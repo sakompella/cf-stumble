@@ -9,9 +9,23 @@ import { parseSha } from "../../src/git/types.js";
 import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import { afterEach, expect, test } from "vitest";
 
-function supervisorRequest(path: string, init?: RequestInit): Promise<Response> {
+type Credential = "valid" | "missing" | "wrong" | "empty";
+
+function supervisorRequest(
+  path: string,
+  init: RequestInit = {},
+  credential: Credential = "valid",
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (credential === "valid") {
+    headers.set("authorization", `Bearer ${env.SUPERVISOR_SECRET}`);
+  } else if (credential === "wrong") {
+    headers.set("authorization", "Bearer wrong-supervisor-secret");
+  } else if (credential === "empty") {
+    headers.set("authorization", "Bearer ");
+  }
   return env.SUPERVISOR.getByName("supervisor-s10").fetch(
-    new Request(`https://cf-stumble.test${path}`, init),
+    new Request(`https://cf-stumble.test${path}`, { ...init, headers }),
   );
 }
 
@@ -76,6 +90,17 @@ async function writeValidationCase(): Promise<void> {
   expect(response.status).toBe(201);
 }
 
+async function supervisorSnapshot(): Promise<readonly unknown[]> {
+  return Promise.all([
+    readJson(await supervisorRequest("/state")),
+    readJson(await supervisorRequest("/generations")),
+    readJson(await supervisorRequest("/context")),
+    readJson(await supervisorRequest("/corpus")),
+    readJson(await supervisorRequest("/validation-results")),
+    readJson(await supervisorRequest("/history")),
+  ]);
+}
+
 function createGeneration(
   source = candidateSource,
   withRuntimeDefinition = true,
@@ -137,6 +162,60 @@ test("lists the pinned generation zero with its lineage", async () => {
     ],
   });
 });
+test("rejects every privileged mutation without the exact credential and preserves state", async () => {
+  const before = await supervisorSnapshot();
+  const requests: readonly [string, RequestInit][] = [
+    ["/promote", { method: "POST", body: JSON.stringify({ candidate: "0".repeat(40) }) }],
+    ["/rollback", { method: "POST", body: JSON.stringify({ target: "0".repeat(40) }) }],
+    ["/reset", { method: "POST" }],
+    [
+      "/generations",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          modules: [{ path: "prompt.md", content: "candidate", executable: false }],
+          summary: "candidate",
+        }),
+      },
+    ],
+    ["/context", { method: "POST", body: JSON.stringify({ key: "blocked", value: true }) }],
+    [
+      "/corpus",
+      { method: "POST", body: JSON.stringify({ name: "blocked", mandatoryCanary: false, session: validationSession }) },
+    ],
+    [
+      "/validation-results",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          candidate: "0".repeat(40),
+          validatedAgainst: null,
+          corpusVersion: "corpus",
+          gateVersion: "gate",
+          verdict: "pass",
+          createdAt: 1,
+          caseResults: [],
+        }),
+      },
+    ],
+  ];
+
+  for (const credential of ["missing", "wrong", "empty"] as const) {
+    for (const [path, init] of requests) {
+      const response = await supervisorRequest(path, init, credential);
+      expect(response.status, `${credential} ${path}`).toBe(401);
+      expect(await supervisorSnapshot(), `${credential} ${path}`).toEqual(before);
+    }
+  }
+});
+
+test("does not pass the supervisor credential into a facet", async () => {
+  const probe = readRecord(await readJson(await supervisorRequest("/facet/probe")));
+  expect(probe["envKeys"]).toEqual([]);
+  expect(probe["envKeys"]).not.toContain("SUPERVISOR_SECRET");
+  expect(probe["ownSecret"]).toBeNull();
+});
+
 test("promotes a registered candidate and records validation evidence", async () => {
   const { candidate } = await promoteCreatedGeneration();
 
@@ -189,6 +268,8 @@ test("promotes a candidate already written to the supervisor object store", asyn
 });
 
 test("returns a structured reason for a candidate rejected by the supervisor-run gate", async () => {
+  const initial = readRecord(await readJson(await supervisorRequest("/live")));
+  const liveBefore = readStringField(readRecord(initial["generation"]), "sha");
   const createdResponse = await createGeneration(candidateSource, false);
   expect(createdResponse.status).toBe(201);
   const created = readRecord(await readJson(createdResponse));
@@ -204,6 +285,8 @@ test("returns a structured reason for a candidate rejected by the supervisor-run
     outcome: "rejected",
     reason: { kind: "not-passing", verdict: "inconclusive" },
   });
+  const liveAfter = readRecord(await readJson(await supervisorRequest("/live")));
+  expect(readStringField(readRecord(liveAfter["generation"]), "sha")).toBe(liveBefore);
 });
 
 test("ignores a caller-supplied attestation and promotes only after its own gate passes", async () => {

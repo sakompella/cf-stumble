@@ -17,5 +17,8 @@
       "new_sqlite_classes": ["Supervisor"]
     }
   ],
-  "worker_loaders": [{ "binding": "LOADER" }]
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "secrets": {
+    "required": ["SUPERVISOR_SECRET"]
+  }
 }

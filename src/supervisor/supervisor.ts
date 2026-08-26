@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 /* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file, import/max-dependencies, unicorn/no-array-sort */
 
+import { authorizeSupervisorRequest } from "./auth.js";
 import {
   healthyAgentSource,
   initializationErrorAgentSource,
@@ -145,6 +146,7 @@ const genesisAuthor: Signature = {
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly store: DurableObjectSqliteStore;
+  private readonly supervisorSecret: string | undefined;
   private initialization: Promise<void> | undefined;
   private genesisPin: GenesisPin | undefined;
   private attempt = 0;
@@ -153,6 +155,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.store = new DurableObjectSqliteStore(ctx);
+    this.supervisorSecret = env.SUPERVISOR_SECRET;
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS spike_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     );
@@ -163,6 +166,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   override async fetch(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
+    if (
+      isPrivilegedRoute(pathname, request.method) &&
+      !authorizeSupervisorRequest(request, this.supervisorSecret)
+    ) {
+      return unauthorizedResponse();
+    }
     if (
       pathname !== "/facet/ping" &&
       pathname !== "/facet/probe" &&
@@ -564,7 +573,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private legacyReset(): Response {
-    return this.resetResponse(true);
+    this.writeState("generation", "0");
+    return Response.json({ generation: "0", reset: true });
   }
 
   private reset(): Response {
@@ -1199,6 +1209,31 @@ function generationSummary(row: GenerationRow): GenerationSummary {
     createdAt: row.created_at,
     summary: row.summary,
   };
+}
+
+function isPrivilegedRoute(pathname: string, method: string): boolean {
+  if (pathname === "/rollback") {
+    return true;
+  }
+  if (pathname === "/promote" || pathname === "/reset") {
+    return method === "POST";
+  }
+  if (
+    pathname === "/generations" ||
+    pathname === "/context" ||
+    pathname === "/corpus" ||
+    pathname === "/validation-results"
+  ) {
+    return method === "POST";
+  }
+  return false;
+}
+
+function unauthorizedResponse(): Response {
+  return Response.json(
+    { error: { kind: "unauthorized", message: "valid supervisor credential required" } },
+    { status: 401 },
+  );
 }
 
 function promotionResponse(result: PromotionResult): Response {
