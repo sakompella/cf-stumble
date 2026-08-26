@@ -239,6 +239,26 @@ become a future regression case.
 
 **Verify:** `pnpm vitest run test/agent`
 
+---
+
+## S14 — Attestation provenance and route authorization · depends: S10, S12 · IN PROGRESS
+
+The most serious remaining hole. Promotion verifies an attestation, but the supervisor accepts
+one **from the caller** over unauthenticated routes, so anyone reaching the Durable Object could
+mint a well-formed attestation and promote arbitrary code. The existing tests prove the shape of
+the check, not the guarantee.
+
+The fix is structural rather than additive: stop accepting attestations over the wire. `promote`
+takes a candidate sha, the supervisor runs the gate itself, and the attestation it computes never
+leaves the process — forgery becomes impossible rather than merely detectable, and the TOCTOU
+window collapses to zero. Privileged routes then get a constant-time secret check that fails
+closed.
+
+Also lands the two rollback guard rails from the review: targets restricted to generations
+previously recorded as live, and quarantine so a known-bad generation cannot silently return.
+
+**Verify:** `pnpm vitest run --config vitest.workers.config.ts test/supervisor`
+
 ## Deferred and out of scope
 
 **Garbage collection — deferred deliberately (D13).** A Durable Object holds 10 GB and
