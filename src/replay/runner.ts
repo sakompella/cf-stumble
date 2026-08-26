@@ -1,7 +1,4 @@
-import {
-  compareObservableEffects,
-  type EffectsDifference,
-} from "./comparison.js";
+import { compareObservableEffects, type EffectsDifference } from "./comparison.js";
 import type {
   CapturedToolResult,
   ObservableEffects,
@@ -84,9 +81,7 @@ function workspaceFromTree(tree: WorkspaceTree): Map<string, string> {
 function treeFromWorkspace(workspace: ReadonlyMap<string, string>): WorkspaceTree {
   return [...workspace.entries()]
     .map(([path, content]) => ({ path, content }))
-    .toSorted((left, right) =>
-      left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
-    );
+    .toSorted((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
 }
 
 function applyPrimitive(

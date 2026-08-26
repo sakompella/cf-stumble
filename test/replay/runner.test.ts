@@ -18,9 +18,7 @@ const session: ReplaySession = {
     {
       input: "update the note",
       modelResponses: [{ requestId: "executor", content: "write" }],
-      capturedToolResults: [
-        { call: writeCall, result: { kind: "write", bytesWritten: 4 } },
-      ],
+      capturedToolResults: [{ call: writeCall, result: { kind: "write", bytesWritten: 4 } }],
     },
   ],
   expectedEffects: {

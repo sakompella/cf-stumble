@@ -57,11 +57,7 @@ export type BashResult = {
   readonly stderr: string;
 };
 
-export type PrimitiveResult =
-  | ReadResult
-  | WriteResult
-  | EditResult
-  | BashResult;
+export type PrimitiveResult = ReadResult | WriteResult | EditResult | BashResult;
 
 export type CapturedToolResult = {
   readonly call: PrimitiveCall;

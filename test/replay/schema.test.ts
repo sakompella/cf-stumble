@@ -32,9 +32,7 @@ test("parses a versioned replay recording into pinned values", () => {
   expect(recording.name).toBe("schema-example");
   expect(recording.seed).toBe(7);
   expect(recording.clock.nowMs).toBe(1_700_000_000_000);
-  expect(recording.initialWorkspace).toEqual([
-    { path: "README.md", content: "before\n" },
-  ]);
+  expect(recording.initialWorkspace).toEqual([{ path: "README.md", content: "before\n" }]);
   expect(recording.turns[0]?.modelResponses[0]?.content).toBe("done");
 });
 
@@ -47,9 +45,7 @@ test("rejects a missing schema version instead of guessing", () => {
 });
 
 test("rejects an unknown schema version instead of defaulting", () => {
-  expect(() =>
-    parseReplaySession({ ...validRecording, schemaVersion: 99 }),
-  ).toThrow(
+  expect(() => parseReplaySession({ ...validRecording, schemaVersion: 99 })).toThrow(
     new ReplaySchemaError("$.schemaVersion", "unsupported version 99"),
   );
 });

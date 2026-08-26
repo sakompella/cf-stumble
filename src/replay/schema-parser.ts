@@ -98,7 +98,10 @@ function parseWorkspaceTree(value: unknown, path: string): WorkspaceTree {
     const previous = sorted[index - 1];
     const current = sorted[index];
     if (previous !== undefined && current !== undefined && previous.path === current.path) {
-      throw new ReplaySchemaError(`${path}[${index}]`, `duplicate path ${JSON.stringify(current.path)}`);
+      throw new ReplaySchemaError(
+        `${path}[${index}]`,
+        `duplicate path ${JSON.stringify(current.path)}`,
+      );
     }
   }
   return sorted;
@@ -226,11 +229,8 @@ function parseTurn(value: unknown, path: string): ReplayTurn {
     modelResponses: readArray(record.modelResponses, `${path}.modelResponses`).map(
       (response, index) => parseModelResponse(response, `${path}.modelResponses[${index}]`),
     ),
-    capturedToolResults: readArray(
-      record.capturedToolResults,
-      `${path}.capturedToolResults`,
-    ).map((result, index) =>
-      parseCapturedToolResult(result, `${path}.capturedToolResults[${index}]`),
+    capturedToolResults: readArray(record.capturedToolResults, `${path}.capturedToolResults`).map(
+      (result, index) => parseCapturedToolResult(result, `${path}.capturedToolResults[${index}]`),
     ),
   };
 }
