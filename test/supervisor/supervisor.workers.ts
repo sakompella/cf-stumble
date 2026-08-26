@@ -2,6 +2,7 @@
 /* oxlint-disable eslint/max-lines, eslint/max-lines-per-function */
 
 import { env } from "cloudflare:workers";
+import { isJsonObjectValue, isJsonString, parseJsonValue, type JsonObject, type JsonValue } from "../../src/json.js";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { buildGeneration } from "../../src/generation/build.js";
 import { readGeneration } from "../../src/generation/read.js";
@@ -29,20 +30,20 @@ function supervisorRequest(
   );
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  return JSON.parse(await response.text());
+async function readJson(response: Response): Promise<JsonValue> {
+  return parseJsonValue(JSON.parse(await response.text()));
 }
 
-function readRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+function readRecord(value: JsonValue | undefined): JsonObject {
+  if (!isJsonObjectValue(value)) {
     throw new Error("expected a JSON object");
   }
-  return Object.fromEntries(Object.entries(value));
+  return value;
 }
 
-function readStringField(record: Record<string, unknown>, key: string): string {
+function readStringField(record: JsonObject, key: string): string {
   const value = record[key];
-  if (typeof value !== "string") {
+  if (!isJsonString(value)) {
     throw new TypeError(`expected ${key} to be a string`);
   }
   return value;

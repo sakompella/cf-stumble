@@ -1,10 +1,11 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { env } from "cloudflare:workers";
+import { isJsonObjectValue, parseJsonValue, type JsonObject } from "../../src/json.js";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = JsonObject;
 
 function supervisorRequest(path: string): Promise<Response> {
   return env.SUPERVISOR.getByName("facet-spike").fetch(
@@ -13,11 +14,11 @@ function supervisorRequest(path: string): Promise<Response> {
 }
 
 async function readRecord(response: Response): Promise<JsonRecord> {
-  const value: unknown = JSON.parse(await response.text());
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  const value = parseJsonValue(JSON.parse(await response.text()));
+  if (!isJsonObjectValue(value)) {
     throw new Error("expected a JSON object");
   }
-  return Object.fromEntries(Object.entries(value));
+  return value;
 }
 
 async function seedSupervisor(): Promise<void> {

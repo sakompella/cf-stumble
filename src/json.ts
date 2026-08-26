@@ -57,3 +57,7 @@ export function isJsonObjectValue(value: JsonValue | undefined): value is JsonOb
 export function isJsonPrimitive(value: JsonValue): value is JsonPrimitive {
   return value === null || typeof value !== "object";
 }
+
+export function isJsonString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
