@@ -141,9 +141,6 @@ function validateOptions(options: BuildGenerationOptions): void {
   if (!Number.isSafeInteger(options.createdAt)) {
     throw new TypeError("generation createdAt must be a safe integer");
   }
-  if (typeof options.summary !== "string") {
-    throw new TypeError("generation summary must be a string");
-  }
   validateSignature(options.author, "author");
   const committer = makeCommitter(options);
   validateSignature(committer, "committer");
@@ -154,16 +151,8 @@ function validateOptions(options: BuildGenerationOptions): void {
     validateParent(options.parent);
   }
   for (const module of options.modules) {
-    if (typeof module.path !== "string") {
-      throw new TypeError("module path must be a string");
-    }
     if (!(module.content instanceof Uint8Array)) {
       throw new TypeError(`module content must be bytes for ${JSON.stringify(module.path)}`);
-    }
-    if (typeof module.executable !== "boolean") {
-      throw new TypeError(
-        `module executable flag must be boolean for ${JSON.stringify(module.path)}`,
-      );
     }
     validateModulePath(module.path);
   }
@@ -195,10 +184,7 @@ function validateParent(parent: Generation): void {
   }
 }
 
-function validateSignature(value: unknown, label: string): asserts value is Signature {
-  if (!isSignature(value)) {
-    throw new TypeError(`generation ${label} must be a signature`);
-  }
+function validateSignature(value: Signature, label: string): void {
   if (
     value.name.length === 0 ||
     value.name.includes("\r") ||
@@ -223,26 +209,6 @@ function validateSignature(value: unknown, label: string): asserts value is Sign
   ) {
     throw new TypeError(`generation ${label} timezone is out of range`);
   }
-}
-
-function isSignature(value: unknown): value is Signature {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  if (
-    !("name" in value) ||
-    !("email" in value) ||
-    !("timestamp" in value) ||
-    !("timezoneOffsetMinutes" in value)
-  ) {
-    return false;
-  }
-  return (
-    typeof value.name === "string" &&
-    typeof value.email === "string" &&
-    typeof value.timestamp === "number" &&
-    typeof value.timezoneOffsetMinutes === "number"
-  );
 }
 
 function validateModulePath(path: string): readonly string[] {

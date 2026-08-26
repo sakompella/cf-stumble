@@ -1,5 +1,4 @@
-import { isJsonObject } from "../../json.js";
-import type { JsonObject } from "../../json.js";
+import { isJsonObjectValue, type JsonObject, type JsonValue } from "../../json.js";
 import { assertNever } from "../../git/types.js";
 import type {
   CapturedToolResult,
@@ -14,16 +13,16 @@ import {
   type PrimitiveResult as ToolPrimitiveResult,
 } from "../../tools/index.js";
 import type { AgentDefinition } from "./definition.js";
-import { isModelSourceError } from "./model-errors.js";
+import { ModelSourceError } from "./model-errors.js";
 import { DEFAULT_MODEL_REQUEST_ID, type ModelResponseSource } from "./model.js";
 import { parseAgentResponse } from "./protocol.js";
 import type { ParsedToolCall } from "./protocol.js";
 import type { TurnFailure } from "./types.js";
 
-type MalformedToolResult = {
-  readonly ok: false;
-  readonly failure: TurnFailure;
-};
+/** Outcome of decoding one tool call from model output: a domain call, or why it was rejected. */
+type PrimitiveCallParse =
+  | { readonly ok: true; readonly call: ToolPrimitiveCall }
+  | { readonly ok: false; readonly failure: TurnFailure };
 
 export type ToolExecution =
   | { readonly ok: true; readonly result: ReplayPrimitiveResult }
@@ -114,8 +113,8 @@ async function requestModel(
         toolResults,
       }),
     };
-  } catch (error: unknown) {
-    if (!isModelSourceError(error)) {
+  } catch (error) {
+    if (!(error instanceof ModelSourceError)) {
       throw error;
     }
     return {
@@ -132,17 +131,12 @@ async function requestModel(
   }
 }
 
-function primitiveCall(action: ParsedToolCall):
-  | { readonly ok: true; readonly call: ToolPrimitiveCall }
-  | { readonly ok: false; readonly failure: TurnFailure } {
+function primitiveCall(action: ParsedToolCall): PrimitiveCallParse {
   if (!isPrimitiveKind(action.name)) {
     return { ok: false, failure: { kind: "unknown-tool", name: action.name } };
   }
-  if (!isRecord(action.arguments)) {
-    return {
-      ok: false,
-      failure: malformedArguments(action.name).failure,
-    };
+  if (!isJsonObjectValue(action.arguments)) {
+    return malformedArguments(action.name);
   }
 
   switch (action.name) {
@@ -159,18 +153,14 @@ function primitiveCall(action: ParsedToolCall):
   }
 }
 
-function readCall(argumentsObject: JsonObject):
-  | { readonly ok: true; readonly call: ToolPrimitiveCall }
-  | { readonly ok: false; readonly failure: TurnFailure } {
+function readCall(argumentsObject: JsonObject): PrimitiveCallParse {
   const path = stringArgument(argumentsObject, "path");
   return path === undefined
     ? malformedArgument("read", "path")
     : { ok: true, call: { kind: "read", path } };
 }
 
-function writeCall(argumentsObject: JsonObject):
-  | { readonly ok: true; readonly call: ToolPrimitiveCall }
-  | { readonly ok: false; readonly failure: TurnFailure } {
+function writeCall(argumentsObject: JsonObject): PrimitiveCallParse {
   const path = stringArgument(argumentsObject, "path");
   const content = stringArgument(argumentsObject, "content");
   if (path === undefined) {
@@ -181,9 +171,7 @@ function writeCall(argumentsObject: JsonObject):
     : { ok: true, call: { kind: "write", path, content } };
 }
 
-function editCall(argumentsObject: JsonObject):
-  | { readonly ok: true; readonly call: ToolPrimitiveCall }
-  | { readonly ok: false; readonly failure: TurnFailure } {
+function editCall(argumentsObject: JsonObject): PrimitiveCallParse {
   const path = stringArgument(argumentsObject, "path");
   const oldText = stringArgument(argumentsObject, "oldText");
   const newText = stringArgument(argumentsObject, "newText");
@@ -198,16 +186,14 @@ function editCall(argumentsObject: JsonObject):
     : { ok: true, call: { kind: "edit", path, oldText, newText } };
 }
 
-function bashCall(argumentsObject: JsonObject):
-  | { readonly ok: true; readonly call: ToolPrimitiveCall }
-  | { readonly ok: false; readonly failure: TurnFailure } {
+function bashCall(argumentsObject: JsonObject): PrimitiveCallParse {
   const command = stringArgument(argumentsObject, "command");
   return command === undefined
     ? malformedArgument("bash", "command")
     : { ok: true, call: { kind: "bash", command } };
 }
 
-function malformedArguments(name: PrimitiveKind): MalformedToolResult {
+function malformedArguments(name: PrimitiveKind): PrimitiveCallParse {
   return {
     ok: false,
     failure: {
@@ -217,7 +203,7 @@ function malformedArguments(name: PrimitiveKind): MalformedToolResult {
   };
 }
 
-function malformedArgument(name: PrimitiveKind, argument: string): MalformedToolResult {
+function malformedArgument(name: PrimitiveKind, argument: string): PrimitiveCallParse {
   return {
     ok: false,
     failure: {
@@ -229,15 +215,15 @@ function malformedArgument(name: PrimitiveKind, argument: string): MalformedTool
 
 function stringArgument(argumentsObject: JsonObject, name: string): string | undefined {
   const value = argumentsObject[name];
-  return typeof value === "string" ? value : undefined;
+  return isString(value) ? value : undefined;
 }
 
 function isPrimitiveKind(value: string): value is PrimitiveKind {
   return PRIMITIVE_KINDS.some((kind) => kind === value);
 }
 
-function isRecord(value: unknown): value is JsonObject {
-  return isJsonObject(value);
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
 }
 
 export function toReplayCall(call: ToolPrimitiveCall): ReplayPrimitiveCall {

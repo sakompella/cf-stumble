@@ -1,6 +1,6 @@
 import { assertNever } from "../../git/types.js";
 import type { WorkspaceTree } from "../../replay/schema.js";
-import type { Workspace } from "../../tools/types.js";
+import type { Workspace, WorkspaceFileContent } from "../../tools/types.js";
 import type { ExecuteTurnOptions, TurnFailure } from "./types.js";
 
 type RecordedFile = { readonly path: string; readonly content: string };
@@ -19,7 +19,7 @@ export async function snapshotWorkspace(workspace: Workspace): Promise<Workspace
     if (content === undefined) {
       throw new TypeError(`workspace listed ${JSON.stringify(path)} but read returned no file`);
     }
-    if (typeof content !== "string") {
+    if (!isTextContent(content)) {
       throw new TypeError(`workspace file ${JSON.stringify(path)} is binary and cannot be recorded`);
     }
     snapshot.push({ path, content });
@@ -68,6 +68,10 @@ export function describeFailure(failure: TurnFailure): string {
   }
 }
 
-export function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+export function errorDetail(error: Error | string): string {
+  return error instanceof Error ? error.message : error;
+}
+
+function isTextContent(content: WorkspaceFileContent): content is string {
+  return typeof content === "string";
 }

@@ -1,5 +1,4 @@
-import { isJsonObject } from "../json.js";
-import type { JsonObject } from "../json.js";
+import { isJsonObjectValue, isJsonValue, parseJsonValue, type JsonObject, type JsonValue } from "../json.js";
 import {
   REPLAY_SCHEMA_VERSION,
   ReplaySchemaError,
@@ -21,26 +20,23 @@ import {
   type WriteCall,
   type WriteResult,
 } from "./schema.js";
-
-function isRecord(value: unknown): value is JsonObject {
-  return isJsonObject(value);
-}
-
-function readRecord(value: unknown, path: string): JsonObject {
-  if (!isRecord(value)) {
+function readRecord(value: JsonValue | undefined, path: string): JsonObject {
+  if (!isJsonObjectValue(value)) {
     throw new ReplaySchemaError(path, "must be an object");
   }
   return value;
 }
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
 
-function readString(value: unknown, path: string): string {
-  if (typeof value !== "string") {
+function readString(value: JsonValue | undefined, path: string): string {
+  if (!isString(value)) {
     throw new ReplaySchemaError(path, "must be a string");
   }
   return value;
 }
-
-function readNonEmptyString(value: unknown, path: string): string {
+function readNonEmptyString(value: JsonValue | undefined, path: string): string {
   const string = readString(value, path);
   if (string.length === 0) {
     throw new ReplaySchemaError(path, "must not be empty");
@@ -48,21 +44,24 @@ function readNonEmptyString(value: unknown, path: string): string {
   return string;
 }
 
-function readArray(value: unknown, path: string): readonly unknown[] {
+function readArray(value: JsonValue | undefined, path: string): readonly JsonValue[] {
   if (!Array.isArray(value)) {
     throw new ReplaySchemaError(path, "must be an array");
   }
-  return value;
+  const array: readonly JsonValue[] = value;
+  return array;
+}
+function isFiniteNumber(value: JsonValue | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
-function readFiniteNumber(value: unknown, path: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+function readFiniteNumber(value: JsonValue | undefined, path: string): number {
+  if (!isFiniteNumber(value)) {
     throw new ReplaySchemaError(path, "must be a finite number");
   }
   return value;
 }
-
-function readInteger(value: unknown, path: string): number {
+function readInteger(value: JsonValue | undefined, path: string): number {
   const number = readFiniteNumber(value, path);
   if (!Number.isInteger(number)) {
     throw new ReplaySchemaError(path, "must be an integer");
@@ -70,7 +69,7 @@ function readInteger(value: unknown, path: string): number {
   return number;
 }
 
-function readWorkspacePath(value: unknown, path: string): string {
+function readWorkspacePath(value: JsonValue | undefined, path: string): string {
   const filePath = readNonEmptyString(value, path);
   if (
     filePath.startsWith("/") ||
@@ -83,7 +82,7 @@ function readWorkspacePath(value: unknown, path: string): string {
   return filePath;
 }
 
-function parseWorkspaceTree(value: unknown, path: string): WorkspaceTree {
+function parseWorkspaceTree(value: JsonValue | undefined, path: string): WorkspaceTree {
   const entries = readArray(value, path).map((entry, index) => {
     const entryPath = `${path}[${index}]`;
     const record = readRecord(entry, entryPath);
@@ -109,7 +108,7 @@ function parseWorkspaceTree(value: unknown, path: string): WorkspaceTree {
   return sorted;
 }
 
-function parsePrimitiveCall(value: unknown, path: string): PrimitiveCall {
+function parsePrimitiveCall(value: JsonValue | undefined, path: string): PrimitiveCall {
   const record = readRecord(value, path);
   const kind = readNonEmptyString(record.kind, `${path}.kind`);
   switch (kind) {
@@ -149,7 +148,7 @@ function parsePrimitiveCall(value: unknown, path: string): PrimitiveCall {
   }
 }
 
-function parsePrimitiveResult(value: unknown, path: string): PrimitiveResult {
+function parsePrimitiveResult(value: JsonValue | undefined, path: string): PrimitiveResult {
   const record = readRecord(value, path);
   const kind = readNonEmptyString(record.kind, `${path}.kind`);
   switch (kind) {
@@ -191,7 +190,7 @@ function parsePrimitiveResult(value: unknown, path: string): PrimitiveResult {
   }
 }
 
-function parseCapturedToolResult(value: unknown, path: string): CapturedToolResult {
+function parseCapturedToolResult(value: JsonValue | undefined, path: string): CapturedToolResult {
   const record = readRecord(value, path);
   const call = parsePrimitiveCall(record.call, `${path}.call`);
   const result = parsePrimitiveResult(record.result, `${path}.result`);
@@ -216,7 +215,7 @@ function parseCapturedToolResult(value: unknown, path: string): CapturedToolResu
   return { call, result };
 }
 
-function parseModelResponse(value: unknown, path: string): RecordedModelResponse {
+function parseModelResponse(value: JsonValue | undefined, path: string): RecordedModelResponse {
   const record = readRecord(value, path);
   return {
     requestId: readNonEmptyString(record.requestId, `${path}.requestId`),
@@ -224,7 +223,7 @@ function parseModelResponse(value: unknown, path: string): RecordedModelResponse
   };
 }
 
-function parseTurn(value: unknown, path: string): ReplayTurn {
+function parseTurn(value: JsonValue | undefined, path: string): ReplayTurn {
   const record = readRecord(value, path);
   return {
     input: readString(record.input, `${path}.input`),
@@ -237,7 +236,7 @@ function parseTurn(value: unknown, path: string): ReplayTurn {
   };
 }
 
-function parseObservableEffects(value: unknown, path: string): ObservableEffects {
+function parseObservableEffects(value: JsonValue | undefined, path: string): ObservableEffects {
   const record = readRecord(value, path);
   return {
     trace: readArray(record.trace, `${path}.trace`).map((call, index) =>
@@ -247,7 +246,11 @@ function parseObservableEffects(value: unknown, path: string): ObservableEffects
   };
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- persisted replay JSON enters here.
 export function parseReplaySession(value: unknown): ReplaySession {
+  if (!isJsonValue(value)) {
+    throw new ReplaySchemaError("$", "must be a JSON value");
+  }
   const record = readRecord(value, "$");
   const version = record.schemaVersion;
   if (version === undefined) {
@@ -282,10 +285,11 @@ export function parseReplaySession(value: unknown): ReplaySession {
 }
 
 export function parseReplaySessionJson(json: string): ReplaySession {
-  let value: unknown;
+  let value: JsonValue;
   try {
-    value = JSON.parse(json);
-  } catch (error: unknown) {
+    value = parseJsonValue(JSON.parse(json));
+  } catch (error) {
+    if (error instanceof ReplaySchemaError) throw error;
     const detail = error instanceof Error ? error.message : String(error);
     throw new ReplaySchemaError("$", `invalid JSON: ${detail}`);
   }

@@ -23,7 +23,11 @@ export type InMemoryWorkspaceOptions = {
 };
 
 function cloneContent(content: WorkspaceFileContent): WorkspaceFileContent {
-  return typeof content === "string" ? content : content.slice();
+  return isTextContent(content) ? content : content.slice();
+}
+
+function isTextContent(content: WorkspaceFileContent): content is string {
+  return typeof content === "string";
 }
 
 /** A deterministic Workspace for unit tests; it does not interpret shell commands. */

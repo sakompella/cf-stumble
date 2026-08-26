@@ -21,7 +21,8 @@ export async function executeSafely(
     }
     return outcome;
   } catch (error: unknown) {
-    return inconclusiveOutcome("agent-error", `validation executor failed: ${errorDetail(error)}`);
+    const detail = error instanceof Error ? error : String(error);
+    return inconclusiveOutcome("agent-error", `validation executor failed: ${errorDetail(detail)}`);
   }
 }
 
@@ -48,8 +49,8 @@ function inconclusiveOutcome(reason: ReplayInconclusiveReason, detail: string): 
   };
 }
 
-function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorDetail(error: Error | string): string {
+  return error instanceof Error ? error.message : error;
 }
 
 export function recordOutcome(outcome: ReplayOutcome): RecordedCaseOutcome {

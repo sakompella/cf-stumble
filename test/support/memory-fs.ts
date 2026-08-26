@@ -65,6 +65,10 @@ function decodeIfRequested(
   content: Uint8Array,
   options: { readonly encoding?: string } | string | undefined,
 ): Uint8Array | string {
+  // isomorphic-git's FsClient calls readFile(path) for bytes and readFile(path, "utf8") for
+  // text. That primitive-or-object union is imposed by the library, so typeof is the only
+  // discriminator available for the primitive arm.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- external FsClient overload boundary.
   const encoding = typeof options === "string" ? options : options?.encoding;
   return encoding === undefined || encoding === ""
     ? content.slice()
@@ -104,7 +108,7 @@ function makePromises(files: Map<string, Uint8Array>, directories: Set<string>):
       return Promise.resolve();
     },
     writeFile: (path: string, data: Uint8Array | string): Promise<void> => {
-      files.set(path, typeof data === "string" ? new TextEncoder().encode(data) : data.slice());
+      files.set(path, data instanceof Uint8Array ? data.slice() : new TextEncoder().encode(data));
       return Promise.resolve();
     },
     readFile: (
