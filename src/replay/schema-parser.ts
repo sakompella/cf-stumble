@@ -1,4 +1,4 @@
-import { isJsonObject, isJsonValue, parseJsonValue, type JsonObject, type JsonValue } from "../json.js";
+import { isJsonObjectValue, isJsonValue, parseJsonValue, type JsonObject, type JsonValue } from "../json.js";
 import {
   REPLAY_SCHEMA_VERSION,
   ReplaySchemaError,
@@ -21,7 +21,7 @@ import {
   type WriteResult,
 } from "./schema.js";
 function readRecord(value: JsonValue | undefined, path: string): JsonObject {
-  if (!isJsonObject(value)) {
+  if (!isJsonObjectValue(value)) {
     throw new ReplaySchemaError(path, "must be an object");
   }
   return value;

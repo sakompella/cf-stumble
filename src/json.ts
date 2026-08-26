@@ -6,34 +6,47 @@ export type JsonObject = {
   readonly [key: string]: JsonValue;
 };
 
+type PendingJsonValue = {
+  readonly value: unknown;
+  readonly ancestors: ReadonlySet<object>;
+};
+
 /** Establish the complete JSON value contract for data arriving from an untyped source. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the shared JSON input guard.
 export function isJsonValue(value: unknown): value is JsonValue {
-  return isJsonValueWithin(value, new Set<object>());
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- recursive JSON validation still starts from an untrusted value.
-function isJsonValueWithin(value: unknown, ancestors: ReadonlySet<object>): value is JsonValue {
-  if (value === null) return true;
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return true;
-    case "number":
-      return Number.isFinite(value);
-    case "object": {
-      if (ancestors.has(value)) return false;
-      const nextAncestors = new Set([...ancestors, value]);
-      const values: readonly unknown[] = Array.isArray(value) ? value : Object.values(value);
-      return values.every((entry) => isJsonValueWithin(entry, nextAncestors));
+  const pending: PendingJsonValue[] = [{ value, ancestors: new Set<object>() }];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) return false;
+    const candidate = current.value;
+    if (candidate === null) continue;
+    switch (typeof candidate) {
+      case "string":
+      case "boolean":
+        continue;
+      case "number":
+        if (Number.isFinite(candidate)) continue;
+        return false;
+      case "object": {
+        if (current.ancestors.has(candidate)) return false;
+        const ancestors = new Set([...current.ancestors, candidate]);
+        const values: readonly unknown[] = Array.isArray(candidate)
+          ? candidate
+          : Object.values(candidate);
+        for (const child of values) {
+          pending.push({ value: child, ancestors });
+        }
+        continue;
+      }
+      case "bigint":
+      case "function":
+      case "symbol":
+      case "undefined":
+        return false;
     }
-    case "bigint":
-    case "function":
-    case "symbol":
-    case "undefined":
-      return false;
+    return false;
   }
-  return false;
+  return true;
 }
 
 /** Parse a JSON value returned by JSON.parse without allowing an untyped representation inward. */
@@ -43,11 +56,6 @@ export function parseJsonValue(value: unknown): JsonValue {
     throw new TypeError("value is not a JSON value");
   }
   return value;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this guard validates an object boundary.
-export function isJsonObject(value: unknown): value is JsonObject {
-  return isJsonValue(value) && isJsonObjectValue(value);
 }
 
 export function isJsonObjectValue(value: JsonValue | undefined): value is JsonObject {

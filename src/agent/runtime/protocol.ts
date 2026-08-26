@@ -1,4 +1,4 @@
-import { isJsonObject, parseJsonValue, type JsonObject, type JsonValue } from "../../json.js";
+import { isJsonObjectValue, parseJsonValue, type JsonObject, type JsonValue } from "../../json.js";
 import type { RecordedModelResponse } from "../../replay/schema.js";
 
 export type ParsedModelResponse =
@@ -30,7 +30,7 @@ export function parseAgentResponse(response: RecordedModelResponse): ModelRespon
   if (Array.isArray(value)) {
     return parseToolCalls(value, "tool calls");
   }
-  if (!isJsonObject(value)) {
+  if (!isJsonObjectValue(value)) {
     return { ok: false, detail: "response must be a JSON object or tool-call array" };
   }
 
@@ -81,10 +81,10 @@ function parseToolCalls(value: JsonValue | undefined, path: string): ModelRespon
 function parseToolCall(value: JsonValue | undefined, path: string):
   | { readonly ok: true; readonly call: ParsedToolCall }
   | { readonly ok: false; readonly detail: string } {
-  if (!isJsonObject(value)) {
+  if (!isJsonObjectValue(value)) {
     return { ok: false, detail: `${path} must be an object` };
   }
-  if (!("name" in value) && isJsonObject(value.function)) {
+  if (!("name" in value) && isJsonObjectValue(value.function)) {
     return parseToolCall(value.function, `${path}.function`);
   }
   const name = value.name;

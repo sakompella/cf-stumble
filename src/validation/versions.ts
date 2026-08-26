@@ -1,5 +1,5 @@
 import {
-  isJsonObject,
+  isJsonObjectValue,
   isJsonPrimitive,
   type JsonPrimitive,
   type JsonValue,
@@ -36,7 +36,7 @@ function canonicalJson(value: JsonValue): string {
     const entries: readonly JsonValue[] = value;
     return `[${entries.map((entry) => canonicalJson(entry)).join(",")}]`;
   }
-  if (isJsonObject(value)) {
+  if (isJsonObjectValue(value)) {
     return `{${Object.keys(value)
       .toSorted()
       .flatMap((key) => {

@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "../../json.js";
+import { isJsonObjectValue, type JsonObject, type JsonValue } from "../../json.js";
 import { assertNever } from "../../git/types.js";
 import type {
   CapturedToolResult,
@@ -132,7 +132,7 @@ function primitiveCall(action: ParsedToolCall):
   if (!isPrimitiveKind(action.name)) {
     return { ok: false, failure: { kind: "unknown-tool", name: action.name } };
   }
-  if (!isJsonObject(action.arguments)) {
+  if (!isJsonObjectValue(action.arguments)) {
     return {
       ok: false,
       failure: malformedArguments(action.name).failure,
