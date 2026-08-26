@@ -74,7 +74,7 @@ async function safeSnapshot(workspace: Workspace): Promise<SnapshotResult> {
   try {
     return { ok: true, workspace: await snapshotWorkspace(workspace) };
   } catch (error: unknown) {
-    return { ok: false, detail: errorDetail(error) };
+    return { ok: false, detail: errorDetail(error instanceof Error ? error : String(error)) };
   }
 }
 
