@@ -2,6 +2,7 @@ import { assertNever } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type { Attestation, Verdict } from "../generation/types.js";
 import type { GenerationNumber } from "../generation/types.js";
+import type { GenerationRegistry, MaterializationTransition } from "../generation/registry.js";
 import type { EffectsDifference } from "../replay/comparison.js";
 import type { ReplaySession } from "../replay/index.js";
 import type { PointerStore } from "../storage/types.js";
@@ -10,10 +11,11 @@ import {
   type ValidationCase,
   type ValidationCaseResult,
   type ValidationExecutor,
+  type PreflightResult,
+  type PreflightRunner,
   type ValidationResult,
   type ValidationResultStore,
 } from "./results.js";
-import type { PreflightResult, PreflightRunner } from "./preflight.js";
 import {
   corpusContainsPinnedCanaries,
   evaluationCases,
@@ -33,6 +35,8 @@ export type ValidationGateOptions = {
   readonly execute: ValidationExecutor;
   /** Optional cheap capability gate; corpus execution starts only after it passes. */
   readonly preflight?: PreflightRunner;
+  /** Records a preflight rejection in the generation lifecycle before the corpus is considered. */
+  readonly generationRegistry?: Pick<GenerationRegistry, "transition">;
   readonly executorTimeoutMs?: number;
   readonly now?: () => number;
 };
@@ -55,6 +59,7 @@ export class ValidationGate {
   private readonly pinnedCanaries: readonly PinnedCanary[];
   private readonly execute: ValidationExecutor;
   private readonly preflight: PreflightRunner | undefined;
+  private readonly generationRegistry: Pick<GenerationRegistry, "transition"> | undefined;
   private readonly executorTimeoutMs: number;
   private readonly now: () => number;
 
@@ -68,12 +73,18 @@ export class ValidationGate {
     this.pinnedCanaries = [...pinnedCanaries];
     this.execute = options.execute;
     this.preflight = options.preflight;
+    this.generationRegistry = options.generationRegistry;
     this.executorTimeoutMs = validateExecutorTimeout(options.executorTimeoutMs ?? 30_000);
     this.now = options.now ?? Date.now;
   }
 
   async validate(candidate: Sha, validationIdentity: ValidationIdentity): Promise<ValidationRun> {
     const preflight = await executePreflight(this.preflight, candidate);
+    await recordPreflightFailure(
+      this.generationRegistry,
+      preflight,
+      validationIdentity,
+    );
     const [corpusVersion, gateVersion, validatedAgainst, pinnedCorpusMatches] = await Promise.all([
       computeCorpusVersion(this.corpus),
       computeGateVersion(),
@@ -106,6 +117,32 @@ export class ValidationGate {
     await this.resultStore.put(result);
     return { result, attestation: passingAttestation(result) };
   }
+}
+
+async function recordPreflightFailure(
+  generationRegistry: Pick<GenerationRegistry, "transition"> | undefined,
+  preflight: PreflightResult | undefined,
+  identity: ValidationIdentity,
+): Promise<void> {
+  if (generationRegistry === undefined || preflight === undefined || preflight.status === "PASS") {
+    return;
+  }
+  const failure = preflight.failure ?? `preflight ${preflight.status.toLowerCase()}`;
+  const transition: MaterializationTransition = hasMaterializationFailure(preflight)
+    ? { state: "load_failed", artifactDigest: identity.artifactDigest, failure }
+    : { state: "validation_failed", failure };
+  const result = await generationRegistry.transition(identity.generation, transition);
+  if (result.outcome === "rejected") {
+    throw new Error(
+      `could not record preflight ${preflight.status.toLowerCase()} for generation ${identity.generation}: ${result.reason.kind}`,
+    );
+  }
+}
+
+function hasMaterializationFailure(preflight: PreflightResult): boolean {
+  return preflight.checks.some(
+    (check) => check.capability === "materialization" && check.status === "FAIL",
+  );
 }
 
 async function executePreflight(
@@ -260,5 +297,4 @@ function evaluateRatchet(caseResults: readonly ValidationCaseResult[]): Verdict 
   }
   return "pass";
 }
-
 export type { EffectsDifference, ReplaySession };

@@ -32,7 +32,7 @@ export type PreflightCheck =
 export type PreflightResult = {
   readonly status: PreflightStatus;
   readonly checks: readonly PreflightCheck[];
-  readonly failure: string | undefined;
+  readonly failure?: string;
 };
 
 export type PreflightProbe =
@@ -65,6 +65,8 @@ export type PreflightResponseSourceFactory = (
   probe: PreflightProbe,
   definition: AgentDefinition,
 ) => ModelResponseSource | Promise<ModelResponseSource>;
+
+export type PreflightRunner = (candidate: Sha) => Promise<PreflightResult>;
 
 export type PreflightOptions = {
   readonly store: Store;
@@ -120,7 +122,7 @@ export async function runPreflight(options: PreflightOptions): Promise<Preflight
 
   const failure = checks.find((check) => check.status !== "PASS");
   if (failure === undefined) {
-    return { status: "PASS", checks, failure: undefined };
+    return { status: "PASS", checks };
   }
   return { status: failure.status, checks, failure: failure.detail };
 }

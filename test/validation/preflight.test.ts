@@ -6,21 +6,16 @@ import {
   type ModelResponseSource,
 } from "../../src/agent/runtime/index.js";
 import { buildGeneration } from "../../src/generation/build.js";
-import { parseGenerationNumber } from "../../src/generation/types.js";
-import type { Attestation, Module } from "../../src/generation/types.js";
+import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import { PointerManager } from "../../src/pointer/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
-import { InMemoryWorkspace } from "../../src/tools/index.js";
+import type { Workspace } from "../../src/tools/index.js";
 import {
   defaultResponseSource,
   defaultWorkspace,
 } from "../../src/validation/preflight-probes.js";
 import type { PreflightProbe } from "../../src/validation/preflight.js";
-import {
-  MemoryValidationResultStore,
-  ValidationGate,
-  type ValidationResult,
-} from "../../src/validation/index.js";
+import { ValidationGate } from "../../src/validation/gate.js";
 import { runPreflight } from "../../src/validation/preflight.js";
 
 const author = {
@@ -32,7 +27,7 @@ const author = {
 
 const encoder = new TextEncoder();
 
-function module(path: string, content: string): Module {
+function module(path: string, content: string) {
   return { path, content: encoder.encode(content), executable: false };
 }
 
@@ -81,7 +76,7 @@ test("a healthy candidate passes all four capability checks", async () => {
   expect(result.checks.every((check) => check.status === "PASS")).toBe(true);
 });
 
-test("a candidate whose edit primitive no longer matches fails preflight and names edit", async () => {
+test("partial success does not pass when the edit capability is lost", async () => {
   const store = new MemoryStore();
   const candidate = await buildHealthyCandidate(store);
 
@@ -95,6 +90,7 @@ test("a candidate whose edit primitive no longer matches fails preflight and nam
   expect(result.failure).toContain("edit");
   expect(result.failure).toContain("expected exactly one match, found none");
   expect(result.checks.find((check) => check.capability === "read")?.status).toBe("PASS");
+  expect(result.checks.filter((check) => check.capability !== "edit").every((check) => check.status === "PASS")).toBe(true);
   expect(result.checks.find((check) => check.capability === "edit")?.status).toBe("FAIL");
 });
 
@@ -140,11 +136,22 @@ test("a preflight failure blocks promotion through the real validation gate", as
   const store = new MemoryStore();
   const live = await buildHealthyCandidate(store);
   const candidate = await buildHealthyCandidate(store);
+  const registry = new MemoryGenerationRegistry();
+  const allocated = await registry.allocate({
+    commit: candidate.sha,
+    baseline: undefined,
+    idempotencyKey: "preflight-promotion",
+    createdAt: candidate.createdAt,
+  });
+  await registry.transition(allocated.number, {
+    state: "loaded",
+    artifactDigest: candidate.sha,
+  });
   expect(await store.setPointer(live.sha, undefined)).toBe(true);
 
   const gate = new ValidationGate({
     pointerStore: store,
-    resultStore: new MemoryValidationResultStore(),
+    resultStore: emptyResultStore(),
     corpus: [],
     execute: () => Promise.reject(new Error("corpus must not run after preflight failure")),
     preflight: (candidateSha) =>
@@ -153,31 +160,41 @@ test("a preflight failure blocks promotion through the real validation gate", as
         candidate: candidateSha,
         responseSourceFactory: brokenEditSource,
       }),
+    generationRegistry: registry,
   });
   const run = await gate.validate(candidate.sha, {
-    generation: parseGenerationNumber(1),
+    generation: allocated.number,
     artifactDigest: candidate.sha,
-    validatedAgainstGeneration: parseGenerationNumber(0),
+    validatedAgainstGeneration: undefined,
   });
 
-  expect(run.result.verdict).toBe("fail");
-  expect(run.result.preflight?.status).toBe("FAIL");
-  expect(run.result.caseResults).toHaveLength(0);
+  expect(run.result).toMatchObject({ verdict: "fail", preflight: { status: "FAIL" }, caseResults: [] });
   expect(run.attestation).toBeUndefined();
 
-  const pointer = new PointerManager({
-    store,
-    corpusVersion: run.result.corpusVersion,
-    gateVersion: run.result.gateVersion,
-  });
-  await expect(pointer.promote(candidate.sha, attestationFor(run.result))).resolves.toEqual({
+  const pointer = new PointerManager({ store, corpusVersion: run.result.corpusVersion, gateVersion: run.result.gateVersion });
+  await expect(pointer.promote(candidate.sha, attestationFor(run.result))).resolves.toMatchObject({
     outcome: "rejected",
-    reason: { kind: "not-passing", verdict: "fail" },
+    reason: { kind: "not-passing" },
   });
   expect(await store.readPointer()).toBe(live.sha);
+  expect((await registry.get(allocated.number))?.state).toBe("validation_failed");
 });
+type Attestation = Parameters<PointerManager["promote"]>[1];
 
-function attestationFor(result: ValidationResult): Attestation {
+function attestationFor(
+  result: Pick<
+    Attestation,
+    | "candidate"
+    | "generation"
+    | "artifactDigest"
+    | "validatedAgainst"
+    | "validatedAgainstGeneration"
+    | "corpusVersion"
+    | "gateVersion"
+    | "verdict"
+    | "createdAt"
+  >,
+): Attestation {
   return {
     candidate: result.candidate,
     generation: result.generation,
@@ -188,6 +205,16 @@ function attestationFor(result: ValidationResult): Attestation {
     gateVersion: result.gateVersion,
     verdict: result.verdict,
     createdAt: result.createdAt,
+  };
+}
+
+const absentResult = void 0;
+
+function emptyResultStore() {
+  return {
+    put: () => Promise.resolve(),
+    get: () => Promise.resolve(absentResult),
+    query: () => Promise.resolve([]),
   };
 }
 
@@ -231,11 +258,15 @@ function brokenEditSource(
 function brokenSelfEditWorkspace(
   probe: PreflightProbe,
   definition: AgentDefinition,
-) {
+): Workspace {
   if (probe.capability !== "self-edit") {
     return defaultWorkspace(probe, definition);
   }
-  return new InMemoryWorkspace({
-    files: [{ path: probe.path, content: "not the candidate definition\n" }],
-  });
+  return {
+    readFile: () => Promise.resolve("not the candidate definition\n"),
+    writeFile: () => Promise.resolve(),
+    listFiles: () => Promise.resolve([]),
+    exists: () => Promise.resolve(false),
+    execute: () => Promise.resolve({ status: "completed", exitCode: 0, stdout: "", stderr: "" }),
+  };
 }
