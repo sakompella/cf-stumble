@@ -1,5 +1,5 @@
 import { assertNever } from "../git/types.js";
-import type { TurnFailure, TurnResult } from "../agent/runtime/index.js";
+import type { AgentDefinition, TurnFailure, TurnResult } from "../agent/runtime/index.js";
 import type { CapturedToolResult } from "../replay/schema.js";
 import type { PrimitiveCall, PrimitiveFailure } from "../tools/index.js";
 import { parseWorkspacePath } from "../tools/index.js";
@@ -9,7 +9,7 @@ import { callForProbe } from "./preflight-probes.js";
 
 export function verifyProbe(
   probe: PreflightProbe,
-  definition: Parameters<typeof callForProbe>[1],
+  definition: AgentDefinition,
   turn: Extract<TurnResult, { readonly status: "completed" }>,
   workspace: Workspace,
 ): Promise<PreflightCheck> {
@@ -125,7 +125,7 @@ function verifySelfEdit(
   probe: Extract<PreflightProbe, { readonly capability: "self-edit" }>,
   result: CapturedToolResult["result"],
   workspace: Workspace,
-  definition: Parameters<typeof callForProbe>[1],
+  definition: AgentDefinition,
 ): Promise<PreflightCheck> {
   if (!isEditResult(result) || result.replacements !== 1) {
     return Promise.resolve(fail(probe.capability, "expected exactly one edit replacement"));

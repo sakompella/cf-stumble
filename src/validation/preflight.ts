@@ -1,6 +1,7 @@
 import {
   AgentMaterializationError,
   materializeGeneration,
+  type SYSTEM_PROMPT_PATH,
   type AgentDefinition,
   type AgentExecutorOptions,
   type ModelResponseSource,
@@ -47,7 +48,7 @@ export type PreflightProbe =
   | { readonly capability: "bash"; readonly command: "printf 'preflight\\n'" }
   | {
       readonly capability: "self-edit";
-      readonly path: "prompt.md";
+      readonly path: typeof SYSTEM_PROMPT_PATH;
       readonly suffix: string;
     };
 
