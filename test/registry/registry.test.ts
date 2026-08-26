@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSha } from "../../src/git/types.js";
+import { describeGenerationRegistryConformance } from "../../src/generation/conformance.js";
 import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import type { AllocationRequest } from "../../src/generation/registry-types.js";
 import { parseGenerationNumber } from "../../src/generation/types.js";
@@ -7,6 +8,10 @@ import { parseGenerationNumber } from "../../src/generation/types.js";
 const COMMIT = parseSha("1111111111111111111111111111111111111111");
 const OTHER_COMMIT = parseSha("2222222222222222222222222222222222222222");
 const ARTIFACT = parseSha("3333333333333333333333333333333333333333");
+
+describeGenerationRegistryConformance("MemoryGenerationRegistry", () =>
+  Promise.resolve(new MemoryGenerationRegistry()),
+);
 
 function request(idempotencyKey: string, commit: typeof COMMIT = COMMIT): AllocationRequest {
   return {
