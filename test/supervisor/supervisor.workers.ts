@@ -181,7 +181,12 @@ test("keeps context and corpus when rolling back", async () => {
   });
 
   expect(rollback.status).toBe(200);
-  expect(readStringField(readRecord(readRecord(await readJson(await supervisorRequest("/live")))["generation"]), "sha")).toBe(genesis);
+  expect(
+    readStringField(
+      readRecord(readRecord(await readJson(await supervisorRequest("/live")))["generation"]),
+      "sha",
+    ),
+  ).toBe(genesis);
   expect(await readJson(await supervisorRequest("/context"))).toMatchObject({
     context: [{ key: "fact", value: { answer: 42 } }],
   });

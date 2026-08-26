@@ -62,7 +62,11 @@ type HistoryRow = {
   readonly from_sha: string | null;
   readonly created_at: number;
 };
-type CorpusRow = { readonly name: string; readonly session_json: string; readonly mandatory_canary: number };
+type CorpusRow = {
+  readonly name: string;
+  readonly session_json: string;
+  readonly mandatory_canary: number;
+};
 type ValidationRow = {
   readonly candidate_sha: string;
   readonly validated_against: string | null;
@@ -322,9 +326,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private inspect(): Response {
     const rows = this.ctx.storage.sql
-      .exec<{ key: string; value: string }>(
-        "SELECT key, value FROM spike_secrets ORDER BY key",
-      )
+      .exec<{ key: string; value: string }>("SELECT key, value FROM spike_secrets ORDER BY key")
       .toArray();
     return Response.json({ rows });
   }
@@ -352,10 +354,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.writeState("generation", "candidate");
       return Response.json({ promoted: true });
     } catch (error: unknown) {
-      return Response.json(
-        { promoted: false, reason: errorMessage(error) },
-        { status: 422 },
-      );
+      return Response.json({ promoted: false, reason: errorMessage(error) }, { status: 422 });
     }
   }
 
@@ -418,8 +417,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         return;
       }
 
-      const validation =
-        suppliedResult ?? makeValidationResult(attestation, attestation.createdAt);
+      const validation = suppliedResult ?? makeValidationResult(attestation, attestation.createdAt);
       this.insertValidationResult(validation);
       this.ctx.storage.sql.exec(
         `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
@@ -607,7 +605,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const liveSha = this.readPointerSql();
       if (liveSha === undefined) {
         return Response.json(
-          { error: { kind: "conflict", message: "cannot create a candidate without a live generation" } },
+          {
+            error: {
+              kind: "conflict",
+              message: "cannot create a candidate without a live generation",
+            },
+          },
           { status: 409 },
         );
       }
@@ -665,9 +668,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readContext(): Response {
     try {
       const rows = this.ctx.storage.sql
-        .exec<ContextRow>(
-          `SELECT key, value, updated_at FROM ${CONTEXT_TABLE} ORDER BY key`,
-        )
+        .exec<ContextRow>(`SELECT key, value, updated_at FROM ${CONTEXT_TABLE} ORDER BY key`)
         .toArray();
       return Response.json({
         context: rows.map((row) => ({
@@ -734,7 +735,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       const candidateValue = url.searchParams.get("candidate");
       const verdictValue = url.searchParams.get("verdict");
-      const candidate = candidateValue === null ? undefined : parseShaField(candidateValue, "candidate");
+      const candidate =
+        candidateValue === null ? undefined : parseShaField(candidateValue, "candidate");
       const verdict = verdictValue === null ? undefined : parseVerdict(verdictValue, "verdict");
       const clauses: string[] = [];
       const parameters: (string | number | null)[] = [];
@@ -774,16 +776,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         throw new Error(`generation ${pinned} has no agent.js module`);
       }
       const facet = this.mountFacet(new TextDecoder().decode(source.content));
-      const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
+      const body =
+        request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
       const facetRequest =
         body === undefined
           ? new Request("https://facet/turn", { method: "POST" })
           : new Request("https://facet/turn", { method: "POST", body });
       const facetResponse = await facet.fetch(facetRequest);
       const facetText = await facetResponse.text();
-      return Response.json({ generation: pinned, result: parseJsonOrText(facetText) }, {
-        status: facetResponse.status,
-      });
+      return Response.json(
+        { generation: pinned, result: parseJsonOrText(facetText) },
+        {
+          status: facetResponse.status,
+        },
+      );
     } catch (error: unknown) {
       return requestErrorResponse(error);
     }
@@ -851,7 +857,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private readPointerSql(): Sha | undefined {
-    const rows = this.ctx.storage.sql.exec<PointerRow>(`SELECT sha FROM ${POINTER_TABLE} WHERE id = 1`).toArray();
+    const rows = this.ctx.storage.sql
+      .exec<PointerRow>(`SELECT sha FROM ${POINTER_TABLE} WHERE id = 1`)
+      .toArray();
     const value = rows[0]?.sha;
     return value === null || value === undefined ? undefined : parseSha(value);
   }
@@ -1053,10 +1061,7 @@ function makeValidationResult(attestation: Attestation, createdAt: number): Vali
   };
 }
 
-function ensureResultMatchesAttestation(
-  result: ValidationResult,
-  attestation: Attestation,
-): void {
+function ensureResultMatchesAttestation(result: ValidationResult, attestation: Attestation): void {
   if (
     result.candidate !== attestation.candidate ||
     result.validatedAgainst !== attestation.validatedAgainst ||
@@ -1332,8 +1337,7 @@ function validationResponse(row: ValidationRow): ValidationResult {
   }
   return {
     candidate: parseSha(row.candidate_sha),
-    validatedAgainst:
-      row.validated_against === null ? undefined : parseSha(row.validated_against),
+    validatedAgainst: row.validated_against === null ? undefined : parseSha(row.validated_against),
     corpusVersion: row.corpus_version,
     gateVersion: row.gate_version,
     verdict: row.verdict,
@@ -1374,10 +1378,7 @@ function requestErrorResponse(error: unknown): Response {
     );
   }
   if (error instanceof MissingResourceError) {
-    return Response.json(
-      { error: { kind: error.kind, message: error.message } },
-      { status: 404 },
-    );
+    return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 404 });
   }
   return Response.json(
     { error: { kind: "internal", message: errorMessage(error) } },
