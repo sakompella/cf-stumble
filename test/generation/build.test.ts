@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
 import { decodeObject } from "../../src/git/index.js";
 import type { Commit, Sha } from "../../src/git/types.js";
@@ -39,67 +39,65 @@ async function readCommit(store: MemoryStore, sha: Sha): Promise<Commit> {
   return object.commit;
 }
 
-describe("buildGeneration", () => {
-  it("writes a root commit with a manifest", async () => {
-    const store = new MemoryStore();
-    const commit = await buildGeneration(store, options);
+it("buildGeneration writes a root commit with a manifest", async () => {
+  const store = new MemoryStore();
+  const commit = await buildGeneration(store, options);
 
-    expect(commit).not.toHaveProperty("number");
-    expect(commit.parent).toBeUndefined();
-    expect(commit.createdAt).toBe(author.timestamp);
-    expect(commit.summary).toBe(`${options.summary}\n`);
-    expect(await readCommit(store, commit.sha)).toEqual({
-      tree: commit.manifest,
-      parents: [],
-      author,
-      committer: author,
-      message: `${options.summary}\n`,
-    });
-    expect(await store.listObjects()).toHaveLength(4);
+  expect(commit).not.toHaveProperty("number");
+  expect(commit.parent).toBeUndefined();
+  expect(commit.createdAt).toBe(author.timestamp);
+  expect(commit.summary).toBe(`${options.summary}\n`);
+  expect(await readCommit(store, commit.sha)).toEqual({
+    tree: commit.manifest,
+    parents: [],
+    author,
+    committer: author,
+    message: `${options.summary}\n`,
+  });
+  expect(await store.listObjects()).toHaveLength(4);
+});
+
+it("buildGeneration deduplicates an unchanged module across commits", async () => {
+  const store = new MemoryStore();
+  const first = await buildGeneration(store, options);
+
+  await buildGeneration(store, {
+    ...options,
+    parent: first,
+    summary: "same module, next commit",
+    createdAt: author.timestamp + 1,
   });
 
-  it("deduplicates an unchanged module across commits", async () => {
-    const store = new MemoryStore();
-    const first = await buildGeneration(store, options);
+  expect(await store.listObjects()).toHaveLength(5);
+});
 
-    await buildGeneration(store, {
-      ...options,
-      parent: first,
-      summary: "same module, next commit",
-      createdAt: author.timestamp + 1,
-    });
-
-    expect(await store.listObjects()).toHaveLength(5);
+it("buildGeneration does not assign a colliding lineage identity to distinct commits", async () => {
+  const store = new MemoryStore();
+  const parent = await buildGeneration(store, options);
+  const left = await buildGeneration(store, {
+    ...options,
+    parent,
+    summary: "candidate left",
+    createdAt: author.timestamp + 1,
+  });
+  const right = await buildGeneration(store, {
+    ...options,
+    parent,
+    summary: "candidate right",
+    createdAt: author.timestamp + 1,
   });
 
-  it("does not assign a colliding lineage identity to distinct commits", async () => {
-    const store = new MemoryStore();
-    const parent = await buildGeneration(store, options);
-    const left = await buildGeneration(store, {
-      ...options,
-      parent,
-      summary: "candidate left",
-      createdAt: author.timestamp + 1,
-    });
-    const right = await buildGeneration(store, {
-      ...options,
-      parent,
-      summary: "candidate right",
-      createdAt: author.timestamp + 1,
-    });
+  expect(left.sha).not.toBe(right.sha);
+  expect(left).not.toHaveProperty("number");
+  expect(right).not.toHaveProperty("number");
+});
 
-    expect(left.sha).not.toBe(right.sha);
-    expect(left).not.toHaveProperty("number");
-    expect(right).not.toHaveProperty("number");
-  });
+it("buildGeneration is deterministic for identical inputs", async () => {
+  const store = new MemoryStore();
 
-  it("is deterministic for identical inputs", async () => {
-    const store = new MemoryStore();
+  const first = await buildGeneration(store, options);
+  const second = await buildGeneration(store, options);
 
-    const first = await buildGeneration(store, options);
-    const second = await buildGeneration(store, options);
-
-    expect(second).toEqual(first);
-    expect(await store.listObjects()).toHaveLength(4);
-  });
+  expect(second).toEqual(first);
+  expect(await store.listObjects()).toHaveLength(4);
 });
