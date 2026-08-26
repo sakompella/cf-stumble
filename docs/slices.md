@@ -145,7 +145,7 @@ rather than guessed at; a mutated fixture fails; tape exhaustion reports `INCONC
 
 ---
 
-## S7 — Regression gate with canaries · depends: S4, S6 · IN PROGRESS
+## S7 — Regression gate with canaries · depends: S4, S6 · DONE
 
 The ratchet (D16) plus the canaries that stop it degenerating (D16a). Owns `src/validation/`.
 
@@ -182,7 +182,7 @@ S2's conformance suite rerun against real DO SQLite under the workers pool, usin
 
 ---
 
-## S10 — Supervisor Durable Object and HTTP routes · depends: S4, S7, S9
+## S10 — Supervisor Durable Object and HTTP routes · depends: S4, S7, S9 · IN PROGRESS
 
 Generation history, live pointer, accumulated context, corpus. Routes to list, promote, roll
 back, reset. Owns `src/supervisor/`.
