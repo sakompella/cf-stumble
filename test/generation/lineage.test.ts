@@ -40,12 +40,7 @@ describe("walkLineage", () => {
     const store = new MemoryStore();
     const root = await build(store, undefined, author.timestamp, "root");
     const child = await build(store, root, author.timestamp + 1, "child");
-    const grandchild = await build(
-      store,
-      child,
-      author.timestamp + 2,
-      "grandchild",
-    );
+    const grandchild = await build(store, child, author.timestamp + 2, "grandchild");
 
     const lineage = await walkLineage(store, grandchild.sha);
 

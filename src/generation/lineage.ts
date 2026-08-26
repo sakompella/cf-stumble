@@ -4,10 +4,7 @@ import { readGeneration } from "./read.js";
 import type { Generation } from "./types.js";
 
 /** Walk from a generation toward generation 0, returning newest to oldest. */
-export async function walkLineage(
-  store: Store,
-  start: Sha,
-): Promise<readonly Generation[]> {
+export async function walkLineage(store: Store, start: Sha): Promise<readonly Generation[]> {
   const lineage: Generation[] = [];
   const visited = new Set<Sha>();
   let current = start;

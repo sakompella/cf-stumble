@@ -70,9 +70,7 @@ describe("generation manifest validation", () => {
     }
     await store.deleteObject(file.sha);
 
-    await expect(readGeneration(store, generation.sha)).rejects.toThrow(
-      /missing.*blob/u,
-    );
+    await expect(readGeneration(store, generation.sha)).rejects.toThrow(/missing.*blob/u);
   });
 });
 

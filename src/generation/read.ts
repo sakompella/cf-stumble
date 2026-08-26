@@ -11,10 +11,7 @@ export type LoadedGeneration = {
 };
 
 /** Read a commit generation and flatten its nested manifest into authored modules. */
-export async function readGeneration(
-  store: Store,
-  sha: Sha,
-): Promise<LoadedGeneration> {
+export async function readGeneration(store: Store, sha: Sha): Promise<LoadedGeneration> {
   const commit = await readCommit(store, sha);
   const modules = await readManifest(store, commit.tree);
   const number = await generationNumber(store, sha);
@@ -124,11 +121,7 @@ async function generationNumber(store: Store, start: Sha) {
   }
 }
 
-async function readObject(
-  store: Store,
-  sha: Sha,
-  description: string,
-): Promise<GitObject> {
+async function readObject(store: Store, sha: Sha, description: string): Promise<GitObject> {
   const bytes = await store.readObject(sha);
   if (bytes === undefined) {
     throw new Error(`missing ${description} object ${sha}`);

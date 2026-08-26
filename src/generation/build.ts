@@ -37,18 +37,13 @@ export async function buildGeneration(
   }
 
   for (const module of options.modules) {
-    const blob = await store.writeObject(
-      encodeObject({ type: "blob", data: module.content }),
-    );
+    const blob = await store.writeObject(encodeObject({ type: "blob", data: module.content }));
     findModuleEntry(root, module.path).blob = blob;
   }
 
   const manifest = await writeTree(store, root);
   const parent = options.parent;
-  const number =
-    parent === undefined
-      ? GENESIS_NUMBER
-      : parseGenerationNumber(parent.number + 1);
+  const number = parent === undefined ? GENESIS_NUMBER : parseGenerationNumber(parent.number + 1);
   const sha = await store.writeObject(
     encodeObject({
       type: "commit",
@@ -82,9 +77,7 @@ function insertModule(root: TreeNode, module: Module): void {
 
   for (const part of parts.slice(0, -1)) {
     if (node.files.has(part)) {
-      throw new TypeError(
-        `module path conflicts with a file: ${JSON.stringify(module.path)}`,
-      );
+      throw new TypeError(`module path conflicts with a file: ${JSON.stringify(module.path)}`);
     }
     let child = node.trees.get(part);
     if (child === undefined) {
