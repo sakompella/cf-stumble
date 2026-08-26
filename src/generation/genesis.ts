@@ -1,5 +1,6 @@
 import { buildGeneration } from "./build.js";
 import type { BuildGenerationOptions } from "./build.js";
+import { walkLineage } from "./lineage.js";
 import type { Sha } from "../git/types.js";
 import type { PointerStore, Store } from "../storage/types.js";
 import { GENESIS_NUMBER } from "./types.js";
@@ -67,6 +68,18 @@ export function isGenesis(
     return pin !== undefined && isGenesisSha(value, pin);
   }
   return isGenesisGeneration(value);
+}
+
+export async function assertGenesisReachable(
+  store: Store,
+  start: Sha,
+  pin: GenesisPin,
+): Promise<void> {
+  const lineage = await walkLineage(store, start);
+  const root = lineage.at(-1);
+  if (root === undefined || !isGenesisSha(root.sha, pin)) {
+    throw new Error(`generation ${start} does not reach pinned genesis ${pin.sha}`);
+  }
 }
 
 /** Reset through the pointer store only, retrying CAS if a concurrent writer wins a race. */

@@ -5,6 +5,7 @@ import {
   isGenesisGeneration,
   isGenesisSha,
   makeGenesisPin,
+  assertGenesisReachable,
   resetToGenesis,
   seedGenesis,
 } from "../../src/generation/genesis.js";
@@ -100,5 +101,20 @@ describe("genesis identification", () => {
     expect(isGenesisSha(genesis.sha, pin)).toBe(true);
     expect(isGenesis(genesis.sha, pin)).toBe(true);
     expect(isGenesisSha(parseSha("ffffffffffffffffffffffffffffffffffffffff"), pin)).toBe(false);
+  });
+
+  it("asserts that a later generation reaches the pinned root", async () => {
+    const store = new MemoryStore();
+    const genesis = await seedGenesis(store, options);
+    const later = await buildGeneration(store, {
+      ...options,
+      parent: genesis,
+      createdAt: author.timestamp + 1,
+      summary: "later generation",
+    });
+    const pin = makeGenesisPin(genesis);
+
+    await expect(assertGenesisReachable(store, later.sha, pin)).resolves.toBeUndefined();
+    expect(isGenesisGeneration(later)).toBe(false);
   });
 });
