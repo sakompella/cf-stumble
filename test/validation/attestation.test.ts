@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
 import type { ReplayOutcome, ReplaySession } from "../../src/replay/index.js";
 import {
@@ -46,12 +47,19 @@ test("a passing run emits an attestation bound to its observed live generation",
     now: () => 123,
   });
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, {
+    generation: parseGenerationNumber(1),
+    artifactDigest: CANDIDATE,
+    validatedAgainstGeneration: parseGenerationNumber(0),
+  });
 
   expect(run.result.verdict).toBe("pass");
   expect(run.attestation).toEqual({
     candidate: CANDIDATE,
+    generation: 1,
+    artifactDigest: CANDIDATE,
     validatedAgainst: LIVE,
+    validatedAgainstGeneration: 0,
     corpusVersion: run.result.corpusVersion,
     gateVersion: run.result.gateVersion,
     verdict: "pass",

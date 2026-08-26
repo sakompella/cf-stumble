@@ -39,7 +39,6 @@ test("seeding starts generation 0, pins its turn, and builds a distinct candidat
     "change prompt",
   );
 
-  expect(candidate.number).toBe(1);
   expect(candidate.parent).toBe(genesis.sha);
   expect(candidate.sha).not.toBe(genesis.sha);
   expect(await store.readPointer()).toBe(genesis.sha);
@@ -61,7 +60,9 @@ test("promotion changes the next pinned turn and rollback restores generation 0"
     baseline: { status: "PASS" },
     candidate: { status: "PASS" },
   });
-  expect(await validation.resultStore.get(candidate.sha)).toEqual(validation.run.result);
+  expect(await validation.resultStore.get(validation.run.result.generation)).toEqual(
+    validation.run.result,
+  );
 
   const pointer = new PointerManager({
     store,
@@ -174,7 +175,7 @@ test("rollback leaves accumulated context, facts, corpus, and validation evidenc
     session: await loadFixture(),
     mandatoryCanary: false,
   });
-  const evidence = await validation.resultStore.get(candidate.sha);
+  const evidence = await validation.resultStore.get(validation.run.result.generation);
 
   expect((await pointer.rollback(genesis.sha, candidate.sha)).outcome).toBe("promoted");
   expect(accumulated.conversationHistory).toEqual([
@@ -191,7 +192,7 @@ test("rollback leaves accumulated context, facts, corpus, and validation evidenc
     "four primitives remain executable",
     "later corpus entry",
   ]);
-  expect(await validation.resultStore.get(candidate.sha)).toEqual(evidence);
+  expect(await validation.resultStore.get(validation.run.result.generation)).toEqual(evidence);
 });
 
 test("a candidate that fails the real replay gate leaves the live pointer unchanged", async () => {

@@ -1,5 +1,5 @@
 import { readGeneration, type LoadedGeneration } from "../../generation/read.js";
-import type { Generation } from "../../generation/types.js";
+import type { CommitSnapshot } from "../../generation/types.js";
 import type { Sha } from "../../git/types.js";
 import type { Store } from "../../storage/types.js";
 
@@ -19,16 +19,14 @@ export type AgentSkill = {
 };
 
 export type AgentDefinition = {
-  readonly generation: Generation;
+  readonly generation: CommitSnapshot;
   readonly systemPrompt: string;
   readonly policy: string;
   readonly skills: readonly AgentSkill[];
 };
 
 export type AgentMaterializationErrorKind =
-  | "missing-module"
-  | "invalid-module"
-  | "unsupported-module";
+  "missing-module" | "invalid-module" | "unsupported-module";
 
 export class AgentMaterializationError extends Error {
   readonly kind: AgentMaterializationErrorKind;
@@ -50,10 +48,7 @@ export class AgentMaterializationError extends Error {
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
 /** Read and validate the role-bearing modules in one immutable generation. */
-export async function materializeGeneration(
-  store: Store,
-  sha: Sha,
-): Promise<AgentDefinition> {
+export async function materializeGeneration(store: Store, sha: Sha): Promise<AgentDefinition> {
   const loaded = await readGeneration(store, sha);
   return materializeLoadedGeneration(loaded);
 }
@@ -88,9 +83,7 @@ function materializeLoadedGeneration(loaded: LoadedGeneration): AgentDefinition 
   };
 }
 
-function materializeSkills(
-  modules: LoadedGeneration["modules"],
-): AgentSkill[] {
+function materializeSkills(modules: LoadedGeneration["modules"]): AgentSkill[] {
   const skills: AgentSkill[] = [];
   for (const module of modules) {
     if (module.path === SYSTEM_PROMPT_PATH || module.path === POLICY_PATH) {

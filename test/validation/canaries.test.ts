@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import { assertNever, parseSha } from "../../src/git/types.js";
 import type { ReplayOutcome, ReplaySession } from "../../src/replay/index.js";
 import {
@@ -11,6 +12,11 @@ import {
 
 const LIVE = parseSha("1111111111111111111111111111111111111111");
 const CANDIDATE = parseSha("2222222222222222222222222222222222222222");
+const validationIdentity = {
+  generation: parseGenerationNumber(1),
+  artifactDigest: CANDIDATE,
+  validatedAgainstGeneration: parseGenerationNumber(0),
+} as const;
 
 const session: ReplaySession = {
   schemaVersion: 1,
@@ -83,7 +89,7 @@ test("a candidate that removes the canary catching its own regression cannot pro
     [{ name: canary.name, session: canary.session }],
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.corpusVersion).toBe(await computeCorpusVersion([stable]));
   expect(run.result.verdict).toBe("inconclusive");
@@ -103,7 +109,7 @@ test("a candidate that weakens a canary cannot promote", async () => {
     { name: canary.name, session: canary.session },
   ]);
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.attestation).toBeUndefined();
@@ -116,7 +122,7 @@ test("a candidate cannot demote a pinned canary through corpus metadata", async 
     { name: canary.name, session: canary.session },
   ]);
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.attestation).toBeUndefined();
@@ -131,7 +137,7 @@ test("partial canary success does not promote because every required canary must
     ),
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("fail");
   expect(run.attestation).toBeUndefined();
@@ -142,7 +148,7 @@ test("a throwing scorer yields INCONCLUSIVE rather than PASS", async () => {
     Promise.reject(new Error("scorer crashed")),
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.result.caseResults[0]?.baseline).toMatchObject({
@@ -160,7 +166,7 @@ test("a timing-out executor yields INCONCLUSIVE rather than PASS", async () => {
     1,
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.result.caseResults[0]?.baseline).toMatchObject({
@@ -183,7 +189,7 @@ test("a failing mandatory canary blocks even when that canary failed on live", a
     ),
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("fail");
   expect(run.attestation).toBeUndefined();
@@ -202,7 +208,7 @@ test("a canary that cannot pass on live makes the gate inconclusive", async () =
     ),
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.attestation).toBeUndefined();
@@ -211,7 +217,7 @@ test("a canary that cannot pass on live makes the gate inconclusive", async () =
 test("an empty corpus is inconclusive rather than vacuously passing", async () => {
   const gate = makeGate([], () => Promise.resolve(outcome("PASS")));
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.attestation).toBeUndefined();
@@ -222,7 +228,7 @@ test("an all-failing baseline is inconclusive rather than permitting promotion",
     Promise.resolve(outcome("FAIL")),
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.attestation).toBeUndefined();
@@ -233,7 +239,7 @@ test("an inconclusive case cannot silently count as a pass", async () => {
     Promise.resolve(generation === LIVE ? outcome("PASS") : outcome("INCONCLUSIVE")),
   );
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, validationIdentity);
 
   expect(run.result.verdict).toBe("inconclusive");
   expect(run.result.caseResults[0]?.candidate.status).toBe("INCONCLUSIVE");

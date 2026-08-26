@@ -1,7 +1,7 @@
 import fixtureData from "../fixtures/sessions/four-primitives.json";
 import { buildGeneration } from "../../src/generation/build.js";
 import { seedGenesis } from "../../src/generation/genesis.js";
-import type { Generation, Module } from "../../src/generation/types.js";
+import type { CommitSnapshot, Module } from "../../src/generation/types.js";
 import {
   AgentExecutor,
   LiveModelResponseSource,
@@ -56,11 +56,11 @@ export function modulesFor(prompt: string, policy: string): readonly Module[] {
 
 export function buildChild(
   store: MemoryStore,
-  parent: Generation,
+  parent: CommitSnapshot,
   prompt: string,
   policy: string,
   summary: string,
-): Promise<Generation> {
+): Promise<CommitSnapshot> {
   return buildGeneration(store, {
     modules: modulesFor(prompt, policy),
     parent,
@@ -70,7 +70,10 @@ export function buildChild(
   });
 }
 
-export function buildPromptCandidate(store: MemoryStore, parent: Generation): Promise<Generation> {
+export function buildPromptCandidate(
+  store: MemoryStore,
+  parent: CommitSnapshot,
+): Promise<CommitSnapshot> {
   return buildChild(store, parent, "candidate prompt\n", ALLOW_POLICY, "change prompt");
 }
 
@@ -116,7 +119,7 @@ export function runConfiguredTurn(store: MemoryStore, workspace: InMemoryWorkspa
 
 export async function seedStore(): Promise<{
   readonly store: MemoryStore;
-  readonly genesis: Generation;
+  readonly genesis: CommitSnapshot;
 }> {
   const store = new MemoryStore();
   const genesis = await seedGenesis(store, {

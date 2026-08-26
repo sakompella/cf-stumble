@@ -1,13 +1,10 @@
 import { AgentExecutor, materializeGeneration } from "../../src/agent/runtime/index.js";
-import type { Attestation, Generation } from "../../src/generation/types.js";
+import type { Attestation, CommitSnapshot } from "../../src/generation/types.js";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import { assertNever } from "../../src/git/types.js";
 import type { Sha } from "../../src/git/types.js";
 import { runReplay } from "../../src/replay/index.js";
-import type {
-  PrimitiveCall,
-  ReplayOutcome,
-  ReplaySession,
-} from "../../src/replay/index.js";
+import type { PrimitiveCall, ReplayOutcome, ReplaySession } from "../../src/replay/index.js";
 import type { MemoryStore } from "../../src/storage/memory.js";
 import {
   MemoryValidationResultStore,
@@ -31,9 +28,7 @@ const expectedReplayCalls: readonly PrimitiveCall[] = [
 
 function replayAgentResponse(policy: string): string {
   const calls = expectedReplayCalls.map((call) =>
-    call.kind === "write" && policy !== ALLOW_POLICY
-      ? { ...call, content: "blocked\n" }
-      : call,
+    call.kind === "write" && policy !== ALLOW_POLICY ? { ...call, content: "blocked\n" } : call,
   );
   return JSON.stringify({
     type: "tool_calls",
@@ -83,15 +78,12 @@ async function executeGeneration(
     throw new Error("validation requires a live generation");
   }
   const definition = await materializeGeneration(store, generation);
-  return runReplay(
-    sessionForPolicy(session, definition.policy),
-    new AgentExecutor(definition),
-  );
+  return runReplay(sessionForPolicy(session, definition.policy), new AgentExecutor(definition));
 }
 
 export async function validateCandidate(
   store: MemoryStore,
-  candidate: Generation,
+  candidate: CommitSnapshot,
   session: ReplaySession,
 ): Promise<{
   readonly run: ValidationRun;
@@ -109,7 +101,15 @@ export async function validateCandidate(
     execute: (generation, currentSession) => executeGeneration(store, generation, currentSession),
     now: () => 1_700_000_002,
   });
-  return { run: await gate.validate(candidate.sha), resultStore, corpus };
+  return {
+    run: await gate.validate(candidate.sha, {
+      generation: parseGenerationNumber(1),
+      artifactDigest: candidate.sha,
+      validatedAgainstGeneration: parseGenerationNumber(0),
+    }),
+    resultStore,
+    corpus,
+  };
 }
 
 export function requireAttestation(run: ValidationRun): Attestation {

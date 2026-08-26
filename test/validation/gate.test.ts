@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
 import type { ReplayOutcome, ReplaySession } from "../../src/replay/index.js";
 import {
@@ -57,7 +58,11 @@ test("the ratchet blocks a regression from a live passing case", async () => {
     now: () => 10,
   });
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, {
+    generation: parseGenerationNumber(1),
+    artifactDigest: CANDIDATE,
+    validatedAgainstGeneration: parseGenerationNumber(0),
+  });
 
   expect(run.result.verdict).toBe("fail");
   expect(run.attestation).toBeUndefined();
@@ -78,7 +83,11 @@ test("the ratchet allows a case that was already failing to fail again", async (
     now: () => 10,
   });
 
-  const run = await gate.validate(CANDIDATE);
+  const run = await gate.validate(CANDIDATE, {
+    generation: parseGenerationNumber(1),
+    artifactDigest: CANDIDATE,
+    validatedAgainstGeneration: parseGenerationNumber(0),
+  });
 
   expect(run.result.verdict).toBe("pass");
   expect(run.attestation).toMatchObject({ candidate: CANDIDATE, verdict: "pass" });

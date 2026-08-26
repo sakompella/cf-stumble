@@ -2,7 +2,13 @@
 /* oxlint-disable eslint/max-lines, eslint/max-lines-per-function */
 
 import { env } from "cloudflare:workers";
-import { isJsonObjectValue, isJsonString, parseJsonValue, type JsonObject, type JsonValue } from "../../src/json.js";
+import {
+  isJsonObjectValue,
+  isJsonString,
+  parseJsonValue,
+  type JsonObject,
+  type JsonValue,
+} from "../../src/json.js";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { buildGeneration } from "../../src/generation/build.js";
 import { readGeneration } from "../../src/generation/read.js";
@@ -47,6 +53,18 @@ function readStringField(record: JsonObject, key: string): string {
     throw new TypeError(`expected ${key} to be a string`);
   }
   return value;
+}
+
+function readNumberField(record: JsonObject, key: string): number {
+  const value = record[key];
+  if (!isJsonNumber(value)) {
+    throw new TypeError(`expected ${key} to be a number`);
+  }
+  return value;
+}
+
+function isJsonNumber(value: JsonValue | undefined): value is number {
+  return typeof value === "number";
 }
 
 const candidateSource = `
@@ -134,19 +152,19 @@ function createGeneration(
 }
 
 async function promoteCreatedGeneration(source = candidateSource): Promise<{
-  readonly genesis: string;
-  readonly candidate: string;
+  readonly genesis: number;
+  readonly candidate: number;
 }> {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
   const initialGeneration = readRecord(initial["generation"]);
-  const genesis = readStringField(initialGeneration, "sha");
+  const genesis = readNumberField(initialGeneration, "number");
   const createdResponse = await createGeneration(source);
   if (createdResponse.status !== 201) {
     throw new Error(await createdResponse.text());
   }
   const created = readRecord(await readJson(createdResponse));
   const generation = readRecord(created["generation"]);
-  const candidate = readStringField(generation, "sha");
+  const candidate = readNumberField(generation, "number");
   await writeValidationCase();
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
@@ -159,7 +177,7 @@ async function promoteCreatedGeneration(source = candidateSource): Promise<{
 afterEach(async () => {
   await reset();
 });
-test("lists the pinned generation zero with its lineage", async () => {
+test("lists generation zero as a validated registry attempt", async () => {
   const response = await supervisorRequest("/generations");
 
   expect(response.status).toBe(200);
@@ -167,11 +185,25 @@ test("lists the pinned generation zero with its lineage", async () => {
     generations: [
       {
         number: 0,
-        parent: null,
-        lineage: [{ number: 0, parent: null }],
+        state: "validated",
+        baseline: null,
       },
     ],
   });
+});
+
+test("allocates distinct registry numbers for repeated attempts of one commit", async () => {
+  const firstResponse = await createGeneration();
+  const secondResponse = await createGeneration();
+  expect(firstResponse.status).toBe(201);
+  expect(secondResponse.status).toBe(201);
+
+  const first = readRecord(readRecord(await readJson(firstResponse))["generation"]);
+  const second = readRecord(readRecord(await readJson(secondResponse))["generation"]);
+  expect(readNumberField(second, "number")).toBe(readNumberField(first, "number") + 1);
+  expect(readStringField(second, "commit")).toBe(readStringField(first, "commit"));
+  expect(first["state"]).toBe("loading");
+  expect(second["state"]).toBe("loading");
 });
 test("rejects every privileged mutation without the exact credential and preserves state", async () => {
   const before = await supervisorSnapshot();
@@ -239,20 +271,22 @@ test("promotes a registered candidate and records validation evidence", async ()
   const { candidate } = await promoteCreatedGeneration();
 
   const live = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(candidate);
+  expect(readNumberField(readRecord(live["generation"]), "number")).toBe(candidate);
 
   const results = readRecord(
-    await readJson(await supervisorRequest(`/validation-results?candidate=${candidate}`)),
+    await readJson(await supervisorRequest(`/validation-results?generation=${candidate}`)),
   );
-  expect(results["results"]).toMatchObject([{ candidate, verdict: "pass" }]);
+  expect(results["results"]).toMatchObject([{ generation: candidate, verdict: "pass" }]);
 });
-test("promotes a candidate already written to the supervisor object store", async () => {
+test("does not promote an object-store commit without a registry attempt", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
-  const genesis = readStringField(readRecord(initial["generation"]), "sha");
+  const genesisGeneration = readRecord(initial["generation"]);
+  const genesis = readNumberField(genesisGeneration, "number");
+  const genesisCommit = readStringField(genesisGeneration, "commit");
   const stub = env.SUPERVISOR.getByName("supervisor-s10");
-  const candidate = await runInDurableObject(stub, async (_instance, state) => {
+  const candidateCommit = await runInDurableObject(stub, async (_instance, state) => {
     const store = new DurableObjectSqliteStore(state);
-    const parent = (await readGeneration(store, parseSha(genesis))).generation;
+    const parent = (await readGeneration(store, parseSha(genesisCommit))).generation;
     const generation = await buildGeneration(store, {
       modules: [
         { path: "agent.js", content: new TextEncoder().encode(candidateSource), executable: false },
@@ -282,25 +316,27 @@ test("promotes a candidate already written to the supervisor object store", asyn
   await writeValidationCase();
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
-    body: JSON.stringify({ candidate }),
+    body: JSON.stringify({ candidate: 1 }),
   });
 
-  expect(promotion.status).toBe(200);
+  expect(promotion.status).toBe(404);
+  expect(await readJson(promotion)).toMatchObject({ error: { kind: "not-found" } });
   expect(
-    readStringField(
+    readNumberField(
       readRecord(readRecord(await readJson(await supervisorRequest("/live")))["generation"]),
-      "sha",
+      "number",
     ),
-  ).toBe(candidate);
+  ).toBe(genesis);
+  expect(candidateCommit).toMatch(/^[0-9a-f]{40}$/u);
 });
 
 test("does not promote a candidate whose worker fails the supervisor-run gate", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
-  const liveBefore = readStringField(readRecord(initial["generation"]), "sha");
+  const liveBefore = readNumberField(readRecord(initial["generation"]), "number");
   const createdResponse = await createGeneration(unloadableCandidateSource);
   expect(createdResponse.status).toBe(201);
   const created = readRecord(await readJson(createdResponse));
-  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const candidate = readNumberField(readRecord(created["generation"]), "number");
   await writeValidationCase();
 
   const promotion = await supervisorRequest("/promote", {
@@ -314,16 +350,16 @@ test("does not promote a candidate whose worker fails the supervisor-run gate", 
     reason: { kind: "not-passing", verdict: "inconclusive" },
   });
   const liveAfter = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(liveAfter["generation"]), "sha")).toBe(liveBefore);
+  expect(readNumberField(readRecord(liveAfter["generation"]), "number")).toBe(liveBefore);
 });
 
 test("returns a structured reason for a candidate rejected by the supervisor-run gate", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
-  const liveBefore = readStringField(readRecord(initial["generation"]), "sha");
+  const liveBefore = readNumberField(readRecord(initial["generation"]), "number");
   const createdResponse = await createGeneration(candidateSource, false);
   expect(createdResponse.status).toBe(201);
   const created = readRecord(await readJson(createdResponse));
-  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const candidate = readNumberField(readRecord(created["generation"]), "number");
   await writeValidationCase();
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
@@ -336,16 +372,14 @@ test("returns a structured reason for a candidate rejected by the supervisor-run
     reason: { kind: "not-passing", verdict: "inconclusive" },
   });
   const liveAfter = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(liveAfter["generation"]), "sha")).toBe(liveBefore);
+  expect(readNumberField(readRecord(liveAfter["generation"]), "number")).toBe(liveBefore);
 });
 
 test("ignores a caller-supplied attestation and promotes only after its own gate passes", async () => {
-  const initial = readRecord(await readJson(await supervisorRequest("/live")));
-  const genesis = readStringField(readRecord(initial["generation"]), "sha");
   const createdResponse = await createGeneration();
   expect(createdResponse.status).toBe(201);
   const created = readRecord(await readJson(createdResponse));
-  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const candidate = readNumberField(readRecord(created["generation"]), "number");
   await writeValidationCase();
 
   const promotion = await supervisorRequest("/promote", {
@@ -354,7 +388,7 @@ test("ignores a caller-supplied attestation and promotes only after its own gate
       candidate,
       attestation: {
         candidate,
-        validatedAgainst: genesis,
+        validatedAgainst: "ignored",
         corpusVersion: "forged-corpus",
         gateVersion: "forged-gate",
         verdict: "pass",
@@ -369,9 +403,9 @@ test("ignores a caller-supplied attestation and promotes only after its own gate
 
 test("promotion rolls back every write when generation history fails", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
-  const genesis = readStringField(readRecord(initial["generation"]), "sha");
+  const genesis = readNumberField(readRecord(initial["generation"]), "number");
   const created = readRecord(await readJson(await createGeneration()));
-  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const candidate = readNumberField(readRecord(created["generation"]), "number");
   await writeValidationCase();
   const stub = env.SUPERVISOR.getByName("supervisor-s10");
   await runInDurableObject(stub, (_instance, durableObjectState) => {
@@ -389,13 +423,13 @@ test("promotion rolls back every write when generation history fails", async () 
 
   expect(promotion.status).toBe(500);
   const live = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
+  expect(readNumberField(readRecord(live["generation"]), "number")).toBe(genesis);
   const results = readRecord(
-    await readJson(await supervisorRequest(`/validation-results?candidate=${candidate}`)),
+    await readJson(await supervisorRequest(`/validation-results?generation=${candidate}`)),
   );
   expect(results["results"]).toEqual([]);
   const history = readRecord(await readJson(await supervisorRequest("/history")));
-  expect(history["history"]).not.toMatchObject([{ operation: "promote", generation: candidate }]);
+  expect(history["history"]).not.toMatchObject([{ kind: "promoted", generation: candidate }]);
 });
 
 test("authorized reset restores genesis after the gate rejects a candidate", async () => {
@@ -403,7 +437,7 @@ test("authorized reset restores genesis after the gate rejects a candidate", asy
   const createdResponse = await createGeneration(unloadableCandidateSource);
   expect(createdResponse.status).toBe(201);
   const created = readRecord(await readJson(createdResponse));
-  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const candidate = readNumberField(readRecord(created["generation"]), "number");
   await writeValidationCase();
 
   const failedPromotion = await supervisorRequest("/promote", {
@@ -415,14 +449,14 @@ test("authorized reset restores genesis after the gate rejects a candidate", asy
   const resetResponse = await supervisorRequest("/reset", { method: "POST" });
   expect(resetResponse.status).toBe(200);
   const live = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
+  expect(readNumberField(readRecord(live["generation"]), "number")).toBe(genesis);
 });
 
 test("rejects rollback to a registered generation that was never live", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
-  const genesis = readStringField(readRecord(initial["generation"]), "sha");
+  const genesis = readNumberField(readRecord(initial["generation"]), "number");
   const created = readRecord(await readJson(await createGeneration()));
-  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const candidate = readNumberField(readRecord(created["generation"]), "number");
 
   const rollback = await supervisorRequest("/rollback", {
     method: "POST",
@@ -432,7 +466,7 @@ test("rejects rollback to a registered generation that was never live", async ()
   expect(rollback.status).toBe(422);
   expect(await readJson(rollback)).toMatchObject({ error: { kind: "not-live" } });
   const live = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
+  expect(readNumberField(readRecord(live["generation"]), "number")).toBe(genesis);
 });
 
 test("a quarantined generation cannot be promoted or rolled back to", async () => {
@@ -463,7 +497,7 @@ test("a quarantined generation cannot be promoted or rolled back to", async () =
   expect(rollback.status).toBe(422);
   expect(await readJson(rollback)).toMatchObject({ error: { kind: "quarantined" } });
   const live = readRecord(await readJson(await supervisorRequest("/live")));
-  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
+  expect(readNumberField(readRecord(live["generation"]), "number")).toBe(genesis);
 });
 
 test("keeps context and corpus when rolling back", async () => {
@@ -498,9 +532,9 @@ test("keeps context and corpus when rolling back", async () => {
 
   expect(rollback.status).toBe(200);
   expect(
-    readStringField(
+    readNumberField(
       readRecord(readRecord(await readJson(await supervisorRequest("/live")))["generation"]),
-      "sha",
+      "number",
     ),
   ).toBe(genesis);
   expect(await readJson(await supervisorRequest("/context"))).toMatchObject({

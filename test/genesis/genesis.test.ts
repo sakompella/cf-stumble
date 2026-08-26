@@ -10,6 +10,7 @@ import {
   seedGenesis,
 } from "../../src/generation/genesis.js";
 import { parseSha } from "../../src/git/types.js";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import { buildGeneration } from "../../src/generation/build.js";
 import type { Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
@@ -209,7 +210,6 @@ describe("genesis reset concurrency", () => {
       createdAt: author.timestamp + 2,
       summary: "candidate generation",
     });
-    const pin = makeGenesisPin(genesis);
     expect(await baseStore.setPointer(live.sha, genesis.sha)).toBe(true);
     const store = new TestStore(baseStore, { barrier: makeBarrier(2) });
     const manager = new PointerManager({
@@ -219,7 +219,10 @@ describe("genesis reset concurrency", () => {
     });
     const attestation = {
       candidate: candidate.sha,
+      generation: parseGenerationNumber(0),
+      artifactDigest: candidate.sha,
       validatedAgainst: live.sha,
+      validatedAgainstGeneration: parseGenerationNumber(0),
       corpusVersion: "corpus-1",
       gateVersion: "gate-1",
       verdict: "pass",
@@ -227,7 +230,7 @@ describe("genesis reset concurrency", () => {
     } as const;
 
     const [resetResult, promotionResult] = await Promise.all([
-      resetToGenesis(store, pin),
+      resetToGenesis(store, makeGenesisPin(genesis)),
       manager.promote(candidate.sha, attestation),
     ]);
 

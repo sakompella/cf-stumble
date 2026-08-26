@@ -1,4 +1,5 @@
 import type { Verdict } from "../generation/types.js";
+import type { GenerationNumber } from "../generation/types.js";
 import type { Sha } from "../git/types.js";
 import type { EffectsDifference } from "../replay/comparison.js";
 import type { ReplayInconclusiveReason, ReplayOutcome } from "../replay/runner.js";
@@ -41,10 +42,13 @@ export type ValidationCaseResult = {
   readonly candidate: RecordedCaseOutcome;
 };
 
-/** The durable row for one candidate, keyed by {@link candidate}. */
+/** The durable row for one materialization attempt, keyed by {@link generation}. */
 export type ValidationResult = {
   readonly candidate: Sha;
+  readonly generation: GenerationNumber;
+  readonly artifactDigest: Sha;
   readonly validatedAgainst: Sha | undefined;
+  readonly validatedAgainstGeneration: GenerationNumber | undefined;
   readonly corpusVersion: string;
   readonly gateVersion: string;
   readonly verdict: Verdict;
@@ -53,31 +57,35 @@ export type ValidationResult = {
 };
 
 export type ValidationResultQuery = {
+  readonly generation?: GenerationNumber;
   readonly candidate?: Sha;
   readonly verdict?: Verdict;
 };
 
-/** Storage for structured gate results; the candidate sha is the record key. */
+/** Storage for structured gate results; the generation number is the record key. */
 export interface ValidationResultStore {
   put(result: ValidationResult): Promise<void>;
-  get(candidate: Sha): Promise<ValidationResult | undefined>;
+  get(generation: GenerationNumber): Promise<ValidationResult | undefined>;
   query(query?: ValidationResultQuery): Promise<readonly ValidationResult[]>;
 }
 
 export class MemoryValidationResultStore implements ValidationResultStore {
-  private readonly results = new Map<Sha, ValidationResult>();
+  private readonly results = new Map<GenerationNumber, ValidationResult>();
 
   put(result: ValidationResult): Promise<void> {
-    this.results.set(result.candidate, result);
+    this.results.set(result.generation, result);
     return Promise.resolve();
   }
 
-  get(candidate: Sha): Promise<ValidationResult | undefined> {
-    return Promise.resolve(this.results.get(candidate));
+  get(generation: GenerationNumber): Promise<ValidationResult | undefined> {
+    return Promise.resolve(this.results.get(generation));
   }
 
   query(query: ValidationResultQuery = {}): Promise<readonly ValidationResult[]> {
     const results = [...this.results.values()].filter((result) => {
+      if (query.generation !== undefined && result.generation !== query.generation) {
+        return false;
+      }
       if (query.candidate !== undefined && result.candidate !== query.candidate) {
         return false;
       }
