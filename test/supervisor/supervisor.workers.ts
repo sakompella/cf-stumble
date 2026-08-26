@@ -111,6 +111,36 @@ test("promotes a registered candidate and records validation evidence", async ()
   expect(results["results"]).toMatchObject([{ candidate, verdict: "pass" }]);
 });
 
+test("returns a structured reason for a rejected promotion", async () => {
+  const initial = readRecord(await readJson(await supervisorRequest("/live")));
+  const genesis = readStringField(readRecord(initial["generation"]), "sha");
+  const createdResponse = await createGeneration();
+  expect(createdResponse.status).toBe(201);
+  const created = readRecord(await readJson(createdResponse));
+  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  const state = readRecord(await readJson(await supervisorRequest("/state")));
+  const promotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({
+      candidate,
+      attestation: {
+        candidate,
+        validatedAgainst: genesis,
+        corpusVersion: readStringField(state, "corpusVersion"),
+        gateVersion: readStringField(state, "gateVersion"),
+        verdict: "fail",
+        createdAt: 1_700_000_001,
+      },
+    }),
+  });
+
+  expect(promotion.status).toBe(422);
+  expect(await readJson(promotion)).toEqual({
+    outcome: "rejected",
+    reason: { kind: "not-passing", verdict: "fail" },
+  });
+});
+
 test("promotion rolls back every write when generation history fails", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
   const genesis = readStringField(readRecord(initial["generation"]), "sha");
