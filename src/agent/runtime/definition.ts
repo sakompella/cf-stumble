@@ -82,8 +82,8 @@ function materializeLoadedGeneration(loaded: LoadedGeneration): AgentDefinition 
   const skills = materializeSkills(loaded.modules);
   return {
     generation: loaded.generation,
-    systemPrompt: decodeText(SYSTEM_PROMPT_PATH, promptModule.content),
-    policy: decodeText(POLICY_PATH, policyModule.content),
+    systemPrompt: requiredText(SYSTEM_PROMPT_PATH, promptModule.content),
+    policy: requiredText(POLICY_PATH, policyModule.content),
     skills,
   };
 }
@@ -118,6 +118,18 @@ function materializeSkills(
   }
   skills.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
   return skills;
+}
+
+function requiredText(path: string, content: Uint8Array): string {
+  const text = decodeText(path, content);
+  if (text.length === 0) {
+    throw new AgentMaterializationError(
+      "invalid-module",
+      path,
+      "required module content must not be empty",
+    );
+  }
+  return text;
 }
 
 function decodeText(path: string, content: Uint8Array): string {

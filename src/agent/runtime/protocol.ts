@@ -25,8 +25,11 @@ export function parseAgentResponse(response: RecordedModelResponse): ModelRespon
   } catch (error: unknown) {
     return { ok: false, detail: `response is not valid JSON: ${errorDetail(error)}` };
   }
+  if (Array.isArray(value)) {
+    return parseToolCalls(value, "tool calls");
+  }
   if (!isRecord(value)) {
-    return { ok: false, detail: "response must be a JSON object" };
+    return { ok: false, detail: "response must be a JSON object or tool-call array" };
   }
 
   const type = value.type;
@@ -43,7 +46,16 @@ export function parseAgentResponse(response: RecordedModelResponse): ModelRespon
       : call;
   }
   if (type === "tool_calls") {
-    return parseToolCalls(value.calls, "tool calls");
+    return parseToolCalls(value.calls ?? value.tool_calls, "tool calls");
+  }
+  if ("tool_calls" in value) {
+    return parseToolCalls(value.tool_calls, "tool calls");
+  }
+  if ("tool" in value) {
+    return parseDirectToolCall(value, "tool call", "tool");
+  }
+  if (typeof value.kind === "string") {
+    return parseDirectToolCall(value, "tool call", "kind");
   }
   return { ok: false, detail: 'response field "type" must be "final", "tool_call", or "tool_calls"' };
 }
@@ -69,6 +81,9 @@ function parseToolCall(value: unknown, path: string):
   if (!isRecord(value)) {
     return { ok: false, detail: `${path} must be an object` };
   }
+  if (!("name" in value) && isRecord(value.function)) {
+    return parseToolCall(value.function, `${path}.function`);
+  }
   const name = value.name;
   if (typeof name !== "string" || name.length === 0) {
     return { ok: false, detail: `${path} field "name" must be a non-empty string` };
@@ -76,7 +91,37 @@ function parseToolCall(value: unknown, path: string):
   if (!("arguments" in value)) {
     return { ok: false, detail: `${path} field "arguments" is required` };
   }
-  let args: unknown = value.arguments;
+  return parseNamedArguments(name, value.arguments, path);
+}
+
+function parseDirectToolCall(
+  value: Record<string, unknown>,
+  path: string,
+  nameKey: string,
+): ModelResponseParseResult {
+  const name = value[nameKey];
+  if (typeof name !== "string" || name.length === 0) {
+    return { ok: false, detail: `${path} field ${JSON.stringify(nameKey)} must be a non-empty string` };
+  }
+  if ("arguments" in value) {
+    const call = parseNamedArguments(name, value.arguments, path);
+    return call.ok ? { ok: true, response: { kind: "tool-calls", calls: [call.call] } } : call;
+  }
+  const argumentsObject: Record<string, unknown> = {};
+  for (const [key, argument] of Object.entries(value)) {
+    if (key !== nameKey && key !== "type") {
+      argumentsObject[key] = argument;
+    }
+  }
+  return { ok: true, response: { kind: "tool-calls", calls: [{ name, arguments: argumentsObject }] } };
+}
+
+function parseNamedArguments(
+  name: string,
+  value: unknown,
+  path: string,
+): { readonly ok: true; readonly call: ParsedToolCall } | { readonly ok: false; readonly detail: string } {
+  let args = value;
   if (typeof args === "string") {
     try {
       args = JSON.parse(args);
