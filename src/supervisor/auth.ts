@@ -1,9 +1,6 @@
 const BEARER_PREFIX = "Bearer ";
 
-export function authorizeSupervisorRequest(
-  request: Request,
-  configuredSecret?: string,
-): boolean {
+export function authorizeSupervisorRequest(request: Request, configuredSecret?: string): boolean {
   if (configuredSecret === undefined || configuredSecret.length === 0) {
     return false;
   }

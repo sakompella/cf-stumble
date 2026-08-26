@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
-/* oxlint-disable eslint/max-lines */
+/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function */
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
@@ -57,6 +57,15 @@ export class Agent extends DurableObject {
 }
 `;
 
+const unloadableCandidateSource = `
+import { DurableObject } from "cloudflare:workers";
+export class Agent extends DurableObject {
+  fetch() {
+    return new Response("unreachable");
+  }
+// missing closing brace
+`;
+
 const validationSession = {
   schemaVersion: 1,
   name: "supervisor-canary",
@@ -97,6 +106,7 @@ async function supervisorSnapshot(): Promise<readonly unknown[]> {
     readJson(await supervisorRequest("/context")),
     readJson(await supervisorRequest("/corpus")),
     readJson(await supervisorRequest("/validation-results")),
+    readJson(await supervisorRequest("/quarantine")),
     readJson(await supervisorRequest("/history")),
   ]);
 }
@@ -182,7 +192,14 @@ test("rejects every privileged mutation without the exact credential and preserv
     ["/context", { method: "POST", body: JSON.stringify({ key: "blocked", value: true }) }],
     [
       "/corpus",
-      { method: "POST", body: JSON.stringify({ name: "blocked", mandatoryCanary: false, session: validationSession }) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "blocked",
+          mandatoryCanary: false,
+          session: validationSession,
+        }),
+      },
     ],
     [
       "/validation-results",
@@ -238,8 +255,16 @@ test("promotes a candidate already written to the supervisor object store", asyn
     const generation = await buildGeneration(store, {
       modules: [
         { path: "agent.js", content: new TextEncoder().encode(candidateSource), executable: false },
-        { path: "prompt.md", content: new TextEncoder().encode("candidate prompt\n"), executable: false },
-        { path: "policy.md", content: new TextEncoder().encode("candidate policy\n"), executable: false },
+        {
+          path: "prompt.md",
+          content: new TextEncoder().encode("candidate prompt\n"),
+          executable: false,
+        },
+        {
+          path: "policy.md",
+          content: new TextEncoder().encode("candidate policy\n"),
+          executable: false,
+        },
       ],
       parent,
       author: {
@@ -266,6 +291,29 @@ test("promotes a candidate already written to the supervisor object store", asyn
       "sha",
     ),
   ).toBe(candidate);
+});
+
+test("does not promote a candidate whose worker fails the supervisor-run gate", async () => {
+  const initial = readRecord(await readJson(await supervisorRequest("/live")));
+  const liveBefore = readStringField(readRecord(initial["generation"]), "sha");
+  const createdResponse = await createGeneration(unloadableCandidateSource);
+  expect(createdResponse.status).toBe(201);
+  const created = readRecord(await readJson(createdResponse));
+  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  await writeValidationCase();
+
+  const promotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({ candidate }),
+  });
+
+  expect(promotion.status).toBe(422);
+  expect(await readJson(promotion)).toMatchObject({
+    outcome: "rejected",
+    reason: { kind: "not-passing", verdict: "inconclusive" },
+  });
+  const liveAfter = readRecord(await readJson(await supervisorRequest("/live")));
+  expect(readStringField(readRecord(liveAfter["generation"]), "sha")).toBe(liveBefore);
 });
 
 test("returns a structured reason for a candidate rejected by the supervisor-run gate", async () => {
@@ -347,6 +395,26 @@ test("promotion rolls back every write when generation history fails", async () 
   expect(results["results"]).toEqual([]);
   const history = readRecord(await readJson(await supervisorRequest("/history")));
   expect(history["history"]).not.toMatchObject([{ operation: "promote", generation: candidate }]);
+});
+
+test("authorized reset restores genesis after the gate rejects a candidate", async () => {
+  const { genesis } = await promoteCreatedGeneration();
+  const createdResponse = await createGeneration(unloadableCandidateSource);
+  expect(createdResponse.status).toBe(201);
+  const created = readRecord(await readJson(createdResponse));
+  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  await writeValidationCase();
+
+  const failedPromotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({ candidate }),
+  });
+  expect(failedPromotion.status).toBe(422);
+
+  const resetResponse = await supervisorRequest("/reset", { method: "POST" });
+  expect(resetResponse.status).toBe(200);
+  const live = readRecord(await readJson(await supervisorRequest("/live")));
+  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
 });
 
 test("rejects rollback to a registered generation that was never live", async () => {

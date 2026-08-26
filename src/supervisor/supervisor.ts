@@ -15,11 +15,7 @@ import {
   type AgentSkill,
 } from "../agent/runtime/index.js";
 import { buildGeneration } from "../generation/build.js";
-import {
-  makeGenesisPin,
-  resetToGenesisSync,
-  seedGenesis,
-} from "../generation/genesis.js";
+import { makeGenesisPin, resetToGenesisSync, seedGenesis } from "../generation/genesis.js";
 import type { GenesisPin, ResetResult } from "../generation/genesis.js";
 import { parseGenerationNumber } from "../generation/types.js";
 import { readGeneration } from "../generation/read.js";
@@ -412,6 +408,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
+  // The old GET spike API only exercises facet loading and never changes the live pointer.
   private async legacyPromote(): Promise<Response> {
     try {
       const facet = this.mountFacet(this.readCandidateSource());
@@ -466,6 +463,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       throw new Error("validation requires a live generation");
     }
     const loaded = await readGeneration(this.store, generation);
+    const sourceModule = loaded.modules.find((module) => module.path === "agent.js");
+    if (sourceModule === undefined) {
+      throw new Error(`generation ${generation} has no agent.js module`);
+    }
+    const facet = this.mountFacet(decodeValidationText("agent.js", sourceModule.content));
+    const probe = await facet.fetch(new Request("https://facet/probe"));
+    if (!probe.ok) {
+      throw new Error(`generation ${generation} probe returned ${probe.status}`);
+    }
     const definition = materializeSupervisorGeneration(loaded);
     return runReplay(session, new AgentExecutor(definition));
   }
@@ -599,6 +605,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return result;
   }
 
+  // Keep the old unauthenticated spike reset from being a second live-pointer API.
   private legacyReset(): Response {
     this.writeState("generation", "0");
     return Response.json({ generation: "0", reset: true });
@@ -1218,9 +1225,8 @@ function materializeSupervisorGeneration(loaded: LoadedGeneration): AgentDefinit
         content: decodeValidationText(module.path, module.content),
       };
     })
-    .sort(
-      (left: AgentSkill, right: AgentSkill) =>
-        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    .sort((left: AgentSkill, right: AgentSkill) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
     );
 
   return {

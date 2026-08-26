@@ -7,18 +7,18 @@
     "bindings": [
       {
         "name": "SUPERVISOR",
-        "class_name": "Supervisor"
-      }
-    ]
+        "class_name": "Supervisor",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["Supervisor"]
-    }
+      "new_sqlite_classes": ["Supervisor"],
+    },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
   "secrets": {
-    "required": ["SUPERVISOR_SECRET"]
-  }
+    "required": ["SUPERVISOR_SECRET"],
+  },
 }
