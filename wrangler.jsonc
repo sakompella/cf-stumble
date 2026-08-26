@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-stumble",
+  "main": "src/supervisor/worker.ts",
+  "compatibility_date": "2025-01-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SUPERVISOR",
+        "class_name": "Supervisor"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Supervisor"]
+    }
+  ],
+  "worker_loaders": [{ "binding": "LOADER" }]
+}
