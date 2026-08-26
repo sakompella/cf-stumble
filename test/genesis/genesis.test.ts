@@ -11,9 +11,11 @@ import {
 } from "../../src/generation/genesis.js";
 import { GENESIS_NUMBER } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
-import { MemoryStore } from "../../src/storage/memory.js";
 import { buildGeneration } from "../../src/generation/build.js";
+import type { Sha } from "../../src/git/types.js";
+import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
+import type { Store } from "../../src/storage/types.js";
 
 const author = {
   name: "Genesis Bot",
@@ -34,6 +36,37 @@ const options = {
   createdAt: author.timestamp,
   summary: "known-good genesis",
 } as const;
+
+class CorruptLiveStore implements Store {
+  readObjectCalls = 0;
+  private readonly delegate: MemoryStore;
+  private readonly liveSha: Sha;
+
+  constructor(delegate: MemoryStore, liveSha: Sha) {
+    this.delegate = delegate;
+    this.liveSha = liveSha;
+  }
+
+  readObject(sha: Sha): Promise<Uint8Array | undefined> {
+    this.readObjectCalls += 1;
+    if (sha === this.liveSha) {
+      return Promise.resolve(new Uint8Array([255]));
+    }
+    return this.delegate.readObject(sha);
+  }
+
+  writeObject(bytes: Uint8Array): Promise<Sha> {
+    return this.delegate.writeObject(bytes);
+  }
+
+  readPointer(): Promise<Sha | undefined> {
+    return this.delegate.readPointer();
+  }
+
+  setPointer(next: Sha, expected: Sha | undefined): Promise<boolean> {
+    return this.delegate.setPointer(next, expected);
+  }
+}
 
 describe("seedGenesis", () => {
   it("creates generation 0 without a parent and points the store at it", async () => {
@@ -107,6 +140,25 @@ describe("resetToGenesis recovery", () => {
     await resetToGenesis(store, pin);
 
     expect(await store.readPointer()).toBe(genesis.sha);
+  });
+
+  it("resets when the live generation object is corrupt without reading it", async () => {
+    const store = new MemoryStore();
+    const genesis = await seedGenesis(store, options);
+    const later = await buildGeneration(store, {
+      ...options,
+      parent: genesis,
+      createdAt: author.timestamp + 1,
+      summary: "later generation",
+    });
+    const pin = makeGenesisPin(genesis);
+    expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
+    const corruptStore = new CorruptLiveStore(store, later.sha);
+
+    await resetToGenesis(corruptStore, pin);
+
+    expect(await corruptStore.readPointer()).toBe(genesis.sha);
+    expect(corruptStore.readObjectCalls).toBe(0);
   });
 });
 
