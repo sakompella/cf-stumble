@@ -4,6 +4,18 @@ export {
   parseReplaySession,
   parseReplaySessionJson,
 } from "./schema-parser.js";
+export { canonicalizeObservableEffects, compareObservableEffects } from "./comparison.js";
+export type { EffectsComparison, EffectsDifference } from "./comparison.js";
+export {
+  runReplay,
+  type AgentRunResult,
+  type ModelRequest,
+  type ReplayAgentLoop,
+  type ReplayInconclusiveReason,
+  type ReplayOptions,
+  type ReplayOutcome,
+  type ReplayRuntime,
+} from "./runner.js";
 export type {
   BashCall,
   BashResult,
