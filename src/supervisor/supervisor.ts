@@ -377,10 +377,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const body = await readRequestRecord(request);
       const candidate = parseShaField(body.candidate, "candidate");
       const attestation = parseAttestation(body.attestation ?? body, "attestation");
+      const suppliedResultValue = body.validationResult ?? body.result;
       const suppliedResult =
-        body.validationResult === undefined
+        suppliedResultValue === undefined
           ? undefined
-          : parseValidationResult(body.validationResult, "validationResult");
+          : parseValidationResult(suppliedResultValue, "validationResult");
       if (suppliedResult !== undefined) {
         ensureResultMatchesAttestation(suppliedResult, attestation);
       }
