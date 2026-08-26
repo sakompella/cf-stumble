@@ -37,3 +37,5 @@ time	slice	decision	reason	evidence	result
 21:10	ANTISLOP	Vendor dmmulroy/anti-slop, adopt via ratchet	136 violations on adoption; gate must never go red and nothing silently tolerated	6 rules clean immediately, 8 set off with recorded counts	adopted
 21:10	ANTISLOP	No schema library; narrow once at the boundary instead	rewriting stable tested parsers late adds more risk than it removes; a schema lib hides rather than removes the unknown boundary	sol review; expect 75-85% of 98 to vanish via restructuring	option B chosen
 21:10	ANTISLOP	Typed FsClient removed both weak dictionary typing and the oracle casts	the "as never" casts existed only to paper over Record<string,unknown>	13/15 anti-slop rules now at error	merged
+21:32	ANTISLOP	All 15 anti-slop rules enforced	93 of 98 parser violations removed by restructuring, not suppression	4 narrow justified exceptions: 3 named boundary parsers + 1 isomorphic-git FsClient overload	done
+21:32	DEBT	supervisor.ts is 1755 lines and disables its own max-lines rules file-wide	added during S10; not an anti-slop rule but a real smell the linter was telling us about	src/supervisor/supervisor.ts:2	open, not addressed tonight

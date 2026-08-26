@@ -112,3 +112,23 @@ There is a lot of policy sitting on top of something that isn't yet running real
 
 **Under-built:** the trusted production execution boundary — module materialization, validator
 provenance, endpoint authorization, and real workspace capability containment.
+
+
+## Lint debt worth naming (open)
+
+Adopting anti-slop surfaced something unrelated to its own rules: `src/supervisor/supervisor.ts`
+is **1755 lines** and carries a file-wide
+
+```
+/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function,
+   eslint/max-classes-per-file, import/max-dependencies, unicorn/no-array-sort */
+```
+
+added while building S10. The anti-slop work already cut real complexity out of it — request
+bodies are now parsed once into a validated `JsonObject` instead of `unknown` fields being
+re-narrowed through many helpers — but the file is still doing storage, routing, promotion,
+validation wiring, genesis and facet loading in one place.
+
+That disable is the linter reporting a design problem and being told to be quiet. Splitting the
+supervisor along its obvious seams (routing / generation store / promotion) is the fix, and it
+was not attempted tonight because it touches the component every workerd test drives.
