@@ -39,6 +39,7 @@ describe("readGeneration", () => {
     const loaded = await readGeneration(store, built.sha);
 
     expect(loaded.generation).toEqual(built);
+    expect(loaded.generation).not.toHaveProperty("number");
     expect(loaded.modules).toHaveLength(modules.length);
     expect(loaded.modules).toEqual(expect.arrayContaining(modules));
   });

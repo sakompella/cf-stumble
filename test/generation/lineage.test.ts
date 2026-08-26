@@ -5,7 +5,8 @@ import { walkLineage } from "../../src/generation/lineage.js";
 import { encodeObject } from "../../src/git/index.js";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
-import type { Generation, Module } from "../../src/generation/types.js";
+import type { Store } from "../../src/storage/types.js";
+import type { CommitSnapshot, Module } from "../../src/generation/types.js";
 
 const author = {
   name: "Build Bot",
@@ -22,10 +23,10 @@ const module = {
 
 function build(
   store: MemoryStore,
-  parent: Generation | undefined,
+  parent: CommitSnapshot | undefined,
   createdAt: number,
   summary: string,
-): Promise<Generation> {
+): Promise<CommitSnapshot> {
   return buildGeneration(store, {
     modules: [module],
     parent,
@@ -49,7 +50,6 @@ describe("walkLineage", () => {
       child.sha,
       root.sha,
     ]);
-    expect(lineage.map((generation) => generation.number)).toEqual([2, 1, 0]);
     expect(lineage.at(-1)?.parent).toBeUndefined();
   });
 
@@ -71,5 +71,36 @@ describe("walkLineage", () => {
     );
 
     await expect(walkLineage(store, broken)).rejects.toThrow(/missing.*commit/u);
+  });
+
+  it("fails cleanly when commit ancestry contains a cycle", async () => {
+    const start = parseSha("a".repeat(40));
+    const tree = parseSha("b".repeat(40));
+    const commitBytes = encodeObject({
+      type: "commit",
+      commit: {
+        tree,
+        parents: [start],
+        author,
+        committer: author,
+        message: "cyclic",
+      },
+    });
+
+    const store: Store = {
+      readObject: (sha) =>
+        Promise.resolve(
+          sha === start
+            ? commitBytes
+            : sha === tree
+              ? encodeObject({ type: "tree", entries: [] })
+              : undefined,
+        ),
+      writeObject: () => Promise.reject(new Error("not used")),
+      readPointer: () => Promise.resolve(undefined),
+      setPointer: () => Promise.resolve(false),
+    };
+
+    await expect(walkLineage(store, start)).rejects.toThrow(/lineage cycle/u);
   });
 });

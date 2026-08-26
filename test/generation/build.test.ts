@@ -40,16 +40,16 @@ async function readCommit(store: MemoryStore, sha: Sha): Promise<Commit> {
 }
 
 describe("buildGeneration", () => {
-  it("writes a root generation with a manifest commit", async () => {
+  it("writes a root commit with a manifest", async () => {
     const store = new MemoryStore();
-    const generation = await buildGeneration(store, options);
+    const commit = await buildGeneration(store, options);
 
-    expect(generation.number).toBe(0);
-    expect(generation.parent).toBeUndefined();
-    expect(generation.createdAt).toBe(author.timestamp);
-    expect(generation.summary).toBe(`${options.summary}\n`);
-    expect(await readCommit(store, generation.sha)).toEqual({
-      tree: generation.manifest,
+    expect(commit).not.toHaveProperty("number");
+    expect(commit.parent).toBeUndefined();
+    expect(commit.createdAt).toBe(author.timestamp);
+    expect(commit.summary).toBe(`${options.summary}\n`);
+    expect(await readCommit(store, commit.sha)).toEqual({
+      tree: commit.manifest,
       parents: [],
       author,
       committer: author,
@@ -58,18 +58,39 @@ describe("buildGeneration", () => {
     expect(await store.listObjects()).toHaveLength(4);
   });
 
-  it("deduplicates an unchanged module across generations", async () => {
+  it("deduplicates an unchanged module across commits", async () => {
     const store = new MemoryStore();
     const first = await buildGeneration(store, options);
 
     await buildGeneration(store, {
       ...options,
       parent: first,
-      summary: "same module, next generation",
+      summary: "same module, next commit",
       createdAt: author.timestamp + 1,
     });
 
     expect(await store.listObjects()).toHaveLength(5);
+  });
+
+  it("does not assign a colliding lineage identity to distinct commits", async () => {
+    const store = new MemoryStore();
+    const parent = await buildGeneration(store, options);
+    const left = await buildGeneration(store, {
+      ...options,
+      parent,
+      summary: "candidate left",
+      createdAt: author.timestamp + 1,
+    });
+    const right = await buildGeneration(store, {
+      ...options,
+      parent,
+      summary: "candidate right",
+      createdAt: author.timestamp + 1,
+    });
+
+    expect(left.sha).not.toBe(right.sha);
+    expect(left).not.toHaveProperty("number");
+    expect(right).not.toHaveProperty("number");
   });
 
   it("is deterministic for identical inputs", async () => {

@@ -2,14 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   isGenesis,
-  isGenesisGeneration,
+  isGenesisCommit,
   isGenesisSha,
   makeGenesisPin,
   assertGenesisReachable,
   resetToGenesis,
   seedGenesis,
 } from "../../src/generation/genesis.js";
-import { GENESIS_NUMBER } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
 import { buildGeneration } from "../../src/generation/build.js";
 import type { Sha } from "../../src/git/types.js";
@@ -101,12 +100,12 @@ class TestStore implements Store {
 }
 
 describe("seedGenesis", () => {
-  it("creates generation 0 without a parent and points the store at it", async () => {
+  it("creates the genesis commit without a parent and points the store at it", async () => {
     const store = new MemoryStore();
 
     const genesis = await seedGenesis(store, options);
 
-    expect(genesis.number).toBe(GENESIS_NUMBER);
+    expect(genesis).not.toHaveProperty("number");
     expect(genesis.parent).toBeUndefined();
     expect(await store.readPointer()).toBe(genesis.sha);
   });
@@ -237,9 +236,7 @@ describe("genesis reset concurrency", () => {
       expect(promotionResult.from).toBe(live.sha);
       expect(promotionResult.to).toBe(candidate.sha);
     } else {
-      expect(["pointer-moved", "stale-attestation"]).toContain(
-        promotionResult.reason.kind,
-      );
+      expect(["pointer-moved", "stale-attestation"]).toContain(promotionResult.reason.kind);
     }
     expect(await baseStore.readPointer()).toBe(genesis.sha);
   });
@@ -251,7 +248,7 @@ describe("genesis identification", () => {
     const genesis = await seedGenesis(store, options);
     const pin = makeGenesisPin(genesis);
 
-    expect(isGenesisGeneration(genesis)).toBe(true);
+    expect(isGenesisCommit(genesis)).toBe(true);
     expect(isGenesis(genesis)).toBe(true);
     expect(isGenesisSha(genesis.sha, pin)).toBe(true);
     expect(isGenesis(genesis.sha, pin)).toBe(true);
@@ -270,6 +267,6 @@ describe("genesis identification", () => {
     const pin = makeGenesisPin(genesis);
 
     await expect(assertGenesisReachable(store, later.sha, pin)).resolves.toBeUndefined();
-    expect(isGenesisGeneration(later)).toBe(false);
+    expect(isGenesisCommit(later)).toBe(false);
   });
 });
