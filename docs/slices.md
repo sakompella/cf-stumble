@@ -209,6 +209,36 @@ Build only what the vertical path in S8 needs; resist widening this.
 
 ---
 
+---
+
+## S12 — Ratchet hardening: canary integrity · depends: S7 · IN PROGRESS
+
+Added after review. Content-derived corpus versions plus mandatory canaries make a weak corpus
+*identifiable* but not *adequate* — a hash tells you the input changed, not that it is still
+sufficient. Enforces the four conditions from `docs/review-findings.md`: canary identity comes
+from a trusted side, every required canary passes individually, a corpus update cannot drop or
+weaken a canary while producing a fresh valid hash, and a scorer failure is `INCONCLUSIVE`.
+
+The headline test: a candidate that removes the canary catching its own regression must not be
+promotable, even with an internally consistent recomputed hash.
+
+**Verify:** `pnpm vitest run test/validation`
+
+---
+
+## S13 — Production agent runtime · depends: S3, S6, S11 · IN PROGRESS
+
+Added after review, and the slice that makes the system real. Materializes a generation's
+modules into a runnable agent definition and executes a turn, dispatching the four primitives
+through the production path rather than a scripted stand-in.
+
+The binding constraint: **the validation gate and live execution must use the same executor.**
+If they diverge, the regression suite tests a surrogate forever and every guarantee above it is
+about the wrong program. A turn also emits a transcript in the replay schema, so a live turn can
+become a future regression case.
+
+**Verify:** `pnpm vitest run test/agent`
+
 ## Deferred and out of scope
 
 **Garbage collection — deferred deliberately (D13).** A Durable Object holds 10 GB and
