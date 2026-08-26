@@ -81,5 +81,5 @@ test("the ratchet allows a case that was already failing to fail again", async (
   const run = await gate.validate(CANDIDATE);
 
   expect(run.result.verdict).toBe("pass");
-  expect(run.attestation).toBeUndefined();
+  expect(run.attestation).toMatchObject({ candidate: CANDIDATE, verdict: "pass" });
 });

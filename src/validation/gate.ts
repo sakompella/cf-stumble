@@ -76,7 +76,18 @@ export class ValidationGate {
       caseResults,
     };
     await this.resultStore.put(result);
-    return { result, attestation: undefined };
+    const attestation =
+      result.verdict === "pass"
+        ? {
+            candidate: result.candidate,
+            validatedAgainst: result.validatedAgainst,
+            corpusVersion: result.corpusVersion,
+            gateVersion: result.gateVersion,
+            verdict: result.verdict,
+            createdAt: result.createdAt,
+          }
+        : undefined;
+    return { result, attestation };
   }
 }
 
