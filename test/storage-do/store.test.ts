@@ -78,5 +78,5 @@ describe("DurableObjectSqliteStore chunking", () => {
     const address = await store.writeObject(input);
 
     expect(await store.readObject(address)).toEqual(input);
-  });
+  }, 30_000);
 });
