@@ -46,4 +46,18 @@ describe("MemoryGenerationRegistry", () => {
     });
     expect(await registry.list()).toHaveLength(2);
   });
+
+  it("returns the same generation for a retried idempotency key but allocates again for a new key", async () => {
+    const registry = new MemoryGenerationRegistry();
+
+    const first = await registry.allocate(request("request-1"));
+    const retry = await registry.allocate(request("request-1", OTHER_COMMIT));
+    const deliberateRetry = await registry.allocate(request("request-2"));
+
+    expect(retry).toEqual(first);
+    expect(retry.commit).toBe(COMMIT);
+    expect(deliberateRetry.number).toBe(first.number + 1);
+    expect(deliberateRetry.commit).toBe(COMMIT);
+    expect(await registry.list()).toHaveLength(2);
+  });
 });
