@@ -1,5 +1,7 @@
 export {
+  AGENT_MANIFEST,
   AgentMaterializationError,
+  materializeAgent,
   materializeGeneration,
   POLICY_PATH,
   SKILLS_PREFIX,

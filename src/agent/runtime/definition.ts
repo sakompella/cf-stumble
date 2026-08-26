@@ -7,6 +7,11 @@ import type { Store } from "../../storage/types.js";
 export const SYSTEM_PROMPT_PATH = "prompt.md";
 export const POLICY_PATH = "policy.md";
 export const SKILLS_PREFIX = "skills/";
+export const AGENT_MANIFEST = {
+  systemPrompt: SYSTEM_PROMPT_PATH,
+  policy: POLICY_PATH,
+  skillsPrefix: SKILLS_PREFIX,
+} as const;
 
 export type AgentSkill = {
   readonly name: string;
@@ -52,6 +57,8 @@ export async function materializeGeneration(
   const loaded = await readGeneration(store, sha);
   return materializeLoadedGeneration(loaded);
 }
+
+export const materializeAgent = materializeGeneration;
 
 function materializeLoadedGeneration(loaded: LoadedGeneration): AgentDefinition {
   const byPath = new Map(loaded.modules.map((module) => [module.path, module]));

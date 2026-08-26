@@ -17,7 +17,7 @@ import type {
 } from "./types.js";
 
 export const DEFAULT_MAX_STEPS = 32;
-export const DEFAULT_MODEL_REQUEST_ID = "executor";
+export { DEFAULT_MODEL_REQUEST_ID } from "./model.js";
 
 /** The executor used by both live turns and the replay validation runner. */
 export class AgentExecutor implements ReplayAgentLoop {

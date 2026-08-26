@@ -2,6 +2,8 @@ import type { AgentDefinition } from "./definition.js";
 import type { PrimitiveResult } from "../../replay/schema.js";
 import type { RecordedModelResponse } from "../../replay/schema.js";
 
+export const DEFAULT_MODEL_REQUEST_ID = "executor";
+
 export type AgentModelRequest = {
   readonly requestId: string;
   readonly input: string;

@@ -13,7 +13,7 @@ import {
 } from "../../tools/index.js";
 import type { AgentDefinition } from "./definition.js";
 import { isModelSourceError } from "./model-errors.js";
-import type { ModelResponseSource } from "./model.js";
+import { DEFAULT_MODEL_REQUEST_ID, type ModelResponseSource } from "./model.js";
 import { parseAgentResponse } from "./protocol.js";
 import type { ParsedToolCall } from "./protocol.js";
 import type { TurnFailure } from "./types.js";
@@ -101,7 +101,7 @@ async function requestModel(
     return {
       ok: true,
       response: await environment.requestModel({
-        requestId: "executor",
+        requestId: DEFAULT_MODEL_REQUEST_ID,
         input,
         definition: environment.definition,
         toolResults,
