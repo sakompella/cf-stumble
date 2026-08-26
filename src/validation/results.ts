@@ -4,6 +4,7 @@ import type { Sha } from "../git/types.js";
 import type { EffectsDifference } from "../replay/comparison.js";
 import type { ReplayInconclusiveReason, ReplayOutcome } from "../replay/runner.js";
 import type { ReplaySession } from "../replay/schema.js";
+import type { PreflightResult } from "./preflight.js";
 
 export type ValidationCase = {
   readonly name: string;
@@ -54,6 +55,7 @@ export type ValidationResult = {
   readonly verdict: Verdict;
   readonly createdAt: number;
   readonly caseResults: readonly ValidationCaseResult[];
+  readonly preflight?: PreflightResult;
 };
 
 export type ValidationResultQuery = {

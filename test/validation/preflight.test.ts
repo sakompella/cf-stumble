@@ -6,7 +6,9 @@ import {
   type ModelResponseSource,
 } from "../../src/agent/runtime/index.js";
 import { buildGeneration } from "../../src/generation/build.js";
-import type { Module } from "../../src/generation/types.js";
+import { parseGenerationNumber } from "../../src/generation/types.js";
+import type { Attestation, Module } from "../../src/generation/types.js";
+import { PointerManager } from "../../src/pointer/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import { InMemoryWorkspace } from "../../src/tools/index.js";
 import {
@@ -14,6 +16,11 @@ import {
   defaultWorkspace,
 } from "../../src/validation/preflight-probes.js";
 import type { PreflightProbe } from "../../src/validation/preflight.js";
+import {
+  MemoryValidationResultStore,
+  ValidationGate,
+  type ValidationResult,
+} from "../../src/validation/index.js";
 import { runPreflight } from "../../src/validation/preflight.js";
 
 const author = {
@@ -128,6 +135,61 @@ test("a harness error is INCONCLUSIVE rather than FAIL and remains distinguishab
   );
   expect(result.checks.some((check) => check.status === "FAIL")).toBe(false);
 });
+
+test("a preflight failure blocks promotion through the real validation gate", async () => {
+  const store = new MemoryStore();
+  const live = await buildHealthyCandidate(store);
+  const candidate = await buildHealthyCandidate(store);
+  expect(await store.setPointer(live.sha, undefined)).toBe(true);
+
+  const gate = new ValidationGate({
+    pointerStore: store,
+    resultStore: new MemoryValidationResultStore(),
+    corpus: [],
+    execute: () => Promise.reject(new Error("corpus must not run after preflight failure")),
+    preflight: (candidateSha) =>
+      runPreflight({
+        store,
+        candidate: candidateSha,
+        responseSourceFactory: brokenEditSource,
+      }),
+  });
+  const run = await gate.validate(candidate.sha, {
+    generation: parseGenerationNumber(1),
+    artifactDigest: candidate.sha,
+    validatedAgainstGeneration: parseGenerationNumber(0),
+  });
+
+  expect(run.result.verdict).toBe("fail");
+  expect(run.result.preflight?.status).toBe("FAIL");
+  expect(run.result.caseResults).toHaveLength(0);
+  expect(run.attestation).toBeUndefined();
+
+  const pointer = new PointerManager({
+    store,
+    corpusVersion: run.result.corpusVersion,
+    gateVersion: run.result.gateVersion,
+  });
+  await expect(pointer.promote(candidate.sha, attestationFor(run.result))).resolves.toEqual({
+    outcome: "rejected",
+    reason: { kind: "not-passing", verdict: "fail" },
+  });
+  expect(await store.readPointer()).toBe(live.sha);
+});
+
+function attestationFor(result: ValidationResult): Attestation {
+  return {
+    candidate: result.candidate,
+    generation: result.generation,
+    artifactDigest: result.artifactDigest,
+    validatedAgainst: result.validatedAgainst,
+    validatedAgainstGeneration: result.validatedAgainstGeneration,
+    corpusVersion: result.corpusVersion,
+    gateVersion: result.gateVersion,
+    verdict: result.verdict,
+    createdAt: result.createdAt,
+  };
+}
 
 function buildHealthyCandidate(store: MemoryStore) {
   return buildGeneration(store, {
