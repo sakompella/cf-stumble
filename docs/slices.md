@@ -11,6 +11,11 @@ pnpm test && pnpm typecheck && pnpm lint
 
 Status legend: `DONE` / `IN PROGRESS` / `NOT DONE (reason)`.
 
+**Generation model remodelled.** Commits are ordinary commits; a generation is one attempted
+facet materialization, numbered from a monotonic registry. See `docs/generations.md`. This
+replaced lineage-depth numbering, which was not an identity — rolling back and branching gave two
+distinct generations both claiming number 1.
+
 **Final state: every slice DONE except garbage collection, which was deliberately cut (D13).**
 134 Node tests and 29 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
 `pnpm lint --max-warnings=0` are all green. Verified green from a cold clone
