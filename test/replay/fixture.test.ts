@@ -36,13 +36,9 @@ const fixtureAgent: ReplayAgentLoop = {
   },
 };
 
-function parseFixture(value: unknown): ReplaySession {
-  return parseReplaySession(value);
-}
-
 function loadFixture(): Promise<ReplaySession> {
-  const untrustedFixture: unknown = structuredClone(fixtureData);
-  return Promise.resolve(parseFixture(untrustedFixture));
+  const untrustedFixture = structuredClone(fixtureData);
+  return Promise.resolve(parseReplaySession(untrustedFixture));
 }
 
 test("the fixture exercises every allowed primitive", async () => {

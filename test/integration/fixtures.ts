@@ -30,13 +30,9 @@ export const genesisModules = [
   { path: POLICY_PATH, content: encoder.encode(ALLOW_POLICY), executable: false },
 ] satisfies readonly Module[];
 
-function parseFixture(value: unknown): ReplaySession {
-  return parseReplaySession(value);
-}
-
 export function loadFixture(): Promise<ReplaySession> {
-  const untrustedFixture: unknown = structuredClone(fixtureData);
-  return Promise.resolve(parseFixture(untrustedFixture));
+  const untrustedFixture = structuredClone(fixtureData);
+  return Promise.resolve(parseReplaySession(untrustedFixture));
 }
 
 export function moduleByPath(modules: readonly Module[], path: string): Module {
