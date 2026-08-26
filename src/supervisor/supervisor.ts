@@ -56,6 +56,12 @@ type GenerationRow = {
 type PointerRow = { readonly sha: string | null };
 type MetaRow = { readonly value: string };
 type ContextRow = { readonly key: string; readonly value: string; readonly updated_at: number };
+type HistoryRow = {
+  readonly operation: string;
+  readonly generation_sha: string;
+  readonly from_sha: string | null;
+  readonly created_at: number;
+};
 type CorpusRow = { readonly name: string; readonly session_json: string; readonly mandatory_canary: number };
 type ValidationRow = {
   readonly candidate_sha: string;
@@ -156,6 +162,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
     if (pathname === "/generations") {
       return request.method === "POST" ? this.createGeneration(request) : this.listGenerations();
+    }
+    if (pathname === "/history") {
+      return this.history();
     }
     if (pathname.startsWith("/generations/")) {
       return this.showGeneration(pathname.slice("/generations/".length));
@@ -524,6 +533,26 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const bySha = new Map(rows.map((row) => [row.sha, row]));
       const generations = rows.map((row) => generationResponse(row, bySha));
       return Response.json({ generations });
+    } catch (error: unknown) {
+      return requestErrorResponse(error);
+    }
+  }
+
+  private history(): Response {
+    try {
+      const rows = this.ctx.storage.sql
+        .exec<HistoryRow>(
+          `SELECT operation, generation_sha, from_sha, created_at FROM ${HISTORY_TABLE} ORDER BY id`,
+        )
+        .toArray();
+      return Response.json({
+        history: rows.map((row) => ({
+          operation: row.operation,
+          generation: parseSha(row.generation_sha),
+          from: row.from_sha === null ? null : parseSha(row.from_sha),
+          createdAt: row.created_at,
+        })),
+      });
     } catch (error: unknown) {
       return requestErrorResponse(error);
     }
@@ -931,8 +960,9 @@ function generationResponse(
     }
     visited.add(current.sha);
     lineage.push(current);
-    current = current.parent_sha === null ? undefined : bySha.get(current.parent_sha);
-    if (current === undefined && row.parent_sha !== null && lineage.length > 0) {
+    const parentSha: string | null = current.parent_sha;
+    current = parentSha === null ? undefined : bySha.get(parentSha);
+    if (current === undefined && parentSha !== null) {
       throw new Error(`generation lineage references missing parent for ${row.sha}`);
     }
   }
