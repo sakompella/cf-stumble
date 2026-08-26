@@ -1,5 +1,5 @@
 import { encodeObject } from "../git/index.js";
-import { FILE_MODE } from "../git/types.js";
+import { isSha, FILE_MODE } from "../git/types.js";
 import type { Signature, Sha, TreeEntry } from "../git/types.js";
 import type { Store } from "../storage/types.js";
 import { GENESIS_NUMBER, parseGenerationNumber } from "./types.js";
@@ -150,8 +150,14 @@ function validateOptions(options: BuildGenerationOptions): void {
   if (typeof options.summary !== "string") {
     throw new TypeError("generation summary must be a string");
   }
-  if (options.committer !== undefined && typeof options.committer !== "object") {
-    throw new TypeError("generation committer must be a signature");
+  validateSignature(options.author, "author");
+  const committer = options.committer ?? options.author;
+  validateSignature(committer, "committer");
+  if (committer.timestamp !== options.createdAt) {
+    throw new TypeError("generation createdAt must equal committer timestamp");
+  }
+  if (options.parent !== undefined) {
+    validateParent(options.parent);
   }
   for (const module of options.modules) {
     if (typeof module.path !== "string") {
@@ -167,6 +173,66 @@ function validateOptions(options: BuildGenerationOptions): void {
     }
     validateModulePath(module.path);
   }
+}
+
+function validateParent(parent: Generation): void {
+  if (!isSha(parent.sha) || !isSha(parent.manifest)) {
+    throw new TypeError("generation parent must contain valid commit and manifest shas");
+  }
+  parseGenerationNumber(parent.number);
+  if (parent.parent !== undefined && !isSha(parent.parent)) {
+    throw new TypeError("generation parent must contain a valid ancestor sha");
+  }
+}
+
+function validateSignature(value: unknown, label: string): asserts value is Signature {
+  if (!isSignature(value)) {
+    throw new TypeError(`generation ${label} must be a signature`);
+  }
+  if (
+    value.name.length === 0 ||
+    value.name.includes("\r") ||
+    value.name.includes("\n") ||
+    value.name.includes("<") ||
+    value.name.includes(">") ||
+    value.email.length === 0 ||
+    value.email.includes("\r") ||
+    value.email.includes("\n") ||
+    value.email.includes("<") ||
+    value.email.includes(">")
+  ) {
+    throw new TypeError(`generation ${label} has an invalid identity`);
+  }
+  if (!Number.isSafeInteger(value.timestamp)) {
+    throw new TypeError(`generation ${label} timestamp must be a safe integer`);
+  }
+  if (
+    !Number.isSafeInteger(value.timezoneOffsetMinutes) ||
+    value.timezoneOffsetMinutes < -1439 ||
+    value.timezoneOffsetMinutes > 1439
+  ) {
+    throw new TypeError(`generation ${label} timezone is out of range`);
+  }
+}
+
+function isSignature(value: unknown): value is Signature {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (
+    !("name" in value) ||
+    !("email" in value) ||
+    !("timestamp" in value) ||
+    !("timezoneOffsetMinutes" in value)
+  ) {
+    return false;
+  }
+  return (
+    typeof value.name === "string" &&
+    typeof value.email === "string" &&
+    typeof value.timestamp === "number" &&
+    typeof value.timezoneOffsetMinutes === "number"
+  );
 }
 
 function validateModulePath(path: string): readonly string[] {

@@ -47,6 +47,7 @@ async function readTree(
   }
 
   for (const entry of object.entries) {
+    validateManifestName(entry.name, parentPath);
     const path = parentPath.length === 0 ? entry.name : `${parentPath}/${entry.name}`;
     switch (entry.mode) {
       case FILE_MODE.tree:
@@ -65,6 +66,13 @@ async function readTree(
       default:
         assertNever(entry.mode, "generation manifest mode");
     }
+  }
+}
+
+function validateManifestName(name: string, parentPath: string): void {
+  if (name === "." || name === "..") {
+    const path = parentPath.length === 0 ? name : `${parentPath}/${name}`;
+    throw new Error(`manifest contains invalid module path ${JSON.stringify(path)}`);
   }
 }
 
