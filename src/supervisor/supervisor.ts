@@ -8,6 +8,12 @@ import {
   syntaxErrorAgentSource,
 } from "../agent/loader.js";
 import { buildGeneration } from "../generation/build.js";
+import {
+  makeGenesisPin,
+  resetToGenesisSync,
+  seedGenesis,
+} from "../generation/genesis.js";
+import type { GenesisPin, ResetResult } from "../generation/genesis.js";
 import { parseGenerationNumber } from "../generation/types.js";
 import { readGeneration } from "../generation/read.js";
 import type {
@@ -127,6 +133,7 @@ const genesisAuthor: Signature = {
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly store: DurableObjectSqliteStore;
   private initialization: Promise<void> | undefined;
+  private genesisPin: GenesisPin | undefined;
   private attempt = 0;
   private activeFacetName: string | undefined;
 
@@ -255,25 +262,29 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     ]);
     const existingGenesis = this.readMeta(GENESIS_META_KEY);
     if (existingGenesis === undefined) {
-      const genesis = await buildGeneration(this.store, {
-        modules: [
-          {
-            path: "agent.js",
-            content: new TextEncoder().encode(healthyAgentSource),
-            executable: false,
-          },
-        ],
-        parent: undefined,
-        author: genesisAuthor,
-        createdAt: INITIAL_TIMESTAMP,
-        summary: "known-good generation 0",
-      });
+      const genesis = await seedGenesis(
+        this.store,
+        {
+          modules: [
+            {
+              path: "agent.js",
+              content: new TextEncoder().encode(healthyAgentSource),
+              executable: false,
+            },
+          ],
+          author: genesisAuthor,
+          createdAt: INITIAL_TIMESTAMP,
+          summary: "known-good generation 0",
+        },
+        { claimPointer: false },
+      );
+      const genesisPin = makeGenesisPin(genesis);
       this.ctx.storage.transactionSync(() => {
         this.insertGeneration(genesis);
         this.ctx.storage.sql.exec(
           `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?)`,
           GENESIS_META_KEY,
-          genesis.sha,
+          genesisPin.sha,
         );
         this.ctx.storage.sql.exec(
           `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?)`,
@@ -288,18 +299,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         this.ctx.storage.sql.exec(
           `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
           "seed",
-          genesis.sha,
+          genesisPin.sha,
           null,
           Date.now(),
         );
-        this.ctx.storage.sql.exec(
-          `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`,
-          genesis.sha,
-        );
+        if (!this.updatePointer(genesisPin.sha)) {
+          throw new Error("generation 0 seed lost a pointer race");
+        }
       });
+      this.genesisPin = genesisPin;
       return;
     }
 
+    const genesisPin = this.readGenesisPin();
+    this.genesisPin = genesisPin;
     if (this.readMeta(CORPUS_VERSION_META_KEY) === undefined) {
       this.writeMeta(CORPUS_VERSION_META_KEY, corpusVersion);
     }
@@ -308,7 +321,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
     this.ctx.storage.sql.exec(
       `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`,
-      existingGenesis,
+      genesisPin.sha,
     );
   }
 
@@ -511,57 +524,68 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private legacyReset(): Response {
-    this.deleteActiveFacet();
-    this.resetPointerOnly();
-    this.writeState("generation", "0");
-    return Response.json({ generation: "0", reset: true });
+    return this.resetResponse(true);
   }
 
   private reset(): Response {
+    return this.resetResponse(false);
+  }
+
+  private resetResponse(legacy: boolean): Response {
     try {
       this.deleteActiveFacet();
-      const genesis = parseSha(this.readMetaOrThrow(GENESIS_META_KEY));
-      let from: Sha | undefined;
-      this.ctx.storage.transactionSync(() => {
-        from = this.readPointerSql();
-        if (!this.updatePointer(genesis, from)) {
-          throw new Error("generation 0 reset lost a pointer race");
-        }
-        this.ctx.storage.sql.exec(
-          `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
-          "reset",
-          genesis,
-          from,
-          Date.now(),
+      const result = this.resetTransaction();
+      if (result.outcome === "contended") {
+        return Response.json(
+          { outcome: result.outcome, attempts: result.attempts },
+          { status: 409 },
         );
-      });
-      this.writeState("generation", "0");
+      }
+      if (legacy) {
+        return Response.json({ generation: "0", reset: true });
+      }
       return Response.json({
-        outcome: "reset",
+        outcome: result.outcome,
         generation: 0,
-        from: from ?? null,
-        to: genesis,
+        from: result.from ?? null,
+        to: result.to,
       });
     } catch (error: unknown) {
       return requestErrorResponse(error);
     }
   }
 
-  private resetPointerOnly(): void {
-    const genesis = parseSha(this.readMetaOrThrow(GENESIS_META_KEY));
+  private resetTransaction(): ResetResult {
+    const pin = this.genesisPin;
+    if (pin === undefined) {
+      throw new Error("genesis pin is unavailable");
+    }
+
+    let result: ResetResult | undefined;
     this.ctx.storage.transactionSync(() => {
-      const from = this.readPointerSql();
-      if (!this.updatePointer(genesis, from)) {
-        throw new Error("generation 0 reset lost a pointer race");
+      result = resetToGenesisSync(
+        {
+          readPointer: () => this.readPointerSql(),
+          setPointer: (next, expected) => this.updatePointer(next, expected),
+        },
+        pin,
+      );
+      if (result.outcome === "contended") {
+        return;
       }
       this.ctx.storage.sql.exec(
         `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
         "reset",
-        genesis,
-        from,
+        result.to,
+        result.from ?? null,
         Date.now(),
       );
+      this.writeState("generation", "0");
     });
+    if (result === undefined) {
+      throw new Error("reset transaction did not produce a result");
+    }
+    return result;
   }
 
   private listGenerations(): Response {
@@ -903,6 +927,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return value;
   }
 
+  private readGenesisPin(): GenesisPin {
+    const sha = parseSha(this.readMetaOrThrow(GENESIS_META_KEY));
+    const row = this.readGenerationRow(sha);
+    if (row === undefined) {
+      throw new Error(`genesis generation ${sha} is not registered`);
+    }
+    return makeGenesisPin(toGeneration(row));
+  }
+
   private writeMeta(key: string, value: string): void {
     this.ctx.storage.sql.exec(
       `INSERT OR REPLACE INTO ${META_TABLE} (key, value) VALUES (?, ?)`,
@@ -919,7 +952,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return value === null || value === undefined ? undefined : parseSha(value);
   }
 
-  private updatePointer(next: Sha, expected: Sha | undefined): boolean {
+  private updatePointer(next: Sha, expected?: Sha): boolean {
     const result =
       expected === undefined
         ? this.ctx.storage.sql.exec(
