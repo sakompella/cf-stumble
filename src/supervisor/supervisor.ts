@@ -91,6 +91,17 @@ type GenerationResponse = GenerationSummary & {
 };
 
 type InvalidRequest = { readonly kind: "invalid-request"; readonly message: string };
+type PromotionRejectionJson =
+  | { readonly kind: "pointer-moved"; readonly expected: Sha | null; readonly actual: Sha | null }
+  | {
+      readonly kind: "stale-attestation";
+      readonly validatedAgainst: Sha | null;
+      readonly liveNow: Sha | null;
+    }
+  | { readonly kind: "corpus-changed"; readonly attested: string; readonly current: string }
+  | { readonly kind: "gate-changed"; readonly attested: string; readonly current: string }
+  | { readonly kind: "wrong-candidate"; readonly attested: Sha; readonly requested: Sha }
+  | { readonly kind: "not-passing"; readonly verdict: Verdict };
 
 const initialCandidate: CandidateMode = "healthy";
 const secretKey = "supervisor-secret";
@@ -166,6 +177,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
     if (pathname === "/generations") {
       return request.method === "POST" ? this.createGeneration(request) : this.listGenerations();
+    }
+    if (pathname === "/generations/live") {
+      return this.live();
     }
     if (pathname === "/history") {
       return this.history();
@@ -1019,7 +1033,34 @@ function promotionResponse(result: PromotionResult): Response {
     });
   }
   const status = result.reason.kind === "pointer-moved" ? 409 : 422;
-  return Response.json(result, { status });
+  return Response.json(
+    { outcome: result.outcome, reason: serializePromotionRejection(result.reason) },
+    { status },
+  );
+}
+
+function serializePromotionRejection(reason: PromotionRejection): PromotionRejectionJson {
+  switch (reason.kind) {
+    case "pointer-moved":
+      return {
+        kind: reason.kind,
+        expected: reason.expected ?? null,
+        actual: reason.actual ?? null,
+      };
+    case "stale-attestation":
+      return {
+        kind: reason.kind,
+        validatedAgainst: reason.validatedAgainst ?? null,
+        liveNow: reason.liveNow ?? null,
+      };
+    case "corpus-changed":
+    case "gate-changed":
+    case "wrong-candidate":
+    case "not-passing":
+      return reason;
+    default:
+      return assertNever(reason, "promotion rejection");
+  }
 }
 
 function verifyAttestation(
@@ -1372,7 +1413,7 @@ function errorMessage(error: unknown): string {
 }
 
 class InvalidRequestError extends Error implements InvalidRequest {
-  readonly kind = "invalid-request" as const;
+  readonly kind = "invalid-request";
 
   constructor(message: string) {
     super(message);
