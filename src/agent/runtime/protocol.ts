@@ -1,3 +1,4 @@
+import { isJsonObject, parseJsonValue, type JsonObject, type JsonValue } from "../../json.js";
 import type { RecordedModelResponse } from "../../replay/schema.js";
 
 export type ParsedModelResponse =
@@ -6,7 +7,7 @@ export type ParsedModelResponse =
 
 export type ParsedToolCall = {
   readonly name: string;
-  readonly arguments: unknown;
+  readonly arguments: JsonValue;
 };
 
 export type ModelResponseParseResult =
@@ -19,22 +20,23 @@ export type ModelResponseParseResult =
  * `{ "type": "tool_call", "name": "write", "arguments": { ... } }`.
  */
 export function parseAgentResponse(response: RecordedModelResponse): ModelResponseParseResult {
-  let value: unknown;
+  let value: JsonValue;
   try {
-    value = JSON.parse(response.content);
-  } catch (error: unknown) {
-    return { ok: false, detail: `response is not valid JSON: ${errorDetail(error)}` };
+    value = parseJsonValue(JSON.parse(response.content));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { ok: false, detail: `response is not valid JSON: ${detail}` };
   }
   if (Array.isArray(value)) {
     return parseToolCalls(value, "tool calls");
   }
-  if (!isRecord(value)) {
+  if (!isJsonObject(value)) {
     return { ok: false, detail: "response must be a JSON object or tool-call array" };
   }
 
   const type = value.type;
   if (type === "final") {
-    if (typeof value.content !== "string") {
+    if (!isString(value.content)) {
       return { ok: false, detail: 'final response field "content" must be a string' };
     }
     return { ok: true, response: { kind: "final", content: value.content } };
@@ -54,18 +56,19 @@ export function parseAgentResponse(response: RecordedModelResponse): ModelRespon
   if ("tool" in value) {
     return parseDirectToolCall(value, "tool call", "tool");
   }
-  if (typeof value.kind === "string") {
+  if (isString(value.kind)) {
     return parseDirectToolCall(value, "tool call", "kind");
   }
   return { ok: false, detail: 'response field "type" must be "final", "tool_call", or "tool_calls"' };
 }
 
-function parseToolCalls(value: unknown, path: string): ModelResponseParseResult {
+function parseToolCalls(value: JsonValue | undefined, path: string): ModelResponseParseResult {
   if (!Array.isArray(value) || value.length === 0) {
     return { ok: false, detail: `${path} must be a non-empty array` };
   }
   const calls: ParsedToolCall[] = [];
-  for (const [index, item] of value.entries()) {
+  const callValues: readonly JsonValue[] = value;
+  for (const [index, item] of callValues.entries()) {
     const call = parseToolCall(item, `${path}[${index}]`);
     if (!call.ok) {
       return call;
@@ -75,17 +78,17 @@ function parseToolCalls(value: unknown, path: string): ModelResponseParseResult 
   return { ok: true, response: { kind: "tool-calls", calls } };
 }
 
-function parseToolCall(value: unknown, path: string):
+function parseToolCall(value: JsonValue | undefined, path: string):
   | { readonly ok: true; readonly call: ParsedToolCall }
   | { readonly ok: false; readonly detail: string } {
-  if (!isRecord(value)) {
+  if (!isJsonObject(value)) {
     return { ok: false, detail: `${path} must be an object` };
   }
-  if (!("name" in value) && isRecord(value.function)) {
+  if (!("name" in value) && isJsonObject(value.function)) {
     return parseToolCall(value.function, `${path}.function`);
   }
   const name = value.name;
-  if (typeof name !== "string" || name.length === 0) {
+  if (!isString(name) || name.length === 0) {
     return { ok: false, detail: `${path} field "name" must be a non-empty string` };
   }
   if (!("arguments" in value)) {
@@ -95,50 +98,48 @@ function parseToolCall(value: unknown, path: string):
 }
 
 function parseDirectToolCall(
-  value: Record<string, unknown>,
+  value: JsonObject,
   path: string,
   nameKey: string,
 ): ModelResponseParseResult {
   const name = value[nameKey];
-  if (typeof name !== "string" || name.length === 0) {
+  if (!isString(name) || name.length === 0) {
     return { ok: false, detail: `${path} field ${JSON.stringify(nameKey)} must be a non-empty string` };
   }
   if ("arguments" in value) {
     const call = parseNamedArguments(name, value.arguments, path);
     return call.ok ? { ok: true, response: { kind: "tool-calls", calls: [call.call] } } : call;
   }
-  const argumentsObject: Record<string, unknown> = {};
+  const argumentEntries: [string, JsonValue][] = [];
   for (const [key, argument] of Object.entries(value)) {
     if (key !== nameKey && key !== "type") {
-      argumentsObject[key] = argument;
+      argumentEntries.push([key, argument]);
     }
   }
+  const argumentsObject: JsonObject = Object.fromEntries(argumentEntries);
   return { ok: true, response: { kind: "tool-calls", calls: [{ name, arguments: argumentsObject }] } };
 }
 
 function parseNamedArguments(
   name: string,
-  value: unknown,
+  value: JsonValue,
   path: string,
 ): { readonly ok: true; readonly call: ParsedToolCall } | { readonly ok: false; readonly detail: string } {
   let args = value;
-  if (typeof args === "string") {
+  if (isString(args)) {
     try {
-      args = JSON.parse(args);
-    } catch (error: unknown) {
+      args = parseJsonValue(JSON.parse(args));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       return {
         ok: false,
-        detail: `${path} field "arguments" is not valid JSON: ${errorDetail(error)}`,
+        detail: `${path} field "arguments" is not valid JSON: ${detail}`,
       };
     }
   }
   return { ok: true, call: { name, arguments: args } };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
 }
