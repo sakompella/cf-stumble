@@ -26,6 +26,12 @@ const regressionCase: ValidationCase = {
   mandatoryCanary: false,
 };
 
+const knownDefectCase: ValidationCase = {
+  name: "known defect remains visible",
+  session: { ...session, name: "known defect remains visible" },
+  mandatoryCanary: false,
+};
+
 function pass(): ReplayOutcome {
   return { status: "PASS", effects: { trace: [], finalWorkspace: [] } };
 }
@@ -66,8 +72,9 @@ test("the ratchet allows a case that was already failing to fail again", async (
       setPointer: () => Promise.resolve(false),
     },
     resultStore: results,
-    corpus: [regressionCase],
-    execute: () => Promise.resolve(fail()),
+    corpus: [regressionCase, knownDefectCase],
+    execute: (_generation, current) =>
+      Promise.resolve(current.name === session.name ? pass() : fail()),
     now: () => 10,
   });
 

@@ -119,6 +119,32 @@ function recordOutcome(outcome: ReplayOutcome): RecordedCaseOutcome {
 }
 
 function evaluateRatchet(caseResults: readonly ValidationCaseResult[]): Verdict {
+  if (caseResults.length === 0) {
+    return "inconclusive";
+  }
+  if (
+    caseResults.some(
+      (caseResult) =>
+        caseResult.baseline.status === "INCONCLUSIVE" ||
+        caseResult.candidate.status === "INCONCLUSIVE",
+    )
+  ) {
+    return "inconclusive";
+  }
+  if (!caseResults.some((caseResult) => caseResult.baseline.status === "PASS")) {
+    return "inconclusive";
+  }
+
+  for (const caseResult of caseResults) {
+    if (caseResult.mandatoryCanary && caseResult.candidate.status === "FAIL") {
+      return "fail";
+    }
+  }
+  for (const caseResult of caseResults) {
+    if (caseResult.mandatoryCanary && caseResult.baseline.status !== "PASS") {
+      return "inconclusive";
+    }
+  }
   for (const caseResult of caseResults) {
     if (
       caseResult.baseline.status === "PASS" &&
