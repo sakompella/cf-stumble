@@ -8,7 +8,11 @@ export default defineConfig({
     }),
   ],
   test: {
-    include: ["test/facet/**/*.test.ts", "test/storage-do/**/*.test.ts"],
+    include: [
+      "test/facet/**/*.test.ts",
+      "test/storage-do/**/*.test.ts",
+      "test/supervisor/**/*.workers.ts",
+    ],
     typecheck: { enabled: false },
   },
 });
