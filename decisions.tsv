@@ -22,3 +22,4 @@ time	slice	decision	reason	evidence	result
 11:36	S10	Supervisor duplicated genesis seeding and reset	S10 worktree branched before S5 landed, so genesis.ts did not exist there	two escape-hatch impls; supervisor uses genesis_sha meta row and its own reset	reconciliation dispatched
 11:37	S8	Vertical path composes with no failed seams	seed gen0, pinned turn, candidate, real gate, attested promote, rollback, reset all compose	6 integration tests, docs/integration-findings.md	merged
 11:37	S8	No production agent loop yet maps generation modules to the replay loop and four tools	integration test supplies a scripted executor; real runtime is a genuine remaining gap	docs/integration-findings.md	open, documented
+11:44	RECONCILE	Genesis unified on src/generation/genesis.ts	supervisor now seeds via seedGenesis and holds a real GenesisPin; meta row only persists which sha is genesis	resetToGenesisSync added so bounded CAS survives inside transactionSync; 140 tests green	merged

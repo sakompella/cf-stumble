@@ -78,4 +78,15 @@ isolation guarantees are tested for real rather than mocked.
 
 ## Status
 
-Early. See `docs/slices.md` for what is done and what is honestly not.
+The generation machinery works end to end. Generation 0 seeds, a turn pins to it, a candidate
+builds and is validated through the real ratchet, promotion moves the pointer on a real
+attestation, the next turn picks up the candidate, and rollback restores the previous one — all
+covered by `test/integration/`.
+
+Facet isolation is proven against real workerd rather than mocked: the facet gets a separate
+SQLite database, an empty `env` with no `LOADER`, blocked network egress, no route back to the
+supervisor, and reset survives both a candidate that fails to load and one that throws on init.
+
+Garbage collection is deliberately not built (D13). The one real gap is that no production agent
+loop yet maps generation modules onto the replay loop and the four primitives — see
+`docs/integration-findings.md`.

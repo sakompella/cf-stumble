@@ -11,6 +11,13 @@ pnpm test && pnpm typecheck && pnpm lint
 
 Status legend: `DONE` / `IN PROGRESS` / `NOT DONE (reason)`.
 
+**Final state: every slice DONE except garbage collection, which was deliberately cut (D13).**
+118 Node tests and 22 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
+`pnpm lint --max-warnings=0` are all green. The remaining honest gap is recorded in
+`docs/integration-findings.md`: there is no production agent loop yet mapping generation modules
+onto the replay loop and the four primitives, so the integration test supplies a scripted
+executor. That is the next slice, not a defect in what exists.
+
 ## Ordering principle (revised after review)
 
 The first draft was twelve horizontal layers with the riskiest claim built last. That is the
