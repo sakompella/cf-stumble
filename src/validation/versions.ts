@@ -15,7 +15,7 @@ const GATE_POLICY = {
 
 type RecordValue = Record<string, unknown>;
 
-function isRecord(value: object): value is RecordValue {
+function isRecord(value: unknown): value is RecordValue {
   return !Array.isArray(value);
 }
 

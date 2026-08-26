@@ -53,7 +53,7 @@ export default defineConfig({
     // 2 violations on adoption
     "anti-slop/require-safety-comment-for-type-assertion": "off",
     // 1 violations on adoption
-    "anti-slop/no-object-parameters": "off",
+    "anti-slop/no-object-parameters": "error",
     // 1 violations on adoption
     "anti-slop/no-chained-type-assertions": "error",
   },
