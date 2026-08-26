@@ -89,6 +89,16 @@ Facet isolation is proven against real workerd rather than mocked: the facet get
 SQLite database, an empty `env` with no `LOADER`, blocked network egress, no route back to the
 supervisor, and reset survives both a candidate that fails to load and one that throws on init.
 
-Garbage collection is deliberately not built (D13). The one real gap is that no production agent
-loop yet maps generation modules onto the replay loop and the four primitives — see
-`docs/integration-findings.md`.
+Promotion cannot be forged: `POST /promote` takes only a candidate sha and the supervisor runs
+the gate itself, so the attestation never leaves the process. Privileged routes require a
+constant-time-compared secret and fail closed. Rollback is restricted to generations previously
+recorded as live, and quarantine stops a known-bad generation returning.
+
+163 tests pass (134 Node, 29 workerd), verified from a cold clone rather than incrementally.
+
+**What is honestly not done.** Garbage collection is deliberately cut (D13). The agent runtime is
+real and shared by the gate and the live path, but it is not yet loaded into a facet through the
+Dynamic Worker Loader, so the last hop from stored bytes to sandboxed execution is unexercised.
+There is no real model provider, `@cloudflare/computer` is not wired as the workspace backend,
+and nothing has been deployed — hosted Dynamic Workers need Workers Paid. See
+`docs/review-findings.md` for what a green suite does not prove.
