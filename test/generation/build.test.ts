@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
 import { decodeObject } from "../../src/git/index.js";
 import type { Commit, Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
+import type { SweepableStore } from "../../src/storage/types.js";
 import { buildGeneration } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
 
@@ -39,46 +40,65 @@ async function readCommit(store: MemoryStore, sha: Sha): Promise<Commit> {
   return object.commit;
 }
 
-describe("buildGeneration", () => {
-  it("writes a root generation with a manifest commit", async () => {
-    const store = new MemoryStore();
-    const generation = await buildGeneration(store, options);
+it("buildGeneration writes a root commit with a manifest", async () => {
+  const store = new MemoryStore();
+  const commit = await buildGeneration(store, options);
 
-    expect(generation.number).toBe(0);
-    expect(generation.parent).toBeUndefined();
-    expect(generation.createdAt).toBe(author.timestamp);
-    expect(generation.summary).toBe(`${options.summary}\n`);
-    expect(await readCommit(store, generation.sha)).toEqual({
-      tree: generation.manifest,
-      parents: [],
-      author,
-      committer: author,
-      message: `${options.summary}\n`,
-    });
-    expect(await store.listObjects()).toHaveLength(4);
+  expect(commit).not.toHaveProperty("number");
+  expect(commit.parent).toBeUndefined();
+  expect(commit.createdAt).toBe(author.timestamp);
+  expect(commit.summary).toBe(`${options.summary}\n`);
+  expect(await readCommit(store, commit.sha)).toEqual({
+    tree: commit.manifest,
+    parents: [],
+    author,
+    committer: author,
+    message: `${options.summary}\n`,
+  });
+  expect(await store.listObjects()).toHaveLength(4);
+});
+
+it("buildGeneration deduplicates an unchanged module across commits", async () => {
+  const store: SweepableStore = new MemoryStore();
+  const first = await buildGeneration(store, options);
+
+  await buildGeneration(store, {
+    ...options,
+    parent: first,
+    summary: "same module, next commit",
+    createdAt: author.timestamp + 1,
   });
 
-  it("deduplicates an unchanged module across generations", async () => {
-    const store = new MemoryStore();
-    const first = await buildGeneration(store, options);
+  expect(await store.listObjects()).toHaveLength(5);
+});
 
-    await buildGeneration(store, {
-      ...options,
-      parent: first,
-      summary: "same module, next generation",
-      createdAt: author.timestamp + 1,
-    });
-
-    expect(await store.listObjects()).toHaveLength(5);
+it("buildGeneration does not assign a colliding lineage identity to distinct commits", async () => {
+  const store = new MemoryStore();
+  const parent = await buildGeneration(store, options);
+  const left = await buildGeneration(store, {
+    ...options,
+    parent,
+    summary: "candidate left",
+    createdAt: author.timestamp + 1,
+  });
+  const right = await buildGeneration(store, {
+    ...options,
+    parent,
+    summary: "candidate right",
+    createdAt: author.timestamp + 1,
   });
 
-  it("is deterministic for identical inputs", async () => {
-    const store = new MemoryStore();
+  expect(left.sha).not.toBe(right.sha);
+  expect(left).not.toHaveProperty("number");
+  expect(right).not.toHaveProperty("number");
+});
 
-    const first = await buildGeneration(store, options);
-    const second = await buildGeneration(store, options);
+it("buildGeneration is deterministic for identical inputs", async () => {
+  const store = new MemoryStore();
 
-    expect(second).toEqual(first);
-    expect(await store.listObjects()).toHaveLength(4);
-  });
+  const first = await buildGeneration(store, options);
+  const second = await buildGeneration(store, options);
+
+  expect(second).toEqual(first);
+  expect(await store.listObjects()).toHaveLength(4);
 });

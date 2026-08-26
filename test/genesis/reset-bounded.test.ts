@@ -4,7 +4,6 @@ import {
   resetToGenesis,
   type GenesisPin,
 } from "../../src/generation/genesis.js";
-import { parseGenerationNumber } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
 import type { Sha } from "../../src/git/types.js";
 import type { PointerStore } from "../../src/storage/types.js";
@@ -12,7 +11,6 @@ import type { PointerStore } from "../../src/storage/types.js";
 const pin: GenesisPin = {
   kind: "genesis",
   sha: parseSha("0".repeat(39) + "1"),
-  number: parseGenerationNumber(0),
 };
 
 /** Always loses the compare-and-swap, standing in for a sustained promotion storm. */
