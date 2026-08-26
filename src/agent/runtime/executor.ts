@@ -8,6 +8,7 @@ import type { Workspace } from "../../tools/types.js";
 import type { AgentDefinition } from "./definition.js";
 import { executeLiveTurn } from "./live-turn.js";
 import { executeLoop, toReplayCall } from "./loop.js";
+import { recordedSourceFromReplayRuntime } from "./replay-source.js";
 import type { ModelResponseSource } from "./model.js";
 import { describeFailure } from "./transcript.js";
 import type {
@@ -55,10 +56,11 @@ export class AgentExecutor implements ReplayAgentLoop {
 
   /** Adapt the same loop to the replay runner's recorded runtime seam. */
   async runTurn(input: string, runtime: ReplayRuntime): Promise<AgentRunResult> {
+    const recordedSource = recordedSourceFromReplayRuntime(runtime);
     const loop = await executeLoop(input, {
       definition: this.definition,
       maxSteps: this.maxSteps,
-      requestModel: (request) => runtime.requestModel({ requestId: request.requestId }),
+      requestModel: (request) => recordedSource.requestModel(request),
       callPrimitive: async (call) => ({
         ok: true,
         result: await runtime.callPrimitive(toReplayCall(call)),
