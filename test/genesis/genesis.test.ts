@@ -76,6 +76,17 @@ describe("resetToGenesis", () => {
     expect(result).toEqual({ outcome: "reset", from: later.sha, to: genesis.sha });
     expect(await store.readPointer()).toBe(genesis.sha);
   });
+
+  it("claims generation 0 when the live pointer is unset", async () => {
+    const store = new MemoryStore();
+    const genesis = await buildGeneration(store, { ...options, parent: undefined });
+    const pin = makeGenesisPin(genesis);
+
+    const result = await resetToGenesis(store, pin);
+
+    expect(result).toEqual({ outcome: "reset", from: undefined, to: genesis.sha });
+    expect(await store.readPointer()).toBe(genesis.sha);
+  });
 });
 
 describe("genesis identification", () => {
