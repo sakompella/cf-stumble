@@ -14,6 +14,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260826.1
         version: 5.20260826.1
+      '@oxlint/plugins':
+        specifier: 1.78.0
+        version: 1.78.0
       isomorphic-git:
         specifier: ^1.41.9
         version: 1.41.9
@@ -580,6 +583,10 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
+
+  '@oxlint/plugins@1.78.0':
+    resolution: {integrity: sha512-Ypt8KeRYw+4jUtlPirfcHWMrn5ms12VrrFPD+Mds477/7tJxG1Kcz2Yrg2nVcTQEUx/GdlhS+BUg1kmxNm04Ug==}
+    engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
@@ -1763,6 +1770,8 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.80.0':
     optional: true
+
+  '@oxlint/plugins@1.78.0': {}
 
   '@poppinss/colors@4.1.6':
     dependencies:
