@@ -8,7 +8,7 @@ export default defineConfig({
     }),
   ],
   test: {
-    include: ["test/facet/**/*.test.ts"],
+    include: ["test/facet/**/*.test.ts", "test/storage-do/**/*.test.ts"],
     typecheck: { enabled: false },
   },
 });
