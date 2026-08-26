@@ -23,3 +23,5 @@ time	slice	decision	reason	evidence	result
 11:37	S8	Vertical path composes with no failed seams	seed gen0, pinned turn, candidate, real gate, attested promote, rollback, reset all compose	6 integration tests, docs/integration-findings.md	merged
 11:37	S8	No production agent loop yet maps generation modules to the replay loop and four tools	integration test supplies a scripted executor; real runtime is a genuine remaining gap	docs/integration-findings.md	open, documented
 11:44	RECONCILE	Genesis unified on src/generation/genesis.ts	supervisor now seeds via seedGenesis and holds a real GenesisPin; meta row only persists which sha is genesis	resetToGenesisSync added so bounded CAS survives inside transactionSync; 140 tests green	merged
+11:47	REVIEW	Attestation provenance is the top gap	bindings close TOCTOU only if attestations come from an authenticated independent validator; routes are unauthenticated so one can be fabricated	sol final review	documented, hardening dispatched
+11:47	REVIEW	Gate and live execution must share one executor	otherwise compatibility validation tests a surrogate forever	sol final review	constraint on the next slice
