@@ -13,7 +13,7 @@ import {
   type PrimitiveResult as ToolPrimitiveResult,
 } from "../../tools/index.js";
 import type { AgentDefinition } from "./definition.js";
-import { isModelSourceError } from "./model-errors.js";
+import { ModelSourceError } from "./model-errors.js";
 import { DEFAULT_MODEL_REQUEST_ID, type ModelResponseSource } from "./model.js";
 import { parseAgentResponse } from "./protocol.js";
 import type { ParsedToolCall } from "./protocol.js";
@@ -109,7 +109,7 @@ async function requestModel(
       }),
     };
   } catch (error) {
-    if (!isModelSourceError(error)) {
+    if (!(error instanceof ModelSourceError)) {
       throw error;
     }
     return {

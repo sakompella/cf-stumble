@@ -18,6 +18,3 @@ export function modelSourceExhausted(detail: string): ModelSourceError {
   return new ModelSourceError("exhausted", detail);
 }
 
-export function isModelSourceError(error: unknown): error is ModelSourceError {
-  return error instanceof ModelSourceError;
-}
