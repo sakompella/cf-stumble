@@ -2,27 +2,24 @@ import { decodeObject } from "../git/index.js";
 import { assertNever, FILE_MODE } from "../git/types.js";
 import type { Commit, GitObject, Sha } from "../git/types.js";
 import type { Store } from "../storage/types.js";
-import { parseGenerationNumber } from "./types.js";
-import type { Generation, Module } from "./types.js";
+import type { CommitSnapshot, Module } from "./types.js";
 
 export type LoadedGeneration = {
-  readonly generation: Generation;
+  readonly generation: CommitSnapshot;
   readonly modules: readonly Module[];
 };
 
-/** Read a commit generation and flatten its nested manifest into authored modules. */
+/** Read a commit and flatten its nested manifest into authored modules. */
 export async function readGeneration(store: Store, sha: Sha): Promise<LoadedGeneration> {
   const commit = await readCommit(store, sha);
   const modules = await readManifest(store, commit.tree);
-  const number = await generationNumber(store, sha);
   const generation = {
     sha,
-    number,
     parent: onlyParent(commit),
     manifest: commit.tree,
     createdAt: commit.committer.timestamp,
     summary: commit.message,
-  } satisfies Generation;
+  } satisfies CommitSnapshot;
   return { generation, modules };
 }
 
@@ -84,13 +81,13 @@ async function readBlob(store: Store, sha: Sha, path: string): Promise<Uint8Arra
 }
 
 async function readCommit(store: Store, sha: Sha): Promise<Commit> {
-  const object = await readObject(store, sha, `generation commit ${sha}`);
+  const object = await readObject(store, sha, `commit ${sha}`);
   if (object.type !== "commit") {
-    throw new Error(`generation object ${sha} is ${object.type}, not a commit`);
+    throw new Error(`commit object ${sha} is ${object.type}, not a commit`);
   }
   if (object.commit.parents.length > 1) {
     throw new Error(
-      `generation commit ${sha} has ${object.commit.parents.length} parents; expected at most one`,
+      `commit ${sha} has ${object.commit.parents.length} parents; expected at most one`,
     );
   }
   return object.commit;
@@ -98,27 +95,6 @@ async function readCommit(store: Store, sha: Sha): Promise<Commit> {
 
 function onlyParent(commit: Commit): Sha | undefined {
   return commit.parents[0];
-}
-
-async function generationNumber(store: Store, start: Sha) {
-  const visited = new Set<Sha>();
-  let current = start;
-  let depth = 0;
-
-  while (true) {
-    if (visited.has(current)) {
-      throw new Error(`generation lineage cycle detected at ${current}`);
-    }
-    visited.add(current);
-
-    const commit = await readCommit(store, current);
-    const parent = onlyParent(commit);
-    if (parent === undefined) {
-      return parseGenerationNumber(depth);
-    }
-    depth += 1;
-    current = parent;
-  }
 }
 
 async function readObject(store: Store, sha: Sha, description: string): Promise<GitObject> {
