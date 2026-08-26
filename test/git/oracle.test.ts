@@ -46,32 +46,62 @@ describe("isomorphic-git codec oracle", () => {
   });
 
   it("agrees on nested tree hashes and exercises directory sorting", async () => {
-    const leaf = await assertOracleAgreement({
-      type: "blob",
-      data: new TextEncoder().encode("nested leaf\n"),
-    });
-    const subtree: GitObject = {
-      type: "tree",
-      entries: [
-        { mode: FILE_MODE.regular, name: "leaf", sha: leaf },
-        { mode: FILE_MODE.executable, name: "内容", sha: leaf },
-      ],
-    };
-    const subtreeSha = await assertOracleAgreement(subtree);
-    const root: GitObject = {
-      type: "tree",
-      // Deliberately place the directory first. Git's wire order puts foo.txt first because
-      // the directory name compares as "foo/", not merely as "foo".
-      entries: [
-        { mode: FILE_MODE.tree, name: "foo", sha: subtreeSha },
-        { mode: FILE_MODE.regular, name: "foo.txt", sha: leaf },
-        { mode: FILE_MODE.regular, name: "README-内容", sha: leaf },
-      ],
-    };
+    await assertNestedTreeAgreement();
+  });
 
-    await assertOracleAgreement(root);
+  it("agrees on unicode merge commits with signed timezone offsets", async () => {
+    await assertOracleAgreement({
+      type: "commit",
+      commit: {
+        tree: parseSha("0123456789012345678901234567890123456789"),
+        parents: [
+          parseSha("1111111111111111111111111111111111111111"),
+          parseSha("2222222222222222222222222222222222222222"),
+        ],
+        author: {
+          name: "Zoë 内容",
+          email: "zoe@example.com",
+          timestamp: 1_700_000_000,
+          timezoneOffsetMinutes: -330,
+        },
+        committer: {
+          name: "生成者",
+          email: "committer@example.com",
+          timestamp: 1_700_000_001,
+          timezoneOffsetMinutes: 530,
+        },
+        message: "merge: café 内容\n",
+      },
+    });
   });
 });
+
+async function assertNestedTreeAgreement(): Promise<void> {
+  const leaf = await assertOracleAgreement({
+    type: "blob",
+    data: new TextEncoder().encode("nested leaf\n"),
+  });
+  const subtree: GitObject = {
+    type: "tree",
+    entries: [
+      { mode: FILE_MODE.regular, name: "leaf", sha: leaf },
+      { mode: FILE_MODE.executable, name: "内容", sha: leaf },
+    ],
+  };
+  const subtreeSha = await assertOracleAgreement(subtree);
+  const root: GitObject = {
+    type: "tree",
+    // Deliberately place the directory first. Git's wire order puts foo.txt first because
+    // the directory name compares as "foo/", not merely as "foo".
+    entries: [
+      { mode: FILE_MODE.tree, name: "foo", sha: subtreeSha },
+      { mode: FILE_MODE.regular, name: "foo.txt", sha: leaf },
+      { mode: FILE_MODE.regular, name: "README-内容", sha: leaf },
+    ],
+  };
+
+  await assertOracleAgreement(root);
+}
 
 async function assertOracleAgreement(object: GitObject): Promise<Sha> {
   const encoded = encodeObject(object);
@@ -176,13 +206,13 @@ function toOracleCommit(commit: Commit): CommitObject {
       name: commit.author.name,
       email: commit.author.email,
       timestamp: commit.author.timestamp,
-      timezoneOffset: commit.author.timezoneOffsetMinutes,
+      timezoneOffset: -commit.author.timezoneOffsetMinutes,
     },
     committer: {
       name: commit.committer.name,
       email: commit.committer.email,
       timestamp: commit.committer.timestamp,
-      timezoneOffset: commit.committer.timezoneOffsetMinutes,
+      timezoneOffset: -commit.committer.timezoneOffsetMinutes,
     },
   };
 }
