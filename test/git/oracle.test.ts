@@ -29,19 +29,15 @@ import { createMemoryFs } from "../support/memory-fs.js";
 const gitdir = "/oracle/.git";
 
 function createOracleFs(): FsClient {
-  // MemoryFs uses a deliberately narrow runtime shape whose method record is typed loosely
-  // because isomorphic-git's FsClient declarations use Function for every method. This is the
-  // single boundary cast from the shared runtime shim to isomorphic-git's loose declaration.
+  // MemoryFs uses a loosely typed method record because isomorphic-git's FsClient declarations use
+  // Function for every method. This is the single boundary cast to that loose declaration.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return createMemoryFs() as unknown as FsClient;
 }
 
 describe("isomorphic-git codec oracle", () => {
   it("agrees on blob hashes and reads blobs in both directions", async () => {
-    const cases = [
-      new Uint8Array(),
-      Uint8Array.from([0, 1, 2, 255, 0]),
-    ];
+    const cases = [new Uint8Array(), Uint8Array.from([0, 1, 2, 255, 0])];
 
     for (const data of cases) {
       await assertOracleAgreement({ type: "blob", data });
@@ -77,8 +73,8 @@ describe("isomorphic-git codec oracle", () => {
       },
     });
   });
-
 });
+
 describe("generation commit messages", () => {
   it("normalizes summaries to one trailing newline", async () => {
     const store = new MemoryStore();
@@ -157,9 +153,8 @@ async function assertOracleAgreement(object: GitObject): Promise<Sha> {
   if (writtenByOracle.type !== "wrapped") {
     throw new Error(`expected a wrapped object, got ${writtenByOracle.type}`);
   }
-  expect(decodeObject(new Uint8Array(writtenByOracle.object))).toEqual(
-    canonicalObject(object),
-  );
+  expect(new Uint8Array(writtenByOracle.object)).toEqual(encoded);
+  expect(decodeObject(new Uint8Array(writtenByOracle.object))).toEqual(canonicalObject(object));
 
   const encodedFs = createOracleFs();
   // The wrapped form is the only isomorphic-git API that accepts our exact encoded bytes.
@@ -189,11 +184,7 @@ function writeWithOracle(fs: FsClient, object: GitObject): Promise<string> {
   }
 }
 
-async function assertReadableByOracle(
-  fs: FsClient,
-  oid: string,
-  object: GitObject,
-): Promise<void> {
+async function assertReadableByOracle(fs: FsClient, oid: string, object: GitObject): Promise<void> {
   switch (object.type) {
     case "blob": {
       const result = await readBlob({ fs, gitdir, oid });
