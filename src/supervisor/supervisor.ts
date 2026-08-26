@@ -572,14 +572,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       if (this.readGenerationRow(target) === undefined) {
         throw new MissingResourceError(`rollback target generation ${target} does not exist`);
       }
+      if (this.isQuarantined(target)) {
+        throw new SafetyViolationError("quarantined", `generation ${target} is quarantined`);
+      }
       if (!this.wasPreviouslyLive(target)) {
         throw new SafetyViolationError(
           "not-live",
           `generation ${target} was never recorded as live`,
         );
-      }
-      if (this.isQuarantined(target)) {
-        throw new SafetyViolationError("quarantined", `generation ${target} is quarantined`);
       }
       const actual = this.readPointerSql();
       const compareWith = expected ?? actual;
