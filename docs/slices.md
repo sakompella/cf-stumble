@@ -12,11 +12,18 @@ pnpm test && pnpm typecheck && pnpm lint
 Status legend: `DONE` / `IN PROGRESS` / `NOT DONE (reason)`.
 
 **Final state: every slice DONE except garbage collection, which was deliberately cut (D13).**
-131 Node tests and 22 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
-`pnpm lint --max-warnings=0` are all green. The remaining honest gap is recorded in
-`docs/integration-findings.md`: there is no production agent loop yet mapping generation modules
-onto the replay loop and the four primitives, so the integration test supplies a scripted
-executor. That is the next slice, not a defect in what exists.
+134 Node tests and 29 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
+`pnpm lint --max-warnings=0` are all green. Verified green from a cold clone
+(`rm -rf node_modules && pnpm install --frozen-lockfile`), not just incrementally.
+
+Slices S12, S13 and S14 were added after an architectural review and each closed a real hole:
+canary identity was controlled by the mutable corpus, the integration test used a scripted
+executor rather than the real one, and promotion accepted a forgeable caller-supplied
+attestation over unauthenticated routes. See `docs/review-findings.md`.
+
+The remaining gaps are honest and recorded: the runtime is real but is not yet loaded into a
+facet through the Dynamic Worker Loader, there is no real model provider, `@cloudflare/computer`
+is not wired as the workspace backend, and nothing has been deployed.
 
 ## Ordering principle (revised after review)
 
@@ -241,7 +248,7 @@ become a future regression case.
 
 ---
 
-## S14 — Attestation provenance and route authorization · depends: S10, S12 · IN PROGRESS
+## S14 — Attestation provenance and route authorization · depends: S10, S12 · DONE
 
 The most serious remaining hole. Promotion verifies an attestation, but the supervisor accepts
 one **from the caller** over unauthenticated routes, so anyone reaching the Durable Object could

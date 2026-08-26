@@ -4,7 +4,14 @@ An architectural review of the finished overnight build. These are the things a 
 suite does *not* prove. Recorded here rather than fixed silently, because several are judgement
 calls for the human and one changes what "validated" means.
 
-## The one that matters most: attestation provenance
+## The one that matters most: attestation provenance — RESOLVED (S14)
+
+**Update:** promotion no longer accepts an attestation from the caller at all. `POST /promote`
+takes a candidate sha, the supervisor runs the gate itself, and the attestation it computes
+never leaves the process — forgery is now structurally impossible rather than merely detectable.
+Privileged routes require a constant-time-compared bearer secret and fail closed. Rollback is
+restricted to generations recorded as live, and quarantine blocks a known-bad generation from
+returning. Original analysis below.
 
 Promotion verifies an attestation bound to candidate sha, the live generation it was validated
 against, corpus version, and gate version. That closes the time-of-check/time-of-use gap where
@@ -81,7 +88,11 @@ was a deliberate trade (D4) and is fine while content is not adversarial — but
 is agent-authored, so if object identity ever becomes a security boundary, add a second SHA-256
 digest rather than relying on the git oid.
 
-## Rollback deserves a guard rail
+## Rollback deserves a guard rail — RESOLVED (S14)
+
+**Update:** rollback targets are now restricted to generations previously recorded as live, and
+quarantine is implemented. Reset remains the deliberate escape hatch that bypasses quarantine,
+since otherwise quarantining everything would leave no way back. Original analysis below.
 
 Rollback needs no attestation, deliberately, so that recovery survives validation being
 unavailable. Two things should temper that:
