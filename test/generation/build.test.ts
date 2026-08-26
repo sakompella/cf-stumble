@@ -47,13 +47,13 @@ describe("buildGeneration", () => {
     expect(generation.number).toBe(0);
     expect(generation.parent).toBeUndefined();
     expect(generation.createdAt).toBe(author.timestamp);
-    expect(generation.summary).toBe(options.summary);
+    expect(generation.summary).toBe(`${options.summary}\n`);
     expect(await readCommit(store, generation.sha)).toEqual({
       tree: generation.manifest,
       parents: [],
       author,
       committer: author,
-      message: options.summary,
+      message: `${options.summary}\n`,
     });
     expect(await store.listObjects()).toHaveLength(4);
   });

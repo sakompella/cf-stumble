@@ -1,267 +1,291 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawn } from "node:child_process";
-import { deflateSync } from "node:zlib";
-import { describe, expect, it, beforeAll } from "vitest";
-
 import {
+  readBlob,
+  readCommit,
+  readObject,
+  readTree,
+  writeBlob,
+  writeCommit,
+  writeObject,
+  writeTree,
+  type CommitObject,
+  type FsClient,
+  type TreeEntry as OracleTreeEntry,
+} from "isomorphic-git";
+import { describe, expect, it } from "vitest";
+
+import { buildGeneration } from "../../src/generation/build.js";
+import { MemoryStore } from "../../src/storage/memory.js";
+import {
+  decodeObject,
   encodeObject,
   FILE_MODE,
   hashObject,
   parseSha,
 } from "../../src/git/index.js";
-import type { GitObject, Sha } from "../../src/git/index.js";
+import type { Commit, GitObject, Sha, TreeEntry } from "../../src/git/index.js";
+import type { Module } from "../../src/generation/types.js";
+import { createMemoryFs } from "../support/memory-fs.js";
 
-const emptyInput = new Uint8Array();
-const gitEnvironment = {
-  ...process.env,
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_NOSYSTEM: "1",
-  GIT_AUTHOR_NAME: "Oracle Author",
-  GIT_AUTHOR_EMAIL: "oracle-author@example.com",
-  GIT_COMMITTER_NAME: "Oracle Committer",
-  GIT_COMMITTER_EMAIL: "oracle-committer@example.com",
-};
+const gitdir = "/oracle/.git";
 
-beforeAll(async () => {
-  await runGit(["--version"], process.cwd(), emptyInput);
-});
-
-describe("git hash-object oracle", () => {
-  it("matches real git for blobs, trees, and commits", async () => {
-    const objects = makeOracleObjects();
-    for (const object of objects) {
-      await assertHashMatchesGit(object);
-    }
-  });
-});
-
-describe("git loose-object repository oracle", () => {
-  it("lets git log, cat-file, and ls-tree read codec-produced objects", async () => {
-    const repository = await mkdtemp(join(tmpdir(), "cf-stumble-git-"));
-    try {
-      await runGit(["init", "--quiet", repository], process.cwd(), emptyInput);
-      const objects = await makeRepositoryObjects();
-      for (const object of objects) {
-        await writeLooseObject(repository, object.bytes, object.sha);
-      }
-
-      const { merge, root, second, rootTree } = repositoryReferences(objects);
-      await writeFile(join(repository, ".git", "HEAD"), "ref: refs/heads/main\n");
-      await mkdir(join(repository, ".git", "refs", "heads"), { recursive: true });
-      await writeFile(
-        join(repository, ".git", "refs", "heads", "main"),
-        `${merge.sha}\n`,
-      );
-
-      const log = await runGit(
-        ["--no-pager", "log", "--format=%H%n%P%n%s", "main"],
-        repository,
-        emptyInput,
-      );
-      expect(log).toContain(`${merge.sha}\n${root.sha} ${second.sha}\nmerge tree\n`);
-
-      const commitOutput = await runGit(
-        ["cat-file", "-p", merge.sha],
-        repository,
-        emptyInput,
-      );
-      expect(commitOutput).toContain(`tree ${rootTree.sha}\n`);
-      expect(commitOutput).toContain(`parent ${root.sha}\nparent ${second.sha}\n`);
-      expect(commitOutput).toContain("merge tree\n");
-
-      const names = await runGit(
-        ["-c", "core.quotePath=false", "ls-tree", "--name-only", merge.sha],
-        repository,
-        emptyInput,
-      );
-      expect(names).toBe("README-内容\nfoo.txt\nfoo\n");
-    } finally {
-      await rm(repository, { recursive: true, force: true });
-    }
-  });
-});
-
-type RepositoryObject = {
-  readonly label: string;
-  readonly bytes: Uint8Array;
-  readonly sha: Sha;
-};
-
-type RepositoryReferences = {
-  readonly merge: RepositoryObject;
-  readonly root: RepositoryObject;
-  readonly second: RepositoryObject;
-  readonly rootTree: RepositoryObject;
-};
-
-function repositoryReferences(
-  objects: readonly RepositoryObject[],
-): RepositoryReferences {
-  const merge = objects.find((object) => object.label === "merge");
-  const root = objects.find((object) => object.label === "root");
-  const second = objects.find((object) => object.label === "second");
-  const rootTree = objects.find((object) => object.label === "root tree");
-  if (merge === undefined || root === undefined || second === undefined || rootTree === undefined) {
-    throw new Error("test fixture is missing a repository object");
-  }
-  return { merge, root, second, rootTree };
+function createOracleFs(): FsClient {
+  // MemoryFs uses a loosely typed method record because isomorphic-git's FsClient declarations use
+  // Function for every method. This is the single boundary cast to that loose declaration.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  return createMemoryFs() as unknown as FsClient;
 }
 
-function makeOracleObjects(): readonly GitObject[] {
-  const blobSha = parseSha("0123456789012345678901234567890123456789");
-  const parentSha = parseSha("1111111111111111111111111111111111111111");
-  return [
-    { type: "blob", data: Uint8Array.from([0, 1, 255, 0]) },
-    {
-      type: "tree",
-      entries: [
-        { mode: FILE_MODE.tree, name: "foo", sha: blobSha },
-        { mode: FILE_MODE.regular, name: "foo.txt", sha: parentSha },
-      ],
-    },
-    {
+describe("isomorphic-git codec oracle", () => {
+  it("agrees on blob hashes and reads blobs in both directions", async () => {
+    const cases = [new Uint8Array(), Uint8Array.from([0, 1, 2, 255, 0])];
+
+    for (const data of cases) {
+      await assertOracleAgreement({ type: "blob", data });
+    }
+  });
+
+  it("agrees on nested tree hashes and exercises directory sorting", async () => {
+    await assertNestedTreeAgreement();
+  });
+
+  it("agrees on unicode merge commits with signed timezone offsets", async () => {
+    await assertOracleAgreement({
       type: "commit",
       commit: {
-        tree: blobSha,
-        parents: [parentSha],
+        tree: parseSha("0123456789012345678901234567890123456789"),
+        parents: [
+          parseSha("1111111111111111111111111111111111111111"),
+          parseSha("2222222222222222222222222222222222222222"),
+        ],
         author: {
-          name: "Oracle Author",
-          email: "oracle@example.com",
+          name: "Zoë 内容",
+          email: "zoe@example.com",
           timestamp: 1_700_000_000,
           timezoneOffsetMinutes: -330,
         },
         committer: {
-          name: "Oracle Committer",
-          email: "oracle@example.com",
+          name: "生成者",
+          email: "committer@example.com",
           timestamp: 1_700_000_001,
           timezoneOffsetMinutes: 530,
         },
-        message: "unicode: 内容\n",
+        message: "merge: café 内容\n",
       },
-    },
-  ];
-}
+    });
+  });
+});
 
-async function makeRepositoryObjects(): Promise<readonly RepositoryObject[]> {
-  const blob = await materialize("blob", {
+describe("generation commit messages", () => {
+  it("normalizes summaries to one trailing newline", async () => {
+    const store = new MemoryStore();
+    const author = {
+      name: "Build Bot",
+      email: "build@example.com",
+      timestamp: 1_700_000_000,
+      timezoneOffsetMinutes: 0,
+    };
+    const module = {
+      path: "prompt.md",
+      content: new TextEncoder().encode("prompt\n"),
+      executable: false,
+    } satisfies Module;
+    const generation = await buildGeneration(store, {
+      modules: [module],
+      parent: undefined,
+      author,
+      createdAt: author.timestamp,
+      summary: "unicode summary\n\n",
+    });
+    const bytes = await store.readObject(generation.sha);
+    if (bytes === undefined) {
+      throw new Error("expected a stored generation commit");
+    }
+    const object = decodeObject(bytes);
+    if (object.type !== "commit") {
+      throw new Error(`expected a commit, got ${object.type}`);
+    }
+    expect(object.commit.message).toBe("unicode summary\n");
+  });
+});
+
+async function assertNestedTreeAgreement(): Promise<void> {
+  const leaf = await assertOracleAgreement({
     type: "blob",
-    data: new TextEncoder().encode("hello\0world"),
+    data: new TextEncoder().encode("nested leaf\n"),
   });
-  const readme = await materialize("readme", {
-    type: "blob",
-    data: new TextEncoder().encode("README 内容\n"),
-  });
-  const subtree = await materialize("subtree", {
-    type: "tree",
-    entries: [{ mode: FILE_MODE.regular, name: "leaf", sha: blob.sha }],
-  });
-  const rootTree = await materialize("root tree", {
+  const subtree: GitObject = {
     type: "tree",
     entries: [
-      { mode: FILE_MODE.tree, name: "foo", sha: subtree.sha },
-      { mode: FILE_MODE.regular, name: "foo.txt", sha: blob.sha },
-      { mode: FILE_MODE.regular, name: "README-内容", sha: readme.sha },
+      { mode: FILE_MODE.regular, name: "leaf", sha: leaf },
+      { mode: FILE_MODE.executable, name: "内容", sha: leaf },
     ],
-  });
-  const root = await materialize("root", commit(rootTree.sha, [], "root tree", 0));
-  const second = await materialize(
-    "second",
-    commit(rootTree.sha, [root.sha], "second tree", 60),
-  );
-  const merge = await materialize(
-    "merge",
-    commit(rootTree.sha, [root.sha, second.sha], "merge tree", -330),
-  );
-  return [blob, readme, subtree, rootTree, root, second, merge];
+  };
+  const subtreeSha = await assertOracleAgreement(subtree);
+  const root: GitObject = {
+    type: "tree",
+    // Deliberately place the directory first. Git's wire order puts foo.txt first because
+    // the directory name compares as "foo/", not merely as "foo".
+    entries: [
+      { mode: FILE_MODE.tree, name: "foo", sha: subtreeSha },
+      { mode: FILE_MODE.regular, name: "foo.txt", sha: leaf },
+      { mode: FILE_MODE.regular, name: "README-内容", sha: leaf },
+    ],
+  };
+
+  await assertOracleAgreement(root);
 }
 
-function commit(
-  tree: Sha,
-  parents: readonly Sha[],
-  message: string,
-  timezoneOffsetMinutes: number,
-): GitObject {
+async function assertOracleAgreement(object: GitObject): Promise<Sha> {
+  const encoded = encodeObject(object);
+  const oracleFs = createOracleFs();
+  const oracleOid = await writeWithOracle(oracleFs, object);
+  await expect(hashObject(encoded)).resolves.toBe(oracleOid);
+
+  // The wrapped form is the only isomorphic-git API that exposes the exact bytes needed by our
+  // decoder, so this deprecated general-purpose API is intentional here.
+  // oxlint-disable-next-line typescript/no-deprecated
+  const writtenByOracle = await readObject({
+    fs: oracleFs,
+    gitdir,
+    oid: oracleOid,
+    format: "wrapped",
+  });
+  if (writtenByOracle.type !== "wrapped") {
+    throw new Error(`expected a wrapped object, got ${writtenByOracle.type}`);
+  }
+  expect(new Uint8Array(writtenByOracle.object)).toEqual(encoded);
+  expect(decodeObject(new Uint8Array(writtenByOracle.object))).toEqual(canonicalObject(object));
+
+  const encodedFs = createOracleFs();
+  // The wrapped form is the only isomorphic-git API that accepts our exact encoded bytes.
+  // oxlint-disable-next-line typescript/no-deprecated
+  const encodedOid = await writeObject({
+    fs: encodedFs,
+    gitdir,
+    object: encoded,
+    format: "wrapped",
+  });
+  expect(encodedOid).toBe(oracleOid);
+  await assertReadableByOracle(encodedFs, encodedOid, object);
+
+  return parseSha(oracleOid);
+}
+
+function writeWithOracle(fs: FsClient, object: GitObject): Promise<string> {
+  switch (object.type) {
+    case "blob":
+      return writeBlob({ fs, gitdir, blob: object.data });
+    case "tree":
+      return writeTree({ fs, gitdir, tree: toOracleTree(object.entries) });
+    case "commit":
+      return writeCommit({ fs, gitdir, commit: toOracleCommit(object.commit) });
+    default:
+      throw new Error("unsupported git object");
+  }
+}
+
+async function assertReadableByOracle(fs: FsClient, oid: string, object: GitObject): Promise<void> {
+  switch (object.type) {
+    case "blob": {
+      const result = await readBlob({ fs, gitdir, oid });
+      expect({ oid: result.oid, blob: new Uint8Array(result.blob) }).toEqual({
+        oid,
+        blob: object.data,
+      });
+      break;
+    }
+    case "tree": {
+      const result = await readTree({ fs, gitdir, oid });
+      expect({ oid: result.oid, tree: result.tree }).toEqual({
+        oid,
+        tree: sortOracleReadEntries(toOracleTree(object.entries)),
+      });
+      break;
+    }
+    case "commit": {
+      const result = await readCommit({ fs, gitdir, oid });
+      expect({ oid: result.oid, commit: result.commit }).toEqual({
+        oid,
+        commit: toOracleCommit(object.commit),
+      });
+      break;
+    }
+    default:
+      throw new Error("unsupported git object");
+  }
+}
+
+function toOracleTree(entries: readonly TreeEntry[]): OracleTreeEntry[] {
+  return entries.map((entry) => ({
+    mode: entry.mode === FILE_MODE.tree ? "040000" : entry.mode,
+    path: entry.name,
+    oid: entry.sha,
+    type: entry.mode === FILE_MODE.tree ? "tree" : "blob",
+  }));
+}
+
+function toOracleCommit(commit: Commit): CommitObject {
   return {
-    type: "commit",
-    commit: {
-      tree,
-      parents,
-      author: {
-        name: "Oracle Author",
-        email: "oracle@example.com",
-        timestamp: 1_700_000_000,
-        timezoneOffsetMinutes,
-      },
-      committer: {
-        name: "Oracle Committer",
-        email: "oracle@example.com",
-        timestamp: 1_700_000_000,
-        timezoneOffsetMinutes,
-      },
-      message: `${message}\n`,
+    message: commit.message,
+    tree: commit.tree,
+    parent: [...commit.parents],
+    author: {
+      name: commit.author.name,
+      email: commit.author.email,
+      timestamp: commit.author.timestamp,
+      timezoneOffset: -commit.author.timezoneOffsetMinutes,
+    },
+    committer: {
+      name: commit.committer.name,
+      email: commit.committer.email,
+      timestamp: commit.committer.timestamp,
+      timezoneOffset: -commit.committer.timezoneOffsetMinutes,
     },
   };
 }
 
-async function materialize(label: string, object: GitObject): Promise<RepositoryObject> {
-  const bytes = encodeObject(object);
-  return { label, bytes, sha: await hashObject(bytes) };
-}
-
-async function assertHashMatchesGit(object: GitObject): Promise<void> {
-  const encoded = encodeObject(object);
-  const expected = await runGit(
-    ["hash-object", "-t", object.type, "--stdin"],
-    process.cwd(),
-    objectBody(encoded),
-  );
-  await expect(hashObject(encoded)).resolves.toBe(expected.trim());
-}
-
-async function writeLooseObject(
-  repository: string,
-  bytes: Uint8Array,
-  sha: Sha,
-): Promise<void> {
-  const directory = join(repository, ".git", "objects", sha.slice(0, 2));
-  await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, sha.slice(2)), deflateSync(Buffer.from(bytes)));
-}
-
-function objectBody(bytes: Uint8Array): Uint8Array {
-  const headerEnd = bytes.indexOf(0);
-  if (headerEnd < 0) {
-    throw new Error("test object has no header terminator");
+function canonicalObject(object: GitObject): GitObject {
+  if (object.type !== "tree") {
+    return object;
   }
-  return bytes.slice(headerEnd + 1);
+  return {
+    type: "tree",
+    entries: object.entries.toSorted(compareGitTreeEntries),
+  };
 }
 
-function runGit(args: readonly string[], cwd: string, input: Uint8Array): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("git", args, { cwd, env: gitEnvironment });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout.push(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr.push(chunk);
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      const output = Buffer.concat(stdout).toString("utf8");
-      if (code === 0) {
-        resolve(output);
-        return;
-      }
-      reject(
-        new Error(
-          `git ${args.join(" ")} exited ${String(code)}: ${Buffer.concat(stderr).toString("utf8")}`,
-        ),
-      );
-    });
-    child.stdin.end(Buffer.from(input));
+function compareGitTreeEntries(left: TreeEntry, right: TreeEntry): number {
+  return compareBytes(treeSortKey(left), treeSortKey(right));
+}
+
+function treeSortKey(entry: TreeEntry): Uint8Array {
+  const name = new TextEncoder().encode(entry.name);
+  if (entry.mode !== FILE_MODE.tree) {
+    return name;
+  }
+  const key = new Uint8Array(name.byteLength + 1);
+  key.set(name);
+  key[name.byteLength] = 47;
+  return key;
+}
+
+function sortOracleReadEntries(entries: readonly OracleTreeEntry[]): OracleTreeEntry[] {
+  return entries.toSorted((left, right) => {
+    if (left.path < right.path) return -1;
+    if (left.path > right.path) return 1;
+    return 0;
   });
+}
+
+function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  const length = Math.min(left.byteLength, right.byteLength);
+  for (let index = 0; index < length; index += 1) {
+    const leftByte = left[index];
+    const rightByte = right[index];
+    if (leftByte === undefined || rightByte === undefined) {
+      throw new Error("missing tree sort byte");
+    }
+    if (leftByte !== rightByte) return leftByte - rightByte;
+  }
+  return left.byteLength - right.byteLength;
 }
