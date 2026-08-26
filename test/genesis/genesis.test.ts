@@ -90,6 +90,26 @@ describe("resetToGenesis", () => {
   });
 });
 
+describe("resetToGenesis recovery", () => {
+  it("resets when the live generation commit is missing", async () => {
+    const store = new MemoryStore();
+    const genesis = await seedGenesis(store, options);
+    const later = await buildGeneration(store, {
+      ...options,
+      parent: genesis,
+      createdAt: author.timestamp + 1,
+      summary: "later generation",
+    });
+    const pin = makeGenesisPin(genesis);
+    expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
+    await store.deleteObject(later.sha);
+
+    await resetToGenesis(store, pin);
+
+    expect(await store.readPointer()).toBe(genesis.sha);
+  });
+});
+
 describe("genesis identification", () => {
   it("identifies generation 0 and its pinned sha", async () => {
     const store = new MemoryStore();
