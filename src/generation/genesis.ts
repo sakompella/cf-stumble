@@ -17,11 +17,17 @@ export type GenesisPin = {
   readonly number: typeof GENESIS_NUMBER;
 };
 
-export type ResetResult = {
-  readonly outcome: "reset";
-  readonly from: Sha | undefined;
-  readonly to: Sha;
-};
+export type ResetResult =
+  | { readonly outcome: "reset"; readonly from: Sha | undefined; readonly to: Sha }
+  | { readonly outcome: "contended"; readonly attempts: number };
+
+/**
+ * Reset re-reads and retries on a lost CAS, but a promotion storm must not be able to spin it
+ * forever: this runs inside a Durable Object, so an unbounded loop wedges the request rather
+ * than failing it, and the escape hatch becomes unobservably stuck exactly when it is needed.
+ * Bounded attempts turn that into a reportable outcome the caller can escalate.
+ */
+export const MAX_RESET_ATTEMPTS = 16;
 
 /** Build generation 0 and claim the live pointer when it has not been initialized. */
 export async function seedGenesis(
@@ -87,10 +93,11 @@ export async function resetToGenesis(
   store: PointerStore,
   pin: GenesisPin,
 ): Promise<ResetResult> {
-  while (true) {
+  for (let attempt = 1; attempt <= MAX_RESET_ATTEMPTS; attempt += 1) {
     const from = await store.readPointer();
     if (await store.setPointer(pin.sha, from)) {
       return { outcome: "reset", from, to: pin.sha };
     }
   }
+  return { outcome: "contended", attempts: MAX_RESET_ATTEMPTS };
 }
