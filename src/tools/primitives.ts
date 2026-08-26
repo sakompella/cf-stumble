@@ -4,6 +4,7 @@ import {
   validateWorkspacePath,
   type Workspace,
   type WorkspaceCommandResult,
+  type WorkspaceFileContent,
   type WorkspacePathError,
 } from "./types.js";
 
@@ -121,11 +122,11 @@ export type PrimitiveOptions = {
 
 export const DEFAULT_BASH_TIMEOUT_MS = 30_000;
 
-function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorDetail(error: Error | string): string {
+  return error instanceof Error ? error.message : error;
 }
 
-function workspaceError(operation: PrimitiveKind, error: unknown): WorkspaceError {
+function workspaceError(operation: PrimitiveKind, error: Error | string): WorkspaceError {
   return { kind: "workspace-error", operation, detail: errorDetail(error) };
 }
 
@@ -146,7 +147,8 @@ async function readPrimitive(
   try {
     content = await workspace.readFile(validation.path);
   } catch (error: unknown) {
-    return { ok: false, kind: "read", error: workspaceError("read", error) };
+    const detail = error instanceof Error ? error : String(error);
+    return { ok: false, kind: "read", error: workspaceError("read", detail) };
   }
   if (content === undefined) {
     return {
@@ -155,7 +157,7 @@ async function readPrimitive(
       error: { kind: "file-not-found", path: call.path },
     };
   }
-  if (typeof content !== "string") {
+  if (!isTextContent(content)) {
     return { ok: false, kind: "read", error: { kind: "binary-file", path: call.path } };
   }
   return { ok: true, kind: "read", content };
@@ -173,7 +175,8 @@ async function writePrimitive(
   try {
     await workspace.writeFile(validation.path, call.content);
   } catch (error: unknown) {
-    return { ok: false, kind: "write", error: workspaceError("write", error) };
+    const detail = error instanceof Error ? error : String(error);
+    return { ok: false, kind: "write", error: workspaceError("write", detail) };
   }
   return {
     ok: true,
@@ -194,7 +197,8 @@ async function editPrimitive(
   try {
     current = await workspace.readFile(validation.path);
   } catch (error: unknown) {
-    return { ok: false, kind: "edit", error: workspaceError("edit", error) };
+    const detail = error instanceof Error ? error : String(error);
+    return { ok: false, kind: "edit", error: workspaceError("edit", detail) };
   }
   if (current === undefined) {
     return {
@@ -203,7 +207,7 @@ async function editPrimitive(
       error: { kind: "file-not-found", path: call.path },
     };
   }
-  if (typeof current !== "string") {
+  if (!isTextContent(current)) {
     return { ok: false, kind: "edit", error: { kind: "binary-file", path: call.path } };
   }
 
@@ -215,7 +219,8 @@ async function editPrimitive(
   try {
     await workspace.writeFile(validation.path, decision.content);
   } catch (error: unknown) {
-    return { ok: false, kind: "edit", error: workspaceError("edit", error) };
+    const detail = error instanceof Error ? error : String(error);
+    return { ok: false, kind: "edit", error: workspaceError("edit", detail) };
   }
   return { ok: true, kind: "edit", replacements: 1 };
 }
@@ -234,7 +239,8 @@ async function bashPrimitive(
   try {
     execution = await workspace.execute(call.command, { timeoutMs });
   } catch (error: unknown) {
-    return { ok: false, kind: "bash", error: workspaceError("bash", error) };
+    const detail = error instanceof Error ? error : String(error);
+    return { ok: false, kind: "bash", error: workspaceError("bash", detail) };
   }
   switch (execution.status) {
     case "completed":
@@ -260,6 +266,10 @@ async function bashPrimitive(
     default:
       return assertNever(execution, "workspace command result");
   }
+}
+
+function isTextContent(content: WorkspaceFileContent): content is string {
+  return typeof content === "string";
 }
 
 /** Execute one of the four fixed primitives against a workspace. */
