@@ -2,15 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import { MemoryActivationLedger } from "../../src/pointer/activation.js";
-import type {
-  AllocationRequest,
-  GenerationRecord,
-} from "../../src/generation/registry-types.js";
+import type { AllocationRequest, GenerationRecord } from "../../src/generation/registry-types.js";
 import type {
   GenerationRegistry,
   MaterializationTransition,
   MaterializationTransitionResult,
 } from "../../src/generation/registry.js";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import type { GenerationNumber } from "../../src/generation/types.js";
 
 const COMMIT = parseSha("1111111111111111111111111111111111111111");
@@ -25,7 +23,10 @@ function request(idempotencyKey: string): AllocationRequest {
   };
 }
 
-async function validatedGeneration(registry: GenerationRegistry, key: string): Promise<GenerationRecord> {
+async function validatedGeneration(
+  registry: GenerationRegistry,
+  key: string,
+): Promise<GenerationRecord> {
   const allocated = await registry.allocate(request(key));
   await registry.transition(allocated.number, { state: "loaded" });
   const validated = await registry.transition(allocated.number, { state: "validated" });
@@ -132,6 +133,22 @@ describe("MemoryActivationLedger promotion", () => {
   });
 });
 
+describe("MemoryActivationLedger unknown generations", () => {
+  it("returns a typed rejection without changing the pointer", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const ledger = new MemoryActivationLedger({ registry });
+    const unknown = parseGenerationNumber(99);
+
+    const result = await ledger.promote(unknown, NO_POINTER);
+
+    expect(result).toEqual({
+      outcome: "rejected",
+      reason: { kind: "unknown-generation", generation: unknown },
+    });
+    expect(await ledger.readPointer()).toBeUndefined();
+  });
+});
+
 describe("MemoryActivationLedger compare-and-swap", () => {
   it("rejects a promotion with a stale expected pointer and leaves the winner intact", async () => {
     const registry = new MemoryGenerationRegistry();
@@ -175,9 +192,15 @@ describe("MemoryActivationLedger history", () => {
     const candidate = await validatedGeneration(registry, "candidate");
 
     expect(await ledger.promote(base.number, NO_POINTER)).toMatchObject({ outcome: "activated" });
-    expect(await ledger.promote(candidate.number, base.number)).toMatchObject({ outcome: "activated" });
-    expect(await ledger.rollback(base.number, candidate.number)).toMatchObject({ outcome: "activated" });
-    expect(await ledger.promote(candidate.number, base.number)).toMatchObject({ outcome: "activated" });
+    expect(await ledger.promote(candidate.number, base.number)).toMatchObject({
+      outcome: "activated",
+    });
+    expect(await ledger.rollback(base.number, candidate.number)).toMatchObject({
+      outcome: "activated",
+    });
+    expect(await ledger.promote(candidate.number, base.number)).toMatchObject({
+      outcome: "activated",
+    });
 
     expect(await ledger.readPointer()).toBe(candidate.number);
     expect(await ledger.readEvents()).toEqual([

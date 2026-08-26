@@ -141,6 +141,8 @@ function isValidated(record: GenerationRecord): boolean {
   }
 }
 
-function rejected(reason: Extract<ActivationResult, { outcome: "rejected" }>["reason"]): ActivationResult {
+function rejected(
+  reason: Extract<ActivationResult, { outcome: "rejected" }>["reason"],
+): ActivationResult {
   return { outcome: "rejected", reason };
 }

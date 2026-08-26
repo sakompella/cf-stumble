@@ -2,15 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import type { AllocationRequest } from "../../src/generation/registry-types.js";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 
 const COMMIT = parseSha("1111111111111111111111111111111111111111");
 const OTHER_COMMIT = parseSha("2222222222222222222222222222222222222222");
 const ARTIFACT = parseSha("3333333333333333333333333333333333333333");
 
-function request(
-  idempotencyKey: string,
-  commit: typeof COMMIT = COMMIT,
-): AllocationRequest {
+function request(idempotencyKey: string, commit: typeof COMMIT = COMMIT): AllocationRequest {
   return {
     commit,
     baseline: undefined,
@@ -136,6 +134,18 @@ describe("MemoryGenerationRegistry validation failures", () => {
 });
 
 describe("MemoryGenerationRegistry transition rejection", () => {
+  it("returns a typed rejection for an unknown generation", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const unknown = parseGenerationNumber(99);
+
+    const result = await registry.transition(unknown, { state: "validated" });
+
+    expect(result).toEqual({
+      outcome: "rejected",
+      reason: { kind: "unknown-generation", generation: unknown },
+    });
+  });
+
   it("rejects illegal materialization transitions without overwriting immutable evidence", async () => {
     const registry = new MemoryGenerationRegistry();
     const record = await registry.allocate(request("illegal-transition"));
