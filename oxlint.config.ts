@@ -55,6 +55,6 @@ export default defineConfig({
     // 1 violations on adoption
     "anti-slop/no-object-parameters": "off",
     // 1 violations on adoption
-    "anti-slop/no-chained-type-assertions": "off",
+    "anti-slop/no-chained-type-assertions": "error",
   },
 });

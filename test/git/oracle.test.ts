@@ -29,10 +29,7 @@ import { createMemoryFs } from "../support/memory-fs.js";
 const gitdir = "/oracle/.git";
 
 function createOracleFs(): FsClient {
-  // MemoryFs uses a loosely typed method record because isomorphic-git's FsClient declarations use
-  // Function for every method. This is the single boundary cast to that loose declaration.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return createMemoryFs() as unknown as FsClient;
+  return createMemoryFs();
 }
 
 describe("isomorphic-git codec oracle", () => {
