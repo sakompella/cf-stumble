@@ -1,9 +1,4 @@
-import {
-  isJsonObjectValue,
-  isJsonPrimitive,
-  type JsonPrimitive,
-  type JsonValue,
-} from "../json.js";
+import { isJsonObjectValue, isJsonPrimitive, type JsonPrimitive, type JsonValue } from "../json.js";
 import type { ValidationCase } from "./results.js";
 
 const GATE_POLICY = {
@@ -11,6 +6,7 @@ const GATE_POLICY = {
   version: 1,
   baseline: "a candidate must preserve every case that passes on the live generation",
   mandatoryCanary: "a canary must pass individually on both the live generation and the candidate",
+  preflight: "every primitive and self-edit check must pass before the corpus runs",
   pinnedCanarySet: "mandatory canaries come from supervisor-owned pinned definitions",
   pinnedCanaryCorpus: "the corpus must contain each pinned canary without content changes",
   inconclusive: "an inconclusive case cannot satisfy a gate requirement",
