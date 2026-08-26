@@ -182,7 +182,7 @@ S2's conformance suite rerun against real DO SQLite under the workers pool, usin
 
 ---
 
-## S10 — Supervisor Durable Object and HTTP routes · depends: S4, S7, S9 · IN PROGRESS
+## S10 — Supervisor Durable Object and HTTP routes · depends: S4, S7, S9 · DONE
 
 Generation history, live pointer, accumulated context, corpus. Routes to list, promote, roll
 back, reset. Owns `src/supervisor/`.
