@@ -51,6 +51,7 @@ import {
   type ValidationResult,
   type ValidationRun,
 } from "../validation/index.js";
+import { isJsonObjectValue, parseJsonValue, type JsonObject, type JsonValue } from "../json.js";
 import { DurableObject } from "cloudflare:workers";
 
 type SupervisorEnv = {
@@ -422,7 +423,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.writeState("generation", "candidate");
       return Response.json({ promoted: true });
     } catch (error: unknown) {
-      return Response.json({ promoted: false, reason: errorMessage(error) }, { status: 422 });
+      const detail = error instanceof Error ? error.message : String(error);
+      return Response.json({ promoted: false, reason: detail }, { status: 422 });
     }
   }
 
@@ -438,7 +440,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const result = this.promoteTransaction(candidate, validation, candidateGeneration);
       return promotionResponse(result);
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -480,7 +482,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       return (await readGeneration(this.store, candidate)).generation;
     } catch (error: unknown) {
-      const message = errorMessage(error);
+      const message = error instanceof Error ? error.message : String(error);
       if (message.startsWith("missing generation commit object")) {
         throw new MissingResourceError(`candidate generation ${candidate} does not exist`);
       }
@@ -562,7 +564,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const result = this.rollbackTransaction(target, expected);
       return promotionResponse(result);
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -634,7 +636,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         to: result.to,
       });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -678,7 +680,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const generations = rows.map((row) => generationResponse(row, bySha));
       return Response.json({ generations });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -698,7 +700,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         })),
       });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -708,8 +710,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       try {
         decodedSha = decodeURIComponent(rawSha);
       } catch (error: unknown) {
+        const detail = error instanceof Error ? error.message : String(error);
         throw new InvalidRequestError(
-          `generation sha is not valid URL encoding: ${errorMessage(error)}`,
+          `generation sha is not valid URL encoding: ${detail}`,
         );
       }
       const sha = parseShaField(decodedSha, "generation");
@@ -723,7 +726,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const bySha = new Map(this.readGenerationRows().map((entry) => [entry.sha, entry]));
       return Response.json({ generation: generationResponse(row, bySha) });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -743,7 +746,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const bySha = new Map(this.readGenerationRows().map((entry) => [entry.sha, entry]));
       return Response.json({ generation: generationResponse(row, bySha) });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -799,7 +802,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         { status: 201 },
       );
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -823,7 +826,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       );
       return Response.json({ key, value }, { status: 201 });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -840,7 +843,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         })),
       });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -867,7 +870,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       });
       return Response.json({ validationCase, corpusVersion }, { status: 201 });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -878,7 +881,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         corpusVersion: this.readMetaOrThrow(CORPUS_VERSION_META_KEY),
       });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -889,7 +892,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.insertValidationResult(result);
       return Response.json({ result }, { status: 201 });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -919,7 +922,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         .toArray();
       return Response.json({ results: rows.map((row) => validationResponse(row)) });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -944,7 +947,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       });
       return Response.json({ quarantined: target, reason }, { status: 201 });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -963,7 +966,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         })),
       });
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -997,7 +1000,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         },
       );
     } catch (error: unknown) {
-      return requestErrorResponse(error);
+      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
@@ -1419,65 +1422,76 @@ function verifyAttestation(
   }
 }
 
-async function readRequestRecord(request: Request): Promise<Record<string, unknown>> {
-  let value: unknown;
+async function readRequestRecord(request: Request): Promise<JsonObject> {
+  let value: JsonValue;
   try {
-    value = JSON.parse(await request.text());
-  } catch (error: unknown) {
-    throw new InvalidRequestError(`request body is not valid JSON: ${errorMessage(error)}`);
+    value = parseJsonValue(JSON.parse(await request.text()));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new InvalidRequestError(`request body is not valid JSON: ${detail}`);
   }
-  if (!isRecord(value)) {
+  if (!isJsonObjectValue(value)) {
     throw new InvalidRequestError("request body must be a JSON object");
   }
   return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readNonEmptyString(value: unknown, path: string): string {
-  if (typeof value !== "string" || value.length === 0) {
+function readNonEmptyString(value: JsonValue | undefined, path: string): string {
+  if (!isString(value) || value.length === 0) {
     throw new InvalidRequestError(`${path} must be a non-empty string`);
   }
   return value;
 }
 
-function readSafeInteger(value: unknown, path: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
+
+function isBoolean(value: JsonValue | undefined): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isSafeInteger(value: JsonValue | undefined): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function readSafeInteger(value: JsonValue | undefined, path: string): number {
+  if (!isSafeInteger(value)) {
     throw new InvalidRequestError(`${path} must be a safe integer`);
   }
   return value;
 }
 
-function parseShaField(value: unknown, path: string): Sha {
+function parseShaField(value: JsonValue | undefined, path: string): Sha {
   const raw = readNonEmptyString(value, path);
   try {
     return parseSha(raw);
   } catch (error: unknown) {
-    throw new InvalidRequestError(`${path} is invalid: ${errorMessage(error)}`);
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new InvalidRequestError(`${path} is invalid: ${detail}`);
   }
 }
 
-function parseNullableSha(value: unknown, path: string): Sha | undefined {
+function parseNullableSha(value: JsonValue | undefined, path: string): Sha | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
   return parseShaField(value, path);
 }
 
-function parseVerdict(value: unknown, path: string): Verdict {
+function parseVerdict(value: JsonValue | undefined, path: string): Verdict {
   if (value === "pass" || value === "fail" || value === "inconclusive") {
     return value;
   }
   throw new InvalidRequestError(`${path} must be pass, fail, or inconclusive`);
 }
 
-function parseModules(value: unknown): readonly Module[] {
+function parseModules(value: JsonValue | undefined): readonly Module[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new InvalidRequestError("modules must be a non-empty array");
   }
-  return value.map((entry, index) => {
+  const entries: readonly JsonValue[] = value;
+  return entries.map((entry, index) => {
     const path = `modules[${index}]`;
     const record = readRecord(entry, path);
     return {
@@ -1488,14 +1502,15 @@ function parseModules(value: unknown): readonly Module[] {
   });
 }
 
-function parseValidationCase(value: unknown, path: string): ValidationCase {
+function parseValidationCase(value: JsonValue | undefined, path: string): ValidationCase {
   const record = readRecord(value, path);
   const name = readNonEmptyString(record.name, `${path}.name`);
   let session: ValidationCase["session"];
   try {
     session = parseReplaySession(record.session);
   } catch (error: unknown) {
-    throw new InvalidRequestError(`${path}.session is invalid: ${errorMessage(error)}`);
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new InvalidRequestError(`${path}.session is invalid: ${detail}`);
   }
   return {
     name,
@@ -1504,12 +1519,13 @@ function parseValidationCase(value: unknown, path: string): ValidationCase {
   };
 }
 
-function parseValidationResult(value: unknown, path: string): ValidationResult {
+function parseValidationResult(value: JsonValue | undefined, path: string): ValidationResult {
   const record = readRecord(value, path);
   const caseResultsValue = record.caseResults;
   if (!Array.isArray(caseResultsValue)) {
     throw new InvalidRequestError(`${path}.caseResults must be an array`);
   }
+  const caseResults: readonly JsonValue[] = caseResultsValue;
   return {
     candidate: parseShaField(record.candidate, `${path}.candidate`),
     validatedAgainst: parseNullableSha(record.validatedAgainst, `${path}.validatedAgainst`),
@@ -1517,13 +1533,13 @@ function parseValidationResult(value: unknown, path: string): ValidationResult {
     gateVersion: readNonEmptyString(record.gateVersion, `${path}.gateVersion`),
     verdict: parseVerdict(record.verdict, `${path}.verdict`),
     createdAt: readSafeInteger(record.createdAt, `${path}.createdAt`),
-    caseResults: caseResultsValue.map((entry, index) =>
+    caseResults: caseResults.map((entry, index) =>
       parseValidationCaseResult(entry, `${path}.caseResults[${index}]`),
     ),
   };
 }
 
-function parseValidationCaseResult(value: unknown, path: string): ValidationCaseResult {
+function parseValidationCaseResult(value: JsonValue | undefined, path: string): ValidationCaseResult {
   const record = readRecord(value, path);
   return {
     name: readNonEmptyString(record.name, `${path}.name`),
@@ -1533,7 +1549,7 @@ function parseValidationCaseResult(value: unknown, path: string): ValidationCase
   };
 }
 
-function parseRecordedCaseOutcome(value: unknown, path: string): RecordedCaseOutcome {
+function parseRecordedCaseOutcome(value: JsonValue | undefined, path: string): RecordedCaseOutcome {
   const record = readRecord(value, path);
   const status = readNonEmptyString(record.status, `${path}.status`);
   switch (status) {
@@ -1555,7 +1571,7 @@ function parseRecordedCaseOutcome(value: unknown, path: string): RecordedCaseOut
   }
 }
 
-function parseEffectsDifference(value: unknown, path: string): EffectsDifference {
+function parseEffectsDifference(value: JsonValue | undefined, path: string): EffectsDifference {
   const record = readRecord(value, path);
   const kind = readNonEmptyString(record.kind, `${path}.kind`);
   if (kind === "trace") {
@@ -1577,7 +1593,7 @@ function parseEffectsDifference(value: unknown, path: string): EffectsDifference
   throw new InvalidRequestError(`${path}.kind is unsupported`);
 }
 
-function parseNullablePrimitiveCall(value: unknown, path: string): PrimitiveCall | undefined {
+function parseNullablePrimitiveCall(value: JsonValue | undefined, path: string): PrimitiveCall | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -1606,7 +1622,7 @@ function parseNullablePrimitiveCall(value: unknown, path: string): PrimitiveCall
   }
 }
 
-function parseNullableWorkspaceFile(value: unknown, path: string): WorkspaceFile | undefined {
+function parseNullableWorkspaceFile(value: JsonValue | undefined, path: string): WorkspaceFile | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -1617,7 +1633,7 @@ function parseNullableWorkspaceFile(value: unknown, path: string): WorkspaceFile
   };
 }
 
-function parseInconclusiveReason(value: unknown, path: string): ReplayInconclusiveReason {
+function parseInconclusiveReason(value: JsonValue | undefined, path: string): ReplayInconclusiveReason {
   const reason = readNonEmptyString(value, path);
   switch (reason) {
     case "tape-exhausted":
@@ -1632,38 +1648,39 @@ function parseInconclusiveReason(value: unknown, path: string): ReplayInconclusi
   }
 }
 
-function readRecord(value: unknown, path: string): Record<string, unknown> {
-  if (!isRecord(value)) {
+function readRecord(value: JsonValue | undefined, path: string): JsonObject {
+  if (!isJsonObjectValue(value)) {
     throw new InvalidRequestError(`${path} must be an object`);
   }
   return value;
 }
 
-function readString(value: unknown, path: string): string {
-  if (typeof value !== "string") {
+function readString(value: JsonValue | undefined, path: string): string {
+  if (!isString(value)) {
     throw new InvalidRequestError(`${path} must be a string`);
   }
   return value;
 }
 
-function readBoolean(value: unknown, path: string): boolean {
-  if (typeof value !== "boolean") {
+function readBoolean(value: JsonValue | undefined, path: string): boolean {
+  if (!isBoolean(value)) {
     throw new InvalidRequestError(`${path} must be a boolean`);
   }
   return value;
 }
 
-function parseStoredJson(value: string, path: string): unknown {
+function parseStoredJson(value: string, path: string): JsonValue {
   try {
-    return JSON.parse(value);
-  } catch (error: unknown) {
-    throw new Error(`${path} contains invalid JSON: ${errorMessage(error)}`, { cause: error });
+    return parseJsonValue(JSON.parse(value));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`${path} contains invalid JSON: ${detail}`, { cause: error });
   }
 }
 
-function parseJsonOrText(value: string): unknown {
+function parseJsonOrText(value: string): JsonValue {
   try {
-    return JSON.parse(value);
+    return parseJsonValue(JSON.parse(value));
   } catch {
     return value;
   }
@@ -1674,6 +1691,7 @@ function validationResponse(row: ValidationRow): ValidationResult {
   if (!Array.isArray(caseResults)) {
     throw new TypeError(`validation ${row.candidate_sha} case results are not an array`);
   }
+  const parsedCaseResults: readonly JsonValue[] = caseResults;
   return {
     candidate: parseSha(row.candidate_sha),
     validatedAgainst: row.validated_against === null ? undefined : parseSha(row.validated_against),
@@ -1681,14 +1699,10 @@ function validationResponse(row: ValidationRow): ValidationResult {
     gateVersion: row.gate_version,
     verdict: row.verdict,
     createdAt: row.created_at,
-    caseResults: caseResults.map((entry, index) =>
+    caseResults: parsedCaseResults.map((entry, index) =>
       parseValidationCaseResult(entry, `validation ${row.candidate_sha}[${index}]`),
     ),
   };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 class InvalidRequestError extends Error implements InvalidRequest {
@@ -1721,7 +1735,7 @@ class SafetyViolationError extends Error {
   }
 }
 
-function requestErrorResponse(error: unknown): Response {
+function requestErrorResponse(error: Error | string): Response {
   if (error instanceof InvalidRequestError) {
     return Response.json(
       { error: { kind: error.kind, message: error.message } satisfies InvalidRequest },
@@ -1735,7 +1749,7 @@ function requestErrorResponse(error: unknown): Response {
     return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 422 });
   }
   return Response.json(
-    { error: { kind: "internal", message: errorMessage(error) } },
+    { error: { kind: "internal", message: error instanceof Error ? error.message : error } },
     { status: 500 },
   );
 }

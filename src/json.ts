@@ -47,7 +47,11 @@ export function parseJsonValue(value: unknown): JsonValue {
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- this guard validates an object boundary.
 export function isJsonObject(value: unknown): value is JsonObject {
-  return isJsonValue(value) && !Array.isArray(value) && typeof value === "object" && value !== null;
+  return isJsonValue(value) && isJsonObjectValue(value);
+}
+
+export function isJsonObjectValue(value: JsonValue | undefined): value is JsonObject {
+  return value !== undefined && value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function isJsonPrimitive(value: JsonValue): value is JsonPrimitive {
