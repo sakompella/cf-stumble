@@ -59,6 +59,8 @@ git's exact byte format means the real `git` binary works as an independent test
   architecture, kept visible rather than quietly patched.
 - **`docs/slices.md`** — the work broken into independently verifiable slices, each with a
   command that exits 0 or non-zero. No slice whose done condition is prose.
+- **`docs/integration-findings.md`** — what did and did not compose when the layers were first
+  driven end to end, including the gaps that remain.
 - **`decisions.tsv`** — running log of decisions made during implementation.
 
 ## Development

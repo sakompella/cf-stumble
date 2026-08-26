@@ -159,7 +159,7 @@ keyed by commit sha (D7) and queryable.
 
 ---
 
-## S8 — Vertical integration path · depends: S3, S4, S5, S7 · IN PROGRESS
+## S8 — Vertical integration path · depends: S3, S4, S5, S7 · DONE
 
 One end-to-end story, in a single test file, exercising the whole system in order: seed
 generation 0 → run a turn pinned to it (D9) → build a candidate → validate → promote →
