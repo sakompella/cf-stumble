@@ -1,13 +1,5 @@
-import {
-  AgentExecutor,
-  type AgentDefinition,
-  type TurnResult,
-} from "../agent/runtime/index.js";
-import type {
-  PreflightOptions,
-  PreflightProbe,
-  PreflightCheck,
-} from "./preflight.js";
+import { AgentExecutor, type AgentDefinition, type TurnResult } from "../agent/runtime/index.js";
+import type { PreflightOptions, PreflightProbe, PreflightCheck } from "./preflight.js";
 import { defaultResponseSource, defaultWorkspace } from "./preflight-probes.js";
 import { failedTurn, verifyProbe } from "./preflight-results.js";
 

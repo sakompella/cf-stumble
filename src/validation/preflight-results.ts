@@ -4,11 +4,7 @@ import type { CapturedToolResult } from "../replay/schema.js";
 import type { PrimitiveCall, PrimitiveFailure } from "../tools/index.js";
 import { parseWorkspacePath } from "../tools/index.js";
 import type { Workspace, WorkspaceFileContent } from "../tools/index.js";
-import type {
-  PreflightCapability,
-  PreflightCheck,
-  PreflightProbe,
-} from "./preflight.js";
+import type { PreflightCapability, PreflightCheck, PreflightProbe } from "./preflight.js";
 import { callForProbe } from "./preflight-probes.js";
 
 export function verifyProbe(
@@ -24,7 +20,9 @@ export function verifyProbe(
     actualCall === undefined ||
     !callsMatch(actualCall, expectedCall)
   ) {
-    return Promise.resolve(fail(probe.capability, `expected exactly one ${expectedCall.kind} call`));
+    return Promise.resolve(
+      fail(probe.capability, `expected exactly one ${expectedCall.kind} call`),
+    );
   }
 
   const transcriptTurn = turn.transcript.turns[0];
@@ -268,11 +266,15 @@ function isReadResult(result: CapturedToolResult["result"]): result is ReadResul
 }
 
 function isWriteResult(result: CapturedToolResult["result"]): result is WriteResult {
-  return result.kind === "write" && "bytesWritten" in result && typeof result.bytesWritten === "number";
+  return (
+    result.kind === "write" && "bytesWritten" in result && typeof result.bytesWritten === "number"
+  );
 }
 
 function isEditResult(result: CapturedToolResult["result"]): result is EditResult {
-  return result.kind === "edit" && "replacements" in result && typeof result.replacements === "number";
+  return (
+    result.kind === "edit" && "replacements" in result && typeof result.replacements === "number"
+  );
 }
 
 function isBashResult(result: CapturedToolResult["result"]): result is BashResult {
