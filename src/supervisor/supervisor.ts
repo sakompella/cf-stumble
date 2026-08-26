@@ -535,7 +535,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         );
       });
       this.writeState("generation", "0");
-      return Response.json({ outcome: "reset", from: from ?? null, to: genesis });
+      return Response.json({
+        outcome: "reset",
+        generation: 0,
+        from: from ?? null,
+        to: genesis,
+      });
     } catch (error: unknown) {
       return requestErrorResponse(error);
     }
@@ -756,7 +761,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async writeValidationResult(request: Request): Promise<Response> {
     try {
       const body = await readRequestRecord(request);
-      const result = parseValidationResult(body, "result");
+      const result = parseValidationResult(body.result ?? body, "result");
       this.insertValidationResult(result);
       return Response.json({ result }, { status: 201 });
     } catch (error: unknown) {
