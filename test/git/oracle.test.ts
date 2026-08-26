@@ -13,6 +13,8 @@ import {
 } from "isomorphic-git";
 import { describe, expect, it } from "vitest";
 
+import { buildGeneration } from "../../src/generation/build.js";
+import { MemoryStore } from "../../src/storage/memory.js";
 import {
   decodeObject,
   encodeObject,
@@ -21,6 +23,7 @@ import {
   parseSha,
 } from "../../src/git/index.js";
 import type { Commit, GitObject, Sha, TreeEntry } from "../../src/git/index.js";
+import type { Module } from "../../src/generation/types.js";
 import { createMemoryFs } from "../support/memory-fs.js";
 
 const gitdir = "/oracle/.git";
@@ -73,6 +76,39 @@ describe("isomorphic-git codec oracle", () => {
         message: "merge: café 内容\n",
       },
     });
+  });
+
+});
+describe("generation commit messages", () => {
+  it("normalizes summaries to one trailing newline", async () => {
+    const store = new MemoryStore();
+    const author = {
+      name: "Build Bot",
+      email: "build@example.com",
+      timestamp: 1_700_000_000,
+      timezoneOffsetMinutes: 0,
+    };
+    const module = {
+      path: "prompt.md",
+      content: new TextEncoder().encode("prompt\n"),
+      executable: false,
+    } satisfies Module;
+    const generation = await buildGeneration(store, {
+      modules: [module],
+      parent: undefined,
+      author,
+      createdAt: author.timestamp,
+      summary: "unicode summary\n\n",
+    });
+    const bytes = await store.readObject(generation.sha);
+    if (bytes === undefined) {
+      throw new Error("expected a stored generation commit");
+    }
+    const object = decodeObject(bytes);
+    if (object.type !== "commit") {
+      throw new Error(`expected a commit, got ${object.type}`);
+    }
+    expect(object.commit.message).toBe("unicode summary\n");
   });
 });
 

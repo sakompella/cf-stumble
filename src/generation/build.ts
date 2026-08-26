@@ -42,6 +42,7 @@ export async function buildGeneration(
   }
 
   const manifest = await writeTree(store, root);
+  const summary = normalizeCommitMessage(options.summary);
   const parent = options.parent;
   const number = parent === undefined ? GENESIS_NUMBER : parseGenerationNumber(parent.number + 1);
   const sha = await store.writeObject(
@@ -52,7 +53,7 @@ export async function buildGeneration(
         parents: parent === undefined ? [] : [parent.sha],
         author: options.author,
         committer: makeCommitter(options),
-        message: options.summary,
+        message: summary,
       },
     }),
   );
@@ -63,7 +64,7 @@ export async function buildGeneration(
     parent: parent?.sha,
     manifest,
     createdAt: options.createdAt,
-    summary: options.summary,
+    summary,
   };
 }
 
@@ -166,6 +167,10 @@ function validateOptions(options: BuildGenerationOptions): void {
     }
     validateModulePath(module.path);
   }
+}
+
+function normalizeCommitMessage(summary: string): string {
+  return `${summary.replace(/\n+$/u, "")}\n`;
 }
 
 function makeCommitter(options: BuildGenerationOptions): Signature {
