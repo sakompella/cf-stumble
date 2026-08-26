@@ -1,80 +1,250 @@
 import { expect, test } from "vitest";
-import { buildGeneration } from "../../src/generation/build.js";
+import {
+  assertGenesisReachable,
+  makeGenesisPin,
+  resetToGenesis,
+} from "../../src/generation/genesis.js";
 import { readGeneration } from "../../src/generation/read.js";
-import { seedGenesis } from "../../src/generation/genesis.js";
-import type { Module } from "../../src/generation/types.js";
-import { InMemoryWorkspace, executePrimitive } from "../../src/tools/index.js";
-import { MemoryStore } from "../../src/storage/memory.js";
+import { PointerManager } from "../../src/pointer/index.js";
+import { InMemoryWorkspace, parseWorkspacePath } from "../../src/tools/index.js";
 import { runPinnedTurn } from "../../src/integration/turn.js";
-
-const author = {
-  name: "Integration Bot",
-  email: "integration@example.com",
-  timestamp: 1_700_000_000,
-  timezoneOffsetMinutes: 0,
-} as const;
-
-const encoder = new TextEncoder();
-
-const genesisModules = [
-  { path: "prompt.md", content: encoder.encode("stable prompt\n"), executable: false },
-  { path: "policy.md", content: encoder.encode("allow-all\n"), executable: false },
-] satisfies readonly Module[];
-
-function moduleByPath(modules: readonly Module[], path: string): Module {
-  const module = modules.find((candidate) => candidate.path === path);
-  if (module === undefined) {
-    throw new Error(`missing module ${path}`);
-  }
-  return module;
-}
-
-function moduleText(modules: readonly Module[], path: string): string {
-  return new TextDecoder().decode(moduleByPath(modules, path).content);
-}
+import {
+  ALLOW_POLICY,
+  buildChild,
+  buildPromptCandidate,
+  loadFixture,
+  runConfiguredTurn,
+  seedStore,
+} from "./fixtures.js";
+import { requireAttestation, validateCandidate } from "./gate.js";
 
 test("seeding starts generation 0, pins its turn, and builds a distinct candidate", async () => {
-  const store = new MemoryStore();
-  const genesis = await seedGenesis(store, {
-    modules: genesisModules,
-    author,
-    createdAt: author.timestamp,
-    summary: "stable genesis",
-  });
+  const { store, genesis } = await seedStore();
   expect(await store.readPointer()).toBe(genesis.sha);
 
   const workspace = new InMemoryWorkspace({
-    files: [{ path: "turns.txt", content: "generation 0\n" }],
+    files: [{ path: "turns.log", content: "" }],
   });
-  const firstTurn = await runPinnedTurn(store, async (generationSha) => {
-    const loaded = await readGeneration(store, generationSha);
-    const write = await executePrimitive(
-      { kind: "write", path: "turns.txt", content: `${moduleText(loaded.modules, "prompt.md")}turn\n` },
-      workspace,
-    );
-    return { generation: loaded.generation, write };
-  });
+  const firstTurn = await runConfiguredTurn(store, workspace);
 
   expect(firstTurn.generation).toBe(genesis.sha);
   expect(firstTurn.result.generation.sha).toBe(genesis.sha);
   expect(firstTurn.result.write).toMatchObject({ ok: true, kind: "write" });
 
-  const candidate = await buildGeneration(store, {
-    modules: [
-      {
-        ...moduleByPath(genesisModules, "prompt.md"),
-        content: encoder.encode("candidate prompt\n"),
-      },
-      moduleByPath(genesisModules, "policy.md"),
-    ],
-    parent: genesis,
-    author,
-    createdAt: author.timestamp + 1,
-    summary: "change prompt",
-  });
+  const candidate = await buildChild(
+    store,
+    genesis,
+    "candidate prompt\n",
+    ALLOW_POLICY,
+    "change prompt",
+  );
 
   expect(candidate.number).toBe(1);
   expect(candidate.parent).toBe(genesis.sha);
   expect(candidate.sha).not.toBe(genesis.sha);
   expect(await store.readPointer()).toBe(genesis.sha);
+});
+
+test("promotion changes the next pinned turn and rollback restores generation 0", async () => {
+  const { store, genesis } = await seedStore();
+  const workspace = new InMemoryWorkspace({ files: [{ path: "turns.log", content: "" }] });
+  await runConfiguredTurn(store, workspace);
+  const objectsAfterGenesis = await store.listObjects();
+  const candidate = await buildPromptCandidate(store, genesis);
+  const objectsAfterCandidate = await store.listObjects();
+  expect(objectsAfterGenesis).toHaveLength(4);
+  expect(objectsAfterCandidate).toHaveLength(7);
+
+  const validation = await validateCandidate(store, candidate, await loadFixture());
+  expect(validation.run.result.verdict).toBe("pass");
+  expect(validation.run.result.caseResults[0]).toMatchObject({
+    baseline: { status: "PASS" },
+    candidate: { status: "PASS" },
+  });
+  expect(await validation.resultStore.get(candidate.sha)).toEqual(validation.run.result);
+
+  const pointer = new PointerManager({
+    store,
+    corpusVersion: validation.run.result.corpusVersion,
+    gateVersion: validation.run.result.gateVersion,
+  });
+  expect(await pointer.promote(candidate.sha, requireAttestation(validation.run))).toEqual({
+    outcome: "promoted",
+    from: genesis.sha,
+    to: candidate.sha,
+  });
+
+  const candidateTurn = await runConfiguredTurn(store, workspace);
+  expect(candidateTurn.generation).toBe(candidate.sha);
+  expect(candidateTurn.result.generation.parent).toBe(genesis.sha);
+  await expect(workspace.readFile(parseWorkspacePath("turns.log"))).resolves.toBe(
+    "candidate prompt\nturn\n",
+  );
+
+  expect(await pointer.rollback(genesis.sha, candidate.sha)).toEqual({
+    outcome: "promoted",
+    from: candidate.sha,
+    to: genesis.sha,
+  });
+  const restoredTurn = await runConfiguredTurn(store, workspace);
+  expect(restoredTurn.generation).toBe(genesis.sha);
+  await expect(workspace.readFile(parseWorkspacePath("turns.log"))).resolves.toBe(
+    "stable prompt\nturn\n",
+  );
+});
+
+test("a promotion does not migrate a turn that already pinned generation 0", async () => {
+  const { store, genesis } = await seedStore();
+  const candidate = await buildChild(
+    store,
+    genesis,
+    "candidate prompt\n",
+    ALLOW_POLICY,
+    "change prompt",
+  );
+  const validation = await validateCandidate(store, candidate, await loadFixture());
+  const pointer = new PointerManager({
+    store,
+    corpusVersion: validation.run.result.corpusVersion,
+    gateVersion: validation.run.result.gateVersion,
+  });
+
+  let announceStart: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    announceStart = resolve;
+  });
+  let allowFinish: (() => void) | undefined;
+  const finish = new Promise<void>((resolve) => {
+    allowFinish = resolve;
+  });
+  const inFlight = runPinnedTurn(store, async (generation) => {
+    const start = announceStart;
+    if (start === undefined) {
+      throw new Error("turn did not initialize its start signal");
+    }
+    start();
+    await finish;
+    return readGeneration(store, generation);
+  });
+
+  await started;
+  expect((await pointer.promote(candidate.sha, requireAttestation(validation.run))).outcome).toBe(
+    "promoted",
+  );
+  expect(await store.readPointer()).toBe(candidate.sha);
+  const release = allowFinish;
+  if (release === undefined) {
+    throw new Error("turn did not initialize its finish signal");
+  }
+  release();
+
+  const completed = await inFlight;
+  expect(completed.generation).toBe(genesis.sha);
+  expect(completed.result.generation.sha).toBe(genesis.sha);
+  expect((await runConfiguredTurn(store, new InMemoryWorkspace())).generation).toBe(candidate.sha);
+});
+
+test("rollback leaves accumulated context, facts, corpus, and validation evidence intact", async () => {
+  const { store, genesis } = await seedStore();
+  const candidate = await buildChild(
+    store,
+    genesis,
+    "candidate prompt\n",
+    ALLOW_POLICY,
+    "change prompt",
+  );
+  const validation = await validateCandidate(store, candidate, await loadFixture());
+  const accumulated = {
+    conversationHistory: ["user asked for a change"],
+    learnedFacts: new Map([["answer", "42"]]),
+    corpusEntries: [...validation.corpus],
+  };
+  const pointer = new PointerManager({
+    store,
+    corpusVersion: validation.run.result.corpusVersion,
+    gateVersion: validation.run.result.gateVersion,
+  });
+  expect((await pointer.promote(candidate.sha, requireAttestation(validation.run))).outcome).toBe(
+    "promoted",
+  );
+  accumulated.conversationHistory.push("agent changed the prompt");
+  accumulated.learnedFacts.set("status", "tested");
+  accumulated.corpusEntries.push({
+    name: "later corpus entry",
+    session: await loadFixture(),
+    mandatoryCanary: false,
+  });
+  const evidence = await validation.resultStore.get(candidate.sha);
+
+  expect((await pointer.rollback(genesis.sha, candidate.sha)).outcome).toBe("promoted");
+  expect(accumulated.conversationHistory).toEqual([
+    "user asked for a change",
+    "agent changed the prompt",
+  ]);
+  expect(accumulated.learnedFacts).toEqual(
+    new Map([
+      ["answer", "42"],
+      ["status", "tested"],
+    ]),
+  );
+  expect(accumulated.corpusEntries.map((entry) => entry.name)).toEqual([
+    "four primitives remain executable",
+    "later corpus entry",
+  ]);
+  expect(await validation.resultStore.get(candidate.sha)).toEqual(evidence);
+});
+
+test("a candidate that fails the real replay gate leaves the live pointer unchanged", async () => {
+  const { store, genesis } = await seedStore();
+  const brokenCandidate = await buildChild(
+    store,
+    genesis,
+    "candidate prompt\n",
+    "deny-write\n",
+    "deny writes",
+  );
+  const validation = await validateCandidate(store, brokenCandidate, await loadFixture());
+
+  expect(validation.run.result.verdict).toBe("fail");
+  expect(validation.run.attestation).toBeUndefined();
+  expect(validation.run.result.caseResults[0]).toMatchObject({
+    baseline: { status: "PASS" },
+    candidate: { status: "FAIL" },
+  });
+  expect(await store.readPointer()).toBe(genesis.sha);
+});
+
+test("reset bypasses a broken candidate and every built descendant still reaches pinned genesis", async () => {
+  const { store, genesis } = await seedStore();
+  const candidate = await buildChild(
+    store,
+    genesis,
+    "candidate prompt\n",
+    ALLOW_POLICY,
+    "change prompt",
+  );
+  const brokenCandidate = await buildChild(
+    store,
+    candidate,
+    "broken prompt\n",
+    "deny-write\n",
+    "broken policy",
+  );
+  expect(await store.setPointer(brokenCandidate.sha, genesis.sha)).toBe(true);
+  await expect(runConfiguredTurn(store, new InMemoryWorkspace())).rejects.toThrow(
+    "unsupported turn policy",
+  );
+
+  const pin = makeGenesisPin(genesis);
+  await expect(assertGenesisReachable(store, genesis.sha, pin)).resolves.toBeUndefined();
+  await expect(assertGenesisReachable(store, candidate.sha, pin)).resolves.toBeUndefined();
+  await expect(assertGenesisReachable(store, brokenCandidate.sha, pin)).resolves.toBeUndefined();
+
+  expect(await resetToGenesis(store, pin)).toEqual({
+    outcome: "reset",
+    from: brokenCandidate.sha,
+    to: genesis.sha,
+  });
+  expect(await store.readPointer()).toBe(genesis.sha);
+  expect((await runConfiguredTurn(store, new InMemoryWorkspace())).generation).toBe(genesis.sha);
 });
