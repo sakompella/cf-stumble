@@ -117,6 +117,9 @@ export class MemoryActivationLedger implements ActivationLedger {
     } satisfies ActivationEvent;
     this.pointer = generation;
     this.events.push(event);
+    if (actual !== undefined) {
+      this.previouslyLive.add(actual);
+    }
     this.previouslyLive.add(generation);
     return { outcome: "activated", from: actual, to: generation };
   }

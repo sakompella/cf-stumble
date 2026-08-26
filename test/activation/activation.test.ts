@@ -215,8 +215,20 @@ describe("MemoryActivationLedger concurrent promotion", () => {
     );
 
     expect(winners).toHaveLength(1);
-    expect(await ledger.readPointer()).toBe(winners[0]?.to);
-    expect(await ledger.readEvents()).toHaveLength(2);
+    const winner = winners[0];
+    if (winner === undefined) {
+      throw new Error("concurrent promotion had no winner");
+    }
+    expect(await ledger.readPointer()).toBe(winner.to);
+    const events = await ledger.readEvents();
+    expect(events).toHaveLength(2);
+    expect(events.at(-1)).toEqual({
+      sequence: 2,
+      kind: "promoted",
+      generation: winner.to,
+      from: base.number,
+      at: 42,
+    });
   });
 });
 
