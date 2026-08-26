@@ -2,6 +2,10 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import { buildGeneration } from "../../src/generation/build.js";
+import { readGeneration } from "../../src/generation/read.js";
+import { parseSha } from "../../src/git/types.js";
+import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import { afterEach, expect, test } from "vitest";
 
 function supervisorRequest(path: string, init?: RequestInit): Promise<Response> {
@@ -83,7 +87,6 @@ async function promoteCreatedGeneration(source = candidateSource): Promise<{
 afterEach(async () => {
   await reset();
 });
-
 test("lists the pinned generation zero with its lineage", async () => {
   const response = await supervisorRequest("/generations");
 
@@ -98,7 +101,6 @@ test("lists the pinned generation zero with its lineage", async () => {
     ],
   });
 });
-
 test("promotes a registered candidate and records validation evidence", async () => {
   const { candidate } = await promoteCreatedGeneration();
 
@@ -109,6 +111,53 @@ test("promotes a registered candidate and records validation evidence", async ()
     await readJson(await supervisorRequest(`/validation-results?candidate=${candidate}`)),
   );
   expect(results["results"]).toMatchObject([{ candidate, verdict: "pass" }]);
+});
+test("promotes a candidate already written to the supervisor object store", async () => {
+  const initial = readRecord(await readJson(await supervisorRequest("/live")));
+  const genesis = readStringField(readRecord(initial["generation"]), "sha");
+  const stub = env.SUPERVISOR.getByName("supervisor-s10");
+  const candidate = await runInDurableObject(stub, async (_instance, state) => {
+    const store = new DurableObjectSqliteStore(state);
+    const parent = (await readGeneration(store, parseSha(genesis))).generation;
+    const generation = await buildGeneration(store, {
+      modules: [
+        { path: "agent.js", content: new TextEncoder().encode(candidateSource), executable: false },
+      ],
+      parent,
+      author: {
+        name: "test builder",
+        email: "builder@example.com",
+        timestamp: 1_700_000_001,
+        timezoneOffsetMinutes: 0,
+      },
+      createdAt: 1_700_000_001,
+      summary: "directly stored candidate",
+    });
+    return generation.sha;
+  });
+  const state = readRecord(await readJson(await supervisorRequest("/state")));
+  const promotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({
+      candidate,
+      attestation: {
+        candidate,
+        validatedAgainst: genesis,
+        corpusVersion: readStringField(state, "corpusVersion"),
+        gateVersion: readStringField(state, "gateVersion"),
+        verdict: "pass",
+        createdAt: 1_700_000_001,
+      },
+    }),
+  });
+
+  expect(promotion.status).toBe(200);
+  expect(
+    readStringField(
+      readRecord(readRecord(await readJson(await supervisorRequest("/live")))["generation"]),
+      "sha",
+    ),
+  ).toBe(candidate);
 });
 
 test("returns a structured reason for a rejected promotion", async () => {

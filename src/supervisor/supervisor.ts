@@ -370,11 +370,29 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       if (suppliedResult !== undefined) {
         ensureResultMatchesAttestation(suppliedResult, attestation);
       }
+      const candidateGeneration = await this.readCandidateGeneration(candidate);
 
-      const result = this.promoteTransaction(candidate, attestation, suppliedResult);
+      const result = this.promoteTransaction(
+        candidate,
+        attestation,
+        suppliedResult,
+        candidateGeneration,
+      );
       return promotionResponse(result);
     } catch (error: unknown) {
       return requestErrorResponse(error);
+    }
+  }
+
+  private async readCandidateGeneration(candidate: Sha): Promise<Generation> {
+    try {
+      return (await readGeneration(this.store, candidate)).generation;
+    } catch (error: unknown) {
+      const message = errorMessage(error);
+      if (message.startsWith("missing generation commit object")) {
+        throw new MissingResourceError(`candidate generation ${candidate} does not exist`);
+      }
+      throw error;
     }
   }
 
@@ -382,14 +400,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     candidate: Sha,
     attestation: Attestation,
     suppliedResult: ValidationResult | undefined,
+    candidateGeneration: Generation,
   ): PromotionResult {
     let result: PromotionResult | undefined;
     this.ctx.storage.transactionSync(() => {
       const liveNow = this.readPointerSql();
-      const generation = this.readGenerationRow(candidate);
-      if (generation === undefined) {
-        throw new MissingResourceError(`candidate generation ${candidate} does not exist`);
-      }
+      const registeredGeneration = this.readGenerationRow(candidate);
       const corpusVersion = this.readMetaOrThrow(CORPUS_VERSION_META_KEY);
       const gateVersion = this.readMetaOrThrow(GATE_VERSION_META_KEY);
       const rejection = verifyAttestation(
@@ -417,6 +433,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         return;
       }
 
+      if (registeredGeneration === undefined) {
+        this.insertGeneration(candidateGeneration);
+      }
       const validation = suppliedResult ?? makeValidationResult(attestation, attestation.createdAt);
       this.insertValidationResult(validation);
       this.ctx.storage.sql.exec(
