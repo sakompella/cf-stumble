@@ -4,6 +4,8 @@ import {
   InMemoryWorkspace,
   parseWorkspacePath,
   type PrimitiveResult,
+  type WorkspaceFileContent,
+  type WorkspacePath,
 } from "../../src/tools/index.js";
 
 function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { readonly ok: true }> {
@@ -12,6 +14,29 @@ function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { read
     throw new Error(`expected success, got ${result.error.kind}`);
   }
   return result;
+}
+
+class FailingWorkspace extends InMemoryWorkspace {
+  private readonly operation: "read" | "write";
+
+  constructor(operation: "read" | "write") {
+    super();
+    this.operation = operation;
+  }
+
+  override readFile(path: WorkspacePath): Promise<WorkspaceFileContent | undefined> {
+    if (this.operation === "read") {
+      return Promise.reject(new Error("read failed"));
+    }
+    return super.readFile(path);
+  }
+
+  override writeFile(path: WorkspacePath, content: string): Promise<void> {
+    if (this.operation === "write") {
+      return Promise.reject(new Error("write failed"));
+    }
+    return super.writeFile(path, content);
+  }
 }
 
 test("read returns the text content of an existing file", async () => {
@@ -50,6 +75,19 @@ test("read reports binary content as a typed failure", async () => {
   });
 });
 
+test("read reports workspace failures as typed failures", async () => {
+  const result = await executePrimitive(
+    { kind: "read", path: "README.md" },
+    new FailingWorkspace("read"),
+  );
+
+  expect(result).toEqual({
+    ok: false,
+    kind: "read",
+    error: { kind: "workspace-error", operation: "read", detail: "read failed" },
+  });
+});
+
 test("write creates parent directories and overwrites existing text", async () => {
   const workspace = new InMemoryWorkspace({
     files: [{ path: "notes/today.txt", content: "old\n" }],
@@ -70,4 +108,17 @@ test("write creates parent directories and overwrites existing text", async () =
   await expect(
     workspace.readFile(parseWorkspacePath("reports/weekly/summary.txt")),
   ).resolves.toBe("done\n");
+});
+
+test("write reports workspace failures as typed failures", async () => {
+  const result = await executePrimitive(
+    { kind: "write", path: "README.md", content: "new\n" },
+    new FailingWorkspace("write"),
+  );
+
+  expect(result).toEqual({
+    ok: false,
+    kind: "write",
+    error: { kind: "workspace-error", operation: "write", detail: "write failed" },
+  });
 });

@@ -4,6 +4,8 @@ import {
   InMemoryWorkspace,
   parseWorkspacePath,
   type PrimitiveResult,
+  type WorkspaceFileContent,
+  type WorkspacePath,
 } from "../../src/tools/index.js";
 
 function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { readonly ok: true }> {
@@ -12,6 +14,12 @@ function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { read
     throw new Error(`expected success, got ${result.error.kind}`);
   }
   return result;
+}
+
+class FailingEditWorkspace extends InMemoryWorkspace {
+  override readFile(_path: WorkspacePath): Promise<WorkspaceFileContent | undefined> {
+    return Promise.reject(new Error("edit read failed"));
+  }
 }
 
 test("edit replaces the one exact match and reports one replacement", async () => {
@@ -91,6 +99,19 @@ test("edit reports binary content as a typed failure", async () => {
     ok: false,
     kind: "edit",
     error: { kind: "binary-file", path: "image.bin" },
+  });
+});
+
+test("edit reports workspace failures as typed failures", async () => {
+  const result = await executePrimitive(
+    { kind: "edit", path: "policy.txt", oldText: "old", newText: "new" },
+    new FailingEditWorkspace(),
+  );
+
+  expect(result).toEqual({
+    ok: false,
+    kind: "edit",
+    error: { kind: "workspace-error", operation: "edit", detail: "edit read failed" },
   });
 });
 
