@@ -27,7 +27,12 @@ version, and the configuration, then two runs with the same gate version can leg
 disagree, and the attestation is binding a value that doesn't capture what actually determined
 the outcome.
 
-## "No seam failed" is overstated
+## "No seam failed" is overstated — RESOLVED (S13)
+
+**Update:** the integration test now drives the real `AgentExecutor` and `materializeGeneration`
+instead of a scripted stand-in, and the gate and live paths share one executor behind two model
+response sources. What remains unexercised is the Dynamic Worker Loader step — the runtime is
+real but is not yet loaded into a facet. Original analysis below.
 
 The vertical integration test skips the most dangerous seam in the system: commit bytes → module
 selection → Dynamic Worker Loader → real executor → primitive dispatch. It supplies a scripted

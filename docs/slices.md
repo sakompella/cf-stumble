@@ -12,7 +12,7 @@ pnpm test && pnpm typecheck && pnpm lint
 Status legend: `DONE` / `IN PROGRESS` / `NOT DONE (reason)`.
 
 **Final state: every slice DONE except garbage collection, which was deliberately cut (D13).**
-118 Node tests and 22 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
+131 Node tests and 22 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
 `pnpm lint --max-warnings=0` are all green. The remaining honest gap is recorded in
 `docs/integration-findings.md`: there is no production agent loop yet mapping generation modules
 onto the replay loop and the four primitives, so the integration test supplies a scripted
@@ -226,7 +226,7 @@ promotable, even with an internally consistent recomputed hash.
 
 ---
 
-## S13 — Production agent runtime · depends: S3, S6, S11 · IN PROGRESS
+## S13 — Production agent runtime · depends: S3, S6, S11 · DONE
 
 Added after review, and the slice that makes the system real. Materializes a generation's
 modules into a runnable agent definition and executes a turn, dispatching the four primitives
