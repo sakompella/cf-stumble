@@ -1,7 +1,7 @@
 import { buildGeneration } from "./build.js";
 import type { BuildGenerationOptions } from "./build.js";
 import type { Sha } from "../git/types.js";
-import type { Store } from "../storage/types.js";
+import type { PointerStore, Store } from "../storage/types.js";
 import { GENESIS_NUMBER } from "./types.js";
 import type { Generation } from "./types.js";
 
@@ -14,6 +14,12 @@ export type GenesisPin = {
   readonly kind: "genesis";
   readonly sha: Sha;
   readonly number: typeof GENESIS_NUMBER;
+};
+
+export type ResetResult = {
+  readonly outcome: "reset";
+  readonly from: Sha | undefined;
+  readonly to: Sha;
 };
 
 /** Build generation 0 and claim the live pointer when it has not been initialized. */
@@ -61,4 +67,17 @@ export function isGenesis(
     return pin !== undefined && isGenesisSha(value, pin);
   }
   return isGenesisGeneration(value);
+}
+
+/** Reset through the pointer store only, retrying CAS if a concurrent writer wins a race. */
+export async function resetToGenesis(
+  store: PointerStore,
+  pin: GenesisPin,
+): Promise<ResetResult> {
+  while (true) {
+    const from = await store.readPointer();
+    if (await store.setPointer(pin.sha, from)) {
+      return { outcome: "reset", from, to: pin.sha };
+    }
+  }
 }

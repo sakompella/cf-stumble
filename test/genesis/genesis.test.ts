@@ -5,11 +5,13 @@ import {
   isGenesisGeneration,
   isGenesisSha,
   makeGenesisPin,
+  resetToGenesis,
   seedGenesis,
 } from "../../src/generation/genesis.js";
 import { GENESIS_NUMBER } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
+import { buildGeneration } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
 
 const author = {
@@ -53,6 +55,26 @@ describe("seedGenesis", () => {
     expect(second.sha).toBe(first.sha);
     expect(await store.listObjects()).toHaveLength(objectsAfterFirstSeed.length);
     expect(await store.listObjects()).toEqual(objectsAfterFirstSeed);
+  });
+});
+
+describe("resetToGenesis", () => {
+  it("moves the live pointer from a later generation to generation 0", async () => {
+    const store = new MemoryStore();
+    const genesis = await seedGenesis(store, options);
+    const later = await buildGeneration(store, {
+      ...options,
+      parent: genesis,
+      createdAt: author.timestamp + 1,
+      summary: "later generation",
+    });
+    const pin = makeGenesisPin(genesis);
+    expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
+
+    const result = await resetToGenesis(store, pin);
+
+    expect(result).toEqual({ outcome: "reset", from: later.sha, to: genesis.sha });
+    expect(await store.readPointer()).toBe(genesis.sha);
   });
 });
 
