@@ -114,7 +114,7 @@ point, against something".
 
 ---
 
-## S5 — Generation 0 pinning and reset · depends: S3, S4 · IN PROGRESS
+## S5 — Generation 0 pinning and reset · depends: S3, S4 · DONE
 
 Never collectable, reset bypasses agent code entirely (D12). Owns `src/generation/genesis.ts`.
 
@@ -159,7 +159,7 @@ keyed by commit sha (D7) and queryable.
 
 ---
 
-## S8 — Vertical integration path · depends: S3, S4, S5, S7
+## S8 — Vertical integration path · depends: S3, S4, S5, S7 · IN PROGRESS
 
 One end-to-end story, in a single test file, exercising the whole system in order: seed
 generation 0 → run a turn pinned to it (D9) → build a candidate → validate → promote →
