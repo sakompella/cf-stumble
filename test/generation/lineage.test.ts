@@ -6,7 +6,6 @@ import { encodeObject } from "../../src/git/index.js";
 import { parseSha } from "../../src/git/types.js";
 import type { Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
-import type { Store } from "../../src/storage/types.js";
 import type { CommitSnapshot, Module } from "../../src/generation/types.js";
 
 const author = {
@@ -37,10 +36,20 @@ function build(
   });
 }
 
-function noPointer(): Promise<Sha | undefined> {
-  return new Promise<Sha | undefined>((resolve) => {
-    resolve();
-  });
+class CyclicStore extends MemoryStore {
+  private readonly cyclicObjects: ReadonlyMap<Sha, Uint8Array>;
+
+  constructor(start: Sha, commitBytes: Uint8Array, tree: Sha, treeBytes: Uint8Array) {
+    super();
+    this.cyclicObjects = new Map([
+      [start, commitBytes],
+      [tree, treeBytes],
+    ]);
+  }
+
+  override readObject(sha: Sha): Promise<Uint8Array | undefined> {
+    return Promise.resolve(this.cyclicObjects.get(sha)?.slice());
+  }
 }
 
 it("walkLineage returns the starting commit followed by its ancestors", async () => {
@@ -93,19 +102,12 @@ it("walkLineage fails cleanly when commit ancestry contains a cycle", async () =
     },
   });
 
-  const store: Store = {
-    readObject: (sha) =>
-      Promise.resolve(
-        sha === start
-          ? commitBytes
-          : sha === tree
-            ? encodeObject({ type: "tree", entries: [] })
-            : undefined,
-      ),
-    writeObject: () => Promise.reject(new Error("not used")),
-    readPointer: noPointer,
-    setPointer: () => Promise.resolve(false),
-  };
+  const store = new CyclicStore(
+    start,
+    commitBytes,
+    tree,
+    encodeObject({ type: "tree", entries: [] }),
+  );
 
   await expect(walkLineage(store, start)).rejects.toThrow(/lineage cycle/u);
 });
