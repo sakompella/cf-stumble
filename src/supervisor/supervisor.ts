@@ -597,7 +597,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private showGeneration(rawSha: string): Response {
     try {
-      const sha = parseSha(decodeURIComponent(rawSha));
+      let decodedSha: string;
+      try {
+        decodedSha = decodeURIComponent(rawSha);
+      } catch (error: unknown) {
+        throw new InvalidRequestError(
+          `generation sha is not valid URL encoding: ${errorMessage(error)}`,
+        );
+      }
+      const sha = parseShaField(decodedSha, "generation");
       const row = this.readGenerationRow(sha);
       if (row === undefined) {
         return Response.json(
@@ -660,13 +668,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           { status: 500 },
         );
       }
-      const generation = await buildGeneration(this.store, {
-        modules,
-        parent: toGeneration(parent),
-        author: genesisAuthor,
-        createdAt,
-        summary,
-      });
+      let generation: Generation;
+      try {
+        generation = await buildGeneration(this.store, {
+          modules,
+          parent: toGeneration(parent),
+          author: genesisAuthor,
+          createdAt,
+          summary,
+        });
+      } catch (error: unknown) {
+        if (error instanceof TypeError) {
+          throw new InvalidRequestError(error.message);
+        }
+        throw error;
+      }
       this.ctx.storage.transactionSync(() => {
         this.insertGeneration(generation);
       });
@@ -1223,7 +1239,12 @@ function parseModules(value: unknown): readonly Module[] {
 function parseValidationCase(value: unknown, path: string): ValidationCase {
   const record = readRecord(value, path);
   const name = readNonEmptyString(record.name, `${path}.name`);
-  const session = parseReplaySession(record.session);
+  let session: ValidationCase["session"];
+  try {
+    session = parseReplaySession(record.session);
+  } catch (error: unknown) {
+    throw new InvalidRequestError(`${path}.session is invalid: ${errorMessage(error)}`);
+  }
   return {
     name,
     session,
