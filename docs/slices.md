@@ -82,7 +82,7 @@ two implementations from quietly diverging.
 
 ---
 
-## S3 — Generation model · depends: S1, S2
+## S3 — Generation model · depends: S1, S2 · IN PROGRESS
 
 A generation is a commit whose tree is the module manifest (D8). Build from named modules, read
 back, walk lineage to the root. Owns `src/generation/`.
@@ -95,7 +95,7 @@ and malformed trees or modules are rejected with a diagnosable error rather than
 
 ---
 
-## S4 — Promote, rollback, attestation · depends: S2, S3
+## S4 — Promote, rollback, attestation · depends: S2, S3 · IN PROGRESS
 
 Owns `src/pointer/`.
 
@@ -122,7 +122,7 @@ Never collectable, reset bypasses agent code entirely (D12). Owns `src/generatio
 
 ---
 
-## S6 — Session recording format and replay runner · depends: S0 only
+## S6 — Session recording format and replay runner · depends: S0 only · DONE
 
 Independent of git, so it parallelises with S1–S2. Owns `src/replay/`, fixtures under
 `test/fixtures/sessions/`.
@@ -173,7 +173,7 @@ why it is a slice rather than an afterthought.
 
 ---
 
-## S9 — Durable Object SQLite store · depends: S2, S0.5
+## S9 — Durable Object SQLite store · depends: S2, S0.5 · IN PROGRESS
 
 S2's conformance suite rerun against real DO SQLite under the workers pool, using
 `transactionSync()` (D6). Owns `src/storage/do-sqlite.ts`.
