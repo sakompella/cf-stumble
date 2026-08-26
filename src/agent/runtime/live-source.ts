@@ -37,6 +37,12 @@ export class LiveModelResponseSource implements ModelResponseSource {
         requestId = raw.requestId;
       }
     }
+    if (requestId !== request.requestId) {
+      throw new ModelSourceError(
+        "error",
+        `live model provider returned response for ${JSON.stringify(requestId)}, expected ${JSON.stringify(request.requestId)}`,
+      );
+    }
     return { requestId, content: raw.content };
   }
 }
