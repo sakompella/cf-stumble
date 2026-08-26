@@ -1,9 +1,13 @@
-import { readFile } from "node:fs/promises";
+import fixtureData from "../fixtures/sessions/four-primitives.json";
 import { buildGeneration } from "../../src/generation/build.js";
 import { seedGenesis } from "../../src/generation/genesis.js";
 import type { Generation, Module } from "../../src/generation/types.js";
-import { AgentExecutor, LiveModelResponseSource, materializeGeneration } from "../../src/agent/runtime/index.js";
-import { parseReplaySessionJson } from "../../src/replay/index.js";
+import {
+  AgentExecutor,
+  LiveModelResponseSource,
+  materializeGeneration,
+} from "../../src/agent/runtime/index.js";
+import { parseReplaySession } from "../../src/replay/index.js";
 import type { ReplaySession } from "../../src/replay/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { InMemoryWorkspace, WriteResult } from "../../src/tools/index.js";
@@ -21,15 +25,18 @@ const decoder = new TextDecoder();
 export const POLICY_PATH = "policy.md";
 export const PROMPT_PATH = "prompt.md";
 export const ALLOW_POLICY = "allow-all\n";
-const fixtureUrl = new URL("../fixtures/sessions/four-primitives.json", import.meta.url);
-
 export const genesisModules = [
   { path: PROMPT_PATH, content: encoder.encode("stable prompt\n"), executable: false },
   { path: POLICY_PATH, content: encoder.encode(ALLOW_POLICY), executable: false },
 ] satisfies readonly Module[];
 
-export async function loadFixture(): Promise<ReplaySession> {
-  return parseReplaySessionJson(await readFile(fixtureUrl, "utf8"));
+function parseFixture(value: unknown): ReplaySession {
+  return parseReplaySession(value);
+}
+
+export function loadFixture(): Promise<ReplaySession> {
+  const untrustedFixture: unknown = structuredClone(fixtureData);
+  return Promise.resolve(parseFixture(untrustedFixture));
 }
 
 export function moduleByPath(modules: readonly Module[], path: string): Module {
