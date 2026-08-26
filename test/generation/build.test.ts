@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { decodeObject } from "../../src/git/index.js";
 import type { Commit, Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
+import type { SweepableStore } from "../../src/storage/types.js";
 import { buildGeneration } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
 
@@ -58,7 +59,7 @@ it("buildGeneration writes a root commit with a manifest", async () => {
 });
 
 it("buildGeneration deduplicates an unchanged module across commits", async () => {
-  const store = new MemoryStore();
+  const store: SweepableStore = new MemoryStore();
   const first = await buildGeneration(store, options);
 
   await buildGeneration(store, {
