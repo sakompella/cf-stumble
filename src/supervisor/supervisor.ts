@@ -1,21 +1,25 @@
 /// <reference types="@cloudflare/workers-types" />
-/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file */
+/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file, import/max-dependencies, unicorn/no-array-sort */
 
+import { authorizeSupervisorRequest } from "./auth.js";
 import {
   healthyAgentSource,
   initializationErrorAgentSource,
   loadAgent,
   syntaxErrorAgentSource,
 } from "../agent/loader.js";
-import { buildGeneration } from "../generation/build.js";
 import {
-  makeGenesisPin,
-  resetToGenesisSync,
-  seedGenesis,
-} from "../generation/genesis.js";
+  AgentExecutor,
+  AgentMaterializationError,
+  type AgentDefinition,
+  type AgentSkill,
+} from "../agent/runtime/index.js";
+import { buildGeneration } from "../generation/build.js";
+import { makeGenesisPin, resetToGenesisSync, seedGenesis } from "../generation/genesis.js";
 import type { GenesisPin, ResetResult } from "../generation/genesis.js";
 import { parseGenerationNumber } from "../generation/types.js";
 import { readGeneration } from "../generation/read.js";
+import type { LoadedGeneration } from "../generation/read.js";
 import type {
   Attestation,
   Generation,
@@ -30,22 +34,28 @@ import type {
   EffectsDifference,
   PrimitiveCall,
   ReplayInconclusiveReason,
+  ReplaySession,
   WorkspaceFile,
 } from "../replay/index.js";
-import { parseReplaySession } from "../replay/index.js";
+import { parseReplaySession, runReplay } from "../replay/index.js";
+import type { ReplayOutcome } from "../replay/index.js";
 import { DurableObjectSqliteStore } from "../storage/do-sqlite.js";
 import {
   computeCorpusVersion,
   computeGateVersion,
+  MemoryValidationResultStore,
+  ValidationGate,
   type RecordedCaseOutcome,
   type ValidationCase,
   type ValidationCaseResult,
   type ValidationResult,
+  type ValidationRun,
 } from "../validation/index.js";
 import { DurableObject } from "cloudflare:workers";
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
+  readonly SUPERVISOR_SECRET?: string;
 };
 
 type CandidateMode = "healthy" | "syntax" | "init";
@@ -81,6 +91,11 @@ type ValidationRow = {
   readonly verdict: Verdict;
   readonly created_at: number;
   readonly case_results_json: string;
+};
+type QuarantineRow = {
+  readonly sha: string;
+  readonly reason: string;
+  readonly created_at: number;
 };
 
 type GenerationSummary = {
@@ -118,6 +133,7 @@ const META_TABLE = "cf_stumble_supervisor_meta";
 const CONTEXT_TABLE = "cf_stumble_context";
 const CORPUS_TABLE = "cf_stumble_corpus";
 const VALIDATION_TABLE = "cf_stumble_validation_results";
+const QUARANTINE_TABLE = "cf_stumble_quarantine";
 const GENESIS_META_KEY = "genesis_sha";
 const CORPUS_VERSION_META_KEY = "corpus_version";
 const GATE_VERSION_META_KEY = "gate_version";
@@ -132,6 +148,7 @@ const genesisAuthor: Signature = {
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly store: DurableObjectSqliteStore;
+  private readonly supervisorSecret: string | undefined;
   private initialization: Promise<void> | undefined;
   private genesisPin: GenesisPin | undefined;
   private attempt = 0;
@@ -140,6 +157,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.store = new DurableObjectSqliteStore(ctx);
+    this.supervisorSecret = env.SUPERVISOR_SECRET;
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS spike_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     );
@@ -150,6 +168,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   override async fetch(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
+    if (
+      isPrivilegedRoute(pathname, request.method) &&
+      !authorizeSupervisorRequest(request, this.supervisorSecret)
+    ) {
+      return unauthorizedResponse();
+    }
     if (
       pathname !== "/facet/ping" &&
       pathname !== "/facet/probe" &&
@@ -208,6 +232,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         ? this.writeValidationResult(request)
         : this.readValidationResults(new URL(request.url));
     }
+    if (pathname === "/quarantine") {
+      return request.method === "POST" ? this.quarantine(request) : this.readQuarantine();
+    }
     if (pathname === "/turn") {
       return this.turn(request);
     }
@@ -248,6 +275,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     sql.exec(
       `CREATE TABLE IF NOT EXISTS ${VALIDATION_TABLE} (candidate_sha TEXT PRIMARY KEY, validated_against TEXT, corpus_version TEXT NOT NULL, gate_version TEXT NOT NULL, verdict TEXT NOT NULL, created_at INTEGER NOT NULL, case_results_json TEXT NOT NULL)`,
     );
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS ${QUARANTINE_TABLE} (sha TEXT PRIMARY KEY, reason TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+    );
 
     if (this.readState("candidate") === undefined) {
       this.writeState("candidate", initialCandidate);
@@ -269,6 +299,16 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
             {
               path: "agent.js",
               content: new TextEncoder().encode(healthyAgentSource),
+              executable: false,
+            },
+            {
+              path: "prompt.md",
+              content: new TextEncoder().encode("known-good prompt\n"),
+              executable: false,
+            },
+            {
+              path: "policy.md",
+              content: new TextEncoder().encode("known-good policy\n"),
               executable: false,
             },
           ],
@@ -368,6 +408,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
+  // The old GET spike API only exercises facet loading and never changes the live pointer.
   private async legacyPromote(): Promise<Response> {
     try {
       const facet = this.mountFacet(this.readCandidateSource());
@@ -389,27 +430,50 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       const body = await readRequestRecord(request);
       const candidate = parseShaField(body.candidate, "candidate");
-      const attestation = parseAttestation(body.attestation ?? body, "attestation");
-      const suppliedResultValue = body.validationResult ?? body.result;
-      const suppliedResult =
-        suppliedResultValue === undefined
-          ? undefined
-          : parseValidationResult(suppliedResultValue, "validationResult");
-      if (suppliedResult !== undefined) {
-        ensureResultMatchesAttestation(suppliedResult, attestation);
+      if (this.isQuarantined(candidate)) {
+        throw new SafetyViolationError("quarantined", `generation ${candidate} is quarantined`);
       }
       const candidateGeneration = await this.readCandidateGeneration(candidate);
-
-      const result = this.promoteTransaction(
-        candidate,
-        attestation,
-        suppliedResult,
-        candidateGeneration,
-      );
+      const validation = await this.validateCandidate(candidate);
+      const result = this.promoteTransaction(candidate, validation, candidateGeneration);
       return promotionResponse(result);
     } catch (error: unknown) {
       return requestErrorResponse(error);
     }
+  }
+
+  private validateCandidate(candidate: Sha): Promise<ValidationRun> {
+    const gate = new ValidationGate({
+      pointerStore: {
+        readPointer: () => Promise.resolve(this.readPointerSql()),
+        setPointer: () => Promise.resolve(false),
+      },
+      resultStore: new MemoryValidationResultStore(),
+      corpus: this.readCorpusCases(),
+      execute: (generation, session) => this.executeGeneration(generation, session),
+    });
+    return gate.validate(candidate);
+  }
+
+  private async executeGeneration(
+    generation: Sha | undefined,
+    session: ReplaySession,
+  ): Promise<ReplayOutcome> {
+    if (generation === undefined) {
+      throw new Error("validation requires a live generation");
+    }
+    const loaded = await readGeneration(this.store, generation);
+    const sourceModule = loaded.modules.find((module) => module.path === "agent.js");
+    if (sourceModule === undefined) {
+      throw new Error(`generation ${generation} has no agent.js module`);
+    }
+    const facet = this.mountFacet(decodeValidationText("agent.js", sourceModule.content));
+    const probe = await facet.fetch(new Request("https://facet/probe"));
+    if (!probe.ok) {
+      throw new Error(`generation ${generation} probe returned ${probe.status}`);
+    }
+    const definition = materializeSupervisorGeneration(loaded);
+    return runReplay(session, new AgentExecutor(definition));
   }
 
   private async readCandidateGeneration(candidate: Sha): Promise<Generation> {
@@ -426,19 +490,29 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private promoteTransaction(
     candidate: Sha,
-    attestation: Attestation,
-    suppliedResult: ValidationResult | undefined,
+    validation: ValidationRun,
     candidateGeneration: Generation,
   ): PromotionResult {
     let result: PromotionResult | undefined;
     this.ctx.storage.transactionSync(() => {
+      if (this.isQuarantined(candidate)) {
+        throw new SafetyViolationError("quarantined", `generation ${candidate} is quarantined`);
+      }
       const liveNow = this.readPointerSql();
       const registeredGeneration = this.readGenerationRow(candidate);
       const corpusVersion = this.readMetaOrThrow(CORPUS_VERSION_META_KEY);
       const gateVersion = this.readMetaOrThrow(GATE_VERSION_META_KEY);
+      if (validation.attestation === undefined) {
+        this.insertValidationResult(validation.result);
+        result = {
+          outcome: "rejected",
+          reason: { kind: "not-passing", verdict: validation.result.verdict },
+        };
+        return;
+      }
       const rejection = verifyAttestation(
         candidate,
-        attestation,
+        validation.attestation,
         liveNow,
         corpusVersion,
         gateVersion,
@@ -464,8 +538,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       if (registeredGeneration === undefined) {
         this.insertGeneration(candidateGeneration);
       }
-      const validation = suppliedResult ?? makeValidationResult(attestation, attestation.createdAt);
-      this.insertValidationResult(validation);
+      this.insertValidationResult(validation.result);
       this.ctx.storage.sql.exec(
         `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
         "promote",
@@ -499,6 +572,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       if (this.readGenerationRow(target) === undefined) {
         throw new MissingResourceError(`rollback target generation ${target} does not exist`);
       }
+      if (this.isQuarantined(target)) {
+        throw new SafetyViolationError("quarantined", `generation ${target} is quarantined`);
+      }
+      if (!this.wasPreviouslyLive(target)) {
+        throw new SafetyViolationError(
+          "not-live",
+          `generation ${target} was never recorded as live`,
+        );
+      }
       const actual = this.readPointerSql();
       const compareWith = expected ?? actual;
       if (!this.updatePointer(target, compareWith)) {
@@ -523,8 +605,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return result;
   }
 
+  // Keep the old unauthenticated spike reset as a response-only compatibility endpoint.
   private legacyReset(): Response {
-    return this.resetResponse(true);
+    return Response.json({ generation: "0", reset: true });
   }
 
   private reset(): Response {
@@ -840,6 +923,50 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
+  private async quarantine(request: Request): Promise<Response> {
+    try {
+      const body = await readRequestRecord(request);
+      const target = parseShaField(body.target ?? body.candidate ?? body.sha, "target");
+      const reason =
+        body.reason === undefined
+          ? "marked bad by supervisor"
+          : readNonEmptyString(body.reason, "reason");
+      if (this.readGenerationRow(target) === undefined) {
+        throw new MissingResourceError(`generation ${target} does not exist`);
+      }
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          `INSERT OR REPLACE INTO ${QUARANTINE_TABLE} (sha, reason, created_at) VALUES (?, ?, ?)`,
+          target,
+          reason,
+          Date.now(),
+        );
+      });
+      return Response.json({ quarantined: target, reason }, { status: 201 });
+    } catch (error: unknown) {
+      return requestErrorResponse(error);
+    }
+  }
+
+  private readQuarantine(): Response {
+    try {
+      const rows = this.ctx.storage.sql
+        .exec<QuarantineRow>(
+          `SELECT sha, reason, created_at FROM ${QUARANTINE_TABLE} ORDER BY created_at, sha`,
+        )
+        .toArray();
+      return Response.json({
+        quarantined: rows.map((row) => ({
+          sha: parseSha(row.sha),
+          reason: row.reason,
+          createdAt: row.created_at,
+        })),
+      });
+    } catch (error: unknown) {
+      return requestErrorResponse(error);
+    }
+  }
+
   private async turn(request: Request): Promise<Response> {
     try {
       const pinned = this.readPointerSql();
@@ -993,6 +1120,27 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return row;
   }
 
+  private isQuarantined(sha: Sha): boolean {
+    const rows = this.ctx.storage.sql
+      .exec<{ sha: string }>(`SELECT sha FROM ${QUARANTINE_TABLE} WHERE sha = ?`, sha)
+      .toArray();
+    return rows.length === 1;
+  }
+
+  private wasPreviouslyLive(sha: Sha): boolean {
+    const rows = this.ctx.storage.sql
+      .exec<{ generation_sha: string }>(
+        `SELECT generation_sha FROM ${HISTORY_TABLE} WHERE generation_sha = ? AND operation IN (?, ?, ?, ?) LIMIT 1`,
+        sha,
+        "seed",
+        "promote",
+        "rollback",
+        "reset",
+      )
+      .toArray();
+    return rows.length === 1;
+  }
+
   private insertGeneration(generation: Generation): void {
     this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO ${GENERATIONS_TABLE} (sha, number, parent_sha, manifest_sha, created_at, summary) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -1028,6 +1176,87 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       result.verdict,
       result.createdAt,
       JSON.stringify(result.caseResults),
+    );
+  }
+}
+
+const validationTextDecoder = new TextDecoder("utf-8", { fatal: true });
+
+function materializeSupervisorGeneration(loaded: LoadedGeneration): AgentDefinition {
+  const modules = loaded.modules.filter((module) => module.path !== "agent.js");
+  const promptModule = modules.find((module) => module.path === "prompt.md");
+  if (promptModule === undefined) {
+    throw new AgentMaterializationError(
+      "missing-module",
+      "prompt.md",
+      'required module "prompt.md" is missing',
+    );
+  }
+  const policyModule = modules.find((module) => module.path === "policy.md");
+  if (policyModule === undefined) {
+    throw new AgentMaterializationError(
+      "missing-module",
+      "policy.md",
+      'required module "policy.md" is missing',
+    );
+  }
+
+  const skills: AgentSkill[] = modules
+    .filter((module) => module.path !== "prompt.md" && module.path !== "policy.md")
+    .map((module): AgentSkill => {
+      if (!module.path.startsWith("skills/")) {
+        throw new AgentMaterializationError(
+          "unsupported-module",
+          module.path,
+          'module must be "prompt.md", "policy.md", or under "skills/"',
+        );
+      }
+      const fileName = module.path.slice("skills/".length);
+      if (fileName.length <= ".md".length || !fileName.endsWith(".md") || fileName.includes("/")) {
+        throw new AgentMaterializationError(
+          "unsupported-module",
+          module.path,
+          'skill module must be a non-empty .md file directly under "skills/"',
+        );
+      }
+      return {
+        name: fileName.slice(0, -".md".length),
+        content: decodeValidationText(module.path, module.content),
+      };
+    })
+    .sort((left: AgentSkill, right: AgentSkill) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+
+  return {
+    generation: loaded.generation,
+    systemPrompt: decodeRequiredValidationText("prompt.md", promptModule.content),
+    policy: decodeRequiredValidationText("policy.md", policyModule.content),
+    skills,
+  };
+}
+
+function decodeRequiredValidationText(path: string, content: Uint8Array): string {
+  const text = decodeValidationText(path, content);
+  if (text.length === 0) {
+    throw new AgentMaterializationError(
+      "invalid-module",
+      path,
+      "required module content must not be empty",
+    );
+  }
+  return text;
+}
+
+function decodeValidationText(path: string, content: Uint8Array): string {
+  try {
+    return validationTextDecoder.decode(content);
+  } catch (error: unknown) {
+    throw new AgentMaterializationError(
+      "invalid-module",
+      path,
+      "module content is not valid UTF-8",
+      error,
     );
   }
 }
@@ -1077,6 +1306,32 @@ function generationSummary(row: GenerationRow): GenerationSummary {
     createdAt: row.created_at,
     summary: row.summary,
   };
+}
+
+function isPrivilegedRoute(pathname: string, method: string): boolean {
+  if (pathname === "/rollback") {
+    return true;
+  }
+  if (pathname === "/promote" || pathname === "/reset") {
+    return method === "POST";
+  }
+  if (
+    pathname === "/generations" ||
+    pathname === "/context" ||
+    pathname === "/corpus" ||
+    pathname === "/validation-results" ||
+    pathname === "/quarantine"
+  ) {
+    return method === "POST";
+  }
+  return false;
+}
+
+function unauthorizedResponse(): Response {
+  return Response.json(
+    { error: { kind: "unauthorized", message: "valid supervisor credential required" } },
+    { status: 401 },
+  );
 }
 
 function promotionResponse(result: PromotionResult): Response {
@@ -1164,30 +1419,6 @@ function verifyAttestation(
   }
 }
 
-function makeValidationResult(attestation: Attestation, createdAt: number): ValidationResult {
-  return {
-    candidate: attestation.candidate,
-    validatedAgainst: attestation.validatedAgainst,
-    corpusVersion: attestation.corpusVersion,
-    gateVersion: attestation.gateVersion,
-    verdict: attestation.verdict,
-    createdAt,
-    caseResults: [],
-  };
-}
-
-function ensureResultMatchesAttestation(result: ValidationResult, attestation: Attestation): void {
-  if (
-    result.candidate !== attestation.candidate ||
-    result.validatedAgainst !== attestation.validatedAgainst ||
-    result.corpusVersion !== attestation.corpusVersion ||
-    result.gateVersion !== attestation.gateVersion ||
-    result.verdict !== attestation.verdict
-  ) {
-    throw new InvalidRequestError("validationResult does not match attestation");
-  }
-}
-
 async function readRequestRecord(request: Request): Promise<Record<string, unknown>> {
   let value: unknown;
   try {
@@ -1240,18 +1471,6 @@ function parseVerdict(value: unknown, path: string): Verdict {
     return value;
   }
   throw new InvalidRequestError(`${path} must be pass, fail, or inconclusive`);
-}
-
-function parseAttestation(value: unknown, path: string): Attestation {
-  const record = readRecord(value, path);
-  return {
-    candidate: parseShaField(record.candidate, `${path}.candidate`),
-    validatedAgainst: parseNullableSha(record.validatedAgainst, `${path}.validatedAgainst`),
-    corpusVersion: readNonEmptyString(record.corpusVersion, `${path}.corpusVersion`),
-    gateVersion: readNonEmptyString(record.gateVersion, `${path}.gateVersion`),
-    verdict: parseVerdict(record.verdict, `${path}.verdict`),
-    createdAt: readSafeInteger(record.createdAt, `${path}.createdAt`),
-  };
 }
 
 function parseModules(value: unknown): readonly Module[] {
@@ -1490,6 +1709,18 @@ class MissingResourceError extends Error {
   }
 }
 
+type SafetyViolationKind = "not-live" | "quarantined";
+
+class SafetyViolationError extends Error {
+  readonly kind: SafetyViolationKind;
+
+  constructor(kind: SafetyViolationKind, message: string) {
+    super(message);
+    this.name = "SafetyViolationError";
+    this.kind = kind;
+  }
+}
+
 function requestErrorResponse(error: unknown): Response {
   if (error instanceof InvalidRequestError) {
     return Response.json(
@@ -1499,6 +1730,9 @@ function requestErrorResponse(error: unknown): Response {
   }
   if (error instanceof MissingResourceError) {
     return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 404 });
+  }
+  if (error instanceof SafetyViolationError) {
+    return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 422 });
   }
   return Response.json(
     { error: { kind: "internal", message: errorMessage(error) } },

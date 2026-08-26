@@ -4,5 +4,6 @@ declare namespace Cloudflare {
   interface Env {
     readonly LOADER: WorkerLoader;
     readonly SUPERVISOR: DurableObjectNamespace;
+    readonly SUPERVISOR_SECRET: string;
   }
 }
