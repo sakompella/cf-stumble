@@ -56,7 +56,7 @@ describe("MemoryGenerationRegistry allocation", () => {
   });
 });
 
-describe("MemoryGenerationRegistry materialization", () => {
+describe("MemoryGenerationRegistry load failures", () => {
   it("preserves a load_failed record rather than deleting it", async () => {
     const registry = new MemoryGenerationRegistry();
     const record = await registry.allocate(request("load-failure"));
@@ -83,7 +83,59 @@ describe("MemoryGenerationRegistry materialization", () => {
       failure: "candidate initialization failed",
     });
   });
+});
 
+describe("MemoryGenerationRegistry valid transitions", () => {
+  it("follows loading through loaded to validated and records the artifact digest", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const record = await registry.allocate(request("validated"));
+
+    const loaded = await registry.transition(record.number, {
+      state: "loaded",
+      artifactDigest: ARTIFACT,
+    });
+    const validated = await registry.transition(record.number, { state: "validated" });
+
+    expect(loaded).toMatchObject({
+      outcome: "transitioned",
+      record: { number: record.number, state: "loaded", artifactDigest: ARTIFACT },
+    });
+    expect(validated).toMatchObject({
+      outcome: "transitioned",
+      record: { number: record.number, state: "validated", artifactDigest: ARTIFACT },
+    });
+  });
+});
+
+describe("MemoryGenerationRegistry validation failures", () => {
+  it("makes validation_failed terminal and preserves its failure reason", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const record = await registry.allocate(request("validation-failure"));
+    await registry.transition(record.number, { state: "loaded", artifactDigest: ARTIFACT });
+
+    const failed = await registry.transition(record.number, {
+      state: "validation_failed",
+      failure: "canary failed",
+    });
+    const retry = await registry.transition(record.number, { state: "validated" });
+
+    expect(failed).toMatchObject({
+      outcome: "transitioned",
+      record: {
+        number: record.number,
+        state: "validation_failed",
+        artifactDigest: ARTIFACT,
+        failure: "canary failed",
+      },
+    });
+    expect(retry).toEqual({
+      outcome: "rejected",
+      reason: { kind: "illegal-transition", from: "validation_failed", to: "validated" },
+    });
+  });
+});
+
+describe("MemoryGenerationRegistry transition rejection", () => {
   it("rejects illegal materialization transitions without overwriting immutable evidence", async () => {
     const registry = new MemoryGenerationRegistry();
     const record = await registry.allocate(request("illegal-transition"));
