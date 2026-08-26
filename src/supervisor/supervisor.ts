@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file */
+/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file, import/max-dependencies, unicorn/no-array-sort */
 
 import {
   healthyAgentSource,
@@ -7,6 +7,12 @@ import {
   loadAgent,
   syntaxErrorAgentSource,
 } from "../agent/loader.js";
+import {
+  AgentExecutor,
+  AgentMaterializationError,
+  type AgentDefinition,
+  type AgentSkill,
+} from "../agent/runtime/index.js";
 import { buildGeneration } from "../generation/build.js";
 import {
   makeGenesisPin,
@@ -16,6 +22,7 @@ import {
 import type { GenesisPin, ResetResult } from "../generation/genesis.js";
 import { parseGenerationNumber } from "../generation/types.js";
 import { readGeneration } from "../generation/read.js";
+import type { LoadedGeneration } from "../generation/read.js";
 import type {
   Attestation,
   Generation,
@@ -30,22 +37,28 @@ import type {
   EffectsDifference,
   PrimitiveCall,
   ReplayInconclusiveReason,
+  ReplaySession,
   WorkspaceFile,
 } from "../replay/index.js";
-import { parseReplaySession } from "../replay/index.js";
+import { parseReplaySession, runReplay } from "../replay/index.js";
+import type { ReplayOutcome } from "../replay/index.js";
 import { DurableObjectSqliteStore } from "../storage/do-sqlite.js";
 import {
   computeCorpusVersion,
   computeGateVersion,
+  MemoryValidationResultStore,
+  ValidationGate,
   type RecordedCaseOutcome,
   type ValidationCase,
   type ValidationCaseResult,
   type ValidationResult,
+  type ValidationRun,
 } from "../validation/index.js";
 import { DurableObject } from "cloudflare:workers";
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
+  readonly SUPERVISOR_SECRET?: string;
 };
 
 type CandidateMode = "healthy" | "syntax" | "init";
@@ -271,6 +284,16 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
               content: new TextEncoder().encode(healthyAgentSource),
               executable: false,
             },
+            {
+              path: "prompt.md",
+              content: new TextEncoder().encode("known-good prompt\n"),
+              executable: false,
+            },
+            {
+              path: "policy.md",
+              content: new TextEncoder().encode("known-good policy\n"),
+              executable: false,
+            },
           ],
           author: genesisAuthor,
           createdAt: INITIAL_TIMESTAMP,
@@ -389,27 +412,38 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       const body = await readRequestRecord(request);
       const candidate = parseShaField(body.candidate, "candidate");
-      const attestation = parseAttestation(body.attestation ?? body, "attestation");
-      const suppliedResultValue = body.validationResult ?? body.result;
-      const suppliedResult =
-        suppliedResultValue === undefined
-          ? undefined
-          : parseValidationResult(suppliedResultValue, "validationResult");
-      if (suppliedResult !== undefined) {
-        ensureResultMatchesAttestation(suppliedResult, attestation);
-      }
       const candidateGeneration = await this.readCandidateGeneration(candidate);
-
-      const result = this.promoteTransaction(
-        candidate,
-        attestation,
-        suppliedResult,
-        candidateGeneration,
-      );
+      const validation = await this.validateCandidate(candidate);
+      const result = this.promoteTransaction(candidate, validation, candidateGeneration);
       return promotionResponse(result);
     } catch (error: unknown) {
       return requestErrorResponse(error);
     }
+  }
+
+  private validateCandidate(candidate: Sha): Promise<ValidationRun> {
+    const gate = new ValidationGate({
+      pointerStore: {
+        readPointer: () => Promise.resolve(this.readPointerSql()),
+        setPointer: () => Promise.resolve(false),
+      },
+      resultStore: new MemoryValidationResultStore(),
+      corpus: this.readCorpusCases(),
+      execute: (generation, session) => this.executeGeneration(generation, session),
+    });
+    return gate.validate(candidate);
+  }
+
+  private async executeGeneration(
+    generation: Sha | undefined,
+    session: ReplaySession,
+  ): Promise<ReplayOutcome> {
+    if (generation === undefined) {
+      throw new Error("validation requires a live generation");
+    }
+    const loaded = await readGeneration(this.store, generation);
+    const definition = materializeSupervisorGeneration(loaded);
+    return runReplay(session, new AgentExecutor(definition));
   }
 
   private async readCandidateGeneration(candidate: Sha): Promise<Generation> {
@@ -426,8 +460,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private promoteTransaction(
     candidate: Sha,
-    attestation: Attestation,
-    suppliedResult: ValidationResult | undefined,
+    validation: ValidationRun,
     candidateGeneration: Generation,
   ): PromotionResult {
     let result: PromotionResult | undefined;
@@ -436,9 +469,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const registeredGeneration = this.readGenerationRow(candidate);
       const corpusVersion = this.readMetaOrThrow(CORPUS_VERSION_META_KEY);
       const gateVersion = this.readMetaOrThrow(GATE_VERSION_META_KEY);
+      if (validation.attestation === undefined) {
+        this.insertValidationResult(validation.result);
+        result = {
+          outcome: "rejected",
+          reason: { kind: "not-passing", verdict: validation.result.verdict },
+        };
+        return;
+      }
       const rejection = verifyAttestation(
         candidate,
-        attestation,
+        validation.attestation,
         liveNow,
         corpusVersion,
         gateVersion,
@@ -464,8 +505,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       if (registeredGeneration === undefined) {
         this.insertGeneration(candidateGeneration);
       }
-      const validation = suppliedResult ?? makeValidationResult(attestation, attestation.createdAt);
-      this.insertValidationResult(validation);
+      this.insertValidationResult(validation.result);
       this.ctx.storage.sql.exec(
         `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
         "promote",
@@ -1032,6 +1072,88 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 }
 
+const validationTextDecoder = new TextDecoder("utf-8", { fatal: true });
+
+function materializeSupervisorGeneration(loaded: LoadedGeneration): AgentDefinition {
+  const modules = loaded.modules.filter((module) => module.path !== "agent.js");
+  const promptModule = modules.find((module) => module.path === "prompt.md");
+  if (promptModule === undefined) {
+    throw new AgentMaterializationError(
+      "missing-module",
+      "prompt.md",
+      'required module "prompt.md" is missing',
+    );
+  }
+  const policyModule = modules.find((module) => module.path === "policy.md");
+  if (policyModule === undefined) {
+    throw new AgentMaterializationError(
+      "missing-module",
+      "policy.md",
+      'required module "policy.md" is missing',
+    );
+  }
+
+  const skills: AgentSkill[] = modules
+    .filter((module) => module.path !== "prompt.md" && module.path !== "policy.md")
+    .map((module): AgentSkill => {
+      if (!module.path.startsWith("skills/")) {
+        throw new AgentMaterializationError(
+          "unsupported-module",
+          module.path,
+          'module must be "prompt.md", "policy.md", or under "skills/"',
+        );
+      }
+      const fileName = module.path.slice("skills/".length);
+      if (fileName.length <= ".md".length || !fileName.endsWith(".md") || fileName.includes("/")) {
+        throw new AgentMaterializationError(
+          "unsupported-module",
+          module.path,
+          'skill module must be a non-empty .md file directly under "skills/"',
+        );
+      }
+      return {
+        name: fileName.slice(0, -".md".length),
+        content: decodeValidationText(module.path, module.content),
+      };
+    })
+    .sort(
+      (left: AgentSkill, right: AgentSkill) =>
+        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+    );
+
+  return {
+    generation: loaded.generation,
+    systemPrompt: decodeRequiredValidationText("prompt.md", promptModule.content),
+    policy: decodeRequiredValidationText("policy.md", policyModule.content),
+    skills,
+  };
+}
+
+function decodeRequiredValidationText(path: string, content: Uint8Array): string {
+  const text = decodeValidationText(path, content);
+  if (text.length === 0) {
+    throw new AgentMaterializationError(
+      "invalid-module",
+      path,
+      "required module content must not be empty",
+    );
+  }
+  return text;
+}
+
+function decodeValidationText(path: string, content: Uint8Array): string {
+  try {
+    return validationTextDecoder.decode(content);
+  } catch (error: unknown) {
+    throw new AgentMaterializationError(
+      "invalid-module",
+      path,
+      "module content is not valid UTF-8",
+      error,
+    );
+  }
+}
+
 function toGeneration(row: GenerationRow): Generation {
   return {
     sha: parseSha(row.sha),
@@ -1164,30 +1286,6 @@ function verifyAttestation(
   }
 }
 
-function makeValidationResult(attestation: Attestation, createdAt: number): ValidationResult {
-  return {
-    candidate: attestation.candidate,
-    validatedAgainst: attestation.validatedAgainst,
-    corpusVersion: attestation.corpusVersion,
-    gateVersion: attestation.gateVersion,
-    verdict: attestation.verdict,
-    createdAt,
-    caseResults: [],
-  };
-}
-
-function ensureResultMatchesAttestation(result: ValidationResult, attestation: Attestation): void {
-  if (
-    result.candidate !== attestation.candidate ||
-    result.validatedAgainst !== attestation.validatedAgainst ||
-    result.corpusVersion !== attestation.corpusVersion ||
-    result.gateVersion !== attestation.gateVersion ||
-    result.verdict !== attestation.verdict
-  ) {
-    throw new InvalidRequestError("validationResult does not match attestation");
-  }
-}
-
 async function readRequestRecord(request: Request): Promise<Record<string, unknown>> {
   let value: unknown;
   try {
@@ -1240,18 +1338,6 @@ function parseVerdict(value: unknown, path: string): Verdict {
     return value;
   }
   throw new InvalidRequestError(`${path} must be pass, fail, or inconclusive`);
-}
-
-function parseAttestation(value: unknown, path: string): Attestation {
-  const record = readRecord(value, path);
-  return {
-    candidate: parseShaField(record.candidate, `${path}.candidate`),
-    validatedAgainst: parseNullableSha(record.validatedAgainst, `${path}.validatedAgainst`),
-    corpusVersion: readNonEmptyString(record.corpusVersion, `${path}.corpusVersion`),
-    gateVersion: readNonEmptyString(record.gateVersion, `${path}.gateVersion`),
-    verdict: parseVerdict(record.verdict, `${path}.verdict`),
-    createdAt: readSafeInteger(record.createdAt, `${path}.createdAt`),
-  };
 }
 
 function parseModules(value: unknown): readonly Module[] {

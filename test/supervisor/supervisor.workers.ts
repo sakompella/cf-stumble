@@ -1,4 +1,5 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
+/* oxlint-disable eslint/max-lines */
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
@@ -42,11 +43,54 @@ export class Agent extends DurableObject {
 }
 `;
 
-function createGeneration(source = candidateSource): Promise<Response> {
+const validationSession = {
+  schemaVersion: 1,
+  name: "supervisor-canary",
+  seed: 1,
+  clock: { nowMs: 1_700_000_000_000 },
+  initialWorkspace: [],
+  turns: [
+    {
+      input: "probe",
+      modelResponses: [
+        {
+          requestId: "executor",
+          content: JSON.stringify({ type: "final", content: "done" }),
+        },
+      ],
+      capturedToolResults: [],
+    },
+  ],
+  expectedEffects: { trace: [], finalWorkspace: [] },
+};
+
+async function writeValidationCase(): Promise<void> {
+  const response = await supervisorRequest("/corpus", {
+    method: "POST",
+    body: JSON.stringify({
+      name: "canary",
+      mandatoryCanary: false,
+      session: validationSession,
+    }),
+  });
+  expect(response.status).toBe(201);
+}
+
+function createGeneration(
+  source = candidateSource,
+  withRuntimeDefinition = true,
+): Promise<Response> {
+  const modules = [{ path: "agent.js", content: source, executable: false }];
+  if (withRuntimeDefinition) {
+    modules.push(
+      { path: "prompt.md", content: "candidate prompt\n", executable: false },
+      { path: "policy.md", content: "candidate policy\n", executable: false },
+    );
+  }
   return supervisorRequest("/generations", {
     method: "POST",
     body: JSON.stringify({
-      modules: [{ path: "agent.js", content: source, executable: false }],
+      modules,
       summary: "candidate generation",
       createdAt: 1_700_000_001,
     }),
@@ -67,18 +111,10 @@ async function promoteCreatedGeneration(source = candidateSource): Promise<{
   const created = readRecord(await readJson(createdResponse));
   const generation = readRecord(created["generation"]);
   const candidate = readStringField(generation, "sha");
-  const state = readRecord(await readJson(await supervisorRequest("/state")));
-  const attestation = {
-    candidate,
-    validatedAgainst: genesis,
-    corpusVersion: readStringField(state, "corpusVersion"),
-    gateVersion: readStringField(state, "gateVersion"),
-    verdict: "pass",
-    createdAt: 1_700_000_001,
-  };
+  await writeValidationCase();
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
-    body: JSON.stringify({ candidate, attestation }),
+    body: JSON.stringify({ candidate }),
   });
   expect(promotion.status).toBe(200);
   return { genesis, candidate };
@@ -122,6 +158,8 @@ test("promotes a candidate already written to the supervisor object store", asyn
     const generation = await buildGeneration(store, {
       modules: [
         { path: "agent.js", content: new TextEncoder().encode(candidateSource), executable: false },
+        { path: "prompt.md", content: new TextEncoder().encode("candidate prompt\n"), executable: false },
+        { path: "policy.md", content: new TextEncoder().encode("candidate policy\n"), executable: false },
       ],
       parent,
       author: {
@@ -135,20 +173,10 @@ test("promotes a candidate already written to the supervisor object store", asyn
     });
     return generation.sha;
   });
-  const state = readRecord(await readJson(await supervisorRequest("/state")));
+  await writeValidationCase();
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
-    body: JSON.stringify({
-      candidate,
-      attestation: {
-        candidate,
-        validatedAgainst: genesis,
-        corpusVersion: readStringField(state, "corpusVersion"),
-        gateVersion: readStringField(state, "gateVersion"),
-        verdict: "pass",
-        createdAt: 1_700_000_001,
-      },
-    }),
+    body: JSON.stringify({ candidate }),
   });
 
   expect(promotion.status).toBe(200);
@@ -160,14 +188,33 @@ test("promotes a candidate already written to the supervisor object store", asyn
   ).toBe(candidate);
 });
 
-test("returns a structured reason for a rejected promotion", async () => {
+test("returns a structured reason for a candidate rejected by the supervisor-run gate", async () => {
+  const createdResponse = await createGeneration(candidateSource, false);
+  expect(createdResponse.status).toBe(201);
+  const created = readRecord(await readJson(createdResponse));
+  const candidate = readStringField(readRecord(created["generation"]), "sha");
+  await writeValidationCase();
+  const promotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({ candidate }),
+  });
+
+  expect(promotion.status).toBe(422);
+  expect(await readJson(promotion)).toEqual({
+    outcome: "rejected",
+    reason: { kind: "not-passing", verdict: "inconclusive" },
+  });
+});
+
+test("ignores a caller-supplied attestation and promotes only after its own gate passes", async () => {
   const initial = readRecord(await readJson(await supervisorRequest("/live")));
   const genesis = readStringField(readRecord(initial["generation"]), "sha");
   const createdResponse = await createGeneration();
   expect(createdResponse.status).toBe(201);
   const created = readRecord(await readJson(createdResponse));
   const candidate = readStringField(readRecord(created["generation"]), "sha");
-  const state = readRecord(await readJson(await supervisorRequest("/state")));
+  await writeValidationCase();
+
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
     body: JSON.stringify({
@@ -175,19 +222,16 @@ test("returns a structured reason for a rejected promotion", async () => {
       attestation: {
         candidate,
         validatedAgainst: genesis,
-        corpusVersion: readStringField(state, "corpusVersion"),
-        gateVersion: readStringField(state, "gateVersion"),
-        verdict: "fail",
-        createdAt: 1_700_000_001,
+        corpusVersion: "forged-corpus",
+        gateVersion: "forged-gate",
+        verdict: "pass",
+        createdAt: 0,
       },
     }),
   });
 
-  expect(promotion.status).toBe(422);
-  expect(await readJson(promotion)).toEqual({
-    outcome: "rejected",
-    reason: { kind: "not-passing", verdict: "fail" },
-  });
+  expect(promotion.status).toBe(200);
+  expect(await readJson(promotion)).toMatchObject({ outcome: "promoted", to: candidate });
 });
 
 test("promotion rolls back every write when generation history fails", async () => {
@@ -195,15 +239,7 @@ test("promotion rolls back every write when generation history fails", async () 
   const genesis = readStringField(readRecord(initial["generation"]), "sha");
   const created = readRecord(await readJson(await createGeneration()));
   const candidate = readStringField(readRecord(created["generation"]), "sha");
-  const state = readRecord(await readJson(await supervisorRequest("/state")));
-  const attestation = {
-    candidate,
-    validatedAgainst: genesis,
-    corpusVersion: readStringField(state, "corpusVersion"),
-    gateVersion: readStringField(state, "gateVersion"),
-    verdict: "pass",
-    createdAt: 1_700_000_001,
-  };
+  await writeValidationCase();
   const stub = env.SUPERVISOR.getByName("supervisor-s10");
   await runInDurableObject(stub, (_instance, durableObjectState) => {
     durableObjectState.storage.sql.exec(`
@@ -215,7 +251,7 @@ test("promotion rolls back every write when generation history fails", async () 
 
   const promotion = await supervisorRequest("/promote", {
     method: "POST",
-    body: JSON.stringify({ candidate, attestation }),
+    body: JSON.stringify({ candidate }),
   });
 
   expect(promotion.status).toBe(500);
