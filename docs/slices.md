@@ -173,7 +173,7 @@ why it is a slice rather than an afterthought.
 
 ---
 
-## S9 — Durable Object SQLite store · depends: S2, S0.5 · IN PROGRESS
+## S9 — Durable Object SQLite store · depends: S2, S0.5 · DONE
 
 S2's conformance suite rerun against real DO SQLite under the workers pool, using
 `transactionSync()` (D6). Owns `src/storage/do-sqlite.ts`.
