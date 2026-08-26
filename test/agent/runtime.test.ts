@@ -82,6 +82,18 @@ function finalResponse(content = "done"): string {
   return JSON.stringify({ type: "final", content });
 }
 
+function allPrimitiveResponse(): string {
+  return JSON.stringify({
+    type: "tool_calls",
+    calls: [
+      { name: "read", arguments: { path: "README.md" } },
+      { name: "write", arguments: { path: "notes.txt", content: "created\n" } },
+      { name: "edit", arguments: { path: "src/app.ts", oldText: "1", newText: "2" } },
+      { name: "bash", arguments: { command: "printf 'ok\\n'" } },
+    ],
+  });
+}
+
 async function runtime() {
   const { store, built } = await generation(modules());
   const definition = await materializeGeneration(store, built.sha);
@@ -120,6 +132,53 @@ test("executes a materialized generation through a live model source and primiti
   }
   await expect(workspace.readFile(parseWorkspacePath("result.txt"))).resolves.toBe(
     "from generation\n",
+  );
+});
+
+test("dispatches all four real primitives and feeds results into the next model request", async () => {
+  const { definition } = await runtime();
+  const workspace = new InMemoryWorkspace({
+    files: [
+      { path: "README.md", content: "hello\n" },
+      { path: "src/app.ts", content: "const answer = 1;\n" },
+    ],
+    executeCommand: () => ({ status: "completed", exitCode: 0, stdout: "ok\n", stderr: "" }),
+  });
+  const response = allPrimitiveResponse();
+  let requestCount = 0;
+  const result = await new AgentExecutor(definition).executeTurn(
+    "exercise every primitive",
+    new LiveModelResponseSource((request) => {
+      requestCount += 1;
+      expect(request.definition.systemPrompt).toBe("system prompt\n");
+      if (requestCount === 1) {
+        expect(request.toolResults).toEqual([]);
+        return response;
+      }
+      expect(request.toolResults.map((toolResult) => toolResult.kind)).toEqual([
+        "read",
+        "write",
+        "edit",
+        "bash",
+      ]);
+      return finalResponse();
+    }),
+    workspace,
+    { name: "all-primitives", seed: 4, nowMs: 1_700_000_100_000 },
+  );
+
+  expect(result.status).toBe("completed");
+  if (result.status === "completed") {
+    expect(result.transcript.expectedEffects.trace).toHaveLength(4);
+    const replayed = await runReplay(
+      parseReplaySessionJson(JSON.stringify(result.transcript)),
+      new AgentExecutor(definition),
+    );
+    expect(replayed.status).toBe("PASS");
+  }
+  await expect(workspace.readFile(parseWorkspacePath("notes.txt"))).resolves.toBe("created\n");
+  await expect(workspace.readFile(parseWorkspacePath("src/app.ts"))).resolves.toBe(
+    "const answer = 2;\n",
   );
 });
 
