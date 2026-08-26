@@ -9,5 +9,11 @@
     "lib": ["ES2023"],
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/supervisor", "src/agent", "test/facet"]
+  "include": [
+    "src/supervisor",
+    "src/agent",
+    "src/storage/do-sqlite.ts",
+    "test/facet",
+    "test/storage-do"
+  ]
 }
