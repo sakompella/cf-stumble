@@ -16,6 +16,7 @@ import type { Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
 import type { Store } from "../../src/storage/types.js";
+import { PointerManager } from "../../src/pointer/index.js";
 
 const author = {
   name: "Genesis Bot",
@@ -37,19 +38,46 @@ const options = {
   summary: "known-good genesis",
 } as const;
 
-class CorruptLiveStore implements Store {
-  readObjectCalls = 0;
-  private readonly delegate: MemoryStore;
-  private readonly liveSha: Sha;
+function makeBarrier(parties: number): () => Promise<void> {
+  let arrived = 0;
+  let release: (() => void) | undefined;
+  const allArrived = new Promise<void>((resolve) => {
+    release = resolve;
+  });
 
-  constructor(delegate: MemoryStore, liveSha: Sha) {
+  return async () => {
+    arrived += 1;
+    if (arrived === parties) {
+      if (release === undefined) {
+        throw new Error("barrier release was not initialized");
+      }
+      release();
+    }
+    await allArrived;
+  };
+}
+
+type TestStoreOptions = {
+  readonly corruptSha?: Sha;
+  readonly barrier?: () => Promise<void>;
+};
+
+class TestStore implements Store {
+  readObjectCalls = 0;
+  private pointerReads = 0;
+  private readonly delegate: MemoryStore;
+  private readonly corruptSha: Sha | undefined;
+  private readonly barrier: (() => Promise<void>) | undefined;
+
+  constructor(delegate: MemoryStore, storeOptions: TestStoreOptions = {}) {
     this.delegate = delegate;
-    this.liveSha = liveSha;
+    this.corruptSha = storeOptions.corruptSha;
+    this.barrier = storeOptions.barrier;
   }
 
   readObject(sha: Sha): Promise<Uint8Array | undefined> {
     this.readObjectCalls += 1;
-    if (sha === this.liveSha) {
+    if (sha === this.corruptSha) {
       return Promise.resolve(new Uint8Array([255]));
     }
     return this.delegate.readObject(sha);
@@ -59,7 +87,11 @@ class CorruptLiveStore implements Store {
     return this.delegate.writeObject(bytes);
   }
 
-  readPointer(): Promise<Sha | undefined> {
+  async readPointer(): Promise<Sha | undefined> {
+    this.pointerReads += 1;
+    if (this.barrier !== undefined && this.pointerReads <= 2) {
+      await this.barrier();
+    }
     return this.delegate.readPointer();
   }
 
@@ -153,12 +185,63 @@ describe("resetToGenesis recovery", () => {
     });
     const pin = makeGenesisPin(genesis);
     expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
-    const corruptStore = new CorruptLiveStore(store, later.sha);
+    const corruptStore = new TestStore(store, { corruptSha: later.sha });
 
     await resetToGenesis(corruptStore, pin);
 
     expect(await corruptStore.readPointer()).toBe(genesis.sha);
     expect(corruptStore.readObjectCalls).toBe(0);
+  });
+});
+
+describe("genesis reset concurrency", () => {
+  it("keeps reset and promotion on complete pointer values", async () => {
+    const baseStore = new MemoryStore();
+    const genesis = await seedGenesis(baseStore, options);
+    const live = await buildGeneration(baseStore, {
+      ...options,
+      parent: genesis,
+      createdAt: author.timestamp + 1,
+      summary: "live generation",
+    });
+    const candidate = await buildGeneration(baseStore, {
+      ...options,
+      parent: live,
+      createdAt: author.timestamp + 2,
+      summary: "candidate generation",
+    });
+    const pin = makeGenesisPin(genesis);
+    expect(await baseStore.setPointer(live.sha, genesis.sha)).toBe(true);
+    const store = new TestStore(baseStore, { barrier: makeBarrier(2) });
+    const manager = new PointerManager({
+      store,
+      corpusVersion: "corpus-1",
+      gateVersion: "gate-1",
+    });
+    const attestation = {
+      candidate: candidate.sha,
+      validatedAgainst: live.sha,
+      corpusVersion: "corpus-1",
+      gateVersion: "gate-1",
+      verdict: "pass",
+      createdAt: author.timestamp + 2,
+    } as const;
+
+    const [resetResult, promotionResult] = await Promise.all([
+      resetToGenesis(store, pin),
+      manager.promote(candidate.sha, attestation),
+    ]);
+
+    expect(resetResult.outcome).toBe("reset");
+    if (promotionResult.outcome === "promoted") {
+      expect(promotionResult.from).toBe(live.sha);
+      expect(promotionResult.to).toBe(candidate.sha);
+    } else {
+      expect(["pointer-moved", "stale-attestation"]).toContain(
+        promotionResult.reason.kind,
+      );
+    }
+    expect(await baseStore.readPointer()).toBe(genesis.sha);
   });
 });
 
