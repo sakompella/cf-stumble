@@ -37,9 +37,7 @@ test("the in-memory workspace exposes configured command outcomes", async () => 
     },
   });
 
-  await expect(
-    workspace.execute("false", { timeoutMs: 250 }),
-  ).resolves.toEqual(commandResult);
+  await expect(workspace.execute("false", { timeoutMs: 250 })).resolves.toEqual(commandResult);
 });
 
 test("the in-memory workspace preserves binary content for the read primitive to reject", async () => {

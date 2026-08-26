@@ -57,9 +57,7 @@ export class InMemoryWorkspace implements Workspace {
 
   listFiles(): Promise<readonly WorkspacePath[]> {
     return Promise.resolve(
-      [...this.files.keys()].toSorted((left, right) =>
-        left < right ? -1 : left > right ? 1 : 0,
-      ),
+      [...this.files.keys()].toSorted((left, right) => (left < right ? -1 : left > right ? 1 : 0)),
     );
   }
 

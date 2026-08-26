@@ -105,9 +105,9 @@ test("write creates parent directories and overwrites existing text", async () =
   expect(expectSuccess(first)).toEqual({ ok: true, kind: "write", bytesWritten: 4 });
   expect(expectSuccess(second)).toEqual({ ok: true, kind: "write", bytesWritten: 5 });
   await expect(workspace.readFile(parseWorkspacePath("notes/today.txt"))).resolves.toBe("new\n");
-  await expect(
-    workspace.readFile(parseWorkspacePath("reports/weekly/summary.txt")),
-  ).resolves.toBe("done\n");
+  await expect(workspace.readFile(parseWorkspacePath("reports/weekly/summary.txt"))).resolves.toBe(
+    "done\n",
+  );
 });
 
 test("write reports workspace failures as typed failures", async () => {

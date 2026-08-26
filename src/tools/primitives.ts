@@ -113,12 +113,7 @@ type EditFailure = Failure<"edit", EditError>;
 type BashFailure = Failure<"bash", BashError>;
 
 export type PrimitiveFailure = ReadFailure | WriteFailure | EditFailure | BashFailure;
-export type PrimitiveResult =
-  | ReadResult
-  | WriteResult
-  | EditResult
-  | BashResult
-  | PrimitiveFailure;
+export type PrimitiveResult = ReadResult | WriteResult | EditResult | BashResult | PrimitiveFailure;
 
 export type PrimitiveOptions = {
   readonly bashTimeoutMs?: number;
@@ -138,7 +133,10 @@ function invalidPath(path: string, reason: WorkspacePathError): InvalidPathError
   return { kind: "invalid-path", path, reason };
 }
 
-async function readPrimitive(call: ReadCall, workspace: Workspace): Promise<ReadResult | ReadFailure> {
+async function readPrimitive(
+  call: ReadCall,
+  workspace: Workspace,
+): Promise<ReadResult | ReadFailure> {
   const validation = validateWorkspacePath(call.path);
   if (!validation.ok) {
     return { ok: false, kind: "read", error: invalidPath(call.path, validation.reason) };
@@ -177,7 +175,11 @@ async function writePrimitive(
   } catch (error: unknown) {
     return { ok: false, kind: "write", error: workspaceError("write", error) };
   }
-  return { ok: true, kind: "write", bytesWritten: new TextEncoder().encode(call.content).byteLength };
+  return {
+    ok: true,
+    kind: "write",
+    bytesWritten: new TextEncoder().encode(call.content).byteLength,
+  };
 }
 
 async function editPrimitive(
