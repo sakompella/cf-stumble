@@ -41,6 +41,7 @@ test("promote rejects a passing attestation after the observed live pointer move
     pointerStore: store,
     resultStore: new MemoryValidationResultStore(),
     corpus: [validationCase],
+    pinnedCanaries: [{ name: validationCase.name, session }],
     execute: () => Promise.resolve(pass),
     now: () => 456,
   });
