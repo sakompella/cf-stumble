@@ -1,13 +1,11 @@
-import { readFile } from "node:fs/promises";
+import fixtureData from "../fixtures/sessions/four-primitives.json";
 import { expect, test } from "vitest";
 import {
-  parseReplaySessionJson,
+  parseReplaySession,
   type ReplayAgentLoop,
   type ReplaySession,
   runReplay,
 } from "../../src/replay/index.js";
-
-const fixtureUrl = new URL("../fixtures/sessions/four-primitives.json", import.meta.url);
 
 const fixtureAgent: ReplayAgentLoop = {
   async runTurn(_input, runtime) {
@@ -38,8 +36,13 @@ const fixtureAgent: ReplayAgentLoop = {
   },
 };
 
-async function loadFixture(): Promise<ReplaySession> {
-  return parseReplaySessionJson(await readFile(fixtureUrl, "utf8"));
+function parseFixture(value: unknown): ReplaySession {
+  return parseReplaySession(value);
+}
+
+function loadFixture(): Promise<ReplaySession> {
+  const untrustedFixture: unknown = structuredClone(fixtureData);
+  return Promise.resolve(parseFixture(untrustedFixture));
 }
 
 test("the fixture exercises every allowed primitive", async () => {
@@ -65,9 +68,10 @@ test("replaying the on-disk fixture twice is deterministic", async () => {
 
 test("mutating a recorded response is detected as a behavioural FAIL", async () => {
   const fixture = await loadFixture();
+  const clonedFixture = structuredClone(fixture);
   const mutated: ReplaySession = {
-    ...fixture,
-    turns: fixture.turns.map((turn, index) =>
+    ...clonedFixture,
+    turns: clonedFixture.turns.map((turn, index) =>
       index === 0
         ? {
             ...turn,
