@@ -10,6 +10,12 @@ export type GenesisOptions = Omit<BuildGenerationOptions, "parent"> & {
   readonly parent?: undefined;
 };
 
+/** Options for seeding the root when its pointer claim must be part of a larger transaction. */
+export type GenesisSeedOptions = {
+  /** Defaults to true; false leaves the pointer claim to the caller. */
+  readonly claimPointer?: boolean;
+};
+
 /** Durable root identity passed to reset and future reachability-based garbage collection. */
 export type GenesisPin = {
   readonly kind: "genesis";
@@ -33,11 +39,14 @@ export const MAX_RESET_ATTEMPTS = 16;
 export async function seedGenesis(
   store: Store,
   options: GenesisOptions,
+  seedOptions: GenesisSeedOptions = {},
 ): Promise<Generation> {
   const genesis = await buildGeneration(store, { ...options, parent: undefined });
-  const current = await store.readPointer();
-  if (current === undefined) {
-    await store.setPointer(genesis.sha, undefined);
+  if (seedOptions.claimPointer !== false) {
+    const current = await store.readPointer();
+    if (current === undefined) {
+      await store.setPointer(genesis.sha, undefined);
+    }
   }
   return genesis;
 }
@@ -88,6 +97,27 @@ export async function assertGenesisReachable(
   }
 }
 
+/** A synchronous pointer store used when a reset must share a SQLite transaction with side rows. */
+export type SynchronousPointerStore = {
+  readonly readPointer: () => Sha | undefined;
+  readonly setPointer: (next: Sha, expected: Sha | undefined) => boolean;
+};
+
+function resetAttempt(
+  attempt: number,
+  from: Sha | undefined,
+  swapped: boolean,
+  to: Sha,
+): ResetResult | undefined {
+  if (swapped) {
+    return { outcome: "reset", from, to };
+  }
+  if (attempt === MAX_RESET_ATTEMPTS) {
+    return { outcome: "contended", attempts: MAX_RESET_ATTEMPTS };
+  }
+  return undefined;
+}
+
 /** Reset through the pointer store only, retrying CAS if a concurrent writer wins a race. */
 export async function resetToGenesis(
   store: PointerStore,
@@ -95,8 +125,27 @@ export async function resetToGenesis(
 ): Promise<ResetResult> {
   for (let attempt = 1; attempt <= MAX_RESET_ATTEMPTS; attempt += 1) {
     const from = await store.readPointer();
-    if (await store.setPointer(pin.sha, from)) {
-      return { outcome: "reset", from, to: pin.sha };
+    const result = resetAttempt(attempt, from, await store.setPointer(pin.sha, from), pin.sha);
+    if (result !== undefined) {
+      return result;
+    }
+  }
+  return { outcome: "contended", attempts: MAX_RESET_ATTEMPTS };
+}
+
+/**
+ * Synchronous reset for a caller that needs pointer and side-row writes in one transaction.
+ * The caller owns the transaction; the same bounded CAS semantics apply inside it.
+ */
+export function resetToGenesisSync(
+  store: SynchronousPointerStore,
+  pin: GenesisPin,
+): ResetResult {
+  for (let attempt = 1; attempt <= MAX_RESET_ATTEMPTS; attempt += 1) {
+    const from = store.readPointer();
+    const result = resetAttempt(attempt, from, store.setPointer(pin.sha, from), pin.sha);
+    if (result !== undefined) {
+      return result;
     }
   }
   return { outcome: "contended", attempts: MAX_RESET_ATTEMPTS };
