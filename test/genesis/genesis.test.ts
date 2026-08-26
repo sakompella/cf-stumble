@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { seedGenesis } from "../../src/generation/genesis.js";
+import {
+  isGenesis,
+  isGenesisGeneration,
+  isGenesisSha,
+  makeGenesisPin,
+  seedGenesis,
+} from "../../src/generation/genesis.js";
 import { GENESIS_NUMBER } from "../../src/generation/types.js";
+import { parseSha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
 
@@ -46,5 +53,19 @@ describe("seedGenesis", () => {
     expect(second.sha).toBe(first.sha);
     expect(await store.listObjects()).toHaveLength(objectsAfterFirstSeed.length);
     expect(await store.listObjects()).toEqual(objectsAfterFirstSeed);
+  });
+});
+
+describe("genesis identification", () => {
+  it("identifies generation 0 and its pinned sha", async () => {
+    const store = new MemoryStore();
+    const genesis = await seedGenesis(store, options);
+    const pin = makeGenesisPin(genesis);
+
+    expect(isGenesisGeneration(genesis)).toBe(true);
+    expect(isGenesis(genesis)).toBe(true);
+    expect(isGenesisSha(genesis.sha, pin)).toBe(true);
+    expect(isGenesis(genesis.sha, pin)).toBe(true);
+    expect(isGenesisSha(parseSha("ffffffffffffffffffffffffffffffffffffffff"), pin)).toBe(false);
   });
 });
