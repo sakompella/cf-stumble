@@ -1,0 +1,8 @@
+time	slice	decision	reason	evidence	result
+10:21	S0	Hand-write git codec, drop @cloudflare/computer git client	writeTree/writeCommit bundled but never exported; commit() needs a working tree	unpacked tarball /tmp/cloudflare-computer-0.2.1	adopted as D1
+10:21	S0	Real facet tests, not stubs	facets+worker loader run locally in workerd with no paid account	developers.cloudflare.com/dynamic-workers	adopted as D2
+10:21	S0	Replay rescoped to executor-compatibility gate	replaying old-prompt tapes passes prompt-only candidates vacuously	sol review	adopted as D14, rewrote S6/S7
+10:21	S0	Promotion consumes an attestation	CAS stops double-promote but not stale validation evidence (TOCTOU)	sol review	adopted as D16b
+10:21	S0	Ratchet needs mandatory canaries	empty or all-failing corpus makes ratchet vacuously permit everything	sol review	adopted as D16a
+10:21	S0	GC deferred	10GB/DO means no pressure; bad root discovery destroys rollback	sol review + DO limits	D13 rewritten, slice cut
+10:21	S0	Facet isolation moved first	load-bearing claim; failing late invalidates everything above it	sol review	adopted as D2b, new slice S0.5
