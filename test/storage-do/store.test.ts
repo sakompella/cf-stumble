@@ -2,7 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { describeStoreConformance } from "../../src/storage/conformance.js";
 import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import type { SweepableStore } from "../../src/storage/types.js";
@@ -66,3 +66,17 @@ afterEach(async () => {
 });
 
 describeStoreConformance("DurableObjectSqliteStore", makeStore);
+
+describe("DurableObjectSqliteStore chunking", () => {
+  it("round-trips an object larger than the single-row limit", async () => {
+    const store = await makeStore();
+    const input = new Uint8Array(4 * 1024 * 1024);
+    for (let index = 0; index < input.length; index += 1) {
+      input[index] = index % 251;
+    }
+
+    const address = await store.writeObject(input);
+
+    expect(await store.readObject(address)).toEqual(input);
+  });
+});
