@@ -41,9 +41,7 @@ export class DurableObjectSqliteStore implements SweepableStore {
       this.sql.exec(
         `CREATE TABLE IF NOT EXISTS ${POINTER_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), sha TEXT)`,
       );
-      this.sql.exec(
-        `INSERT OR IGNORE INTO ${POINTER_TABLE} (id, sha) VALUES (1, NULL)`,
-      );
+      this.sql.exec(`INSERT OR IGNORE INTO ${POINTER_TABLE} (id, sha) VALUES (1, NULL)`);
     });
   }
 
@@ -79,10 +77,7 @@ export class DurableObjectSqliteStore implements SweepableStore {
   setPointer(next: Sha, expected: Sha | undefined): Promise<boolean> {
     const result =
       expected === undefined
-        ? this.sql.exec(
-            `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`,
-            next,
-          )
+        ? this.sql.exec(`UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`, next)
         : this.sql.exec(
             `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha = ?`,
             next,
@@ -92,9 +87,7 @@ export class DurableObjectSqliteStore implements SweepableStore {
   }
 
   listObjects(): Promise<readonly Sha[]> {
-    const rows = this.sql
-      .exec<ShaRow>(`SELECT sha FROM ${OBJECTS_TABLE} ORDER BY sha`)
-      .toArray();
+    const rows = this.sql.exec<ShaRow>(`SELECT sha FROM ${OBJECTS_TABLE} ORDER BY sha`).toArray();
     return Promise.resolve(rows.map((row) => parseSha(row.sha)));
   }
 
