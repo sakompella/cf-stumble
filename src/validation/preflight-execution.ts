@@ -1,4 +1,4 @@
-import { AgentExecutor, type AgentDefinition, type TurnResult } from "../agent/runtime/index.js";
+import { AgentExecutor, type AgentDefinition } from "../agent/runtime/index.js";
 import type { PreflightOptions, PreflightProbe, PreflightCheck } from "./preflight.js";
 import { defaultResponseSource, defaultWorkspace } from "./preflight-probes.js";
 import { failedTurn, verifyProbe } from "./preflight-results.js";
@@ -16,35 +16,39 @@ export async function runProbe(
   nowMs: number,
 ): Promise<PreflightCheck> {
   try {
-    const workspace = await (options.workspaceFactory ?? defaultWorkspace)(probe, definition);
-    const source = await (options.responseSourceFactory ?? defaultResponseSource)(
-      probe,
-      definition,
-    );
-    const turn = await withTimeout(
-      new AgentExecutor(definition, options.executorOptions).executeTurn(
-        `preflight ${probe.capability}`,
-        source,
-        workspace,
-        {
-          name: `preflight-${probe.capability}`,
-          seed: 0,
-          nowMs,
-        },
-      ),
-      timeoutMs,
-    );
-    if (turn === timeoutMarker) {
-      return inconclusive(probe.capability, `executor exceeded ${timeoutMs}ms`);
+    const result = await withTimeout(executeProbe(definition, probe, options, nowMs), timeoutMs);
+    if (result === timeoutMarker) {
+      return inconclusive(probe.capability, `probe exceeded ${timeoutMs}ms`);
     }
-    if (turn.status === "failed") {
-      return failedTurn(probe.capability, turn.failure);
-    }
-    return await verifyProbe(probe, definition, turn, workspace);
+    return result;
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
     return inconclusive(probe.capability, `harness error: ${detail}`);
   }
+}
+
+async function executeProbe(
+  definition: AgentDefinition,
+  probe: PreflightProbe,
+  options: PreflightOptions,
+  nowMs: number,
+): Promise<PreflightCheck> {
+  const workspace = await (options.workspaceFactory ?? defaultWorkspace)(probe, definition);
+  const source = await (options.responseSourceFactory ?? defaultResponseSource)(probe, definition);
+  const turn = await new AgentExecutor(definition, options.executorOptions).executeTurn(
+    `preflight ${probe.capability}`,
+    source,
+    workspace,
+    {
+      name: `preflight-${probe.capability}`,
+      seed: 0,
+      nowMs,
+    },
+  );
+  if (turn.status === "failed") {
+    return failedTurn(probe.capability, turn.failure);
+  }
+  return verifyProbe(probe, definition, turn, workspace);
 }
 
 function inconclusive(capability: ProbeCapability, detail: string): PreflightCheck {
@@ -64,5 +68,3 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | Tim
     }
   });
 }
-
-export type { TurnResult };
