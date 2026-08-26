@@ -51,7 +51,7 @@ export default defineConfig({
     // 4 violations on adoption
     "anti-slop/no-unknown-returns": "off",
     // 2 violations on adoption
-    "anti-slop/require-safety-comment-for-type-assertion": "off",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
     // 1 violations on adoption
     "anti-slop/no-object-parameters": "error",
     // 1 violations on adoption
