@@ -282,7 +282,7 @@ export function parseReplaySession(value: unknown): ReplaySession {
 export function parseReplaySessionJson(json: string): ReplaySession {
   let value: unknown;
   try {
-    value = JSON.parse(json) as unknown;
+    value = JSON.parse(json);
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new ReplaySchemaError("$", `invalid JSON: ${detail}`);
