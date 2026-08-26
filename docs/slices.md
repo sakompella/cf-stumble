@@ -191,10 +191,10 @@ back, reset. Owns `src/supervisor/`.
 
 ---
 
-## S11 — Agent primitives · depends: S6, S0.5 · IN PROGRESS
+## S11 — Agent primitives · depends: S6, S0.5 · DONE
 
 The fixed action space: `read`, `write`, `edit`, `bash`, and nothing else ever. What
-accumulates across generations is skills, prompts, and policies. Owns `src/agent/tools/`.
+accumulates across generations is skills, prompts, and policies. Owns `src/tools/` (Node-side program, environment-agnostic over a `Workspace` interface).
 
 Build only what the vertical path in S8 needs; resist widening this.
 
