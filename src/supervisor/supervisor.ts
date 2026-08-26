@@ -96,6 +96,11 @@ type ValidationRow = {
   readonly created_at: number;
   readonly case_results_json: string;
 };
+type QuarantineRow = {
+  readonly sha: string;
+  readonly reason: string;
+  readonly created_at: number;
+};
 
 type GenerationSummary = {
   readonly sha: Sha;
@@ -132,6 +137,7 @@ const META_TABLE = "cf_stumble_supervisor_meta";
 const CONTEXT_TABLE = "cf_stumble_context";
 const CORPUS_TABLE = "cf_stumble_corpus";
 const VALIDATION_TABLE = "cf_stumble_validation_results";
+const QUARANTINE_TABLE = "cf_stumble_quarantine";
 const GENESIS_META_KEY = "genesis_sha";
 const CORPUS_VERSION_META_KEY = "corpus_version";
 const GATE_VERSION_META_KEY = "gate_version";
@@ -230,6 +236,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         ? this.writeValidationResult(request)
         : this.readValidationResults(new URL(request.url));
     }
+    if (pathname === "/quarantine") {
+      return request.method === "POST" ? this.quarantine(request) : this.readQuarantine();
+    }
     if (pathname === "/turn") {
       return this.turn(request);
     }
@@ -269,6 +278,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
     sql.exec(
       `CREATE TABLE IF NOT EXISTS ${VALIDATION_TABLE} (candidate_sha TEXT PRIMARY KEY, validated_against TEXT, corpus_version TEXT NOT NULL, gate_version TEXT NOT NULL, verdict TEXT NOT NULL, created_at INTEGER NOT NULL, case_results_json TEXT NOT NULL)`,
+    );
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS ${QUARANTINE_TABLE} (sha TEXT PRIMARY KEY, reason TEXT NOT NULL, created_at INTEGER NOT NULL)`,
     );
 
     if (this.readState("candidate") === undefined) {
@@ -421,6 +433,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       const body = await readRequestRecord(request);
       const candidate = parseShaField(body.candidate, "candidate");
+      if (this.isQuarantined(candidate)) {
+        throw new SafetyViolationError("quarantined", `generation ${candidate} is quarantined`);
+      }
       const candidateGeneration = await this.readCandidateGeneration(candidate);
       const validation = await this.validateCandidate(candidate);
       const result = this.promoteTransaction(candidate, validation, candidateGeneration);
@@ -474,6 +489,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   ): PromotionResult {
     let result: PromotionResult | undefined;
     this.ctx.storage.transactionSync(() => {
+      if (this.isQuarantined(candidate)) {
+        throw new SafetyViolationError("quarantined", `generation ${candidate} is quarantined`);
+      }
       const liveNow = this.readPointerSql();
       const registeredGeneration = this.readGenerationRow(candidate);
       const corpusVersion = this.readMetaOrThrow(CORPUS_VERSION_META_KEY);
@@ -547,6 +565,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.ctx.storage.transactionSync(() => {
       if (this.readGenerationRow(target) === undefined) {
         throw new MissingResourceError(`rollback target generation ${target} does not exist`);
+      }
+      if (!this.wasPreviouslyLive(target)) {
+        throw new SafetyViolationError(
+          "not-live",
+          `generation ${target} was never recorded as live`,
+        );
+      }
+      if (this.isQuarantined(target)) {
+        throw new SafetyViolationError("quarantined", `generation ${target} is quarantined`);
       }
       const actual = this.readPointerSql();
       const compareWith = expected ?? actual;
@@ -890,6 +917,50 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
+  private async quarantine(request: Request): Promise<Response> {
+    try {
+      const body = await readRequestRecord(request);
+      const target = parseShaField(body.target ?? body.candidate, "target");
+      const reason =
+        body.reason === undefined
+          ? "marked bad by supervisor"
+          : readNonEmptyString(body.reason, "reason");
+      if (this.readGenerationRow(target) === undefined) {
+        throw new MissingResourceError(`generation ${target} does not exist`);
+      }
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          `INSERT OR REPLACE INTO ${QUARANTINE_TABLE} (sha, reason, created_at) VALUES (?, ?, ?)`,
+          target,
+          reason,
+          Date.now(),
+        );
+      });
+      return Response.json({ quarantined: target, reason }, { status: 201 });
+    } catch (error: unknown) {
+      return requestErrorResponse(error);
+    }
+  }
+
+  private readQuarantine(): Response {
+    try {
+      const rows = this.ctx.storage.sql
+        .exec<QuarantineRow>(
+          `SELECT sha, reason, created_at FROM ${QUARANTINE_TABLE} ORDER BY created_at, sha`,
+        )
+        .toArray();
+      return Response.json({
+        quarantined: rows.map((row) => ({
+          sha: parseSha(row.sha),
+          reason: row.reason,
+          createdAt: row.created_at,
+        })),
+      });
+    } catch (error: unknown) {
+      return requestErrorResponse(error);
+    }
+  }
+
   private async turn(request: Request): Promise<Response> {
     try {
       const pinned = this.readPointerSql();
@@ -1041,6 +1112,27 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       throw new Error(`generation ${sha} was not registered`);
     }
     return row;
+  }
+
+  private isQuarantined(sha: Sha): boolean {
+    const rows = this.ctx.storage.sql
+      .exec<{ sha: string }>(`SELECT sha FROM ${QUARANTINE_TABLE} WHERE sha = ?`, sha)
+      .toArray();
+    return rows.length === 1;
+  }
+
+  private wasPreviouslyLive(sha: Sha): boolean {
+    const rows = this.ctx.storage.sql
+      .exec<{ generation_sha: string }>(
+        `SELECT generation_sha FROM ${HISTORY_TABLE} WHERE generation_sha = ? AND operation IN (?, ?, ?, ?) LIMIT 1`,
+        sha,
+        "seed",
+        "promote",
+        "rollback",
+        "reset",
+      )
+      .toArray();
+    return rows.length === 1;
   }
 
   private insertGeneration(generation: Generation): void {
@@ -1222,7 +1314,8 @@ function isPrivilegedRoute(pathname: string, method: string): boolean {
     pathname === "/generations" ||
     pathname === "/context" ||
     pathname === "/corpus" ||
-    pathname === "/validation-results"
+    pathname === "/validation-results" ||
+    pathname === "/quarantine"
   ) {
     return method === "POST";
   }
@@ -1611,6 +1704,18 @@ class MissingResourceError extends Error {
   }
 }
 
+type SafetyViolationKind = "not-live" | "quarantined";
+
+class SafetyViolationError extends Error {
+  readonly kind: SafetyViolationKind;
+
+  constructor(kind: SafetyViolationKind, message: string) {
+    super(message);
+    this.name = "SafetyViolationError";
+    this.kind = kind;
+  }
+}
+
 function requestErrorResponse(error: unknown): Response {
   if (error instanceof InvalidRequestError) {
     return Response.json(
@@ -1620,6 +1725,9 @@ function requestErrorResponse(error: unknown): Response {
   }
   if (error instanceof MissingResourceError) {
     return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 404 });
+  }
+  if (error instanceof SafetyViolationError) {
+    return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 422 });
   }
   return Response.json(
     { error: { kind: "internal", message: errorMessage(error) } },

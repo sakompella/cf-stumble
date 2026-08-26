@@ -168,6 +168,7 @@ test("rejects every privileged mutation without the exact credential and preserv
     ["/promote", { method: "POST", body: JSON.stringify({ candidate: "0".repeat(40) }) }],
     ["/rollback", { method: "POST", body: JSON.stringify({ target: "0".repeat(40) }) }],
     ["/reset", { method: "POST" }],
+    ["/quarantine", { method: "POST", body: JSON.stringify({ target: "0".repeat(40) }) }],
     [
       "/generations",
       {
@@ -346,6 +347,54 @@ test("promotion rolls back every write when generation history fails", async () 
   expect(results["results"]).toEqual([]);
   const history = readRecord(await readJson(await supervisorRequest("/history")));
   expect(history["history"]).not.toMatchObject([{ operation: "promote", generation: candidate }]);
+});
+
+test("rejects rollback to a registered generation that was never live", async () => {
+  const initial = readRecord(await readJson(await supervisorRequest("/live")));
+  const genesis = readStringField(readRecord(initial["generation"]), "sha");
+  const created = readRecord(await readJson(await createGeneration()));
+  const candidate = readStringField(readRecord(created["generation"]), "sha");
+
+  const rollback = await supervisorRequest("/rollback", {
+    method: "POST",
+    body: JSON.stringify({ target: candidate, expected: genesis }),
+  });
+
+  expect(rollback.status).toBe(422);
+  expect(await readJson(rollback)).toMatchObject({ error: { kind: "not-live" } });
+  const live = readRecord(await readJson(await supervisorRequest("/live")));
+  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
+});
+
+test("a quarantined generation cannot be promoted or rolled back to", async () => {
+  const { genesis, candidate } = await promoteCreatedGeneration();
+  const quarantine = await supervisorRequest("/quarantine", {
+    method: "POST",
+    body: JSON.stringify({ target: candidate, reason: "failed operator review" }),
+  });
+  expect(quarantine.status).toBe(201);
+
+  const leave = await supervisorRequest("/rollback", {
+    method: "POST",
+    body: JSON.stringify({ target: genesis, expected: candidate }),
+  });
+  expect(leave.status).toBe(200);
+
+  const promotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({ candidate }),
+  });
+  expect(promotion.status).toBe(422);
+  expect(await readJson(promotion)).toMatchObject({ error: { kind: "quarantined" } });
+
+  const rollback = await supervisorRequest("/rollback", {
+    method: "POST",
+    body: JSON.stringify({ target: candidate, expected: genesis }),
+  });
+  expect(rollback.status).toBe(422);
+  expect(await readJson(rollback)).toMatchObject({ error: { kind: "quarantined" } });
+  const live = readRecord(await readJson(await supervisorRequest("/live")));
+  expect(readStringField(readRecord(live["generation"]), "sha")).toBe(genesis);
 });
 
 test("keeps context and corpus when rolling back", async () => {
