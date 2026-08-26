@@ -1,4 +1,5 @@
 export { decodeObject, encodeObject } from "./codec.js";
+export { hashObject } from "./hash.js";
 export type {
   Commit,
   FileMode,
