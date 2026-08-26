@@ -11,18 +11,43 @@ than silently worked around.
 
 ### D1 — Write our own git object codec; do not build generations on `@cloudflare/computer`'s git client
 
-The brief said to build on "its lazily-bundled isomorphic-git glue". The published package
-(`@cloudflare/computer@0.2.1`, marked PREVIEW ONLY, `publishConfig.tag: unreleased`) bundles
-isomorphic-git 1.40.0 and exposes `hashObject`, `catFile`, `lsTree`, `updateRef`, `commit`,
-`log`, and friends — but **`writeTree` and `writeCommit` are bundled and never exported**, and
-its `commit()` goes through the index/working-tree workflow. Writing a commit that points at a
-tree we constructed in memory is the single most common operation in this system, and the
-public API cannot do it without a working tree, which the design forbids outright.
+**Corrected after review — the original justification here was wrong and is retracted.**
 
-So: a hand-written codec for the three object types we need. It is roughly 150 lines, has no
-dependency surface, and — because we keep git's exact wire format — every encode can be checked
-against the real `git` binary in tests. That verification property is worth more than the code
-we save by taking a dependency.
+What this decision first claimed was that a commit pointing at an in-memory tree cannot be
+written without a working tree. That is false, and worth stating plainly rather than quietly
+editing. isomorphic-git publicly exports `writeTree({ fs, gitdir, tree })` and
+`writeCommit({ fs, gitdir, commit })`, both of which take the object directly with no index and
+no `add` step, and both work fine against memfs or any `FsClient` shim. `commit()` on memfs
+works too. Building the entire DAG in memory with isomorphic-git was always available.
+
+The narrow finding that was actually true: **`@cloudflare/computer@0.2.1`'s wrapper** (PREVIEW
+ONLY, `publishConfig.tag: unreleased`) bundles isomorphic-git 1.40.0 but re-exports only
+`hashObject`, `catFile`, `lsTree`, `updateRef`, `commit`, `log` and friends — not `writeTree` or
+`writeCommit`. So *that wrapper* is unusable for our purposes. Taking a direct dependency on
+isomorphic-git was never blocked.
+
+So the real question was: hand-write a codec, or depend on isomorphic-git directly and give it
+a filesystem?
+
+**The actual reason for hand-writing it is the storage surface.** `FsClient` is about ten
+methods (`readFile`, `writeFile`, `readdir`, `mkdir`, `stat`, `lstat`, `unlink`, `rmdir`,
+`readlink`, `symlink`), and isomorphic-git then lays out zlib-compressed loose objects under
+`objects/ab/cdef…` inside whatever backs it. D3's whole premise is that the store is a dumb
+content-addressed map of four functions, because Cloudflare Artifacts replaces it later. Taking
+the dependency means emulating a filesystem over Durable Object SQLite so that git can emulate a
+content-addressed store on top of it — when the thing underneath already is one.
+
+So: a hand-written codec for the three object types we need. It is 614 lines (the original
+estimate of 150 was optimistic by a factor of four, which is itself an argument the other way),
+has no dependency surface, keeps the four-function store honest, and — because we keep git's
+exact wire format — every encode is checked against the real `git` binary in tests.
+
+**The case against, which is real.** 614 lines of hand-rolled encoding is meaningful bug
+surface, mitigated but not eliminated by the oracle. isomorphic-git is tested across far more
+edge cases than ours is. And our codec deliberately rejects `gpgsig` and `encoding` headers, so
+it cannot read foreign commits; if packfiles, fetch, or push are ever wanted, the dependency
+comes back anyway. This decision is worth revisiting if the storage layer ever stops being the
+thing we are protecting.
 
 `@cloudflare/computer` stays in the design for what it is actually good at: the workspace,
 filesystem, and shell that the agent's four primitives sit on. It is not on the path for

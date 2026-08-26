@@ -47,10 +47,14 @@ Validation results are a SQLite table keyed by commit sha rather than git notes,
 questions we ask of them ("every rejected candidate whose failure touched the retry policy")
 are `WHERE` clauses, not history walks.
 
-We write our own git object codec rather than using isomorphic-git — the published
-`@cloudflare/computer` bundles it but never exports `writeTree`/`writeCommit`, and writing a
-commit that points at an in-memory tree is the most common operation in this system. Keeping
-git's exact byte format means the real `git` binary works as an independent test oracle.
+We write our own git object codec rather than depending on isomorphic-git. Not because
+isomorphic-git can't do this — it exports `writeTree` and `writeCommit`, which take objects
+directly and run fine on memfs. The reason is the storage surface: isomorphic-git wants a
+ten-method `FsClient` and writes zlib-compressed loose objects into it, which would mean
+emulating a filesystem over Durable Object SQLite so git can emulate a content-addressed store
+on top of something that already is one. The codec is 614 lines, keeps the four-function store
+honest, and because it keeps git's exact byte format the real `git` binary works as an
+independent test oracle. See D1 for the case against.
 
 ## Documentation
 
