@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { JsonObject } from "../../src/json.js";
 import { buildGeneration } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
 import {
@@ -74,7 +75,7 @@ test("fails with the missing required module named", async () => {
   );
 });
 
-function toolResponse(name: string, args: Readonly<Record<string, unknown>>): string {
+function toolResponse(name: string, args: JsonObject): string {
   return JSON.stringify({ type: "tool_call", name, arguments: args });
 }
 

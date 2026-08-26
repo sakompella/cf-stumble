@@ -1,3 +1,5 @@
+import { isJsonObject, isJsonValue } from "../../json.js";
+import type { JsonObject, JsonValue } from "../../json.js";
 import type { RecordedModelResponse } from "../../replay/schema.js";
 
 export type ParsedModelResponse =
@@ -6,7 +8,7 @@ export type ParsedModelResponse =
 
 export type ParsedToolCall = {
   readonly name: string;
-  readonly arguments: unknown;
+  readonly arguments: JsonValue;
 };
 
 export type ModelResponseParseResult =
@@ -95,7 +97,7 @@ function parseToolCall(value: unknown, path: string):
 }
 
 function parseDirectToolCall(
-  value: Record<string, unknown>,
+  value: JsonObject,
   path: string,
   nameKey: string,
 ): ModelResponseParseResult {
@@ -107,7 +109,7 @@ function parseDirectToolCall(
     const call = parseNamedArguments(name, value.arguments, path);
     return call.ok ? { ok: true, response: { kind: "tool-calls", calls: [call.call] } } : call;
   }
-  const argumentsObject: Record<string, unknown> = {};
+  const argumentsObject: { [key: string]: JsonValue } = {};
   for (const [key, argument] of Object.entries(value)) {
     if (key !== nameKey && key !== "type") {
       argumentsObject[key] = argument;
@@ -132,11 +134,14 @@ function parseNamedArguments(
       };
     }
   }
+  if (!isJsonValue(args)) {
+    return { ok: false, detail: `${path} field "arguments" is not JSON-compatible` };
+  }
   return { ok: true, call: { name, arguments: args } };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isRecord(value: unknown): value is JsonObject {
+  return isJsonObject(value);
 }
 
 function errorDetail(error: unknown): string {

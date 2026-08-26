@@ -45,7 +45,7 @@ export default defineConfig({
     // 40 violations on adoption
     "anti-slop/no-runtime-typeof": "off",
     // 22 violations on adoption
-    "anti-slop/no-unsafe-dictionary-type": "off",
+    "anti-slop/no-unsafe-dictionary-type": "error",
     // 8 violations on adoption
     "anti-slop/no-known-value-widening": "error",
     // 4 violations on adoption

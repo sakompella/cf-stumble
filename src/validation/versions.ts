@@ -1,3 +1,5 @@
+import { isJsonObject } from "../json.js";
+import type { JsonObject } from "../json.js";
 import type { ValidationCase } from "./results.js";
 
 const GATE_POLICY = {
@@ -13,10 +15,8 @@ const GATE_POLICY = {
   noPassingBaseline: "a baseline with no passing case is inconclusive",
 } as const;
 
-type RecordValue = Record<string, unknown>;
-
-function isRecord(value: unknown): value is RecordValue {
-  return !Array.isArray(value);
+function isRecord(value: unknown): value is JsonObject {
+  return isJsonObject(value);
 }
 
 function jsonString(value: string): string {
