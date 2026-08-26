@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "name": "four-primitives",
+  "seed": 12345,
+  "clock": {
+    "nowMs": 1700000000000
+  },
+  "initialWorkspace": [
+    {
+      "path": "README.md",
+      "content": "hello\n"
+    },
+    {
+      "path": "src/app.ts",
+      "content": "const answer = 1;\n"
+    }
+  ],
+  "turns": [
+    {
+      "input": "exercise every primitive",
+      "modelResponses": [
+        {
+          "requestId": "executor",
+          "content": "run-four-primitives"
+        }
+      ],
+      "capturedToolResults": [
+        {
+          "call": {
+            "kind": "read",
+            "path": "README.md"
+          },
+          "result": {
+            "kind": "read",
+            "content": "hello\n"
+          }
+        },
+        {
+          "call": {
+            "kind": "write",
+            "path": "notes.txt",
+            "content": "created\n"
+          },
+          "result": {
+            "kind": "write",
+            "bytesWritten": 8
+          }
+        },
+        {
+          "call": {
+            "kind": "edit",
+            "path": "src/app.ts",
+            "oldText": "1",
+            "newText": "2"
+          },
+          "result": {
+            "kind": "edit",
+            "replacements": 1
+          }
+        },
+        {
+          "call": {
+            "kind": "bash",
+            "command": "printf 'ok\\n'"
+          },
+          "result": {
+            "kind": "bash",
+            "exitCode": 0,
+            "stdout": "ok\n",
+            "stderr": ""
+          },
+          "workspaceAfter": [
+            {
+              "path": "README.md",
+              "content": "hello\n"
+            },
+            {
+              "path": "notes.txt",
+              "content": "created\n"
+            },
+            {
+              "path": "src/app.ts",
+              "content": "const answer = 2;\n"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "expectedEffects": {
+    "trace": [
+      {
+        "kind": "read",
+        "path": "README.md"
+      },
+      {
+        "kind": "write",
+        "path": "notes.txt",
+        "content": "created\n"
+      },
+      {
+        "kind": "edit",
+        "path": "src/app.ts",
+        "oldText": "1",
+        "newText": "2"
+      },
+      {
+        "kind": "bash",
+        "command": "printf 'ok\\n'"
+      }
+    ],
+    "finalWorkspace": [
+      {
+        "path": "README.md",
+        "content": "hello\n"
+      },
+      {
+        "path": "notes.txt",
+        "content": "created\n"
+      },
+      {
+        "path": "src/app.ts",
+        "content": "const answer = 2;\n"
+      }
+    ]
+  }
+}
