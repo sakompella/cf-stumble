@@ -41,9 +41,9 @@ export default defineConfig({
     // Violated on adoption. Ratcheted to "error" as each is cleared, so the gate never goes
     // red and no violation is silently tolerated. Counts are from the adoption run.
     // 58 violations on adoption
-    "anti-slop/no-unknown-parameters": "off",
+    "anti-slop/no-unknown-parameters": "error",
     // 40 violations on adoption
-    "anti-slop/no-runtime-typeof": "off",
+    "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
     // 22 violations on adoption
     "anti-slop/no-unsafe-dictionary-type": "off",
     // 8 violations on adoption
