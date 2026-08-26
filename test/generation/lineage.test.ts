@@ -37,6 +37,12 @@ function build(
   });
 }
 
+function noPointer(): Promise<Sha | undefined> {
+  return new Promise<Sha | undefined>((resolve) => {
+    resolve();
+  });
+}
+
 it("walkLineage returns the starting commit followed by its ancestors", async () => {
   const store = new MemoryStore();
   const root = await build(store, undefined, author.timestamp, "root");
@@ -97,7 +103,7 @@ it("walkLineage fails cleanly when commit ancestry contains a cycle", async () =
             : undefined,
       ),
     writeObject: () => Promise.reject(new Error("not used")),
-    readPointer: () => Promise.resolve<Sha | undefined>(),
+    readPointer: noPointer,
     setPointer: () => Promise.resolve(false),
   };
 

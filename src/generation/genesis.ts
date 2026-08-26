@@ -4,8 +4,7 @@ import { walkLineage } from "./lineage.js";
 import { isSha } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type { PointerStore, Store } from "../storage/types.js";
-import { GENESIS_NUMBER } from "./types.js";
-import type { Generation } from "./types.js";
+import type { CommitSnapshot } from "./types.js";
 
 export type GenesisOptions = Omit<BuildGenerationOptions, "parent"> & {
   readonly parent?: undefined;
@@ -17,11 +16,10 @@ export type GenesisSeedOptions = {
   readonly claimPointer?: boolean;
 };
 
-/** Durable root identity passed to reset and future reachability-based garbage collection. */
+/** Durable root commit identity passed to reset and reachability checks. */
 export type GenesisPin = {
   readonly kind: "genesis";
   readonly sha: Sha;
-  readonly number: typeof GENESIS_NUMBER;
 };
 
 export type ResetResult =
@@ -36,12 +34,12 @@ export type ResetResult =
  */
 export const MAX_RESET_ATTEMPTS = 16;
 
-/** Build generation 0 and claim the live pointer when it has not been initialized. */
+/** Build the pinned genesis commit and claim the live pointer when it is uninitialized. */
 export async function seedGenesis(
   store: Store,
   options: GenesisOptions,
   seedOptions: GenesisSeedOptions = {},
-): Promise<Generation> {
+): Promise<CommitSnapshot> {
   const genesis = await buildGeneration(store, { ...options, parent: undefined });
   if (seedOptions.claimPointer !== false) {
     const current = await store.readPointer();
@@ -52,43 +50,34 @@ export async function seedGenesis(
   return genesis;
 }
 
-/** Return whether a generation record describes the pinned generation 0 shape. */
-export function isGenesisGeneration(
-  generation: Pick<Generation, "number" | "parent">,
-): boolean {
-  return generation.number === GENESIS_NUMBER && generation.parent === undefined;
+/** Return whether a commit snapshot is a root with no parent. */
+export function isGenesisCommit(commit: Pick<CommitSnapshot, "parent">): boolean {
+  return commit.parent === undefined;
 }
 
-/** Turn a validated generation-0 record into explicit root data for recovery and GC. */
-export function makeGenesisPin(generation: Generation): GenesisPin {
-  if (!isGenesisGeneration(generation)) {
-    throw new TypeError("only generation 0 without a parent can be pinned as genesis");
+/** Turn a root commit snapshot into explicit identity for recovery and reachability checks. */
+export function makeGenesisPin(commit: CommitSnapshot): GenesisPin {
+  if (!isGenesisCommit(commit)) {
+    throw new TypeError("only a root commit without a parent can be pinned as genesis");
   }
-  return { kind: "genesis", sha: generation.sha, number: GENESIS_NUMBER };
+  return { kind: "genesis", sha: commit.sha };
 }
 
 /** Identify a sha by comparing it with the explicit genesis root data. */
 export function isGenesisSha(sha: Sha, pin: GenesisPin): boolean {
-  return pin.kind === "genesis" && pin.number === GENESIS_NUMBER && pin.sha === sha;
+  return pin.kind === "genesis" && pin.sha === sha;
 }
 
-export function isGenesis(
-  generation: Pick<Generation, "number" | "parent">,
-): boolean;
+export function isGenesis(commit: Pick<CommitSnapshot, "parent">): boolean;
 export function isGenesis(sha: Sha, pin: GenesisPin): boolean;
-export function isGenesis(
-  value: Pick<Generation, "number" | "parent"> | Sha,
-  pin?: GenesisPin,
-): boolean {
+export function isGenesis(value: Pick<CommitSnapshot, "parent"> | Sha, pin?: GenesisPin): boolean {
   if (isShaValue(value)) {
     return pin !== undefined && isGenesisSha(value, pin);
   }
-  return isGenesisGeneration(value);
+  return isGenesisCommit(value);
 }
 
-function isShaValue(
-  value: Pick<Generation, "number" | "parent"> | Sha,
-): value is Sha {
+function isShaValue(value: Pick<CommitSnapshot, "parent"> | Sha): value is Sha {
   return typeof value === "string" && isSha(value);
 }
 
@@ -100,7 +89,7 @@ export async function assertGenesisReachable(
   const lineage = await walkLineage(store, start);
   const root = lineage.at(-1);
   if (root === undefined || !isGenesisSha(root.sha, pin)) {
-    throw new Error(`generation ${start} does not reach pinned genesis ${pin.sha}`);
+    throw new Error(`commit ${start} does not reach pinned genesis ${pin.sha}`);
   }
 }
 
@@ -126,10 +115,7 @@ function resetAttempt(
 }
 
 /** Reset through the pointer store only, retrying CAS if a concurrent writer wins a race. */
-export async function resetToGenesis(
-  store: PointerStore,
-  pin: GenesisPin,
-): Promise<ResetResult> {
+export async function resetToGenesis(store: PointerStore, pin: GenesisPin): Promise<ResetResult> {
   for (let attempt = 1; attempt <= MAX_RESET_ATTEMPTS; attempt += 1) {
     const from = await store.readPointer();
     const result = resetAttempt(attempt, from, await store.setPointer(pin.sha, from), pin.sha);
@@ -144,10 +130,7 @@ export async function resetToGenesis(
  * Synchronous reset for a caller that needs pointer and side-row writes in one transaction.
  * The caller owns the transaction; the same bounded CAS semantics apply inside it.
  */
-export function resetToGenesisSync(
-  store: SynchronousPointerStore,
-  pin: GenesisPin,
-): ResetResult {
+export function resetToGenesisSync(store: SynchronousPointerStore, pin: GenesisPin): ResetResult {
   for (let attempt = 1; attempt <= MAX_RESET_ATTEMPTS; attempt += 1) {
     const from = store.readPointer();
     const result = resetAttempt(attempt, from, store.setPointer(pin.sha, from), pin.sha);
