@@ -34,7 +34,7 @@ pnpm, TypeScript 7 strict, vitest 4, oxlint type-aware with `--max-warnings=0`.
 
 ---
 
-## S0.5 — Facet isolation spike · depends: S0 · **highest priority**
+## S0.5 — Facet isolation spike · depends: S0 · DONE (all five claims hold)
 
 Prove the safety claim before building on it. Load agent code through the Worker Loader, mount
 it as a Durable Object facet, and demonstrate containment.

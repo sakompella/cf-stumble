@@ -1,5 +1,5 @@
 const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
 export function encodeUtf8(value: string, context: string): Uint8Array {
   for (let index = 0; index < value.length; index += 1) {

@@ -10,3 +10,5 @@ time	slice	decision	reason	evidence	result
 10:36	S1	Codec rejects gpgsig/encoding commit headers	fixed domain types cannot represent them; we author every commit ourselves	agent report	accepted, noted as a limit on decoding foreign commits
 10:38	S2	Conformance suite is the deliverable, not MemoryStore	S9 reruns it verbatim against DO SQLite; stops the two impls diverging	mutation test: yielding between compare and write gives 16 CAS winners, suite fails	merged
 10:38	S3/S4	Brand via type predicate, not `as` assertion	no-unsafe-type-assertion; matches parseSha idiom already in git/types.ts	oxlint	adopted repo-wide
+10:41	S0.5	All 5 facet isolation claims hold	storage separate, env empty, egress blocked, routes unreachable, reset survives load+init failure	7 tests vs real workerd	architecture de-risked, merged
+10:41	S0.5	Split tsconfig: node-side vs workers-side	@cloudflare/workers-types globally replaces Node lib types; one program cannot host both	tsc errors on crypto and TextDecoder in src/git after merge	two configs, typecheck runs both
