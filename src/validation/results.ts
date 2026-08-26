@@ -7,7 +7,17 @@ import type { ReplaySession } from "../replay/schema.js";
 export type ValidationCase = {
   readonly name: string;
   readonly session: ReplaySession;
+  /**
+   * Legacy corpus metadata. ValidationGate only treats its supervisor-owned pinned canary set
+   * as authoritative for mandatory status.
+   */
   readonly mandatoryCanary: boolean;
+};
+
+/** A canary definition held outside the mutable validation corpus. */
+export type PinnedCanary = {
+  readonly name: string;
+  readonly session: ReplaySession;
 };
 
 export type ValidationExecutor = (

@@ -1,28 +1,34 @@
-import { assertNever } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type { Attestation, Verdict } from "../generation/types.js";
 import type { EffectsDifference } from "../replay/comparison.js";
-import type {
-  ReplayInconclusiveReason,
-  ReplayOutcome,
-  ReplaySession,
-} from "../replay/index.js";
+import type { ReplaySession } from "../replay/index.js";
 import type { PointerStore } from "../storage/types.js";
 import {
-  type RecordedCaseOutcome,
+  type PinnedCanary,
   type ValidationCase,
   type ValidationCaseResult,
   type ValidationExecutor,
   type ValidationResult,
   type ValidationResultStore,
 } from "./results.js";
+import {
+  corpusContainsPinnedCanaries,
+  evaluationCases,
+  validateCorpus,
+  validateExecutorTimeout,
+  validatePinnedCanaries,
+} from "./canaries.js";
+import { executeSafely, recordOutcome } from "./execution.js";
 import { computeCorpusVersion, computeGateVersion } from "./versions.js";
 
 export type ValidationGateOptions = {
   readonly pointerStore: PointerStore;
   readonly resultStore: ValidationResultStore;
   readonly corpus: readonly ValidationCase[];
+  /** Supervisor-owned canaries; corpus metadata cannot add, remove, or alter these cases. */
+  readonly pinnedCanaries?: readonly PinnedCanary[];
   readonly execute: ValidationExecutor;
+  readonly executorTimeoutMs?: number;
   readonly now?: () => number;
 };
 
@@ -35,36 +41,40 @@ export class ValidationGate {
   private readonly pointerStore: PointerStore;
   private readonly resultStore: ValidationResultStore;
   private readonly corpus: readonly ValidationCase[];
+  private readonly pinnedCanaries: readonly PinnedCanary[];
   private readonly execute: ValidationExecutor;
+  private readonly executorTimeoutMs: number;
   private readonly now: () => number;
 
   constructor(options: ValidationGateOptions) {
     validateCorpus(options.corpus);
+    const pinnedCanaries = options.pinnedCanaries ?? [];
+    validatePinnedCanaries(pinnedCanaries);
     this.pointerStore = options.pointerStore;
     this.resultStore = options.resultStore;
     this.corpus = [...options.corpus];
+    this.pinnedCanaries = [...pinnedCanaries];
     this.execute = options.execute;
+    this.executorTimeoutMs = validateExecutorTimeout(options.executorTimeoutMs ?? 30_000);
     this.now = options.now ?? Date.now;
   }
 
   async validate(candidate: Sha): Promise<ValidationRun> {
-    const [corpusVersion, gateVersion, validatedAgainst] = await Promise.all([
+    const [corpusVersion, gateVersion, validatedAgainst, pinnedCorpusMatches] = await Promise.all([
       computeCorpusVersion(this.corpus),
       computeGateVersion(),
       this.pointerStore.readPointer(),
+      corpusContainsPinnedCanaries(this.corpus, this.pinnedCanaries),
     ]);
-    const caseResults: ValidationCaseResult[] = [];
-
-    for (const validationCase of this.corpus) {
-      const baseline = await this.execute(validatedAgainst, validationCase.session);
-      const candidateOutcome = await this.execute(candidate, validationCase.session);
-      caseResults.push({
-        name: validationCase.name,
-        mandatoryCanary: validationCase.mandatoryCanary,
-        baseline: recordOutcome(baseline),
-        candidate: recordOutcome(candidateOutcome),
-      });
-    }
+    const caseResults = pinnedCorpusMatches
+      ? await runCases(
+          this.execute,
+          candidate,
+          validatedAgainst,
+          evaluationCases(this.corpus, this.pinnedCanaries),
+          this.executorTimeoutMs,
+        )
+      : [];
 
     const result: ValidationResult = {
       candidate,
@@ -91,42 +101,35 @@ export class ValidationGate {
   }
 }
 
-function validateCorpus(corpus: readonly ValidationCase[]): void {
-  const names = new Set<string>();
-  for (const validationCase of corpus) {
-    if (validationCase.name.length === 0) {
-      throw new TypeError("validation case name must not be empty");
-    }
-    if (names.has(validationCase.name)) {
-      throw new TypeError(`duplicate validation case ${JSON.stringify(validationCase.name)}`);
-    }
-    names.add(validationCase.name);
+async function runCases(
+  execute: ValidationExecutor,
+  candidate: Sha,
+  validatedAgainst: Sha | undefined,
+  cases: readonly ValidationCase[],
+  timeoutMs: number,
+): Promise<readonly ValidationCaseResult[]> {
+  const caseResults: ValidationCaseResult[] = [];
+  for (const validationCase of cases) {
+    const baseline = await executeSafely(
+      execute,
+      validatedAgainst,
+      validationCase.session,
+      timeoutMs,
+    );
+    const candidateOutcome = await executeSafely(
+      execute,
+      candidate,
+      validationCase.session,
+      timeoutMs,
+    );
+    caseResults.push({
+      name: validationCase.name,
+      mandatoryCanary: validationCase.mandatoryCanary,
+      baseline: recordOutcome(baseline),
+      candidate: recordOutcome(candidateOutcome),
+    });
   }
-}
-
-function recordOutcome(outcome: ReplayOutcome): RecordedCaseOutcome {
-  switch (outcome.status) {
-    case "PASS":
-      return { status: "PASS" };
-    case "FAIL": {
-      const difference: EffectsDifference = outcome.difference;
-      return { status: "FAIL", difference };
-    }
-    case "INCONCLUSIVE": {
-      const inconclusive: {
-        readonly status: "INCONCLUSIVE";
-        readonly reason: ReplayInconclusiveReason;
-        readonly detail: string;
-      } = {
-        status: "INCONCLUSIVE",
-        reason: outcome.reason,
-        detail: outcome.detail,
-      };
-      return inconclusive;
-    }
-    default:
-      return assertNever(outcome, "replay outcome");
-  }
+  return caseResults;
 }
 
 function evaluateRatchet(caseResults: readonly ValidationCaseResult[]): Verdict {
@@ -157,10 +160,7 @@ function evaluateRatchet(caseResults: readonly ValidationCaseResult[]): Verdict 
     }
   }
   for (const caseResult of caseResults) {
-    if (
-      caseResult.baseline.status === "PASS" &&
-      caseResult.candidate.status === "FAIL"
-    ) {
+    if (caseResult.baseline.status === "PASS" && caseResult.candidate.status === "FAIL") {
       return "fail";
     }
   }

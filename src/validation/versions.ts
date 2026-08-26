@@ -4,8 +4,11 @@ const GATE_POLICY = {
   name: "executor-compatibility-regression-gate",
   version: 1,
   baseline: "a candidate must preserve every case that passes on the live generation",
-  mandatoryCanary: "a canary must pass on both the live generation and the candidate",
+  mandatoryCanary: "a canary must pass individually on both the live generation and the candidate",
+  pinnedCanarySet: "mandatory canaries come from supervisor-owned pinned definitions",
+  pinnedCanaryCorpus: "the corpus must contain each pinned canary without content changes",
   inconclusive: "an inconclusive case cannot satisfy a gate requirement",
+  executorFailure: "an executor throw or timeout is inconclusive",
   emptyCorpus: "an empty corpus is inconclusive",
   noPassingBaseline: "a baseline with no passing case is inconclusive",
 } as const;
@@ -50,9 +53,7 @@ function canonicalJson(value: unknown): string {
         .toSorted()
         .flatMap((key) => {
           const entry = value[key];
-          return entry === undefined
-            ? []
-            : [`${jsonString(key)}:${canonicalJson(entry)}`];
+          return entry === undefined ? [] : [`${jsonString(key)}:${canonicalJson(entry)}`];
         })
         .join(",")}}`;
     case "undefined":

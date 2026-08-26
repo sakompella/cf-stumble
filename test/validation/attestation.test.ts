@@ -41,6 +41,7 @@ test("a passing run emits an attestation bound to its observed live generation",
     },
     resultStore: new MemoryValidationResultStore(),
     corpus: [validationCase],
+    pinnedCanaries: [{ name: validationCase.name, session }],
     execute: () => Promise.resolve(passingOutcome),
     now: () => 123,
   });
@@ -63,9 +64,7 @@ test("corpus versions change when case content or canary markings change", async
   const changedSession = await computeCorpusVersion([
     { ...validationCase, session: { ...session, seed: 2 } },
   ]);
-  const changedCanary = await computeCorpusVersion([
-    { ...validationCase, mandatoryCanary: false },
-  ]);
+  const changedCanary = await computeCorpusVersion([{ ...validationCase, mandatoryCanary: false }]);
 
   expect(changedSession).not.toBe(baseline);
   expect(changedCanary).not.toBe(baseline);

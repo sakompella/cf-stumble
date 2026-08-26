@@ -4,6 +4,8 @@ import type { ReplayOutcome, ReplaySession } from "../../src/replay/index.js";
 import {
   MemoryValidationResultStore,
   ValidationGate,
+  computeCorpusVersion,
+  type PinnedCanary,
   type ValidationCase,
 } from "../../src/validation/index.js";
 
@@ -48,10 +50,14 @@ function outcome(status: ReplayOutcome["status"]): ReplayOutcome {
 
 function makeGate(
   corpus: readonly ValidationCase[],
-  execute: (
-    generation: typeof LIVE | undefined,
-    current: ReplaySession,
-  ) => Promise<ReplayOutcome>,
+  execute: (generation: typeof LIVE | undefined, current: ReplaySession) => Promise<ReplayOutcome>,
+  pinnedCanaries: readonly PinnedCanary[] = corpus
+    .filter((corpusCase) => corpusCase.mandatoryCanary)
+    .map(({ name: caseName, session: caseSession }) => ({
+      name: caseName,
+      session: caseSession,
+    })),
+  executorTimeoutMs = 30_000,
 ): ValidationGate {
   return new ValidationGate({
     pointerStore: {
@@ -60,10 +66,109 @@ function makeGate(
     },
     resultStore: new MemoryValidationResultStore(),
     corpus,
+    pinnedCanaries,
     execute,
+    executorTimeoutMs,
     now: () => 10,
   });
 }
+
+test("a candidate that removes the canary catching its own regression cannot promote", async () => {
+  const stable = validationCase("stable", false);
+  const canary = validationCase("self-protecting canary", true);
+  const gate = makeGate(
+    [stable],
+    (_generation, current) =>
+      Promise.resolve(current.name === canary.name ? outcome("FAIL") : outcome("PASS")),
+    [{ name: canary.name, session: canary.session }],
+  );
+
+  const run = await gate.validate(CANDIDATE);
+
+  expect(run.result.corpusVersion).toBe(await computeCorpusVersion([stable]));
+  expect(run.result.verdict).toBe("inconclusive");
+  expect(run.attestation).toBeUndefined();
+});
+
+test("a candidate that weakens a canary cannot promote", async () => {
+  const canary = validationCase("strict canary", true);
+  const weakened: ValidationCase = {
+    ...canary,
+    session: {
+      ...canary.session,
+      expectedEffects: { trace: [], finalWorkspace: [{ path: "extra.txt", content: "allowed" }] },
+    },
+  };
+  const gate = makeGate([weakened], () => Promise.resolve(outcome("PASS")), [
+    { name: canary.name, session: canary.session },
+  ]);
+
+  const run = await gate.validate(CANDIDATE);
+
+  expect(run.result.verdict).toBe("inconclusive");
+  expect(run.attestation).toBeUndefined();
+});
+
+test("a candidate cannot demote a pinned canary through corpus metadata", async () => {
+  const canary = validationCase("pinned canary", true);
+  const demoted: ValidationCase = { ...canary, mandatoryCanary: false };
+  const gate = makeGate([demoted], () => Promise.resolve(outcome("PASS")), [
+    { name: canary.name, session: canary.session },
+  ]);
+
+  const run = await gate.validate(CANDIDATE);
+
+  expect(run.result.verdict).toBe("inconclusive");
+  expect(run.attestation).toBeUndefined();
+});
+
+test("partial canary success does not promote because every required canary must pass individually", async () => {
+  const first = validationCase("first canary", true);
+  const second = validationCase("second canary", true);
+  const gate = makeGate([first, second], (generation, current) =>
+    Promise.resolve(
+      generation === LIVE || current.name === first.name ? outcome("PASS") : outcome("FAIL"),
+    ),
+  );
+
+  const run = await gate.validate(CANDIDATE);
+
+  expect(run.result.verdict).toBe("fail");
+  expect(run.attestation).toBeUndefined();
+});
+
+test("a throwing scorer yields INCONCLUSIVE rather than PASS", async () => {
+  const gate = makeGate([validationCase("throwing scorer", false)], () =>
+    Promise.reject(new Error("scorer crashed")),
+  );
+
+  const run = await gate.validate(CANDIDATE);
+
+  expect(run.result.verdict).toBe("inconclusive");
+  expect(run.result.caseResults[0]?.baseline).toMatchObject({
+    status: "INCONCLUSIVE",
+    reason: "agent-error",
+  });
+  expect(run.attestation).toBeUndefined();
+});
+
+test("a timing-out executor yields INCONCLUSIVE rather than PASS", async () => {
+  const gate = makeGate(
+    [validationCase("timing out executor", false)],
+    () => new Promise<ReplayOutcome>(() => {}),
+    [],
+    1,
+  );
+
+  const run = await gate.validate(CANDIDATE);
+
+  expect(run.result.verdict).toBe("inconclusive");
+  expect(run.result.caseResults[0]?.baseline).toMatchObject({
+    status: "INCONCLUSIVE",
+    reason: "timeout",
+  });
+  expect(run.attestation).toBeUndefined();
+});
 
 test("a failing mandatory canary blocks even when that canary failed on live", async () => {
   const stable = validationCase("stable", false);
@@ -113,9 +218,8 @@ test("an empty corpus is inconclusive rather than vacuously passing", async () =
 });
 
 test("an all-failing baseline is inconclusive rather than permitting promotion", async () => {
-  const gate = makeGate(
-    [validationCase("known defect", false)],
-    () => Promise.resolve(outcome("FAIL")),
+  const gate = makeGate([validationCase("known defect", false)], () =>
+    Promise.resolve(outcome("FAIL")),
   );
 
   const run = await gate.validate(CANDIDATE);
