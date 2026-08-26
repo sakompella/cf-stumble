@@ -1,3 +1,4 @@
+import { ReplayAbort, replayAbort } from "./abort.js";
 import { compareObservableEffects, type EffectsDifference } from "./comparison.js";
 import type {
   CapturedToolResult,
@@ -61,18 +62,6 @@ export type ReplayOutcome =
 export type ReplayOptions = {
   readonly timeoutMs?: number;
 };
-
-type ReplayAbort = Error & { readonly reason: ReplayInconclusiveReason };
-
-function replayAbort(reason: ReplayInconclusiveReason, detail: string): ReplayAbort {
-  const error = new Error(detail);
-  error.name = "ReplayAbort";
-  return Object.assign(error, { reason });
-}
-
-function isReplayAbort(error: unknown): error is ReplayAbort {
-  return error instanceof Error && error.name === "ReplayAbort" && "reason" in error;
-}
 
 function workspaceFromTree(tree: WorkspaceTree): Map<string, string> {
   return new Map(tree.map((file) => [file.path, file.content]));
@@ -220,8 +209,8 @@ class ReplayRuntimeImpl implements ReplayRuntime {
   }
 }
 
-function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorDetail(error: Error | string): string {
+  return error instanceof Error ? error.message : error;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -234,9 +223,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         clearTimeout(timer);
         resolve(value);
       },
-      (error: unknown) => {
+      (reason) => {
         clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
+        reject(reason instanceof Error ? reason : new Error(String(reason)));
       },
     );
   });
@@ -272,7 +261,7 @@ export async function runReplay(
     }
     return { status: "FAIL", effects, difference: comparison.difference };
   } catch (error: unknown) {
-    if (isReplayAbort(error)) {
+    if (error instanceof ReplayAbort) {
       return {
         status: "INCONCLUSIVE",
         reason: error.reason,
@@ -280,10 +269,11 @@ export async function runReplay(
         effects: runtime.currentEffects(),
       };
     }
+    const detail = error instanceof Error ? error : String(error);
     return {
       status: "INCONCLUSIVE",
       reason: "agent-error",
-      detail: `agent loop failed: ${errorDetail(error)}`,
+      detail: `agent loop failed: ${errorDetail(detail)}`,
       effects: runtime.currentEffects(),
     };
   }
