@@ -41,19 +41,34 @@ export class PointerManager {
       return { outcome: "rejected", reason: rejection };
     }
 
-    const swapped = await this.store.setPointer(candidate, liveNow);
-    if (!swapped) {
-      return {
-        outcome: "rejected",
-        reason: {
-          kind: "pointer-moved",
-          expected: liveNow,
-          actual: await this.store.readPointer(),
-        },
-      };
-    }
-    return { outcome: "promoted", from: liveNow, to: candidate };
+    return movePointer(this.store, candidate, liveNow);
   }
+
+  rollback(
+    target: Sha,
+    expected: Sha | undefined,
+  ): Promise<PromotionResult> {
+    return movePointer(this.store, target, expected);
+  }
+}
+
+async function movePointer(
+  store: PointerStore,
+  next: Sha,
+  expected: Sha | undefined,
+): Promise<PromotionResult> {
+  const swapped = await store.setPointer(next, expected);
+  if (!swapped) {
+    return {
+      outcome: "rejected",
+      reason: {
+        kind: "pointer-moved",
+        expected,
+        actual: await store.readPointer(),
+      },
+    };
+  }
+  return { outcome: "promoted", from: expected, to: next };
 }
 
 function verifyAttestation(

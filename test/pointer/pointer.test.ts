@@ -144,6 +144,48 @@ describe("PointerManager attestation versions", () => {
   });
 });
 
+describe("PointerManager rollback", () => {
+  it("restores the prior generation through the same pointer switch in reverse", async () => {
+    const store = new MemoryStore();
+    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    const manager = makeManager(store);
+
+    expect(
+      await manager.promote(
+        CANDIDATE,
+        makeAttestation({ candidate: CANDIDATE }),
+      ),
+    ).toEqual({ outcome: "promoted", from: LIVE, to: CANDIDATE });
+
+    const result = await manager.rollback(LIVE, CANDIDATE);
+
+    expect(result).toEqual({
+      outcome: "promoted",
+      from: CANDIDATE,
+      to: LIVE,
+    });
+    expect(await store.readPointer()).toBe(LIVE);
+  });
+
+  it("leaves the pointer unchanged when rollback expects a superseded live generation", async () => {
+    const store = new MemoryStore();
+    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    const manager = makeManager(store);
+
+    const result = await manager.rollback(CANDIDATE, NEXT_LIVE);
+
+    expect(result).toEqual({
+      outcome: "rejected",
+      reason: {
+        kind: "pointer-moved",
+        expected: NEXT_LIVE,
+        actual: LIVE,
+      },
+    });
+    expect(await store.readPointer()).toBe(LIVE);
+  });
+});
+
 describe("PointerManager candidate binding", () => {
   it("rejects an attestation for a different candidate", async () => {
     const store = new MemoryStore();
