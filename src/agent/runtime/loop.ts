@@ -18,6 +18,11 @@ import { parseAgentResponse } from "./protocol.js";
 import type { ParsedToolCall } from "./protocol.js";
 import type { TurnFailure } from "./types.js";
 
+type MalformedToolResult = {
+  readonly ok: false;
+  readonly failure: TurnFailure;
+};
+
 export type ToolExecution =
   | { readonly ok: true; readonly result: ReplayPrimitiveResult }
   | { readonly ok: false; readonly failure: TurnFailure };
@@ -200,9 +205,7 @@ function bashCall(argumentsObject: Record<string, unknown>):
     : { ok: true, call: { kind: "bash", command } };
 }
 
-function malformedArguments(
-  name: PrimitiveKind,
-): { readonly ok: false; readonly failure: TurnFailure } {
+function malformedArguments(name: PrimitiveKind): MalformedToolResult {
   return {
     ok: false,
     failure: {
@@ -212,10 +215,7 @@ function malformedArguments(
   };
 }
 
-function malformedArgument(
-  name: PrimitiveKind,
-  argument: string,
-): { readonly ok: false; readonly failure: TurnFailure } {
+function malformedArgument(name: PrimitiveKind, argument: string): MalformedToolResult {
   return {
     ok: false,
     failure: {

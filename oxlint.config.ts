@@ -47,7 +47,7 @@ export default defineConfig({
     // 22 violations on adoption
     "anti-slop/no-unsafe-dictionary-type": "off",
     // 8 violations on adoption
-    "anti-slop/no-known-value-widening": "off",
+    "anti-slop/no-known-value-widening": "error",
     // 4 violations on adoption
     "anti-slop/no-unknown-returns": "error",
     // 2 violations on adoption
