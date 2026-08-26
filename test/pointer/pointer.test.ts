@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSha } from "../../src/git/types.js";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import type { Sha } from "../../src/git/types.js";
 import { PointerManager } from "../../src/pointer/index.js";
 import type { Attestation, PromotionResult } from "../../src/generation/types.js";
@@ -14,7 +15,10 @@ const NEXT_LIVE = parseSha("4444444444444444444444444444444444444444");
 function makeAttestation(overrides: Partial<Attestation> = {}): Attestation {
   return {
     candidate: CANDIDATE,
+    generation: parseGenerationNumber(0),
+    artifactDigest: CANDIDATE,
     validatedAgainst: LIVE,
+    validatedAgainstGeneration: parseGenerationNumber(0),
     corpusVersion: "corpus-1",
     gateVersion: "gate-1",
     verdict: "pass",
@@ -56,11 +60,7 @@ class InitialReadBarrierStore implements PointerStore {
   private readonly parties: number;
   private readonly barrier: () => Promise<void>;
 
-  constructor(
-    delegate: PointerStore,
-    parties: number,
-    barrier: () => Promise<void>,
-  ) {
+  constructor(delegate: PointerStore, parties: number, barrier: () => Promise<void>) {
     this.delegate = delegate;
     this.parties = parties;
     this.barrier = barrier;

@@ -1,5 +1,6 @@
 import type { Sha } from "../git/types.js";
 import type { Attestation, Verdict } from "../generation/types.js";
+import type { GenerationNumber } from "../generation/types.js";
 import type { EffectsDifference } from "../replay/comparison.js";
 import type { ReplaySession } from "../replay/index.js";
 import type { PointerStore } from "../storage/types.js";
@@ -37,6 +38,12 @@ export type ValidationRun = {
   readonly attestation: Attestation | undefined;
 };
 
+export type ValidationIdentity = {
+  readonly generation: GenerationNumber;
+  readonly artifactDigest: Sha;
+  readonly validatedAgainstGeneration: GenerationNumber | undefined;
+};
+
 export class ValidationGate {
   private readonly pointerStore: PointerStore;
   private readonly resultStore: ValidationResultStore;
@@ -59,7 +66,7 @@ export class ValidationGate {
     this.now = options.now ?? Date.now;
   }
 
-  async validate(candidate: Sha): Promise<ValidationRun> {
+  async validate(candidate: Sha, validationIdentity: ValidationIdentity): Promise<ValidationRun> {
     const [corpusVersion, gateVersion, validatedAgainst, pinnedCorpusMatches] = await Promise.all([
       computeCorpusVersion(this.corpus),
       computeGateVersion(),
@@ -76,29 +83,58 @@ export class ValidationGate {
         )
       : [];
 
-    const result: ValidationResult = {
+    const result = makeValidationResult(
       candidate,
+      validationIdentity,
       validatedAgainst,
       corpusVersion,
       gateVersion,
-      verdict: evaluateRatchet(caseResults),
-      createdAt: this.now(),
       caseResults,
-    };
+      this.now(),
+    );
     await this.resultStore.put(result);
-    const attestation =
-      result.verdict === "pass"
-        ? {
-            candidate: result.candidate,
-            validatedAgainst: result.validatedAgainst,
-            corpusVersion: result.corpusVersion,
-            gateVersion: result.gateVersion,
-            verdict: result.verdict,
-            createdAt: result.createdAt,
-          }
-        : undefined;
-    return { result, attestation };
+    return { result, attestation: passingAttestation(result) };
   }
+}
+
+function makeValidationResult(
+  candidate: Sha,
+  identity: ValidationIdentity,
+  validatedAgainst: Sha | undefined,
+  corpusVersion: string,
+  gateVersion: string,
+  caseResults: readonly ValidationCaseResult[],
+  createdAt: number,
+): ValidationResult {
+  return {
+    candidate,
+    generation: identity.generation,
+    artifactDigest: identity.artifactDigest,
+    validatedAgainst,
+    validatedAgainstGeneration: identity.validatedAgainstGeneration,
+    corpusVersion,
+    gateVersion,
+    verdict: evaluateRatchet(caseResults),
+    createdAt,
+    caseResults,
+  };
+}
+
+function passingAttestation(result: ValidationResult): Attestation | undefined {
+  if (result.verdict !== "pass") {
+    return undefined;
+  }
+  return {
+    candidate: result.candidate,
+    generation: result.generation,
+    artifactDigest: result.artifactDigest,
+    validatedAgainst: result.validatedAgainst,
+    validatedAgainstGeneration: result.validatedAgainstGeneration,
+    corpusVersion: result.corpusVersion,
+    gateVersion: result.gateVersion,
+    verdict: result.verdict,
+    createdAt: result.createdAt,
+  };
 }
 
 async function runCases(

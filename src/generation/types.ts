@@ -49,14 +49,21 @@ export type Verdict = "pass" | "fail" | "inconclusive";
  * Evidence that a candidate was validated, bound tightly enough that it cannot be replayed
  * against a world that has since moved (D16b).
  *
- * Without `validatedAgainst`, "this candidate passed" degrades to "this candidate passed at
+ * Without the baseline identity, "this candidate passed" degrades to "this candidate passed at
  * some point, against something" — and a promoter could present validation performed against a
- * generation that is no longer live. The corpus and gate versions close the same gap for the
- * case where the tests themselves changed underneath the result.
+ * generation that is no longer live. The candidate generation and artifact digest bind the
+ * attempt and bytes that ran, while the corpus and gate versions close the same gap for the case
+ * where the tests themselves changed underneath the result.
  */
 export type Attestation = {
   readonly candidate: Sha;
+  /** The registry attempt whose artifact was validated. */
+  readonly generation: GenerationNumber;
+  /** Digest of the agent artifact actually loaded into the candidate facet. */
+  readonly artifactDigest: Sha;
   readonly validatedAgainst: Sha | undefined;
+  /** The registry generation whose commit was used as the validation baseline. */
+  readonly validatedAgainstGeneration: GenerationNumber | undefined;
   readonly corpusVersion: string;
   readonly gateVersion: string;
   readonly verdict: Verdict;

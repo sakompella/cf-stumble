@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { parseGenerationNumber } from "../../src/generation/types.js";
 import { PointerManager } from "../../src/pointer/index.js";
 import { parseSha } from "../../src/git/types.js";
 import type { ReplayOutcome, ReplaySession } from "../../src/replay/index.js";
@@ -46,7 +47,11 @@ test("promote rejects a passing attestation after the observed live pointer move
     now: () => 456,
   });
 
-  const validation = await gate.validate(CANDIDATE);
+  const validation = await gate.validate(CANDIDATE, {
+    generation: parseGenerationNumber(1),
+    artifactDigest: CANDIDATE,
+    validatedAgainstGeneration: parseGenerationNumber(0),
+  });
   if (validation.attestation === undefined) {
     throw new Error("passing validation did not emit an attestation");
   }

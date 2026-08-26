@@ -15,19 +15,14 @@ import {
   type AgentSkill,
 } from "../agent/runtime/index.js";
 import { buildGeneration } from "../generation/build.js";
-import { makeGenesisPin, resetToGenesisSync, seedGenesis } from "../generation/genesis.js";
-import type { GenesisPin, ResetResult } from "../generation/genesis.js";
-import { parseGenerationNumber } from "../generation/types.js";
+import { makeGenesisPin, seedGenesis } from "../generation/genesis.js";
+import type { GenesisPin } from "../generation/genesis.js";
+import { GENESIS_NUMBER, parseGenerationNumber } from "../generation/types.js";
 import { readGeneration } from "../generation/read.js";
 import type { LoadedGeneration } from "../generation/read.js";
-import type {
-  Attestation,
-  Generation,
-  Module,
-  PromotionRejection,
-  PromotionResult,
-  Verdict,
-} from "../generation/types.js";
+import type { Attestation, CommitSnapshot, Module, Verdict } from "../generation/types.js";
+import type { GenerationNumber } from "../generation/types.js";
+import type { GenerationRecord, MaterializationState } from "../generation/registry-types.js";
 import { assertNever, parseSha } from "../git/types.js";
 import type { Sha, Signature } from "../git/types.js";
 import type {
@@ -62,22 +57,25 @@ type SupervisorEnv = {
 type CandidateMode = "healthy" | "syntax" | "init";
 
 type GenerationRow = {
-  readonly sha: string;
   readonly number: number;
-  readonly parent_sha: string | null;
-  readonly manifest_sha: string;
+  readonly commit_sha: string;
+  readonly baseline_number: number | null;
+  readonly state: MaterializationState;
+  readonly artifact_digest: string | null;
+  readonly idempotency_key: string;
   readonly created_at: number;
-  readonly summary: string;
+  readonly failure: string | null;
 };
 
-type PointerRow = { readonly sha: string | null };
+type PointerRow = { readonly generation_number: number | null };
 type MetaRow = { readonly value: string };
 type ContextRow = { readonly key: string; readonly value: string; readonly updated_at: number };
 type HistoryRow = {
-  readonly operation: string;
-  readonly generation_sha: string;
-  readonly from_sha: string | null;
-  readonly created_at: number;
+  readonly sequence: number;
+  readonly kind: ActivationKind;
+  readonly generation_number: number;
+  readonly from_generation_number: number | null;
+  readonly at: number;
 };
 type CorpusRow = {
   readonly name: string;
@@ -85,8 +83,11 @@ type CorpusRow = {
   readonly mandatory_canary: number;
 };
 type ValidationRow = {
+  readonly generation_number: number;
   readonly candidate_sha: string;
+  readonly artifact_digest: string;
   readonly validated_against: string | null;
+  readonly validated_against_generation: number | null;
   readonly corpus_version: string;
   readonly gate_version: string;
   readonly verdict: Verdict;
@@ -94,40 +95,97 @@ type ValidationRow = {
   readonly case_results_json: string;
 };
 type QuarantineRow = {
-  readonly sha: string;
+  readonly generation_number: number;
   readonly reason: string;
   readonly created_at: number;
 };
 
 type GenerationSummary = {
-  readonly sha: Sha;
-  readonly number: number;
-  readonly parent: Sha | null;
-  readonly manifest: Sha;
+  readonly number: GenerationNumber;
+  readonly commit: Sha;
+  readonly baseline: GenerationNumber | null;
+  readonly state: MaterializationState;
+  readonly artifactDigest: Sha | null;
+  readonly idempotencyKey: string;
   readonly createdAt: number;
-  readonly summary: string;
+  readonly failure: string | null;
 };
 
-type GenerationResponse = GenerationSummary & {
-  readonly lineage: readonly GenerationSummary[];
+type CandidateGeneration = {
+  readonly row: GenerationRow;
+  readonly loaded: LoadedGeneration | undefined;
 };
 
 type InvalidRequest = { readonly kind: "invalid-request"; readonly message: string };
-type PromotionRejectionJson =
-  | { readonly kind: "pointer-moved"; readonly expected: Sha | null; readonly actual: Sha | null }
+type RegistryPromotionRejection =
+  | {
+      readonly kind: "pointer-moved";
+      readonly expected: GenerationNumber | undefined;
+      readonly actual: GenerationNumber | undefined;
+    }
   | {
       readonly kind: "stale-attestation";
-      readonly validatedAgainst: Sha | null;
-      readonly liveNow: Sha | null;
+      readonly validatedAgainst: Sha | undefined;
+      readonly liveNow: Sha | undefined;
+      readonly validatedAgainstGeneration: GenerationNumber | undefined;
+      readonly liveGeneration: GenerationNumber | undefined;
     }
+  | {
+      readonly kind: "wrong-generation";
+      readonly attested: GenerationNumber;
+      readonly requested: GenerationNumber;
+    }
+  | { readonly kind: "artifact-changed"; readonly attested: Sha; readonly current: Sha }
   | { readonly kind: "corpus-changed"; readonly attested: string; readonly current: string }
   | { readonly kind: "gate-changed"; readonly attested: string; readonly current: string }
   | { readonly kind: "wrong-candidate"; readonly attested: Sha; readonly requested: Sha }
   | { readonly kind: "not-passing"; readonly verdict: Verdict };
 
+type RegistryPromotionResult =
+  | {
+      readonly outcome: "promoted";
+      readonly from: GenerationNumber | undefined;
+      readonly to: GenerationNumber;
+    }
+  | { readonly outcome: "rejected"; readonly reason: RegistryPromotionRejection };
+
+type RegistryPromotionRejectionJson =
+  | {
+      readonly kind: "pointer-moved";
+      readonly expected: GenerationNumber | null;
+      readonly actual: GenerationNumber | null;
+    }
+  | {
+      readonly kind: "stale-attestation";
+      readonly validatedAgainst: Sha | null;
+      readonly liveNow: Sha | null;
+      readonly validatedAgainstGeneration: GenerationNumber | null;
+      readonly liveGeneration: GenerationNumber | null;
+    }
+  | {
+      readonly kind: "wrong-generation";
+      readonly attested: GenerationNumber;
+      readonly requested: GenerationNumber;
+    }
+  | { readonly kind: "artifact-changed"; readonly attested: Sha; readonly current: Sha }
+  | { readonly kind: "corpus-changed"; readonly attested: string; readonly current: string }
+  | { readonly kind: "gate-changed"; readonly attested: string; readonly current: string }
+  | { readonly kind: "wrong-candidate"; readonly attested: Sha; readonly requested: Sha }
+  | { readonly kind: "not-passing"; readonly verdict: Verdict };
+
+type GenerationResetResult =
+  | {
+      readonly outcome: "reset";
+      readonly from: GenerationNumber | undefined;
+      readonly to: GenerationNumber;
+    }
+  | { readonly outcome: "contended"; readonly attempts: number };
+
+type ActivationKind = "promoted" | "rolled_back";
+
 const initialCandidate: CandidateMode = "healthy";
 const secretKey = "supervisor-secret";
-const POINTER_TABLE = "cf_stumble_pointer";
+const POINTER_TABLE = "cf_stumble_generation_pointer";
 const GENERATIONS_TABLE = "cf_stumble_generations";
 const HISTORY_TABLE = "cf_stumble_generation_history";
 const META_TABLE = "cf_stumble_supervisor_meta";
@@ -138,6 +196,7 @@ const QUARANTINE_TABLE = "cf_stumble_quarantine";
 const GENESIS_META_KEY = "genesis_sha";
 const CORPUS_VERSION_META_KEY = "corpus_version";
 const GATE_VERSION_META_KEY = "gate_version";
+const NEXT_GENERATION_META_KEY = "next_generation_number";
 const INITIAL_TIMESTAMP = 1_700_000_000;
 
 const genesisAuthor: Signature = {
@@ -259,11 +318,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async initialize(): Promise<void> {
     const sql = this.ctx.storage.sql;
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS ${GENERATIONS_TABLE} (sha TEXT PRIMARY KEY, number INTEGER NOT NULL, parent_sha TEXT, manifest_sha TEXT NOT NULL, created_at INTEGER NOT NULL, summary TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${GENERATIONS_TABLE} (number INTEGER PRIMARY KEY, commit_sha TEXT NOT NULL, baseline_number INTEGER, state TEXT NOT NULL CHECK (state IN ('loading', 'load_failed', 'loaded', 'validation_failed', 'validated')), artifact_digest TEXT, idempotency_key TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, failure TEXT)`,
     );
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS ${HISTORY_TABLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, operation TEXT NOT NULL, generation_sha TEXT NOT NULL, from_sha TEXT, created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${HISTORY_TABLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK (kind IN ('promoted', 'rolled_back')), generation_number INTEGER NOT NULL, from_generation_number INTEGER, at INTEGER NOT NULL)`,
     );
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS ${POINTER_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), generation_number INTEGER)`,
+    );
+    sql.exec(`INSERT OR IGNORE INTO ${POINTER_TABLE} (id, generation_number) VALUES (1, NULL)`);
     sql.exec(
       `CREATE TABLE IF NOT EXISTS ${META_TABLE} (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
     );
@@ -274,10 +337,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       `CREATE TABLE IF NOT EXISTS ${CORPUS_TABLE} (name TEXT PRIMARY KEY, session_json TEXT NOT NULL, mandatory_canary INTEGER NOT NULL CHECK (mandatory_canary IN (0, 1)))`,
     );
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS ${VALIDATION_TABLE} (candidate_sha TEXT PRIMARY KEY, validated_against TEXT, corpus_version TEXT NOT NULL, gate_version TEXT NOT NULL, verdict TEXT NOT NULL, created_at INTEGER NOT NULL, case_results_json TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${VALIDATION_TABLE} (generation_number INTEGER PRIMARY KEY, candidate_sha TEXT NOT NULL, artifact_digest TEXT NOT NULL, validated_against TEXT, validated_against_generation INTEGER, corpus_version TEXT NOT NULL, gate_version TEXT NOT NULL, verdict TEXT NOT NULL, created_at INTEGER NOT NULL, case_results_json TEXT NOT NULL)`,
     );
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS ${QUARANTINE_TABLE} (sha TEXT PRIMARY KEY, reason TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS ${QUARANTINE_TABLE} (generation_number INTEGER PRIMARY KEY, reason TEXT NOT NULL, created_at INTEGER NOT NULL)`,
     );
 
     if (this.readState("candidate") === undefined) {
@@ -320,8 +383,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         { claimPointer: false },
       );
       const genesisPin = makeGenesisPin(genesis);
+      const loadedGenesis = await readGeneration(this.store, genesis.sha);
+      const genesisArtifact = await digestArtifact(loadedGenesis);
+      const genesisRecord = {
+        number: GENESIS_NUMBER,
+        commit: genesis.sha,
+        baseline: undefined,
+        state: "validated",
+        artifactDigest: genesisArtifact,
+        idempotencyKey: "genesis",
+        createdAt: genesis.createdAt,
+        failure: undefined,
+      } satisfies GenerationRecord;
       this.ctx.storage.transactionSync(() => {
-        this.insertGeneration(genesis);
+        this.insertGeneration(genesisRecord);
         this.ctx.storage.sql.exec(
           `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?)`,
           GENESIS_META_KEY,
@@ -338,13 +413,18 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           gateVersion,
         );
         this.ctx.storage.sql.exec(
-          `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
-          "seed",
-          genesisPin.sha,
+          `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?)`,
+          NEXT_GENERATION_META_KEY,
+          "1",
+        );
+        this.ctx.storage.sql.exec(
+          `INSERT INTO ${HISTORY_TABLE} (kind, generation_number, from_generation_number, at) VALUES (?, ?, ?, ?)`,
+          "promoted",
+          GENESIS_NUMBER,
           null,
           Date.now(),
         );
-        if (!this.updatePointer(genesisPin.sha)) {
+        if (!this.updatePointer(GENESIS_NUMBER)) {
           throw new Error("generation 0 seed lost a pointer race");
         }
       });
@@ -361,8 +441,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.writeMeta(GATE_VERSION_META_KEY, gateVersion);
     }
     this.ctx.storage.sql.exec(
-      `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`,
-      genesisPin.sha,
+      `UPDATE ${POINTER_TABLE} SET generation_number = ? WHERE id = 1 AND generation_number IS NULL`,
+      GENESIS_NUMBER,
     );
   }
 
@@ -431,30 +511,59 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async promote(request: Request): Promise<Response> {
     try {
       const body = await readRequestRecord(request);
-      const candidate = parseShaField(body.candidate, "candidate");
-      if (this.isQuarantined(candidate)) {
-        throw new SafetyViolationError("quarantined", `generation ${candidate} is quarantined`);
+      const number = parseGenerationNumberField(body.candidate ?? body.generation, "candidate");
+      const candidate = await this.readCandidateGeneration(number);
+      if (this.isQuarantined(number)) {
+        throw new SafetyViolationError("quarantined", `generation ${number} is quarantined`);
       }
-      const candidateGeneration = await this.readCandidateGeneration(candidate);
-      const validation = await this.validateCandidate(candidate);
-      const result = this.promoteTransaction(candidate, validation, candidateGeneration);
+      const loaded = await this.loadCandidate(candidate);
+      if (loaded.outcome === "failed") {
+        return promotionResponse({
+          outcome: "rejected",
+          reason: { kind: "not-passing", verdict: "inconclusive" },
+        });
+      }
+      if (candidate.loaded === undefined) {
+        throw new Error(`generation ${number} has no materialized commit`);
+      }
+      const validation = await this.validateCandidate(
+        number,
+        candidate.loaded.generation.sha,
+        loaded.artifactDigest,
+      );
+      const result = this.promoteTransaction(number, validation, loaded.artifactDigest);
       return promotionResponse(result);
     } catch (error: unknown) {
       return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
-  private validateCandidate(candidate: Sha): Promise<ValidationRun> {
+  private validateCandidate(
+    number: GenerationNumber,
+    candidate: Sha,
+    artifactDigest: Sha,
+  ): Promise<ValidationRun> {
     const gate = new ValidationGate({
       pointerStore: {
-        readPointer: () => Promise.resolve(this.readPointerSql()),
+        readPointer: () => {
+          const live = this.readPointerSql();
+          const row = live === undefined ? undefined : this.readGenerationRow(live);
+          if (live !== undefined && row === undefined) {
+            throw new Error(`live generation ${live} is missing`);
+          }
+          return Promise.resolve(row === undefined ? undefined : parseSha(row.commit_sha));
+        },
         setPointer: () => Promise.resolve(false),
       },
       resultStore: new MemoryValidationResultStore(),
       corpus: this.readCorpusCases(),
       execute: (generation, session) => this.executeGeneration(generation, session),
     });
-    return gate.validate(candidate);
+    return gate.validate(candidate, {
+      generation: number,
+      artifactDigest,
+      validatedAgainstGeneration: this.readPointerSql(),
+    });
   }
 
   private async executeGeneration(
@@ -478,33 +587,117 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runReplay(session, new AgentExecutor(definition));
   }
 
-  private async readCandidateGeneration(candidate: Sha): Promise<Generation> {
+  private async readCandidateGeneration(number: GenerationNumber): Promise<CandidateGeneration> {
+    const row = this.readGenerationRow(number);
+    if (row === undefined) {
+      throw new MissingResourceError(`candidate generation ${number} does not exist`);
+    }
+    if (row.state === "load_failed" || row.state === "validation_failed") {
+      return { row, loaded: undefined };
+    }
     try {
-      return (await readGeneration(this.store, candidate)).generation;
+      return {
+        row,
+        loaded: await readGeneration(this.store, parseSha(row.commit_sha)),
+      };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.startsWith("missing generation commit object")) {
-        throw new MissingResourceError(`candidate generation ${candidate} does not exist`);
-      }
-      throw error;
+      const failure = error instanceof Error ? error.message : String(error);
+      this.markLoadFailed(number, failure);
+      return {
+        row: { ...row, state: "load_failed", failure },
+        loaded: undefined,
+      };
     }
   }
 
-  private promoteTransaction(
-    candidate: Sha,
-    validation: ValidationRun,
-    candidateGeneration: Generation,
-  ): PromotionResult {
-    let result: PromotionResult | undefined;
+  private async loadCandidate(
+    candidate: CandidateGeneration,
+  ): Promise<
+    { readonly outcome: "loaded"; readonly artifactDigest: Sha } | { readonly outcome: "failed" }
+  > {
+    if (candidate.row.state === "load_failed" || candidate.row.state === "validation_failed") {
+      return { outcome: "failed" };
+    }
+    if (candidate.loaded === undefined) {
+      throw new Error(`generation ${rowNumber(candidate.row)} has no materialized commit`);
+    }
+    const sourceModule = candidate.loaded.modules.find((module) => module.path === "agent.js");
+    if (sourceModule === undefined) {
+      this.markLoadFailed(rowNumber(candidate.row), "agent.js is missing");
+      return { outcome: "failed" };
+    }
+    const digest = await digestBytes(sourceModule.content);
+    if (candidate.row.state !== "loading") {
+      const storedDigest =
+        candidate.row.artifact_digest === null
+          ? undefined
+          : parseSha(candidate.row.artifact_digest);
+      return storedDigest === digest
+        ? { outcome: "loaded", artifactDigest: digest }
+        : { outcome: "failed" };
+    }
+    try {
+      const facet = this.mountFacet(decodeValidationText("agent.js", sourceModule.content));
+      const probe = await facet.fetch(new Request("https://facet/probe"));
+      if (!probe.ok) {
+        throw new Error(
+          `candidate generation ${rowNumber(candidate.row)} probe returned ${probe.status}`,
+        );
+      }
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.markLoadFailed(rowNumber(candidate.row), detail, digest);
+      return { outcome: "failed" };
+    }
     this.ctx.storage.transactionSync(() => {
-      if (this.isQuarantined(candidate)) {
-        throw new SafetyViolationError("quarantined", `generation ${candidate} is quarantined`);
+      this.ctx.storage.sql.exec(
+        `UPDATE ${GENERATIONS_TABLE} SET state = ?, artifact_digest = ? WHERE number = ? AND state = ?`,
+        "loaded",
+        digest,
+        rowNumber(candidate.row),
+        "loading",
+      );
+    });
+    return { outcome: "loaded", artifactDigest: digest };
+  }
+
+  private markLoadFailed(number: GenerationNumber, failure: string, artifactDigest?: Sha): void {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `UPDATE ${GENERATIONS_TABLE} SET state = ?, artifact_digest = ?, failure = ? WHERE number = ? AND state = ?`,
+        "load_failed",
+        artifactDigest ?? null,
+        failure,
+        number,
+        "loading",
+      );
+    });
+  }
+
+  private promoteTransaction(
+    number: GenerationNumber,
+    validation: ValidationRun,
+    artifactDigest: Sha,
+  ): RegistryPromotionResult {
+    let result: RegistryPromotionResult | undefined;
+    this.ctx.storage.transactionSync(() => {
+      if (this.isQuarantined(number)) {
+        throw new SafetyViolationError("quarantined", `generation ${number} is quarantined`);
       }
       const liveNow = this.readPointerSql();
-      const registeredGeneration = this.readGenerationRow(candidate);
+      const registeredGeneration = this.readGenerationRow(number);
+      if (registeredGeneration === undefined) {
+        throw new MissingResourceError(`candidate generation ${number} does not exist`);
+      }
+      const candidate = parseSha(registeredGeneration.commit_sha);
+      const liveCommit =
+        liveNow === undefined ? undefined : this.readGenerationRowOrThrow(liveNow).commit_sha;
       const corpusVersion = this.readMetaOrThrow(CORPUS_VERSION_META_KEY);
       const gateVersion = this.readMetaOrThrow(GATE_VERSION_META_KEY);
       if (validation.attestation === undefined) {
+        if (registeredGeneration.state === "loaded") {
+          this.transitionGeneration(number, "validation_failed", validation.result.verdict);
+        }
         this.insertValidationResult(validation.result);
         result = {
           outcome: "rejected",
@@ -513,8 +706,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         return;
       }
       const rejection = verifyAttestation(
+        number,
         candidate,
+        artifactDigest,
         validation.attestation,
+        liveCommit === undefined ? undefined : parseSha(liveCommit),
         liveNow,
         corpusVersion,
         gateVersion,
@@ -524,7 +720,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         return;
       }
 
-      const swapped = this.updatePointer(candidate, liveNow);
+      const swapped = this.updatePointer(number, liveNow);
       if (!swapped) {
         result = {
           outcome: "rejected",
@@ -537,18 +733,16 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         return;
       }
 
-      if (registeredGeneration === undefined) {
-        this.insertGeneration(candidateGeneration);
-      }
+      this.transitionGeneration(number, "validated");
       this.insertValidationResult(validation.result);
       this.ctx.storage.sql.exec(
-        `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
-        "promote",
-        candidate,
+        `INSERT INTO ${HISTORY_TABLE} (kind, generation_number, from_generation_number, at) VALUES (?, ?, ?, ?)`,
+        "promoted",
+        number,
         liveNow,
         Date.now(),
       );
-      result = { outcome: "promoted", from: liveNow, to: candidate };
+      result = { outcome: "promoted", from: liveNow, to: number };
     });
     if (result === undefined) {
       throw new Error("promotion transaction did not produce a result");
@@ -559,8 +753,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async rollback(request: Request): Promise<Response> {
     try {
       const body = await readRequestRecord(request);
-      const target = parseShaField(body.target, "target");
-      const expected = parseNullableSha(body.expected, "expected");
+      const target = parseGenerationNumberField(body.target, "target");
+      const expected = parseNullableGenerationNumber(body.expected, "expected");
       const result = this.rollbackTransaction(target, expected);
       return promotionResponse(result);
     } catch (error: unknown) {
@@ -568,8 +762,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
-  private rollbackTransaction(target: Sha, expected: Sha | undefined): PromotionResult {
-    let result: PromotionResult | undefined;
+  private rollbackTransaction(
+    target: GenerationNumber,
+    expected: GenerationNumber | undefined,
+  ): RegistryPromotionResult {
+    let result: RegistryPromotionResult | undefined;
     this.ctx.storage.transactionSync(() => {
       if (this.readGenerationRow(target) === undefined) {
         throw new MissingResourceError(`rollback target generation ${target} does not exist`);
@@ -593,8 +790,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         return;
       }
       this.ctx.storage.sql.exec(
-        `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
-        "rollback",
+        `INSERT INTO ${HISTORY_TABLE} (kind, generation_number, from_generation_number, at) VALUES (?, ?, ?, ?)`,
+        "rolled_back",
         target,
         actual,
         Date.now(),
@@ -640,27 +837,25 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
-  private resetTransaction(): ResetResult {
+  private resetTransaction(): GenerationResetResult {
     const pin = this.genesisPin;
     if (pin === undefined) {
       throw new Error("genesis pin is unavailable");
     }
 
-    let result: ResetResult | undefined;
+    let result: GenerationResetResult | undefined;
     this.ctx.storage.transactionSync(() => {
-      result = resetToGenesisSync(
-        {
-          readPointer: () => this.readPointerSql(),
-          setPointer: (next, expected) => this.updatePointer(next, expected),
-        },
-        pin,
-      );
+      const from = this.readPointerSql();
+      const swapped = this.updatePointer(GENESIS_NUMBER, from);
+      result = swapped
+        ? { outcome: "reset", from, to: GENESIS_NUMBER }
+        : { outcome: "contended", attempts: 1 };
       if (result.outcome === "contended") {
         return;
       }
       this.ctx.storage.sql.exec(
-        `INSERT INTO ${HISTORY_TABLE} (operation, generation_sha, from_sha, created_at) VALUES (?, ?, ?, ?)`,
-        "reset",
+        `INSERT INTO ${HISTORY_TABLE} (kind, generation_number, from_generation_number, at) VALUES (?, ?, ?, ?)`,
+        "rolled_back",
         result.to,
         result.from ?? null,
         Date.now(),
@@ -676,8 +871,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private listGenerations(): Response {
     try {
       const rows = this.readGenerationRows();
-      const bySha = new Map(rows.map((row) => [row.sha, row]));
-      const generations = rows.map((row) => generationResponse(row, bySha));
+      const generations = rows.map((row) => generationResponse(row));
       return Response.json({ generations });
     } catch (error: unknown) {
       return requestErrorResponse(error instanceof Error ? error : String(error));
@@ -688,15 +882,19 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       const rows = this.ctx.storage.sql
         .exec<HistoryRow>(
-          `SELECT operation, generation_sha, from_sha, created_at FROM ${HISTORY_TABLE} ORDER BY id`,
+          `SELECT id AS sequence, kind, generation_number, from_generation_number, at FROM ${HISTORY_TABLE} ORDER BY id`,
         )
         .toArray();
       return Response.json({
         history: rows.map((row) => ({
-          operation: row.operation,
-          generation: parseSha(row.generation_sha),
-          from: row.from_sha === null ? null : parseSha(row.from_sha),
-          createdAt: row.created_at,
+          sequence: row.sequence,
+          kind: row.kind,
+          generation: parseGenerationNumber(row.generation_number),
+          from:
+            row.from_generation_number === null
+              ? null
+              : parseGenerationNumber(row.from_generation_number),
+          at: row.at,
         })),
       });
     } catch (error: unknown) {
@@ -704,27 +902,24 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
-  private showGeneration(rawSha: string): Response {
+  private showGeneration(rawNumber: string): Response {
     try {
-      let decodedSha: string;
+      let decodedNumber: string;
       try {
-        decodedSha = decodeURIComponent(rawSha);
+        decodedNumber = decodeURIComponent(rawNumber);
       } catch (error: unknown) {
         const detail = error instanceof Error ? error.message : String(error);
-        throw new InvalidRequestError(
-          `generation sha is not valid URL encoding: ${detail}`,
-        );
+        throw new InvalidRequestError(`generation number is not valid URL encoding: ${detail}`);
       }
-      const sha = parseShaField(decodedSha, "generation");
-      const row = this.readGenerationRow(sha);
+      const number = parseGenerationNumberField(decodedNumber, "generation");
+      const row = this.readGenerationRow(number);
       if (row === undefined) {
         return Response.json(
-          { error: { kind: "not-found", resource: "generation", sha } },
+          { error: { kind: "not-found", resource: "generation", number } },
           { status: 404 },
         );
       }
-      const bySha = new Map(this.readGenerationRows().map((entry) => [entry.sha, entry]));
-      return Response.json({ generation: generationResponse(row, bySha) });
+      return Response.json({ generation: generationResponse(row) });
     } catch (error: unknown) {
       return requestErrorResponse(error instanceof Error ? error : String(error));
     }
@@ -743,8 +938,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           { status: 500 },
         );
       }
-      const bySha = new Map(this.readGenerationRows().map((entry) => [entry.sha, entry]));
-      return Response.json({ generation: generationResponse(row, bySha) });
+      return Response.json({ generation: generationResponse(row) });
     } catch (error: unknown) {
       return requestErrorResponse(error instanceof Error ? error : String(error));
     }
@@ -755,12 +949,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const body = await readRequestRecord(request);
       const modules = parseModules(body.modules);
       const summary = readNonEmptyString(body.summary, "summary");
+      const idempotencyKey =
+        body.idempotencyKey === undefined
+          ? crypto.randomUUID()
+          : readNonEmptyString(body.idempotencyKey, "idempotencyKey");
       const createdAt =
         body.createdAt === undefined
           ? Math.floor(Date.now() / 1_000)
           : readSafeInteger(body.createdAt, "createdAt");
-      const liveSha = this.readPointerSql();
-      if (liveSha === undefined) {
+      const existing = this.readGenerationByIdempotencyKey(idempotencyKey);
+      if (existing !== undefined) {
+        return Response.json({ generation: generationResponse(existing) });
+      }
+      const liveNumber = this.readPointerSql();
+      if (liveNumber === undefined) {
         return Response.json(
           {
             error: {
@@ -771,18 +973,27 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           { status: 409 },
         );
       }
-      const parent = this.readGenerationRow(liveSha);
+      const parent = this.readGenerationRow(liveNumber);
       if (parent === undefined) {
         return Response.json(
-          { error: { kind: "corrupt-state", message: `live generation ${liveSha} is missing` } },
+          { error: { kind: "corrupt-state", message: `live generation ${liveNumber} is missing` } },
           { status: 500 },
         );
       }
-      let generation: Generation;
+      let parentSnapshot: CommitSnapshot;
+      try {
+        parentSnapshot = (await readGeneration(this.store, parseSha(parent.commit_sha))).generation;
+      } catch (error: unknown) {
+        if (error instanceof TypeError) {
+          throw new InvalidRequestError(error.message);
+        }
+        throw error;
+      }
+      let generation: CommitSnapshot;
       try {
         generation = await buildGeneration(this.store, {
           modules,
-          parent: toGeneration(parent),
+          parent: parentSnapshot,
           author: genesisAuthor,
           createdAt,
           summary,
@@ -793,14 +1004,19 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         }
         throw error;
       }
+      let row: GenerationRow | undefined;
       this.ctx.storage.transactionSync(() => {
-        this.insertGeneration(generation);
+        row = this.allocateGeneration(
+          generation.sha,
+          liveNumber,
+          idempotencyKey,
+          generation.createdAt,
+        );
       });
-      const bySha = new Map(this.readGenerationRows().map((entry) => [entry.sha, entry]));
-      return Response.json(
-        { generation: generationResponse(this.readGenerationRowOrThrow(generation.sha), bySha) },
-        { status: 201 },
-      );
+      if (row === undefined) {
+        throw new Error("generation allocation did not produce a row");
+      }
+      return Response.json({ generation: generationResponse(row) }, { status: 201 });
     } catch (error: unknown) {
       return requestErrorResponse(error instanceof Error ? error : String(error));
     }
@@ -899,12 +1115,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readValidationResults(url: URL): Response {
     try {
       const candidateValue = url.searchParams.get("candidate");
+      const generationValue = url.searchParams.get("generation");
       const verdictValue = url.searchParams.get("verdict");
       const candidate =
         candidateValue === null ? undefined : parseShaField(candidateValue, "candidate");
+      const generation =
+        generationValue === null
+          ? undefined
+          : parseGenerationNumberField(generationValue, "generation");
       const verdict = verdictValue === null ? undefined : parseVerdict(verdictValue, "verdict");
       const clauses: string[] = [];
       const parameters: (string | number | null)[] = [];
+      if (generation !== undefined) {
+        clauses.push("generation_number = ?");
+        parameters.push(generation);
+      }
       if (candidate !== undefined) {
         clauses.push("candidate_sha = ?");
         parameters.push(candidate);
@@ -916,7 +1141,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const where = clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`;
       const rows = this.ctx.storage.sql
         .exec<ValidationRow>(
-          `SELECT candidate_sha, validated_against, corpus_version, gate_version, verdict, created_at, case_results_json FROM ${VALIDATION_TABLE}${where} ORDER BY created_at`,
+          `SELECT generation_number, candidate_sha, artifact_digest, validated_against, validated_against_generation, corpus_version, gate_version, verdict, created_at, case_results_json FROM ${VALIDATION_TABLE}${where} ORDER BY created_at`,
           ...parameters,
         )
         .toArray();
@@ -929,7 +1154,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async quarantine(request: Request): Promise<Response> {
     try {
       const body = await readRequestRecord(request);
-      const target = parseShaField(body.target ?? body.candidate ?? body.sha, "target");
+      const target = parseGenerationNumberField(
+        body.target ?? body.generation ?? body.candidate,
+        "target",
+      );
       const reason =
         body.reason === undefined
           ? "marked bad by supervisor"
@@ -939,7 +1167,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       }
       this.ctx.storage.transactionSync(() => {
         this.ctx.storage.sql.exec(
-          `INSERT OR REPLACE INTO ${QUARANTINE_TABLE} (sha, reason, created_at) VALUES (?, ?, ?)`,
+          `INSERT OR REPLACE INTO ${QUARANTINE_TABLE} (generation_number, reason, created_at) VALUES (?, ?, ?)`,
           target,
           reason,
           Date.now(),
@@ -955,12 +1183,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     try {
       const rows = this.ctx.storage.sql
         .exec<QuarantineRow>(
-          `SELECT sha, reason, created_at FROM ${QUARANTINE_TABLE} ORDER BY created_at, sha`,
+          `SELECT generation_number, reason, created_at FROM ${QUARANTINE_TABLE} ORDER BY created_at, generation_number`,
         )
         .toArray();
       return Response.json({
         quarantined: rows.map((row) => ({
-          sha: parseSha(row.sha),
+          generation: parseGenerationNumber(row.generation_number),
           reason: row.reason,
           createdAt: row.created_at,
         })),
@@ -979,7 +1207,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           { status: 409 },
         );
       }
-      const loaded = await readGeneration(this.store, pinned);
+      const row = this.readGenerationRow(pinned);
+      if (row === undefined) {
+        throw new Error(`live generation ${pinned} is missing`);
+      }
+      const loaded = await readGeneration(this.store, parseSha(row.commit_sha));
       const source = loaded.modules.find((module) => module.path === "agent.js");
       if (source === undefined) {
         throw new Error(`generation ${pinned} has no agent.js module`);
@@ -1059,11 +1291,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private readGenesisPin(): GenesisPin {
     const sha = parseSha(this.readMetaOrThrow(GENESIS_META_KEY));
-    const row = this.readGenerationRow(sha);
-    if (row === undefined) {
+    const row = this.readGenerationRow(GENESIS_NUMBER);
+    if (row === undefined || row.commit_sha !== sha) {
       throw new Error(`genesis generation ${sha} is not registered`);
     }
-    return makeGenesisPin(toGeneration(row));
+    return { kind: "genesis", sha };
   }
 
   private writeMeta(key: string, value: string): void {
@@ -1074,23 +1306,23 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
   }
 
-  private readPointerSql(): Sha | undefined {
+  private readPointerSql(): GenerationNumber | undefined {
     const rows = this.ctx.storage.sql
-      .exec<PointerRow>(`SELECT sha FROM ${POINTER_TABLE} WHERE id = 1`)
+      .exec<PointerRow>(`SELECT generation_number FROM ${POINTER_TABLE} WHERE id = 1`)
       .toArray();
-    const value = rows[0]?.sha;
-    return value === null || value === undefined ? undefined : parseSha(value);
+    const value = rows[0]?.generation_number;
+    return value === null || value === undefined ? undefined : parseGenerationNumber(value);
   }
 
-  private updatePointer(next: Sha, expected?: Sha): boolean {
+  private updatePointer(next: GenerationNumber, expected?: GenerationNumber): boolean {
     const result =
       expected === undefined
         ? this.ctx.storage.sql.exec(
-            `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`,
+            `UPDATE ${POINTER_TABLE} SET generation_number = ? WHERE id = 1 AND generation_number IS NULL`,
             next,
           )
         : this.ctx.storage.sql.exec(
-            `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha = ?`,
+            `UPDATE ${POINTER_TABLE} SET generation_number = ? WHERE id = 1 AND generation_number = ?`,
             next,
             expected,
           );
@@ -1100,60 +1332,125 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readGenerationRows(): readonly GenerationRow[] {
     return this.ctx.storage.sql
       .exec<GenerationRow>(
-        `SELECT sha, number, parent_sha, manifest_sha, created_at, summary FROM ${GENERATIONS_TABLE} ORDER BY number, sha`,
+        `SELECT number, commit_sha, baseline_number, state, artifact_digest, idempotency_key, created_at, failure FROM ${GENERATIONS_TABLE} ORDER BY number`,
       )
       .toArray();
   }
 
-  private readGenerationRow(sha: Sha): GenerationRow | undefined {
+  private readGenerationRow(number: GenerationNumber): GenerationRow | undefined {
     const rows = this.ctx.storage.sql
       .exec<GenerationRow>(
-        `SELECT sha, number, parent_sha, manifest_sha, created_at, summary FROM ${GENERATIONS_TABLE} WHERE sha = ?`,
-        sha,
+        `SELECT number, commit_sha, baseline_number, state, artifact_digest, idempotency_key, created_at, failure FROM ${GENERATIONS_TABLE} WHERE number = ?`,
+        number,
       )
       .toArray();
     return rows[0];
   }
 
-  private readGenerationRowOrThrow(sha: Sha): GenerationRow {
-    const row = this.readGenerationRow(sha);
+  private readGenerationRowOrThrow(number: GenerationNumber): GenerationRow {
+    const row = this.readGenerationRow(number);
     if (row === undefined) {
-      throw new Error(`generation ${sha} was not registered`);
+      throw new Error(`generation ${number} was not registered`);
     }
     return row;
   }
 
-  private isQuarantined(sha: Sha): boolean {
+  private readGenerationByIdempotencyKey(key: string): GenerationRow | undefined {
     const rows = this.ctx.storage.sql
-      .exec<{ sha: string }>(`SELECT sha FROM ${QUARANTINE_TABLE} WHERE sha = ?`, sha)
+      .exec<GenerationRow>(
+        `SELECT number, commit_sha, baseline_number, state, artifact_digest, idempotency_key, created_at, failure FROM ${GENERATIONS_TABLE} WHERE idempotency_key = ?`,
+        key,
+      )
       .toArray();
-    return rows.length === 1;
+    return rows[0];
   }
 
-  private wasPreviouslyLive(sha: Sha): boolean {
+  private isQuarantined(number: GenerationNumber): boolean {
     const rows = this.ctx.storage.sql
-      .exec<{ generation_sha: string }>(
-        `SELECT generation_sha FROM ${HISTORY_TABLE} WHERE generation_sha = ? AND operation IN (?, ?, ?, ?) LIMIT 1`,
-        sha,
-        "seed",
-        "promote",
-        "rollback",
-        "reset",
+      .exec<{ generation_number: number }>(
+        `SELECT generation_number FROM ${QUARANTINE_TABLE} WHERE generation_number = ?`,
+        number,
       )
       .toArray();
     return rows.length === 1;
   }
 
-  private insertGeneration(generation: Generation): void {
+  private wasPreviouslyLive(number: GenerationNumber): boolean {
+    const rows = this.ctx.storage.sql
+      .exec<{ generation_number: number }>(
+        `SELECT generation_number FROM ${HISTORY_TABLE} WHERE generation_number = ? LIMIT 1`,
+        number,
+      )
+      .toArray();
+    return rows.length === 1;
+  }
+
+  private insertGeneration(generation: GenerationRecord): void {
     this.ctx.storage.sql.exec(
-      `INSERT OR IGNORE INTO ${GENERATIONS_TABLE} (sha, number, parent_sha, manifest_sha, created_at, summary) VALUES (?, ?, ?, ?, ?, ?)`,
-      generation.sha,
+      `INSERT INTO ${GENERATIONS_TABLE} (number, commit_sha, baseline_number, state, artifact_digest, idempotency_key, created_at, failure) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       generation.number,
-      generation.parent ?? null,
-      generation.manifest,
+      generation.commit,
+      generation.baseline ?? null,
+      generation.state,
+      generation.artifactDigest ?? null,
+      generation.idempotencyKey,
       generation.createdAt,
-      generation.summary,
+      generation.failure ?? null,
     );
+  }
+
+  private allocateGeneration(
+    commit: Sha,
+    baseline: GenerationNumber,
+    idempotencyKey: string,
+    createdAt: number,
+  ): GenerationRow {
+    const existing = this.readGenerationByIdempotencyKey(idempotencyKey);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const nextValue = Number(this.readMetaOrThrow(NEXT_GENERATION_META_KEY));
+    if (!Number.isSafeInteger(nextValue) || nextValue < 0) {
+      throw new RangeError("generation number counter is invalid or exhausted");
+    }
+    const next = parseGenerationNumber(nextValue);
+    if (nextValue === Number.MAX_SAFE_INTEGER) {
+      throw new RangeError("generation number counter is exhausted");
+    }
+    const record = {
+      number: next,
+      commit,
+      baseline,
+      state: "loading",
+      artifactDigest: undefined,
+      idempotencyKey,
+      createdAt,
+      failure: undefined,
+    } satisfies GenerationRecord;
+    this.insertGeneration(record);
+    this.writeMeta(NEXT_GENERATION_META_KEY, String(next + 1));
+    return this.readGenerationRowOrThrow(next);
+  }
+
+  private transitionGeneration(
+    number: GenerationNumber,
+    state: Extract<MaterializationState, "validation_failed" | "validated">,
+    failure?: string,
+  ): void {
+    const result = this.ctx.storage.sql.exec(
+      state === "validation_failed"
+        ? `UPDATE ${GENERATIONS_TABLE} SET state = ?, failure = ? WHERE number = ? AND state = ?`
+        : `UPDATE ${GENERATIONS_TABLE} SET state = ?, failure = NULL WHERE number = ? AND state IN (?, ?)`,
+      ...(state === "validation_failed"
+        ? [state, failure ?? "validation failed", number, "loaded"]
+        : [state, number, "loaded", "validated"]),
+    );
+    if (result.rowsWritten !== 1) {
+      const row = this.readGenerationRow(number);
+      if (row?.state !== state) {
+        throw new Error(`generation ${number} cannot transition to ${state}`);
+      }
+    }
   }
 
   private readCorpusCases(): readonly ValidationCase[] {
@@ -1171,9 +1468,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private insertValidationResult(result: ValidationResult): void {
     this.ctx.storage.sql.exec(
-      `INSERT OR REPLACE INTO ${VALIDATION_TABLE} (candidate_sha, validated_against, corpus_version, gate_version, verdict, created_at, case_results_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO ${VALIDATION_TABLE} (generation_number, candidate_sha, artifact_digest, validated_against, validated_against_generation, corpus_version, gate_version, verdict, created_at, case_results_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      result.generation,
       result.candidate,
+      result.artifactDigest,
       result.validatedAgainst ?? null,
+      result.validatedAgainstGeneration ?? null,
       result.corpusVersion,
       result.gateVersion,
       result.verdict,
@@ -1184,6 +1484,25 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 }
 
 const validationTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
+
+function digestArtifact(loaded: LoadedGeneration): Promise<Sha> {
+  const source = loaded.modules.find((module) => module.path === "agent.js");
+  if (source === undefined) {
+    throw new Error(`commit ${loaded.generation.sha} has no agent.js module`);
+  }
+  return digestBytes(source.content);
+}
+
+async function digestBytes(bytes: Uint8Array): Promise<Sha> {
+  const digest = await crypto.subtle.digest("SHA-1", bytes);
+  return parseSha(
+    Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+  );
+}
+
+function rowNumber(row: GenerationRow): GenerationNumber {
+  return parseGenerationNumber(row.number);
+}
 
 function materializeSupervisorGeneration(loaded: LoadedGeneration): AgentDefinition {
   const modules = loaded.modules.filter((module) => module.path !== "agent.js");
@@ -1264,50 +1583,16 @@ function decodeValidationText(path: string, content: Uint8Array): string {
   }
 }
 
-function toGeneration(row: GenerationRow): Generation {
+function generationResponse(row: GenerationRow): GenerationSummary {
   return {
-    sha: parseSha(row.sha),
     number: parseGenerationNumber(row.number),
-    parent: row.parent_sha === null ? undefined : parseSha(row.parent_sha),
-    manifest: parseSha(row.manifest_sha),
+    commit: parseSha(row.commit_sha),
+    baseline: row.baseline_number === null ? null : parseGenerationNumber(row.baseline_number),
+    state: row.state,
+    artifactDigest: row.artifact_digest === null ? null : parseSha(row.artifact_digest),
+    idempotencyKey: row.idempotency_key,
     createdAt: row.created_at,
-    summary: row.summary,
-  };
-}
-
-function generationResponse(
-  row: GenerationRow,
-  bySha: ReadonlyMap<string, GenerationRow>,
-): GenerationResponse {
-  const lineage: GenerationRow[] = [];
-  const visited = new Set<string>();
-  let current: GenerationRow | undefined = row;
-  while (current !== undefined) {
-    if (visited.has(current.sha)) {
-      throw new Error(`generation lineage cycle detected at ${current.sha}`);
-    }
-    visited.add(current.sha);
-    lineage.push(current);
-    const parentSha: string | null = current.parent_sha;
-    current = parentSha === null ? undefined : bySha.get(parentSha);
-    if (current === undefined && parentSha !== null) {
-      throw new Error(`generation lineage references missing parent for ${row.sha}`);
-    }
-  }
-  return {
-    ...generationSummary(row),
-    lineage: lineage.map((entry) => generationSummary(entry)),
-  };
-}
-
-function generationSummary(row: GenerationRow): GenerationSummary {
-  return {
-    sha: parseSha(row.sha),
-    number: row.number,
-    parent: row.parent_sha === null ? null : parseSha(row.parent_sha),
-    manifest: parseSha(row.manifest_sha),
-    createdAt: row.created_at,
-    summary: row.summary,
+    failure: row.failure,
   };
 }
 
@@ -1337,7 +1622,7 @@ function unauthorizedResponse(): Response {
   );
 }
 
-function promotionResponse(result: PromotionResult): Response {
+function promotionResponse(result: RegistryPromotionResult): Response {
   if (result.outcome === "promoted") {
     return Response.json({
       outcome: result.outcome,
@@ -1352,7 +1637,9 @@ function promotionResponse(result: PromotionResult): Response {
   );
 }
 
-function serializePromotionRejection(reason: PromotionRejection): PromotionRejectionJson {
+function serializePromotionRejection(
+  reason: RegistryPromotionRejection,
+): RegistryPromotionRejectionJson {
   switch (reason.kind) {
     case "pointer-moved":
       return {
@@ -1365,7 +1652,11 @@ function serializePromotionRejection(reason: PromotionRejection): PromotionRejec
         kind: reason.kind,
         validatedAgainst: reason.validatedAgainst ?? null,
         liveNow: reason.liveNow ?? null,
+        validatedAgainstGeneration: reason.validatedAgainstGeneration ?? null,
+        liveGeneration: reason.liveGeneration ?? null,
       };
+    case "wrong-generation":
+    case "artifact-changed":
     case "corpus-changed":
     case "gate-changed":
     case "wrong-candidate":
@@ -1377,12 +1668,22 @@ function serializePromotionRejection(reason: PromotionRejection): PromotionRejec
 }
 
 function verifyAttestation(
+  generation: GenerationNumber,
   candidate: Sha,
+  artifactDigest: Sha,
   attestation: Attestation,
   liveNow: Sha | undefined,
+  liveGeneration: GenerationNumber | undefined,
   corpusVersion: string,
   gateVersion: string,
-): PromotionRejection | undefined {
+): RegistryPromotionRejection | undefined {
+  if (attestation.generation !== generation) {
+    return {
+      kind: "wrong-generation",
+      attested: attestation.generation,
+      requested: generation,
+    };
+  }
   if (attestation.candidate !== candidate) {
     return {
       kind: "wrong-candidate",
@@ -1390,11 +1691,23 @@ function verifyAttestation(
       requested: candidate,
     };
   }
-  if (attestation.validatedAgainst !== liveNow) {
+  if (attestation.artifactDigest !== artifactDigest) {
+    return {
+      kind: "artifact-changed",
+      attested: attestation.artifactDigest,
+      current: artifactDigest,
+    };
+  }
+  if (
+    attestation.validatedAgainst !== liveNow ||
+    attestation.validatedAgainstGeneration !== liveGeneration
+  ) {
     return {
       kind: "stale-attestation",
       validatedAgainst: attestation.validatedAgainst,
       liveNow,
+      validatedAgainstGeneration: attestation.validatedAgainstGeneration,
+      liveGeneration,
     };
   }
   if (attestation.corpusVersion !== corpusVersion) {
@@ -1472,6 +1785,34 @@ function parseShaField(value: JsonValue | undefined, path: string): Sha {
   }
 }
 
+function parseGenerationNumberField(value: JsonValue | undefined, path: string): GenerationNumber {
+  let raw: number;
+  if (isString(value)) {
+    if (!/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+      throw new InvalidRequestError(`${path} must be a non-negative integer`);
+    }
+    raw = Number(value);
+  } else {
+    raw = readSafeInteger(value, path);
+  }
+  try {
+    return parseGenerationNumber(raw);
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new InvalidRequestError(`${path} is invalid: ${detail}`);
+  }
+}
+
+function parseNullableGenerationNumber(
+  value: JsonValue | undefined,
+  path: string,
+): GenerationNumber | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return parseGenerationNumberField(value, path);
+}
+
 function parseNullableSha(value: JsonValue | undefined, path: string): Sha | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -1528,7 +1869,13 @@ function parseValidationResult(value: JsonValue | undefined, path: string): Vali
   const caseResults: readonly JsonValue[] = caseResultsValue;
   return {
     candidate: parseShaField(record.candidate, `${path}.candidate`),
+    generation: parseGenerationNumberField(record.generation, `${path}.generation`),
+    artifactDigest: parseShaField(record.artifactDigest, `${path}.artifactDigest`),
     validatedAgainst: parseNullableSha(record.validatedAgainst, `${path}.validatedAgainst`),
+    validatedAgainstGeneration: parseNullableGenerationNumber(
+      record.validatedAgainstGeneration,
+      `${path}.validatedAgainstGeneration`,
+    ),
     corpusVersion: readNonEmptyString(record.corpusVersion, `${path}.corpusVersion`),
     gateVersion: readNonEmptyString(record.gateVersion, `${path}.gateVersion`),
     verdict: parseVerdict(record.verdict, `${path}.verdict`),
@@ -1539,7 +1886,10 @@ function parseValidationResult(value: JsonValue | undefined, path: string): Vali
   };
 }
 
-function parseValidationCaseResult(value: JsonValue | undefined, path: string): ValidationCaseResult {
+function parseValidationCaseResult(
+  value: JsonValue | undefined,
+  path: string,
+): ValidationCaseResult {
   const record = readRecord(value, path);
   return {
     name: readNonEmptyString(record.name, `${path}.name`),
@@ -1593,7 +1943,10 @@ function parseEffectsDifference(value: JsonValue | undefined, path: string): Eff
   throw new InvalidRequestError(`${path}.kind is unsupported`);
 }
 
-function parseNullablePrimitiveCall(value: JsonValue | undefined, path: string): PrimitiveCall | undefined {
+function parseNullablePrimitiveCall(
+  value: JsonValue | undefined,
+  path: string,
+): PrimitiveCall | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -1622,7 +1975,10 @@ function parseNullablePrimitiveCall(value: JsonValue | undefined, path: string):
   }
 }
 
-function parseNullableWorkspaceFile(value: JsonValue | undefined, path: string): WorkspaceFile | undefined {
+function parseNullableWorkspaceFile(
+  value: JsonValue | undefined,
+  path: string,
+): WorkspaceFile | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -1633,7 +1989,10 @@ function parseNullableWorkspaceFile(value: JsonValue | undefined, path: string):
   };
 }
 
-function parseInconclusiveReason(value: JsonValue | undefined, path: string): ReplayInconclusiveReason {
+function parseInconclusiveReason(
+  value: JsonValue | undefined,
+  path: string,
+): ReplayInconclusiveReason {
   const reason = readNonEmptyString(value, path);
   switch (reason) {
     case "tape-exhausted":
@@ -1694,7 +2053,13 @@ function validationResponse(row: ValidationRow): ValidationResult {
   const parsedCaseResults: readonly JsonValue[] = caseResults;
   return {
     candidate: parseSha(row.candidate_sha),
+    generation: parseGenerationNumber(row.generation_number),
+    artifactDigest: parseSha(row.artifact_digest),
     validatedAgainst: row.validated_against === null ? undefined : parseSha(row.validated_against),
+    validatedAgainstGeneration:
+      row.validated_against_generation === null
+        ? undefined
+        : parseGenerationNumber(row.validated_against_generation),
     corpusVersion: row.corpus_version,
     gateVersion: row.gate_version,
     verdict: row.verdict,
