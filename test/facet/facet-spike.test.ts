@@ -4,7 +4,8 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 
-type JsonRecord = Record<string, unknown>;
+import { isJsonObject } from "../../src/json.js";
+import type { JsonObject } from "../../src/json.js";
 
 function supervisorRequest(path: string): Promise<Response> {
   return env.SUPERVISOR.getByName("facet-spike").fetch(
@@ -12,12 +13,12 @@ function supervisorRequest(path: string): Promise<Response> {
   );
 }
 
-async function readRecord(response: Response): Promise<JsonRecord> {
+async function readRecord(response: Response): Promise<JsonObject> {
   const value: unknown = JSON.parse(await response.text());
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isJsonObject(value)) {
     throw new Error("expected a JSON object");
   }
-  return Object.fromEntries(Object.entries(value));
+  return value;
 }
 
 async function seedSupervisor(): Promise<void> {

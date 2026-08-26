@@ -1,3 +1,5 @@
+import { isJsonObject } from "../json.js";
+import type { JsonObject } from "../json.js";
 import {
   REPLAY_SCHEMA_VERSION,
   ReplaySchemaError,
@@ -20,11 +22,11 @@ import {
   type WriteResult,
 } from "./schema.js";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isRecord(value: unknown): value is JsonObject {
+  return isJsonObject(value);
 }
 
-function readRecord(value: unknown, path: string): Record<string, unknown> {
+function readRecord(value: unknown, path: string): JsonObject {
   if (!isRecord(value)) {
     throw new ReplaySchemaError(path, "must be an object");
   }

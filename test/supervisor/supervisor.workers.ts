@@ -9,6 +9,9 @@ import { parseSha } from "../../src/git/types.js";
 import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import { afterEach, expect, test } from "vitest";
 
+import { isJsonValue } from "../../src/json.js";
+import type { JsonObject, JsonValue } from "../../src/json.js";
+
 type Credential = "valid" | "missing" | "wrong" | "empty";
 
 function supervisorRequest(
@@ -29,18 +32,22 @@ function supervisorRequest(
   );
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  return JSON.parse(await response.text());
+async function readJson(response: Response): Promise<JsonValue> {
+  const parsed: unknown = JSON.parse(await response.text());
+  if (!isJsonValue(parsed)) {
+    throw new TypeError("expected a JSON value");
+  }
+  return parsed;
 }
 
-function readRecord(value: unknown): Record<string, unknown> {
+function readRecord(value: unknown): JsonObject {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("expected a JSON object");
   }
   return Object.fromEntries(Object.entries(value));
 }
 
-function readStringField(record: Record<string, unknown>, key: string): string {
+function readStringField(record: JsonObject, key: string): string {
   const value = record[key];
   if (typeof value !== "string") {
     throw new TypeError(`expected ${key} to be a string`);

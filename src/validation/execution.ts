@@ -61,15 +61,11 @@ export function recordOutcome(outcome: ReplayOutcome): RecordedCaseOutcome {
       return { status: "FAIL", difference };
     }
     case "INCONCLUSIVE": {
-      const inconclusive: {
-        readonly status: "INCONCLUSIVE";
-        readonly reason: ReplayInconclusiveReason;
-        readonly detail: string;
-      } = {
+      const inconclusive = {
         status: "INCONCLUSIVE",
         reason: outcome.reason,
         detail: outcome.detail,
-      };
+      } satisfies RecordedCaseOutcome;
       return inconclusive;
     }
     default:

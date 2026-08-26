@@ -45,16 +45,16 @@ export default defineConfig({
     // 40 violations on adoption
     "anti-slop/no-runtime-typeof": "off",
     // 22 violations on adoption
-    "anti-slop/no-unsafe-dictionary-type": "off",
+    "anti-slop/no-unsafe-dictionary-type": "error",
     // 8 violations on adoption
-    "anti-slop/no-known-value-widening": "off",
+    "anti-slop/no-known-value-widening": "error",
     // 4 violations on adoption
-    "anti-slop/no-unknown-returns": "off",
+    "anti-slop/no-unknown-returns": "error",
     // 2 violations on adoption
-    "anti-slop/require-safety-comment-for-type-assertion": "off",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
     // 1 violations on adoption
-    "anti-slop/no-object-parameters": "off",
+    "anti-slop/no-object-parameters": "error",
     // 1 violations on adoption
-    "anti-slop/no-chained-type-assertions": "off",
+    "anti-slop/no-chained-type-assertions": "error",
   },
 });

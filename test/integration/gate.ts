@@ -17,6 +17,11 @@ import {
 } from "../../src/validation/index.js";
 import { ALLOW_POLICY } from "./fixtures.js";
 
+type PrimitiveMessage = {
+  readonly name: PrimitiveCall["kind"];
+  readonly arguments: Readonly<Record<string, string>>;
+};
+
 const expectedReplayCalls: readonly PrimitiveCall[] = [
   { kind: "read", path: "README.md" },
   { kind: "write", path: "notes.txt", content: "created\n" },
@@ -36,7 +41,7 @@ function replayAgentResponse(policy: string): string {
   });
 }
 
-function primitiveMessage(call: PrimitiveCall): { readonly name: string; readonly arguments: object } {
+function primitiveMessage(call: PrimitiveCall): PrimitiveMessage {
   switch (call.kind) {
     case "read":
       return { name: call.kind, arguments: { path: call.path } };

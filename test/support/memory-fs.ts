@@ -22,6 +22,22 @@ type Stats = {
   mode: number;
 };
 
+type FsPromises = {
+  mkdir: (path: string) => Promise<void>;
+  writeFile: (path: string, data: Uint8Array | string) => Promise<void>;
+  readFile: (
+    path: string,
+    options?: { readonly encoding?: string } | string,
+  ) => Promise<Uint8Array | string>;
+  stat: (path: string) => Promise<Stats>;
+  lstat: (path: string) => Promise<Stats>;
+  readdir: (path: string) => Promise<readonly string[]>;
+  rmdir: (path: string) => Promise<void>;
+  unlink: (path: string) => Promise<void>;
+  readlink: (path: string) => Promise<string>;
+  symlink: (target: string, path: string) => Promise<void>;
+};
+
 /** Carries the `code` property isomorphic-git branches on, without asserting a widened type. */
 class FsError extends Error {
   public readonly code: string;
@@ -67,16 +83,13 @@ function childNames(files: ReadonlyMap<string, Uint8Array>, path: string): reado
 }
 
 export type MemoryFs = {
-  promises: Record<string, unknown>;
+  promises: FsPromises;
   /** Every path currently holding content, for asserting on what git laid down. */
   paths: () => readonly string[];
   read: (path: string) => Uint8Array | undefined;
 };
 
-function makePromises(
-  files: Map<string, Uint8Array>,
-  directories: Set<string>,
-): Record<string, unknown> {
+function makePromises(files: Map<string, Uint8Array>, directories: Set<string>): FsPromises {
   const stat = (path: string): Promise<Stats> => {
     if (directories.has(path)) return Promise.resolve(statsFor(0, true));
     const content = files.get(path);

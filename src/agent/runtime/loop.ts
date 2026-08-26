@@ -1,3 +1,5 @@
+import { isJsonObject } from "../../json.js";
+import type { JsonObject } from "../../json.js";
 import { assertNever } from "../../git/types.js";
 import type {
   CapturedToolResult,
@@ -17,6 +19,11 @@ import { DEFAULT_MODEL_REQUEST_ID, type ModelResponseSource } from "./model.js";
 import { parseAgentResponse } from "./protocol.js";
 import type { ParsedToolCall } from "./protocol.js";
 import type { TurnFailure } from "./types.js";
+
+type MalformedToolResult = {
+  readonly ok: false;
+  readonly failure: TurnFailure;
+};
 
 export type ToolExecution =
   | { readonly ok: true; readonly result: ReplayPrimitiveResult }
@@ -152,7 +159,7 @@ function primitiveCall(action: ParsedToolCall):
   }
 }
 
-function readCall(argumentsObject: Record<string, unknown>):
+function readCall(argumentsObject: JsonObject):
   | { readonly ok: true; readonly call: ToolPrimitiveCall }
   | { readonly ok: false; readonly failure: TurnFailure } {
   const path = stringArgument(argumentsObject, "path");
@@ -161,7 +168,7 @@ function readCall(argumentsObject: Record<string, unknown>):
     : { ok: true, call: { kind: "read", path } };
 }
 
-function writeCall(argumentsObject: Record<string, unknown>):
+function writeCall(argumentsObject: JsonObject):
   | { readonly ok: true; readonly call: ToolPrimitiveCall }
   | { readonly ok: false; readonly failure: TurnFailure } {
   const path = stringArgument(argumentsObject, "path");
@@ -174,7 +181,7 @@ function writeCall(argumentsObject: Record<string, unknown>):
     : { ok: true, call: { kind: "write", path, content } };
 }
 
-function editCall(argumentsObject: Record<string, unknown>):
+function editCall(argumentsObject: JsonObject):
   | { readonly ok: true; readonly call: ToolPrimitiveCall }
   | { readonly ok: false; readonly failure: TurnFailure } {
   const path = stringArgument(argumentsObject, "path");
@@ -191,7 +198,7 @@ function editCall(argumentsObject: Record<string, unknown>):
     : { ok: true, call: { kind: "edit", path, oldText, newText } };
 }
 
-function bashCall(argumentsObject: Record<string, unknown>):
+function bashCall(argumentsObject: JsonObject):
   | { readonly ok: true; readonly call: ToolPrimitiveCall }
   | { readonly ok: false; readonly failure: TurnFailure } {
   const command = stringArgument(argumentsObject, "command");
@@ -200,9 +207,7 @@ function bashCall(argumentsObject: Record<string, unknown>):
     : { ok: true, call: { kind: "bash", command } };
 }
 
-function malformedArguments(
-  name: PrimitiveKind,
-): { readonly ok: false; readonly failure: TurnFailure } {
+function malformedArguments(name: PrimitiveKind): MalformedToolResult {
   return {
     ok: false,
     failure: {
@@ -212,10 +217,7 @@ function malformedArguments(
   };
 }
 
-function malformedArgument(
-  name: PrimitiveKind,
-  argument: string,
-): { readonly ok: false; readonly failure: TurnFailure } {
+function malformedArgument(name: PrimitiveKind, argument: string): MalformedToolResult {
   return {
     ok: false,
     failure: {
@@ -225,7 +227,7 @@ function malformedArgument(
   };
 }
 
-function stringArgument(argumentsObject: Record<string, unknown>, name: string): string | undefined {
+function stringArgument(argumentsObject: JsonObject, name: string): string | undefined {
   const value = argumentsObject[name];
   return typeof value === "string" ? value : undefined;
 }
@@ -234,8 +236,8 @@ function isPrimitiveKind(value: string): value is PrimitiveKind {
   return PRIMITIVE_KINDS.some((kind) => kind === value);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isRecord(value: unknown): value is JsonObject {
+  return isJsonObject(value);
 }
 
 export function toReplayCall(call: ToolPrimitiveCall): ReplayPrimitiveCall {

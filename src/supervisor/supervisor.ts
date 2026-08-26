@@ -2,6 +2,8 @@
 /* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file, import/max-dependencies, unicorn/no-array-sort */
 
 import { authorizeSupervisorRequest } from "./auth.js";
+import { isJsonObject, isJsonValue } from "../json.js";
+import type { JsonObject, JsonValue } from "../json.js";
 import {
   healthyAgentSource,
   initializationErrorAgentSource,
@@ -1419,7 +1421,7 @@ function verifyAttestation(
   }
 }
 
-async function readRequestRecord(request: Request): Promise<Record<string, unknown>> {
+async function readRequestRecord(request: Request): Promise<JsonObject> {
   let value: unknown;
   try {
     value = JSON.parse(await request.text());
@@ -1432,8 +1434,8 @@ async function readRequestRecord(request: Request): Promise<Record<string, unkno
   return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isRecord(value: unknown): value is JsonObject {
+  return isJsonObject(value);
 }
 
 function readNonEmptyString(value: unknown, path: string): string {
@@ -1632,7 +1634,7 @@ function parseInconclusiveReason(value: unknown, path: string): ReplayInconclusi
   }
 }
 
-function readRecord(value: unknown, path: string): Record<string, unknown> {
+function readRecord(value: unknown, path: string): JsonObject {
   if (!isRecord(value)) {
     throw new InvalidRequestError(`${path} must be an object`);
   }
@@ -1653,17 +1655,25 @@ function readBoolean(value: unknown, path: string): boolean {
   return value;
 }
 
-function parseStoredJson(value: string, path: string): unknown {
+function parseStoredJson(value: string, path: string): JsonValue {
   try {
-    return JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
+    if (!isJsonValue(parsed)) {
+      throw new TypeError("value is not JSON-compatible");
+    }
+    return parsed;
   } catch (error: unknown) {
     throw new Error(`${path} contains invalid JSON: ${errorMessage(error)}`, { cause: error });
   }
 }
 
-function parseJsonOrText(value: string): unknown {
+function parseJsonOrText(value: string): JsonValue {
   try {
-    return JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
+    if (!isJsonValue(parsed)) {
+      throw new TypeError("value is not JSON-compatible");
+    }
+    return parsed;
   } catch {
     return value;
   }

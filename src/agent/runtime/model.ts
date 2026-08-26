@@ -16,6 +16,8 @@ export type ModelResponseSource = {
   requestModel(request: AgentModelRequest): Promise<RecordedModelResponse>;
 };
 
-export type ModelProvider = (request: AgentModelRequest) => unknown;
+export type ModelProvider = (
+  request: AgentModelRequest,
+) => LiveModelResponse | Promise<LiveModelResponse>;
 
 export type LiveModelResponse = string | { readonly content: string; readonly requestId?: string };
