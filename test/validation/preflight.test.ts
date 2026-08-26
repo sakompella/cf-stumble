@@ -10,10 +10,7 @@ import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import { PointerManager } from "../../src/pointer/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Workspace } from "../../src/tools/index.js";
-import {
-  defaultResponseSource,
-  defaultWorkspace,
-} from "../../src/validation/preflight-probes.js";
+import { defaultResponseSource, defaultWorkspace } from "../../src/validation/preflight-probes.js";
 import type { PreflightProbe } from "../../src/validation/preflight.js";
 import { ValidationGate } from "../../src/validation/gate.js";
 import { runPreflight } from "../../src/validation/preflight.js";
@@ -90,7 +87,11 @@ test("partial success does not pass when the edit capability is lost", async () 
   expect(result.failure).toContain("edit");
   expect(result.failure).toContain("expected exactly one match, found none");
   expect(result.checks.find((check) => check.capability === "read")?.status).toBe("PASS");
-  expect(result.checks.filter((check) => check.capability !== "edit").every((check) => check.status === "PASS")).toBe(true);
+  expect(
+    result.checks
+      .filter((check) => check.capability !== "edit")
+      .every((check) => check.status === "PASS"),
+  ).toBe(true);
   expect(result.checks.find((check) => check.capability === "edit")?.status).toBe("FAIL");
 });
 
@@ -126,9 +127,7 @@ test("a harness error is INCONCLUSIVE rather than FAIL and remains distinguishab
 
   expect(result.status).toBe("INCONCLUSIVE");
   expect(result.failure).toContain("workspace blew up");
-  expect(result.checks.find((check) => check.capability === "bash")?.status).toBe(
-    "INCONCLUSIVE",
-  );
+  expect(result.checks.find((check) => check.capability === "bash")?.status).toBe("INCONCLUSIVE");
   expect(result.checks.some((check) => check.status === "FAIL")).toBe(false);
 });
 
@@ -137,16 +136,7 @@ test("a preflight failure blocks promotion through the real validation gate", as
   const live = await buildHealthyCandidate(store);
   const candidate = await buildHealthyCandidate(store);
   const registry = new MemoryGenerationRegistry();
-  const allocated = await registry.allocate({
-    commit: candidate.sha,
-    baseline: undefined,
-    idempotencyKey: "preflight-promotion",
-    createdAt: candidate.createdAt,
-  });
-  await registry.transition(allocated.number, {
-    state: "loaded",
-    artifactDigest: candidate.sha,
-  });
+  const allocated = await registerLoaded(registry, candidate);
   expect(await store.setPointer(live.sha, undefined)).toBe(true);
 
   const gate = new ValidationGate({
@@ -168,10 +158,18 @@ test("a preflight failure blocks promotion through the real validation gate", as
     validatedAgainstGeneration: undefined,
   });
 
-  expect(run.result).toMatchObject({ verdict: "fail", preflight: { status: "FAIL" }, caseResults: [] });
+  expect(run.result).toMatchObject({
+    verdict: "fail",
+    preflight: { status: "FAIL" },
+    caseResults: [],
+  });
   expect(run.attestation).toBeUndefined();
 
-  const pointer = new PointerManager({ store, corpusVersion: run.result.corpusVersion, gateVersion: run.result.gateVersion });
+  const pointer = new PointerManager({
+    store,
+    corpusVersion: run.result.corpusVersion,
+    gateVersion: run.result.gateVersion,
+  });
   await expect(pointer.promote(candidate.sha, attestationFor(run.result))).resolves.toMatchObject({
     outcome: "rejected",
     reason: { kind: "not-passing" },
@@ -210,6 +208,23 @@ function attestationFor(
 
 const absentResult = void 0;
 
+async function registerLoaded(
+  registry: MemoryGenerationRegistry,
+  candidate: Awaited<ReturnType<typeof buildHealthyCandidate>>,
+) {
+  const allocated = await registry.allocate({
+    commit: candidate.sha,
+    baseline: undefined,
+    idempotencyKey: "preflight-promotion",
+    createdAt: candidate.createdAt,
+  });
+  await registry.transition(allocated.number, {
+    state: "loaded",
+    artifactDigest: candidate.sha,
+  });
+  return allocated;
+}
+
 function emptyResultStore() {
   return {
     put: () => Promise.resolve(),
@@ -228,10 +243,7 @@ function buildHealthyCandidate(store: MemoryStore) {
   });
 }
 
-function brokenEditSource(
-  probe: PreflightProbe,
-  definition: AgentDefinition,
-): ModelResponseSource {
+function brokenEditSource(probe: PreflightProbe, definition: AgentDefinition): ModelResponseSource {
   if (probe.capability !== "edit") {
     return defaultResponseSource(probe, definition);
   }
@@ -255,10 +267,7 @@ function brokenEditSource(
   ]);
 }
 
-function brokenSelfEditWorkspace(
-  probe: PreflightProbe,
-  definition: AgentDefinition,
-): Workspace {
+function brokenSelfEditWorkspace(probe: PreflightProbe, definition: AgentDefinition): Workspace {
   if (probe.capability !== "self-edit") {
     return defaultWorkspace(probe, definition);
   }

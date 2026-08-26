@@ -14,12 +14,7 @@ import { runProbe } from "./preflight-execution.js";
 export type PreflightStatus = "PASS" | "FAIL" | "INCONCLUSIVE";
 
 export type PreflightCapability =
-  | "materialization"
-  | "read"
-  | "write"
-  | "edit"
-  | "bash"
-  | "self-edit";
+  "materialization" | "read" | "write" | "edit" | "bash" | "self-edit";
 
 export type PreflightCheck =
   | { readonly capability: PreflightCapability; readonly status: "PASS" }
@@ -105,10 +100,7 @@ export async function runPreflight(options: PreflightOptions): Promise<Preflight
     const detail = `preflight: timeout must be positive and finite, got ${timeoutMs}`;
     return {
       status: "INCONCLUSIVE",
-      checks: [
-        materialization,
-        ...probes.map((probe) => inconclusiveTimeout(probe, detail)),
-      ],
+      checks: [materialization, ...probes.map((probe) => inconclusiveTimeout(probe, detail))],
       failure: detail,
     };
   }

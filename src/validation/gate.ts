@@ -80,11 +80,7 @@ export class ValidationGate {
 
   async validate(candidate: Sha, validationIdentity: ValidationIdentity): Promise<ValidationRun> {
     const preflight = await executePreflight(this.preflight, candidate);
-    await recordPreflightFailure(
-      this.generationRegistry,
-      preflight,
-      validationIdentity,
-    );
+    await recordPreflightFailure(this.generationRegistry, preflight, validationIdentity);
     const [corpusVersion, gateVersion, validatedAgainst, pinnedCorpusMatches] = await Promise.all([
       computeCorpusVersion(this.corpus),
       computeGateVersion(),
