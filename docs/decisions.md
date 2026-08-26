@@ -98,6 +98,18 @@ either absent or deliberate. `globalOutbound: null` blocks network egress by def
 can prove universal non-access, and this one does not claim to; it catches the configuration
 mistakes that would quietly invalidate the architecture, which is the realistic threat.
 
+### D2a-bis — The facet gets a four-method capability, never a Workspace
+
+Confirmed by reading `@cloudflare/computer@0.2.1` source: a shell or container holding a Workspace
+also holds the filesystem root, host-forwarded git, Assets and Artifacts, and **git network calls
+run host-side, bypassing `globalOutbound: null`**. Our egress test would stay green while an agent
+exfiltrated over git.
+
+So the supervisor owns the Workspace and exposes exactly four proxied methods matching the four
+primitives. This is the first concrete payoff of fixing the action space and never growing it: a
+four-method capability can be audited; "a filesystem and a shell" cannot. See
+`docs/review-findings.md`.
+
 ### D2b — The isolation spike runs first, not last
 
 Originally sequenced as the twelfth slice. That was backwards: it is the claim the entire

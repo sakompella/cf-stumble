@@ -1,7 +1,7 @@
 # Review findings
 
 An architectural review of the finished overnight build. These are the things a green test
-suite does *not* prove. Recorded here rather than fixed silently, because several are judgement
+suite does _not_ prove. Recorded here rather than fixed silently, because several are judgement
 calls for the human and one changes what "validated" means.
 
 ## The one that matters most: attestation provenance — RESOLVED (S14)
@@ -21,7 +21,7 @@ It does not close the gap where **the evidence was never trustworthy in the firs
 bindings only mean something if attestations can be issued exclusively by an authenticated,
 independent validator. Today the supervisor's routes are unauthenticated and a caller can
 construct a well-formed attestation directly, which is exactly what the tests do. So the current
-test proves the *shape* of the check, not the *guarantee* — a perfectly bound result that
+test proves the _shape_ of the check, not the _guarantee_ — a perfectly bound result that
 anybody can mint proves nothing.
 
 Concretely, before this is deployed: trace who can mutate corpus and context, submit validation
@@ -57,8 +57,8 @@ identity came from the mutable corpus, and a corpus change only had to produce a
 Canaries are now pinned in supervisor-owned state and must remain present, mandatory and
 content-identical. The original analysis is kept below.
 
-Content-derived corpus versions plus mandatory canaries make a weak corpus *identifiable*. They
-do not make it *adequate*. The hole is only closed if all four of these hold, and they should be
+Content-derived corpus versions plus mandatory canaries make a weak corpus _identifiable_. They
+do not make it _adequate_. The hole is only closed if all four of these hold, and they should be
 checked rather than assumed:
 
 - Canary identities and their expected outcomes are controlled independently of the candidate.
@@ -113,7 +113,6 @@ There is a lot of policy sitting on top of something that isn't yet running real
 **Under-built:** the trusted production execution boundary — module materialization, validator
 provenance, endpoint authorization, and real workspace capability containment.
 
-
 ## Lint debt worth naming (open)
 
 Adopting anti-slop surfaced something unrelated to its own rules: `src/supervisor/supervisor.ts`
@@ -132,3 +131,43 @@ validation wiring, genesis and facet loading in one place.
 That disable is the linter reporting a design problem and being told to be quiet. Splitting the
 supervisor along its obvious seams (routing / generation store / promotion) is the fix, and it
 was not attempted tonight because it touches the component every workerd test drives.
+
+## `@cloudflare/computer` would breach the facet boundary if used naively (open)
+
+Workers Paid became acceptable, so the obvious move was to back the four primitives with a real
+`@cloudflare/computer` workspace and finally get a production `bash`. Reading the 0.2.1 source
+first turned up a set of capability leaks that would quietly dismantle the isolation the whole
+design rests on.
+
+**Egress is not actually closed.** Setting `egress: { mode: "none" }` blocks ambient public
+networking, but the backend still grants the internal `computer.internal` route, and **git network
+operations execute host-side** — so clone, fetch and push bypass `globalOutbound: null` entirely.
+Our facet test asserts that `fetch()` and `connect()` fail; it would keep passing while the agent
+exfiltrated through git.
+
+**The workspace surface is much wider than four primitives.** A shell or container reaching a
+Workspace gets the filesystem root, host-forwarded git, Assets and Artifacts. `containerEnv` and
+any credentials baked into the image are readable by commands. Version 0.2.1 has neither RPC bearer
+authentication nor an environment allowlist; both are pending in an unreleased 0.3.0.
+
+**The current model already resists this, by accident of being strict.** An `env: {}` facet cannot
+use `WorkerShellBackend` at all, because it has no `LOADER`. Exposing a host-owned Workspace to the
+facet would require deliberately adding a capability route back to the supervisor — precisely the
+thing D2a says must not exist.
+
+**So the design is: never hand the facet a Workspace.** Expose a narrow capability with exactly
+four methods, matching the four primitives, proxied and policed by the supervisor, which holds the
+Workspace itself. This is the first concrete payoff from fixing the action space at four and never
+letting it grow: a four-method capability is auditable in a way that "a filesystem and a shell"
+never is.
+
+The unglamorous consequence is that `bash` cannot be a passthrough. Whatever the supervisor is
+willing to run has to be an explicit, reviewed surface, and `WorkerShellBackend` runs just-bash —
+roughly 77 bundled utilities with pipes, redirects and loops, but no OS processes, no compiler and
+no arbitrary binaries — while the container backend runs real processes and costs real money
+(standard-2 around $0.129/hour while awake, sleeping after idle, cold start 1–3s).
+
+**Maturity argues for patience anyway.** npm is still on 0.2.1 with `publishConfig.tag: unreleased`
+while GitHub `main` sits 69 commits ahead behind an unreleased 0.3.0 that changes auth and
+environment filtering. Open issues include broken published sqlite, unreachable GC, and unbounded
+tombstones. Fine to build a workspace on; not something to make load-bearing for isolation.
