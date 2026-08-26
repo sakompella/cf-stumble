@@ -70,7 +70,7 @@ encoder.
 
 ---
 
-## S2 — Storage interface, in-memory implementation, conformance suite · depends: S0 · IN PROGRESS
+## S2 — Storage interface, in-memory implementation, conformance suite · depends: S0 · DONE
 
 The four-function surface (D3, D5). Owns `src/storage/`, `test/storage/`.
 
