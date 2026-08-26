@@ -82,7 +82,7 @@ two implementations from quietly diverging.
 
 ---
 
-## S3 — Generation model · depends: S1, S2 · IN PROGRESS
+## S3 — Generation model · depends: S1, S2 · DONE
 
 A generation is a commit whose tree is the module manifest (D8). Build from named modules, read
 back, walk lineage to the root. Owns `src/generation/`.
@@ -191,7 +191,7 @@ back, reset. Owns `src/supervisor/`.
 
 ---
 
-## S11 — Agent primitives · depends: S6, S0.5
+## S11 — Agent primitives · depends: S6, S0.5 · IN PROGRESS
 
 The fixed action space: `read`, `write`, `edit`, `bash`, and nothing else ever. What
 accumulates across generations is skills, prompts, and policies. Owns `src/agent/tools/`.

@@ -12,3 +12,4 @@ time	slice	decision	reason	evidence	result
 10:38	S3/S4	Brand via type predicate, not `as` assertion	no-unsafe-type-assertion; matches parseSha idiom already in git/types.ts	oxlint	adopted repo-wide
 10:41	S0.5	All 5 facet isolation claims hold	storage separate, env empty, egress blocked, routes unreachable, reset survives load+init failure	7 tests vs real workerd	architecture de-risked, merged
 10:41	S0.5	Split tsconfig: node-side vs workers-side	@cloudflare/workers-types globally replaces Node lib types; one program cannot host both	tsc errors on crypto and TextDecoder in src/git after merge	two configs, typecheck runs both
+10:53	S3	Lineage cycle guard kept though untestable	content addressing makes a real cycle unconstructable (child sha embeds parent sha); guard defends a corrupted store	visited-set in lineage.ts and read.ts, no test	accepted, noted
