@@ -47,7 +47,7 @@ export class AgentMaterializationError extends Error {
   }
 }
 
-const decoder = new TextDecoder("utf-8", { fatal: true });
+const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
 /** Read and validate the role-bearing modules in one immutable generation. */
 export async function materializeGeneration(

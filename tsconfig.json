@@ -1,18 +1,11 @@
 {
-  // Node-side code: the git codec, storage, generations, pointer, replay, and their tests.
-  // Worker-side code lives in tsconfig.workers.json under a different global environment.
+  // One program. The Node-side/worker-side split existed because @cloudflare/workers-types is a
+  // global augmentation that replaces Node's lib globals, and some tests needed node: builtins.
+  // Nothing imports node: any more, so there is one environment: workerd.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
-    "types": ["node"]
+    "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src", "test", "*.config.ts"],
-  "exclude": [
-    "src/supervisor",
-    "src/agent",
-    "src/storage/do-sqlite.ts",
-    "test/facet",
-    "test/storage-do",
-    "test/supervisor"
-  ]
+  "include": ["src", "test", "*.config.ts"]
 }

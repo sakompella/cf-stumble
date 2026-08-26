@@ -1180,7 +1180,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 }
 
-const validationTextDecoder = new TextDecoder("utf-8", { fatal: true });
+const validationTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
 function materializeSupervisorGeneration(loaded: LoadedGeneration): AgentDefinition {
   const modules = loaded.modules.filter((module) => module.path !== "agent.js");

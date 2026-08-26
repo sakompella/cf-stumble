@@ -6,16 +6,14 @@
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "test": "vitest run",
-    "test:workers": "vitest run --config vitest.workers.config.ts",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.workers.json --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --max-warnings=0",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.1.0",
     "@cloudflare/workers-types": "^5.20260826.1",
-    "@types/node": "^26.0.0",
     "isomorphic-git": "^1.41.9",
     "oxlint": "^1.80.0",
     "oxlint-tsgolint": "^7.0.2001",
