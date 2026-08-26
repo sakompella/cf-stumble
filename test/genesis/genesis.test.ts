@@ -35,4 +35,16 @@ describe("seedGenesis", () => {
     expect(genesis.parent).toBeUndefined();
     expect(await store.readPointer()).toBe(genesis.sha);
   });
+
+  it("is idempotent without adding objects on a second seed", async () => {
+    const store = new MemoryStore();
+
+    const first = await seedGenesis(store, options);
+    const objectsAfterFirstSeed = await store.listObjects();
+    const second = await seedGenesis(store, options);
+
+    expect(second.sha).toBe(first.sha);
+    expect(await store.listObjects()).toHaveLength(objectsAfterFirstSeed.length);
+    expect(await store.listObjects()).toEqual(objectsAfterFirstSeed);
+  });
 });
