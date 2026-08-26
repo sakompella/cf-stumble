@@ -47,7 +47,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
     switch (pathname) {
       case "/facet/ping":
-        return this.fetchFacet();
+        return this.fetchFacet("ping");
+      case "/facet/probe":
+        return this.fetchFacet("probe");
       case "/seed":
         return this.seed();
       case "/inspect":
@@ -69,15 +71,16 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
-  private fetchFacet(): Promise<Response> {
+  private fetchFacet(path: "ping" | "probe"): Promise<Response> {
     const facet = this.mountFacet(this.readCandidateSource());
-    return facet.fetch(new Request("https://facet/ping"));
+    return facet.fetch(new Request(`https://facet/${path}`));
   }
 
   private mountFacet(source: string): Fetcher {
     this.attempt += 1;
-    const worker = loadAgent(this.env.LOADER, `candidate-${this.attempt}`, source);
-    const facetName = `agent-${this.attempt}`;
+    const uniqueName = `${this.attempt}-${crypto.randomUUID()}`;
+    const worker = loadAgent(this.env.LOADER, `candidate-${uniqueName}`, source);
+    const facetName = `agent-${uniqueName}`;
     const agentClass = worker.getDurableObjectClass("Agent");
     const facet = this.ctx.facets.get(facetName, () => ({ class: agentClass }));
     this.activeFacetName = facetName;
@@ -113,7 +116,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async promote(): Promise<Response> {
     try {
       const facet = this.mountFacet(this.readCandidateSource());
-      const response = await facet.fetch(new Request("https://facet/ping"));
+      const response = await facet.fetch(new Request("https://facet/probe"));
       if (!response.ok) {
         return Response.json(
           { promoted: false, reason: `facet returned ${response.status}` },
