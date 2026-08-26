@@ -10,6 +10,13 @@ import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import { afterEach, expect, test } from "vitest";
 
 type Credential = "valid" | "missing" | "wrong" | "empty";
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
 
 function supervisorRequest(
   path: string,
@@ -29,8 +36,32 @@ function supervisorRequest(
   );
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  return JSON.parse(await response.text());
+async function readJson(response: Response): Promise<JsonValue> {
+  const parsed: unknown = JSON.parse(await response.text());
+  return toJsonValue(parsed);
+}
+
+function toJsonValue(value: unknown): JsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("JSON value must contain finite numbers");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => toJsonValue(entry));
+  }
+  if (typeof value === "object") {
+    const record: { [key: string]: JsonValue } = {};
+    for (const [key, entry] of Object.entries(value)) {
+      record[key] = toJsonValue(entry);
+    }
+    return record;
+  }
+  throw new TypeError("JSON value contains an unsupported type");
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

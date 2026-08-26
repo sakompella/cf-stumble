@@ -49,7 +49,7 @@ export default defineConfig({
     // 8 violations on adoption
     "anti-slop/no-known-value-widening": "off",
     // 4 violations on adoption
-    "anti-slop/no-unknown-returns": "off",
+    "anti-slop/no-unknown-returns": "error",
     // 2 violations on adoption
     "anti-slop/require-safety-comment-for-type-assertion": "error",
     // 1 violations on adoption

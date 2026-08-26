@@ -58,6 +58,14 @@ type SupervisorEnv = {
   readonly SUPERVISOR_SECRET?: string;
 };
 
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
 type CandidateMode = "healthy" | "syntax" | "init";
 
 type GenerationRow = {
@@ -1653,20 +1661,45 @@ function readBoolean(value: unknown, path: string): boolean {
   return value;
 }
 
-function parseStoredJson(value: string, path: string): unknown {
+function parseStoredJson(value: string, path: string): JsonValue {
   try {
-    return JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
+    return toJsonValue(parsed);
   } catch (error: unknown) {
     throw new Error(`${path} contains invalid JSON: ${errorMessage(error)}`, { cause: error });
   }
 }
 
-function parseJsonOrText(value: string): unknown {
+function parseJsonOrText(value: string): JsonValue {
   try {
-    return JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
+    return toJsonValue(parsed);
   } catch {
     return value;
   }
+}
+
+function toJsonValue(value: unknown): JsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("JSON value must contain finite numbers");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => toJsonValue(entry));
+  }
+  if (typeof value === "object") {
+    const record: { [key: string]: JsonValue } = {};
+    for (const [key, entry] of Object.entries(value)) {
+      record[key] = toJsonValue(entry);
+    }
+    return record;
+  }
+  throw new TypeError("JSON value contains an unsupported type");
 }
 
 function validationResponse(row: ValidationRow): ValidationResult {
