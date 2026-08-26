@@ -1422,7 +1422,7 @@ class InvalidRequestError extends Error implements InvalidRequest {
 }
 
 class MissingResourceError extends Error {
-  readonly kind = "not-found" as const;
+  readonly kind = "not-found";
 
   constructor(message: string) {
     super(message);
