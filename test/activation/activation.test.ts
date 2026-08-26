@@ -66,3 +66,38 @@ describe("MemoryActivationLedger promotion", () => {
     ]);
   });
 });
+
+describe("MemoryActivationLedger compare-and-swap", () => {
+  it("rejects a promotion with a stale expected pointer and leaves the winner intact", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const ledger = new MemoryActivationLedger({ registry, now: () => 42 });
+    const base = await validatedGeneration(registry, "base");
+    const contender = await validatedGeneration(registry, "contender");
+    await ledger.promote(base.number, NO_POINTER);
+
+    const rejected = await ledger.promote(contender.number, NO_POINTER);
+
+    expect(rejected).toEqual({
+      outcome: "rejected",
+      reason: { kind: "pointer-moved", expected: NO_POINTER, actual: base.number },
+    });
+    expect(await ledger.readPointer()).toBe(base.number);
+    expect(await ledger.readEvents()).toHaveLength(1);
+  });
+});
+
+describe("MemoryActivationLedger rollback", () => {
+  it("rejects rollback to a generation never previously recorded as live", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const ledger = new MemoryActivationLedger({ registry });
+    const target = await validatedGeneration(registry, "never-live");
+
+    const result = await ledger.rollback(target.number, NO_POINTER);
+
+    expect(result).toEqual({
+      outcome: "rejected",
+      reason: { kind: "never-promoted", generation: target.number },
+    });
+    expect(await ledger.readPointer()).toBeUndefined();
+  });
+});
