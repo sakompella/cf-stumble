@@ -73,14 +73,18 @@ independent test oracle. See D1 for the case against.
 
 ```
 pnpm install
-pnpm test          # vitest, plain Node
-pnpm typecheck     # tsc --noEmit, strict
+pnpm test          # all 165 tests, inside real workerd
+pnpm typecheck     # tsc --noEmit, strict, typed against workers-types
 pnpm lint          # oxlint type-aware, --max-warnings=0
 ```
 
-Workers-side tests run under a separate config against real workerd. Facets and the Dynamic
-Worker Loader need Workers Paid to *deploy*, but run locally with no account at all, so the
-isolation guarantees are tested for real rather than mocked.
+**Everything runs in workerd.** There is no Node-side test path and nothing imports `node:`
+builtins, so a passing test says something about the runtime we actually deploy to. The git
+codec's independent oracle is isomorphic-git rather than the `git` binary precisely because a
+subprocess cannot run there.
+
+Facets and the Dynamic Worker Loader need Workers Paid to *deploy*, but run locally with no
+account at all, so the isolation guarantees are tested for real rather than mocked.
 
 ## Status
 

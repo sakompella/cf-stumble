@@ -42,6 +42,20 @@ estimate of 150 was optimistic by a factor of four, which is itself an argument 
 has no dependency surface, keeps the four-function store honest, and — because we keep git's
 exact wire format — every encode is checked against the real `git` binary in tests.
 
+### D1a — The oracle is isomorphic-git, not the `git` binary
+
+Originally the codec was cross-checked against the real `git` executable. That was a good
+oracle and it had one fatal property for this project: it needs a subprocess, so those tests
+could only run in Node. Since the whole system deploys to workerd, the codec's correctness was
+being proven in a runtime we do not ship to.
+
+isomorphic-git replaces it. It is pure JavaScript, runs inside workerd, and is still a genuinely
+independent implementation written by other people, so the evidence is just as good. A prototype
+confirmed the two produce byte-identical objects given identical inputs, and the mutation check
+survived the swap: padding tree modes to `040000` still makes the nested-tree oracle fail.
+
+That change is what let the entire suite move onto one runtime.
+
 **The case against, which is real.** 614 lines of hand-rolled encoding is meaningful bug
 surface, mitigated but not eliminated by the oracle. isomorphic-git is tested across far more
 edge cases than ours is. And our codec deliberately rejects `gpgsig` and `encoding` headers, so
