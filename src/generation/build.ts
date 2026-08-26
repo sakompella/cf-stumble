@@ -56,7 +56,7 @@ export async function buildGeneration(
         tree: manifest,
         parents: parent === undefined ? [] : [parent.sha],
         author: options.author,
-        committer: options.committer ?? options.author,
+        committer: makeCommitter(options),
         message: options.summary,
       },
     }),
@@ -151,7 +151,7 @@ function validateOptions(options: BuildGenerationOptions): void {
     throw new TypeError("generation summary must be a string");
   }
   validateSignature(options.author, "author");
-  const committer = options.committer ?? options.author;
+  const committer = makeCommitter(options);
   validateSignature(committer, "committer");
   if (committer.timestamp !== options.createdAt) {
     throw new TypeError("generation createdAt must equal committer timestamp");
@@ -173,6 +173,18 @@ function validateOptions(options: BuildGenerationOptions): void {
     }
     validateModulePath(module.path);
   }
+}
+
+function makeCommitter(options: BuildGenerationOptions): Signature {
+  if (options.committer !== undefined) {
+    return options.committer;
+  }
+  return {
+    name: options.author.name,
+    email: options.author.email,
+    timestamp: options.createdAt,
+    timezoneOffsetMinutes: options.author.timezoneOffsetMinutes,
+  };
 }
 
 function validateParent(parent: Generation): void {
