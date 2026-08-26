@@ -12,6 +12,7 @@
     "src/agent",
     "src/storage/do-sqlite.ts",
     "test/facet",
-    "test/storage-do"
+    "test/storage-do",
+    "test/supervisor"
   ]
 }
