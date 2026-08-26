@@ -1,3 +1,9 @@
+import {
+  isJsonObject,
+  isJsonPrimitive,
+  type JsonPrimitive,
+  type JsonValue,
+} from "../json.js";
 import type { ValidationCase } from "./results.js";
 
 const GATE_POLICY = {
@@ -13,64 +19,43 @@ const GATE_POLICY = {
   noPassingBaseline: "a baseline with no passing case is inconclusive",
 } as const;
 
-type RecordValue = Record<string, unknown>;
-
-function isRecord(value: object): value is RecordValue {
-  return !Array.isArray(value);
-}
-
-function jsonString(value: string): string {
+function jsonString(value: JsonPrimitive): string {
   const encoded = JSON.stringify(value);
   if (encoded === undefined) {
-    throw new TypeError("could not encode string as JSON");
+    throw new TypeError("could not encode JSON primitive");
   }
   return encoded;
 }
 
 /** Canonical JSON makes version hashes independent of object insertion order. */
-function canonicalJson(value: unknown): string {
+function canonicalJson(value: JsonValue): string {
   if (value === null) {
     return "null";
   }
-  switch (typeof value) {
-    case "string":
-      return jsonString(value);
-    case "boolean":
-      return value ? "true" : "false";
-    case "number":
-      if (!Number.isFinite(value)) {
-        throw new TypeError("version content must contain finite numbers");
-      }
-      return String(value);
-    case "object":
-      if (Array.isArray(value)) {
-        return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
-      }
-      if (!isRecord(value)) {
-        throw new TypeError("version content must contain plain records");
-      }
-      return `{${Object.keys(value)
-        .toSorted()
-        .flatMap((key) => {
-          const entry = value[key];
-          return entry === undefined ? [] : [`${jsonString(key)}:${canonicalJson(entry)}`];
-        })
-        .join(",")}}`;
-    case "undefined":
-      return "null";
-    case "bigint":
-    case "function":
-    case "symbol":
-      throw new TypeError("version content must be JSON-compatible");
+  if (Array.isArray(value)) {
+    const entries: readonly JsonValue[] = value;
+    return `[${entries.map((entry) => canonicalJson(entry)).join(",")}]`;
   }
-  throw new TypeError("version content must be JSON-compatible");
+  if (isJsonObject(value)) {
+    return `{${Object.keys(value)
+      .toSorted()
+      .flatMap((key) => {
+        const entry = value[key];
+        return entry === undefined ? [] : [`${jsonString(key)}:${canonicalJson(entry)}`];
+      })
+      .join(",")}}`;
+  }
+  if (isJsonPrimitive(value)) {
+    return jsonString(value);
+  }
+  throw new Error("internal error: unknown JSON value variant");
 }
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function hashVersion(namespace: string, content: unknown): Promise<string> {
+async function hashVersion(namespace: string, content: JsonValue): Promise<string> {
   const input = new TextEncoder().encode(`${namespace}\n${canonicalJson(content)}`);
   const digest = await crypto.subtle.digest("SHA-256", input);
   return `sha256:${bytesToHex(new Uint8Array(digest))}`;
