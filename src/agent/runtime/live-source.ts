@@ -1,3 +1,4 @@
+import { isJsonObject, isJsonValue, type JsonValue } from "../../json.js";
 import { ModelSourceError } from "./model-errors.js";
 import type {
   AgentModelRequest,
@@ -15,25 +16,29 @@ export class LiveModelResponseSource implements ModelResponseSource {
   }
 
   async requestModel(request: AgentModelRequest): Promise<RecordedModelResponse> {
-    let raw: unknown;
+    let raw: JsonValue;
     try {
-      raw = await this.provider(request);
-    } catch (error: unknown) {
+      const provided = await this.provider(request);
+      if (!isJsonValue(provided)) {
+        throw new TypeError("provider returned a non-JSON value");
+      }
+      raw = provided;
+    } catch (error) {
       throw new ModelSourceError("error", "live model provider failed", error);
     }
 
-    if (typeof raw === "string") {
+    if (isString(raw)) {
       return { requestId: request.requestId, content: raw };
     }
-    if (!isRecord(raw) || typeof raw.content !== "string") {
+    if (!isJsonObject(raw) || !isString(raw.content)) {
       throw new ModelSourceError("error", "live model provider returned a response without string content");
     }
     let requestId = request.requestId;
     if ("requestId" in raw) {
-      if (raw.requestId !== undefined && typeof raw.requestId !== "string") {
+      if (raw.requestId !== undefined && !isString(raw.requestId)) {
         throw new ModelSourceError("error", "live model provider returned an invalid request id");
       }
-      if (typeof raw.requestId === "string") {
+      if (isString(raw.requestId)) {
         requestId = raw.requestId;
       }
     }
@@ -47,6 +52,6 @@ export class LiveModelResponseSource implements ModelResponseSource {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
 }
