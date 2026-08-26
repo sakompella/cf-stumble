@@ -5,6 +5,7 @@ import type { AllocationRequest } from "../../src/generation/registry-types.js";
 
 const COMMIT = parseSha("1111111111111111111111111111111111111111");
 const OTHER_COMMIT = parseSha("2222222222222222222222222222222222222222");
+const ARTIFACT = parseSha("3333333333333333333333333333333333333333");
 
 function request(
   idempotencyKey: string,
@@ -18,32 +19,25 @@ function request(
   };
 }
 
-describe("MemoryGenerationRegistry", () => {
-  it("allocates monotonic generation numbers and never reuses values after failures", async () => {
+describe("MemoryGenerationRegistry allocation", () => {
+  it("writes the loading record before the load outcome is known", async () => {
     const registry = new MemoryGenerationRegistry();
 
+    const record = await registry.allocate(request("before-load"));
+
+    expect(record.state).toBe("loading");
+    expect(await registry.get(record.number)).toEqual(record);
+  });
+
+  it("allocates monotonic numbers and never reuses a value after a failure", async () => {
+    const registry = new MemoryGenerationRegistry();
     const first = await registry.allocate(request("first"));
-    const failed = await registry.transition(first.number, {
-      state: "load_failed",
-      failure: "candidate initialization failed",
-    });
+    await registry.transition(first.number, { state: "load_failed", failure: "failed" });
+
     const second = await registry.allocate(request("second", OTHER_COMMIT));
 
-    expect(failed).toEqual({
-      outcome: "transitioned",
-      record: {
-        ...first,
-        state: "load_failed",
-        failure: "candidate initialization failed",
-      },
-    });
     expect(first.number).toBe(0);
     expect(second.number).toBe(1);
-    expect(await registry.get(first.number)).toMatchObject({
-      number: first.number,
-      state: "load_failed",
-      failure: "candidate initialization failed",
-    });
     expect(await registry.list()).toHaveLength(2);
   });
 
@@ -59,5 +53,53 @@ describe("MemoryGenerationRegistry", () => {
     expect(deliberateRetry.number).toBe(first.number + 1);
     expect(deliberateRetry.commit).toBe(COMMIT);
     expect(await registry.list()).toHaveLength(2);
+  });
+});
+
+describe("MemoryGenerationRegistry materialization", () => {
+  it("preserves a load_failed record rather than deleting it", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const record = await registry.allocate(request("load-failure"));
+
+    const failed = await registry.transition(record.number, {
+      state: "load_failed",
+      artifactDigest: ARTIFACT,
+      failure: "candidate initialization failed",
+    });
+
+    expect(failed).toEqual({
+      outcome: "transitioned",
+      record: {
+        ...record,
+        state: "load_failed",
+        artifactDigest: ARTIFACT,
+        failure: "candidate initialization failed",
+      },
+    });
+    expect(await registry.get(record.number)).toMatchObject({
+      number: record.number,
+      state: "load_failed",
+      artifactDigest: ARTIFACT,
+      failure: "candidate initialization failed",
+    });
+  });
+
+  it("rejects illegal materialization transitions without overwriting immutable evidence", async () => {
+    const registry = new MemoryGenerationRegistry();
+    const record = await registry.allocate(request("illegal-transition"));
+    const failed = await registry.transition(record.number, {
+      state: "load_failed",
+      failure: "loader failed",
+    });
+
+    const rejected = await registry.transition(record.number, { state: "validated" });
+
+    expect(rejected).toEqual({
+      outcome: "rejected",
+      reason: { kind: "illegal-transition", from: "load_failed", to: "validated" },
+    });
+    expect(await registry.get(record.number)).toEqual(
+      failed.outcome === "transitioned" ? failed.record : undefined,
+    );
   });
 });
