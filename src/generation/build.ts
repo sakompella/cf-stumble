@@ -2,12 +2,11 @@ import { encodeObject } from "../git/index.js";
 import { isSha, FILE_MODE } from "../git/types.js";
 import type { Signature, Sha, TreeEntry } from "../git/types.js";
 import type { Store } from "../storage/types.js";
-import { GENESIS_NUMBER, parseGenerationNumber } from "./types.js";
-import type { Generation, Module } from "./types.js";
+import type { CommitSnapshot, Module } from "./types.js";
 
 export type BuildGenerationOptions = {
   readonly modules: readonly Module[];
-  readonly parent: Generation | undefined;
+  readonly parent: CommitSnapshot | undefined;
   readonly author: Signature;
   readonly committer?: Signature;
   readonly createdAt: number;
@@ -28,7 +27,7 @@ type TreeNode = {
 export async function buildGeneration(
   store: Store,
   options: BuildGenerationOptions,
-): Promise<Generation> {
+): Promise<CommitSnapshot> {
   validateOptions(options);
   const root = createTreeNode();
 
@@ -44,7 +43,6 @@ export async function buildGeneration(
   const manifest = await writeTree(store, root);
   const summary = normalizeCommitMessage(options.summary);
   const parent = options.parent;
-  const number = parent === undefined ? GENESIS_NUMBER : parseGenerationNumber(parent.number + 1);
   const sha = await store.writeObject(
     encodeObject({
       type: "commit",
@@ -60,7 +58,6 @@ export async function buildGeneration(
 
   return {
     sha,
-    number,
     parent: parent?.sha,
     manifest,
     createdAt: options.createdAt,
@@ -174,13 +171,12 @@ function makeCommitter(options: BuildGenerationOptions): Signature {
   };
 }
 
-function validateParent(parent: Generation): void {
+function validateParent(parent: CommitSnapshot): void {
   if (!isSha(parent.sha) || !isSha(parent.manifest)) {
-    throw new TypeError("generation parent must contain valid commit and manifest shas");
+    throw new TypeError("commit parent must contain valid commit and manifest shas");
   }
-  parseGenerationNumber(parent.number);
   if (parent.parent !== undefined && !isSha(parent.parent)) {
-    throw new TypeError("generation parent must contain a valid ancestor sha");
+    throw new TypeError("commit parent must contain a valid ancestor sha");
   }
 }
 

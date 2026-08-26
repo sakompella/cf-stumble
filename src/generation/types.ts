@@ -1,16 +1,15 @@
 /**
- * Generation records and the evidence required to promote one.
+ * Commit snapshots and the evidence required to promote a materialization attempt.
  *
- * A generation is a git commit: its tree is the module manifest, its parent is the generation
- * it was derived from, so lineage is the commit DAG and costs us nothing to maintain
- * (docs/decisions.md D8).
+ * Commits carry module content and commit ancestry. Generation numbers belong to the registry,
+ * not to this content-addressed layer.
  */
 
 import type { Sha } from "../git/types.js";
 
 declare const generationNumberBrand: unique symbol;
 
-/** Position in the lineage. Generation 0 is the pinned genesis and is never collectable. */
+/** A registry-assigned generation number; it is not derived from commit ancestry. */
 export type GenerationNumber = number & { readonly [generationNumberBrand]: true };
 
 export function isGenerationNumber(value: number): value is GenerationNumber {
@@ -33,12 +32,11 @@ export type Module = {
   readonly executable: boolean;
 };
 
-export type Generation = {
+/** The commit metadata needed to inspect its manifest and ancestry. */
+export type CommitSnapshot = {
   readonly sha: Sha;
-  readonly number: GenerationNumber;
-  /** Absent only for generation 0. */
   readonly parent: Sha | undefined;
-  /** Tree sha — the manifest of modules making up this generation. */
+  /** Tree sha — the manifest of modules contained in this commit. */
   readonly manifest: Sha;
   readonly createdAt: number;
   /** Human-facing summary; lives in the commit message so `git log` shows it (D7). */
