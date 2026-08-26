@@ -6,3 +6,5 @@ time	slice	decision	reason	evidence	result
 10:21	S0	Ratchet needs mandatory canaries	empty or all-failing corpus makes ratchet vacuously permit everything	sol review	adopted as D16a
 10:21	S0	GC deferred	10GB/DO means no pressure; bad root discovery destroys rollback	sol review + DO limits	D13 rewritten, slice cut
 10:21	S0	Facet isolation moved first	load-bearing claim; failing late invalidates everything above it	sol review	adopted as D2b, new slice S0.5
+10:36	S1	Keep git-exact byte format	mutation test: padding mode to 040000 makes the git hash-object oracle fail	verified locally, restored after	oracle discriminates, S1 merged
+10:36	S1	Codec rejects gpgsig/encoding commit headers	fixed domain types cannot represent them; we author every commit ourselves	agent report	accepted, noted as a limit on decoding foreign commits

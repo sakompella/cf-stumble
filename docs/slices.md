@@ -54,7 +54,7 @@ Must prove, per D2a — storage separation alone is a narrower claim than we nee
 
 ---
 
-## S1 — Git object codec · depends: S0 · IN PROGRESS
+## S1 — Git object codec · depends: S0 · DONE
 
 Encode and decode git `blob`, `tree`, and `commit` objects byte-exactly; address by SHA-1 of
 the full object bytes including header.
