@@ -605,9 +605,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return result;
   }
 
-  // Keep the old unauthenticated spike reset from being a second live-pointer API.
+  // Keep the old unauthenticated spike reset as a response-only compatibility endpoint.
   private legacyReset(): Response {
-    this.writeState("generation", "0");
     return Response.json({ generation: "0", reset: true });
   }
 
@@ -927,7 +926,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private async quarantine(request: Request): Promise<Response> {
     try {
       const body = await readRequestRecord(request);
-      const target = parseShaField(body.target ?? body.candidate, "target");
+      const target = parseShaField(body.target ?? body.candidate ?? body.sha, "target");
       const reason =
         body.reason === undefined
           ? "marked bad by supervisor"

@@ -15,6 +15,7 @@ test("a missing secret binding fails closed", () => {
 
 test("a missing, wrong, or empty credential is rejected", () => {
   expect(authorizeSupervisorRequest(request(), "supervisor-secret")).toBe(false);
+  expect(authorizeSupervisorRequest(request("Bearer supervisor-secret"), "")).toBe(false);
   expect(authorizeSupervisorRequest(request("Bearer wrong"), "supervisor-secret")).toBe(false);
   expect(authorizeSupervisorRequest(request("Bearer "), "supervisor-secret")).toBe(false);
 });
