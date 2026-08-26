@@ -1,10 +1,10 @@
-import { readGeneration } from "../../src/generation/read.js";
+import { AgentExecutor, materializeGeneration } from "../../src/agent/runtime/index.js";
 import type { Attestation, Generation } from "../../src/generation/types.js";
+import { assertNever } from "../../src/git/types.js";
 import type { Sha } from "../../src/git/types.js";
 import { runReplay } from "../../src/replay/index.js";
 import type {
   PrimitiveCall,
-  ReplayAgentLoop,
   ReplayOutcome,
   ReplaySession,
 } from "../../src/replay/index.js";
@@ -15,7 +15,7 @@ import {
   type ValidationCase,
   type ValidationRun,
 } from "../../src/validation/index.js";
-import { ALLOW_POLICY, POLICY_PATH, moduleText } from "./fixtures.js";
+import { ALLOW_POLICY } from "./fixtures.js";
 
 const expectedReplayCalls: readonly PrimitiveCall[] = [
   { kind: "read", path: "README.md" },
@@ -24,32 +24,48 @@ const expectedReplayCalls: readonly PrimitiveCall[] = [
   { kind: "bash", command: "printf 'ok\\n'" },
 ];
 
-function replayAgentForPolicy(policy: string): ReplayAgentLoop {
-  const calls: readonly PrimitiveCall[] =
-    policy === ALLOW_POLICY
-      ? expectedReplayCalls
-      : [
-          { kind: "read", path: "README.md" },
-          { kind: "write", path: "notes.txt", content: "blocked\n" },
-          { kind: "edit", path: "src/app.ts", oldText: "1", newText: "2" },
-          { kind: "bash", command: "printf 'ok\\n'" },
-        ];
+function replayAgentResponse(policy: string): string {
+  const calls = expectedReplayCalls.map((call) =>
+    call.kind === "write" && policy !== ALLOW_POLICY
+      ? { ...call, content: "blocked\n" }
+      : call,
+  );
+  return JSON.stringify({
+    type: "tool_calls",
+    calls: calls.map((call) => primitiveMessage(call)),
+  });
+}
 
+function primitiveMessage(call: PrimitiveCall): { readonly name: string; readonly arguments: object } {
+  switch (call.kind) {
+    case "read":
+      return { name: call.kind, arguments: { path: call.path } };
+    case "write":
+      return { name: call.kind, arguments: { path: call.path, content: call.content } };
+    case "edit":
+      return {
+        name: call.kind,
+        arguments: { path: call.path, oldText: call.oldText, newText: call.newText },
+      };
+    case "bash":
+      return { name: call.kind, arguments: { command: call.command } };
+    default:
+      return assertNever(call, "primitive call");
+  }
+}
+
+function sessionForPolicy(session: ReplaySession, policy: string): ReplaySession {
   return {
-    async runTurn(_input, runtime) {
-      const response = await runtime.requestModel({ requestId: "executor" });
-      if (response.content !== "run-four-primitives") {
-        return {
-          status: "inconclusive",
-          reason: "malformed-response",
-          detail: `unknown scripted response ${JSON.stringify(response.content)}`,
-        };
-      }
-      for (const call of calls) {
-        await runtime.callPrimitive(call);
-      }
-      return { status: "completed" };
-    },
+    ...session,
+    turns: session.turns.map((turn) => ({
+      ...turn,
+      modelResponses: [
+        ...turn.modelResponses.map((response, index) =>
+          index === 0 ? { ...response, content: replayAgentResponse(policy) } : response,
+        ),
+        { requestId: "executor", content: JSON.stringify({ type: "final", content: "done" }) },
+      ],
+    })),
   };
 }
 
@@ -61,8 +77,11 @@ async function executeGeneration(
   if (generation === undefined) {
     throw new Error("validation requires a live generation");
   }
-  const loaded = await readGeneration(store, generation);
-  return runReplay(session, replayAgentForPolicy(moduleText(loaded.modules, POLICY_PATH)));
+  const definition = await materializeGeneration(store, generation);
+  return runReplay(
+    sessionForPolicy(session, definition.policy),
+    new AgentExecutor(definition),
+  );
 }
 
 export async function validateCandidate(

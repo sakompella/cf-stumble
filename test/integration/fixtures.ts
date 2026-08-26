@@ -2,12 +2,11 @@ import { readFile } from "node:fs/promises";
 import { buildGeneration } from "../../src/generation/build.js";
 import { seedGenesis } from "../../src/generation/genesis.js";
 import type { Generation, Module } from "../../src/generation/types.js";
-import { readGeneration } from "../../src/generation/read.js";
+import { AgentExecutor, LiveModelResponseSource, materializeGeneration } from "../../src/agent/runtime/index.js";
 import { parseReplaySessionJson } from "../../src/replay/index.js";
 import type { ReplaySession } from "../../src/replay/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
-import { executePrimitive } from "../../src/tools/index.js";
-import type { InMemoryWorkspace, PrimitiveResult, WriteResult } from "../../src/tools/index.js";
+import type { InMemoryWorkspace, WriteResult } from "../../src/tools/index.js";
 import { runPinnedTurn } from "../../src/integration/turn.js";
 
 export const author = {
@@ -72,32 +71,43 @@ export function buildPromptCandidate(store: MemoryStore, parent: Generation): Pr
   return buildChild(store, parent, "candidate prompt\n", ALLOW_POLICY, "change prompt");
 }
 
-function successfulWrite(result: PrimitiveResult): WriteResult {
-  if (!result.ok || result.kind !== "write") {
-    throw new Error(`turn write failed: ${result.ok ? result.kind : result.error.kind}`);
-  }
-  return result;
-}
-
 export function runConfiguredTurn(store: MemoryStore, workspace: InMemoryWorkspace) {
   return runPinnedTurn(store, async (generationSha) => {
-    const loaded = await readGeneration(store, generationSha);
-    const policy = moduleText(loaded.modules, POLICY_PATH);
-    if (policy !== ALLOW_POLICY) {
-      throw new Error(`unsupported turn policy ${JSON.stringify(policy)}`);
+    const definition = await materializeGeneration(store, generationSha);
+    if (definition.policy !== ALLOW_POLICY) {
+      throw new Error(`unsupported turn policy ${JSON.stringify(definition.policy)}`);
     }
-    const write = await executePrimitive(
-      {
-        kind: "write",
-        path: "turns.log",
-        content: `${moduleText(loaded.modules, PROMPT_PATH)}turn\n`,
-      },
+    const content = `${definition.systemPrompt}turn\n`;
+    const turn = await new AgentExecutor(definition).executeTurn(
+      "append a turn",
+      new LiveModelResponseSource((request) =>
+        request.toolResults.length === 0
+          ? JSON.stringify({
+              type: "tool_call",
+              name: "write",
+              arguments: { path: "turns.log", content },
+            })
+          : JSON.stringify({ type: "final", content: "turn appended" }),
+      ),
       workspace,
+      { name: "integration-turn", seed: 0, nowMs: definition.generation.createdAt },
     );
-    return {
-      generation: loaded.generation,
-      write: successfulWrite(write),
+    if (turn.status !== "completed") {
+      throw new Error(`turn failed: ${turn.failure.kind}`);
+    }
+    const write = turn.trace.find(
+      (call): call is { readonly kind: "write"; readonly path: string; readonly content: string } =>
+        call.kind === "write" && call.path === "turns.log" && call.content === content,
+    );
+    if (write === undefined) {
+      throw new Error("turn completed without the configured write");
+    }
+    const result: WriteResult = {
+      ok: true,
+      kind: "write",
+      bytesWritten: encoder.encode(write.content).byteLength,
     };
+    return { generation: definition.generation, write: result };
   });
 }
 
