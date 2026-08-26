@@ -13,7 +13,7 @@ export type Sha = string & { readonly [shaBrand]: true };
 
 export const SHA_HEX_LENGTH = 40;
 
-const SHA_PATTERN = /^[0-9a-f]{40}$/;
+const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 
 export function isSha(value: string): value is Sha {
   return SHA_PATTERN.test(value);

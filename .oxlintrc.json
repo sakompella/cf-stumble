@@ -13,6 +13,7 @@
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "eslint/no-console": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off"
   },
