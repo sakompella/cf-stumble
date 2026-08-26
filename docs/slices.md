@@ -211,7 +211,7 @@ Build only what the vertical path in S8 needs; resist widening this.
 
 ---
 
-## S12 — Ratchet hardening: canary integrity · depends: S7 · IN PROGRESS
+## S12 — Ratchet hardening: canary integrity · depends: S7 · DONE
 
 Added after review. Content-derived corpus versions plus mandatory canaries make a weak corpus
 *identifiable* but not *adequate* — a hash tells you the input changed, not that it is still

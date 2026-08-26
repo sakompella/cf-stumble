@@ -38,7 +38,12 @@ The corollary is a design constraint on the next slice: **the gate and live exec
 the same executor implementation.** If they diverge, compatibility validation is forever testing
 a surrogate, and the regression suite stops being evidence about the thing that actually runs.
 
-## Canaries don't close the ratchet hole on their own
+## Canaries don't close the ratchet hole on their own — RESOLVED (S12)
+
+**Update:** two of the four conditions were genuinely unenforced and are now fixed. Canary
+identity came from the mutable corpus, and a corpus change only had to produce a new hash.
+Canaries are now pinned in supervisor-owned state and must remain present, mandatory and
+content-identical. The original analysis is kept below.
 
 Content-derived corpus versions plus mandatory canaries make a weak corpus *identifiable*. They
 do not make it *adequate*. The hole is only closed if all four of these hold, and they should be
