@@ -1,6 +1,7 @@
 import { buildGeneration } from "./build.js";
 import type { BuildGenerationOptions } from "./build.js";
 import { walkLineage } from "./lineage.js";
+import { isSha } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type { PointerStore, Store } from "../storage/types.js";
 import { GENESIS_NUMBER } from "./types.js";
@@ -79,10 +80,16 @@ export function isGenesis(
   value: Pick<Generation, "number" | "parent"> | Sha,
   pin?: GenesisPin,
 ): boolean {
-  if (typeof value === "string") {
+  if (isShaValue(value)) {
     return pin !== undefined && isGenesisSha(value, pin);
   }
   return isGenesisGeneration(value);
+}
+
+function isShaValue(
+  value: Pick<Generation, "number" | "parent"> | Sha,
+): value is Sha {
+  return typeof value === "string" && isSha(value);
 }
 
 export async function assertGenesisReachable(
