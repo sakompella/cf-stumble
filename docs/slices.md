@@ -95,7 +95,7 @@ and malformed trees or modules are rejected with a diagnosable error rather than
 
 ---
 
-## S4 — Promote, rollback, attestation · depends: S2, S3 · IN PROGRESS
+## S4 — Promote, rollback, attestation · depends: S2, S3 · DONE
 
 Owns `src/pointer/`.
 
@@ -114,7 +114,7 @@ point, against something".
 
 ---
 
-## S5 — Generation 0 pinning and reset · depends: S3, S4
+## S5 — Generation 0 pinning and reset · depends: S3, S4 · IN PROGRESS
 
 Never collectable, reset bypasses agent code entirely (D12). Owns `src/generation/genesis.ts`.
 
@@ -145,7 +145,7 @@ rather than guessed at; a mutated fixture fails; tape exhaustion reports `INCONC
 
 ---
 
-## S7 — Regression gate with canaries · depends: S4, S6
+## S7 — Regression gate with canaries · depends: S4, S6 · IN PROGRESS
 
 The ratchet (D16) plus the canaries that stop it degenerating (D16a). Owns `src/validation/`.
 
