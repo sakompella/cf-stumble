@@ -1,0 +1,38 @@
+export {
+  DEFAULT_BASH_TIMEOUT_MS,
+  PRIMITIVE_KINDS,
+  executePrimitive,
+  runPrimitive,
+  type BashCall,
+  type BashResult,
+  type EditCall,
+  type EditResult,
+  type Primitive,
+  type PrimitiveCall,
+  type PrimitiveFailure,
+  type PrimitiveKind,
+  type PrimitiveOptions,
+  type PrimitiveResult,
+  type ReadCall,
+  type ReadResult,
+  type WriteCall,
+  type WriteResult,
+} from "./primitives.js";
+export {
+  InMemoryWorkspace,
+  type InMemoryWorkspaceOptions,
+  type MemoryCommandExecutor,
+  type MemoryWorkspaceFile,
+} from "./workspace.js";
+export {
+  isWorkspacePath,
+  parseWorkspacePath,
+  validateWorkspacePath,
+  type ExecuteCommandOptions,
+  type Workspace,
+  type WorkspaceCommandResult,
+  type WorkspaceFileContent,
+  type WorkspacePath,
+  type WorkspacePathError,
+  type WorkspacePathValidation,
+} from "./types.js";
