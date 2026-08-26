@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
+import { describeActivationLedgerConformance } from "../../src/pointer/conformance.js";
 import { MemoryActivationLedger } from "../../src/pointer/activation.js";
 import type { AllocationRequest, GenerationRecord } from "../../src/generation/registry-types.js";
 import type {
@@ -13,6 +14,14 @@ import type { GenerationNumber } from "../../src/generation/types.js";
 
 const COMMIT = parseSha("1111111111111111111111111111111111111111");
 const NO_POINTER: GenerationNumber | undefined = undefined;
+
+describeActivationLedgerConformance("MemoryActivationLedger", () => {
+  const registry = new MemoryGenerationRegistry();
+  return Promise.resolve({
+    registry,
+    ledger: new MemoryActivationLedger({ registry, now: () => 42 }),
+  });
+});
 
 function request(idempotencyKey: string): AllocationRequest {
   return {
