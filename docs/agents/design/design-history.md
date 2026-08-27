@@ -293,9 +293,9 @@ linked a D-number to the ADR that superseded it.
 They disagreed. D8 still read "a generation is a commit; the manifest is its tree" long after
 ADR-0002 replaced that model and the glossary was rewritten to say a commit is explicitly _not_ a
 generation. A reader starting from `decisions.md` — the file the README pointed at first — would
-have built the pre-remodel mental model and found code that contradicted it. The failure is not that someone forgot to update an entry; it is that two
-registers of current position cannot both be current, so one of them is always drifting and
-there is no moment at which anyone notices.
+have built the pre-remodel mental model and found code that contradicted it. The failure is not
+that someone forgot to update an entry; it is that two registers of current position cannot both
+be current, so one of them is always drifting and there is no moment at which anyone notices.
 
 The tsv had the opposite problem: it was doing two jobs with one schema. Rows like "vendor
 anti-slop, adopt via ratchet" are decisions; rows like "DO SQLite fails on large objects with raw
