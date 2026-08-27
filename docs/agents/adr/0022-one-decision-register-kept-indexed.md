@@ -1,7 +1,7 @@
 # Keep exactly one decision register, and keep it indexed
 
-`docs/agents/adr/` is the only place a resolved position is recorded. A second register is not a backup, it is a fork: this project ran three at once — a numbered `decisions.md`, an append-only `decisions.tsv` journal, and the ADRs — with no rule for which won, and by the time anyone checked, the oldest one still asserted that a generation is a commit, a model two ADRs and the glossary had already replaced.
+`docs/agents/adr/` is the only place that records a resolved position. A second register creates a fork, not a backup. This project once ran three: numbered `decisions.md`, an append-only `decisions.tsv` journal, and the ADRs. No rule decided which won, and the oldest still said a generation was a commit after two ADRs and the glossary replaced that model.
 
 ## Consequences
 
-Narrative belongs in `docs/agents/design/`, which carries reasoning and findings but never states a position the ADRs don't. An index at `docs/agents/adr/README.md` makes "read the ADRs touching your area" a lookup rather than a directory listing, and `test/docs/adr-index.test.ts` fails when a file is missing from it — an unenforced index rots the same way the registers did.
+`docs/agents/design/` holds reasoning and findings but never resolves a position the ADRs do not. The index in `docs/agents/adr/README.md` turns "read the ADRs touching your area" into a lookup instead of a directory listing. `test/docs/adr-index.test.ts` fails when a file is missing because an unenforced index rots just as the registers did.

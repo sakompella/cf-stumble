@@ -1,7 +1,7 @@
 # Keep Git as the storage model
 
-The agent's authored history is real Git objects and commits, not two SQL tables holding module text and a parent column. Dropping Git was proposed and rejected: ancestry, content-addressed deduplication of unchanged modules across many generations, and the ability to inspect the history with ordinary tools are all free from the object model and would each have to be rebuilt, badly, on top of a schema that started out looking simpler.
+The agent's authored history uses real Git objects and commits, not two SQL tables for module text and a parent column. We rejected dropping Git. The object model gives us ancestry, content-addressed deduplication of unchanged modules across generations, and history we can inspect with ordinary tools. A schema that looks simpler would need to rebuild each of those, badly.
 
 ## Consequences
 
-This is what ADR-0009 and ADR-0011 are downstream of — they argue about _how_ to hold Git objects, and this is the decision to hold them at all. The cost is a real one and is paid in those ADRs: a project-owned codec, or whatever replaces it later.
+ADR-0009 and ADR-0011 follow from this decision: they decide how to hold Git objects; this ADR decides to hold them at all. The cost appears in those ADRs: a project-owned codec, or whatever replaces it later.
