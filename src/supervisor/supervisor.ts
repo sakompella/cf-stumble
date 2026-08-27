@@ -8,10 +8,14 @@ import {
   loadAgent,
   syntaxErrorAgentSource,
 } from "../agent/loader.js";
+import { Result } from "better-result";
 import {
   AgentExecutor,
-  AgentMaterializationError,
+  InvalidModuleError,
+  MissingModuleError,
+  UnsupportedModuleError,
   type AgentDefinition,
+  type AgentMaterializationError,
   type AgentSkill,
 } from "../agent/runtime/index.js";
 import { buildGeneration } from "../generation/build.js";
@@ -578,13 +582,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     if (sourceModule === undefined) {
       throw new Error(`generation ${generation} has no agent.js module`);
     }
-    const facet = this.mountFacet(decodeValidationText("agent.js", sourceModule.content));
+    const facet = this.mountFacet(decodedAgentSource(sourceModule.content));
     const probe = await facet.fetch(new Request("https://facet/probe"));
     if (!probe.ok) {
       throw new Error(`generation ${generation} probe returned ${probe.status}`);
     }
-    const definition = materializeSupervisorGeneration(loaded);
-    return runReplay(session, new AgentExecutor(definition));
+    const materialized = materializeSupervisorGeneration(loaded);
+    if (Result.isError(materialized)) {
+      // This generation's own modules are malformed, a recoverable candidate defect rather than a
+      // harness fault; `executeSafely` (src/validation/execution.ts) still turns the throw into an
+      // INCONCLUSIVE case outcome today, so this preserves the existing control flow while keeping
+      // the error itself a typed, recoverable `AgentMaterializationError` rather than a `Panic`.
+      throw materialized.error;
+    }
+    return runReplay(session, new AgentExecutor(materialized.value));
   }
 
   private async readCandidateGeneration(number: GenerationNumber): Promise<CandidateGeneration> {
@@ -637,7 +648,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         : { outcome: "failed" };
     }
     try {
-      const facet = this.mountFacet(decodeValidationText("agent.js", sourceModule.content));
+      const facet = this.mountFacet(decodedAgentSource(sourceModule.content));
       const probe = await facet.fetch(new Request("https://facet/probe"));
       if (!probe.ok) {
         throw new Error(
@@ -1504,83 +1515,96 @@ function rowNumber(row: GenerationRow): GenerationNumber {
   return parseGenerationNumber(row.number);
 }
 
-function materializeSupervisorGeneration(loaded: LoadedGeneration): AgentDefinition {
+function materializeSupervisorGeneration(
+  loaded: LoadedGeneration,
+): Result<AgentDefinition, AgentMaterializationError> {
   const modules = loaded.modules.filter((module) => module.path !== "agent.js");
   const promptModule = modules.find((module) => module.path === "prompt.md");
   if (promptModule === undefined) {
-    throw new AgentMaterializationError(
-      "missing-module",
-      "prompt.md",
-      'required module "prompt.md" is missing',
-    );
+    return Result.err(new MissingModuleError({ path: "prompt.md" }));
   }
   const policyModule = modules.find((module) => module.path === "policy.md");
   if (policyModule === undefined) {
-    throw new AgentMaterializationError(
-      "missing-module",
-      "policy.md",
-      'required module "policy.md" is missing',
-    );
+    return Result.err(new MissingModuleError({ path: "policy.md" }));
   }
 
-  const skills: AgentSkill[] = modules
-    .filter((module) => module.path !== "prompt.md" && module.path !== "policy.md")
-    .map((module): AgentSkill => {
-      if (!module.path.startsWith("skills/")) {
-        throw new AgentMaterializationError(
-          "unsupported-module",
-          module.path,
-          'module must be "prompt.md", "policy.md", or under "skills/"',
-        );
-      }
-      const fileName = module.path.slice("skills/".length);
-      if (fileName.length <= ".md".length || !fileName.endsWith(".md") || fileName.includes("/")) {
-        throw new AgentMaterializationError(
-          "unsupported-module",
-          module.path,
-          'skill module must be a non-empty .md file directly under "skills/"',
-        );
-      }
-      return {
-        name: fileName.slice(0, -".md".length),
-        content: decodeValidationText(module.path, module.content),
-      };
-    })
-    .sort((left: AgentSkill, right: AgentSkill) =>
-      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
-    );
+  const skills: AgentSkill[] = [];
+  for (const module of modules) {
+    if (module.path === "prompt.md" || module.path === "policy.md") {
+      continue;
+    }
+    if (!module.path.startsWith("skills/")) {
+      return Result.err(
+        new UnsupportedModuleError({ path: module.path, reason: "not-under-skills-prefix" }),
+      );
+    }
+    const fileName = module.path.slice("skills/".length);
+    if (fileName.length <= ".md".length || !fileName.endsWith(".md") || fileName.includes("/")) {
+      return Result.err(
+        new UnsupportedModuleError({ path: module.path, reason: "invalid-skill-filename" }),
+      );
+    }
+    const content = decodeValidationText(module.path, module.content);
+    if (Result.isError(content)) {
+      return content;
+    }
+    skills.push({ name: fileName.slice(0, -".md".length), content: content.value });
+  }
+  skills.sort((left: AgentSkill, right: AgentSkill) =>
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+  );
 
-  return {
+  const systemPrompt = decodeRequiredValidationText("prompt.md", promptModule.content);
+  if (Result.isError(systemPrompt)) {
+    return systemPrompt;
+  }
+  const policy = decodeRequiredValidationText("policy.md", policyModule.content);
+  if (Result.isError(policy)) {
+    return policy;
+  }
+
+  return Result.ok({
     generation: loaded.generation,
-    systemPrompt: decodeRequiredValidationText("prompt.md", promptModule.content),
-    policy: decodeRequiredValidationText("policy.md", policyModule.content),
+    systemPrompt: systemPrompt.value,
+    policy: policy.value,
     skills,
-  };
+  });
 }
 
-function decodeRequiredValidationText(path: string, content: Uint8Array): string {
-  const text = decodeValidationText(path, content);
-  if (text.length === 0) {
-    throw new AgentMaterializationError(
-      "invalid-module",
-      path,
-      "required module content must not be empty",
-    );
+function decodeRequiredValidationText(
+  path: string,
+  content: Uint8Array,
+): Result<string, AgentMaterializationError> {
+  const decoded = decodeValidationText(path, content);
+  if (Result.isError(decoded)) {
+    return decoded;
   }
-  return text;
+  if (decoded.value.length === 0) {
+    return Result.err(new InvalidModuleError({ path, reason: "empty-content" }));
+  }
+  return Result.ok(decoded.value);
 }
 
-function decodeValidationText(path: string, content: Uint8Array): string {
-  try {
-    return validationTextDecoder.decode(content);
-  } catch (error: unknown) {
-    throw new AgentMaterializationError(
-      "invalid-module",
-      path,
-      "module content is not valid UTF-8",
-      error,
-    );
+function decodeValidationText(
+  path: string,
+  content: Uint8Array,
+): Result<string, InvalidModuleError> {
+  return Result.try({
+    try: () => validationTextDecoder.decode(content),
+    catch: (cause) => new InvalidModuleError({ path, reason: "invalid-utf8", cause }),
+  });
+}
+
+/**
+ * Decode `agent.js` for `mountFacet`, which needs a plain string. A decode failure is still about
+ * this generation's own content, so it throws the recoverable tagged error rather than a `Panic`.
+ */
+function decodedAgentSource(content: Uint8Array): string {
+  const decoded = decodeValidationText("agent.js", content);
+  if (Result.isError(decoded)) {
+    throw decoded.error;
   }
+  return decoded.value;
 }
 
 function generationResponse(row: GenerationRow): GenerationSummary {
@@ -2112,6 +2136,18 @@ function requestErrorResponse(error: Error | string): Response {
   }
   if (error instanceof SafetyViolationError) {
     return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 422 });
+  }
+  if (
+    error instanceof MissingModuleError ||
+    error instanceof InvalidModuleError ||
+    error instanceof UnsupportedModuleError
+  ) {
+    const kind = error.match({
+      MissingModuleError: () => "missing-module" as const,
+      InvalidModuleError: () => "invalid-module" as const,
+      UnsupportedModuleError: () => "unsupported-module" as const,
+    });
+    return Response.json({ error: { kind, message: error.message } }, { status: 422 });
   }
   return Response.json(
     { error: { kind: "internal", message: error instanceof Error ? error.message : error } },

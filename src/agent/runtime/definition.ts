@@ -1,3 +1,4 @@
+import { Result, TaggedError } from "better-result";
 import { readGeneration, type LoadedGeneration } from "../../generation/read.js";
 import type { CommitSnapshot } from "../../generation/types.js";
 import type { Sha } from "../../git/types.js";
@@ -25,117 +26,154 @@ export type AgentDefinition = {
   readonly skills: readonly AgentSkill[];
 };
 
-export type AgentMaterializationErrorKind =
-  | "missing-module"
-  | "invalid-module"
-  | "unsupported-module";
-
-export class AgentMaterializationError extends Error {
-  readonly kind: AgentMaterializationErrorKind;
-  readonly path: string;
-
-  constructor(kind: AgentMaterializationErrorKind, path: string, message: string, cause?: unknown) {
-    const fullMessage = `agent materialization error at ${JSON.stringify(path)}: ${message}`;
-    if (cause === undefined) {
-      super(fullMessage);
-    } else {
-      super(fullMessage, { cause });
-    }
-    this.name = "AgentMaterializationError";
-    this.kind = kind;
-    this.path = path;
+export class MissingModuleError extends TaggedError("MissingModuleError")<{
+  path: string;
+  message: string;
+}> {
+  constructor(args: { path: string }) {
+    super({ ...args, message: `required module ${JSON.stringify(args.path)} is missing` });
   }
 }
 
+export type InvalidModuleReason = "empty-content" | "invalid-utf8";
+
+export class InvalidModuleError extends TaggedError("InvalidModuleError")<{
+  path: string;
+  reason: InvalidModuleReason;
+  message: string;
+  cause?: unknown;
+}> {
+  constructor(args: { path: string; reason: InvalidModuleReason; cause?: unknown }) {
+    const detail =
+      args.reason === "empty-content"
+        ? "required module content must not be empty"
+        : "module content is not valid UTF-8";
+    super({ ...args, message: `${JSON.stringify(args.path)}: ${detail}` });
+  }
+}
+
+export type UnsupportedModuleReason = "not-under-skills-prefix" | "invalid-skill-filename";
+
+export class UnsupportedModuleError extends TaggedError("UnsupportedModuleError")<{
+  path: string;
+  reason: UnsupportedModuleReason;
+  message: string;
+}> {
+  constructor(args: { path: string; reason: UnsupportedModuleReason }) {
+    const detail =
+      args.reason === "not-under-skills-prefix"
+        ? `module must be ${JSON.stringify(SYSTEM_PROMPT_PATH)}, ${JSON.stringify(POLICY_PATH)}, or under ${JSON.stringify(SKILLS_PREFIX)}`
+        : `skill module must be a non-empty .md file directly under ${JSON.stringify(SKILLS_PREFIX)}`;
+    super({ ...args, message: `${JSON.stringify(args.path)}: ${detail}` });
+  }
+}
+
+/** Every way a candidate's own modules can fail to materialize into an `AgentDefinition`. */
+export type AgentMaterializationError =
+  | MissingModuleError
+  | InvalidModuleError
+  | UnsupportedModuleError;
+
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
-/** Read and validate the role-bearing modules in one immutable generation. */
-export async function materializeGeneration(store: Store, sha: Sha): Promise<AgentDefinition> {
+/**
+ * Read and validate the role-bearing modules in one immutable generation.
+ *
+ * The returned `Result` covers only the module-shape failures above, which are always caused by
+ * the generation's own content and so are always recoverable. `readGeneration` itself can still
+ * reject this promise on a store-read failure; that path has not been migrated yet and is a
+ * harness-level defect rather than a condition about the generation's modules.
+ */
+export async function materializeGeneration(
+  store: Store,
+  sha: Sha,
+): Promise<Result<AgentDefinition, AgentMaterializationError>> {
   const loaded = await readGeneration(store, sha);
   return materializeLoadedGeneration(loaded);
 }
 
 export const materializeAgent = materializeGeneration;
 
-function materializeLoadedGeneration(loaded: LoadedGeneration): AgentDefinition {
+function materializeLoadedGeneration(
+  loaded: LoadedGeneration,
+): Result<AgentDefinition, AgentMaterializationError> {
   const byPath = new Map(loaded.modules.map((module) => [module.path, module]));
   const promptModule = byPath.get(SYSTEM_PROMPT_PATH);
   if (promptModule === undefined) {
-    throw new AgentMaterializationError(
-      "missing-module",
-      SYSTEM_PROMPT_PATH,
-      `required module ${JSON.stringify(SYSTEM_PROMPT_PATH)} is missing`,
-    );
+    return Result.err(new MissingModuleError({ path: SYSTEM_PROMPT_PATH }));
   }
   const policyModule = byPath.get(POLICY_PATH);
   if (policyModule === undefined) {
-    throw new AgentMaterializationError(
-      "missing-module",
-      POLICY_PATH,
-      `required module ${JSON.stringify(POLICY_PATH)} is missing`,
-    );
+    return Result.err(new MissingModuleError({ path: POLICY_PATH }));
   }
 
   const skills = materializeSkills(loaded.modules);
-  return {
+  if (Result.isError(skills)) {
+    return skills;
+  }
+  const systemPrompt = requiredText(SYSTEM_PROMPT_PATH, promptModule.content);
+  if (Result.isError(systemPrompt)) {
+    return systemPrompt;
+  }
+  const policy = requiredText(POLICY_PATH, policyModule.content);
+  if (Result.isError(policy)) {
+    return policy;
+  }
+
+  return Result.ok({
     generation: loaded.generation,
-    systemPrompt: requiredText(SYSTEM_PROMPT_PATH, promptModule.content),
-    policy: requiredText(POLICY_PATH, policyModule.content),
-    skills,
-  };
+    systemPrompt: systemPrompt.value,
+    policy: policy.value,
+    skills: skills.value,
+  });
 }
 
-function materializeSkills(modules: LoadedGeneration["modules"]): AgentSkill[] {
+function materializeSkills(
+  modules: LoadedGeneration["modules"],
+): Result<AgentSkill[], AgentMaterializationError> {
   const skills: AgentSkill[] = [];
   for (const module of modules) {
     if (module.path === SYSTEM_PROMPT_PATH || module.path === POLICY_PATH) {
       continue;
     }
     if (!module.path.startsWith(SKILLS_PREFIX)) {
-      throw new AgentMaterializationError(
-        "unsupported-module",
-        module.path,
-        `module must be ${JSON.stringify(SYSTEM_PROMPT_PATH)}, ${JSON.stringify(POLICY_PATH)}, or under ${JSON.stringify(SKILLS_PREFIX)}`,
+      return Result.err(
+        new UnsupportedModuleError({ path: module.path, reason: "not-under-skills-prefix" }),
       );
     }
     const fileName = module.path.slice(SKILLS_PREFIX.length);
     if (fileName.length <= ".md".length || !fileName.endsWith(".md") || fileName.includes("/")) {
-      throw new AgentMaterializationError(
-        "unsupported-module",
-        module.path,
-        `skill module must be a non-empty .md file directly under ${JSON.stringify(SKILLS_PREFIX)}`,
+      return Result.err(
+        new UnsupportedModuleError({ path: module.path, reason: "invalid-skill-filename" }),
       );
     }
-    skills.push({
-      name: fileName.slice(0, -".md".length),
-      content: decodeText(module.path, module.content),
-    });
+    const content = decodeText(module.path, module.content);
+    if (Result.isError(content)) {
+      return content;
+    }
+    skills.push({ name: fileName.slice(0, -".md".length), content: content.value });
   }
   skills.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
-  return skills;
+  return Result.ok(skills);
 }
 
-function requiredText(path: string, content: Uint8Array): string {
-  const text = decodeText(path, content);
-  if (text.length === 0) {
-    throw new AgentMaterializationError(
-      "invalid-module",
-      path,
-      "required module content must not be empty",
-    );
+function requiredText(
+  path: string,
+  content: Uint8Array,
+): Result<string, AgentMaterializationError> {
+  const decoded = decodeText(path, content);
+  if (Result.isError(decoded)) {
+    return decoded;
   }
-  return text;
+  if (decoded.value.length === 0) {
+    return Result.err(new InvalidModuleError({ path, reason: "empty-content" }));
+  }
+  return Result.ok(decoded.value);
 }
 
-function decodeText(path: string, content: Uint8Array): string {
-  try {
-    return decoder.decode(content);
-  } catch (error: unknown) {
-    throw new AgentMaterializationError(
-      "invalid-module",
-      path,
-      "module content is not valid UTF-8",
-      error,
-    );
-  }
+function decodeText(path: string, content: Uint8Array): Result<string, InvalidModuleError> {
+  return Result.try({
+    try: () => decoder.decode(content),
+    catch: (cause) => new InvalidModuleError({ path, reason: "invalid-utf8", cause }),
+  });
 }

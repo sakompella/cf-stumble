@@ -1,14 +1,18 @@
 export {
   AGENT_MANIFEST,
-  AgentMaterializationError,
+  InvalidModuleError,
   materializeAgent,
   materializeGeneration,
+  MissingModuleError,
   POLICY_PATH,
   SKILLS_PREFIX,
   SYSTEM_PROMPT_PATH,
+  UnsupportedModuleError,
   type AgentDefinition,
-  type AgentMaterializationErrorKind,
+  type AgentMaterializationError,
   type AgentSkill,
+  type InvalidModuleReason,
+  type UnsupportedModuleReason,
 } from "./definition.js";
 export {
   type AgentModelRequest,
