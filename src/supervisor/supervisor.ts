@@ -29,7 +29,7 @@ import {
 import { InvalidGenerationInputError } from "../generation/errors.js";
 import { readGeneration } from "../generation/read.js";
 import type { LoadedGeneration } from "../generation/read.js";
-import type { Attestation, CommitSnapshot, Module, Verdict } from "../generation/types.js";
+import type { Attestation, Module, Verdict } from "../generation/types.js";
 import type { GenerationNumber } from "../generation/types.js";
 import type { GenerationRecord, MaterializationState } from "../generation/registry-types.js";
 import { assertNever, parseSha } from "../git/types.js";
@@ -44,6 +44,7 @@ import type {
 import { parseReplaySession, runReplay } from "../replay/index.js";
 import type { ReplayOutcome } from "../replay/index.js";
 import { DurableObjectSqliteStore } from "../storage/do-sqlite.js";
+import { StorageCapacityError, StorageUnavailableError } from "../storage/errors.js";
 import { ObjectTooLargeError } from "../storage/types.js";
 import {
   computeCorpusVersion,
@@ -392,17 +393,23 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         },
         { claimPointer: false },
       );
-      const genesisPin = makeGenesisPin(genesis);
-      const loadedGenesis = await readGeneration(this.store, genesis.sha);
-      const genesisArtifact = await digestArtifact(loadedGenesis);
+      if (Result.isError(genesis)) {
+        throw genesis.error;
+      }
+      const genesisPin = makeGenesisPin(genesis.value);
+      const loadedGenesis = await readGeneration(this.store, genesis.value.sha);
+      if (Result.isError(loadedGenesis)) {
+        throw loadedGenesis.error;
+      }
+      const genesisArtifact = await digestArtifact(loadedGenesis.value);
       const genesisRecord = {
         number: GENESIS_NUMBER,
-        commit: genesis.sha,
+        commit: genesis.value.sha,
         baseline: undefined,
         state: "validated",
         artifactDigest: genesisArtifact,
         idempotencyKey: "genesis",
-        createdAt: genesis.createdAt,
+        createdAt: genesis.value.createdAt,
         failure: undefined,
       } satisfies GenerationRecord;
       this.ctx.storage.transactionSync(() => {
@@ -523,36 +530,38 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       const body = await readRequestRecord(request);
       const number = parseGenerationNumberField(body.candidate ?? body.generation, "candidate");
       const candidate = await this.readCandidateGeneration(number);
+      if (Result.isError(candidate)) {
+        throw candidate.error;
+      }
       if (this.isQuarantined(number)) {
         throw new SafetyViolationError("quarantined", `generation ${number} is quarantined`);
       }
-      const loaded = await this.loadCandidate(candidate);
+      const loaded = await this.loadCandidate(candidate.value);
       if (loaded.outcome === "failed") {
         return promotionResponse({
           outcome: "rejected",
           reason: { kind: "not-passing", verdict: "inconclusive" },
         });
       }
-      if (candidate.loaded === undefined) {
+      if (candidate.value.loaded === undefined) {
         throw new Error(`generation ${number} has no materialized commit`);
       }
       const validation = await this.validateCandidate(
         number,
-        candidate.loaded.generation.sha,
+        candidate.value.loaded.generation.sha,
         loaded.artifactDigest,
       );
-      const result = this.promoteTransaction(number, validation, loaded.artifactDigest);
+      if (Result.isError(validation)) {
+        throw validation.error;
+      }
+      const result = this.promoteTransaction(number, validation.value, loaded.artifactDigest);
       return promotionResponse(result);
     } catch (error: unknown) {
       return requestErrorResponse(error instanceof Error ? error : String(error));
     }
   }
 
-  private validateCandidate(
-    number: GenerationNumber,
-    candidate: Sha,
-    artifactDigest: Sha,
-  ): Promise<ValidationRun> {
+  private validateCandidate(number: GenerationNumber, candidate: Sha, artifactDigest: Sha) {
     const gate = new ValidationGate({
       pointerStore: {
         readPointer: () => {
@@ -561,9 +570,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           if (live !== undefined && row === undefined) {
             throw new Error(`live generation ${live} is missing`);
           }
-          return Promise.resolve(row === undefined ? undefined : parseSha(row.commit_sha));
+          return Promise.resolve(
+            Result.ok(row === undefined ? undefined : parseSha(row.commit_sha)),
+          );
         },
-        setPointer: () => Promise.resolve(false),
+        setPointer: () => Promise.resolve(Result.ok(false)),
       },
       resultStore: new MemoryValidationResultStore(),
       corpus: this.readCorpusCases(),
@@ -584,7 +595,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       throw new Error("validation requires a live generation");
     }
     const loaded = await readGeneration(this.store, generation);
-    const sourceModule = loaded.modules.find((module) => module.path === "agent.js");
+    if (Result.isError(loaded)) {
+      throw loaded.error;
+    }
+    const sourceModule = loaded.value.modules.find((module) => module.path === "agent.js");
     if (sourceModule === undefined) {
       throw new Error(`generation ${generation} has no agent.js module`);
     }
@@ -593,7 +607,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     if (!probe.ok) {
       throw new Error(`generation ${generation} probe returned ${probe.status}`);
     }
-    const materialized = materializeSupervisorGeneration(loaded);
+    const materialized = materializeSupervisorGeneration(loaded.value);
     if (Result.isError(materialized)) {
       // This generation's own modules are malformed, a recoverable candidate defect rather than a
       // harness fault; `executeSafely` (src/validation/execution.ts) still turns the throw into an
@@ -604,27 +618,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runReplay(session, new AgentExecutor(materialized.value));
   }
 
-  private async readCandidateGeneration(number: GenerationNumber): Promise<CandidateGeneration> {
+  private async readCandidateGeneration(
+    number: GenerationNumber,
+  ): Promise<Result<CandidateGeneration, StorageUnavailableError>> {
     const row = this.readGenerationRow(number);
     if (row === undefined) {
       throw new MissingResourceError(`candidate generation ${number} does not exist`);
     }
     if (row.state === "load_failed" || row.state === "validation_failed") {
-      return { row, loaded: undefined };
+      return Result.ok({ row, loaded: undefined });
     }
-    try {
-      return {
-        row,
-        loaded: await readGeneration(this.store, parseSha(row.commit_sha)),
-      };
-    } catch (error: unknown) {
-      const failure = error instanceof Error ? error.message : String(error);
-      this.markLoadFailed(number, failure);
-      return {
-        row: { ...row, state: "load_failed", failure },
-        loaded: undefined,
-      };
+    const loaded = await readGeneration(this.store, parseSha(row.commit_sha));
+    if (Result.isError(loaded)) {
+      return loaded;
     }
+    return Result.ok({ row, loaded: loaded.value });
   }
 
   private async loadCandidate(
@@ -997,15 +1005,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
           { status: 500 },
         );
       }
-      let parentSnapshot: CommitSnapshot;
-      try {
-        parentSnapshot = (await readGeneration(this.store, parseSha(parent.commit_sha))).generation;
-      } catch (error: unknown) {
-        if (error instanceof TypeError) {
-          throw new InvalidRequestError(error.message);
-        }
-        throw error;
+      const parentRead = await readGeneration(this.store, parseSha(parent.commit_sha));
+      if (Result.isError(parentRead)) {
+        throw parentRead.error;
       }
+      const parentSnapshot = parentRead.value.generation;
       const built = await buildGeneration(this.store, {
         modules,
         parent: parentSnapshot,
@@ -1228,7 +1232,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         throw new Error(`live generation ${pinned} is missing`);
       }
       const loaded = await readGeneration(this.store, parseSha(row.commit_sha));
-      const source = loaded.modules.find((module) => module.path === "agent.js");
+      if (Result.isError(loaded)) {
+        throw loaded.error;
+      }
+      const source = loaded.value.modules.find((module) => module.path === "agent.js");
       if (source === undefined) {
         throw new Error(`generation ${pinned} has no agent.js module`);
       }
@@ -2141,6 +2148,18 @@ class SafetyViolationError extends Error {
 }
 
 function requestErrorResponse(error: Error | string): Response {
+  if (StorageUnavailableError.is(error)) {
+    return Response.json(
+      { error: { kind: "storage-unavailable", message: "storage temporarily unavailable" } },
+      { status: 503 },
+    );
+  }
+  if (StorageCapacityError.is(error)) {
+    return Response.json(
+      { error: { kind: "storage-capacity", message: "supervisor storage capacity exceeded" } },
+      { status: 507 },
+    );
+  }
   if (ObjectTooLargeError.is(error)) {
     return Response.json(
       { error: { kind: "object-too-large", message: error.message } },

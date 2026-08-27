@@ -44,7 +44,7 @@ class ObjectLimitStore extends MemoryStore {
 }
 
 async function readCommit(store: MemoryStore, sha: Sha): Promise<Commit> {
-  const bytes = await store.readObject(sha);
+  const bytes = expectOk(await store.readObject(sha));
   if (bytes === undefined) {
     throw new Error("expected a stored commit");
   }
@@ -70,7 +70,7 @@ it("buildGeneration writes a root commit with a manifest", async () => {
     committer: author,
     message: `${options.summary}\n`,
   });
-  expect(await store.listObjects()).toHaveLength(4);
+  expect(expectOk(await store.listObjects())).toHaveLength(4);
 });
 
 it("buildGeneration preserves an object-size error from storage", async () => {
@@ -95,7 +95,7 @@ it("buildGeneration deduplicates an unchanged module across commits", async () =
     createdAt: author.timestamp + 1,
   });
 
-  expect(await store.listObjects()).toHaveLength(5);
+  expect(expectOk(await store.listObjects())).toHaveLength(5);
 });
 
 it("buildGeneration does not assign a colliding lineage identity to distinct commits", async () => {
@@ -126,5 +126,5 @@ it("buildGeneration is deterministic for identical inputs", async () => {
   const second = await buildGeneration(store, options);
 
   expect(second).toEqual(first);
-  expect(await store.listObjects()).toHaveLength(4);
+  expect(expectOk(await store.listObjects())).toHaveLength(4);
 });

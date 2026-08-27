@@ -71,7 +71,7 @@ describe("generation commit messages", () => {
         summary: "unicode summary\n\n",
       }),
     );
-    const bytes = await store.readObject(generation.sha);
+    const bytes = expectOk(await store.readObject(generation.sha));
     if (bytes === undefined) {
       throw new Error("expected a stored generation commit");
     }

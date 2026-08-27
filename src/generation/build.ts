@@ -2,6 +2,7 @@ import { panic, Result, type Result as ResultType } from "better-result";
 import { encodeObject } from "../git/index.js";
 import { FILE_MODE } from "../git/types.js";
 import type { Sha, Signature, TreeEntry } from "../git/types.js";
+import type { StorageCapacityError, StorageUnavailableError } from "../storage/errors.js";
 import type { ObjectTooLargeError, Store } from "../storage/types.js";
 import { InvalidGenerationInputError } from "./errors.js";
 import {
@@ -21,7 +22,11 @@ export type BuildGenerationOptions = {
   readonly summary: string;
 };
 
-export type GenerationBuildError = InvalidGenerationInputError | ObjectTooLargeError;
+export type GenerationBuildError =
+  | InvalidGenerationInputError
+  | ObjectTooLargeError
+  | StorageUnavailableError
+  | StorageCapacityError;
 
 type ModuleEntry = {
   readonly module: Module;
@@ -81,7 +86,7 @@ function writeCommit(
   options: BuildGenerationOptions,
   manifest: Sha,
   summary: string,
-): Promise<ResultType<Sha, ObjectTooLargeError>> {
+): Promise<ResultType<Sha, ObjectTooLargeError | StorageUnavailableError | StorageCapacityError>> {
   return writeObject(
     store,
     encodeObject({
@@ -163,7 +168,7 @@ function findModuleEntry(root: TreeNode, path: string): ModuleEntry {
 async function writeTree(
   store: Store,
   node: TreeNode,
-): Promise<ResultType<Sha, ObjectTooLargeError>> {
+): Promise<ResultType<Sha, ObjectTooLargeError | StorageUnavailableError | StorageCapacityError>> {
   const entries: TreeEntry[] = [];
   for (const [name, child] of node.trees) {
     const sha = await writeTree(store, child);
@@ -188,7 +193,7 @@ async function writeTree(
 function writeObject(
   store: Store,
   bytes: Uint8Array,
-): Promise<ResultType<Sha, ObjectTooLargeError>> {
+): Promise<ResultType<Sha, ObjectTooLargeError | StorageUnavailableError | StorageCapacityError>> {
   return store.writeObject(bytes);
 }
 

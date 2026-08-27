@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { expect, test } from "vitest";
 import { parseGenerationNumber } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
@@ -9,6 +10,7 @@ import {
   computeGateVersion,
   type ValidationCase,
 } from "../../src/validation/index.js";
+import { expectOk } from "../support/result.js";
 
 const LIVE = parseSha("1111111111111111111111111111111111111111");
 const CANDIDATE = parseSha("2222222222222222222222222222222222222222");
@@ -37,8 +39,8 @@ const passingOutcome: ReplayOutcome = {
 test("a passing run emits an attestation bound to its observed live generation", async () => {
   const gate = new ValidationGate({
     pointerStore: {
-      readPointer: () => Promise.resolve(LIVE),
-      setPointer: () => Promise.resolve(false),
+      readPointer: () => Promise.resolve(Result.ok(LIVE)),
+      setPointer: () => Promise.resolve(Result.ok(false)),
     },
     resultStore: new MemoryValidationResultStore(),
     corpus: [validationCase],
@@ -47,11 +49,13 @@ test("a passing run emits an attestation bound to its observed live generation",
     now: () => 123,
   });
 
-  const run = await gate.validate(CANDIDATE, {
-    generation: parseGenerationNumber(1),
-    artifactDigest: CANDIDATE,
-    validatedAgainstGeneration: parseGenerationNumber(0),
-  });
+  const run = expectOk(
+    await gate.validate(CANDIDATE, {
+      generation: parseGenerationNumber(1),
+      artifactDigest: CANDIDATE,
+      validatedAgainstGeneration: parseGenerationNumber(0),
+    }),
+  );
 
   expect(run.result.verdict).toBe("pass");
   expect(run.attestation).toEqual({

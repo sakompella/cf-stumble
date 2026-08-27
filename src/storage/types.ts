@@ -8,6 +8,8 @@
 
 import { TaggedError, type Result } from "better-result";
 import type { Sha } from "../git/types.js";
+import type { StorageCapacityError, StorageUnavailableError } from "./errors.js";
+export type { StorageCapacityError, StorageUnavailableError } from "./errors.js";
 
 /** The maximum complete object size accepted by every store implementation. */
 export const MAX_OBJECT_BYTES = 10 * 1024 * 1024 * 1024;
@@ -28,26 +30,31 @@ export class ObjectTooLargeError extends TaggedError("ObjectTooLargeError")<{
 
 export interface ObjectStore {
   /** Returns undefined for an address that was never written. */
-  readObject(sha: Sha): Promise<Uint8Array | undefined>;
+  readObject(sha: Sha): Promise<Result<Uint8Array | undefined, StorageUnavailableError>>;
 
   /**
    * Stores the complete git object bytes, header included, and returns the SHA-1 of exactly
    * those bytes. Writing content that is already present is a no-op that returns the same
    * address, which is what makes an unchanged module across generations cost nothing.
    */
-  writeObject(bytes: Uint8Array): Promise<Result<Sha, ObjectTooLargeError>>;
+  writeObject(
+    bytes: Uint8Array,
+  ): Promise<Result<Sha, ObjectTooLargeError | StorageUnavailableError | StorageCapacityError>>;
 }
 
 export interface PointerStore {
   /** The live generation, or undefined before anything has been promoted. */
-  readPointer(): Promise<Sha | undefined>;
+  readPointer(): Promise<Result<Sha | undefined, StorageUnavailableError>>;
 
   /**
    * Compare-and-swap. Returns false without writing when the current pointer is not
    * `expected`, so two concurrent promotions from the same base cannot both win.
    * `expected` is undefined only when claiming the pointer for the first time.
    */
-  setPointer(next: Sha, expected: Sha | undefined): Promise<boolean>;
+  setPointer(
+    next: Sha,
+    expected: Sha | undefined,
+  ): Promise<Result<boolean, StorageUnavailableError | StorageCapacityError>>;
 }
 
 export interface Store extends ObjectStore, PointerStore {}
@@ -58,6 +65,6 @@ export interface Store extends ObjectStore, PointerStore {}
  * functions, because Artifacts may well not offer it and only the GC path should care.
  */
 export interface SweepableStore extends Store {
-  listObjects(): Promise<readonly Sha[]>;
-  deleteObject(sha: Sha): Promise<void>;
+  listObjects(): Promise<Result<readonly Sha[], StorageUnavailableError>>;
+  deleteObject(sha: Sha): Promise<Result<void, StorageUnavailableError>>;
 }

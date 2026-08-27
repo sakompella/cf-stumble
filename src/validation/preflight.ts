@@ -8,6 +8,7 @@ import {
 } from "../agent/runtime/index.js";
 import type { Sha } from "../git/types.js";
 import type { Workspace } from "../tools/index.js";
+import { StorageUnavailableError } from "../storage/errors.js";
 import type { Store } from "../storage/types.js";
 import { probes } from "./preflight-probes.js";
 import { runProbe } from "./preflight-execution.js";
@@ -88,9 +89,10 @@ export async function runPreflight(options: PreflightOptions): Promise<Preflight
     const materialized = await materializeGeneration(options.store, options.candidate);
     if (Result.isError(materialized)) {
       const detail = materialized.error.message;
+      const status = StorageUnavailableError.is(materialized.error) ? "INCONCLUSIVE" : "FAIL";
       return {
-        status: "FAIL",
-        checks: [{ capability: "materialization", status: "FAIL", detail }],
+        status,
+        checks: [{ capability: "materialization", status, detail }],
         failure: detail,
       };
     }

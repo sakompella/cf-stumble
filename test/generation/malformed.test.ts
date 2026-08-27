@@ -55,7 +55,7 @@ describe("generation module path validation", () => {
       _tag: "InvalidGenerationInputError",
       condition: "invalid-module-path",
     });
-    expect(await store.listObjects()).toHaveLength(0);
+    expect(expectOk(await store.listObjects())).toHaveLength(0);
   });
 });
 
@@ -63,7 +63,7 @@ describe("generation manifest validation", () => {
   it("rejects a manifest that references a missing blob", async () => {
     const store = new MemoryStore();
     const generation = await buildValidGeneration(store);
-    const manifestBytes = await store.readObject(generation.manifest);
+    const manifestBytes = expectOk(await store.readObject(generation.manifest));
     if (manifestBytes === undefined) {
       throw new Error("expected a stored manifest");
     }
@@ -75,7 +75,7 @@ describe("generation manifest validation", () => {
     if (file === undefined) {
       throw new Error("expected a manifest entry");
     }
-    await store.deleteObject(file.sha);
+    expectOk(await store.deleteObject(file.sha));
 
     await expect(readGeneration(store, generation.sha)).rejects.toThrow(/missing.*blob/u);
     await expect(readGeneration(store, generation.sha)).rejects.toMatchObject({ _tag: "Panic" });

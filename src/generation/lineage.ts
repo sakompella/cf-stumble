@@ -1,11 +1,15 @@
-import { panic } from "better-result";
+import { Result, panic, type Result as ResultType } from "better-result";
 import type { Sha } from "../git/types.js";
+import type { StorageUnavailableError } from "../storage/errors.js";
 import type { Store } from "../storage/types.js";
 import { readGeneration } from "./read.js";
 import type { CommitSnapshot } from "./types.js";
 
 /** Walk from a commit through its parents, returning newest to oldest. */
-export async function walkLineage(store: Store, start: Sha): Promise<readonly CommitSnapshot[]> {
+export async function walkLineage(
+  store: Store,
+  start: Sha,
+): Promise<ResultType<readonly CommitSnapshot[], StorageUnavailableError>> {
   const lineage: CommitSnapshot[] = [];
   // A genuine cycle is unconstructable here: a commit's sha is derived from bytes that already
   // embed its parent's sha, so a child cannot become its own ancestor. This guard defends against
@@ -19,10 +23,14 @@ export async function walkLineage(store: Store, start: Sha): Promise<readonly Co
     }
     visited.add(current);
 
-    const { generation: commit } = await readGeneration(store, current);
+    const loaded = await readGeneration(store, current);
+    if (Result.isError(loaded)) {
+      return loaded;
+    }
+    const commit = loaded.value.generation;
     lineage.push(commit);
     if (commit.parent === undefined) {
-      return lineage;
+      return Result.ok(lineage);
     }
     current = commit.parent;
   }

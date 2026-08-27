@@ -126,11 +126,13 @@ export async function seedStore(): Promise<{
   readonly genesis: CommitSnapshot;
 }> {
   const store = new MemoryStore();
-  const genesis = await seedGenesis(store, {
-    modules: genesisModules,
-    author,
-    createdAt: author.timestamp,
-    summary: "stable genesis",
-  });
+  const genesis = expectOk(
+    await seedGenesis(store, {
+      modules: genesisModules,
+      author,
+      createdAt: author.timestamp,
+      summary: "stable genesis",
+    }),
+  );
   return { store, genesis };
 }

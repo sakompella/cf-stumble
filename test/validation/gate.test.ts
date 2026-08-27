@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { expect, test } from "vitest";
 import { parseGenerationNumber } from "../../src/generation/types.js";
 import { parseSha } from "../../src/git/types.js";
@@ -7,6 +8,7 @@ import {
   ValidationGate,
   type ValidationCase,
 } from "../../src/validation/index.js";
+import { expectOk } from "../support/result.js";
 
 const LIVE = parseSha("1111111111111111111111111111111111111111");
 const CANDIDATE = parseSha("2222222222222222222222222222222222222222");
@@ -49,8 +51,8 @@ test("the ratchet blocks a regression from a live passing case", async () => {
   const results = new MemoryValidationResultStore();
   const gate = new ValidationGate({
     pointerStore: {
-      readPointer: () => Promise.resolve(LIVE),
-      setPointer: () => Promise.resolve(false),
+      readPointer: () => Promise.resolve(Result.ok(LIVE)),
+      setPointer: () => Promise.resolve(Result.ok(false)),
     },
     resultStore: results,
     corpus: [regressionCase],
@@ -58,11 +60,13 @@ test("the ratchet blocks a regression from a live passing case", async () => {
     now: () => 10,
   });
 
-  const run = await gate.validate(CANDIDATE, {
-    generation: parseGenerationNumber(1),
-    artifactDigest: CANDIDATE,
-    validatedAgainstGeneration: parseGenerationNumber(0),
-  });
+  const run = expectOk(
+    await gate.validate(CANDIDATE, {
+      generation: parseGenerationNumber(1),
+      artifactDigest: CANDIDATE,
+      validatedAgainstGeneration: parseGenerationNumber(0),
+    }),
+  );
 
   expect(run.result.verdict).toBe("fail");
   expect(run.attestation).toBeUndefined();
@@ -73,8 +77,8 @@ test("the ratchet allows a case that was already failing to fail again", async (
   const results = new MemoryValidationResultStore();
   const gate = new ValidationGate({
     pointerStore: {
-      readPointer: () => Promise.resolve(LIVE),
-      setPointer: () => Promise.resolve(false),
+      readPointer: () => Promise.resolve(Result.ok(LIVE)),
+      setPointer: () => Promise.resolve(Result.ok(false)),
     },
     resultStore: results,
     corpus: [regressionCase, knownDefectCase],
@@ -83,11 +87,13 @@ test("the ratchet allows a case that was already failing to fail again", async (
     now: () => 10,
   });
 
-  const run = await gate.validate(CANDIDATE, {
-    generation: parseGenerationNumber(1),
-    artifactDigest: CANDIDATE,
-    validatedAgainstGeneration: parseGenerationNumber(0),
-  });
+  const run = expectOk(
+    await gate.validate(CANDIDATE, {
+      generation: parseGenerationNumber(1),
+      artifactDigest: CANDIDATE,
+      validatedAgainstGeneration: parseGenerationNumber(0),
+    }),
+  );
 
   expect(run.result.verdict).toBe("pass");
   expect(run.attestation).toMatchObject({ candidate: CANDIDATE, verdict: "pass" });

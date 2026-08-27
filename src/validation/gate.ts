@@ -1,11 +1,9 @@
-import { assertNever } from "../git/types.js";
-import type { Sha } from "../git/types.js";
-import type { Attestation, Verdict } from "../generation/types.js";
-import type { GenerationNumber } from "../generation/types.js";
+import { Result, type Result as ResultType } from "better-result";
+import { assertNever, type Sha } from "../git/types.js";
+import type { Attestation, GenerationNumber, Verdict } from "../generation/types.js";
 import type { GenerationRegistry, MaterializationTransition } from "../generation/registry.js";
-import type { EffectsDifference } from "../replay/comparison.js";
-import type { ReplaySession } from "../replay/index.js";
-import type { PointerStore } from "../storage/types.js";
+import type { EffectsDifference, ReplaySession } from "../replay/index.js";
+import type { PointerStore, StorageUnavailableError } from "../storage/types.js";
 import {
   type PinnedCanary,
   type ValidationCase,
@@ -30,12 +28,9 @@ export type ValidationGateOptions = {
   readonly pointerStore: PointerStore;
   readonly resultStore: ValidationResultStore;
   readonly corpus: readonly ValidationCase[];
-  /** Supervisor-owned canaries; corpus metadata cannot add, remove, or alter these cases. */
   readonly pinnedCanaries?: readonly PinnedCanary[];
   readonly execute: ValidationExecutor;
-  /** Optional cheap capability gate; corpus execution starts only after it passes. */
   readonly preflight?: PreflightRunner;
-  /** Records a preflight rejection in the generation lifecycle before the corpus is considered. */
   readonly generationRegistry?: Pick<GenerationRegistry, "transition">;
   readonly executorTimeoutMs?: number;
   readonly now?: () => number;
@@ -78,15 +73,22 @@ export class ValidationGate {
     this.now = options.now ?? Date.now;
   }
 
-  async validate(candidate: Sha, validationIdentity: ValidationIdentity): Promise<ValidationRun> {
+  async validate(
+    candidate: Sha,
+    validationIdentity: ValidationIdentity,
+  ): Promise<ResultType<ValidationRun, StorageUnavailableError>> {
     const preflight = await executePreflight(this.preflight, candidate);
     await recordPreflightFailure(this.generationRegistry, preflight, validationIdentity);
-    const [corpusVersion, gateVersion, validatedAgainst, pinnedCorpusMatches] = await Promise.all([
+    const pointer = await this.pointerStore.readPointer();
+    if (Result.isError(pointer)) {
+      return pointer;
+    }
+    const [corpusVersion, gateVersion, pinnedCorpusMatches] = await Promise.all([
       computeCorpusVersion(this.corpus),
       computeGateVersion(),
-      this.pointerStore.readPointer(),
       corpusContainsPinnedCanaries(this.corpus, this.pinnedCanaries),
     ]);
+    const validatedAgainst = pointer.value;
     const caseResults =
       preflight === undefined || preflight.status === "PASS"
         ? pinnedCorpusMatches
@@ -111,7 +113,7 @@ export class ValidationGate {
       preflight,
     );
     await this.resultStore.put(result);
-    return { result, attestation: passingAttestation(result) };
+    return Result.ok({ result, attestation: passingAttestation(result) });
   }
 }
 

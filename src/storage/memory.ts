@@ -11,11 +11,11 @@ export class MemoryStore implements SweepableStore {
   private readonly objects = new Map<Sha, Uint8Array>();
   private pointer: Sha | undefined;
 
-  readObject(sha: Sha): Promise<Uint8Array | undefined> {
-    return Promise.resolve(this.objects.get(sha)?.slice());
+  readObject(sha: Sha): ReturnType<SweepableStore["readObject"]> {
+    return Promise.resolve(Result.ok(this.objects.get(sha)?.slice()));
   }
 
-  async writeObject(bytes: Uint8Array): Promise<Result<Sha, ObjectTooLargeError>> {
+  async writeObject(bytes: Uint8Array): ReturnType<SweepableStore["writeObject"]> {
     if (bytes.byteLength > MAX_OBJECT_BYTES) {
       return Result.err(
         new ObjectTooLargeError({ actualBytes: bytes.byteLength, maxBytes: MAX_OBJECT_BYTES }),
@@ -31,24 +31,24 @@ export class MemoryStore implements SweepableStore {
     return Result.ok(sha);
   }
 
-  readPointer(): Promise<Sha | undefined> {
-    return Promise.resolve(this.pointer);
+  readPointer(): ReturnType<SweepableStore["readPointer"]> {
+    return Promise.resolve(Result.ok(this.pointer));
   }
 
-  setPointer(next: Sha, expected: Sha | undefined): Promise<boolean> {
+  setPointer(next: Sha, expected: Sha | undefined): ReturnType<SweepableStore["setPointer"]> {
     if (this.pointer !== expected) {
-      return Promise.resolve(false);
+      return Promise.resolve(Result.ok(false));
     }
     this.pointer = next;
-    return Promise.resolve(true);
+    return Promise.resolve(Result.ok(true));
   }
 
-  listObjects(): Promise<readonly Sha[]> {
-    return Promise.resolve([...this.objects.keys()]);
+  listObjects(): ReturnType<SweepableStore["listObjects"]> {
+    return Promise.resolve(Result.ok([...this.objects.keys()]));
   }
 
-  deleteObject(sha: Sha): Promise<void> {
+  deleteObject(sha: Sha): ReturnType<SweepableStore["deleteObject"]> {
     this.objects.delete(sha);
-    return Promise.resolve();
+    return Promise.resolve(Result.ok());
   }
 }

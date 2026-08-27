@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { expectOk } from "../support/result.js";
 import { parseGenerationNumber } from "../../src/generation/types.js";
 import { PointerManager } from "../../src/pointer/index.js";
 import { parseSha } from "../../src/git/types.js";
@@ -37,7 +38,7 @@ const pass: ReplayOutcome = {
 
 test("promote rejects a passing attestation after the observed live pointer moved", async () => {
   const store = new MemoryStore();
-  expect(await store.setPointer(LIVE, undefined)).toBe(true);
+  expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
   const gate = new ValidationGate({
     pointerStore: store,
     resultStore: new MemoryValidationResultStore(),
@@ -47,24 +48,26 @@ test("promote rejects a passing attestation after the observed live pointer move
     now: () => 456,
   });
 
-  const validation = await gate.validate(CANDIDATE, {
-    generation: parseGenerationNumber(1),
-    artifactDigest: CANDIDATE,
-    validatedAgainstGeneration: parseGenerationNumber(0),
-  });
+  const validation = expectOk(
+    await gate.validate(CANDIDATE, {
+      generation: parseGenerationNumber(1),
+      artifactDigest: CANDIDATE,
+      validatedAgainstGeneration: parseGenerationNumber(0),
+    }),
+  );
   if (validation.attestation === undefined) {
     throw new Error("passing validation did not emit an attestation");
   }
   expect(validation.attestation.validatedAgainst).toBe(LIVE);
 
-  expect(await store.setPointer(MOVED_LIVE, LIVE)).toBe(true);
+  expect(expectOk(await store.setPointer(MOVED_LIVE, LIVE))).toBe(true);
   const pointer = new PointerManager({
     store,
     corpusVersion: validation.result.corpusVersion,
     gateVersion: validation.result.gateVersion,
   });
 
-  const promotion = await pointer.promote(CANDIDATE, validation.attestation);
+  const promotion = expectOk(await pointer.promote(CANDIDATE, validation.attestation));
 
   expect(promotion).toEqual({
     outcome: "rejected",
@@ -74,5 +77,5 @@ test("promote rejects a passing attestation after the observed live pointer move
       liveNow: MOVED_LIVE,
     },
   });
-  expect(await store.readPointer()).toBe(MOVED_LIVE);
+  expect(expectOk(await store.readPointer())).toBe(MOVED_LIVE);
 });

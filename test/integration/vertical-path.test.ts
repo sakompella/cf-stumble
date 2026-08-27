@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { expectOk } from "../support/result.js";
 import {
   assertGenesisReachable,
   makeGenesisPin,
@@ -20,7 +21,7 @@ import { requireAttestation, validateCandidate } from "./gate.js";
 
 test("seeding starts generation 0, pins its turn, and builds a distinct candidate", async () => {
   const { store, genesis } = await seedStore();
-  expect(await store.readPointer()).toBe(genesis.sha);
+  expect(expectOk(await store.readPointer())).toBe(genesis.sha);
 
   const workspace = new InMemoryWorkspace({
     files: [{ path: "turns.log", content: "" }],
@@ -41,19 +42,18 @@ test("seeding starts generation 0, pins its turn, and builds a distinct candidat
 
   expect(candidate.parent).toBe(genesis.sha);
   expect(candidate.sha).not.toBe(genesis.sha);
-  expect(await store.readPointer()).toBe(genesis.sha);
+  expect(expectOk(await store.readPointer())).toBe(genesis.sha);
 });
 
 test("promotion changes the next pinned turn and rollback restores generation 0", async () => {
   const { store, genesis } = await seedStore();
   const workspace = new InMemoryWorkspace({ files: [{ path: "turns.log", content: "" }] });
   await runConfiguredTurn(store, workspace);
-  const objectsAfterGenesis = await store.listObjects();
+  const objectsAfterGenesis = expectOk(await store.listObjects());
   const candidate = await buildPromptCandidate(store, genesis);
-  const objectsAfterCandidate = await store.listObjects();
+  const objectsAfterCandidate = expectOk(await store.listObjects());
   expect(objectsAfterGenesis).toHaveLength(4);
   expect(objectsAfterCandidate).toHaveLength(7);
-
   const validation = await validateCandidate(store, candidate, await loadFixture());
   expect(validation.run.result.verdict).toBe("pass");
   expect(validation.run.result.caseResults[0]).toMatchObject({
@@ -69,7 +69,9 @@ test("promotion changes the next pinned turn and rollback restores generation 0"
     corpusVersion: validation.run.result.corpusVersion,
     gateVersion: validation.run.result.gateVersion,
   });
-  expect(await pointer.promote(candidate.sha, requireAttestation(validation.run))).toEqual({
+  expect(
+    expectOk(await pointer.promote(candidate.sha, requireAttestation(validation.run))),
+  ).toEqual({
     outcome: "promoted",
     from: genesis.sha,
     to: candidate.sha,
@@ -82,7 +84,7 @@ test("promotion changes the next pinned turn and rollback restores generation 0"
     "candidate prompt\nturn\n",
   );
 
-  expect(await pointer.rollback(genesis.sha, candidate.sha)).toEqual({
+  expect(expectOk(await pointer.rollback(genesis.sha, candidate.sha))).toEqual({
     outcome: "promoted",
     from: candidate.sha,
     to: genesis.sha,
@@ -125,14 +127,14 @@ test("a promotion does not migrate a turn that already pinned generation 0", asy
     }
     start();
     await finish;
-    return readGeneration(store, generation);
+    return expectOk(await readGeneration(store, generation));
   });
 
   await started;
-  expect((await pointer.promote(candidate.sha, requireAttestation(validation.run))).outcome).toBe(
-    "promoted",
-  );
-  expect(await store.readPointer()).toBe(candidate.sha);
+  expect(
+    expectOk(await pointer.promote(candidate.sha, requireAttestation(validation.run))).outcome,
+  ).toBe("promoted");
+  expect(expectOk(await store.readPointer())).toBe(candidate.sha);
   const release = allowFinish;
   if (release === undefined) {
     throw new Error("turn did not initialize its finish signal");
@@ -165,9 +167,9 @@ test("rollback leaves accumulated context, facts, corpus, and validation evidenc
     corpusVersion: validation.run.result.corpusVersion,
     gateVersion: validation.run.result.gateVersion,
   });
-  expect((await pointer.promote(candidate.sha, requireAttestation(validation.run))).outcome).toBe(
-    "promoted",
-  );
+  expect(
+    expectOk(await pointer.promote(candidate.sha, requireAttestation(validation.run))).outcome,
+  ).toBe("promoted");
   accumulated.conversationHistory.push("agent changed the prompt");
   accumulated.learnedFacts.set("status", "tested");
   accumulated.corpusEntries.push({
@@ -177,7 +179,7 @@ test("rollback leaves accumulated context, facts, corpus, and validation evidenc
   });
   const evidence = await validation.resultStore.get(validation.run.result.generation);
 
-  expect((await pointer.rollback(genesis.sha, candidate.sha)).outcome).toBe("promoted");
+  expect(expectOk(await pointer.rollback(genesis.sha, candidate.sha)).outcome).toBe("promoted");
   expect(accumulated.conversationHistory).toEqual([
     "user asked for a change",
     "agent changed the prompt",
@@ -212,7 +214,7 @@ test("a candidate that fails the real replay gate leaves the live pointer unchan
     baseline: { status: "PASS" },
     candidate: { status: "FAIL" },
   });
-  expect(await store.readPointer()).toBe(genesis.sha);
+  expect(expectOk(await store.readPointer())).toBe(genesis.sha);
 });
 
 test("reset bypasses a broken candidate and every built descendant still reaches pinned genesis", async () => {
@@ -231,21 +233,21 @@ test("reset bypasses a broken candidate and every built descendant still reaches
     "deny-write\n",
     "broken policy",
   );
-  expect(await store.setPointer(brokenCandidate.sha, genesis.sha)).toBe(true);
+  expect(expectOk(await store.setPointer(brokenCandidate.sha, genesis.sha))).toBe(true);
   await expect(runConfiguredTurn(store, new InMemoryWorkspace())).rejects.toThrow(
     "unsupported turn policy",
   );
 
   const pin = makeGenesisPin(genesis);
-  await expect(assertGenesisReachable(store, genesis.sha, pin)).resolves.toBeUndefined();
-  await expect(assertGenesisReachable(store, candidate.sha, pin)).resolves.toBeUndefined();
-  await expect(assertGenesisReachable(store, brokenCandidate.sha, pin)).resolves.toBeUndefined();
+  expectOk(await assertGenesisReachable(store, genesis.sha, pin));
+  expectOk(await assertGenesisReachable(store, candidate.sha, pin));
+  expectOk(await assertGenesisReachable(store, brokenCandidate.sha, pin));
 
-  expect(await resetToGenesis(store, pin)).toEqual({
+  expect(expectOk(await resetToGenesis(store, pin))).toEqual({
     outcome: "reset",
     from: brokenCandidate.sha,
     to: genesis.sha,
   });
-  expect(await store.readPointer()).toBe(genesis.sha);
+  expect(expectOk(await store.readPointer())).toBe(genesis.sha);
   expect((await runConfiguredTurn(store, new InMemoryWorkspace())).generation).toBe(genesis.sha);
 });

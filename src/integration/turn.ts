@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import type { Sha } from "../git/types.js";
 import type { PointerStore } from "../storage/types.js";
 
@@ -11,9 +12,12 @@ export async function runPinnedTurn<T>(
   pointerStore: PointerStore,
   execute: (generation: Sha) => Promise<T>,
 ): Promise<PinnedTurn<T>> {
-  const generation = await pointerStore.readPointer();
-  if (generation === undefined) {
+  const pointer = await pointerStore.readPointer();
+  if (Result.isError(pointer)) {
+    throw pointer.error;
+  }
+  if (pointer.value === undefined) {
     throw new Error("cannot start a turn without a live generation");
   }
-  return { generation, result: await execute(generation) };
+  return { generation: pointer.value, result: await execute(pointer.value) };
 }
