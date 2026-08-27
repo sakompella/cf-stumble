@@ -107,10 +107,11 @@ to avoid. Once that constraint was explicitly lifted — "deps are not an issue,
 as little as possible" — the calculus flips entirely. `@cloudflare/computer` provides a real
 filesystem (a Workspace), and against a real filesystem isomorphic-git's ordinary
 `writeFile` → `add` → `commit` workflow is exactly the workflow it was built for, no working-tree
-avoidance required. The plan as of `docs/agents/design/computer-integration.md` deletes the 614-line codec and
-the four-function object store entirely, in favor of isomorphic-git operating on a
-Computer-provided filesystem. As of this writing that plan is written but not executed in source —
-`src/git/` and `src/storage/` still exist on `main`.
+avoidance required. The direction this points in, laid out in `docs/agents/design/computer-integration.md`, is retiring the
+614-line codec and the four-function object store in favor of isomorphic-git operating on a
+Computer-provided filesystem. That direction is written, not executed — `src/git/` and
+`src/storage/` still exist on `main`, and the migration is gated on designing how a facet's
+workspace hands the supervisor an immutable candidate, which is not yet decided.
 
 The honest accounting: three of the four reasons ever given for the codec turned out to be either
 false, circular, or beside the point, and the one durable reason (interop) was never actually
@@ -230,6 +231,56 @@ surfaced three latent typing bugs — `globalThis.crypto` and two `TextDecoder({
 calls — that had only ever type-checked correctly against Node's global lib types, which
 `@cloudflare/workers-types` doesn't provide. The Node half hadn't just been redundant; it had been
 quietly masking bugs in code that only ever needs to run in the one runtime that matters.
+
+## A bootstrap constraint got mistaken for the product
+
+The source brief for the overnight build was a derivative prompt, not the product spec: it told
+that night's build to give agent-controlled code exactly four actions — `read`, `write`, `edit`,
+`bash` — and nothing else, because that was the runtime the overnight session actually had
+available to hand a facet safely and quickly. It was a bootstrap constraint, scoped to what could
+be built and proven in one sitting, not a claim about what the finished system's agent should be
+forever limited to.
+
+That scoping got lost almost immediately. The four actions were written up as a permanent
+isolation boundary — "the agent action space is permanently limited to `read`, `write`, `edit`,
+and `bash`; a facet must never receive a general `@cloudflare/computer` Workspace" — and then
+layer after layer treated that sentence as settled product architecture rather than as the shape
+of one night's tooling. The WebAssembly shell was justified partly on its own merits and partly
+as the thing that keeps a container from ever sitting behind the facet, full stop, rather than as
+a bootstrap-runtime choice that a later, more capable runtime could supersede. The `@cloudflare/computer`
+integration plan inherited the same premise and designed a four-method proxy specifically so the
+facet would never hold anything Computer calls a `Workspace`, treating breadth of tooling itself as
+the danger rather than a proxy for it.
+
+Once that premise was in the design, everything downstream entrenched it further, each time
+making it harder to notice it was scope, not spec. The primitive-kind union got an `assertNever`
+exhaustiveness check, so adding a fifth action failed the build — a genuinely good technique for
+enforcing whatever the invariant is, but it was pointed at "four primitives, forever" instead of
+at the actual invariant underneath. Slice and verification prose then cited that compiler check as
+proof the four-action limit itself was correct, phrases like "the fixed action space: `read`,
+`write`, `edit`, `bash`, and nothing else ever" got written down as the final state rather than as a
+description of what one slice had built so far, and review findings treated a facet holding a real
+filesystem and shell as an isolation breach on sight, before asking what it could actually do with
+them.
+
+The actual invariant was never about how many tools the facet has. The facet is the mutable, active
+harness — it is supposed to own the model loop, its tools, its workspace and runtime, its prompts,
+skills, policy, and modules, and to keep evolving all of that as ordinary work. The supervisor is
+the small, stable recovery authority underneath it — immutable candidate and generation records,
+materialization, validation evidence, atomic live selection, rollback, and a genesis reset the facet
+cannot design around. Containment is judged by whether the facet can disable or impersonate that
+recovery authority, not by whether it has broad tools, native execution, networking, or a Computer
+workspace. `read`/`write`/`edit`/`bash` was always just the bootstrap runtime standing in for "the
+facet's current capabilities," whatever those happened to be on a given night; it was never the
+boundary.
+
+The shape this project should have started from was already built and documented elsewhere:
+Autolith's split between a mutable active image carrying tools and state and a stable launcher
+guarding pristine recovery (`lambda-symbolics/autolith`, `docs/architecture.org` and `AGENTS.md`) is
+the same distinction under different names. This correction is recorded in
+`docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`, which supersedes ADR-0004, ADR-0010,
+ADR-0020, and ADR-0021 — all four had, in different ways, encoded the fixed-four constraint as
+product architecture rather than as the bootstrap scope it actually was.
 
 ## Three decision registers, and the one that had quietly gone wrong
 

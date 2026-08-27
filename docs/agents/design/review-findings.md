@@ -74,12 +74,42 @@ it, the gate can still permit a regression while reporting success.
 
 The capability audit currently proves a list of denied paths against a facet with `env` of `[]`
 and `globalOutbound: null`. That result is sound for the configuration tested, and it is not a
-general containment proof. A `@cloudflare/computer`-backed `bash` will have its own egress and
-its own credentials, and that boundary has not been audited at all. Repeat the audit when the
-workspace is wired.
+general containment proof. Repeat the audit once the facet holds a real `@cloudflare/computer`
+workspace, its own egress, and its own runtime.
 
 Separately, local workerd does not establish hosted Dynamic Worker behaviour. Nothing here has
 run on Cloudflare's infrastructure.
+
+## The audit question for Computer, or any binding, is recovery authority, not tool breadth (open)
+
+An earlier version of this review treated a facet holding a real `@cloudflare/computer` Workspace
+as an isolation breach by itself — broad filesystem and shell access looked dangerous on sight, so
+the conclusion was to keep the facet on a narrow, hand-proxied set of methods forever. That
+conclusion doesn't survive contact with what containment is actually supposed to guarantee. The
+facet is meant to be the mutable, active harness; it is supposed to own its tools, its workspace,
+and its runtime, and a full Computer workspace is a reasonable thing for it to have. Breadth of
+tooling is not the hazard.
+
+The question a containment audit actually has to answer is narrower and harder to fake: **can the
+facet, through Computer or through any binding it holds, mutate or impersonate the supervisor's
+recovery authority** — its candidate and generation records, materialization state, validation
+evidence, the live pointer, rollback, or the genesis reset? A facet that can read and write its
+own filesystem, run its own shell, and commit its own git history has lost nothing that matters if
+none of that reaches the supervisor's SQLite, its promotion transaction, or its reset path except
+through the sanctioned candidate-submission pathway.
+
+That pathway is where the real work is, and it is not yet designed. `docs/agents/design/computer-integration.md`
+names the open questions: how a facet's mutable workspace hands the supervisor an immutable
+candidate (a commit, a tree, a signed artifact) without ever giving the facet a write path into
+the supervisor's own records, and how the supervisor can trust what it receives without re-deriving
+it itself. Two findings from the earlier, narrower framing still matter to that design regardless of
+how broad the facet's own tooling is: `@cloudflare/computer`'s git client runs network operations
+(clone, fetch, push) host-side, bypassing `globalOutbound: null` — so if the facet's workspace ever
+gets a real git remote, that remote is a candidate egress and submission path that has to be
+audited on its own terms, separately from whatever the facet does with its own files. And version
+0.2.1 has neither RPC bearer authentication nor an environment allowlist, so any binding the facet
+holds toward the supervisor's process needs its own authentication rather than relying on the
+facet's tooling being narrow.
 
 ## SHA-1 is an encoding claim, not an identity claim
 
@@ -133,46 +163,6 @@ That disable is the linter reporting a design problem and being told to be quiet
 supervisor along its obvious seams (routing / generation store / promotion) is the fix, and it
 was not attempted tonight because it touches the component every workerd test drives.
 
-## `@cloudflare/computer` would breach the facet boundary if used naively (open)
-
-Workers Paid became acceptable, so the obvious move was to back the four primitives with a real
-`@cloudflare/computer` workspace and finally get a production `bash`. Reading the 0.2.1 source
-first turned up a set of capability leaks that would quietly dismantle the isolation the whole
-design rests on.
-
-**Egress is not actually closed.** Setting `egress: { mode: "none" }` blocks ambient public
-networking, but the backend still grants the internal `computer.internal` route, and **git network
-operations execute host-side** — so clone, fetch and push bypass `globalOutbound: null` entirely.
-Our facet test asserts that `fetch()` and `connect()` fail; it would keep passing while the agent
-exfiltrated through git.
-
-**The workspace surface is much wider than four primitives.** A shell or container reaching a
-Workspace gets the filesystem root, host-forwarded git, Assets and Artifacts. `containerEnv` and
-any credentials baked into the image are readable by commands. Version 0.2.1 has neither RPC bearer
-authentication nor an environment allowlist; both are pending in an unreleased 0.3.0.
-
-**The current model already resists this, by accident of being strict.** An `env: {}` facet cannot
-use `WorkerShellBackend` at all, because it has no `LOADER`. Exposing a host-owned Workspace to the
-facet would require deliberately adding a capability route back to the supervisor — precisely the
-thing ADR-0004 says must not exist.
-
-**So the design is: never hand the facet a Workspace.** Expose a narrow capability with exactly
-four methods, matching the four primitives, proxied and policed by the supervisor, which holds the
-Workspace itself. This is the first concrete payoff from fixing the action space at four and never
-letting it grow: a four-method capability is auditable in a way that "a filesystem and a shell"
-never is.
-
-The unglamorous consequence is that `bash` cannot be a passthrough. Whatever the supervisor is
-willing to run has to be an explicit, reviewed surface, and `WorkerShellBackend` runs just-bash —
-roughly 77 bundled utilities with pipes, redirects and loops, but no OS processes, no compiler and
-no arbitrary binaries — while the container backend runs real processes and costs real money
-(standard-2 around $0.129/hour while awake, sleeping after idle, cold start 1–3s).
-
-**Maturity argues for patience anyway.** npm is still on 0.2.1 with `publishConfig.tag: unreleased`
-while GitHub `main` sits 69 commits ahead behind an unreleased 0.3.0 that changes auth and
-environment filtering. Open issues include broken published sqlite, unreachable GC, and unbounded
-tombstones. Fine to build a workspace on; not something to make load-bearing for isolation.
-
 ## Two known inconsistencies between the code and the model (open)
 
 Both surfaced by cross-checking `docs/agents/CONTEXT.md` against `src/`, which is the main argument for
@@ -190,14 +180,14 @@ the headline proof currently validates a design we no longer use. It should be m
 `@cloudflare/computer` work, since migrating a test that already tests the wrong thing just carries
 the error forward.
 
-**`Workspace` has five methods; the action space has four.** `src/tools/types.ts` exposes
-`readFile`, `writeFile`, `listFiles`, `exists` and `execute`. The four primitives sit _on top_ of
-that, so `Workspace` is the substrate rather than the capability.
-
-That naming is a trap aimed squarely at the migration. `docs/agents/design/computer-integration.md` says to
-expose a four-method proxy to the facet; anyone reading "proxy the Workspace" would hand it
-`listFiles` and raw `execute` — a materially wider surface than intended. The glossary now
-deliberately avoids claiming the interface has four methods.
+**`Workspace` in `src/tools/types.ts` names two different things.** The bootstrap interface
+exposes `readFile`, `writeFile`, `listFiles`, `exists` and `execute`; the bootstrap primitives
+(`read`, `write`, `edit`, `bash`) sit on top of that as one client of it, not as the whole of it.
+That is also the same identifier `@cloudflare/computer` uses for its own, much larger `Workspace`
+class. The overlap is confusing rather than load-bearing now that the facet is expected to own a
+real workspace outright rather than be proxied through a fixed method list, but the two things
+still need distinct names before source migration starts, so a reader can tell "this repository's
+bootstrap workspace shim" from "Computer's `Workspace`" on sight.
 
 ## Questions still on the human, not the machine (open)
 

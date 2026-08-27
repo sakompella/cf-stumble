@@ -33,12 +33,15 @@ Three instances, each guarding a claim central to the architecture:
   the compare-and-swap. That the conformance suite's CAS assertion turns a real race into a
   visible, countable failure — rather than an intermittent flake someone would shrug off — is the
   reason it's trusted enough for S9 to rerun it verbatim against real Durable Object SQLite.
-- **The fixed action space.** Adding a fifth member to the primitive-kind union was attempted
-  directly, to check whether the "only four primitives, ever" claim is enforced or merely
+- **The bootstrap primitive-kind union.** Adding a fifth member to the primitive-kind union was
+  attempted directly, to check whether the exhaustiveness check guarding it is enforced or merely
   documented. It failed the build at an `assertNever` exhaustiveness check (`TS2345`), not at
-  runtime and not by convention. That means the four-primitive boundary is a compiler-enforced
-  invariant: nobody can add a fifth action space without the build itself refusing, which is a
-  materially stronger guarantee than a comment or a code-review norm.
+  runtime and not by convention. That proves the technique: whatever the primitive-kind union is
+  set to at a given point, the compiler refuses code that forgets a case, which is a materially
+  stronger guarantee than a comment or a code-review norm. It is not, on its own, evidence that
+  four is the right number of primitives forever — that was a historical bootstrap scope, not a
+  product invariant (see `docs/agents/design/design-history.md`) — only that whatever the union is set to,
+  the build enforces exhaustive handling of it.
 
 ## Cross-implementation oracles: correctness checked by someone else's code
 

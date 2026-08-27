@@ -39,8 +39,9 @@ The first draft was twelve horizontal layers with the riskiest claim built last.
 wrong shape: it front-loads the work whose outcome is already known and defers the work that
 could invalidate everything. Two changes:
 
-1. **The facet isolation spike runs first.** It is the load-bearing safety claim (ADR-0004). If it
-   fails, the architecture changes, and every hour spent on layers above it is wasted.
+1. **The facet isolation spike runs first.** It is the load-bearing safety claim: that the facet
+   cannot reach the supervisor's recovery authority (see `docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`).
+   If it fails, the architecture changes, and every hour spent on layers above it is wasted.
 2. **A thin vertical path beats complete horizontal layers.** Once the spike lands, drive one
    end-to-end story through the system — seed generation 0, run a turn pinned to it, validate a
    candidate, promote, run a turn on the new generation, roll back — and only then widen each
@@ -63,7 +64,7 @@ it as a Durable Object facet, and demonstrate containment.
 
 Owns `wrangler.jsonc`, `vitest.config.ts`, `src/agent/loader.ts`, `test/facet/`.
 
-Must prove, per ADR-0004 — storage separation alone is a narrower claim than we need:
+Must prove — storage separation alone is a narrower claim than we need:
 
 - A secret written to the supervisor's SQLite is not observable from inside the facet.
 - Every capability crossing the boundary is enumerated and each is absent or deliberate:
@@ -217,12 +218,17 @@ back, reset. Owns `src/supervisor/`.
 
 ## S11 — Agent primitives · depends: S6, S0.5 · DONE
 
-The fixed action space: `read`, `write`, `edit`, `bash`, and nothing else ever. What
-accumulates across generations is skills, prompts, and policies. Owns `src/tools/` (pure logic,
+This is bootstrap-runtime work, not a permanent limit on the facet's action space: it built the
+four primitives — `read`, `write`, `edit`, `bash` — that this overnight build had time to wire
+end to end. What the facet is meant to accumulate across generations is not limited to these;
+see `docs/agents/design/computer-integration.md` for the facet owning a real workspace and runtime, and
+`docs/agents/design/design-history.md` for how the earlier "nothing else, ever" framing of this slice was
+a mistaken product claim rather than scope for the night. Owns `src/tools/` (pure logic,
 environment-agnostic over a `Workspace` interface — see `docs/agents/CONTEXT.md`, "Workspace," for why that
 word now needs disambiguating from `@cloudflare/computer`'s class of the same name).
 
-Build only what the vertical path in S8 needs; resist widening this.
+Built only what the vertical path in S8 needed at the time. Widening the facet's action space
+beyond these four is expected future work, not something to resist.
 
 **Verify:** `pnpm vitest run test/tools`
 
