@@ -406,19 +406,28 @@ property tests), up from 259.
   manifest slice makes the observable-effect contract versioned, which _is_ a replay schema change.
   A corpus migration has to exist before anything bumps that version.
 
+  Deferred deliberately, with a tripwire: before `REPLAY_SCHEMA_VERSION` changes, the replay-effect
+  work must teach `schema.ts`, `schema-parser.ts`, `readCorpusCases`, `writeCorpus`, and
+  `parseValidationCase` to parse old versions and migrate explicitly, and must add a workerd test
+  that inserts raw version-1 corpus JSON and proves `/corpus`, validation, and promotion still work
+  while rollback and reset stay reachable. The bump must not land unless that unchanged legacy
+  fixture passes.
+
   An earlier version of this note called that a bricked supervisor, which overstates it.
   `readCorpusCases` is reached only from `validateCandidate` and the corpus writes
   (`supervisor.ts:564`, `1082`, `1108`); neither `reset` nor rollback calls it. A version bump would
   block validation and promotion while leaving the recovery path working, which is the ordering
   ADR-0007 asks for. Bad, but not the worst case.
 
-- **A transient failure during first initialization wedges the instance, and this one predates the
-  migration.** `ensureInitialized` caches the promise with `??=` (`supervisor.ts:318`), so if
-  `initialize()` rejects, every later request awaits the same rejected promise rather than retrying.
-  Whether Cloudflare's `blockConcurrencyWhile` aborts the object and lets a fresh instance recover
-  needs checking against the platform rather than assumed; if it does not, a moment of storage
-  pressure at startup is indistinguishable from a permanent outage. This is the most plausible
-  route to an unreachable supervisor found so far, and it has nothing to do with `Result`.
+- **A failed first initialization does not wedge the instance — withdrawn.** `ensureInitialized`
+  caches the promise with `??=` (`supervisor.ts:318`), so a rejected `initialize()` is never retried
+  by that instance, which looked like a permanent outage from a transient failure. Cloudflare's
+  documentation for `blockConcurrencyWhile` settles it the other way: a throwing callback terminates
+  and resets the Durable Object. `ensureInitialized` does not catch the rejection
+  (`supervisor.ts:323`), so the cached rejected promise dies with the instance and the next request
+  gets a fresh one. No fix needed, and no test either — characterising it would test a platform
+  guarantee rather than anything in this repository. Revisit only if production evidence shows the
+  same in-memory instance surviving a throwing callback.
 
 - **Both recoverable branches added so far are close to unreachable.** Slice 7's 413 needs a single
   object above `MAX_OBJECT_BYTES`, which is 10 GiB, against modules measured in kilobytes; slice 3's
