@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { decodeObject, encodeObject } from "../../src/git/index.js";
 import { gitObjects, treeEntries } from "../support/git-generators.js";
 import { canonicalObject } from "../support/git-oracle.js";
+import { persistedExamples } from "../support/hegel.js";
 import { expectOk } from "../support/result.js";
 
 /**
@@ -21,7 +22,7 @@ test("decoding undoes encoding for every object", () => {
     // A tree comes back in git's order rather than the order it was written in; that reordering
     // is the encoder's job, so it is part of the expected value, not a weakening of the property.
     expect(expectOk(decodeObject(encodeObject(object)))).toEqual(canonicalObject(object));
-  });
+  }, persistedExamples);
 });
 
 test("re-encoding a decoded object is a fixpoint on the bytes", () => {
@@ -31,7 +32,7 @@ test("re-encoding a decoded object is a fixpoint on the bytes", () => {
     // A format that drifts on the second pass still passes a one-shot round-trip, so check the
     // bytes settle rather than only that the value survives.
     expect(encodeObject(expectOk(decodeObject(encoded)))).toEqual(encoded);
-  });
+  }, persistedExamples);
 });
 
 test("tree bytes do not depend on the order the entries were written in", () => {
@@ -51,19 +52,23 @@ test("tree bytes do not depend on the order the entries were written in", () => 
     expect(encodeObject({ type: "tree", entries: shuffled })).toEqual(
       encodeObject({ type: "tree", entries }),
     );
-  });
+  }, persistedExamples);
 });
 
 /**
- * Bytes the decoder might accept: mostly single-byte mutations of a real encoding, because
- * uniform random bytes are rejected at the header and would never reach the tree or commit
- * parsers. `bytesReachDecoder` below asserts this generator keeps finding accepted inputs.
+ * Bytes a decoder has to handle: random noise, plus mutations and truncations of real encodings.
+ * Uniform random bytes are rejected at the header and would never reach the tree or commit parsers,
+ * while a truncation drives each parser's incomplete-input branches.
  */
 const decoderInput = gs.composite<Uint8Array>((tc) => {
-  if (tc.draw(gs.integers({ minValue: 0, maxValue: 9 })) === 0) {
+  const inputKind = tc.draw(gs.integers({ minValue: 0, maxValue: 9 }));
+  if (inputKind === 0) {
     return tc.draw(gs.binary({ maxSize: 64 }));
   }
   const bytes = encodeObject(tc.draw(gitObjects));
+  if (inputKind === 1) {
+    return bytes.slice(0, tc.draw(gs.integers({ minValue: 0, maxValue: bytes.byteLength })));
+  }
   const mutations = tc.draw(gs.integers({ minValue: 0, maxValue: 3 }));
   for (let count = 0; count < mutations; count += 1) {
     if (bytes.byteLength === 0) break;
@@ -73,7 +78,7 @@ const decoderInput = gs.composite<Uint8Array>((tc) => {
   return bytes;
 });
 
-test("whatever the decoder accepts is canonical", () => {
+test("decoding arbitrary, mutated, and truncated bytes is total and canonical", () => {
   hegel.test((tc) => {
     const bytes = tc.draw(decoderInput);
 
@@ -89,7 +94,7 @@ test("whatever the decoder accepts is canonical", () => {
     // The store is content-addressed, so two byte strings that decode to the same object would be
     // two names for one thing. Accepting only canonical bytes is what rules that out.
     expect(encodeObject(decoded.value)).toEqual(bytes);
-  });
+  }, persistedExamples);
 });
 
 test("mutated encodings still reach the decoder, so the property above is not vacuous", () => {
@@ -100,7 +105,7 @@ test("mutated encodings still reach the decoder, so the property above is not va
         accepted += 1;
       }
     },
-    { testCases: 300 },
+    { ...persistedExamples, testCases: 300 },
   );
 
   expect(accepted).toBeGreaterThan(0);
