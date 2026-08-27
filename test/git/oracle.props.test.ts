@@ -10,6 +10,7 @@ import {
 } from "../support/git-generators.js";
 import { assertOracleAgreement } from "../support/git-oracle.js";
 import { expectOk } from "../support/result.js";
+import { persistedExamples } from "../support/hegel.js";
 
 /**
  * The differential layer over `test/git/oracle.test.ts`. That test pins three hand-chosen objects
@@ -25,7 +26,7 @@ import { expectOk } from "../support/result.js";
 test("blob encoding agrees with isomorphic-git", () =>
   hegel.testAsync(async (tc) => {
     await assertOracleAgreement(tc.draw(blobs));
-  }));
+  }, persistedExamples));
 
 /**
  * Entry ordering and mode encoding are where this codec is most likely to be wrong: git sorts a
@@ -36,17 +37,17 @@ test("blob encoding agrees with isomorphic-git", () =>
 test("tree encoding agrees with isomorphic-git", () =>
   hegel.testAsync(async (tc) => {
     await assertOracleAgreement({ type: "tree", entries: tc.draw(oracleSafeTreeEntries) });
-  }));
+  }, persistedExamples));
 
 test("prefix-sharing tree names sort the way git sorts them", () =>
   hegel.testAsync(async (tc) => {
     await assertOracleAgreement({ type: "tree", entries: tc.draw(prefixSharingTreeEntries) });
-  }));
+  }, persistedExamples));
 
 test("commit encoding agrees with isomorphic-git", () =>
   hegel.testAsync(async (tc) => {
     await assertOracleAgreement({ type: "commit", commit: tc.draw(oracleSafeCommits) });
-  }));
+  }, persistedExamples));
 
 /**
  * A bug this suite found, pinned rather than fixed.

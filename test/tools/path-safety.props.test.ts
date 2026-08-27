@@ -8,6 +8,7 @@ import {
   parseWorkspacePath,
   type WorkspacePathRejection,
 } from "../../src/tools/index.js";
+import { persistedExamples } from "../support/hegel.js";
 
 /**
  * A property layer over `test/tools/path-safety.test.ts`, which pins one example per rejection
@@ -80,7 +81,7 @@ test("parsing is total: every string yields a branded path or a tagged rejection
     expect(_tag).toBe("InvalidWorkspacePathError");
     expect(result.error.path).toBe(raw);
     expect(REJECTIONS).toContain(result.error.rejection);
-  });
+  }, persistedExamples);
 });
 
 test("an accepted path can never escape its workspace", () => {
@@ -99,7 +100,7 @@ test("an accepted path can never escape its workspace", () => {
     expect(accepted.split("/")).not.toContain("..");
     expect(accepted.split("/")).not.toContain(".");
     expect(accepted.split("/")).not.toContain("");
-  });
+  }, persistedExamples);
 });
 
 test("the predicate and the parser agree on every string", () => {
@@ -109,7 +110,7 @@ test("the predicate and the parser agree on every string", () => {
     // `parseWorkspacePath` panics when its two gates disagree, so the panic is unobservable from
     // outside. This pins the weaker public claim: a caller may use either and get the same answer.
     expect(isWorkspacePath(raw)).toBe(Result.isOk(parseWorkspacePath(raw)));
-  });
+  }, persistedExamples);
 });
 
 test("every rejection reason stays reachable, so the properties above are not vacuous", () => {
@@ -120,7 +121,7 @@ test("every rejection reason stays reachable, so the properties above are not va
       const result = parseWorkspacePath(tc.draw(candidatePaths));
       if (Result.isError(result)) reached.add(result.error.rejection);
     },
-    { testCases: 500 },
+    { ...persistedExamples, testCases: 500 },
   );
 
   expect([...reached].toSorted()).toEqual([...REJECTIONS].toSorted());
