@@ -8,12 +8,10 @@ codebase. This repo is **single-context**: one `CONTEXT.md` and one `docs/adr/` 
 - **`CONTEXT.md`** at the repo root — the glossary of domain terms.
 - **`docs/adr/`** — read the ADRs that touch the area you are about to work in.
 
-If these don't exist, **proceed silently**. Don't flag their absence and don't suggest creating
-them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and
-`/improve-codebase-architecture`) creates them lazily, when a term or a decision actually gets
-resolved.
-
-As of writing, neither exists yet. That is expected.
+Both exist in this repo. Read `CONTEXT.md` in full, and read the ADRs touching the area you are
+about to work in. When a term or a decision is missing, the `/domain-modeling` skill (reached via
+`/grill-with-docs` and `/improve-codebase-architecture`) adds it lazily, when that term or decision
+actually gets resolved.
 
 ## Also read the design docs
 

@@ -80,3 +80,20 @@ Three things it learned that we had not:
 DGM also independently confirms the replay problem we hit: a recorded response tape can validate
 protocol behaviour but cannot validate a _prompt_ change. Its answer is fresh execution with
 repeated samples on held-out tasks, which is the mechanism we have explicitly deferred.
+
+
+## The isomorphic-git comparison prototype
+
+A throwaway spike comparing our hand-written codec against isomorphic-git is parked, unmerged, on
+the branch `prototype/isogit-comparison`. It is recorded here so it stays findable rather than
+being lost with the branch.
+
+It established that the two produce **byte-identical objects** given identical inputs — trees
+matched immediately, and commits matched once a trailing-newline convention was aligned, which
+turned out to be a real if minor bug in ours. It also measured that isomorphic-git's stored bytes
+are zlib-compressed at path keys, so `sha1(stored) != oid`, and corrected an earlier finding of
+mine: counting *calls* suggested four filesystem methods sufficed, but isomorphic-git *binds* all
+ten when it constructs its wrapper, so a four-method shim fails before anything runs.
+
+Its verdict — keep the codec — has since been overtaken by the decision to adopt
+`@cloudflare/computer` and stop home-rolling. The measurements remain valid.

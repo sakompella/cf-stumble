@@ -171,3 +171,29 @@ no arbitrary binaries — while the container backend runs real processes and co
 while GitHub `main` sits 69 commits ahead behind an unreleased 0.3.0 that changes auth and
 environment filtering. Open issues include broken published sqlite, unreachable GC, and unbounded
 tombstones. Fine to build a workspace on; not something to make load-bearing for isolation.
+
+## Two known inconsistencies between the code and the model (open)
+
+Both surfaced by cross-checking `CONTEXT.md` against `src/`, which is the main argument for
+keeping a glossary at all.
+
+**The vertical integration test still drives the pre-remodel pointer.** `src/integration/turn.ts`
+reads the legacy `PointerStore`, receives a commit sha, and calls it a generation. Its only
+callers are the integration tests — including `test/integration/vertical-path.test.ts`, whose
+entire job is proving the system composes end to end. The supervisor was rewired onto the
+generation registry; this helper was not, and because it still typechecks and passes, nothing
+complained.
+
+This is the failure mode where a green test is actively misleading rather than merely incomplete:
+the headline proof currently validates a design we no longer use. It should be migrated before the
+`@cloudflare/computer` work, since migrating a test that already tests the wrong thing just carries
+the error forward.
+
+**`Workspace` has five methods; the action space has four.** `src/tools/types.ts` exposes
+`readFile`, `writeFile`, `listFiles`, `exists` and `execute`. The four primitives sit *on top* of
+that, so `Workspace` is the substrate rather than the capability.
+
+That naming is a trap aimed squarely at the migration. `docs/computer-integration.md` says to
+expose a four-method proxy to the facet; anyone reading "proxy the Workspace" would hand it
+`listFiles` and raw `execute` — a materially wider surface than intended. `CONTEXT.md` now
+deliberately avoids claiming the interface has four methods.

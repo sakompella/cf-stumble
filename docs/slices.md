@@ -277,6 +277,37 @@ previously recorded as live, and quarantine so a known-bad generation cannot sil
 
 **Verify:** `pnpm vitest run test/supervisor`
 
+---
+
+## S15 — Chunked object storage · depends: S9 · DONE
+
+Durable Object SQLite caps row and BLOB size, so storing each whole git object in one row threw a
+raw `SQLITE_TOOBIG` above roughly 2 MB. A self-modifying agent writing a large module would have
+blown up the store, and the failure surfaced as an opaque SQLite error rather than anything the
+system could reason about. Reproduced in workerd before fixing: 1 MiB and 2.5 MiB succeeded, 4 MiB
+threw.
+
+Objects are now split across chunk rows beneath the four-function interface, so the address is
+still the SHA-1 of the complete object and no caller can tell. Prior art: `littledivy/durable-git`
+chunks at 1 MiB, `@cloudflare/computer` at 512 KiB.
+
+**Verify:** `pnpm test` (the shared conformance suite covers both stores)
+
+---
+
+## S16 — Capability preflight · depends: S13 · DONE
+
+Borrowed from the Darwin Gödel Machine, which rejects a candidate that fails to compile *or has
+lost the ability to edit code* before spending anything on benchmarks. A candidate that can no
+longer use its own `edit` primitive is a dead end regardless of how it scores, and discovering
+that through a full corpus run is both slow and diffuse.
+
+Preflight drives the real executor — not a second divergent path — and every capability must pass
+individually rather than contributing to a score. Safety here is a floor, not something to
+maximise, because optimising hard against one benchmark amplifies brittle behaviour.
+
+**Verify:** `pnpm vitest run test/validation`
+
 ## Deferred and out of scope
 
 **Garbage collection — deferred deliberately (D13).** A Durable Object holds 10 GB and
