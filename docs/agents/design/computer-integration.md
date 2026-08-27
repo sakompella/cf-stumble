@@ -5,27 +5,24 @@ hand-proxied four-method capability, on the premise that a facet holding a real
 `@cloudflare/computer` `Workspace` was itself an isolation breach. That premise was wrong — see
 `docs/agents/design/design-history.md` and `docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`. The
 facet is the mutable, active harness; it is supposed to own a real workspace, real tools, and a
-real runtime, and grow all of that as ordinary work. Computer fits that role well. What follows
-keeps the verified facts about the `@cloudflare/computer@0.2.1` package — those don't depend on
-which side of the boundary ends up holding the workspace — and replaces the design built on the
-old premise with the actual open question: how does a facet's mutable workspace hand the
-supervisor an immutable candidate without ever giving the facet a write path into the
+real runtime, and grow all of that as ordinary work. Computer is the intended platform for that
+role. What follows separates a historical research snapshot of
+`@cloudflare/computer@0.2.1` from the open design question: how does a facet's mutable workspace
+hand the supervisor an immutable candidate without ever giving the facet a write path into the
 supervisor's own recovery records?
 
 ## What Computer is for now: the facet's own work environment
 
-Adopt `@cloudflare/computer@0.2.1` as the facet's workspace: a durable filesystem, an ordinary
-git workflow over that filesystem, and — through the Worker-shell or container backends — a real
-`bash`. This is the facet's own mutable state, in the same sense its prompts, skills, and policy
-are its own mutable state; nothing about holding a full `Workspace` here threatens the supervisor,
-because the supervisor's recovery authority does not live inside it. The candidate/generation
-registry, the activation ledger, validation evidence, and the live pointer stay supervisor-owned
-data, independent of whatever workspace implementation the facet uses to do its work.
+Use a current, exactly pinned `@cloudflare/computer` release to back the facet's durable
+filesystem, ordinary Git workflow, and runtime. This is facet-owned mutable state; holding a full
+Computer Workspace does not threaten the supervisor unless its bindings also expose supervisor
+recovery authority. The candidate and generation registry, activation ledger, validation
+evidence, and live pointer remain independent supervisor-owned data.
 
-This also removes the incompatibility the old plan had to route around. A facet with `env: {}`
-had no path to a proxied capability at all; giving the facet its own Computer `Workspace` directly
-(as a binding into its own Durable Object, or as a workspace it owns outright) sidesteps that
-entirely, because there is no proxy to route through in the first place.
+The exact Cloudflare wiring remains unresolved. Conceptually the facet owns the Computer-backed
+workspace rather than calling a supervisor-owned four-method proxy, but whether that means a
+binding to a separate workspace Durable Object or another supported arrangement must be checked
+against the current Computer API before implementation.
 
 ## The question that is actually unresolved: sanctioned candidate submission
 
@@ -81,11 +78,11 @@ design work, not something to default into while writing this document.
   canaries, `INCONCLUSIVE`, attestation provenance, and the candidate-to-live comparison are
   cf-stumble's rules, not something the package provides.
 
-## Verified facts about `@cloudflare/computer@0.2.1`
+## Historical research snapshot: `@cloudflare/computer@0.2.1`
 
-These are facts about the package as shipped, independent of which side of the boundary ends up
-using it. Keep them as reference material for whoever designs the submission pathway and does the
-eventual source migration; do not read them as endorsing the old four-method design.
+These facts were verified against version 0.2.1 during the original design work. They explain the
+old plan and identify questions to re-check, but they are not current version guidance. Refresh
+the package, source, open issues, and Cloudflare documentation before implementation.
 
 The npm package at `@cloudflare/computer@0.2.1` is MIT-licensed, preview-only, and its
 `package.json` has `publishConfig.tag: "unreleased"`. Its `Workspace` constructs
@@ -105,15 +102,14 @@ own Computer workspace ever gets a real git remote, that remote is an egress pat
 ambient `fetch`/`connect` denial, and it needs to be accounted for in its own right, not assumed
 closed because `globalOutbound` is set.
 
-GitHub `main` at commit `de87919a4fd37242e960e13b7b3ba802d1eef0a0` has source changes described by
-open release PR [#112](https://github.com/cloudflare/computer/issues/112) as unreleased `0.3.0`:
-container bearer authentication, changed container launch arguments, `/api` replacing `/ws`, and
-filtered container environments. The fetched `main` `package.json` still says `0.2.1`. Pin the
-exact npm `0.2.1` release for any first integration and track `main` as a separate compatibility
-track; do not use a caret range for a preview package. Version 0.2.1 has neither RPC bearer
-authentication nor an environment allowlist — both are pending in 0.3.0 — so any binding between a
-facet's workspace and anything the supervisor exposes needs its own authentication rather than
-relying on the package to provide it.
+At the time of that review, GitHub `main` at commit
+`de87919a4fd37242e960e13b7b3ba802d1eef0a0` contained changes described by release PR
+[#112](https://github.com/cloudflare/computer/issues/112) as unreleased `0.3.0`: container bearer
+authentication, changed container launch arguments, `/api` replacing `/ws`, and filtered
+container environments. The fetched `main` `package.json` still said `0.2.1`, whose RPC had no
+bearer authentication or environment allowlist. None of those version or issue states should be
+assumed current; the durable lesson is to pin the selected preview release exactly and give every
+facet-to-supervisor binding its own authentication.
 
 **Worker wiring facts.** `nodejs_compat` is required by Computer's VFS/git bundle.
 `experimental` is required by the Worker-shell backend and the Dynamic Worker Loader path.
@@ -141,11 +137,10 @@ without measurement. Open issues [#68](https://github.com/cloudflare/computer/is
 (unreachable GC) and [#67](https://github.com/cloudflare/computer/issues/67) (unbounded VFS
 tombstones) mean "small" needs re-checking as history accumulates, not just on the first turn.
 
-**Other open issues worth tracking:** [#106](https://github.com/cloudflare/computer/issues/106)
+**Issues open at the time of review:** [#106](https://github.com/cloudflare/computer/issues/106)
 (broken published sqlite shell content) and [#114](https://github.com/cloudflare/computer/issues/114)
-(deployed container WebSocket upgrades that never complete). The preview warning in the package
-README is accurate; these are operational risks to plan around, not reasons to withhold a real
-workspace from the facet.
+(deployed container WebSocket upgrades that never complete). Re-check their status before using
+them as implementation constraints.
 
 ## What still needs to be built, once the submission boundary is designed
 
@@ -166,6 +161,6 @@ The verified package facts above come from the unpacked `@cloudflare/computer@0.
 corresponding JavaScript. The main-branch source reviewed was `packages/computer/src/workspace.ts`,
 `src/proxy.ts`, `src/git/index.ts`, `src/backends/worker-shell/worker-shell.ts`,
 `src/backends/worker-shell/entrypoint.ts`, and `src/backends/container/cloudflare-container.ts`.
-Cloudflare's current whole-product references were
+The Cloudflare whole-product references consulted at the time were
 `https://developers.cloudflare.com/dynamic-workers/llms-full.txt` and
 `https://developers.cloudflare.com/containers/llms-full.txt`.

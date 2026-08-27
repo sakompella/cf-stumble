@@ -1,11 +1,11 @@
 # Architecture decisions
 
-One decision per file, in a paragraph. Superseded decisions keep their file and say what replaced
-them, so a reader who follows an old reference lands somewhere that explains itself rather than on
-a 404.
+One decision per file, in a paragraph. Superseded decisions normally keep their file and name the
+replacement; stale premises explicitly dropped from the architecture live in design history
+instead of remaining in this current-decision register.
 
-This index exists so that "read the ADRs touching your area" is a lookup rather than sixteen file
-opens. Grouped by area; a decision that spans two areas is listed under the one that owns it.
+This index exists so that "read the ADRs touching your area" is a lookup rather than a directory
+of file opens. Grouped by area; a decision that spans two areas is listed under the one that owns it.
 `test/docs/adr-index.test.ts` fails if a file here is missing from the list below.
 
 ## Generations and activation

@@ -236,12 +236,12 @@ quietly masking bugs in code that only ever needs to run in the one runtime that
 
 The source brief for the overnight build was a derivative prompt, not the product spec: it told
 that night's build to give agent-controlled code exactly four actions — `read`, `write`, `edit`,
-`bash` — and nothing else, because that was the runtime the overnight session actually had
-available to hand a facet safely and quickly. It was a bootstrap constraint, scoped to what could
-be built and proven in one sitting, not a claim about what the finished system's agent should be
-forever limited to.
+`bash` — and nothing else. The historical export lacks role labels and begins mid-conversation, so
+it does not establish why that restriction appeared. What is clear is that the derivative prompt
+conflicted with the Autolith-inspired product model the human has now reaffirmed: the active
+harness is mutable, while the separate recovery authority stays stable.
 
-That scoping got lost almost immediately. The four actions were written up as a permanent
+That conflict went unnoticed almost immediately. The four actions were written up as a permanent
 isolation boundary — "the agent action space is permanently limited to `read`, `write`, `edit`,
 and `bash`; a facet must never receive a general `@cloudflare/computer` Workspace" — and then
 layer after layer treated that sentence as settled product architecture rather than as the shape
@@ -270,17 +270,16 @@ the small, stable recovery authority underneath it — immutable candidate and g
 materialization, validation evidence, atomic live selection, rollback, and a genesis reset the facet
 cannot design around. Containment is judged by whether the facet can disable or impersonate that
 recovery authority, not by whether it has broad tools, native execution, networking, or a Computer
-workspace. `read`/`write`/`edit`/`bash` was always just the bootstrap runtime standing in for "the
-facet's current capabilities," whatever those happened to be on a given night; it was never the
-boundary.
+workspace. `read`/`write`/`edit`/`bash` is the bootstrap runtime currently implemented in this repository;
+it is not the recovery boundary.
 
 The shape this project should have started from was already built and documented elsewhere:
 Autolith's split between a mutable active image carrying tools and state and a stable launcher
 guarding pristine recovery (`lambda-symbolics/autolith`, `docs/architecture.org` and `AGENTS.md`) is
 the same distinction under different names. This correction is recorded in
-`docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`, which supersedes ADR-0004, ADR-0010,
-ADR-0020, and ADR-0021 — all four had, in different ways, encoded the fixed-four constraint as
-product architecture rather than as the bootstrap scope it actually was.
+`docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`. The four stale ADRs that encoded the
+fixed-tool facet, supervisor-owned workspace, WebAssembly-only shell, and fixed capability floor
+were dropped; this design history preserves why.
 
 ## Three decision registers, and the one that had quietly gone wrong
 
@@ -307,10 +306,10 @@ convention, the reason an untestable cycle guard exists, and about fifteen evide
 that made other decisions checkable — and its chronology was already better served by 224 git
 commits covering the same window.
 
-Consolidating onto ADRs cost about thirty rewritten cross-references and produced eight new
-decision records, five of which were positions that had been sitting in prose all along: one
-executor for the gate and live turns, keeping Git at all rather than two SQL tables, ranking
-supervisor reachability above egress, the WebAssembly shell, and preflight as a capability floor.
-That last group is the real lesson. The decisions were not missing because nobody wrote them
-down; they were missing because they had been written down as _narrative_, where a position is
-indistinguishable from an observation, and where nothing goes red when the code stops matching.
+Consolidating onto ADRs cost about thirty rewritten cross-references and surfaced positions that
+had been sitting in prose, including one executor for gate and live turns, keeping Git rather than
+two SQL tables, and ranking supervisor reachability above egress. It also promoted the
+WebAssembly-only shell and fixed capability floor into decisions that were later dropped when the
+Autolith-inspired product boundary was restored. That is the real lesson: narrative can hide both
+missing decisions and assumptions that never deserved decision status, because nothing goes red
+when either drifts from the product.

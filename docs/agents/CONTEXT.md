@@ -91,16 +91,16 @@ The isolated execution compartment in which one generation's agent code runs. It
 _Avoid_: generation, sandbox, worker
 
 **Facet capability**:
-The authority a facet receives to work on its task, bounded by whatever tool registry the current agent definition exposes. It is not access to the supervisor or to a broad platform workspace, regardless of how that tool registry evolves.
-_Avoid_: workspace access, supervisor access, full computer
+Authority available to the active harness for ordinary work, including its tool registry, runtime, and workspace. It may evolve with the agent definition; it excludes direct authority over supervisor recovery state.
+_Avoid_: supervisor access, recovery authority
 
 **Agent workspace**:
-The bounded work area an agent reaches through its primitives. It is a project capability, not the broad `Workspace` provided by `@cloudflare/computer`.
-_Avoid_: Workspace, filesystem access
+The facet-owned mutable work environment used for tasks and harness development. It may be backed by a Computer Workspace, but it is ordinary agent state rather than supervisor recovery state.
+_Avoid_: supervisor workspace, recovery store
 
 **Computer Workspace**:
-The broad platform workspace supplied by `@cloudflare/computer`. It must be named with the qualifier because it is a different, wider concept than an agent workspace.
-_Avoid_: workspace (unqualified), agent workspace
+The platform workspace supplied by `@cloudflare/computer`, which may implement an agent workspace. Use the qualifier when referring specifically to that API rather than to the domain concept.
+_Avoid_: workspace (when the platform API is meant)
 
 **Four primitives**:
 The agent action set generation 0 ships with: `read`, `write`, `edit`, and `bash`. They are the bootstrap tool registry, not a permanent ceiling — a later agent definition may extend its own tool registry, since the facet's harness is meant to evolve.
@@ -111,11 +111,11 @@ The versioned material that describes how the agent behaves, including its model
 _Avoid_: agent state, supervisor configuration, runtime state
 
 **Prompt, policy, and skills**:
-The changeable parts of an agent definition: the prompt directs the model, policy states constraints, and skills provide reusable task guidance. They are definition content, not new primitives.
-_Avoid_: tools, plugins, runtime state
+Parts of an agent definition: the prompt directs the model, policy states constraints, and skills provide reusable task guidance. They evolve alongside the model loop, tool registry, and other harness modules.
+_Avoid_: runtime state, accumulated context
 
 **Accumulated context**:
-The supervisor-owned knowledge and history that persist across generations. It belongs to the running system, not to a commit or a rollback target.
+Knowledge and history that persist across generations without becoming part of an agent definition. Rollback does not rewind it.
 _Avoid_: generation state, commit state, snapshot state
 
 ### Evaluation and execution
@@ -129,8 +129,8 @@ The rule that a turn uses the live generation selected at its start for its enti
 _Avoid_: live reload, mid-turn migration
 
 **Executor**:
-The component that turns model responses into primitive calls and their effects. The gate and live path use the same executor so validation concerns the behavior that will actually run.
-_Avoid_: model, facet, tool
+The component of an agent definition that turns model responses into tool calls and effects. The gate evaluates the candidate's executor, so validation concerns the behavior that would actually run.
+_Avoid_: model, facet, individual tool
 
 **Replay session**:
 A recorded interaction used to reproduce a defined sequence of model responses, primitive calls, and observable effects. It is a compatibility case, not a fresh evaluation of whether a prompt is better.
@@ -153,8 +153,8 @@ A compatibility case that must pass in its own right and whose identity is prote
 _Avoid_: optional test, sample case, corpus entry
 
 **Preflight**:
-The cheap viability check before the compatibility gate, including whether a candidate retains the ability to read, write, edit, and revise its own definition. It rejects a dead-end candidate before more costly evaluation.
-_Avoid_: validation gate, smoke test, quality check
+The cheap viability check before the compatibility gate. It confirms that a candidate loads, satisfies its declared runtime contract, and can still propose a future candidate through a sanctioned path.
+_Avoid_: validation gate, quality evaluation
 
 **Inconclusive**:
 An evaluation outcome meaning the system could not determine pass or fail. It is distinct from failure because it describes insufficient or invalid evidence, not a demonstrated regression.

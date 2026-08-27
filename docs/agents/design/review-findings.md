@@ -99,10 +99,10 @@ none of that reaches the supervisor's SQLite, its promotion transaction, or its 
 through the sanctioned candidate-submission pathway.
 
 That pathway is where the real work is, and it is not yet designed. `docs/agents/design/computer-integration.md`
-names the open questions: how a facet's mutable workspace hands the supervisor an immutable
-candidate (a commit, a tree, a signed artifact) without ever giving the facet a write path into
-the supervisor's own records, and how the supervisor can trust what it receives without re-deriving
-it itself. Two findings from the earlier, narrower framing still matter to that design regardless of
+names the open questions: how a facet's mutable workspace hands the supervisor immutable candidate
+bytes without gaining a write path into the supervisor's own records, and how the supervisor
+independently derives their identity and validates what it materializes. Two findings from the
+earlier, narrower framing still matter to that design regardless of
 how broad the facet's own tooling is: `@cloudflare/computer`'s git client runs network operations
 (clone, fetch, push) host-side, bypassing `globalOutbound: null` — so if the facet's workspace ever
 gets a real git remote, that remote is a candidate egress and submission path that has to be

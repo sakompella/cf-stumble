@@ -1,24 +1,26 @@
 # cf-stumble
 
 A personal AI coding-agent harness on Cloudflare Workers where the agent's own definition —
-its model loop, tool registry, prompts, skills, policies, and module code — is versioned as
-immutable **generations**, modelled on NixOS system generations.
+its model loop, tool registry, prompts, skills, policies, and module code — is versioned in Git
+and materialized as immutable numbered **generations**, modelled on NixOS system generations.
 
 The agent can modify itself. A self-modification is a _candidate_ build that must pass a gate
 before it can go live. Promotion is an atomic pointer switch. Rollback is the same switch in
-reverse. Nothing is edited in place, so there is no state in which the agent is half-upgraded.
+reverse. A live definition is never patched in place, so there is no state in which the agent is
+half-upgraded.
 
 ## Why it's shaped this way
 
 A self-modifying agent has an obvious failure mode: it breaks itself, and the thing that would
 have fixed it is the thing that broke. Three properties are arranged against that.
 
-**The supervisor is not modifiable by the agent.** Generation history, the live pointer, the
-accumulated context, and the replay corpus live in a supervisor Durable Object that is deployed
+**The supervisor is not modifiable by the agent.** The generation registry, live pointer,
+accumulated context, and replay corpus live in a supervisor Durable Object that is deployed
 normally. Agent code runs in a Durable Object _facet_ loaded through the Dynamic Worker Loader,
-with its own isolated SQLite and no route back to the supervisor's state. That containment is
-the entire safety argument, which is why it is the first thing built and tested rather than the
-last (see ADR-0024).
+with its own isolated SQLite and no direct access to supervisor state; it can influence that state
+only through sanctioned control paths the supervisor validates. That containment is the entire
+safety argument, which is why it is the first thing built and tested rather than the last (see
+ADR-0024).
 
 **Generation 0 is pinned and always reachable.** It is never garbage-collected, and reset routes
 through the supervisor without touching agent code. An escape hatch the agent can break is not
@@ -35,13 +37,16 @@ a permanent ceiling on what a later agent definition is allowed to grow into.
 
 ## Storage
 
-Generations use the git object model: a generation is a commit, its tree is the module
-manifest, and modules are blobs. Lineage is the commit DAG, so it comes free, and content
-addressing means an unchanged module across fifty generations is stored once.
+Authored history uses the Git object model: commits carry content and ancestry, their trees are
+module manifests, and modules are blobs. A generation is a separately numbered attempt to
+materialize one of those commits, so the same commit may be attempted more than once. Content
+addressing still means an unchanged module across fifty commits is stored once.
 
-There is **no working tree, ever**. Objects are built in memory and written to a
-content-addressed store whose entire surface is four functions — `readObject`, `writeObject`,
-`readPointer`, `setPointer` — because Cloudflare Artifacts is expected to replace it later.
+The current implementation builds Git objects in memory and writes them to a content-addressed
+store without a working tree. That is an implementation choice, not a restriction on the facet:
+the planned Computer integration gives the facet its own mutable working environment, then hands
+an immutable candidate to the supervisor through a sanctioned boundary that is still being
+designed.
 
 Two things deliberately sit outside git. The live pointer is one row in the supervisor's
 SQLite rather than a git ref, so the switch happens inside the same transaction domain as
@@ -56,8 +61,8 @@ directly and run fine on memfs. The reason is the storage surface: isomorphic-gi
 ten-method `FsClient` and writes zlib-compressed loose objects into it, which would mean
 emulating a filesystem over Durable Object SQLite so git can emulate a content-addressed store
 on top of something that already is one. The codec is 614 lines, keeps the four-function store
-honest, and because it keeps git's exact byte format the real `git` binary works as an
-independent test oracle. See ADR-0009 for the case against the hand-written codec and for the
+honest, and because it keeps Git's exact byte format isomorphic-git works as an independent test
+oracle inside workerd. See ADR-0009 for the case against the hand-written codec and for the
 replacement it was later measured against.
 
 ## Documentation
@@ -66,9 +71,9 @@ Everything under `docs/agents/` was written by agents working on this project. `
 that directory is reserved for hand-written human documentation.
 
 - **`docs/agents/adr/README.md`** — the decision index, grouped by area. Start here.
-- **`docs/agents/adr/`** — every resolved design decision, one per file, in a paragraph each. Superseded
-  decisions keep their file and say what replaced them, so the corrections where research or
-  review contradicted the original architecture stay visible rather than being quietly patched.
+- **`docs/agents/adr/`** — the current decision register, one decision per file. Superseded records
+  normally remain and point to their replacement; explicitly dropped stale premises live only in
+  design history rather than continuing to look like supported architecture.
 - **`docs/agents/design/design-history.md`** — the reasoning behind those decisions: what we thought, what
   changed our mind, and what the change cost. The ADRs carry the position; this carries the arc.
 - **`docs/agents/design/slices.md`** — the work broken into independently verifiable slices, each with a
@@ -82,7 +87,7 @@ that directory is reserved for hand-written human documentation.
 
 ```
 pnpm install
-pnpm test          # all 165 tests, inside real workerd
+pnpm test          # all tests, inside real workerd
 pnpm typecheck     # tsc --noEmit, strict, typed against workers-types
 pnpm lint          # oxlint type-aware, --max-warnings=0
 ```
@@ -111,11 +116,12 @@ the gate itself, so the attestation never leaves the process. Privileged routes 
 constant-time-compared secret and fail closed. Rollback is restricted to generations previously
 recorded as live, and quarantine stops a known-bad generation returning.
 
-163 tests pass (134 Node, 29 workerd), verified from a cold clone rather than incrementally.
+214 tests pass in workerd.
 
-**What is honestly not done.** Garbage collection is deliberately cut (ADR-0007). The agent runtime is
-real and shared by the gate and the live path, but it is not yet loaded into a facet through the
-Dynamic Worker Loader, so the last hop from stored bytes to sandboxed execution is unexercised.
-There is no real model provider, `@cloudflare/computer` is not wired as the workspace backend,
-and nothing has been deployed — hosted Dynamic Workers need Workers Paid. See
+**What is honestly not done.** Garbage collection is deliberately cut (ADR-0007). The current
+agent runtime still materializes prompt, policy, and skills around the bootstrap four-tool
+executor; it does not yet load a generation's complete evolvable harness into a facet. The last
+hop from stored bytes to candidate-owned execution is therefore unexercised. There is no real
+model provider, `@cloudflare/computer` is not wired as the facet's workspace, the sanctioned
+candidate-submission boundary is not designed, and nothing has been deployed. See
 `docs/agents/design/review-findings.md` for what a green suite does not prove.

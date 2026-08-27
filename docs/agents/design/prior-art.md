@@ -76,13 +76,12 @@ is meant to change and a small stable authority that is not:
 Autolith's own `AGENTS.md` draws this distinction explicitly: the stable launcher, the mutable
 active agent, its workers, and the pristine recovery path are named as four separate things, and
 only a small operation set is reserved for _durable self-mutation_ — the actions that change what
-boots next. Everything else — ordinary workspace tools, the tool registry a worker reaches for its
-task — stays broad and extensible. That is the shape we borrowed: a small, auditable set of
-operations governs recovery and promotion, while the facet's own tool registry, prompts, skills,
-and policies are exactly the parts meant to keep growing (see ADR-0024). Autolith does not fix a
-worker's action space to a handful of primitives, and neither was that ever this project's stated
-intent — an internal document mistook a derivative demo prompt's fixed-four constraint for the
-whole design; see `docs/agents/design/decision-provenance.md` for how that happened.
+boots next. Everything else — ordinary workspace tools and the active image's tool registry — stays broad and
+extensible. That is the shape we borrowed: a small, auditable set of operations governs recovery
+and promotion, while the facet's own loop, tools, prompts, skills, and policies are the parts meant
+to keep growing (see ADR-0024). Autolith does not fix the active agent's action space to a handful
+of primitives. This project did so only after a derivative prompt was mistaken for the product;
+see `docs/agents/design/decision-provenance.md` for how that happened.
 
 ## Self-modifying agents: the Darwin Gödel Machine
 
@@ -93,10 +92,10 @@ fresh benchmark execution.
 
 Three things it learned that we had not:
 
-1. **Cheap gates before expensive evaluation.** DGM rejects a candidate that fails to compile _or
-   that has lost its ability to edit code_, before spending anything on benchmarks. A candidate
-   that can no longer use its own `edit` primitive is a dead end regardless of its score. We had no
-   such gate; this became the preflight slice.
+1. **Cheap gates before expensive evaluation.** DGM rejects a candidate that fails to compile or
+   has lost its ability to modify itself before spending anything on benchmarks. The general lesson
+   is to test candidate viability and successor production before expensive evaluation; the current
+   bootstrap preflight expresses that through its existing tool protocol.
 2. **Keep weaker branches; parent selection is not greedy.** Later improvements can emerge from
    candidates that scored badly. Our model prunes nothing, so we are accidentally fine here, but it
    is a reason not to add aggressive pruning later.

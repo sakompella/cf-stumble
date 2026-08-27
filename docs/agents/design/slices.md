@@ -304,14 +304,16 @@ chunks at 1 MiB, `@cloudflare/computer` at 512 KiB.
 
 ## S16 — Capability preflight · depends: S13 · DONE
 
-Borrowed from the Darwin Gödel Machine, which rejects a candidate that fails to compile _or has
-lost the ability to edit code_ before spending anything on benchmarks. A candidate that can no
-longer use its own `edit` primitive is a dead end regardless of how it scores, and discovering
-that through a full corpus run is both slow and diffuse.
+Borrowed from the Darwin Gödel Machine, which rejects a candidate that fails to compile or can no
+longer modify itself before spending anything on benchmarks. The bootstrap implementation checks
+its four current tools and self-edit path independently, because losing one makes that executor
+unusable. This is an implemented protocol check, not a permanent requirement that every future
+harness expose an `edit` primitive.
 
-Preflight drives the real executor — not a second divergent path — and every capability must pass
-individually rather than contributing to a score. Safety here is a floor, not something to
-maximise, because optimising hard against one benchmark amplifies brittle behaviour.
+Preflight drives the candidate executor rather than a second divergent path. As the facet evolves,
+the check must evolve with its declared runtime contract and continue proving that the candidate
+can load and propose a successor. Viability is a floor rather than something to maximise, because
+optimising hard against one benchmark amplifies brittle behavior.
 
 **Verify:** `pnpm vitest run test/validation`
 
@@ -322,8 +324,8 @@ deduplicated module blobs are kilobytes, so there is no storage pressure for a l
 Meanwhile a root-discovery bug deletes the objects rollback depends on, turning the recovery
 mechanism into the thing needing recovery. Bad trade for disk we aren't short of.
 
-**Never tonight, per the source brief:** any UI, `patch.md` support, code-server, GitHub
-webhooks, the container backend.
+**Excluded from the overnight build, not from the product:** any UI, `patch.md` support,
+code-server, GitHub webhooks, and the container backend.
 
 **Not built, and worth being honest about:** judging whether a prompt actually got _better_
 needs live generation against the candidate prompt and scored trials over task invariants.
