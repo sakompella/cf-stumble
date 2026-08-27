@@ -383,6 +383,21 @@ property tests), up from 259.
   That is not hypothetical for a system built to evolve itself, and it lands on the facet plan, whose
   manifest slice makes the observable-effect contract versioned, which _is_ a replay schema change.
   A corpus migration has to exist before anything bumps that version.
+
+  An earlier version of this note called that a bricked supervisor, which overstates it.
+  `readCorpusCases` is reached only from `validateCandidate` and the corpus writes
+  (`supervisor.ts:564`, `1082`, `1108`); neither `reset` nor rollback calls it. A version bump would
+  block validation and promotion while leaving the recovery path working, which is the ordering
+  ADR-0007 asks for. Bad, but not the worst case.
+
+- **A transient failure during first initialization wedges the instance, and this one predates the
+  migration.** `ensureInitialized` caches the promise with `??=` (`supervisor.ts:318`), so if
+  `initialize()` rejects, every later request awaits the same rejected promise rather than retrying.
+  Whether Cloudflare's `blockConcurrencyWhile` aborts the object and lets a fresh instance recover
+  needs checking against the platform rather than assumed; if it does not, a moment of storage
+  pressure at startup is indistinguishable from a permanent outage. This is the most plausible
+  route to an unreachable supervisor found so far, and it has nothing to do with `Result`.
+
 - **Both recoverable branches added so far are close to unreachable.** Slice 7's 413 needs a single
   object above `MAX_OBJECT_BYTES`, which is 10 GiB, against modules measured in kilobytes; slice 3's
   422 for non-UTF-8 content cannot be reached through the JSON API at all. The panic paths are the

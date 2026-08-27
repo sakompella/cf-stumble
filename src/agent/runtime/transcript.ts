@@ -1,4 +1,3 @@
-import { panic } from "better-result";
 import type { WorkspaceTree } from "../../replay/schema.js";
 import type { Workspace, WorkspaceFileContent } from "../../tools/types.js";
 import type { ExecuteTurnOptions, TurnFailure } from "./types.js";
@@ -17,7 +16,12 @@ export async function snapshotWorkspace(workspace: Workspace): Promise<Workspace
   for (const path of files) {
     const content = await workspace.readFile(path);
     if (content === undefined) {
-      panic(`workspace listed ${JSON.stringify(path)} but read returned no file`);
+      // Not a broken invariant: `readFile` returns `undefined` by contract, and `Workspace`
+      // promises nothing about a path surviving between `listFiles` and the read. Once the
+      // workspace is a real filesystem the agent's own `bash` can delete a file inside that
+      // window, so this has to stay recoverable — `safeSnapshot` turns it into a
+      // `TranscriptSnapshotError`, while a panic would escape and take the turn down.
+      throw new Error(`workspace listed ${JSON.stringify(path)} but the file was gone by the read`);
     }
     if (!isTextContent(content)) {
       throw new TypeError(
