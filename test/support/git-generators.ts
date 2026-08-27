@@ -38,7 +38,7 @@ export const fileModes = gs.sampledFrom([
  * prefixes of each other, which is where git's trailing-slash sort ordering bites.
  */
 export const treeEntryNames = gs.oneOf(
-  gs.sampledFrom(["a", "foo", "foo.txt", "foo0", "foo~", "内容", "café", "-", " ", "\u{1f600}"]),
+  gs.sampledFrom(["a", "foo", "foo.txt", "foo0", "foo~", "内容", "café", "-", " ", "\u{1F600}"]),
   gs.text({ minSize: 1, maxSize: 8, excludeCharacters: "/\0", excludeCategories: ["Cs"] }),
 );
 
@@ -59,11 +59,14 @@ export const treeEntryNames = gs.oneOf(
  */
 function isReadableByOracle(name: string): boolean {
   if (name.includes("\\") || /[\uE000-\uFFFF]/u.test(name)) return false;
-  const cleaned = name.normalize("NFC").toLowerCase().replace(/[. ]+$/u, "");
+  const cleaned = name
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[. ]+$/u, "");
   return name !== "." && name !== ".." && cleaned !== ".git" && !/^\.?git~[1-9]$/u.test(cleaned);
 }
 
-export const oracleSafeTreeEntryNames = treeEntryNames.filter(isReadableByOracle);
+export const oracleSafeTreeEntryNames = treeEntryNames.filter((name) => isReadableByOracle(name));
 
 /**
  * Build entries for a list of names, dropping repeats.
@@ -104,7 +107,7 @@ export const oracleSafeTreeEntries = treeEntriesOf(oracleSafeTreeEntryNames);
 export const prefixSharingTreeEntries = gs.composite<readonly TreeEntry[]>((tc) => {
   const stem = tc.draw(gs.text({ minSize: 1, maxSize: 4, alphabet: "ab内" }));
   const suffixes = tc.draw(
-    gs.arrays(gs.sampledFrom(["", ".", ".txt", "0", "~", "-", "\u{1f600}"]), {
+    gs.arrays(gs.sampledFrom(["", ".", ".txt", "0", "~", "-", "\u{1F600}"]), {
       minSize: 1,
       unique: true,
     }),
@@ -169,12 +172,16 @@ export const blobs = gs
   .map((data) => ({ type: "blob", data: Uint8Array.from(data) }) satisfies GitObject);
 
 export const gitObjects = gs.composite<GitObject>((tc) => {
-  switch (tc.draw(gs.sampledFrom(["blob", "tree", "commit"] as const))) {
+  const kind = tc.draw(gs.sampledFrom(["blob", "tree", "commit"] as const));
+  switch (kind) {
     case "blob":
       return tc.draw(blobs);
     case "tree":
       return { type: "tree", entries: tc.draw(treeEntries) };
     case "commit":
       return { type: "commit", commit: tc.draw(commits) };
+    default:
+      kind satisfies never;
+      throw new Error("unreachable git object kind");
   }
 });

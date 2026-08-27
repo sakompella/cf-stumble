@@ -13,7 +13,13 @@ import {
 } from "isomorphic-git";
 import { expect } from "vitest";
 
-import { decodeObject, encodeObject, FILE_MODE, hashObject, parseSha } from "../../src/git/index.js";
+import {
+  decodeObject,
+  encodeObject,
+  FILE_MODE,
+  hashObject,
+  parseSha,
+} from "../../src/git/index.js";
 import type { Commit, GitObject, Sha, TreeEntry } from "../../src/git/index.js";
 import { createMemoryFs } from "./memory-fs.js";
 

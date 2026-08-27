@@ -57,7 +57,8 @@ const workspaceTrees = gs.composite<readonly JsonObject[]>((tc) => {
 
 const primitiveCalls = gs.composite<JsonObject>((tc) => {
   const path = tc.draw(gs.sampledFrom(["README.md", "src/app.ts", "a"]));
-  switch (tc.draw(gs.sampledFrom(["read", "write", "edit", "bash"] as const))) {
+  const kind = tc.draw(gs.sampledFrom(["read", "write", "edit", "bash"] as const));
+  switch (kind) {
     case "read":
       return { kind: "read", path };
     case "write":
@@ -71,32 +72,40 @@ const primitiveCalls = gs.composite<JsonObject>((tc) => {
       };
     case "bash":
       return { kind: "bash", command: tc.draw(gs.text({ minSize: 1, maxSize: 12 })) };
+    default:
+      kind satisfies never;
+      throw new Error("unreachable primitive call kind");
   }
 });
 
+// `call.kind` carries the full `JsonValue | undefined` the index signature allows, not the
+// four-way literal union it is actually drawn from, so this reads as `if`/`else` rather than a
+// `switch`: a `switch` here would force every other literal `JsonValue` member (`null`,
+// `undefined`, `true`, `false`) into its own case just to fall through to the same default as any
+// non-"write"/"edit"/"bash" string, number, array, or object already does.
 const capturedToolResults = gs.composite<JsonObject>((tc) => {
   const call = tc.draw(primitiveCalls);
   const integers = gs.integers({ minValue: 0, maxValue: 255 });
-  switch (call.kind) {
-    case "write":
-      return { call, result: { kind: "write", bytesWritten: tc.draw(integers) } };
-    case "edit":
-      return { call, result: { kind: "edit", replacements: tc.draw(integers) } };
-    case "bash":
-      return {
-        call,
-        result: {
-          kind: "bash",
-          exitCode: tc.draw(integers),
-          stdout: tc.draw(gs.text({ maxSize: 8 })),
-          stderr: tc.draw(gs.text({ maxSize: 8 })),
-        },
-        // Only a bash result carries one, and the parser rejects it anywhere else.
-        workspaceAfter: tc.draw(workspaceTrees),
-      };
-    default:
-      return { call, result: { kind: "read", content: tc.draw(gs.text({ maxSize: 8 })) } };
+  if (call.kind === "write") {
+    return { call, result: { kind: "write", bytesWritten: tc.draw(integers) } };
   }
+  if (call.kind === "edit") {
+    return { call, result: { kind: "edit", replacements: tc.draw(integers) } };
+  }
+  if (call.kind === "bash") {
+    return {
+      call,
+      result: {
+        kind: "bash",
+        exitCode: tc.draw(integers),
+        stdout: tc.draw(gs.text({ maxSize: 8 })),
+        stderr: tc.draw(gs.text({ maxSize: 8 })),
+      },
+      // Only a bash result carries one, and the parser rejects it anywhere else.
+      workspaceAfter: tc.draw(workspaceTrees),
+    };
+  }
+  return { call, result: { kind: "read", content: tc.draw(gs.text({ maxSize: 8 })) } };
 });
 
 const turns = gs.composite<JsonObject>((tc) => ({
@@ -127,9 +136,19 @@ export const replaySessionJson = gs.composite<JsonObject>((tc) => ({
   },
 }));
 
+/**
+ * `Array.isArray` narrows a union to `any[]` rather than to the one array shape `JsonValue`
+ * allows, which is what let an `any` escape the recursive call below. A type predicate stated
+ * against `JsonValue` itself keeps the narrowing exact, the same way `isJsonObjectValue` does for
+ * the object case (ADR-0015).
+ */
+function isJsonArrayValue(value: JsonValue): value is readonly JsonValue[] {
+  return Array.isArray(value);
+}
+
 /** Replace one value somewhere inside `value`, descending at random until it runs out of container. */
 function corruptSomewhere(tc: TestCase, value: JsonValue): JsonValue {
-  if (Array.isArray(value) && value.length > 0 && tc.draw(gs.booleans())) {
+  if (isJsonArrayValue(value) && value.length > 0 && tc.draw(gs.booleans())) {
     const at = tc.draw(gs.integers({ minValue: 0, maxValue: value.length - 1 }));
     return value.map((child, index) => (index === at ? corruptSomewhere(tc, child) : child));
   }
@@ -147,12 +166,16 @@ function corruptSomewhere(tc: TestCase, value: JsonValue): JsonValue {
 }
 
 export const arbitraryJson = gs.composite<JsonValue>((tc) => {
-  switch (tc.draw(gs.sampledFrom(["free", "valid", "corrupted"] as const))) {
+  const source = tc.draw(gs.sampledFrom(["free", "valid", "corrupted"] as const));
+  switch (source) {
     case "free":
       return freeJson(tc, tc.draw(gs.integers({ minValue: 0, maxValue: 4 })));
     case "valid":
       return tc.draw(replaySessionJson);
     case "corrupted":
       return corruptSomewhere(tc, tc.draw(replaySessionJson));
+    default:
+      source satisfies never;
+      throw new Error("unreachable JSON source");
   }
 });

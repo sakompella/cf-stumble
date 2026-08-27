@@ -87,7 +87,7 @@ test("KNOWN BUG: the encoder writes tree entry names git refuses to read", async
 test("tree entries sort by UTF-8 bytes, where isomorphic-git sorts by UTF-16 code unit", () => {
   const sha = parseSha("0000000000000000000000000000000000000000");
   const entries = [
-    { mode: FILE_MODE.regular, name: "\u{1f600}", sha },
+    { mode: FILE_MODE.regular, name: "\u{1F600}", sha },
     { mode: FILE_MODE.regular, name: "\uE000", sha },
   ];
 
@@ -96,5 +96,5 @@ test("tree entries sort by UTF-8 bytes, where isomorphic-git sorts by UTF-16 cod
 
   // U+E000 is EE 80 80 and U+1F600 is F0 9F 98 80, so git puts U+E000 first. By code unit the
   // lead surrogate D83D is smaller, which is the order isomorphic-git would write.
-  expect(decoded.entries.map((entry) => entry.name)).toEqual(["\uE000", "\u{1f600}"]);
+  expect(decoded.entries.map((entry) => entry.name)).toEqual(["\uE000", "\u{1F600}"]);
 });

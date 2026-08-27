@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { isJsonValue, type JsonValue } from "../../src/json.js";
+import { isJsonValue } from "../../src/json.js";
 import {
   parseReplaySession,
   parseReplaySessionJson,
@@ -18,7 +18,7 @@ import { arbitraryJson, replaySessionJson } from "../support/json-generators.js"
  * hand-written narrowing is exactly the kind that is total on the inputs its author imagined.
  */
 
-test("parsing arbitrary JSON is total: a session, or a ReplaySchemaError, and nothing else", () =>
+test("parsing arbitrary JSON is total: a session, or a ReplaySchemaError, and nothing else", () => {
   hegel.test((tc) => {
     const value = tc.draw(arbitraryJson);
 
@@ -29,11 +29,15 @@ test("parsing arbitrary JSON is total: a session, or a ReplaySchemaError, and no
       // A `TypeError` or a bare `Error` escaping here would reach the gate as harness noise
       // instead of as a rejected tape, which ADR-0014 is explicit about not wanting.
       expect(error).toBeInstanceOf(ReplaySchemaError);
-      expect((error as ReplaySchemaError).path).not.toBe("");
+      // A real `instanceof` narrows without a cast; the `expect` above already fails the test
+      // if this branch is impossible, so the rethrow below is unreachable in practice.
+      if (!(error instanceof ReplaySchemaError)) throw error;
+      expect(error.path).not.toBe("");
       return;
     }
     expect(parsed.schemaVersion).toBe(REPLAY_SCHEMA_VERSION);
-  }));
+  });
+});
 
 test("generated JSON reaches past the version check, so totality is not one `if`", () => {
   let accepted = 0;
@@ -57,7 +61,7 @@ test("generated JSON reaches past the version check, so totality is not one `if`
   expect(deep.length).toBeGreaterThan(3);
 });
 
-test("parsing an arbitrary string is total, malformed JSON included", () =>
+test("parsing an arbitrary string is total, malformed JSON included", () => {
   hegel.test((tc) => {
     const text = tc.draw(
       gs.oneOf(
@@ -71,9 +75,10 @@ test("parsing an arbitrary string is total, malformed JSON included", () =>
     } catch (error) {
       expect(error).toBeInstanceOf(ReplaySchemaError);
     }
-  }));
+  });
+});
 
-test("a recorded session survives a trip through JSON", () =>
+test("a recorded session survives a trip through JSON", () => {
   hegel.test((tc) => {
     const session = tc.draw(replaySessionJson);
 
@@ -83,9 +88,10 @@ test("a recorded session survives a trip through JSON", () =>
     // pass rather than against the input: the claim is that parsing settles, not that it is
     // the identity.
     expect(parseReplaySessionJson(JSON.stringify(parsed))).toEqual(parsed);
-  }));
+  });
+});
 
-test("dropping any required field is rejected rather than defaulted", () =>
+test("dropping any required field is rejected rather than defaulted", () => {
   hegel.test((tc) => {
     const session = tc.draw(replaySessionJson);
     const key = tc.draw(
@@ -104,9 +110,10 @@ test("dropping any required field is rejected rather than defaulted", () =>
     // A parser that fills in a default here would let a tape recorded under one schema be
     // replayed as though it were another, which is the failure ADR-0005's ratchet cannot see.
     expect(() => parseReplaySession(withoutKey)).toThrow(ReplaySchemaError);
-  }));
+  });
+});
 
-test("the JSON guard accepts exactly what JSON.stringify can round-trip", () =>
+test("the JSON guard accepts exactly what JSON.stringify can round-trip", () => {
   hegel.test((tc) => {
     const value = tc.draw(arbitraryJson);
 
@@ -114,23 +121,30 @@ test("the JSON guard accepts exactly what JSON.stringify can round-trip", () =>
     // has to be what `JSON.parse` can hand back unchanged.
     expect(isJsonValue(value)).toBe(true);
     const reparsed: unknown = JSON.parse(JSON.stringify(value));
-    expect(reparsed as JsonValue).toEqual(value);
-  }));
+    // Narrow through the real predicate rather than assert: the claim is that `JSON.parse` hands
+    // back a `JsonValue`, and a cast here would only assume the very thing being tested.
+    if (!isJsonValue(reparsed)) {
+      throw new Error("JSON.parse produced a value the JSON guard does not accept");
+    }
+    expect(reparsed).toEqual(value);
+  });
+});
 
-test("the JSON guard rejects values JSON cannot carry", () =>
+test("the JSON guard rejects values JSON cannot carry", () => {
   hegel.test((tc) => {
-    const shape = tc.draw(
+    const unsupportedKind = tc.draw(
       gs.sampledFrom(["undefined", "bigint", "function", "symbol", "nan", "infinity"] as const),
     );
     const notJson: unknown = {
       undefined: undefined,
       bigint: 1n,
-      function: () => undefined,
+      function: () => {},
       symbol: Symbol("s"),
       nan: Number.NaN,
       infinity: Number.POSITIVE_INFINITY,
-    }[shape];
+    }[unsupportedKind];
 
     expect(isJsonValue(notJson)).toBe(false);
     expect(isJsonValue([tc.draw(arbitraryJson), notJson])).toBe(false);
-  }));
+  });
+});

@@ -12,25 +12,27 @@ import { canonicalObject } from "../support/git-oracle.js";
  * meaningful even where isomorphic-git declines to go.
  */
 
-test("decoding undoes encoding for every object", () =>
+test("decoding undoes encoding for every object", () => {
   hegel.test((tc) => {
     const object = tc.draw(gitObjects);
 
     // A tree comes back in git's order rather than the order it was written in; that reordering
     // is the encoder's job, so it is part of the expected value, not a weakening of the property.
     expect(decodeObject(encodeObject(object))).toEqual(canonicalObject(object));
-  }));
+  });
+});
 
-test("re-encoding a decoded object is a fixpoint on the bytes", () =>
+test("re-encoding a decoded object is a fixpoint on the bytes", () => {
   hegel.test((tc) => {
     const encoded = encodeObject(tc.draw(gitObjects));
 
     // A format that drifts on the second pass still passes a one-shot round-trip, so check the
     // bytes settle rather than only that the value survives.
     expect(encodeObject(decodeObject(encoded))).toEqual(encoded);
-  }));
+  });
+});
 
-test("tree bytes do not depend on the order the entries were written in", () =>
+test("tree bytes do not depend on the order the entries were written in", () => {
   hegel.test((tc) => {
     const entries = tc.draw(treeEntries);
     const shuffled = [...entries];
@@ -47,7 +49,8 @@ test("tree bytes do not depend on the order the entries were written in", () =>
     expect(encodeObject({ type: "tree", entries: shuffled })).toEqual(
       encodeObject({ type: "tree", entries }),
     );
-  }));
+  });
+});
 
 /**
  * Bytes the decoder might accept: mostly single-byte mutations of a real encoding, because
@@ -68,7 +71,7 @@ const decoderInput = gs.composite<Uint8Array>((tc) => {
   return bytes;
 });
 
-test("whatever the decoder accepts is canonical", () =>
+test("whatever the decoder accepts is canonical", () => {
   hegel.test((tc) => {
     const bytes = tc.draw(decoderInput);
 
@@ -85,7 +88,8 @@ test("whatever the decoder accepts is canonical", () =>
     // The store is content-addressed, so two byte strings that decode to the same object would be
     // two names for one thing. Accepting only canonical bytes is what rules that out.
     expect(encodeObject(decoded)).toEqual(bytes);
-  }));
+  });
+});
 
 test("mutated encodings still reach the decoder, so the property above is not vacuous", () => {
   let accepted = 0;

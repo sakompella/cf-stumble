@@ -66,7 +66,7 @@ const candidatePaths = gs.composite<string>((tc) => {
   return fragments.join(tc.draw(gs.sampledFrom(["/", ""])));
 });
 
-test("parsing is total: every string yields a branded path or a tagged rejection", () =>
+test("parsing is total: every string yields a branded path or a tagged rejection", () => {
   hegel.test((tc) => {
     const raw = tc.draw(candidatePaths);
 
@@ -76,12 +76,14 @@ test("parsing is total: every string yields a branded path or a tagged rejection
       expect(result.value).toBe(raw);
       return;
     }
-    expect(result.error._tag).toBe("InvalidWorkspacePathError");
+    const { _tag } = result.error;
+    expect(_tag).toBe("InvalidWorkspacePathError");
     expect(result.error.path).toBe(raw);
     expect(REJECTIONS).toContain(result.error.rejection);
-  }));
+  });
+});
 
-test("an accepted path can never escape its workspace", () =>
+test("an accepted path can never escape its workspace", () => {
   hegel.test((tc) => {
     const result = parseWorkspacePath(tc.draw(candidatePaths));
     if (Result.isError(result)) return;
@@ -97,16 +99,18 @@ test("an accepted path can never escape its workspace", () =>
     expect(accepted.split("/")).not.toContain("..");
     expect(accepted.split("/")).not.toContain(".");
     expect(accepted.split("/")).not.toContain("");
-  }));
+  });
+});
 
-test("the predicate and the parser agree on every string", () =>
+test("the predicate and the parser agree on every string", () => {
   hegel.test((tc) => {
     const raw = tc.draw(candidatePaths);
 
     // `parseWorkspacePath` panics when its two gates disagree, so the panic is unobservable from
     // outside. This pins the weaker public claim: a caller may use either and get the same answer.
     expect(isWorkspacePath(raw)).toBe(Result.isOk(parseWorkspacePath(raw)));
-  }));
+  });
+});
 
 test("every rejection reason stays reachable, so the properties above are not vacuous", () => {
   const reached = new Set<WorkspacePathRejection>();
