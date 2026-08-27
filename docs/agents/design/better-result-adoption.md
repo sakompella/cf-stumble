@@ -324,12 +324,44 @@ slices land. `src/integration/turn.ts` is excluded entirely: it drives a superse
 | Slice                            | Status                              |
 | -------------------------------- | ----------------------------------- |
 | 1 - Primitive execution failures | **Complete**                        |
-| 2 - Turn failures                | Next. Specified in section 9        |
-| 3-8                              | Specified in section 9, not started |
+| 2 - Turn failures                | **Complete**                        |
+| 3 - Agent materialization        | **Complete**                        |
+| 5 - Git object decoding          | **Complete**                        |
+| 4 - Untrusted JSON and replay    | Next. Specified in section 9        |
+| 6-8                              | Specified in section 9, not started |
 
 **Baseline before migration.** With `better-result@3.0.1` installed and no source change,
 `pnpm verify` passed and all 214 tests across 37 files ran green in the workerd pool, so the
 dependency alone regresses nothing.
+
+**Slices 2, 3, and 5 ran in parallel** in separate worktrees, which the ranking in section 9 does
+not anticipate. It was safe because their files are disjoint and because slice 5 keeps the throwing
+`parseSha` for internally built hex, so nothing outside `src/git/` had to change with it. Slice 4
+was deliberately held back: it changes `parseJsonValue`, which `src/agent/runtime/protocol.ts` calls,
+and slice 2 owned that file. Slices 6 and 7 stay serial — slice 6 depends on 4 and 5, and slice 7
+changes the `Store` interface, which ripples into eleven files including `supervisor.ts`.
+
+After all three, `pnpm verify` is green with 291 tests across 43 files (269 workerd, 22 Node
+property tests), up from 259.
+
+### Findings for later slices, not fixed here
+
+- **A malformed or unloadable candidate is scored `INCONCLUSIVE`, not `FAIL`.**
+  `executeGeneration` (`src/supervisor/supervisor.ts:590`) receives a typed
+  `AgentMaterializationError` from slice 3 and throws it, so `executeSafely` renders it as
+  `INCONCLUSIVE`. A candidate whose own modules are malformed is a candidate defect;
+  `INCONCLUSIVE` should mean the platform left us unable to tell. The current behaviour is pinned by
+  `test/supervisor/supervisor.workers.ts:347`, so changing it is deliberate and has a test to
+  update. Slice 8 owns the transport; the verdict policy itself belongs to the facet runtime work.
+- **Slice 3's 422 for a non-UTF-8 module is unreachable today.** Modules arrive as JSON strings
+  through `POST /generations`, and a JSON string cannot carry invalid UTF-8. The branch becomes
+  reachable only when a facet submits raw candidate bytes, and that is when it needs a test.
+- **`parseSha` still throws a `TypeError` rather than panicking**, because `parseShaField`
+  (`supervisor.ts:1781`) catches it to build a 400. Slice 8 moves that caller, after which it can
+  panic. Documented on the function.
+- **`snapshotWorkspace` panics on a list-then-read race** (`src/agent/runtime/transcript.ts:20`).
+  Correct against `InMemoryWorkspace`, wrong against a real filesystem where the agent's own `bash`
+  can delete a file between the two calls.
 
 ### Slice 1 - Primitive execution failures (complete)
 
