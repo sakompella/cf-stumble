@@ -1,8 +1,8 @@
 # Adopting better-result
 
 A repository-wide audit of how cf-stumble represents failure today, a target model built on
-`better-result`, and a ranked set of vertical slices for getting there. The eight slices are
-specified well enough to be executed without redoing this analysis.
+`better-result`, and a ranked set of vertical slices for getting there. Slice 1 is implemented;
+slices 2-8 are specified well enough to be executed without redoing this analysis.
 
 ## 1. Scope and repository facts
 
@@ -242,7 +242,7 @@ Ordered so that each slice's errors are already tagged before the slice that con
 supervisor comes last on purpose: it is the confluence of every other path, so migrating it first
 would mean writing its `.match()` against types that seven later slices still change.
 
-**Slice 1 — Primitive execution failures. Recommended first slice.** From `pathError` and
+**Slice 1 — Primitive execution failures. Complete; see section 11.** From `pathRejection` and
 `prepareEdit` through `executePrimitive` and `executeLiveTool` to the `failedTurn` presentation
 boundary in `src/validation/preflight-results.ts`. Bounded and valuable: it is the one path already
 shaped like the target, so the change is mostly deletion of hand-rolled machinery; it ends at a real
@@ -321,14 +321,103 @@ slices land. `src/integration/turn.ts` is excluded entirely: it drives a superse
 
 ## 11. Migration progress and validation log
 
-Nothing is migrated yet. Slice 1 is recommended and approved for implementation; this section
-records completed work, deviations, discoveries, and validation evidence as slices land.
-
 | Slice                            | Status                              |
 | -------------------------------- | ----------------------------------- |
-| 1 - Primitive execution failures | Recommended, not started            |
-| 2-8                              | Specified in section 9, not started |
+| 1 - Primitive execution failures | **Complete**                        |
+| 2 - Turn failures                | Next. Specified in section 9        |
+| 3-8                              | Specified in section 9, not started |
 
-**Baseline before any migration.** With `better-result@3.0.1` installed and no source change,
-`pnpm verify` passes and all 214 tests across 37 files run green in the workerd pool. Adding the
+**Baseline before migration.** With `better-result@3.0.1` installed and no source change,
+`pnpm verify` passed and all 214 tests across 37 files ran green in the workerd pool, so the
 dependency alone regresses nothing.
+
+### Slice 1 - Primitive execution failures (complete)
+
+**Boundary.** From the failure sources in `src/tools/` - `pathRejection`'s seven reasons,
+`prepareEdit`'s three match failures, a throwing `Workspace` method, an absent file, binary
+content, a command deadline, an invalid timeout option - through `executePrimitive` and
+`executeLiveTool` to the two places a primitive failure is consumed: `TurnFailure`'s
+`primitive-failure` variant, and the `failedTurn` presentation boundary in
+`src/validation/preflight-results.ts` that renders it as a `PreflightCheck`.
+
+**What changed.**
+
+- **New `src/tools/errors.ts`** declares nine `TaggedError` subclasses plus the per-primitive
+  unions and `PrimitiveError`. The seven path rejections collapse into one error carrying a
+  `rejection` field, because no consumer distinguishes them; the three edit failures stay separate,
+  because each produces different user-facing wording and collapsing them would make `occurrences`
+  optional and so admit an invalid state.
+- **`src/tools/types.ts`**: `parseWorkspacePath` returns
+  `Result<WorkspacePath, InvalidWorkspacePathError>`. `validateWorkspacePath` and
+  `WorkspacePathValidation` are deleted - the `Result` is the validation, so there is no longer
+  both a throwing and a non-throwing entry point to keep in step. `WorkspacePathError` is renamed
+  `WorkspacePathRejection`, since it names a reason and no longer an error object.
+- **`src/tools/edit.ts`**: `prepareEdit` returns `Result<string, EditMatchError>`; `EditDecision`
+  is deleted.
+- **`src/tools/primitives.ts`**: `executePrimitive` returns `Promise<PrimitiveResult>`, now an
+  alias for `Result<PrimitiveSuccess, PrimitiveError>`. The `ok: true` flag is off every success
+  type, and `Failure<K, E>`, `PrimitiveFailure`, `InvalidPathError`, `WorkspaceError`, `ReadError`,
+  `WriteError`, `EditError`, and `BashError` are all deleted. The five `try`/`catch` blocks become
+  one `workspaceCall` helper wrapping `Result.tryPromise`, and the duplicated read-then-check-
+  undefined-then-check-binary sequence becomes one `readTextFile`. The file is 240 lines, down
+  from 295, and the deleted type machinery is replaced by 170 lines of named errors.
+- **`src/agent/runtime/`**: `live-turn.ts` narrows with `Result.isError`; `loop.ts` takes
+  `PrimitiveSuccess`; `types.ts` carries `PrimitiveError`; `transcript.ts` reports the error's
+  message instead of its old `kind`.
+- **`src/validation/preflight-results.ts`**: `isHarnessPrimitiveError` and
+  `primitiveFailureDetail` become exhaustive `.match()` calls. Adding a primitive error variant now
+  fails to compile in both, which the old `switch` on a `kind` field could not do.
+- **`src/tools/workspace.ts`** and `verifyTextFile` in `preflight-results.ts` take trusted setup
+  input, so they `unwrap()` with a message; an invalid path there is a defect, not a condition to
+  report.
+
+**Deviations from the plan in section 9.**
+
+1. **F2 became a `panic`, not a structural impossibility.** The audit predicted the
+   validator-disagrees-with-predicate check could be deleted outright. It cannot: branding requires
+   calling the type predicate in a narrowing position (ADR-0015 forbids an assertion), so the
+   compiler cannot see that a path rejected by the predicate always has a reason. The check
+   remains, as `panic` with a message naming both sides of the disagreement - which is the correct
+   disposition rather than a workaround.
+2. **`oxlint.config.ts` sets `eslint/max-classes-per-file` to `{ max: 12 }`.** Nine sibling error
+   classes trip a default of 1. The alternatives were a file-level `oxlint-disable` (rejected) or
+   nine one-class files (rejected: the taxonomy read together is the design). This is a repo-wide
+   policy change and deserves review. It also removes the need for `max-classes-per-file` in the
+   line-2 disable block of `supervisor.ts`, which slice 8 should drop; that block was left
+   untouched here.
+3. **`Result.map` was replaced with explicit `Result.isError` guards.** `unicorn/no-array-callback-reference`
+   fires on `Result.map(result, fn)`, mistaking it for `Array.prototype.map`. The early-return form
+   reads better next to the surrounding guards anyway, so no suppression was needed. Worth knowing
+   before later slices reach for the static combinators.
+
+**Test changes.** 214 pre-existing tests still pass; 21 were added, for 235 across 38 files.
+
+- Rewritten in place, because the values changed shape: `test/tools/primitives.test.ts`,
+  `edit.test.ts`, `bash.test.ts`, `path-safety.test.ts` assert `_tag` and context fields through
+  `expectOk`/`expectErr` instead of `result.ok` and `error.kind`.
+- Two assertions changed because a field was removed rather than renamed:
+  `test/agent/runtime.test.ts:261` now expects
+  `error: { _tag: "WorkspaceFileNotFoundError", path: "missing.txt" }` in place of
+  `error: { kind: "file-not-found" }`, and `test/integration/vertical-path.test.ts:32` drops
+  `ok: true` from a `WriteResult`, as does `test/integration/fixtures.ts`.
+- Mechanical: `parseWorkspacePath(...)` becomes `parseWorkspacePath(...).unwrap()` at 14 test call
+  sites, where throwing on an invalid literal is the intent.
+- `test/validation/preflight.test.ts` is **unchanged**, including its INCONCLUSIVE assertion. The
+  preflight detail strings are byte-identical, which is the evidence the harness-fault policy
+  survived the migration.
+
+New coverage: `test/validation/primitive-failure-mapping.test.ts` pins the harness-fault vs
+candidate-fault verdict and the exact detail string for all nine variants, and asserts that every
+variant appears in one of the two lists. `test/tools/path-safety.test.ts` covers all seven path
+rejections, where it previously covered three. `test/tools/primitives.test.ts` asserts `cause` is
+preserved as the original `Error` through `Result.tryPromise` rather than flattened to a string.
+`test/tools/workspace.test.ts` asserts the constructor's invalid-fixture path raises `Panic`.
+New shared helper: `test/support/result.ts`.
+
+**Validation.** `pnpm verify` passes end to end: `tsc --noEmit` clean, `oxfmt --check` clean,
+`oxlint --type-aware --max-warnings=0` clean, 235/235 tests green in workerd. No `oxlint-disable`
+comment was added anywhere, and `supervisor.ts` was not touched.
+
+**Next slice: 2 (turn failures).** It is the natural continuation - slice 1 stops exactly at the
+`TurnFailure` seam, and slice 2 collapses the `switch` over the remaining variants and the
+`.match()` over primitive errors into one exhaustive match at the same boundary.

@@ -58,7 +58,9 @@ export function describeFailure(failure: TurnFailure): string {
     case "unknown-tool":
       return `unknown tool ${JSON.stringify(failure.name)}`;
     case "primitive-failure":
-      return `primitive ${failure.error.kind} failed for ${failure.call.kind}`;
+      // The tagged error's own message already names the operation and the offending input, which
+      // is strictly more than the old `kind` gave a reader of this line.
+      return `primitive ${failure.call.kind} failed: ${failure.error.message}`;
     case "model-source-exhausted":
     case "model-source-error":
     case "transcript-error":

@@ -41,7 +41,11 @@ export class InMemoryWorkspace implements Workspace {
       (() => ({ status: "completed", exitCode: 0, stdout: "", stderr: "" }));
 
     for (const file of options.files ?? []) {
-      const path = parseWorkspacePath(file.path);
+      // Fixture paths come from trusted setup code, so an invalid one is a mistake in the caller
+      // rather than a condition to report; unwrap panics and names the offending path.
+      const path = parseWorkspacePath(file.path).unwrap(
+        `InMemoryWorkspace was given an invalid fixture path: ${JSON.stringify(file.path)}`,
+      );
       if (this.files.has(path)) {
         throw new TypeError(`duplicate workspace file: ${JSON.stringify(file.path)}`);
       }

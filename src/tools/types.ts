@@ -1,24 +1,14 @@
+import { Result, panic } from "better-result";
+import { InvalidWorkspacePathError, type WorkspacePathRejection } from "./errors.js";
+
 declare const workspacePathBrand: unique symbol;
 
 /** A validated relative path inside a workspace. Construct with {@link parseWorkspacePath}. */
 export type WorkspacePath = string & { readonly [workspacePathBrand]: true };
 
-export type WorkspacePathError =
-  | "empty"
-  | "absolute"
-  | "nul-byte"
-  | "backslash"
-  | "path-traversal"
-  | "dot-segment"
-  | "empty-segment";
-
-export type WorkspacePathValidation =
-  | { readonly ok: true; readonly path: WorkspacePath }
-  | { readonly ok: false; readonly reason: WorkspacePathError };
-
 const WINDOWS_ABSOLUTE_PATH = /^[A-Za-z]:/u;
 
-function pathError(path: string): WorkspacePathError | undefined {
+function pathRejection(path: string): WorkspacePathRejection | undefined {
   if (path.length === 0) {
     return "empty";
   }
@@ -47,27 +37,28 @@ function pathError(path: string): WorkspacePathError | undefined {
 }
 
 export function isWorkspacePath(value: string): value is WorkspacePath {
-  return pathError(value) === undefined;
+  return pathRejection(value) === undefined;
 }
 
-export function validateWorkspacePath(path: string): WorkspacePathValidation {
-  const reason = pathError(path);
-  if (reason !== undefined) {
-    return { ok: false, reason };
+/**
+ * Narrow an untrusted string into a {@link WorkspacePath}.
+ *
+ * The brand is applied by {@link isWorkspacePath}, a type predicate, so no assertion is involved
+ * (ADR-0015). The predicate and the rejection reason come from the same classifier, so the two
+ * cannot disagree about whether a path is valid — but the compiler cannot see that, which is why
+ * the impossible branch panics rather than inventing a reason to report.
+ */
+export function parseWorkspacePath(path: string): Result<WorkspacePath, InvalidWorkspacePathError> {
+  if (isWorkspacePath(path)) {
+    return Result.ok(path);
   }
-  if (!isWorkspacePath(path)) {
-    throw new Error("workspace path validator disagreed with its predicate");
+  const rejection = pathRejection(path);
+  if (rejection === undefined) {
+    panic(
+      `workspace path classifier disagreed with its predicate: isWorkspacePath rejected ${JSON.stringify(path)} but pathRejection found no reason`,
+    );
   }
-  return { ok: true, path };
-}
-
-/** Parse a path supplied by trusted setup code. Primitive calls use the non-throwing validator. */
-export function parseWorkspacePath(path: string): WorkspacePath {
-  const validation = validateWorkspacePath(path);
-  if (!validation.ok) {
-    throw new TypeError(`invalid workspace path (${validation.reason}): ${JSON.stringify(path)}`);
-  }
-  return validation.path;
+  return Result.err(new InvalidWorkspacePathError({ path, rejection }));
 }
 
 export type WorkspaceFileContent = string | Uint8Array;

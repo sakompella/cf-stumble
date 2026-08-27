@@ -1,11 +1,23 @@
+import { Result } from "better-result";
 import { assertNever } from "../git/types.js";
-import { prepareEdit, type EditMatchError } from "./edit.js";
+import { prepareEdit } from "./edit.js";
 import {
-  validateWorkspacePath,
+  BinaryFileError,
+  CommandTimeoutError,
+  InvalidCommandTimeoutError,
+  WorkspaceFileNotFoundError,
+  WorkspaceOperationError,
+  type BashPrimitiveError,
+  type EditPrimitiveError,
+  type PrimitiveError,
+  type ReadPrimitiveError,
+  type WritePrimitiveError,
+} from "./errors.js";
+import {
+  parseWorkspacePath,
   type Workspace,
-  type WorkspaceCommandResult,
   type WorkspaceFileContent,
-  type WorkspacePathError,
+  type WorkspacePath,
 } from "./types.js";
 
 export const PRIMITIVE_KINDS = ["read", "write", "edit", "bash"] as const;
@@ -39,82 +51,31 @@ export type PrimitiveCall = ReadCall | WriteCall | EditCall | BashCall;
 export type Primitive = PrimitiveCall;
 
 export type ReadResult = {
-  readonly ok: true;
   readonly kind: "read";
   readonly content: string;
 };
 
 export type WriteResult = {
-  readonly ok: true;
   readonly kind: "write";
   readonly bytesWritten: number;
 };
 
 export type EditResult = {
-  readonly ok: true;
   readonly kind: "edit";
   readonly replacements: 1;
 };
 
 export type BashResult = {
-  readonly ok: true;
   readonly kind: "bash";
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
 };
 
-type InvalidPathError = {
-  readonly kind: "invalid-path";
-  readonly path: string;
-  readonly reason: WorkspacePathError;
-};
+/** What a primitive produces when it succeeds. Failure is carried by the `Result`, not by a flag. */
+export type PrimitiveSuccess = ReadResult | WriteResult | EditResult | BashResult;
 
-type WorkspaceError = {
-  readonly kind: "workspace-error";
-  readonly operation: PrimitiveKind;
-  readonly detail: string;
-};
-
-type ReadError =
-  | InvalidPathError
-  | WorkspaceError
-  | { readonly kind: "file-not-found"; readonly path: string }
-  | { readonly kind: "binary-file"; readonly path: string };
-
-type WriteError = InvalidPathError | WorkspaceError;
-
-type EditError =
-  | InvalidPathError
-  | WorkspaceError
-  | EditMatchError
-  | { readonly kind: "file-not-found"; readonly path: string }
-  | { readonly kind: "binary-file"; readonly path: string };
-
-type BashError =
-  | WorkspaceError
-  | {
-      readonly kind: "timeout";
-      readonly command: string;
-      readonly timeoutMs: number;
-      readonly stdout: string;
-      readonly stderr: string;
-    }
-  | { readonly kind: "invalid-timeout"; readonly timeoutMs: number };
-
-type Failure<K extends PrimitiveKind, E> = {
-  readonly ok: false;
-  readonly kind: K;
-  readonly error: E;
-};
-
-type ReadFailure = Failure<"read", ReadError>;
-type WriteFailure = Failure<"write", WriteError>;
-type EditFailure = Failure<"edit", EditError>;
-type BashFailure = Failure<"bash", BashError>;
-
-export type PrimitiveFailure = ReadFailure | WriteFailure | EditFailure | BashFailure;
-export type PrimitiveResult = ReadResult | WriteResult | EditResult | BashResult | PrimitiveFailure;
+export type PrimitiveResult = Result<PrimitiveSuccess, PrimitiveError>;
 
 export type PrimitiveOptions = {
   readonly bashTimeoutMs?: number;
@@ -122,147 +83,131 @@ export type PrimitiveOptions = {
 
 export const DEFAULT_BASH_TIMEOUT_MS = 30_000;
 
-function errorDetail(error: Error | string): string {
-  return error instanceof Error ? error.message : error;
+/** Wrap one `Workspace` call so a thrown infrastructure error becomes a typed failure. */
+function workspaceCall<T>(
+  operation: PrimitiveKind,
+  run: () => Promise<T>,
+): Promise<Result<T, WorkspaceOperationError>> {
+  return Result.tryPromise({
+    try: run,
+    catch: (cause: unknown) => new WorkspaceOperationError({ operation, cause }),
+  });
 }
 
-function workspaceError(operation: PrimitiveKind, error: Error | string): WorkspaceError {
-  return { kind: "workspace-error", operation, detail: errorDetail(error) };
-}
-
-function invalidPath(path: string, reason: WorkspacePathError): InvalidPathError {
-  return { kind: "invalid-path", path, reason };
+/** Read text a primitive is about to operate on, rejecting an absent or binary file. */
+async function readTextFile(
+  operation: PrimitiveKind,
+  path: WorkspacePath,
+  reportedPath: string,
+  workspace: Workspace,
+): Promise<Result<string, ReadPrimitiveError>> {
+  const content = await workspaceCall(operation, () => workspace.readFile(path));
+  if (Result.isError(content)) {
+    return content;
+  }
+  if (content.value === undefined) {
+    return Result.err(new WorkspaceFileNotFoundError({ path: reportedPath }));
+  }
+  if (!isTextContent(content.value)) {
+    return Result.err(new BinaryFileError({ path: reportedPath }));
+  }
+  return Result.ok(content.value);
 }
 
 async function readPrimitive(
   call: ReadCall,
   workspace: Workspace,
-): Promise<ReadResult | ReadFailure> {
-  const validation = validateWorkspacePath(call.path);
-  if (!validation.ok) {
-    return { ok: false, kind: "read", error: invalidPath(call.path, validation.reason) };
+): Promise<Result<ReadResult, ReadPrimitiveError>> {
+  const path = parseWorkspacePath(call.path);
+  if (Result.isError(path)) {
+    return path;
   }
-
-  let content;
-  try {
-    content = await workspace.readFile(validation.path);
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error : String(error);
-    return { ok: false, kind: "read", error: workspaceError("read", detail) };
+  const content = await readTextFile("read", path.value, call.path, workspace);
+  if (Result.isError(content)) {
+    return content;
   }
-  if (content === undefined) {
-    return {
-      ok: false,
-      kind: "read",
-      error: { kind: "file-not-found", path: call.path },
-    };
-  }
-  if (!isTextContent(content)) {
-    return { ok: false, kind: "read", error: { kind: "binary-file", path: call.path } };
-  }
-  return { ok: true, kind: "read", content };
+  return Result.ok({ kind: "read", content: content.value });
 }
 
 async function writePrimitive(
   call: WriteCall,
   workspace: Workspace,
-): Promise<WriteResult | WriteFailure> {
-  const validation = validateWorkspacePath(call.path);
-  if (!validation.ok) {
-    return { ok: false, kind: "write", error: invalidPath(call.path, validation.reason) };
+): Promise<Result<WriteResult, WritePrimitiveError>> {
+  const path = parseWorkspacePath(call.path);
+  if (Result.isError(path)) {
+    return path;
   }
-
-  try {
-    await workspace.writeFile(validation.path, call.content);
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error : String(error);
-    return { ok: false, kind: "write", error: workspaceError("write", detail) };
+  const written = await workspaceCall("write", () => workspace.writeFile(path.value, call.content));
+  if (Result.isError(written)) {
+    return written;
   }
-  return {
-    ok: true,
+  return Result.ok({
     kind: "write",
     bytesWritten: new TextEncoder().encode(call.content).byteLength,
-  };
+  });
 }
 
 async function editPrimitive(
   call: EditCall,
   workspace: Workspace,
-): Promise<EditResult | EditFailure> {
-  const validation = validateWorkspacePath(call.path);
-  if (!validation.ok) {
-    return { ok: false, kind: "edit", error: invalidPath(call.path, validation.reason) };
+): Promise<Result<EditResult, EditPrimitiveError>> {
+  const path = parseWorkspacePath(call.path);
+  if (Result.isError(path)) {
+    return path;
   }
-  let current;
-  try {
-    current = await workspace.readFile(validation.path);
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error : String(error);
-    return { ok: false, kind: "edit", error: workspaceError("edit", detail) };
-  }
-  if (current === undefined) {
-    return {
-      ok: false,
-      kind: "edit",
-      error: { kind: "file-not-found", path: call.path },
-    };
-  }
-  if (!isTextContent(current)) {
-    return { ok: false, kind: "edit", error: { kind: "binary-file", path: call.path } };
+  const current = await readTextFile("edit", path.value, call.path, workspace);
+  if (Result.isError(current)) {
+    return current;
   }
 
-  const decision = prepareEdit(call.path, current, call.oldText, call.newText);
-  if (!decision.ok) {
-    return { ok: false, kind: "edit", error: decision.error };
+  const edited = prepareEdit(call.path, current.value, call.oldText, call.newText);
+  if (Result.isError(edited)) {
+    return edited;
   }
 
-  try {
-    await workspace.writeFile(validation.path, decision.content);
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error : String(error);
-    return { ok: false, kind: "edit", error: workspaceError("edit", detail) };
+  const written = await workspaceCall("edit", () => workspace.writeFile(path.value, edited.value));
+  if (Result.isError(written)) {
+    return written;
   }
-  return { ok: true, kind: "edit", replacements: 1 };
+  return Result.ok({ kind: "edit", replacements: 1 });
 }
 
 async function bashPrimitive(
   call: BashCall,
   workspace: Workspace,
   options: PrimitiveOptions | undefined,
-): Promise<BashResult | BashFailure> {
+): Promise<Result<BashResult, BashPrimitiveError>> {
   const timeoutMs = options?.bashTimeoutMs ?? DEFAULT_BASH_TIMEOUT_MS;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-    return { ok: false, kind: "bash", error: { kind: "invalid-timeout", timeoutMs } };
+    return Result.err(new InvalidCommandTimeoutError({ timeoutMs }));
   }
 
-  let execution: WorkspaceCommandResult;
-  try {
-    execution = await workspace.execute(call.command, { timeoutMs });
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error : String(error);
-    return { ok: false, kind: "bash", error: workspaceError("bash", detail) };
+  const executed = await workspaceCall("bash", () =>
+    workspace.execute(call.command, { timeoutMs }),
+  );
+  if (Result.isError(executed)) {
+    return executed;
   }
+
+  // Bound to a local so the switch below narrows the union.
+  const execution = executed.value;
   switch (execution.status) {
     case "completed":
-      return {
-        ok: true,
+      return Result.ok({
         kind: "bash",
         exitCode: execution.exitCode,
         stdout: execution.stdout,
         stderr: execution.stderr,
-      };
+      });
     case "timed-out":
-      return {
-        ok: false,
-        kind: "bash",
-        error: {
-          kind: "timeout",
+      return Result.err(
+        new CommandTimeoutError({
           command: call.command,
           timeoutMs,
           stdout: execution.stdout,
           stderr: execution.stderr,
-        },
-      };
+        }),
+      );
     default:
       return assertNever(execution, "workspace command result");
   }

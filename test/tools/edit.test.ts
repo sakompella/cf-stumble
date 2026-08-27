@@ -3,18 +3,10 @@ import {
   executePrimitive,
   InMemoryWorkspace,
   parseWorkspacePath,
-  type PrimitiveResult,
   type WorkspaceFileContent,
   type WorkspacePath,
 } from "../../src/tools/index.js";
-
-function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { readonly ok: true }> {
-  expect(result.ok).toBe(true);
-  if (!result.ok) {
-    throw new Error(`expected success, got ${result.error.kind}`);
-  }
-  return result;
-}
+import { expectErr, expectOk } from "../support/result.js";
 
 class FailingEditWorkspace extends InMemoryWorkspace {
   override readFile(_path: WorkspacePath): Promise<WorkspaceFileContent | undefined> {
@@ -32,8 +24,8 @@ test("edit replaces the one exact match and reports one replacement", async () =
     workspace,
   );
 
-  expect(expectSuccess(result)).toEqual({ ok: true, kind: "edit", replacements: 1 });
-  await expect(workspace.readFile(parseWorkspacePath("src/app.ts"))).resolves.toBe(
+  expect(expectOk(result)).toEqual({ kind: "edit", replacements: 1 });
+  await expect(workspace.readFile(parseWorkspacePath("src/app.ts").unwrap())).resolves.toBe(
     "const answer = 42;\n",
   );
 });
@@ -48,12 +40,14 @@ test("edit reports no match and leaves the file unchanged", async () => {
     workspace,
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "edit",
-    error: { kind: "no-match", path: "policy.txt", oldText: "allow bash" },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "EditNoMatchError",
+    path: "policy.txt",
+    oldText: "allow bash",
   });
-  await expect(workspace.readFile(parseWorkspacePath("policy.txt"))).resolves.toBe("allow read\n");
+  await expect(workspace.readFile(parseWorkspacePath("policy.txt").unwrap())).resolves.toBe(
+    "allow read\n",
+  );
 });
 
 test("edit rejects an ambiguous match instead of choosing the first", async () => {
@@ -66,12 +60,13 @@ test("edit rejects an ambiguous match instead of choosing the first", async () =
     workspace,
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "edit",
-    error: { kind: "ambiguous-match", path: "policy.txt", oldText: "allow read", occurrences: 2 },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "EditAmbiguousMatchError",
+    path: "policy.txt",
+    oldText: "allow read",
+    occurrences: 2,
   });
-  await expect(workspace.readFile(parseWorkspacePath("policy.txt"))).resolves.toBe(
+  await expect(workspace.readFile(parseWorkspacePath("policy.txt").unwrap())).resolves.toBe(
     "allow read\nallow read\n",
   );
 });
@@ -82,10 +77,9 @@ test("edit reports a missing file as a typed failure", async () => {
     new InMemoryWorkspace(),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "edit",
-    error: { kind: "file-not-found", path: "missing.txt" },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "WorkspaceFileNotFoundError",
+    path: "missing.txt",
   });
 });
 
@@ -95,11 +89,7 @@ test("edit reports binary content as a typed failure", async () => {
     new InMemoryWorkspace({ files: [{ path: "image.bin", content: new Uint8Array([0, 1]) }] }),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "edit",
-    error: { kind: "binary-file", path: "image.bin" },
-  });
+  expect(expectErr(result)).toMatchObject({ _tag: "BinaryFileError", path: "image.bin" });
 });
 
 test("edit reports workspace failures as typed failures", async () => {
@@ -108,10 +98,10 @@ test("edit reports workspace failures as typed failures", async () => {
     new FailingEditWorkspace(),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "edit",
-    error: { kind: "workspace-error", operation: "edit", detail: "edit read failed" },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "WorkspaceOperationError",
+    operation: "edit",
+    detail: "edit read failed",
   });
 });
 
@@ -121,9 +111,5 @@ test("edit rejects an empty search string as a typed failure", async () => {
     new InMemoryWorkspace({ files: [{ path: "policy.txt", content: "unchanged" }] }),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "edit",
-    error: { kind: "empty-search", path: "policy.txt" },
-  });
+  expect(expectErr(result)).toMatchObject({ _tag: "EmptyEditSearchError", path: "policy.txt" });
 });

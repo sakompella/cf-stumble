@@ -1,7 +1,7 @@
 import type { ReplaySession } from "../../replay/schema.js";
 import type {
   PrimitiveCall as ToolPrimitiveCall,
-  PrimitiveFailure,
+  PrimitiveError,
   PrimitiveOptions,
 } from "../../tools/index.js";
 
@@ -19,10 +19,12 @@ export type ExecuteTurnOptions = {
 export type TurnFailure =
   | { readonly kind: "malformed-tool-call"; readonly detail: string }
   | { readonly kind: "unknown-tool"; readonly name: string }
+  // The primitive family is migrated to tagged errors; the variants around it are not yet, so
+  // this is the slice seam. See docs/agents/design/better-result-adoption.md, slice 2.
   | {
       readonly kind: "primitive-failure";
       readonly call: ToolPrimitiveCall;
-      readonly error: PrimitiveFailure["error"];
+      readonly error: PrimitiveError;
     }
   | { readonly kind: "model-source-exhausted"; readonly detail: string }
   | { readonly kind: "model-source-error"; readonly detail: string }

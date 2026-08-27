@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import {
   REPLAY_SCHEMA_VERSION,
   type CapturedToolResult,
@@ -114,7 +115,7 @@ async function executeLiveTool(
   capturedToolResults: CapturedToolResult[],
 ) {
   const result = await executePrimitive(call, workspace, primitiveOptions);
-  if (!result.ok) {
+  if (Result.isError(result)) {
     return {
       ok: false as const,
       failure: { kind: "primitive-failure", call, error: result.error } satisfies TurnFailure,
@@ -132,7 +133,7 @@ async function executeLiveTool(
     }
     workspaceAfter = snapshot.workspace;
   }
-  const captured = capturedToolResult(call, result, workspaceAfter);
+  const captured = capturedToolResult(call, result.value, workspaceAfter);
   capturedToolResults.push(captured);
   return { ok: true as const, result: captured.result };
 }

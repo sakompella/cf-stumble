@@ -1,17 +1,6 @@
 import { expect, test } from "vitest";
-import {
-  executePrimitive,
-  InMemoryWorkspace,
-  type PrimitiveResult,
-} from "../../src/tools/index.js";
-
-function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { readonly ok: true }> {
-  expect(result.ok).toBe(true);
-  if (!result.ok) {
-    throw new Error(`expected success, got ${result.error.kind}`);
-  }
-  return result;
-}
+import { executePrimitive, InMemoryWorkspace } from "../../src/tools/index.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 test("bash returns stdout, stderr, and a zero exit code", async () => {
   const result = await executePrimitive(
@@ -26,8 +15,7 @@ test("bash returns stdout, stderr, and a zero exit code", async () => {
     { bashTimeoutMs: 500 },
   );
 
-  expect(expectSuccess(result)).toEqual({
-    ok: true,
+  expect(expectOk(result)).toEqual({
     kind: "bash",
     exitCode: 0,
     stdout: "ok\n",
@@ -48,8 +36,7 @@ test("bash exposes a non-zero exit code as a result rather than an exception", a
     }),
   );
 
-  expect(expectSuccess(result)).toEqual({
-    ok: true,
+  expect(expectOk(result)).toEqual({
     kind: "bash",
     exitCode: 17,
     stdout: "",
@@ -57,7 +44,7 @@ test("bash exposes a non-zero exit code as a result rather than an exception", a
   });
 });
 
-test("bash returns timeout as a distinct typed outcome", async () => {
+test("bash returns timeout as a distinct typed outcome, keeping partial output", async () => {
   const result = await executePrimitive(
     { kind: "bash", command: "sleep 10" },
     new InMemoryWorkspace({
@@ -70,16 +57,12 @@ test("bash returns timeout as a distinct typed outcome", async () => {
     { bashTimeoutMs: 25 },
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "bash",
-    error: {
-      kind: "timeout",
-      command: "sleep 10",
-      timeoutMs: 25,
-      stdout: "before timeout",
-      stderr: "deadline 25",
-    },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "CommandTimeoutError",
+    command: "sleep 10",
+    timeoutMs: 25,
+    stdout: "before timeout",
+    stderr: "deadline 25",
   });
 });
 
@@ -93,10 +76,10 @@ test("bash reports command-execution failures as typed failures", async () => {
     }),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "bash",
-    error: { kind: "workspace-error", operation: "bash", detail: "shell unavailable" },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "WorkspaceOperationError",
+    operation: "bash",
+    detail: "shell unavailable",
   });
 });
 
@@ -107,9 +90,5 @@ test("bash rejects an invalid timeout as a typed failure", async () => {
     { bashTimeoutMs: 0 },
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "bash",
-    error: { kind: "invalid-timeout", timeoutMs: 0 },
-  });
+  expect(expectErr(result)).toMatchObject({ _tag: "InvalidCommandTimeoutError", timeoutMs: 0 });
 });

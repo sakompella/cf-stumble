@@ -29,7 +29,7 @@ test("seeding starts generation 0, pins its turn, and builds a distinct candidat
 
   expect(firstTurn.generation).toBe(genesis.sha);
   expect(firstTurn.result.generation.sha).toBe(genesis.sha);
-  expect(firstTurn.result.write).toMatchObject({ ok: true, kind: "write" });
+  expect(firstTurn.result.write).toMatchObject({ kind: "write" });
 
   const candidate = await buildChild(
     store,
@@ -78,7 +78,7 @@ test("promotion changes the next pinned turn and rollback restores generation 0"
   const candidateTurn = await runConfiguredTurn(store, workspace);
   expect(candidateTurn.generation).toBe(candidate.sha);
   expect(candidateTurn.result.generation.parent).toBe(genesis.sha);
-  await expect(workspace.readFile(parseWorkspacePath("turns.log"))).resolves.toBe(
+  await expect(workspace.readFile(parseWorkspacePath("turns.log").unwrap())).resolves.toBe(
     "candidate prompt\nturn\n",
   );
 
@@ -89,7 +89,7 @@ test("promotion changes the next pinned turn and rollback restores generation 0"
   });
   const restoredTurn = await runConfiguredTurn(store, workspace);
   expect(restoredTurn.generation).toBe(genesis.sha);
-  await expect(workspace.readFile(parseWorkspacePath("turns.log"))).resolves.toBe(
+  await expect(workspace.readFile(parseWorkspacePath("turns.log").unwrap())).resolves.toBe(
     "stable prompt\nturn\n",
   );
 });

@@ -109,7 +109,6 @@ export function runConfiguredTurn(store: MemoryStore, workspace: InMemoryWorkspa
       throw new Error("turn completed without the configured write");
     }
     const result: WriteResult = {
-      ok: true,
       kind: "write",
       bytesWritten: encoder.encode(write.content).byteLength,
     };
