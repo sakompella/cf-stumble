@@ -4,4 +4,4 @@ The agent's authored history is real Git objects and commits, not two SQL tables
 
 ## Consequences
 
-This is what ADR-0009, ADR-0010 and ADR-0011 are downstream of — they argue about _how_ to hold Git objects, and this is the decision to hold them at all. The cost is a real one and is paid in those ADRs: either a project-owned codec or a dependency on `@cloudflare/computer`.
+This is what ADR-0009 and ADR-0011 are downstream of — they argue about _how_ to hold Git objects, and this is the decision to hold them at all. The cost is a real one and is paid in those ADRs: a project-owned codec, or whatever replaces it later.

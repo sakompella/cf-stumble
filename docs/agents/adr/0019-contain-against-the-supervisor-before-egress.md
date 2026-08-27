@@ -4,4 +4,4 @@ The threat this architecture is built to stop is the agent reaching the supervis
 
 ## Consequences
 
-This is why the design keeps `globalOutbound: null` for ambient egress and still accepts a narrow `WORKSPACE` binding, and why host-side git — which bypasses `globalOutbound` entirely — is a tolerable risk when proxied but not when handed over whole. Without the ranking stated, those two positions read as an inconsistency rather than a choice.
+This is why the design keeps `globalOutbound: null` for ambient egress by default: exfiltration is a bounded loss the facet can be given more room to risk over time, while any path that reaches the supervisor's registry, materialization records, validation evidence, live pointer, rollback, or genesis recovery has to go through a sanctioned control path the supervisor validates and attests itself, never through direct facet access. Ranking the threats this way is what keeps a broader facet workspace or runtime from reading as a containment concession — it isn't one, unless it also reaches supervisor authority directly.

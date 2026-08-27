@@ -27,31 +27,30 @@ opens. Grouped by area; a decision that spans two areas is listed under the one 
 
 ## Agent isolation
 
+- **[ADR-0024](0024-facet-owns-the-evolvable-harness.md)** — the facet owns its model loop, tools,
+  prompts, policies, modules, and work environment as ordinary, evolvable work; `read`, `write`,
+  `edit`, `bash` were a bootstrap action space, not a ceiling. Capability breadth is judged by
+  whether it reaches supervisor recovery authority directly, not by counting tools.
 - **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — the threat being contained
   is the agent reaching the supervisor and disabling its own rollback. Exfiltration is ranked second,
-  deliberately, and that ranking is what makes the rest of the isolation design coherent.
-- **[ADR-0004](0004-isolate-agent-code-behind-four-capabilities.md)** — agent code runs in a facet
-  with an action space of exactly `read`, `write`, `edit`, `bash`. A facet never receives a general
-  Computer Workspace, because that carries filesystem, git, Assets and Artifacts with it.
-- **[ADR-0020](0020-the-agent-shell-is-wasm-never-a-container.md)** — `bash` is a WebAssembly shell
-  with no OS processes and no package installs. Native execution, if ever needed, goes behind a
-  supervisor-owned validator rather than behind the facet.
+  deliberately, and that ranking is what makes the rest of the isolation design coherent — and it is
+  the reason a broad facet workspace isn't itself a containment concession.
 
 ## The validation gate
 
-- **[ADR-0005](0005-use-replay-as-a-compatibility-ratchet.md)** — replay measures executor
-  compatibility, not prompt quality, because the tape came from the old prompt. Regressions from the
-  live generation block promotion, and supervisor-pinned canaries must pass outright.
+- **[ADR-0005](0005-use-replay-as-a-compatibility-ratchet.md)** — replay measures compatibility
+  against the actual candidate facet at the protocol version the tape was recorded under, not prompt
+  quality and not a frozen surrogate. Regressions from the live generation block promotion, and
+  supervisor-pinned canaries must pass outright.
 - **[ADR-0006](0006-supervisor-produces-promotion-evidence.md)** — the supervisor runs the gate and
   keeps the attestation; a caller cannot submit one. Corpus and gate versions are content-derived
   hashes.
 - **[ADR-0014](0014-replay-cases-assert-observable-effects.md)** — a case asserts tool calls and
   workspace state rather than text, pins every source of variation, and reports `INCONCLUSIVE` for
   harness failure so the ratchet is never fed noise.
-- **[ADR-0017](0017-one-executor-for-the-gate-and-live-turns.md)** — the gate and live turns run the
-  same executor behind two response sources. A gate running different code validates a surrogate.
-- **[ADR-0021](0021-preflight-is-a-capability-floor.md)** — preflight is a hard floor checked before
-  the corpus, not another score, so a candidate cannot trade away a capability for a better result.
+- **[ADR-0017](0017-one-executor-for-the-gate-and-live-turns.md)** — the gate and live turns run
+  whatever executor the candidate generation actually is, behind two response sources, so a facet
+  that changes its own loop or tools carries that change into the gate automatically.
 
 ## Git storage
 
@@ -62,9 +61,6 @@ opens. Grouped by area; a decision that spans two areas is listed under the one 
   against the hand-written codec and the evidence behind the retraction.
 - **[ADR-0011](0011-sha1-for-oracle-testability.md)** — SHA-1 is chosen so an independent
   implementation can check every encoding. It is not a security claim.
-- **[ADR-0010](0010-adopt-computer-for-workspace-git.md)** — _proposed._ Replace the hand-written
-  codec and store with `@cloudflare/computer` once the containment, compatibility and performance
-  slices succeed. ADR-0009 stays current until then.
 
 ## The agent definition
 
