@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,8 +7,8 @@ import {
   isGenesisSha,
   makeGenesisPin,
   assertGenesisReachable,
-  resetToGenesis,
-  seedGenesis,
+  resetToGenesis as resetToGenesisResult,
+  seedGenesis as seedGenesisResult,
 } from "../../src/generation/genesis.js";
 import { parseSha } from "../../src/git/types.js";
 import { parseGenerationNumber } from "../../src/generation/types.js";
@@ -17,6 +18,7 @@ import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
 import type { Store } from "../../src/storage/types.js";
 import { PointerManager } from "../../src/pointer/index.js";
+import type { Attestation } from "../../src/generation/types.js";
 import { expectOk } from "../support/result.js";
 
 const author = {
@@ -41,6 +43,20 @@ const options = {
 
 async function buildGeneration(...args: Parameters<typeof buildGenerationResult>) {
   return expectOk(await buildGenerationResult(...args));
+}
+
+function passingAttestation(candidate: Sha, live: Sha): Attestation {
+  return {
+    candidate,
+    generation: parseGenerationNumber(0),
+    artifactDigest: candidate,
+    validatedAgainst: live,
+    validatedAgainstGeneration: parseGenerationNumber(0),
+    corpusVersion: "corpus-1",
+    gateVersion: "gate-1",
+    verdict: "pass",
+    createdAt: author.timestamp + 2,
+  };
 }
 
 function makeBarrier(parties: number): () => Promise<void> {
@@ -80,10 +96,10 @@ class TestStore implements Store {
     this.barrier = storeOptions.barrier;
   }
 
-  readObject(sha: Sha): Promise<Uint8Array | undefined> {
+  readObject(sha: Sha): ReturnType<Store["readObject"]> {
     this.readObjectCalls += 1;
     if (sha === this.corruptSha) {
-      return Promise.resolve(new Uint8Array([255]));
+      return Promise.resolve(Result.ok(new Uint8Array([255])));
     }
     return this.delegate.readObject(sha);
   }
@@ -92,7 +108,7 @@ class TestStore implements Store {
     return this.delegate.writeObject(bytes);
   }
 
-  async readPointer(): Promise<Sha | undefined> {
+  async readPointer(): ReturnType<Store["readPointer"]> {
     this.pointerReads += 1;
     if (this.barrier !== undefined && this.pointerReads <= 2) {
       await this.barrier();
@@ -100,7 +116,7 @@ class TestStore implements Store {
     return this.delegate.readPointer();
   }
 
-  setPointer(next: Sha, expected: Sha | undefined): Promise<boolean> {
+  setPointer(next: Sha, expected: Sha | undefined): ReturnType<Store["setPointer"]> {
     return this.delegate.setPointer(next, expected);
   }
 }
@@ -109,30 +125,30 @@ describe("seedGenesis", () => {
   it("creates the genesis commit without a parent and points the store at it", async () => {
     const store = new MemoryStore();
 
-    const genesis = await seedGenesis(store, options);
+    const genesis = expectOk(await seedGenesisResult(store, options));
 
     expect(genesis).not.toHaveProperty("number");
     expect(genesis.parent).toBeUndefined();
-    expect(await store.readPointer()).toBe(genesis.sha);
+    expect(expectOk(await store.readPointer())).toBe(genesis.sha);
   });
 
   it("is idempotent without adding objects on a second seed", async () => {
     const store = new MemoryStore();
 
-    const first = await seedGenesis(store, options);
-    const objectsAfterFirstSeed = await store.listObjects();
-    const second = await seedGenesis(store, options);
+    const first = expectOk(await seedGenesisResult(store, options));
+    const objectsAfterFirstSeed = expectOk(await store.listObjects());
+    const second = expectOk(await seedGenesisResult(store, options));
 
     expect(second.sha).toBe(first.sha);
-    expect(await store.listObjects()).toHaveLength(objectsAfterFirstSeed.length);
-    expect(await store.listObjects()).toEqual(objectsAfterFirstSeed);
+    expect(expectOk(await store.listObjects())).toHaveLength(objectsAfterFirstSeed.length);
+    expect(expectOk(await store.listObjects())).toEqual(objectsAfterFirstSeed);
   });
 });
 
 describe("resetToGenesis", () => {
   it("moves the live pointer from a later generation to generation 0", async () => {
     const store = new MemoryStore();
-    const genesis = await seedGenesis(store, options);
+    const genesis = expectOk(await seedGenesisResult(store, options));
     const later = await buildGeneration(store, {
       ...options,
       parent: genesis,
@@ -140,12 +156,10 @@ describe("resetToGenesis", () => {
       summary: "later generation",
     });
     const pin = makeGenesisPin(genesis);
-    expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
-
-    const result = await resetToGenesis(store, pin);
-
+    expect(expectOk(await store.setPointer(later.sha, genesis.sha))).toBe(true);
+    const result = expectOk(await resetToGenesisResult(store, pin));
     expect(result).toEqual({ outcome: "reset", from: later.sha, to: genesis.sha });
-    expect(await store.readPointer()).toBe(genesis.sha);
+    expect(expectOk(await store.readPointer())).toBe(genesis.sha);
   });
 
   it("claims generation 0 when the live pointer is unset", async () => {
@@ -153,17 +167,17 @@ describe("resetToGenesis", () => {
     const genesis = await buildGeneration(store, { ...options, parent: undefined });
     const pin = makeGenesisPin(genesis);
 
-    const result = await resetToGenesis(store, pin);
+    const result = expectOk(await resetToGenesisResult(store, pin));
 
     expect(result).toEqual({ outcome: "reset", from: undefined, to: genesis.sha });
-    expect(await store.readPointer()).toBe(genesis.sha);
+    expect(expectOk(await store.readPointer())).toBe(genesis.sha);
   });
 });
 
 describe("resetToGenesis recovery", () => {
   it("resets when the live generation commit is missing", async () => {
     const store = new MemoryStore();
-    const genesis = await seedGenesis(store, options);
+    const genesis = expectOk(await seedGenesisResult(store, options));
     const later = await buildGeneration(store, {
       ...options,
       parent: genesis,
@@ -171,17 +185,17 @@ describe("resetToGenesis recovery", () => {
       summary: "later generation",
     });
     const pin = makeGenesisPin(genesis);
-    expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
-    await store.deleteObject(later.sha);
+    expect(expectOk(await store.setPointer(later.sha, genesis.sha))).toBe(true);
+    expectOk(await store.deleteObject(later.sha));
 
-    await resetToGenesis(store, pin);
+    expectOk(await resetToGenesisResult(store, pin));
 
-    expect(await store.readPointer()).toBe(genesis.sha);
+    expect(expectOk(await store.readPointer())).toBe(genesis.sha);
   });
 
   it("resets when the live generation object is corrupt without reading it", async () => {
     const store = new MemoryStore();
-    const genesis = await seedGenesis(store, options);
+    const genesis = expectOk(await seedGenesisResult(store, options));
     const later = await buildGeneration(store, {
       ...options,
       parent: genesis,
@@ -189,12 +203,10 @@ describe("resetToGenesis recovery", () => {
       summary: "later generation",
     });
     const pin = makeGenesisPin(genesis);
-    expect(await store.setPointer(later.sha, genesis.sha)).toBe(true);
+    expect(expectOk(await store.setPointer(later.sha, genesis.sha))).toBe(true);
     const corruptStore = new TestStore(store, { corruptSha: later.sha });
-
-    await resetToGenesis(corruptStore, pin);
-
-    expect(await corruptStore.readPointer()).toBe(genesis.sha);
+    expectOk(await resetToGenesisResult(corruptStore, pin));
+    expect(expectOk(await corruptStore.readPointer())).toBe(genesis.sha);
     expect(corruptStore.readObjectCalls).toBe(0);
   });
 });
@@ -202,7 +214,7 @@ describe("resetToGenesis recovery", () => {
 describe("genesis reset concurrency", () => {
   it("keeps reset and promotion on complete pointer values", async () => {
     const baseStore = new MemoryStore();
-    const genesis = await seedGenesis(baseStore, options);
+    const genesis = expectOk(await seedGenesisResult(baseStore, options));
     const live = await buildGeneration(baseStore, {
       ...options,
       parent: genesis,
@@ -215,45 +227,35 @@ describe("genesis reset concurrency", () => {
       createdAt: author.timestamp + 2,
       summary: "candidate generation",
     });
-    expect(await baseStore.setPointer(live.sha, genesis.sha)).toBe(true);
+    expect(expectOk(await baseStore.setPointer(live.sha, genesis.sha))).toBe(true);
     const store = new TestStore(baseStore, { barrier: makeBarrier(2) });
     const manager = new PointerManager({
       store,
       corpusVersion: "corpus-1",
       gateVersion: "gate-1",
     });
-    const attestation = {
-      candidate: candidate.sha,
-      generation: parseGenerationNumber(0),
-      artifactDigest: candidate.sha,
-      validatedAgainst: live.sha,
-      validatedAgainstGeneration: parseGenerationNumber(0),
-      corpusVersion: "corpus-1",
-      gateVersion: "gate-1",
-      verdict: "pass",
-      createdAt: author.timestamp + 2,
-    } as const;
-
     const [resetResult, promotionResult] = await Promise.all([
-      resetToGenesis(store, makeGenesisPin(genesis)),
-      manager.promote(candidate.sha, attestation),
+      resetToGenesisResult(store, makeGenesisPin(genesis)),
+      manager.promote(candidate.sha, passingAttestation(candidate.sha, live.sha)),
     ]);
+    const reset = expectOk(resetResult);
+    const promotion = expectOk(promotionResult);
 
-    expect(resetResult.outcome).toBe("reset");
-    if (promotionResult.outcome === "promoted") {
-      expect(promotionResult.from).toBe(live.sha);
-      expect(promotionResult.to).toBe(candidate.sha);
+    expect(reset.outcome).toBe("reset");
+    if (promotion.outcome === "promoted") {
+      expect(promotion.from).toBe(live.sha);
+      expect(promotion.to).toBe(candidate.sha);
     } else {
-      expect(["pointer-moved", "stale-attestation"]).toContain(promotionResult.reason.kind);
+      expect(["pointer-moved", "stale-attestation"]).toContain(promotion.reason.kind);
     }
-    expect(await baseStore.readPointer()).toBe(genesis.sha);
+    expect(expectOk(await baseStore.readPointer())).toBe(genesis.sha);
   });
 });
 
 describe("genesis identification", () => {
   it("identifies generation 0 and its pinned sha", async () => {
     const store = new MemoryStore();
-    const genesis = await seedGenesis(store, options);
+    const genesis = expectOk(await seedGenesisResult(store, options));
     const pin = makeGenesisPin(genesis);
 
     expect(isGenesisCommit(genesis)).toBe(true);
@@ -265,7 +267,7 @@ describe("genesis identification", () => {
 
   it("asserts that a later generation reaches the pinned root", async () => {
     const store = new MemoryStore();
-    const genesis = await seedGenesis(store, options);
+    const genesis = expectOk(await seedGenesisResult(store, options));
     const later = await buildGeneration(store, {
       ...options,
       parent: genesis,
@@ -274,7 +276,7 @@ describe("genesis identification", () => {
     });
     const pin = makeGenesisPin(genesis);
 
-    await expect(assertGenesisReachable(store, later.sha, pin)).resolves.toBeUndefined();
+    expectOk(await assertGenesisReachable(store, later.sha, pin));
     expect(isGenesisCommit(later)).toBe(false);
   });
 });

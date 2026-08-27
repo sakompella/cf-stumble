@@ -2,11 +2,13 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import { Result } from "better-result";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseSha } from "../../src/git/types.js";
 import type { Sha } from "../../src/git/types.js";
 import { describeStoreConformance } from "../../src/storage/conformance.js";
 import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
+import { StorageCapacityError, StorageUnavailableError } from "../../src/storage/errors.js";
 import type { SweepableStore } from "../../src/storage/types.js";
 import { expectOk } from "../support/result.js";
 
@@ -21,7 +23,9 @@ class TestStore implements SweepableStore {
     this.stub = stub;
   }
 
-  readObject(sha: Parameters<SweepableStore["readObject"]>[0]): Promise<Uint8Array | undefined> {
+  readObject(
+    sha: Parameters<SweepableStore["readObject"]>[0],
+  ): ReturnType<SweepableStore["readObject"]> {
     return runInDurableObject(this.stub, (_instance, state) => {
       return new DurableObjectSqliteStore(state).readObject(sha);
     });
@@ -54,7 +58,9 @@ class TestStore implements SweepableStore {
     });
   }
 
-  deleteObject(sha: Parameters<SweepableStore["deleteObject"]>[0]): Promise<void> {
+  deleteObject(
+    sha: Parameters<SweepableStore["deleteObject"]>[0],
+  ): ReturnType<SweepableStore["deleteObject"]> {
     return runInDurableObject(this.stub, (_instance, state) => {
       return new DurableObjectSqliteStore(state).deleteObject(sha);
     });
@@ -81,6 +87,25 @@ class TestStore implements SweepableStore {
           SELECT RAISE(ABORT, 'interrupted chunk write');
         END
       `);
+    });
+  }
+
+  installCapacityFailure(): Promise<void> {
+    return runInDurableObject(this.stub, (_instance, state) => {
+      initializeStore(state);
+      state.storage.sql.exec(`
+        CREATE TRIGGER cf_stumble_test_full
+        BEFORE INSERT ON cf_stumble_objects
+        BEGIN
+          SELECT RAISE(ABORT, 'SQLITE_FULL');
+        END
+      `);
+    });
+  }
+
+  removeCapacityFailure(): Promise<void> {
+    return runInDurableObject(this.stub, (_instance, state) => {
+      state.storage.sql.exec("DROP TRIGGER cf_stumble_test_full");
     });
   }
 }
@@ -128,7 +153,7 @@ function testLargeObjectRoundTrip(): void {
 
     const address = await writeObject(store, input);
 
-    expect(await store.readObject(address)).toEqual(input);
+    expect(expectOk(await store.readObject(address))).toEqual(input);
   }, 30_000);
 }
 
@@ -139,7 +164,7 @@ function testExactChunkRoundTrip(): void {
 
     const address = await writeObject(store, input);
 
-    expect(await store.readObject(address)).toEqual(input);
+    expect(expectOk(await store.readObject(address))).toEqual(input);
   });
 }
 
@@ -150,7 +175,7 @@ function testChunkPlusOneRoundTrip(): void {
 
     const address = await writeObject(store, input);
 
-    expect(await store.readObject(address)).toEqual(input);
+    expect(expectOk(await store.readObject(address))).toEqual(input);
   });
 }
 
@@ -161,7 +186,7 @@ function testChunkMinusOneRoundTrip(): void {
 
     const address = await writeObject(store, input);
 
-    expect(await store.readObject(address)).toEqual(input);
+    expect(expectOk(await store.readObject(address))).toEqual(input);
   });
 }
 
@@ -171,7 +196,7 @@ function testEmptyObjectRoundTrip(): void {
 
     const address = await writeObject(store, new Uint8Array());
 
-    expect(await store.readObject(address)).toEqual(new Uint8Array());
+    expect(expectOk(await store.readObject(address))).toEqual(new Uint8Array());
   });
 }
 
@@ -182,13 +207,31 @@ function testInterruptedWriteRollback(): void {
     const address = await shaFor(input);
     await store.installChunkWriteFailure(1);
 
-    await expect(store.writeObject(input)).rejects.toThrow(
-      "SQLite storage failed to write an object",
-    );
+    const result = await store.writeObject(input);
+    if (Result.isOk(result) || !StorageUnavailableError.is(result.error)) {
+      throw new Error("expected interrupted write to be unavailable");
+    }
 
-    expect(await store.readObject(address)).toBeUndefined();
-    expect(await store.listObjects()).toHaveLength(0);
+    expect(expectOk(await store.readObject(address))).toBeUndefined();
+    expect(expectOk(await store.listObjects())).toHaveLength(0);
     expect(await store.countChunkRows()).toBe(0);
+  });
+}
+
+function testCapacityFailure(): void {
+  it("classifies SQLITE_FULL as capacity and recovers after capacity is available", async () => {
+    const store = await makeStore();
+    const input = makeBytes(1);
+    await store.installCapacityFailure();
+
+    const failed = await store.writeObject(input);
+    expect(Result.isError(failed)).toBe(true);
+    if (Result.isOk(failed) || !StorageCapacityError.is(failed.error)) {
+      throw new Error("expected SQLITE_FULL to be a storage capacity error");
+    }
+
+    await store.removeCapacityFailure();
+    expect(await writeObject(store, input)).toBeDefined();
   });
 }
 
@@ -198,13 +241,13 @@ function testChunkDeletion(): void {
     const input = makeBytes(CHUNK_SIZE * 2 + 1);
     const address = await writeObject(store, input);
 
-    expect(await store.listObjects()).toEqual([address]);
+    expect(expectOk(await store.listObjects())).toEqual([address]);
     expect(await store.countChunkRows()).toBe(3);
 
-    await store.deleteObject(address);
+    expectOk(await store.deleteObject(address));
 
-    expect(await store.readObject(address)).toBeUndefined();
-    expect(await store.listObjects()).toHaveLength(0);
+    expect(expectOk(await store.readObject(address))).toBeUndefined();
+    expect(expectOk(await store.listObjects())).toHaveLength(0);
     expect(await store.countChunkRows()).toBe(0);
   });
 }
@@ -218,7 +261,7 @@ function testLargeWriteIdempotence(): void {
     const secondAddress = await writeObject(store, input);
 
     expect(secondAddress).toBe(firstAddress);
-    expect(await store.listObjects()).toHaveLength(1);
+    expect(expectOk(await store.listObjects())).toHaveLength(1);
     expect(await store.countChunkRows()).toBe(3);
   });
 }
@@ -230,6 +273,7 @@ describe("DurableObjectSqliteStore chunking", () => {
   testChunkMinusOneRoundTrip();
   testEmptyObjectRoundTrip();
   testInterruptedWriteRollback();
+  testCapacityFailure();
   testChunkDeletion();
   testLargeWriteIdempotence();
 });

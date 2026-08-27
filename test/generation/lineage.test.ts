@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { expect, it } from "vitest";
 
 import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
@@ -50,8 +51,8 @@ class CyclicStore extends MemoryStore {
     ]);
   }
 
-  override readObject(sha: Sha): Promise<Uint8Array | undefined> {
-    return Promise.resolve(this.cyclicObjects.get(sha)?.slice());
+  override readObject(sha: Sha): ReturnType<MemoryStore["readObject"]> {
+    return Promise.resolve(Result.ok(this.cyclicObjects.get(sha)?.slice()));
   }
 }
 
@@ -61,7 +62,7 @@ it("walkLineage returns the starting commit followed by its ancestors", async ()
   const child = await build(store, root, author.timestamp + 1, "child");
   const grandchild = await build(store, child, author.timestamp + 2, "grandchild");
 
-  const lineage = await walkLineage(store, grandchild.sha);
+  const lineage = expectOk(await walkLineage(store, grandchild.sha));
 
   expect(lineage.map((generation) => generation.sha)).toEqual([
     grandchild.sha,

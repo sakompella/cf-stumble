@@ -41,7 +41,7 @@ describe("readGeneration", () => {
       summary: "nested modules",
     });
 
-    const loaded = await readGeneration(store, built.sha);
+    const loaded = expectOk(await readGeneration(store, built.sha));
 
     expect(loaded.generation).toEqual(built);
     expect(loaded.generation).not.toHaveProperty("number");

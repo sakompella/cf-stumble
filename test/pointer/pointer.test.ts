@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { expectOk } from "../support/result.js";
 import { parseSha } from "../../src/git/types.js";
 import { parseGenerationNumber } from "../../src/generation/types.js";
 import type { Sha } from "../../src/git/types.js";
@@ -6,12 +7,10 @@ import { PointerManager } from "../../src/pointer/index.js";
 import type { Attestation, PromotionResult } from "../../src/generation/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { PointerStore } from "../../src/storage/types.js";
-
 const LIVE = parseSha("1111111111111111111111111111111111111111");
 const CANDIDATE = parseSha("2222222222222222222222222222222222222222");
 const OTHER_CANDIDATE = parseSha("3333333333333333333333333333333333333333");
 const NEXT_LIVE = parseSha("4444444444444444444444444444444444444444");
-
 function makeAttestation(overrides: Partial<Attestation> = {}): Attestation {
   return {
     candidate: CANDIDATE,
@@ -26,7 +25,6 @@ function makeAttestation(overrides: Partial<Attestation> = {}): Attestation {
     ...overrides,
   };
 }
-
 function makeManager(store: PointerStore): PointerManager {
   return new PointerManager({
     store,
@@ -34,14 +32,12 @@ function makeManager(store: PointerStore): PointerManager {
     gateVersion: "gate-1",
   });
 }
-
 function makeBarrier(parties: number): () => Promise<void> {
   let arrived = 0;
   let release: (() => void) | undefined;
   const allArrived = new Promise<void>((resolve) => {
     release = resolve;
   });
-
   return async () => {
     arrived += 1;
     if (arrived === parties) {
@@ -66,7 +62,7 @@ class InitialReadBarrierStore implements PointerStore {
     this.barrier = barrier;
   }
 
-  async readPointer(): Promise<Sha | undefined> {
+  async readPointer(): ReturnType<PointerStore["readPointer"]> {
     this.reads += 1;
     if (this.reads <= this.parties) {
       await this.barrier();
@@ -74,7 +70,7 @@ class InitialReadBarrierStore implements PointerStore {
     return this.delegate.readPointer();
   }
 
-  setPointer(next: Sha, expected: Sha | undefined): Promise<boolean> {
+  setPointer(next: Sha, expected: Sha | undefined): ReturnType<PointerStore["setPointer"]> {
     return this.delegate.setPointer(next, expected);
   }
 }
@@ -82,42 +78,41 @@ class InitialReadBarrierStore implements PointerStore {
 describe("PointerManager validation", () => {
   it("leaves the pointer exactly where it was when validation did not pass", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    const result = await manager.promote(CANDIDATE, makeAttestation({ verdict: "fail" }));
+    const result = expectOk(await manager.promote(CANDIDATE, makeAttestation({ verdict: "fail" })));
 
     expect(result).toEqual({
       outcome: "rejected",
       reason: { kind: "not-passing", verdict: "fail" },
     });
-    expect(await store.readPointer()).toBe(LIVE);
+    expect(expectOk(await store.readPointer())).toBe(LIVE);
   });
 });
 
 describe("PointerManager promotion", () => {
   it("promotes a passing candidate from the currently live generation", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    const result = await manager.promote(CANDIDATE, makeAttestation());
+    const result = expectOk(await manager.promote(CANDIDATE, makeAttestation()));
 
     expect(result).toEqual({
       outcome: "promoted",
       from: LIVE,
       to: CANDIDATE,
     });
-    expect(await store.readPointer()).toBe(CANDIDATE);
+    expect(expectOk(await store.readPointer())).toBe(CANDIDATE);
   });
 
   it("promotes the first candidate when no live pointer exists", async () => {
     const store = new MemoryStore();
     const manager = makeManager(store);
 
-    const result = await manager.promote(
-      CANDIDATE,
-      makeAttestation({ validatedAgainst: undefined }),
+    const result = expectOk(
+      await manager.promote(CANDIDATE, makeAttestation({ validatedAgainst: undefined })),
     );
 
     expect(result).toEqual({
@@ -125,24 +120,26 @@ describe("PointerManager promotion", () => {
       from: undefined,
       to: CANDIDATE,
     });
-    expect(await store.readPointer()).toBe(CANDIDATE);
+    expect(expectOk(await store.readPointer())).toBe(CANDIDATE);
   });
 });
 
 describe("PointerManager attestation freshness", () => {
   it("rejects an attestation validated against a generation superseded by the live pointer", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
     const stale = makeAttestation({ candidate: OTHER_CANDIDATE });
 
-    expect(await manager.promote(NEXT_LIVE, makeAttestation({ candidate: NEXT_LIVE }))).toEqual({
+    expect(
+      expectOk(await manager.promote(NEXT_LIVE, makeAttestation({ candidate: NEXT_LIVE }))),
+    ).toEqual({
       outcome: "promoted",
       from: LIVE,
       to: NEXT_LIVE,
     });
 
-    const result = await manager.promote(OTHER_CANDIDATE, stale);
+    const result = expectOk(await manager.promote(OTHER_CANDIDATE, stale));
 
     expect(result).toEqual({
       outcome: "rejected",
@@ -152,17 +149,19 @@ describe("PointerManager attestation freshness", () => {
         liveNow: NEXT_LIVE,
       },
     });
-    expect(await store.readPointer()).toBe(NEXT_LIVE);
+    expect(expectOk(await store.readPointer())).toBe(NEXT_LIVE);
   });
 });
 
 describe("PointerManager attestation versions", () => {
   it("rejects an attestation whose corpus version changed", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    const result = await manager.promote(CANDIDATE, makeAttestation({ corpusVersion: "corpus-0" }));
+    const result = expectOk(
+      await manager.promote(CANDIDATE, makeAttestation({ corpusVersion: "corpus-0" })),
+    );
 
     expect(result).toEqual({
       outcome: "rejected",
@@ -172,15 +171,17 @@ describe("PointerManager attestation versions", () => {
         current: "corpus-1",
       },
     });
-    expect(await store.readPointer()).toBe(LIVE);
+    expect(expectOk(await store.readPointer())).toBe(LIVE);
   });
 
   it("rejects an attestation whose gate version changed", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    const result = await manager.promote(CANDIDATE, makeAttestation({ gateVersion: "gate-0" }));
+    const result = expectOk(
+      await manager.promote(CANDIDATE, makeAttestation({ gateVersion: "gate-0" })),
+    );
 
     expect(result).toEqual({
       outcome: "rejected",
@@ -190,38 +191,40 @@ describe("PointerManager attestation versions", () => {
         current: "gate-1",
       },
     });
-    expect(await store.readPointer()).toBe(LIVE);
+    expect(expectOk(await store.readPointer())).toBe(LIVE);
   });
 });
 
 describe("PointerManager rollback", () => {
   it("restores the prior generation through the same pointer switch in reverse", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    expect(await manager.promote(CANDIDATE, makeAttestation({ candidate: CANDIDATE }))).toEqual({
+    expect(
+      expectOk(await manager.promote(CANDIDATE, makeAttestation({ candidate: CANDIDATE }))),
+    ).toEqual({
       outcome: "promoted",
       from: LIVE,
       to: CANDIDATE,
     });
 
-    const result = await manager.rollback(LIVE, CANDIDATE);
+    const result = expectOk(await manager.rollback(LIVE, CANDIDATE));
 
     expect(result).toEqual({
       outcome: "promoted",
       from: CANDIDATE,
       to: LIVE,
     });
-    expect(await store.readPointer()).toBe(LIVE);
+    expect(expectOk(await store.readPointer())).toBe(LIVE);
   });
 
   it("leaves the pointer unchanged when rollback expects a superseded live generation", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    const result = await manager.rollback(CANDIDATE, NEXT_LIVE);
+    const result = expectOk(await manager.rollback(CANDIDATE, NEXT_LIVE));
 
     expect(result).toEqual({
       outcome: "rejected",
@@ -231,14 +234,14 @@ describe("PointerManager rollback", () => {
         actual: LIVE,
       },
     });
-    expect(await store.readPointer()).toBe(LIVE);
+    expect(expectOk(await store.readPointer())).toBe(LIVE);
   });
 });
 
 describe("PointerManager concurrency", () => {
   it("allows exactly one concurrent promotion from a shared base", async () => {
     const baseStore = new MemoryStore();
-    expect(await baseStore.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await baseStore.setPointer(LIVE, undefined))).toBe(true);
     const contenders = Array.from({ length: 16 }, (_, index) =>
       parseSha(String(index + 10).padStart(40, "0")),
     );
@@ -250,7 +253,9 @@ describe("PointerManager concurrency", () => {
     const manager = makeManager(store);
 
     const results = await Promise.all(
-      contenders.map((candidate) => manager.promote(candidate, makeAttestation({ candidate }))),
+      contenders.map(async (candidate) =>
+        expectOk(await manager.promote(candidate, makeAttestation({ candidate }))),
+      ),
     );
     const winners = results.filter(
       (result): result is Extract<PromotionResult, { outcome: "promoted" }> =>
@@ -268,19 +273,18 @@ describe("PointerManager concurrency", () => {
     if (winner === undefined) {
       throw new Error("concurrent promotion had no winner");
     }
-    expect(await baseStore.readPointer()).toBe(winner.to);
+    expect(expectOk(await baseStore.readPointer())).toBe(winner.to);
   });
 });
 
 describe("PointerManager candidate binding", () => {
   it("rejects an attestation for a different candidate", async () => {
     const store = new MemoryStore();
-    expect(await store.setPointer(LIVE, undefined)).toBe(true);
+    expect(expectOk(await store.setPointer(LIVE, undefined))).toBe(true);
     const manager = makeManager(store);
 
-    const result = await manager.promote(
-      CANDIDATE,
-      makeAttestation({ candidate: OTHER_CANDIDATE }),
+    const result = expectOk(
+      await manager.promote(CANDIDATE, makeAttestation({ candidate: OTHER_CANDIDATE })),
     );
 
     expect(result).toEqual({
@@ -291,6 +295,6 @@ describe("PointerManager candidate binding", () => {
         requested: CANDIDATE,
       },
     });
-    expect(await store.readPointer()).toBe(LIVE);
+    expect(expectOk(await store.readPointer())).toBe(LIVE);
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { expectOk } from "../support/result.js";
 import {
   DEFAULT_MODEL_REQUEST_ID,
   RecordedModelResponseSource,
@@ -11,9 +12,7 @@ import { PointerManager } from "../../src/pointer/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Workspace } from "../../src/tools/index.js";
 import { defaultResponseSource, defaultWorkspace } from "../../src/validation/preflight-probes.js";
-import type { PreflightProbe } from "../../src/validation/preflight.js";
-import { ValidationGate } from "../../src/validation/gate.js";
-import { runPreflight } from "../../src/validation/preflight.js";
+import { type PreflightProbe, runPreflight, ValidationGate } from "../../src/validation/index.js";
 
 const author = {
   name: "Preflight Test",
@@ -141,7 +140,7 @@ test("a preflight failure blocks promotion through the real validation gate", as
   const candidate = await buildHealthyCandidate(store);
   const registry = new MemoryGenerationRegistry();
   const allocated = await registerLoaded(registry, candidate);
-  expect(await store.setPointer(live.sha, undefined)).toBe(true);
+  expect(expectOk(await store.setPointer(live.sha, undefined))).toBe(true);
 
   const gate = new ValidationGate({
     pointerStore: store,
@@ -156,11 +155,13 @@ test("a preflight failure blocks promotion through the real validation gate", as
       }),
     generationRegistry: registry,
   });
-  const run = await gate.validate(candidate.sha, {
-    generation: allocated.number,
-    artifactDigest: candidate.sha,
-    validatedAgainstGeneration: undefined,
-  });
+  const run = expectOk(
+    await gate.validate(candidate.sha, {
+      generation: allocated.number,
+      artifactDigest: candidate.sha,
+      validatedAgainstGeneration: undefined,
+    }),
+  );
 
   expect(run.result).toMatchObject({
     verdict: "fail",
@@ -174,11 +175,11 @@ test("a preflight failure blocks promotion through the real validation gate", as
     corpusVersion: run.result.corpusVersion,
     gateVersion: run.result.gateVersion,
   });
-  await expect(pointer.promote(candidate.sha, attestationFor(run.result))).resolves.toMatchObject({
+  expect(expectOk(await pointer.promote(candidate.sha, attestationFor(run.result)))).toMatchObject({
     outcome: "rejected",
     reason: { kind: "not-passing" },
   });
-  expect(await store.readPointer()).toBe(live.sha);
+  expect(expectOk(await store.readPointer())).toBe(live.sha);
   expect((await registry.get(allocated.number))?.state).toBe("validation_failed");
 });
 type Attestation = Parameters<PointerManager["promote"]>[1];

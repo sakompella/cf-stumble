@@ -95,7 +95,7 @@ function parseShaLine(line: string, label: string): Result<Sha, GitObjectDecodeE
       }),
     );
   }
-  return sha;
+  return Result.ok(sha.value);
 }
 
 const SIGNATURE = /^(.+) <([^<>]+)> (-?[0-9]+) ([+-][0-9]{4})$/u;

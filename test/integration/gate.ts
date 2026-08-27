@@ -13,6 +13,7 @@ import {
   type ValidationRun,
 } from "../../src/validation/index.js";
 import { ALLOW_POLICY } from "./fixtures.js";
+import { expectOk } from "../support/result.js";
 
 type PrimitiveMessage = {
   readonly name: PrimitiveCall["kind"];
@@ -106,11 +107,13 @@ export async function validateCandidate(
     now: () => 1_700_000_002,
   });
   return {
-    run: await gate.validate(candidate.sha, {
-      generation: parseGenerationNumber(1),
-      artifactDigest: candidate.sha,
-      validatedAgainstGeneration: parseGenerationNumber(0),
-    }),
+    run: expectOk(
+      await gate.validate(candidate.sha, {
+        generation: parseGenerationNumber(1),
+        artifactDigest: candidate.sha,
+        validatedAgainstGeneration: parseGenerationNumber(0),
+      }),
+    ),
     resultStore,
     corpus,
   };

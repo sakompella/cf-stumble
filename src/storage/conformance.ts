@@ -13,12 +13,39 @@ const POINTER_OTHER = parseSha("3333333333333333333333333333333333333333");
 
 type StoreFactory = () => Promise<SweepableStore>;
 
-async function writeObject(store: SweepableStore, bytes: Uint8Array): Promise<Sha> {
-  const result = await store.writeObject(bytes);
+function unwrap<T, E>(result: Result<T, E>): T {
   if (Result.isError(result)) {
-    throw result.error;
+    throw result.error instanceof Error ? result.error : new Error(String(result.error));
   }
   return result.value;
+}
+
+async function writeObject(store: SweepableStore, bytes: Uint8Array): Promise<Sha> {
+  return unwrap(await store.writeObject(bytes));
+}
+
+async function readObject(store: SweepableStore, sha: Sha): Promise<Uint8Array | undefined> {
+  return unwrap(await store.readObject(sha));
+}
+
+async function readPointer(store: SweepableStore): Promise<Sha | undefined> {
+  return unwrap(await store.readPointer());
+}
+
+async function setPointer(
+  store: SweepableStore,
+  next: Sha,
+  expected: Sha | undefined,
+): Promise<boolean> {
+  return unwrap(await store.setPointer(next, expected));
+}
+
+async function listObjects(store: SweepableStore): Promise<readonly Sha[]> {
+  return unwrap(await store.listObjects());
+}
+
+async function deleteObject(store: SweepableStore, sha: Sha): Promise<void> {
+  unwrap(await store.deleteObject(sha));
 }
 
 function makeBarrier(parties: number): () => Promise<void> {
@@ -64,7 +91,7 @@ function testIdempotentWrites(makeStore: StoreFactory): void {
     const secondAddress = await writeObject(store, bytes);
 
     expect(secondAddress).toBe(firstAddress);
-    expect(await store.listObjects()).toHaveLength(1);
+    expect(await listObjects(store)).toHaveLength(1);
   });
 }
 
@@ -72,7 +99,7 @@ function testUnknownReads(makeStore: StoreFactory): void {
   it("returns undefined for an unknown object", async () => {
     const store = await makeStore();
 
-    expect(await store.readObject(UNKNOWN_SHA)).toBeUndefined();
+    expect(await readObject(store, UNKNOWN_SHA)).toBeUndefined();
   });
 }
 
@@ -87,8 +114,7 @@ function testByteFidelity(makeStore: StoreFactory): void {
 
     for (const input of inputs) {
       const address = await writeObject(store, input);
-      const output = await store.readObject(address);
-
+      const output = await readObject(store, address);
       expect(output).toEqual(input);
     }
 
@@ -103,14 +129,14 @@ function testBufferIsolation(makeStore: StoreFactory): void {
     const address = await writeObject(store, input);
     input[0] = 99;
 
-    const firstRead = await store.readObject(address);
+    const firstRead = await readObject(store, address);
     expect(firstRead).toEqual(new Uint8Array([1, 2, 3]));
     if (firstRead === undefined) {
       throw new Error("stored object was unexpectedly missing");
     }
     firstRead[1] = 88;
 
-    expect(await store.readObject(address)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(await readObject(store, address)).toEqual(new Uint8Array([1, 2, 3]));
   });
 }
 
@@ -118,18 +144,15 @@ function testPointerCas(makeStore: StoreFactory): void {
   it("performs pointer compare-and-swap without stale writes", async () => {
     const store = await makeStore();
 
-    expect(await store.readPointer()).toBeUndefined();
-    expect(await store.setPointer(POINTER_NEXT, undefined)).toBe(true);
-    expect(await store.readPointer()).toBe(POINTER_NEXT);
-
-    expect(await store.setPointer(POINTER_OTHER, undefined)).toBe(false);
-    expect(await store.readPointer()).toBe(POINTER_NEXT);
-
-    expect(await store.setPointer(POINTER_OTHER, POINTER_BASE)).toBe(false);
-    expect(await store.readPointer()).toBe(POINTER_NEXT);
-
-    expect(await store.setPointer(POINTER_OTHER, POINTER_NEXT)).toBe(true);
-    expect(await store.readPointer()).toBe(POINTER_OTHER);
+    expect(await readPointer(store)).toBeUndefined();
+    expect(await setPointer(store, POINTER_NEXT, undefined)).toBe(true);
+    expect(await readPointer(store)).toBe(POINTER_NEXT);
+    expect(await setPointer(store, POINTER_OTHER, undefined)).toBe(false);
+    expect(await readPointer(store)).toBe(POINTER_NEXT);
+    expect(await setPointer(store, POINTER_OTHER, POINTER_BASE)).toBe(false);
+    expect(await readPointer(store)).toBe(POINTER_NEXT);
+    expect(await setPointer(store, POINTER_OTHER, POINTER_NEXT)).toBe(true);
+    expect(await readPointer(store)).toBe(POINTER_OTHER);
   });
 }
 
@@ -142,16 +165,16 @@ function testConcurrentPointerCas(makeStore: StoreFactory): void {
     );
     const waitForContenders = makeBarrier(contenderCount);
 
-    expect(await store.setPointer(POINTER_BASE, undefined)).toBe(true);
+    expect(await setPointer(store, POINTER_BASE, undefined)).toBe(true);
     const attempts = contenders.map(async (next) => {
       await waitForContenders();
-      return { next, won: await store.setPointer(next, POINTER_BASE) };
+      return { next, won: await setPointer(store, next, POINTER_BASE) };
     });
     const results = await Promise.all(attempts);
     const winners = results.filter(({ won }) => won).map(({ next }) => next);
 
     expect(winners).toHaveLength(1);
-    expect(await store.readPointer()).toBe(winners[0]);
+    expect(await readPointer(store)).toBe(winners[0]);
   });
 }
 
@@ -161,13 +184,12 @@ function testSweep(makeStore: StoreFactory): void {
     const retained = await writeObject(store, new Uint8Array([1]));
     const removed = await writeObject(store, new Uint8Array([2]));
 
-    expect(await store.listObjects()).toHaveLength(2);
-    await store.deleteObject(removed);
-
-    expect(await store.readObject(removed)).toBeUndefined();
-    expect(await store.listObjects()).toEqual(expect.arrayContaining([retained]));
-    expect(await store.listObjects()).not.toContain(removed);
-    await store.deleteObject(removed);
+    expect(await listObjects(store)).toHaveLength(2);
+    await deleteObject(store, removed);
+    expect(await readObject(store, removed)).toBeUndefined();
+    expect(await listObjects(store)).toEqual(expect.arrayContaining([retained]));
+    expect(await listObjects(store)).not.toContain(removed);
+    await deleteObject(store, removed);
   });
 }
 
@@ -178,7 +200,6 @@ function testObjectSizeLimit(makeStore: StoreFactory): void {
     Object.defineProperty(bytes, "byteLength", { value: MAX_OBJECT_BYTES + 1 });
 
     const result = await store.writeObject(bytes);
-
     expect(Result.isError(result)).toBe(true);
     if (Result.isOk(result)) {
       throw new Error("expected object above the size limit to be rejected");

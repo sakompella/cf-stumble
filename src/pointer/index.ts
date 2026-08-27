@@ -1,3 +1,4 @@
+import { Result, type Result as ResultType } from "better-result";
 import { assertNever } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type {
@@ -6,6 +7,7 @@ import type {
   PromotionResult,
   Verdict,
 } from "../generation/types.js";
+import type { StorageCapacityError, StorageUnavailableError } from "../storage/errors.js";
 import type { PointerStore } from "../storage/types.js";
 
 export type PointerManagerOptions = {
@@ -13,6 +15,8 @@ export type PointerManagerOptions = {
   readonly corpusVersion: string;
   readonly gateVersion: string;
 };
+
+export type PointerError = StorageUnavailableError | StorageCapacityError;
 
 export class PointerManager {
   private readonly store: PointerStore;
@@ -25,23 +29,32 @@ export class PointerManager {
     this.gateVersion = options.gateVersion;
   }
 
-  async promote(candidate: Sha, attestation: Attestation): Promise<PromotionResult> {
-    const liveNow = await this.store.readPointer();
+  async promote(
+    candidate: Sha,
+    attestation: Attestation,
+  ): Promise<ResultType<PromotionResult, PointerError>> {
+    const live = await this.store.readPointer();
+    if (Result.isError(live)) {
+      return live;
+    }
     const rejection = verifyAttestation(
       candidate,
       attestation,
-      liveNow,
+      live.value,
       this.corpusVersion,
       this.gateVersion,
     );
     if (rejection !== undefined) {
-      return { outcome: "rejected", reason: rejection };
+      return Result.ok({ outcome: "rejected", reason: rejection });
     }
 
-    return movePointer(this.store, candidate, liveNow);
+    return movePointer(this.store, candidate, live.value);
   }
 
-  rollback(target: Sha, expected: Sha | undefined): Promise<PromotionResult> {
+  rollback(
+    target: Sha,
+    expected: Sha | undefined,
+  ): Promise<ResultType<PromotionResult, PointerError>> {
     return movePointer(this.store, target, expected);
   }
 }
@@ -50,19 +63,22 @@ async function movePointer(
   store: PointerStore,
   next: Sha,
   expected: Sha | undefined,
-): Promise<PromotionResult> {
+): Promise<ResultType<PromotionResult, PointerError>> {
   const swapped = await store.setPointer(next, expected);
-  if (!swapped) {
-    return {
-      outcome: "rejected",
-      reason: {
-        kind: "pointer-moved",
-        expected,
-        actual: await store.readPointer(),
-      },
-    };
+  if (Result.isError(swapped)) {
+    return swapped;
   }
-  return { outcome: "promoted", from: expected, to: next };
+  if (!swapped.value) {
+    const actual = await store.readPointer();
+    if (Result.isError(actual)) {
+      return actual;
+    }
+    return Result.ok({
+      outcome: "rejected",
+      reason: { kind: "pointer-moved", expected, actual: actual.value },
+    });
+  }
+  return Result.ok({ outcome: "promoted", from: expected, to: next });
 }
 
 function verifyAttestation(

@@ -1,9 +1,10 @@
-import { panic, Result } from "better-result";
-import { buildGeneration } from "./build.js";
+import { panic, Result, type Result as ResultType } from "better-result";
+import { buildGeneration, type GenerationBuildError } from "./build.js";
 import type { BuildGenerationOptions } from "./build.js";
 import { walkLineage } from "./lineage.js";
 import { isSha } from "../git/types.js";
 import type { Sha } from "../git/types.js";
+import type { StorageCapacityError, StorageUnavailableError } from "../storage/errors.js";
 import type { PointerStore, Store } from "../storage/types.js";
 import type { CommitSnapshot } from "./types.js";
 
@@ -27,6 +28,11 @@ export type ResetResult =
   | { readonly outcome: "reset"; readonly from: Sha | undefined; readonly to: Sha }
   | { readonly outcome: "contended"; readonly attempts: number };
 
+export type GenesisSeedError =
+  | GenerationBuildError
+  | StorageUnavailableError
+  | StorageCapacityError;
+
 /**
  * Reset re-reads and retries on a lost CAS, but a promotion storm must not be able to spin it
  * forever: this runs inside a Durable Object, so an unbounded loop wedges the request rather
@@ -40,19 +46,25 @@ export async function seedGenesis(
   store: Store,
   options: GenesisOptions,
   seedOptions: GenesisSeedOptions = {},
-): Promise<CommitSnapshot> {
+): Promise<ResultType<CommitSnapshot, GenesisSeedError>> {
   const built = await buildGeneration(store, { ...options, parent: undefined });
   if (Result.isError(built)) {
-    panic("genesis options cannot build a generation", built.error);
+    return built;
   }
   const genesis = built.value;
   if (seedOptions.claimPointer !== false) {
     const current = await store.readPointer();
-    if (current === undefined) {
-      await store.setPointer(genesis.sha, undefined);
+    if (Result.isError(current)) {
+      return current;
+    }
+    if (current.value === undefined) {
+      const claimed = await store.setPointer(genesis.sha, undefined);
+      if (Result.isError(claimed)) {
+        return claimed;
+      }
     }
   }
-  return genesis;
+  return Result.ok(genesis);
 }
 
 /** Return whether a commit snapshot is a root with no parent. */
@@ -90,12 +102,16 @@ export async function assertGenesisReachable(
   store: Store,
   start: Sha,
   pin: GenesisPin,
-): Promise<void> {
+): Promise<ResultType<void, StorageUnavailableError>> {
   const lineage = await walkLineage(store, start);
-  const root = lineage.at(-1);
+  if (Result.isError(lineage)) {
+    return lineage;
+  }
+  const root = lineage.value.at(-1);
   if (root === undefined || !isGenesisSha(root.sha, pin)) {
     panic(`commit ${start} does not reach pinned genesis ${pin.sha}`);
   }
+  return Result.ok();
 }
 
 /** A synchronous pointer store used when a reset must share a SQLite transaction with side rows. */
@@ -120,15 +136,25 @@ function resetAttempt(
 }
 
 /** Reset through the pointer store only, retrying CAS if a concurrent writer wins a race. */
-export async function resetToGenesis(store: PointerStore, pin: GenesisPin): Promise<ResetResult> {
+export async function resetToGenesis(
+  store: PointerStore,
+  pin: GenesisPin,
+): Promise<ResultType<ResetResult, StorageUnavailableError | StorageCapacityError>> {
   for (let attempt = 1; attempt <= MAX_RESET_ATTEMPTS; attempt += 1) {
     const from = await store.readPointer();
-    const result = resetAttempt(attempt, from, await store.setPointer(pin.sha, from), pin.sha);
+    if (Result.isError(from)) {
+      return from;
+    }
+    const swapped = await store.setPointer(pin.sha, from.value);
+    if (Result.isError(swapped)) {
+      return swapped;
+    }
+    const result = resetAttempt(attempt, from.value, swapped.value, pin.sha);
     if (result !== undefined) {
-      return result;
+      return Result.ok(result);
     }
   }
-  return { outcome: "contended", attempts: MAX_RESET_ATTEMPTS };
+  return Result.ok({ outcome: "contended", attempts: MAX_RESET_ATTEMPTS });
 }
 
 /**

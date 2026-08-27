@@ -2,6 +2,7 @@ import { Result, TaggedError } from "better-result";
 import { readGeneration, type LoadedGeneration } from "../../generation/read.js";
 import type { CommitSnapshot } from "../../generation/types.js";
 import type { Sha } from "../../git/types.js";
+import type { StorageUnavailableError } from "../../storage/errors.js";
 import type { Store } from "../../storage/types.js";
 
 /** The generation manifest convention consumed by the runtime. */
@@ -74,22 +75,25 @@ export type AgentMaterializationError =
   | InvalidModuleError
   | UnsupportedModuleError;
 
+export type MaterializeGenerationError = AgentMaterializationError | StorageUnavailableError;
+
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
 /**
  * Read and validate the role-bearing modules in one immutable generation.
  *
- * The returned `Result` covers only the module-shape failures above, which are always caused by
- * the generation's own content and so are always recoverable. `readGeneration` itself can still
- * reject this promise on a store-read failure; that path has not been migrated yet and is a
- * harness-level defect rather than a condition about the generation's modules.
+ * Module-shape failures describe the generation; storage failures describe the supervisor and
+ * must reach its boundary without being recorded as a candidate failure.
  */
 export async function materializeGeneration(
   store: Store,
   sha: Sha,
-): Promise<Result<AgentDefinition, AgentMaterializationError>> {
+): Promise<Result<AgentDefinition, MaterializeGenerationError>> {
   const loaded = await readGeneration(store, sha);
-  return materializeLoadedGeneration(loaded);
+  if (Result.isError(loaded)) {
+    return loaded;
+  }
+  return materializeLoadedGeneration(loaded.value);
 }
 
 export const materializeAgent = materializeGeneration;

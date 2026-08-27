@@ -287,7 +287,7 @@ test("does not promote an object-store commit without a registry attempt", async
   const stub = env.SUPERVISOR.getByName("supervisor-s10");
   const candidateCommit = await runInDurableObject(stub, async (_instance, state) => {
     const store = new DurableObjectSqliteStore(state);
-    const parent = (await readGeneration(store, parseSha(genesisCommit))).generation;
+    const parent = expectOk(await readGeneration(store, parseSha(genesisCommit))).generation;
     const generation = expectOk(
       await buildGeneration(store, {
         modules: [
