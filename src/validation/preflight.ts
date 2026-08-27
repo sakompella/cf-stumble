@@ -1,5 +1,5 @@
+import { Result } from "better-result";
 import {
-  AgentMaterializationError,
   materializeGeneration,
   type SYSTEM_PROMPT_PATH,
   type AgentDefinition,
@@ -85,14 +85,21 @@ const PREFLIGHT_NOW_MS = 1_700_000_000_000;
 export async function runPreflight(options: PreflightOptions): Promise<PreflightResult> {
   let definition: AgentDefinition;
   try {
-    definition = await materializeGeneration(options.store, options.candidate);
+    const materialized = await materializeGeneration(options.store, options.candidate);
+    if (Result.isError(materialized)) {
+      const detail = materialized.error.message;
+      return {
+        status: "FAIL",
+        checks: [{ capability: "materialization", status: "FAIL", detail }],
+        failure: detail,
+      };
+    }
+    definition = materialized.value;
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
-    const status: PreflightStatus =
-      error instanceof AgentMaterializationError ? "FAIL" : "INCONCLUSIVE";
     return {
-      status,
-      checks: [{ capability: "materialization", status, detail }],
+      status: "INCONCLUSIVE",
+      checks: [{ capability: "materialization", status: "INCONCLUSIVE", detail }],
       failure: detail,
     };
   }

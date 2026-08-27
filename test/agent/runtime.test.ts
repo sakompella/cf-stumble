@@ -4,14 +4,15 @@ import { buildGeneration } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
 import {
   AgentExecutor,
-  AgentMaterializationError,
   LiveModelResponseSource,
+  MissingModuleError,
   RecordedModelResponseSource,
   materializeGeneration,
 } from "../../src/agent/runtime/index.js";
 import { parseReplaySessionJson, runReplay } from "../../src/replay/index.js";
 import { InMemoryWorkspace, parseWorkspacePath } from "../../src/tools/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 const author = {
   name: "Runtime Test",
@@ -53,7 +54,7 @@ test("materializes prompt, policy, and skills from generation bytes", async () =
     ]),
   );
 
-  await expect(materializeGeneration(store, built.sha)).resolves.toEqual({
+  expect(expectOk(await materializeGeneration(store, built.sha))).toEqual({
     generation: built,
     systemPrompt: "system prompt\n",
     policy: "allow-all\n",
@@ -66,13 +67,9 @@ test("fails with the missing required module named", async () => {
     { path: "prompt.md", content: encoder.encode("system prompt\n"), executable: false },
   ]);
 
-  await expect(materializeGeneration(store, built.sha)).rejects.toEqual(
-    new AgentMaterializationError(
-      "missing-module",
-      "policy.md",
-      'required module "policy.md" is missing',
-    ),
-  );
+  const error = expectErr(await materializeGeneration(store, built.sha));
+  expect(MissingModuleError.is(error)).toBe(true);
+  expect(error).toMatchObject({ _tag: "MissingModuleError", path: "policy.md" });
 });
 
 function toolResponse(name: string, args: JsonObject): string {
@@ -97,7 +94,11 @@ function allPrimitiveResponse(): string {
 
 async function runtime() {
   const { store, built } = await generation(modules());
-  const definition = await materializeGeneration(store, built.sha);
+  // This generation is built from the test's own fixed modules above, so a materialization
+  // failure here is a defect in the fixture, not a condition to report.
+  const definition = (await materializeGeneration(store, built.sha)).unwrap(
+    "test fixture generation failed to materialize",
+  );
   return { definition, workspace: new InMemoryWorkspace() };
 }
 

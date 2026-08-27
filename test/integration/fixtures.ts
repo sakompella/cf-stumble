@@ -79,7 +79,11 @@ export function buildPromptCandidate(
 
 export function runConfiguredTurn(store: MemoryStore, workspace: InMemoryWorkspace) {
   return runPinnedTurn(store, async (generationSha) => {
-    const definition = await materializeGeneration(store, generationSha);
+    // Every generation exercised here is built by this test module's own fixtures, so a
+    // materialization failure is a defect in the fixture, not a condition to report.
+    const definition = (await materializeGeneration(store, generationSha)).unwrap(
+      "integration fixture generation failed to materialize",
+    );
     if (definition.policy !== ALLOW_POLICY) {
       throw new Error(`unsupported turn policy ${JSON.stringify(definition.policy)}`);
     }

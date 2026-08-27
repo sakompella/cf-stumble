@@ -77,7 +77,11 @@ async function executeGeneration(
   if (generation === undefined) {
     throw new Error("validation requires a live generation");
   }
-  const definition = await materializeGeneration(store, generation);
+  // Every generation exercised through this test-only executor (candidate or baseline) is built
+  // by this test module's own fixtures, so a materialization failure is a defect in the fixture.
+  const definition = (await materializeGeneration(store, generation)).unwrap(
+    "integration test generation failed to materialize",
+  );
   return runReplay(sessionForPolicy(session, definition.policy), new AgentExecutor(definition));
 }
 
