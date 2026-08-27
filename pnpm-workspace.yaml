@@ -3,8 +3,10 @@
 allowBuilds:
   esbuild: true
   workerd: true
+# Cloudflare ships the Workers toolchain on a near-daily cadence pinned to a
+# compatibility date, so the release-age gate would block every routine update.
 minimumReleaseAgeExclude:
-  - '@cloudflare/vitest-plugin@1.1.0'
-  - '@cloudflare/workers-types@5.20260826.1'
-  - miniflare@5.20260825.0-alpha
-  - wrangler@4.126.0
+  - '@cloudflare/vitest-plugin'
+  - '@cloudflare/workers-types'
+  - miniflare
+  - wrangler

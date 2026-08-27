@@ -12,15 +12,15 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.1.0",
-    "@cloudflare/workers-types": "^5.20260826.1",
-    "@oxlint/plugins": "1.78.0",
-    "isomorphic-git": "^1.41.9",
-    "oxlint": "^1.80.0",
-    "oxlint-tsgolint": "^7.0.2001",
-    "prettier": "^3.9.6",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.11",
-    "wrangler": "^4.126.0"
+    "@cloudflare/vitest-plugin": "^1",
+    "@cloudflare/workers-types": "^5",
+    "@oxlint/plugins": "^1",
+    "isomorphic-git": "^1",
+    "oxlint": "^1",
+    "oxlint-tsgolint": "^7",
+    "prettier": "^3",
+    "typescript": "^7",
+    "vitest": "^4",
+    "wrangler": "^4"
   }
 }
