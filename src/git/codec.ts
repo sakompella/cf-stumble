@@ -7,10 +7,7 @@ import { encodeTree, decodeTree } from "./tree.js";
 export function encodeObject(object: GitObject): Uint8Array {
   switch (object.type) {
     case "blob":
-      return concat(
-        encodeUtf8(`blob ${object.data.byteLength}\0`, "object header"),
-        object.data,
-      );
+      return concat(encodeUtf8(`blob ${object.data.byteLength}\0`, "object header"), object.data);
     case "tree":
       return encodeTree(object.entries);
     case "commit":
@@ -38,9 +35,7 @@ export function decodeObject(bytes: Uint8Array): GitObject {
     throw new TypeError("malformed git object header: missing type or length");
   }
   if (lengthText.length > 1 && lengthText.startsWith("0")) {
-    throw new TypeError(
-      `malformed git object header: non-canonical length ${lengthText}`,
-    );
+    throw new TypeError(`malformed git object header: non-canonical length ${lengthText}`);
   }
   const length = Number(lengthText);
   if (!Number.isSafeInteger(length)) {

@@ -3,11 +3,11 @@
 How this project knows a green test suite means something, rather than just having one. Every
 technique here exists because "the tests pass" is a claim that can be true for the wrong reason —
 a suite that can't fail proves nothing by passing — so each practice below is paired with a
-concrete check that the suite *can* fail, applied to a real defect or a deliberately introduced
+concrete check that the suite _can_ fail, applied to a real defect or a deliberately introduced
 one.
 
 This document covers technique and instances. It does not repeat `docs/review-findings.md`,
-which is the separate, harder question of what a green suite does *not* prove — read that
+which is the separate, harder question of what a green suite does _not_ prove — read that
 document for the boundaries of everything below.
 
 ## Mutation testing: prove the suite would catch the bug it claims to catch
@@ -66,7 +66,7 @@ in-memory store's tests once and the DO store's tests separately — invites the
 implementations to quietly diverge: a behavior one store happens to have and the other doesn't
 would show up as "our tests pass" on both sides, because each side would only ever be checked
 against its own idea of correct. Running the identical assertions against both closes that gap:
-the CAS mutation test above discriminates a torn write in *either* implementation, because it's
+the CAS mutation test above discriminates a torn write in _either_ implementation, because it's
 the same test file running twice, not two similar-looking ones.
 
 Verified directly by diffing `conformance.ts` between the commit that introduced the DO SQLite

@@ -63,9 +63,7 @@ class TestStore implements SweepableStore {
     return runInDurableObject(this.stub, (_instance, state) => {
       initializeStore(state);
       const rows = state.storage.sql
-        .exec<{ readonly count: number }>(
-          "SELECT COUNT(*) AS count FROM cf_stumble_object_chunks",
-        )
+        .exec<{ readonly count: number }>("SELECT COUNT(*) AS count FROM cf_stumble_object_chunks")
         .toArray();
       return rows[0]?.count ?? 0;
     });

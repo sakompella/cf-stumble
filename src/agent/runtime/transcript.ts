@@ -20,7 +20,9 @@ export async function snapshotWorkspace(workspace: Workspace): Promise<Workspace
       throw new TypeError(`workspace listed ${JSON.stringify(path)} but read returned no file`);
     }
     if (!isTextContent(content)) {
-      throw new TypeError(`workspace file ${JSON.stringify(path)} is binary and cannot be recorded`);
+      throw new TypeError(
+        `workspace file ${JSON.stringify(path)} is binary and cannot be recorded`,
+      );
     }
     snapshot.push({ path, content });
   }

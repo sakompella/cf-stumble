@@ -83,10 +83,10 @@ const workspace = new Workspace({
   ],
 });
 
-using execution = await workspace.runtime.exec(
-  "printf 'ok\\n'",
-  { cwd: "/workspace", encoding: "utf8" },
-);
+using execution = await workspace.runtime.exec("printf 'ok\\n'", {
+  cwd: "/workspace",
+  encoding: "utf8",
+});
 const result = await execution.result();
 ```
 
@@ -102,23 +102,15 @@ The initial deployment has no `containers` stanza. That keeps `CloudflareContain
   "name": "cf-stumble",
   "main": "src/supervisor/worker.ts",
   "compatibility_date": "2025-01-01",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "experimental",
-    "enable_ctx_exports"
-  ],
+  "compatibility_flags": ["nodejs_compat", "experimental", "enable_ctx_exports"],
   "durable_objects": {
-    "bindings": [
-      { "name": "SUPERVISOR", "class_name": "Supervisor" }
-    ]
+    "bindings": [{ "name": "SUPERVISOR", "class_name": "Supervisor" }],
   },
-  "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["Supervisor"] }
-  ],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Supervisor"] }],
   "worker_loaders": [{ "binding": "LOADER" }],
   "secrets": {
-    "required": ["SUPERVISOR_SECRET"]
-  }
+    "required": ["SUPERVISOR_SECRET"],
+  },
 }
 ```
 

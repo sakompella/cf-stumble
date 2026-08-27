@@ -26,7 +26,7 @@ the real source of truth for why things are shaped the way they are:
 - **`docs/decisions.md`** — every resolved design decision with its reasoning, evidence and
   reversal cost. Retracted decisions are left visible with the retraction stated, rather than
   quietly edited, so read the corrections as well as the conclusions.
-- **`docs/review-findings.md`** — what a green test suite does *not* prove. Read this before
+- **`docs/review-findings.md`** — what a green test suite does _not_ prove. Read this before
   trusting any guarantee.
 - **`docs/prior-art.md`** — what already exists in this space and what it teaches.
 - **`docs/slices.md`** — the work breakdown, each slice with a command that exits 0 or non-zero.
@@ -64,7 +64,7 @@ language the project doesn't use (reconsider), or there's a real gap (note it fo
 `/domain-modeling`).
 
 Note that this project's vocabulary has been deliberately sharpened at least once already:
-"generation" means an *attempted facet materialization*, not a commit, and the registry is a
+"generation" means an _attempted facet materialization_, not a commit, and the registry is a
 registry rather than "tags". Precision here is load-bearing, not pedantry.
 
 ## Flag ADR conflicts

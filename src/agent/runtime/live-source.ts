@@ -1,10 +1,6 @@
 import { isJsonObjectValue, isJsonValue, type JsonValue } from "../../json.js";
 import { ModelSourceError } from "./model-errors.js";
-import type {
-  AgentModelRequest,
-  ModelProvider,
-  ModelResponseSource,
-} from "./model.js";
+import type { AgentModelRequest, ModelProvider, ModelResponseSource } from "./model.js";
 import type { RecordedModelResponse } from "../../replay/schema.js";
 
 /** A model source whose provider is deliberately injected by the caller. */
@@ -31,7 +27,10 @@ export class LiveModelResponseSource implements ModelResponseSource {
       return { requestId: request.requestId, content: raw };
     }
     if (!isJsonObjectValue(raw) || !isString(raw.content)) {
-      throw new ModelSourceError("error", "live model provider returned a response without string content");
+      throw new ModelSourceError(
+        "error",
+        "live model provider returned a response without string content",
+      );
     }
     let requestId = request.requestId;
     if ("requestId" in raw) {

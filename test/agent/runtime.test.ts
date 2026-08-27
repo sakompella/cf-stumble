@@ -117,11 +117,16 @@ test("executes a materialized generation through a live model source and primiti
     return response;
   });
 
-  const result = await new AgentExecutor(definition).executeTurn("write a result", source, workspace, {
-    name: "runtime-turn",
-    seed: 9,
-    nowMs: 1_700_000_100_000,
-  });
+  const result = await new AgentExecutor(definition).executeTurn(
+    "write a result",
+    source,
+    workspace,
+    {
+      name: "runtime-turn",
+      seed: 9,
+      nowMs: 1_700_000_100_000,
+    },
+  );
 
   expect(result.status).toBe("completed");
   if (result.status === "completed") {
@@ -214,7 +219,9 @@ test("the same executor and effects work with recorded replay and live sources",
     { name: "same-executor", seed: 3, nowMs: 1_700_000_100_000 },
   );
   expect(recorded).toMatchObject({ status: "completed" });
-  await expect(recordedWorkspace.readFile(parseWorkspacePath("result.txt"))).resolves.toBe("same\n");
+  await expect(recordedWorkspace.readFile(parseWorkspacePath("result.txt"))).resolves.toBe(
+    "same\n",
+  );
 
   const replayed = await runReplay(recording, new AgentExecutor(definition));
   expect(replayed.status).toBe("PASS");
@@ -226,9 +233,9 @@ async function failedTurn(
   maxSteps?: number,
 ) {
   const { definition } = await runtime();
-  const source = new RecordedModelResponseSource(response === undefined ? [] : [
-    { requestId: "executor", content: response },
-  ]);
+  const source = new RecordedModelResponseSource(
+    response === undefined ? [] : [{ requestId: "executor", content: response }],
+  );
   return new AgentExecutor(definition, maxSteps === undefined ? {} : { maxSteps }).executeTurn(
     "test",
     source,

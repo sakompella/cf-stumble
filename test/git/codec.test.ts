@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GitObject } from "../../src/git/index.js";
-import {
-  decodeObject,
-  encodeObject,
-  FILE_MODE,
-  parseSha,
-} from "../../src/git/index.js";
+import { decodeObject, encodeObject, FILE_MODE, parseSha } from "../../src/git/index.js";
 
 const encoder = new TextEncoder();
 
@@ -19,9 +14,7 @@ function shaBytes(value: string): Uint8Array {
 }
 
 function concat(...parts: readonly Uint8Array[]): Uint8Array {
-  const result = new Uint8Array(
-    parts.reduce((length, part) => length + part.byteLength, 0),
-  );
+  const result = new Uint8Array(parts.reduce((length, part) => length + part.byteLength, 0));
   let offset = 0;
   for (const part of parts) {
     result.set(part, offset);
@@ -60,11 +53,7 @@ describe("git tree objects", () => {
     });
 
     expect(encoded).toEqual(
-      concat(
-        encoder.encode("tree 33\0"),
-        encoder.encode("40000 nested\0"),
-        shaBytes(sha),
-      ),
+      concat(encoder.encode("tree 33\0"), encoder.encode("40000 nested\0"), shaBytes(sha)),
     );
   });
 
@@ -89,7 +78,6 @@ describe("git tree objects", () => {
       ),
     );
   });
-
 });
 
 describe("unicode git tree names", () => {

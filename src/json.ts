@@ -59,7 +59,9 @@ export function parseJsonValue(value: unknown): JsonValue {
 }
 
 export function isJsonObjectValue(value: JsonValue | undefined): value is JsonObject {
-  return value !== undefined && value !== null && typeof value === "object" && !Array.isArray(value);
+  return (
+    value !== undefined && value !== null && typeof value === "object" && !Array.isArray(value)
+  );
 }
 
 export function isJsonPrimitive(value: JsonValue): value is JsonPrimitive {

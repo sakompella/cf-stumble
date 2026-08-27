@@ -64,6 +64,7 @@ it as a Durable Object facet, and demonstrate containment.
 Owns `wrangler.jsonc`, `vitest.config.ts`, `src/agent/loader.ts`, `test/facet/`.
 
 Must prove, per D2a — storage separation alone is a narrower claim than we need:
+
 - A secret written to the supervisor's SQLite is not observable from inside the facet.
 - Every capability crossing the boundary is enumerated and each is absent or deliberate:
   bindings, service bindings, outbound `fetch`/`connect` (`globalOutbound: null`), and the
@@ -149,7 +150,7 @@ Never collectable, reset bypasses agent code entirely (D12). Owns `src/generatio
 Independent of git, so it parallelises with S1–S2. Owns `src/replay/`, fixtures under
 `test/fixtures/sessions/`.
 
-**Scope corrected (D14):** this is an *executor compatibility* regression gate, not a quality
+**Scope corrected (D14):** this is an _executor compatibility_ regression gate, not a quality
 gate. Replaying recorded model responses cannot tell you whether a prompt got better — the tape
 is an output of the old prompt, so a prompt-only candidate reproduces identical effects and
 passes vacuously. What it does catch is a broken edit primitive, a mangled tool-call parser, or
@@ -231,7 +232,7 @@ Build only what the vertical path in S8 needs; resist widening this.
 ## S12 — Ratchet hardening: canary integrity · depends: S7 · DONE
 
 Added after review. Content-derived corpus versions plus mandatory canaries make a weak corpus
-*identifiable* but not *adequate* — a hash tells you the input changed, not that it is still
+_identifiable_ but not _adequate_ — a hash tells you the input changed, not that it is still
 sufficient. Enforces the four conditions from `docs/review-findings.md`: canary identity comes
 from a trusted side, every required canary passes individually, a corpus update cannot drop or
 weaken a canary while producing a fresh valid hash, and a scorer failure is `INCONCLUSIVE`.
@@ -286,7 +287,7 @@ mechanism into the thing needing recovery. Bad trade for disk we aren't short of
 **Never tonight, per the source brief:** any UI, `patch.md` support, code-server, GitHub
 webhooks, the container backend.
 
-**Not built, and worth being honest about:** judging whether a prompt actually got *better*
+**Not built, and worth being honest about:** judging whether a prompt actually got _better_
 needs live generation against the candidate prompt and scored trials over task invariants.
 That is a genuinely different mechanism from replay, and calling recorded-response replay a
 general validation corpus would paper over the gap (D14).

@@ -85,11 +85,7 @@ export class Agent extends DurableObject {
 }
 `;
 
-export function loadAgent(
-  loader: WorkerLoader,
-  name: string,
-  source: string,
-): WorkerStub {
+export function loadAgent(loader: WorkerLoader, name: string, source: string): WorkerStub {
   return loader.get(name, () => ({
     compatibilityDate: "2025-01-01",
     mainModule: "agent.js",

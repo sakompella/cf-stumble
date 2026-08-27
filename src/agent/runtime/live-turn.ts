@@ -165,9 +165,6 @@ async function makeCompletedTurn(
   return { status: "completed", response: loop.response, trace: loop.trace, transcript };
 }
 
-function transcriptFailure(
-  detail: string,
-  trace: readonly ToolPrimitiveCall[] = [],
-): TurnResult {
+function transcriptFailure(detail: string, trace: readonly ToolPrimitiveCall[] = []): TurnResult {
   return { status: "failed", failure: { kind: "transcript-error", detail }, trace };
 }

@@ -44,9 +44,7 @@ function encodeTreeEntry(entry: TreeEntry): EncodedTreeEntry {
     concat(nameBytes, Uint8Array.of(0)),
   );
   const sortKey =
-    mode === FILE_MODE.tree
-      ? concat(nameBytes, Uint8Array.of(47))
-      : nameBytes.slice();
+    mode === FILE_MODE.tree ? concat(nameBytes, Uint8Array.of(47)) : nameBytes.slice();
 
   return { mode, name: entry.name, nameBytes, prefix, shaBytes, sortKey };
 }
@@ -89,9 +87,7 @@ function decodeTreeEntry(body: Uint8Array, offset: number): DecodedTreeEntry {
   if (modeEnd < 0) {
     throw new Error("malformed git tree: missing mode separator");
   }
-  const mode = validateMode(
-    decodeUtf8(body.subarray(offset, modeEnd), "tree mode"),
-  );
+  const mode = validateMode(decodeUtf8(body.subarray(offset, modeEnd), "tree mode"));
   const nameStart = modeEnd + 1;
   const nameEnd = body.indexOf(0, nameStart);
   if (nameEnd < 0) {
@@ -113,18 +109,12 @@ function decodeTreeEntry(body: Uint8Array, offset: number): DecodedTreeEntry {
     nameBytes: nameBytes.slice(),
     prefix: body.slice(offset, shaStart),
     shaBytes,
-    sortKey:
-      mode === FILE_MODE.tree
-        ? concat(nameBytes, Uint8Array.of(47))
-        : nameBytes.slice(),
+    sortKey: mode === FILE_MODE.tree ? concat(nameBytes, Uint8Array.of(47)) : nameBytes.slice(),
   } satisfies EncodedTreeEntry;
   return { entry, encoded, nextOffset: shaEnd };
 }
 
-function validateTreeOrder(
-  entries: readonly EncodedTreeEntry[],
-  duplicateMessage: string,
-): void {
+function validateTreeOrder(entries: readonly EncodedTreeEntry[], duplicateMessage: string): void {
   for (let index = 1; index < entries.length; index += 1) {
     const previous = entries[index - 1];
     const current = entries[index];

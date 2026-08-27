@@ -39,7 +39,7 @@ The plan, before any code, was "recorded model-response sessions are the validat
 replay a session's tape against a candidate and see if it still produces the same effects.
 
 An external review caught that this is circular for the one change that matters most. A recorded
-model response is an *output of the old prompt*. Replay that tape against a prompt-only
+model response is an _output of the old prompt_. Replay that tape against a prompt-only
 candidate — the single most common thing a generation changes — and the candidate reproduces
 byte-identical effects, because the tape never asked the new prompt anything. The case passes
 without exercising the change at all. The gate would have rubber-stamped exactly the class of
@@ -47,10 +47,10 @@ modification it exists to police, and it would have done so silently: every prom
 looked validated.
 
 The fix was to rescope, not to abandon. Replay is honest about a narrower, still-useful claim:
-given a fixed sequence of model responses, does the candidate's *executor* still turn them into
+given a fixed sequence of model responses, does the candidate's _executor_ still turn them into
 the same tool calls and the same effects? That catches a broken edit primitive, a mangled
 tool-call parser, or a policy that now refuses something it used to allow — real regressions, just
-not the one everyone assumes "validation" means. Judging whether a *prompt* got better needs live
+not the one everyone assumes "validation" means. Judging whether a _prompt_ got better needs live
 generation against the candidate prompt and scored trials over task invariants, which is a
 different mechanism with a different cost model and is explicitly not built. The corpus is named
 an executor-compatibility corpus, deliberately, so nobody mistakes what it checks.
@@ -79,7 +79,7 @@ throwaway prototype was built to settle it empirically.
 for keeping the hand-written codec anyway: it lets isomorphic-git serve as an independent
 correctness oracle; it gives dedup; it preserves interop with real git tooling. Two of these don't
 survive scrutiny. The oracle argument is circular — isomorphic-git is only useful as an oracle
-*because* we chose to copy git's byte format; invent our own record type and there is no external
+_because_ we chose to copy git's byte format; invent our own record type and there is no external
 spec to violate, so the entire class of bug the oracle catches stops existing, and ordinary
 round-trip tests would cover what's left. The dedup argument is simply wrong — dedup comes from
 content addressing (hash the bytes, use the hash as the key), which has nothing to do with git's
@@ -92,13 +92,13 @@ could not actually be pointed at the store without an export step that had never
 specifically because "surely someone has done this before" — found that `js-git` had already
 implemented our exact invariant: `sha1(codec.frame(object))` over uncompressed framed bytes,
 behind duck-typed pluggable storage. It died in 2017 and is unmaintained, but it settles the
-design question: the separation of object *format* from object *storage* is the same shape every
+design question: the separation of object _format_ from object _storage_ is the same shape every
 mature implementation of this idea uses (`go-git`'s `EncodedObjectStorer`, `gix`'s split between
 `gix-object` and `gix-odb`, `dulwich`'s `ObjectStore`, Irmin's `Content_addressable.S`), and no
 maintained JavaScript package offers it — the maintained JS alternative, isomorphic-git, hard-codes
 the loose-object filesystem layout as part of the package rather than exposing format separately
-from storage. Separately, reading git's own source confirmed that git hashes the *uncompressed
-framed* bytes and only compresses the on-disk loose-file representation — so storing raw
+from storage. Separately, reading git's own source confirmed that git hashes the _uncompressed
+framed_ bytes and only compresses the on-disk loose-file representation — so storing raw
 uncompressed rows was always a canonical representation of a git object, not an approximation or a
 shortcut.
 
@@ -138,7 +138,7 @@ things out onto, and simplicity was the whole point of removing the codec.
 
 The original generation model made every commit a generation, numbered by walking parent links —
 lineage depth. A test built specifically to check this constructed generation 0, built generation
-1 from it, then rolled back to 0 and built a *different* candidate from 0: both candidates
+1 from it, then rolled back to 0 and built a _different_ candidate from 0: both candidates
 computed depth 1, so two distinct generations claimed the same number. Depth is a property of a
 position in the graph, and rollback-then-branch produces two different positions at the same
 depth. It is not an identity, and treating it as one is a real bug, not a modeling nitpick — a
@@ -190,7 +190,7 @@ evidence for one world gets presented against a different, later world. That bin
 it does close that gap.
 
 A final review found the gap it didn't close: the supervisor's routes were unauthenticated, and
-`POST /promote` accepted an attestation *from the caller*. A perfectly bound attestation that
+`POST /promote` accepted an attestation _from the caller_. A perfectly bound attestation that
 anybody can construct proves the shape of a check, not the guarantee behind it — the tests that
 exercised the binding were themselves constructing well-formed attestations directly, which is
 exactly what an attacker would also do. The fix was structural rather than additive: stop

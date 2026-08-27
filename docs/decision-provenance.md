@@ -18,8 +18,8 @@ before promotion, generation 0 pinned with a reset that bypasses agent code. Thi
 prior design conversation and was handed over as a brief. The agents implemented it; they did not
 invent it.
 
-**The generation remodel.** Commits became ordinary commits; a generation became one *attempted
-facet materialization*, numbered by a monotonic counter. This is the largest design change the
+**The generation remodel.** Commits became ordinary commits; a generation became one _attempted
+facet materialization_, numbered by a monotonic counter. This is the largest design change the
 project has undergone, and it fixed a genuine identity bug — lineage depth is not an identity, and
 rolling back then branching produced two distinct generations both claiming number 1.
 

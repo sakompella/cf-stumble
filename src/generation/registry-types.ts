@@ -15,7 +15,11 @@ import type { GenerationNumber } from "./types.js";
  * and `validation_failed` are ends, not stages on the way to `validated`.
  */
 export type MaterializationState =
-  "loading" | "load_failed" | "loaded" | "validation_failed" | "validated";
+  | "loading"
+  | "load_failed"
+  | "loaded"
+  | "validation_failed"
+  | "validated";
 
 export function isTerminalState(state: MaterializationState): boolean {
   return state === "load_failed" || state === "validation_failed" || state === "validated";

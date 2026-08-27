@@ -26,7 +26,9 @@ export type AgentDefinition = {
 };
 
 export type AgentMaterializationErrorKind =
-  "missing-module" | "invalid-module" | "unsupported-module";
+  | "missing-module"
+  | "invalid-module"
+  | "unsupported-module";
 
 export class AgentMaterializationError extends Error {
   readonly kind: AgentMaterializationErrorKind;

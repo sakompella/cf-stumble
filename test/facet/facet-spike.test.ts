@@ -50,9 +50,7 @@ test("keeps supervisor storage and facet storage separate in both directions", a
 
   const probe = await readRecord(await supervisorRequest("/facet/probe"));
   expect(probe["ownSecret"]).toBeNull();
-  expect(probe["ownRows"]).toEqual([
-    { key: "facet-marker", value: "facet-wrote-here" },
-  ]);
+  expect(probe["ownRows"]).toEqual([{ key: "facet-marker", value: "facet-wrote-here" }]);
 
   const supervisor = await readRecord(await supervisorRequest("/inspect"));
   expect(supervisor["rows"]).toEqual([

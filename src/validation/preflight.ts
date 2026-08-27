@@ -15,7 +15,12 @@ import { runProbe } from "./preflight-execution.js";
 export type PreflightStatus = "PASS" | "FAIL" | "INCONCLUSIVE";
 
 export type PreflightCapability =
-  "materialization" | "read" | "write" | "edit" | "bash" | "self-edit";
+  | "materialization"
+  | "read"
+  | "write"
+  | "edit"
+  | "bash"
+  | "self-edit";
 
 export type PreflightCheck =
   | { readonly capability: PreflightCapability; readonly status: "PASS" }

@@ -25,10 +25,7 @@ export class PointerManager {
     this.gateVersion = options.gateVersion;
   }
 
-  async promote(
-    candidate: Sha,
-    attestation: Attestation,
-  ): Promise<PromotionResult> {
+  async promote(candidate: Sha, attestation: Attestation): Promise<PromotionResult> {
     const liveNow = await this.store.readPointer();
     const rejection = verifyAttestation(
       candidate,
@@ -44,10 +41,7 @@ export class PointerManager {
     return movePointer(this.store, candidate, liveNow);
   }
 
-  rollback(
-    target: Sha,
-    expected: Sha | undefined,
-  ): Promise<PromotionResult> {
+  rollback(target: Sha, expected: Sha | undefined): Promise<PromotionResult> {
     return movePointer(this.store, target, expected);
   }
 }

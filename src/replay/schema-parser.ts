@@ -1,4 +1,10 @@
-import { isJsonObjectValue, isJsonValue, parseJsonValue, type JsonObject, type JsonValue } from "../json.js";
+import {
+  isJsonObjectValue,
+  isJsonValue,
+  parseJsonValue,
+  type JsonObject,
+  type JsonValue,
+} from "../json.js";
 import {
   REPLAY_SCHEMA_VERSION,
   ReplaySchemaError,

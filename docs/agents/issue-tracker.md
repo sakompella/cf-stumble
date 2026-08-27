@@ -4,7 +4,6 @@
 > closing anything on GitHub is gated by the rule in `AGENTS.md` — prepare the change, show it,
 > and wait for an explicit go-ahead. Read operations below are unrestricted.
 
-
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
 ## Conventions

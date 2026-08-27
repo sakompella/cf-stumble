@@ -4,7 +4,7 @@ A personal AI coding-agent harness on Cloudflare Workers where the agent's own d
 its prompts, skills, policies, and module code — is versioned as immutable **generations**,
 modelled on NixOS system generations.
 
-The agent can modify itself. A self-modification is a *candidate* build that must pass a gate
+The agent can modify itself. A self-modification is a _candidate_ build that must pass a gate
 before it can go live. Promotion is an atomic pointer switch. Rollback is the same switch in
 reverse. Nothing is edited in place, so there is no state in which the agent is half-upgraded.
 
@@ -15,7 +15,7 @@ have fixed it is the thing that broke. Three properties are arranged against tha
 
 **The supervisor is not modifiable by the agent.** Generation history, the live pointer, the
 accumulated context, and the replay corpus live in a supervisor Durable Object that is deployed
-normally. Agent code runs in a Durable Object *facet* loaded through the Dynamic Worker Loader,
+normally. Agent code runs in a Durable Object _facet_ loaded through the Dynamic Worker Loader,
 with its own isolated SQLite and no route back to the supervisor's state. That containment is
 the entire safety argument, which is why it is the first thing built and tested rather than the
 last (see `docs/decisions.md` D2b).
@@ -63,7 +63,7 @@ independent test oracle. See D1 for the case against.
   architecture, kept visible rather than quietly patched.
 - **`docs/slices.md`** — the work broken into independently verifiable slices, each with a
   command that exits 0 or non-zero. No slice whose done condition is prose.
-- **`docs/review-findings.md`** — what a green test suite does *not* prove. Read this before
+- **`docs/review-findings.md`** — what a green test suite does _not_ prove. Read this before
   trusting the validation gate.
 - **`docs/integration-findings.md`** — what did and did not compose when the layers were first
   driven end to end, including the gaps that remain.
@@ -83,7 +83,7 @@ builtins, so a passing test says something about the runtime we actually deploy 
 codec's independent oracle is isomorphic-git rather than the `git` binary precisely because a
 subprocess cannot run there.
 
-Facets and the Dynamic Worker Loader need Workers Paid to *deploy*, but run locally with no
+Facets and the Dynamic Worker Loader need Workers Paid to _deploy_, but run locally with no
 account at all, so the isolation guarantees are tested for real rather than mocked.
 
 ## Status

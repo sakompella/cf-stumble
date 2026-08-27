@@ -23,7 +23,7 @@ works too. Building the entire DAG in memory with isomorphic-git was always avai
 The narrow finding that was actually true: **`@cloudflare/computer@0.2.1`'s wrapper** (PREVIEW
 ONLY, `publishConfig.tag: unreleased`) bundles isomorphic-git 1.40.0 but re-exports only
 `hashObject`, `catFile`, `lsTree`, `updateRef`, `commit`, `log` and friends — not `writeTree` or
-`writeCommit`. So *that wrapper* is unusable for our purposes. Taking a direct dependency on
+`writeCommit`. So _that wrapper_ is unusable for our purposes. Taking a direct dependency on
 isomorphic-git was never blocked.
 
 So the real question was: hand-write a codec, or depend on isomorphic-git directly and give it
@@ -146,7 +146,7 @@ against an independent implementation is the strongest verification available he
 only available if we match git's format exactly.
 
 The limit of that argument, stated so nobody later mistakes it for a security claim: the oracle
-justifies trusting our *encoding*, not SHA-1's collision resistance. Content here is
+justifies trusting our _encoding_, not SHA-1's collision resistance. Content here is
 agent-authored, so an agent can in principle influence object ids. Nothing tonight depends on
 collision resistance, but if integrity ever becomes load-bearing the answer is to store a
 second SHA-256 digest alongside the real git oid rather than to abandon git compatibility.
@@ -169,8 +169,8 @@ partial writes if something throws midway. Promotion touches the pointer row, th
 history, and the validation table together, so it needs a real transaction.
 
 To be explicit about the division of labour, since it caused confusion once already: the CAS in
-D5 handles *concurrency* and is provable in a plain in-memory test, while `transactionSync()`
-handles *crash atomicity* across the several rows a promotion touches. Neither subsumes the
+D5 handles _concurrency_ and is provable in a plain in-memory test, while `transactionSync()`
+handles _crash atomicity_ across the several rows a promotion touches. Neither subsumes the
 other, and the promote path uses both — the CAS check happens inside the transaction.
 
 ### D7 — Validation results are a SQLite table keyed by commit sha; no git notes
@@ -227,12 +227,12 @@ The design is recorded here so it can be picked up later; the slice is out of sc
 
 ## Validation gate
 
-### D14 — Replay is an *executor compatibility* gate, not a quality gate
+### D14 — Replay is an _executor compatibility_ gate, not a quality gate
 
 **Revised after review. The original framing was circular and would have wasted the night.**
 
 The plan was "recorded sessions are the validation corpus". That does not work, and the reason
-is worth stating plainly: a recorded model response is an output of the *old* prompt. Replay a
+is worth stating plainly: a recorded model response is an output of the _old_ prompt. Replay a
 prompt-only candidate — which is the main thing a generation changes — and the tape produces
 byte-identical effects, so the case passes without exercising the change at all. The gate would
 have rubber-stamped exactly the modifications it exists to police. Worse, a candidate that
@@ -244,7 +244,7 @@ final workspace state?** That catches real regressions — a broken edit primiti
 tool-call parser, a policy that now refuses something it used to allow — and it is deterministic
 and cheap. It is a runtime regression suite.
 
-Judging whether a *prompt* got better needs live generation against the candidate prompt and
+Judging whether a _prompt_ got better needs live generation against the candidate prompt and
 scored trials over task invariants. That is a different mechanism with a different cost model,
 and it is explicitly not built tonight. The two are kept as separate categories rather than
 letting one masquerade as the other.

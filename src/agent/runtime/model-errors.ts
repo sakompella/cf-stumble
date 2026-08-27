@@ -17,4 +17,3 @@ export class ModelSourceError extends Error {
 export function modelSourceExhausted(detail: string): ModelSourceError {
   return new ModelSourceError("exhausted", detail);
 }
-

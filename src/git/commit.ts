@@ -4,25 +4,14 @@ import { concat, concatMany, decodeUtf8, encodeUtf8 } from "./binary.js";
 
 export function encodeCommit(commit: Commit): Uint8Array {
   const parts: Uint8Array[] = [
-    encodeUtf8(
-      `tree ${validateSha(commit.tree, "commit tree")}\n`,
-      "commit header",
-    ),
+    encodeUtf8(`tree ${validateSha(commit.tree, "commit tree")}\n`, "commit header"),
   ];
   for (const parent of commit.parents) {
-    parts.push(
-      encodeUtf8(
-        `parent ${validateSha(parent, "commit parent")}\n`,
-        "commit header",
-      ),
-    );
+    parts.push(encodeUtf8(`parent ${validateSha(parent, "commit parent")}\n`, "commit header"));
   }
   parts.push(
     encodeUtf8(`author ${formatSignature(commit.author)}\n`, "commit header"),
-    encodeUtf8(
-      `committer ${formatSignature(commit.committer)}\n`,
-      "commit header",
-    ),
+    encodeUtf8(`committer ${formatSignature(commit.committer)}\n`, "commit header"),
     encodeUtf8("\n", "commit separator"),
     encodeUtf8(commit.message, "commit message"),
   );
@@ -31,9 +20,7 @@ export function encodeCommit(commit: Commit): Uint8Array {
   return concat(encodeUtf8(`commit ${body.byteLength}\0`, "object header"), body);
 }
 
-export function decodeCommit(
-  body: Uint8Array,
-): Extract<GitObject, { type: "commit" }> {
+export function decodeCommit(body: Uint8Array): Extract<GitObject, { type: "commit" }> {
   const text = decodeUtf8(body, "commit");
   const separator = text.indexOf("\n\n");
   if (separator < 0) {
@@ -72,11 +59,7 @@ export function decodeCommit(
   };
 }
 
-function requireCommitLine(
-  headers: readonly string[],
-  index: number,
-  label: string,
-): string {
+function requireCommitLine(headers: readonly string[], index: number, label: string): string {
   const line = headers[index];
   if (line === undefined) {
     throw new Error(`malformed git commit: missing ${label} header`);
@@ -103,9 +86,7 @@ function parseSignature(line: string, label: string): Signature {
   if (!line.startsWith(prefix)) {
     throw new Error(`malformed git commit: expected ${label} header`);
   }
-  const match = /^(.+) <([^<>]+)> (-?[0-9]+) ([+-][0-9]{4})$/u.exec(
-    line.slice(prefix.length),
-  );
+  const match = /^(.+) <([^<>]+)> (-?[0-9]+) ([+-][0-9]{4})$/u.exec(line.slice(prefix.length));
   if (match === null) {
     throw new Error(`malformed git commit: invalid ${label} signature`);
   }
@@ -142,12 +123,7 @@ function parseTimezone(value: string, label: string): number {
   const hours = Number(hoursText);
   const minutes = Number(minutesText);
   const absoluteMinutes = hours * 60 + minutes;
-  if (
-    !Number.isInteger(hours) ||
-    !Number.isInteger(minutes) ||
-    hours > 23 ||
-    minutes > 59
-  ) {
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
     throw new Error(`malformed git commit: invalid ${label} timezone`);
   }
   const offset = sign === "-" ? -absoluteMinutes : absoluteMinutes;

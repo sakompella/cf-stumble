@@ -43,9 +43,7 @@ export function parseAgentResponse(response: RecordedModelResponse): ModelRespon
   }
   if (type === "tool_call") {
     const call = parseToolCall(value, "tool call");
-    return call.ok
-      ? { ok: true, response: { kind: "tool-calls", calls: [call.call] } }
-      : call;
+    return call.ok ? { ok: true, response: { kind: "tool-calls", calls: [call.call] } } : call;
   }
   if (type === "tool_calls") {
     return parseToolCalls(value.calls ?? value.tool_calls, "tool calls");
@@ -59,7 +57,10 @@ export function parseAgentResponse(response: RecordedModelResponse): ModelRespon
   if (isString(value.kind)) {
     return parseDirectToolCall(value, "tool call", "kind");
   }
-  return { ok: false, detail: 'response field "type" must be "final", "tool_call", or "tool_calls"' };
+  return {
+    ok: false,
+    detail: 'response field "type" must be "final", "tool_call", or "tool_calls"',
+  };
 }
 
 function parseToolCalls(value: JsonValue | undefined, path: string): ModelResponseParseResult {
@@ -78,7 +79,10 @@ function parseToolCalls(value: JsonValue | undefined, path: string): ModelRespon
   return { ok: true, response: { kind: "tool-calls", calls } };
 }
 
-function parseToolCall(value: JsonValue | undefined, path: string):
+function parseToolCall(
+  value: JsonValue | undefined,
+  path: string,
+):
   | { readonly ok: true; readonly call: ParsedToolCall }
   | { readonly ok: false; readonly detail: string } {
   if (!isJsonObjectValue(value)) {
@@ -104,7 +108,10 @@ function parseDirectToolCall(
 ): ModelResponseParseResult {
   const name = value[nameKey];
   if (!isString(name) || name.length === 0) {
-    return { ok: false, detail: `${path} field ${JSON.stringify(nameKey)} must be a non-empty string` };
+    return {
+      ok: false,
+      detail: `${path} field ${JSON.stringify(nameKey)} must be a non-empty string`,
+    };
   }
   if ("arguments" in value) {
     const call = parseNamedArguments(name, value.arguments, path);
@@ -117,14 +124,19 @@ function parseDirectToolCall(
     }
   }
   const argumentsObject: JsonObject = Object.fromEntries(argumentEntries);
-  return { ok: true, response: { kind: "tool-calls", calls: [{ name, arguments: argumentsObject }] } };
+  return {
+    ok: true,
+    response: { kind: "tool-calls", calls: [{ name, arguments: argumentsObject }] },
+  };
 }
 
 function parseNamedArguments(
   name: string,
   value: JsonValue,
   path: string,
-): { readonly ok: true; readonly call: ParsedToolCall } | { readonly ok: false; readonly detail: string } {
+):
+  | { readonly ok: true; readonly call: ParsedToolCall }
+  | { readonly ok: false; readonly detail: string } {
   let args = value;
   if (isString(args)) {
     try {

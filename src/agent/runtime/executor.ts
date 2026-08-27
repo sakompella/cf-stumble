@@ -1,8 +1,4 @@
-import type {
-  AgentRunResult,
-  ReplayAgentLoop,
-  ReplayRuntime,
-} from "../../replay/index.js";
+import type { AgentRunResult, ReplayAgentLoop, ReplayRuntime } from "../../replay/index.js";
 import type { PrimitiveOptions } from "../../tools/index.js";
 import type { Workspace } from "../../tools/types.js";
 import type { AgentDefinition } from "./definition.js";
@@ -11,11 +7,7 @@ import { executeLoop, toReplayCall } from "./loop.js";
 import { recordedSourceFromReplayRuntime } from "./replay-source.js";
 import type { ModelResponseSource } from "./model.js";
 import { describeFailure } from "./transcript.js";
-import type {
-  AgentExecutorOptions,
-  ExecuteTurnOptions,
-  TurnResult,
-} from "./types.js";
+import type { AgentExecutorOptions, ExecuteTurnOptions, TurnResult } from "./types.js";
 
 export const DEFAULT_MAX_STEPS = 32;
 export { DEFAULT_MODEL_REQUEST_ID } from "./model.js";
@@ -77,9 +69,4 @@ export class AgentExecutor implements ReplayAgentLoop {
   }
 }
 
-export type {
-  AgentExecutorOptions,
-  ExecuteTurnOptions,
-  TurnFailure,
-  TurnResult,
-} from "./types.js";
+export type { AgentExecutorOptions, ExecuteTurnOptions, TurnFailure, TurnResult } from "./types.js";

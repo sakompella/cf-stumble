@@ -17,7 +17,8 @@ export type EffectsDifference =
     };
 
 export type EffectsComparison =
-  { readonly equal: true } | { readonly equal: false; readonly difference: EffectsDifference };
+  | { readonly equal: true }
+  | { readonly equal: false; readonly difference: EffectsDifference };
 
 function comparePaths(left: WorkspaceFile, right: WorkspaceFile): number {
   return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
