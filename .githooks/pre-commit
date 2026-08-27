@@ -1,5 +1,8 @@
 #!/bin/sh
-# Runs the three cheap gates before every commit (~7s combined).
+# Runs the full gate before every commit: typecheck, format, lint, tests (~11s combined).
+# That order is deliberate. Type errors make the type-aware lint rules report "error type"
+# noise instead of the real fault, and formatting changes what lint sees at all — wrapping a
+# long line has pushed a file over max-lines here before.
 # Checks the working tree, not the index, so a partial `git add` can still
 # commit while unstaged work is broken. Bypass with `git commit --no-verify`.
 #
