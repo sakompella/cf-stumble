@@ -1,5 +1,5 @@
 /**
- * The storage surface, deliberately kept to four functions (docs/decisions.md D3, D5).
+ * The storage surface, deliberately kept to four functions (docs/adr/0009, docs/adr/0003).
  *
  * Cloudflare Artifacts is expected to replace the implementation later, so the interface is
  * shaped like what Artifacts offers — a content-addressed map from hash to bytes — rather

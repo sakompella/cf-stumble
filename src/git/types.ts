@@ -1,7 +1,7 @@
 /**
  * Git object model types.
  *
- * We keep git's exact on-disk object format (see docs/decisions.md D1, D4). That is not
+ * We keep git's exact on-disk object format (see docs/adr/0009, docs/adr/0011). That is not
  * nostalgia: it makes the real `git` binary an independent oracle in tests, so an encoding
  * bug shows up as a hash mismatch against a tool we did not write.
  */

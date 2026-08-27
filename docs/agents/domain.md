@@ -21,16 +21,18 @@ the real source of truth for why things are shaped the way they are:
 - **`docs/generations.md`** — the generation data model. A commit is an ordinary commit; a
   generation is one attempted facet materialization. Materialization is immutable, activation is
   an append-only ledger.
-- **`docs/decisions.md`** — every resolved design decision with its reasoning, evidence and
-  reversal cost. Retracted decisions are left visible with the retraction stated, rather than
-  quietly edited, so read the corrections as well as the conclusions.
+- **`docs/design-history.md`** — the reasoning behind the ADRs: what we thought, what changed our
+  mind, and what the change cost. Retractions are left visible rather than quietly edited, so read
+  the corrections as well as the conclusions.
 - **`docs/review-findings.md`** — what a green test suite does _not_ prove. Read this before
   trusting any guarantee.
 - **`docs/prior-art.md`** — what already exists in this space and what it teaches.
 - **`docs/slices.md`** — the work breakdown, each slice with a command that exits 0 or non-zero.
 
-Several decisions recorded in `docs/decisions.md` would make reasonable ADRs. Converting them is
-a job for `/domain-modeling` when a decision is next revisited, not a bulk migration.
+The decisions that used to live in a single `docs/decisions.md` have been merged into `docs/adr/`,
+which is now the only register of resolved positions. Nothing else should grow into a second one:
+when a decision is made or revisited, it goes in `docs/adr/` and the reasoning behind it goes in
+`docs/design-history.md`.
 
 ## File structure
 
@@ -41,7 +43,7 @@ a job for `/domain-modeling` when a decision is next revisited, not a bulk migra
 │   ├── adr/
 │   │   ├── 0001-....md
 │   │   └── 0002-....md
-│   ├── decisions.md
+│   ├── design-history.md
 │   ├── generations.md
 │   └── ...
 └── src/

@@ -1,7 +1,7 @@
 # Design history
 
 Not a changelog. This is organized by decision: what we thought, what changed our mind, and what
-it cost to change it. Read `docs/decisions.md` for the resolved position on each of these and
+it cost to change it. Read `docs/adr/` for the resolved position on each of these and
 `docs/agents/domain.md` for the vocabulary; this document exists to carry the reasoning that a
 decision record alone tends to compress away.
 

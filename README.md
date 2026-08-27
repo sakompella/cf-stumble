@@ -18,7 +18,7 @@ accumulated context, and the replay corpus live in a supervisor Durable Object t
 normally. Agent code runs in a Durable Object _facet_ loaded through the Dynamic Worker Loader,
 with its own isolated SQLite and no route back to the supervisor's state. That containment is
 the entire safety argument, which is why it is the first thing built and tested rather than the
-last (see `docs/decisions.md` D2b).
+last (see ADR-0004).
 
 **Generation 0 is pinned and always reachable.** It is never garbage-collected, and reset routes
 through the supervisor without touching agent code. An escape hatch the agent can break is not
@@ -54,13 +54,16 @@ ten-method `FsClient` and writes zlib-compressed loose objects into it, which wo
 emulating a filesystem over Durable Object SQLite so git can emulate a content-addressed store
 on top of something that already is one. The codec is 614 lines, keeps the four-function store
 honest, and because it keeps git's exact byte format the real `git` binary works as an
-independent test oracle. See D1 for the case against.
+independent test oracle. See ADR-0009 for the case against and ADR-0010 for the proposed
+replacement.
 
 ## Documentation
 
-- **`docs/decisions.md`** — every resolved design decision with its reasoning, evidence, and
-  reversal cost. Includes the corrections where research or review contradicted the original
-  architecture, kept visible rather than quietly patched.
+- **`docs/adr/`** — every resolved design decision, one per file, in a paragraph each. Superseded
+  decisions keep their file and say what replaced them, so the corrections where research or
+  review contradicted the original architecture stay visible rather than being quietly patched.
+- **`docs/design-history.md`** — the reasoning behind those decisions: what we thought, what
+  changed our mind, and what the change cost. The ADRs carry the position; this carries the arc.
 - **`docs/slices.md`** — the work broken into independently verifiable slices, each with a
   command that exits 0 or non-zero. No slice whose done condition is prose.
 - **`docs/review-findings.md`** — what a green test suite does _not_ prove. Read this before
@@ -104,7 +107,7 @@ recorded as live, and quarantine stops a known-bad generation returning.
 
 163 tests pass (134 Node, 29 workerd), verified from a cold clone rather than incrementally.
 
-**What is honestly not done.** Garbage collection is deliberately cut (D13). The agent runtime is
+**What is honestly not done.** Garbage collection is deliberately cut (ADR-0007). The agent runtime is
 real and shared by the gate and the live path, but it is not yet loaded into a facet through the
 Dynamic Worker Loader, so the last hop from stored bytes to sandboxed execution is unexercised.
 There is no real model provider, `@cloudflare/computer` is not wired as the workspace backend,

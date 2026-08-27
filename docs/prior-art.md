@@ -28,7 +28,7 @@ The wider survey, from reading source rather than READMEs:
 | `wasm-git`, `nodegit`, Dolt, Noms | —         | —                                                    | Dead ends for this purpose       |
 
 **This is what finally justifies the hand-written codec**, and it is a better argument than any of
-the three originally given in D1. Every mature implementation of this idea separates format from
+the three originally given for it. Every mature implementation of this idea separates format from
 storage exactly as we do; the only JS one is abandoned; the maintained alternatives either hard-code
 a filesystem layout or are in another language.
 
@@ -81,7 +81,6 @@ DGM also independently confirms the replay problem we hit: a recorded response t
 protocol behaviour but cannot validate a _prompt_ change. Its answer is fresh execution with
 repeated samples on held-out tasks, which is the mechanism we have explicitly deferred.
 
-
 ## The isomorphic-git comparison prototype
 
 A throwaway spike comparing our hand-written codec against isomorphic-git is parked, unmerged, on
@@ -92,7 +91,7 @@ It established that the two produce **byte-identical objects** given identical i
 matched immediately, and commits matched once a trailing-newline convention was aligned, which
 turned out to be a real if minor bug in ours. It also measured that isomorphic-git's stored bytes
 are zlib-compressed at path keys, so `sha1(stored) != oid`, and corrected an earlier finding of
-mine: counting *calls* suggested four filesystem methods sufficed, but isomorphic-git *binds* all
+mine: counting _calls_ suggested four filesystem methods sufficed, but isomorphic-git _binds_ all
 ten when it constructs its wrapper, so a four-method shim fails before anything runs.
 
 Its verdict — keep the codec — has since been overtaken by the decision to adopt

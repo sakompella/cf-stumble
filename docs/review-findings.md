@@ -84,7 +84,7 @@ run on Cloudflare's infrastructure.
 
 Byte agreement with `git hash-object` proves the codec is correct. It says nothing about
 collision resistance, and the codec uses ordinary SHA-1 without git's collision detection. This
-was a deliberate trade (D4) and is fine while content is not adversarial — but the content here
+was a deliberate trade (ADR-0011) and is fine while content is not adversarial — but the content here
 is agent-authored, so if object identity ever becomes a security boundary, add a second SHA-256
 digest rather than relying on the git oid.
 
@@ -103,7 +103,7 @@ unavailable. Two things should temper that:
 
 Also worth thinking about: immutable old code can still become unloadable against newer
 persistent state. Rolling back the code does not roll back the state it has to read, which is
-the correct design (D17) but means an old generation is not automatically safe.
+the correct design (ADR-0003) but means an old generation is not automatically safe.
 
 ## Over-built and under-built
 
@@ -153,7 +153,7 @@ authentication nor an environment allowlist; both are pending in an unreleased 0
 **The current model already resists this, by accident of being strict.** An `env: {}` facet cannot
 use `WorkerShellBackend` at all, because it has no `LOADER`. Exposing a host-owned Workspace to the
 facet would require deliberately adding a capability route back to the supervisor — precisely the
-thing D2a says must not exist.
+thing ADR-0004 says must not exist.
 
 **So the design is: never hand the facet a Workspace.** Expose a narrow capability with exactly
 four methods, matching the four primitives, proxied and policed by the supervisor, which holds the
@@ -190,10 +190,31 @@ the headline proof currently validates a design we no longer use. It should be m
 the error forward.
 
 **`Workspace` has five methods; the action space has four.** `src/tools/types.ts` exposes
-`readFile`, `writeFile`, `listFiles`, `exists` and `execute`. The four primitives sit *on top* of
+`readFile`, `writeFile`, `listFiles`, `exists` and `execute`. The four primitives sit _on top_ of
 that, so `Workspace` is the substrate rather than the capability.
 
 That naming is a trap aimed squarely at the migration. `docs/computer-integration.md` says to
 expose a four-method proxy to the facet; anyone reading "proxy the Workspace" would hand it
 `listFiles` and raw `execute` — a materially wider surface than intended. `CONTEXT.md` now
 deliberately avoids claiming the interface has four methods.
+
+## Questions still on the human, not the machine (open)
+
+Carried over from `docs/decisions.md` when its resolved decisions moved into `docs/adr/`. These
+never resolved, so they are not decisions and never became ADRs. Each has a default chosen to be
+cheap to reverse, which is what makes leaving them open tolerable rather than negligent.
+
+**How much workspace state must a replay case pin to be meaningful?** Recorded sessions are a
+JSON fixture directory with a versioned schema. The source brief flagged this as the piece most
+likely to need a real conversation rather than an overnight decision, and it was right: how much
+state a case pins is a judgement about which regressions are worth catching, and nobody has made
+that judgement yet. Default in place: fixtures on disk, schema versioned, swap the loader later.
+
+**Are skills blobs or a subtree?** Currently one blob per skill under a `skills/` subtree. If a
+skill grows into a directory with attachments, this wants nested trees instead. Cheap to change
+while the corpus is small, and progressively less so after.
+
+**May the agent promote itself unattended?** The machinery supports unattended promotion and the
+endpoint exists, but nothing calls it automatically, which keeps the interesting capability built
+and the dangerous behaviour switched off. Turning it on is a decision about risk appetite, not
+about code.

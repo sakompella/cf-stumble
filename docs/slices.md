@@ -16,7 +16,7 @@ facet materialization, numbered from a monotonic registry. See `docs/generations
 replaced lineage-depth numbering, which was not an identity — rolling back and branching gave two
 distinct generations both claiming number 1.
 
-**Final state: every slice DONE except garbage collection, which was deliberately cut (D13).**
+**Final state: every slice DONE except garbage collection, which was deliberately cut (ADR-0007).**
 The full suite runs as a single `pnpm test`, inside real workerd — there is no separate Node
 run and no `test:workers` script; see `docs/design-history.md` ("one runtime") for why the
 two-runtime split was removed. `pnpm test`, `pnpm typecheck`, and `pnpm lint --max-warnings=0`
@@ -39,7 +39,7 @@ The first draft was twelve horizontal layers with the riskiest claim built last.
 wrong shape: it front-loads the work whose outcome is already known and defers the work that
 could invalidate everything. Two changes:
 
-1. **The facet isolation spike runs first.** It is the load-bearing safety claim (D2b). If it
+1. **The facet isolation spike runs first.** It is the load-bearing safety claim (ADR-0004). If it
    fails, the architecture changes, and every hour spent on layers above it is wasted.
 2. **A thin vertical path beats complete horizontal layers.** Once the spike lands, drive one
    end-to-end story through the system — seed generation 0, run a turn pinned to it, validate a
@@ -63,7 +63,7 @@ it as a Durable Object facet, and demonstrate containment.
 
 Owns `wrangler.jsonc`, `vitest.config.ts`, `src/agent/loader.ts`, `test/facet/`.
 
-Must prove, per D2a — storage separation alone is a narrower claim than we need:
+Must prove, per ADR-0004 — storage separation alone is a narrower claim than we need:
 
 - A secret written to the supervisor's SQLite is not observable from inside the facet.
 - Every capability crossing the boundary is enumerated and each is absent or deliberate:
@@ -84,7 +84,7 @@ the full object bytes including header.
 
 Owns `src/git/`, `test/git/`.
 
-The real `git` binary is an independent oracle (D4): every object we encode has its id checked
+The real `git` binary is an independent oracle (ADR-0011): every object we encode has its id checked
 against `git hash-object`, and a repository built entirely by our codec is handed to `git log`
 and `git cat-file`. An encoding bug cannot hide behind our own decoder agreeing with our own
 encoder.
@@ -95,7 +95,7 @@ encoder.
 
 ## S2 — Storage interface, in-memory implementation, conformance suite · depends: S0 · DONE
 
-The four-function surface (D3, D5). Owns `src/storage/`, `test/storage/`.
+The four-function surface (ADR-0009, ADR-0003). Owns `src/storage/`, `test/storage/`.
 
 The deliverable that matters is the **conformance suite** — tests parameterised over a store
 factory, which S9 reruns verbatim against Durable Object SQLite. That reuse is what stops the
@@ -107,7 +107,8 @@ two implementations from quietly diverging.
 
 ## S3 — Generation model · depends: S1, S2 · DONE
 
-A generation is a commit whose tree is the module manifest (D8). Build from named modules, read
+A generation is a commit whose tree is the module manifest — the pre-remodel model, since
+superseded by ADR-0002. Build from named modules, read
 back, walk lineage to the root. Owns `src/generation/`.
 
 Must prove: an unchanged module across two generations is stored once (dedup actually
@@ -128,7 +129,7 @@ base do not interleave — one wins, one is rejected, the pointer ends on the wi
 a torn state.
 
 Promotion consumes an **attestation** bound to candidate sha, live generation, corpus version,
-and gate version (D16b), verified inside the same transaction that moves the pointer. A test
+and gate version (ADR-0006), verified inside the same transaction that moves the pointer. A test
 must show that an attestation which was valid against a since-superseded live generation is
 rejected — that TOCTOU gap is the difference between "validated" and "was validated at some
 point, against something".
@@ -139,7 +140,7 @@ point, against something".
 
 ## S5 — Generation 0 pinning and reset · depends: S3, S4 · DONE
 
-Never collectable, reset bypasses agent code entirely (D12). Owns `src/generation/genesis.ts`.
+Never collectable, reset bypasses agent code entirely (ADR-0007). Owns `src/generation/genesis.ts`.
 
 **Verify:** `pnpm vitest run test/genesis`
 
@@ -150,7 +151,7 @@ Never collectable, reset bypasses agent code entirely (D12). Owns `src/generatio
 Independent of git, so it parallelises with S1–S2. Owns `src/replay/`, fixtures under
 `test/fixtures/sessions/`.
 
-**Scope corrected (D14):** this is an _executor compatibility_ regression gate, not a quality
+**Scope corrected (ADR-0005):** this is an _executor compatibility_ regression gate, not a quality
 gate. Replaying recorded model responses cannot tell you whether a prompt got better — the tape
 is an output of the old prompt, so a prompt-only candidate reproduces identical effects and
 passes vacuously. What it does catch is a broken edit primitive, a mangled tool-call parser, or
@@ -158,8 +159,8 @@ a policy that now refuses what it used to allow. Build it for that, and don't le
 name "validation corpus".
 
 A case pins initial workspace state, captured tool results, seeded randomness, and the clock
-(D14b). Outcomes are three-valued — tape exhaustion, an unexpected model request, a timeout, or
-a malformed response is `INCONCLUSIVE`, never `FAIL` (D14a).
+(ADR-0014). Outcomes are three-valued — tape exhaustion, an unexpected model request, a timeout,
+or a malformed response is `INCONCLUSIVE`, never `FAIL` (ADR-0014).
 
 Must prove: replaying a fixture twice is identical; an unknown schema version is rejected
 rather than guessed at; a mutated fixture fails; tape exhaustion reports `INCONCLUSIVE`.
@@ -170,13 +171,13 @@ rather than guessed at; a mutated fixture fails; tape exhaustion reports `INCONC
 
 ## S7 — Regression gate with canaries · depends: S4, S6 · DONE
 
-The ratchet (D16) plus the canaries that stop it degenerating (D16a). Owns `src/validation/`.
+The ratchet plus the canaries that stop it degenerating (ADR-0005). Owns `src/validation/`.
 
 Must prove: promotion blocked when a case passing on the live generation fails on the
 candidate; promotion **allowed** when an already-failing case fails again; a mandatory canary
 failing blocks outright rather than fail-no-worse; an empty corpus or an all-failing baseline
 yields `INCONCLUSIVE` and refuses promotion instead of vacuously permitting it; results are
-keyed by commit sha (D7) and queryable.
+keyed by commit sha (ADR-0003) and queryable.
 
 **Verify:** `pnpm vitest run test/validation`
 
@@ -185,7 +186,7 @@ keyed by commit sha (D7) and queryable.
 ## S8 — Vertical integration path · depends: S3, S4, S5, S7 · DONE
 
 One end-to-end story, in a single test file, exercising the whole system in order: seed
-generation 0 → run a turn pinned to it (D9) → build a candidate → validate → promote →
+generation 0 → run a turn pinned to it (ADR-0002) → build a candidate → validate → promote →
 confirm the next turn uses the candidate → roll back → confirm the turn after that is back on
 the original.
 
@@ -199,7 +200,7 @@ why it is a slice rather than an afterthought.
 ## S9 — Durable Object SQLite store · depends: S2, S0.5 · DONE
 
 S2's conformance suite rerun against real DO SQLite under the workers pool, using
-`transactionSync()` (D6). Owns `src/storage/do-sqlite.ts`.
+`transactionSync()` (ADR-0003). Owns `src/storage/do-sqlite.ts`.
 
 **Verify:** `pnpm vitest run test/storage-do`
 
@@ -297,8 +298,8 @@ chunks at 1 MiB, `@cloudflare/computer` at 512 KiB.
 
 ## S16 — Capability preflight · depends: S13 · DONE
 
-Borrowed from the Darwin Gödel Machine, which rejects a candidate that fails to compile *or has
-lost the ability to edit code* before spending anything on benchmarks. A candidate that can no
+Borrowed from the Darwin Gödel Machine, which rejects a candidate that fails to compile _or has
+lost the ability to edit code_ before spending anything on benchmarks. A candidate that can no
 longer use its own `edit` primitive is a dead end regardless of how it scores, and discovering
 that through a full corpus run is both slow and diffuse.
 
@@ -310,7 +311,7 @@ maximise, because optimising hard against one benchmark amplifies brittle behavi
 
 ## Deferred and out of scope
 
-**Garbage collection — deferred deliberately (D13).** A Durable Object holds 10 GB and
+**Garbage collection — deferred deliberately (ADR-0007).** A Durable Object holds 10 GB and
 deduplicated module blobs are kilobytes, so there is no storage pressure for a long time.
 Meanwhile a root-discovery bug deletes the objects rollback depends on, turning the recovery
 mechanism into the thing needing recovery. Bad trade for disk we aren't short of.
@@ -321,4 +322,4 @@ webhooks, the container backend.
 **Not built, and worth being honest about:** judging whether a prompt actually got _better_
 needs live generation against the candidate prompt and scored trials over task invariants.
 That is a genuinely different mechanism from replay, and calling recorded-response replay a
-general validation corpus would paper over the gap (D14).
+general validation corpus would paper over the gap (ADR-0005).

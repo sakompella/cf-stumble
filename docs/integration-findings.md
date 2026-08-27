@@ -6,7 +6,7 @@ building, replay validation, attested promotion, rollback, reset, and module ded
 
 ## Supervisor state is not available yet
 
-S8 cannot exercise D17 against the supervisor because `src/supervisor/` is intentionally absent
+S8 cannot exercise ADR-0003's corpus-outside-generations claim against the supervisor because `src/supervisor/` is intentionally absent
 while S10 is in progress. The test keeps conversation history, learned facts, and corpus entries
 in a separate test-owned object, and uses the real `MemoryValidationResultStore` for validation
 evidence. Rollback leaves all of them intact, but this proves pointer rollback does not mutate
@@ -22,4 +22,5 @@ scripted executor, not a stub of the gate, but it is not the eventual supervisor
 
 No source slice semantics were changed, and no other integration seam failed in the sequential
 path. The remaining S10 work must replace the test-owned accumulated state and scripted executor
-with supervisor-owned implementations before D17 and unattended production turns can be claimed.
+with supervisor-owned implementations before ADR-0003 and unattended production turns can be
+claimed.
