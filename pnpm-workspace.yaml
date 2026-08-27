@@ -1,7 +1,11 @@
 # esbuild and workerd ship prebuilt native binaries fetched by their postinstall.
 # Both are first-party (evanw / Cloudflare) and required for vitest and workerd to run.
+# koffi is the FFI loader @hegeldev/hegel uses to reach libhegel, its native generation engine;
+# its postinstall picks the prebuilt library for this platform. Denying it leaves hegel unable to
+# load, which takes the whole Node property-test project down with it.
 allowBuilds:
   esbuild: true
+  koffi: true
   workerd: true
 # Cloudflare ships the Workers toolchain on a near-daily cadence pinned to a
 # compatibility date, so the release-age gate would block every routine update.
