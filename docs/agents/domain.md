@@ -1,49 +1,27 @@
-# Domain Docs
+# Domain docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the
-codebase. This repo is **single-context**: one `docs/agents/CONTEXT.md` and one
-`docs/agents/adr/`.
+Use this file to find and apply the repository's domain documentation. This is a single-context repository: it has one glossary at `docs/agents/CONTEXT.md` and one ADR directory at `docs/agents/adr/`.
 
-## Before exploring, read these
+## Before exploring
 
-- **`docs/agents/CONTEXT.md`** — the glossary of domain terms. Not at the repo root; see the
-  override note below.
-- **`docs/agents/adr/README.md`** — the ADR index, grouped by area. Start here to find which ADRs touch
-  the area you are about to work in, then read those.
+1. Read `docs/agents/CONTEXT.md` in full. It defines the terms used in this project.
+2. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change. The index groups decisions by owner.
 
-Both exist in this repo. Read `docs/agents/CONTEXT.md` in full, and read the ADRs touching the area you are
-about to work in. When a term or a decision is missing, the `/domain-modeling` skill (reached via
-`/grill-with-docs` and `/improve-codebase-architecture`) adds it lazily, when that term or decision
-actually gets resolved.
+When the glossary or ADRs lack a resolved term or decision, use `/domain-modeling` through `/grill-with-docs` or `/improve-codebase-architecture` after the issue is resolved.
 
-## Also read the design docs
+## Read the design docs too
 
-Everything under `docs/agents/` is agent-generated, including the ADRs. `docs/` outside this
-directory is reserved for hand-written human documentation and is currently empty. Write new
-agent-authored documentation here, not there.
+Everything in `docs/agents/` is agent-authored. `docs/` outside it is for human-authored documentation and is empty. Put new agent-authored documentation here.
 
-The directory splits three ways: `adr/` holds resolved positions, `design/` holds the reasoning
-and findings behind them, and the loose files at this level are skill configuration. New design
-writing goes in `design/`.
+`adr/` records current decisions. `design/` records the reasoning and findings behind them. Loose files in this directory configure skills.
 
-These carry the reasoning the ADRs compress away:
+- `docs/agents/design/generations.md` defines the generation data model. A commit is an ordinary commit; a generation is one attempted facet materialization. Materialization is immutable and activation uses an append-only ledger.
+- `docs/agents/design/design-history.md` records what changed the project's mind and what it cost. Read corrections as well as conclusions.
+- `docs/agents/design/review-findings.md` records what a green suite does _not_ prove. Read it before relying on a guarantee.
+- `docs/agents/design/prior-art.md` compares existing systems and records the lessons used here.
+- `docs/agents/design/slices.md` is the work plan. Each slice has a command that exits 0 or non-zero.
 
-- **`docs/agents/design/generations.md`** — the generation data model. A commit is an ordinary commit; a
-  generation is one attempted facet materialization. Materialization is immutable, activation is
-  an append-only ledger.
-- **`docs/agents/design/design-history.md`** — the reasoning behind the ADRs: what we thought, what changed our
-  mind, and what the change cost. Retractions are left visible rather than quietly edited, so read
-  the corrections as well as the conclusions.
-- **`docs/agents/design/review-findings.md`** — what a green test suite does _not_ prove. Read this before
-  trusting any guarantee.
-- **`docs/agents/design/prior-art.md`** — what already exists in this space and what it teaches.
-- **`docs/agents/design/slices.md`** — the work breakdown, each slice with a command that exits 0 or non-zero.
-
-The decisions that used to live in a single `docs/decisions.md` have been merged into `docs/agents/adr/`,
-which is now the only register of resolved positions. Nothing else should grow into a second one:
-when a decision is made or revisited, it goes in `docs/agents/adr/` and the reasoning behind it goes in
-`docs/agents/design/design-history.md`. A new ADR also needs a line in `docs/agents/adr/README.md`, and
-`test/docs/adr-index.test.ts` fails until it has one.
+The old `docs/decisions.md` was consolidated into `docs/agents/adr/`, which is the only decision register. Add a resolved decision there and put its reasoning in `docs/agents/design/design-history.md`. New ADRs also need an entry in `docs/agents/adr/README.md`; `test/docs/adr-index.test.ts` checks the index.
 
 ## File structure
 
@@ -66,37 +44,20 @@ when a decision is made or revisited, it goes in `docs/agents/adr/` and the reas
 └── src/
 ```
 
-The `/domain-modeling` skill's default layout puts `CONTEXT.md` at the repo root and ADRs at
-`docs/adr/`. This repo overrides both, to `docs/agents/CONTEXT.md` and `docs/agents/adr/`, so that
-everything agents generate sits under one directory. Read these paths from here rather than from
-the skill, which will otherwise look at the root and find nothing.
+The `/domain-modeling` skill normally looks for `CONTEXT.md` at the repository root and ADRs in `docs/adr/`. This repository puts them in `docs/agents/CONTEXT.md` and `docs/agents/adr/`, so that all agent-authored documentation stays together. Use the paths in this file, not the skill defaults.
 
-The glossary override is the sharper of the two, because several skills name `CONTEXT.md` at the
-repo root as a one-line habit rather than reading it from this config. If one of them reports no
-glossary, this is why.
+A root `CONTEXT-MAP.md` would indicate a multi-context repository with per-context glossaries. This repository has none and is not a monorepo. `pnpm-workspace.yaml` only approves build scripts for esbuild and workerd; it does not define workspace packages.
 
-A `CONTEXT-MAP.md` at the root would signal a multi-context repo with per-context `CONTEXT.md`
-files (that signal is still read from the root). This repo has none and is not a monorepo — the
-`pnpm-workspace.yaml` present here only carries build-script approvals for esbuild and workerd,
-not workspace packages.
+## Use the glossary
 
-## Use the glossary's vocabulary
+Use terms from `docs/agents/CONTEXT.md` whenever you name a domain concept in an issue title, refactor proposal, hypothesis, or test name. Do not substitute words listed under `_Avoid_:`.
 
-When your output names a domain concept — an issue title, a refactor proposal, a hypothesis, a
-test name — use the term as defined in `docs/agents/CONTEXT.md`. Don't drift to synonyms the glossary
-explicitly avoids.
+A missing concept means either the project does not use that language or the glossary needs a new term. Reconsider the wording first; record a real gap for `/domain-modeling`.
 
-If the concept you need isn't in the glossary yet, that's a signal: either you're inventing
-language the project doesn't use (reconsider), or there's a real gap (note it for
-`/domain-modeling`).
-
-Note that this project's vocabulary has been deliberately sharpened at least once already:
-"generation" means an _attempted facet materialization_, not a commit, and the registry is a
-registry rather than "tags". Precision here is load-bearing, not pedantry.
+The distinction between a generation and a commit, for example, affects the data model. A registry identifies attempts; Git tags name revisions. This vocabulary prevents those concepts from collapsing into one another.
 
 ## Flag ADR conflicts
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently
-overriding:
+State an ADR conflict instead of silently overriding it:
 
 > _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_

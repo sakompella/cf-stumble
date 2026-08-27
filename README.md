@@ -1,87 +1,39 @@
 # cf-stumble
 
-A personal AI coding-agent harness on Cloudflare Workers where the agent's own definition —
-its model loop, tool registry, prompts, skills, policies, and module code — is versioned in Git
-and materialized as immutable numbered **generations**, modelled on NixOS system generations.
+cf-stumble is a self-modifying AI coding-agent harness for Cloudflare Workers. The agent definition, including its model loop, tool registry, prompts, skills, policies, and module code, lives in Git. The system materializes that definition as immutable, numbered **generations**, borrowing the recovery model from NixOS.
 
-The agent can modify itself. A self-modification is a _candidate_ build that must pass a gate
-before it can go live. Promotion is an atomic pointer switch. Rollback is the same switch in
-reverse. A live definition is never patched in place, so there is no state in which the agent is
-half-upgraded.
+The agent can change its own definition, but it cannot decide that the change may run. A candidate must pass the validation gate before promotion atomically moves the live pointer. Rollback moves that pointer back. Nothing patches a live definition in place, so an upgrade cannot leave the agent half changed.
 
-## Why it's shaped this way
+## Why it is shaped this way
 
-A self-modifying agent has an obvious failure mode: it breaks itself, and the thing that would
-have fixed it is the thing that broke. Three properties are arranged against that.
+A self-modifying agent can break the code that would repair it. cf-stumble keeps recovery outside the part the agent can alter.
 
-**The supervisor is not modifiable by the agent.** The generation registry, live pointer,
-accumulated context, and replay corpus live in a supervisor Durable Object that is deployed
-normally. Agent code runs in a Durable Object _facet_ loaded through the Dynamic Worker Loader,
-with its own isolated SQLite and no direct access to supervisor state; it can influence that state
-only through sanctioned control paths the supervisor validates. That containment is the entire
-safety argument, which is why it is the first thing built and tested rather than the last (see
-ADR-0024).
+The supervisor is not agent-authored code. Its Durable Object holds the generation registry, live pointer, accumulated context, and compatibility corpus. The agent runs in an isolated Durable Object facet through the Dynamic Worker Loader, with separate SQLite and no direct supervisor access. It can affect supervisor state only through sanctioned paths that the supervisor validates. That boundary is the safety argument, so the project builds and tests it first (see ADR-0024).
 
-**Generation 0 is pinned and always reachable.** It is never garbage-collected, and reset routes
-through the supervisor without touching agent code. An escape hatch the agent can break is not
-an escape hatch, so it is tested against candidate code that fails to load and candidate code
-that throws on init.
+Generation 0 stays pinned and reachable. Reset goes through the supervisor, without running agent code, and is tested against a candidate that cannot load and one that throws during init. An escape hatch the agent can break is no recovery path.
 
-**The facet is the mutable half; the supervisor is not.** Model loop, tool registry, prompts,
-skills, policies, module code, and the agent's work environment can all change from one candidate
-to the next — that evolvability is the point of the project. What stays fixed is the supervisor's
-recovery authority: generation history, the live pointer, and the validation gate, none of which
-a facet can reach except through the sanctioned build → validate → promote path (see ADR-0024).
-`read`, `write`, `edit`, and `bash` are the bootstrap harness the first generation ships with, not
-a permanent ceiling on what a later agent definition is allowed to grow into.
+The facet owns the part that must evolve: its model loop, tools, prompts, skills, policies, module code, and work environment. The supervisor keeps recovery authority: the generation registry, live pointer, and validation gate. `read`, `write`, `edit`, and `bash` are the bootstrap harness the first generation ships with, not a permanent ceiling on what a later agent definition is allowed to grow into.
 
 ## Storage
 
-Authored history uses the Git object model: commits carry content and ancestry, their trees are
-module manifests, and modules are blobs. A generation is a separately numbered attempt to
-materialize one of those commits, so the same commit may be attempted more than once. Content
-addressing still means an unchanged module across fifty commits is stored once.
+Authored history uses Git objects. Commits carry content and ancestry; trees are module manifests; modules are blobs. A generation is a numbered attempt to materialize a commit, so one commit can produce several generations. Unchanged modules remain content-addressed and are stored once.
 
-The current implementation builds Git objects in memory and writes them to a content-addressed
-store without a working tree. That is an implementation choice, not a restriction on the facet:
-the planned Computer integration gives the facet its own mutable working environment, then hands
-an immutable candidate to the supervisor through a sanctioned boundary that is still being
-designed.
+The implementation builds Git objects in memory and stores them directly, without a working tree. That does not limit the facet. The planned Computer integration gives it a mutable work environment, then passes an immutable candidate to the supervisor through a sanctioned boundary that is still being designed.
 
-Two things deliberately sit outside git. The live pointer is one row in the supervisor's
-SQLite rather than a git ref, so the switch happens inside the same transaction domain as
-everything else and a reader can never see the pointer and the state it names disagree.
-Validation results are a SQLite table keyed by commit sha rather than git notes, because the
-questions we ask of them ("every rejected candidate whose failure touched the retry policy")
-are `WHERE` clauses, not history walks.
+The live pointer and validation evidence stay outside Git. The pointer is one row in supervisor SQLite, so its switch shares a transaction with the state it names. Validation evidence is a SQLite table keyed by commit sha, because questions such as "every rejected candidate whose failure touched the retry policy" are `WHERE` clauses, not Git history walks.
 
-We write our own git object codec rather than depending on isomorphic-git. Not because
-isomorphic-git can't do this — it exports `writeTree` and `writeCommit`, which take objects
-directly and run fine on memfs. The reason is the storage surface: isomorphic-git wants a
-ten-method `FsClient` and writes zlib-compressed loose objects into it, which would mean
-emulating a filesystem over Durable Object SQLite so git can emulate a content-addressed store
-on top of something that already is one. The codec is 614 lines, keeps the four-function store
-honest, and because it keeps Git's exact byte format isomorphic-git works as an independent test
-oracle inside workerd. See ADR-0009 for the case against the hand-written codec and for the
-replacement it was later measured against.
+The project has its own Git object codec instead of isomorphic-git. isomorphic-git exports `writeTree` and `writeCommit`, but it expects a ten-method `FsClient` and writes zlib-compressed loose objects. Using it would mean emulating a filesystem over Durable Object SQLite so Git can emulate a content-addressed store on top of something that already is one. The codec is 614 lines, keeps the four-function store honest, and preserves Git's exact byte format, so isomorphic-git can act as an independent oracle inside workerd. ADR-0009 records the case against the codec and the later measurement that replaced it.
 
 ## Documentation
 
-Everything under `docs/agents/` was written by agents working on this project. `docs/` outside
-that directory is reserved for hand-written human documentation.
+Everything under `docs/agents/` is agent-authored. `docs/` outside that directory is for hand-written human documentation.
 
-- **`docs/agents/adr/README.md`** — the decision index, grouped by area. Start here.
-- **`docs/agents/adr/`** — the current decision register, one decision per file. When a decision is
-  replaced, whatever still matters is folded into the new ADR and the old file is deleted; Git
-  keeps the history, so the register only ever holds currently-useful positions.
-- **`docs/agents/design/design-history.md`** — the reasoning behind those decisions: what we thought, what
-  changed our mind, and what the change cost. The ADRs carry the position; this carries the arc.
-- **`docs/agents/design/slices.md`** — the work broken into independently verifiable slices, each with a
-  command that exits 0 or non-zero. No slice whose done condition is prose.
-- **`docs/agents/design/review-findings.md`** — what a green test suite does _not_ prove. Read this before
-  trusting the validation gate.
-- **`docs/agents/design/integration-findings.md`** — what did and did not compose when the layers were first
-  driven end to end, including the gaps that remain.
+- `docs/agents/adr/README.md` indexes current decisions by area. Start there.
+- `docs/agents/adr/` is the current decision register, one decision per file. A replacement folds in what still matters and deletes the obsolete ADR; Git keeps the history.
+- `docs/agents/design/design-history.md` records the reasoning behind decisions, including changes of mind and their cost.
+- `docs/agents/design/slices.md` breaks work into independently verifiable slices with commands that exit 0 or non-zero.
+- `docs/agents/design/review-findings.md` records what a green suite does _not_ prove.
+- `docs/agents/design/integration-findings.md` records what did and did not compose when the layers first ran end to end.
 
 ## Development
 
@@ -92,36 +44,18 @@ pnpm typecheck     # tsc --noEmit, strict, typed against workers-types
 pnpm lint          # oxlint type-aware, --max-warnings=0
 ```
 
-**Everything runs in workerd.** There is no Node-side test path and nothing imports `node:`
-builtins, so a passing test says something about the runtime we actually deploy to. The git
-codec's independent oracle is isomorphic-git rather than the `git` binary precisely because a
-subprocess cannot run there.
+Tests run in workerd, not Node, and no code imports `node:` builtins. A passing test exercises the runtime that deploys. The codec uses isomorphic-git as its independent oracle because workerd cannot run the `git` binary as a subprocess.
 
-Facets and the Dynamic Worker Loader need Workers Paid to _deploy_, but run locally with no
-account at all, so the isolation guarantees are tested for real rather than mocked.
+Facets and the Dynamic Worker Loader require Workers Paid to deploy, but they run locally without an account. The isolation tests exercise the real boundary instead of a mock.
 
 ## Status
 
-The generation machinery works end to end. Generation 0 seeds, a turn pins to it, a candidate
-builds and is validated through the real ratchet, promotion moves the pointer on a real
-attestation, the next turn picks up the candidate, and rollback restores the previous one — all
-covered by `test/integration/`.
+The generation path works end to end. Generation 0 seeds, a turn pins to it, a candidate materializes and passes the ratchet, promotion moves the pointer on a real attestation, the next turn selects the candidate, and rollback restores the prior generation. `test/integration/` covers that path.
 
-Facet isolation is proven against real workerd rather than mocked: the facet gets a separate
-SQLite database, an empty `env` with no `LOADER`, blocked network egress, no route back to the
-supervisor, and reset survives both a candidate that fails to load and one that throws on init.
+Facet isolation runs in workerd. The facet gets separate SQLite, an empty `env` with no `LOADER`, blocked network egress, and no route to the supervisor. Reset survives both a candidate that fails to load and one that throws during init.
 
-Promotion cannot be forged: `POST /promote` takes only a candidate sha and the supervisor runs
-the gate itself, so the attestation never leaves the process. Privileged routes require a
-constant-time-compared secret and fail closed. Rollback is restricted to generations previously
-recorded as live, and quarantine stops a known-bad generation returning.
+Promotion cannot be forged. `POST /promote` accepts only a candidate sha; the supervisor runs the gate and retains the attestation. Privileged routes use a constant-time-compared secret and fail closed. Rollback targets only generations previously recorded as live, and quarantine prevents a known-bad generation from returning.
 
-214 tests pass in workerd.
+259 tests pass across 43 files in two vitest projects.
 
-**What is honestly not done.** Garbage collection is deliberately cut (ADR-0007). The current
-agent runtime still materializes prompt, policy, and skills around the bootstrap four-tool
-executor; it does not yet load a generation's complete evolvable harness into a facet. The last
-hop from stored bytes to candidate-owned execution is therefore unexercised. There is no real
-model provider, `@cloudflare/computer` is not wired as the facet's workspace, the sanctioned
-candidate-submission boundary is not designed, and nothing has been deployed. See
-`docs/agents/design/review-findings.md` for what a green suite does not prove.
+**What is honestly not done.** Garbage collection is cut (ADR-0007). The current agent runtime materializes prompt, policy, and skills around the bootstrap four-tool executor, but does not yet load a generation's complete evolvable harness into a facet. The last hop from stored bytes to candidate-owned execution is unexercised. There is no real model provider, `@cloudflare/computer` is not wired as the facet's workspace, the sanctioned candidate-submission boundary is not designed, and nothing has been deployed. `docs/agents/design/review-findings.md` explains what a green suite does not prove.
