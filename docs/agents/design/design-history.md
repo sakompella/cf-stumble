@@ -230,3 +230,36 @@ surfaced three latent typing bugs — `globalThis.crypto` and two `TextDecoder({
 calls — that had only ever type-checked correctly against Node's global lib types, which
 `@cloudflare/workers-types` doesn't provide. The Node half hadn't just been redundant; it had been
 quietly masking bugs in code that only ever needs to run in the one runtime that matters.
+
+## Three decision registers, and the one that had quietly gone wrong
+
+The project accumulated three places where a decision could be recorded, none of them wrong on
+its own. `docs/decisions.md` held resolved positions as D1–D17 with reversal costs. A
+`decisions.tsv` journal held 53 timestamped rows of decisions and findings from the overnight
+build. `docs/adr/` arrived later with the engineering-skills convention and covered much of the
+same ground under different numbers. Nothing said which won when they disagreed, and nothing
+linked a D-number to the ADR that superseded it.
+
+They disagreed. D8 still read "a generation is a commit; the manifest is its tree" long after
+ADR-0001 was marked superseded, ADR-0002 replaced that model, and the glossary was rewritten to
+say a commit is explicitly _not_ a generation. A reader starting from `decisions.md` — the file
+the README pointed at first — would have built the pre-remodel mental model and found code that
+contradicted it. The failure is not that someone forgot to update an entry; it is that two
+registers of current position cannot both be current, so one of them is always drifting and
+there is no moment at which anyone notices.
+
+The tsv had the opposite problem: it was doing two jobs with one schema. Rows like "vendor
+anti-slop, adopt via ratchet" are decisions; rows like "DO SQLite fails on large objects with raw
+SQLITE_TOOBIG" are findings; the columns could not tell them apart, so both aged the same way and
+neither had an owner. Its genuinely irreplaceable content turned out to be small — a branding
+convention, the reason an untestable cycle guard exists, and about fifteen evidence citations
+that made other decisions checkable — and its chronology was already better served by 224 git
+commits covering the same window.
+
+Consolidating onto ADRs cost about thirty rewritten cross-references and produced eight new
+decision records, five of which were positions that had been sitting in prose all along: one
+executor for the gate and live turns, keeping Git at all rather than two SQL tables, ranking
+supervisor reachability above egress, the WebAssembly shell, and preflight as a capability floor.
+That last group is the real lesson. The decisions were not missing because nobody wrote them
+down; they were missing because they had been written down as _narrative_, where a position is
+indistinguishable from an observation, and where nothing goes red when the code stops matching.

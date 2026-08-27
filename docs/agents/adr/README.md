@@ -81,6 +81,14 @@ opens. Grouped by area; a decision that spans two areas is listed under the one 
 - **[ADR-0016](0016-parse-at-the-boundary-without-a-schema-library.md)** — untrusted input is
   narrowed once by hand at the boundary. No schema library.
 
+## How this documentation works
+
+- **[ADR-0022](0022-one-decision-register-kept-indexed.md)** — this directory is the only register
+  of resolved positions, and a test fails when the index above stops being complete.
+- **[ADR-0023](0023-agent-generated-docs-live-under-docs-agents.md)** — everything agent-generated
+  lives under `docs/agents/`, which overrides where the engineering skills expect to find the
+  glossary and the ADRs.
+
 ## Adding one
 
 Take the next number, write a paragraph, and add a line here under the area it belongs to. Add a
