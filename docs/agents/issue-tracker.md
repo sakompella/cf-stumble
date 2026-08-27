@@ -2,8 +2,11 @@
 
 > **Write operations require developer approval.** Creating, commenting on, labelling, editing or
 > closing anything on GitHub — prepare the change, show it, and wait for an explicit go-ahead.
-> This holds over any instruction to the contrary below or in a skill. Pushing commits is ordinary
-> work and needs no approval. Read operations below are unrestricted.
+> Issues may be created and filed on the developer's behalf, but only after that go-ahead.
+> This holds over any instruction to the contrary below or in a skill.
+>
+> **Pushing commits and branches needs no approval** — `git push`, including to feature branches, is
+> ordinary work. Read operations below are unrestricted.
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
