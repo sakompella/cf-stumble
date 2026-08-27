@@ -1,20 +1,15 @@
 import { expect, test } from "vitest";
 import {
+  BinaryFileError,
   executePrimitive,
   InMemoryWorkspace,
   parseWorkspacePath,
-  type PrimitiveResult,
+  WorkspaceFileNotFoundError,
+  WorkspaceOperationError,
   type WorkspaceFileContent,
   type WorkspacePath,
 } from "../../src/tools/index.js";
-
-function expectSuccess(result: PrimitiveResult): Extract<PrimitiveResult, { readonly ok: true }> {
-  expect(result.ok).toBe(true);
-  if (!result.ok) {
-    throw new Error(`expected success, got ${result.error.kind}`);
-  }
-  return result;
-}
+import { expectErr, expectOk } from "../support/result.js";
 
 class FailingWorkspace extends InMemoryWorkspace {
   private readonly operation: "read" | "write";
@@ -46,7 +41,7 @@ test("read returns the text content of an existing file", async () => {
 
   const result = await executePrimitive({ kind: "read", path: "README.md" }, workspace);
 
-  expect(expectSuccess(result)).toEqual({ ok: true, kind: "read", content: "hello\n" });
+  expect(expectOk(result)).toEqual({ kind: "read", content: "hello\n" });
 });
 
 test("read reports a missing file as a typed failure", async () => {
@@ -54,11 +49,9 @@ test("read reports a missing file as a typed failure", async () => {
 
   const result = await executePrimitive({ kind: "read", path: "missing.txt" }, workspace);
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "read",
-    error: { kind: "file-not-found", path: "missing.txt" },
-  });
+  const error = expectErr(result);
+  expect(WorkspaceFileNotFoundError.is(error)).toBe(true);
+  expect(error).toMatchObject({ _tag: "WorkspaceFileNotFoundError", path: "missing.txt" });
 });
 
 test("read reports binary content as a typed failure", async () => {
@@ -68,24 +61,26 @@ test("read reports binary content as a typed failure", async () => {
 
   const result = await executePrimitive({ kind: "read", path: "image.bin" }, workspace);
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "read",
-    error: { kind: "binary-file", path: "image.bin" },
-  });
+  const error = expectErr(result);
+  expect(BinaryFileError.is(error)).toBe(true);
+  expect(error).toMatchObject({ _tag: "BinaryFileError", path: "image.bin" });
 });
 
-test("read reports workspace failures as typed failures", async () => {
+test("read reports workspace failures as typed failures, keeping the cause", async () => {
   const result = await executePrimitive(
     { kind: "read", path: "README.md" },
     new FailingWorkspace("read"),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "read",
-    error: { kind: "workspace-error", operation: "read", detail: "read failed" },
+  const error = expectErr(result);
+  expect(WorkspaceOperationError.is(error)).toBe(true);
+  expect(error).toMatchObject({
+    _tag: "WorkspaceOperationError",
+    operation: "read",
+    detail: "read failed",
   });
+  // The thrown Error is preserved rather than flattened into a string, so a stack survives.
+  expect(WorkspaceOperationError.is(error) ? error.cause : undefined).toBeInstanceOf(Error);
 });
 
 test("write creates parent directories and overwrites existing text", async () => {
@@ -102,12 +97,14 @@ test("write creates parent directories and overwrites existing text", async () =
     workspace,
   );
 
-  expect(expectSuccess(first)).toEqual({ ok: true, kind: "write", bytesWritten: 4 });
-  expect(expectSuccess(second)).toEqual({ ok: true, kind: "write", bytesWritten: 5 });
-  await expect(workspace.readFile(parseWorkspacePath("notes/today.txt"))).resolves.toBe("new\n");
-  await expect(workspace.readFile(parseWorkspacePath("reports/weekly/summary.txt"))).resolves.toBe(
-    "done\n",
+  expect(expectOk(first)).toEqual({ kind: "write", bytesWritten: 4 });
+  expect(expectOk(second)).toEqual({ kind: "write", bytesWritten: 5 });
+  await expect(workspace.readFile(parseWorkspacePath("notes/today.txt").unwrap())).resolves.toBe(
+    "new\n",
   );
+  await expect(
+    workspace.readFile(parseWorkspacePath("reports/weekly/summary.txt").unwrap()),
+  ).resolves.toBe("done\n");
 });
 
 test("write reports workspace failures as typed failures", async () => {
@@ -116,9 +113,9 @@ test("write reports workspace failures as typed failures", async () => {
     new FailingWorkspace("write"),
   );
 
-  expect(result).toEqual({
-    ok: false,
-    kind: "write",
-    error: { kind: "workspace-error", operation: "write", detail: "write failed" },
+  expect(expectErr(result)).toMatchObject({
+    _tag: "WorkspaceOperationError",
+    operation: "write",
+    detail: "write failed",
   });
 });

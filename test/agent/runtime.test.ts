@@ -136,7 +136,7 @@ test("executes a materialized generation through a live model source and primiti
     ]);
     expect(result.transcript.turns[0]?.modelResponses).toHaveLength(2);
   }
-  await expect(workspace.readFile(parseWorkspacePath("result.txt"))).resolves.toBe(
+  await expect(workspace.readFile(parseWorkspacePath("result.txt").unwrap())).resolves.toBe(
     "from generation\n",
   );
 });
@@ -182,8 +182,10 @@ test("dispatches all four real primitives and feeds results into the next model 
     );
     expect(replayed.status).toBe("PASS");
   }
-  await expect(workspace.readFile(parseWorkspacePath("notes.txt"))).resolves.toBe("created\n");
-  await expect(workspace.readFile(parseWorkspacePath("src/app.ts"))).resolves.toBe(
+  await expect(workspace.readFile(parseWorkspacePath("notes.txt").unwrap())).resolves.toBe(
+    "created\n",
+  );
+  await expect(workspace.readFile(parseWorkspacePath("src/app.ts").unwrap())).resolves.toBe(
     "const answer = 2;\n",
   );
 });
@@ -219,7 +221,7 @@ test("the same executor and effects work with recorded replay and live sources",
     { name: "same-executor", seed: 3, nowMs: 1_700_000_100_000 },
   );
   expect(recorded).toMatchObject({ status: "completed" });
-  await expect(recordedWorkspace.readFile(parseWorkspacePath("result.txt"))).resolves.toBe(
+  await expect(recordedWorkspace.readFile(parseWorkspacePath("result.txt").unwrap())).resolves.toBe(
     "same\n",
   );
 
@@ -260,7 +262,10 @@ test("reports distinct typed turn failures", async () => {
   );
   expect(primitive).toMatchObject({
     status: "failed",
-    failure: { kind: "primitive-failure", error: { kind: "file-not-found" } },
+    failure: {
+      kind: "primitive-failure",
+      error: { _tag: "WorkspaceFileNotFoundError", path: "missing.txt" },
+    },
   });
 
   const exhausted = await failedTurn();

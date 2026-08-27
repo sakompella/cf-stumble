@@ -10,7 +10,7 @@ import {
   PRIMITIVE_KINDS,
   type PrimitiveCall as ToolPrimitiveCall,
   type PrimitiveKind,
-  type PrimitiveResult as ToolPrimitiveResult,
+  type PrimitiveSuccess as ToolPrimitiveSuccess,
 } from "../../tools/index.js";
 import type { AgentDefinition } from "./definition.js";
 import { ModelSourceError } from "./model-errors.js";
@@ -243,7 +243,7 @@ export function toReplayCall(call: ToolPrimitiveCall): ReplayPrimitiveCall {
 
 export function capturedToolResult(
   call: ToolPrimitiveCall,
-  result: ToolPrimitiveResult,
+  result: ToolPrimitiveSuccess,
   workspaceAfter: readonly { readonly path: string; readonly content: string }[] | undefined,
 ): CapturedToolResult {
   const capturedCall = toReplayCall(call);
@@ -257,10 +257,12 @@ export function capturedToolResult(
   return { call: capturedCall, result: capturedResult };
 }
 
-function toReplayResult(result: ToolPrimitiveResult): ReplayPrimitiveResult {
-  if (!result.ok) {
-    throw new TypeError("internal error: primitive failure cannot become a replay result");
-  }
+/**
+ * A replay transcript records what happened, and a failed primitive produces no captured result.
+ * The parameter type is the success type, so handing this a failure is no longer representable —
+ * the guard this function used to need is gone.
+ */
+function toReplayResult(result: ToolPrimitiveSuccess): ReplayPrimitiveResult {
   switch (result.kind) {
     case "read":
       return { kind: "read", content: result.content };

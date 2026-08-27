@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      better-result:
+        specifier: ^3.0.1
+        version: 3.0.1
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1
@@ -1006,6 +1010,9 @@ packages:
 
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
+
+  better-result@3.0.1:
+    resolution: {integrity: sha512-rnCeqEXkKPHmz5MO5ZroPRDyHe4YvlNPyy7qj8cVcWs/GnvSvC3086G74/220W+wWcIWlXgzvcjskFV0A4blUQ==}
 
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
@@ -2157,6 +2164,8 @@ snapshots:
       possible-typed-array-names: 1.1.0
 
   base64-js@1.5.1: {}
+
+  better-result@3.0.1: {}
 
   blake3-wasm@2.1.5: {}
 

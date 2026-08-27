@@ -1,7 +1,7 @@
 import { assertNever } from "../git/types.js";
 import type { AgentDefinition, TurnFailure, TurnResult } from "../agent/runtime/index.js";
 import type { CapturedToolResult } from "../replay/schema.js";
-import type { PrimitiveCall, PrimitiveFailure } from "../tools/index.js";
+import type { PrimitiveCall, PrimitiveError } from "../tools/index.js";
 import { parseWorkspacePath } from "../tools/index.js";
 import type { Workspace, WorkspaceFileContent } from "../tools/index.js";
 import type { PreflightCapability, PreflightCheck, PreflightProbe } from "./preflight.js";
@@ -146,9 +146,15 @@ async function verifyTextFile(
   capability: Exclude<PreflightCapability, "materialization">,
   operation: string,
 ): Promise<PreflightCheck> {
+  // Probe paths are our own constants, so an invalid one is a defect in this module rather than a
+  // condition to report. Parsed outside the try so a panic is not mistaken for a workspace fault.
+  const probePath = parseWorkspacePath(path).unwrap(
+    `preflight probe declares an invalid workspace path: ${JSON.stringify(path)}`,
+  );
+
   let content: WorkspaceFileContent | undefined;
   try {
-    content = await workspace.readFile(parseWorkspacePath(path));
+    content = await workspace.readFile(probePath);
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
     return inconclusive(capability, `workspace ${operation} check failed: ${detail}`);
@@ -186,47 +192,46 @@ export function failedTurn(
   }
 }
 
-function isHarnessPrimitiveError(error: PrimitiveFailure["error"]): boolean {
-  switch (error.kind) {
-    case "workspace-error":
-    case "timeout":
-    case "invalid-timeout":
-      return true;
-    case "invalid-path":
-    case "file-not-found":
-    case "binary-file":
-    case "empty-search":
-    case "no-match":
-    case "ambiguous-match":
-      return false;
-    default:
-      return assertNever(error, "preflight primitive failure");
-  }
+/**
+ * Whether the harness failed rather than the candidate.
+ *
+ * This split is the reason preflight has three outcomes instead of two: charging a candidate with
+ * a FAIL for the harness's own broken workspace would ratchet in a regression the candidate never
+ * caused. A harness fault is INCONCLUSIVE, which blocks promotion without recording a regression.
+ *
+ * Exhaustive over `PrimitiveError`, so adding a primitive failure forces a decision here rather
+ * than defaulting into one.
+ */
+function isHarnessPrimitiveError(error: PrimitiveError): boolean {
+  return error.match<PrimitiveError, boolean>({
+    WorkspaceOperationError: () => true,
+    CommandTimeoutError: () => true,
+    InvalidCommandTimeoutError: () => true,
+    InvalidWorkspacePathError: () => false,
+    WorkspaceFileNotFoundError: () => false,
+    BinaryFileError: () => false,
+    EmptyEditSearchError: () => false,
+    EditNoMatchError: () => false,
+    EditAmbiguousMatchError: () => false,
+  });
 }
 
-function primitiveFailureDetail(error: PrimitiveFailure["error"]): string {
-  switch (error.kind) {
-    case "invalid-path":
-      return `invalid path ${JSON.stringify(error.path)} (${error.reason})`;
-    case "workspace-error":
-      return `workspace error during ${error.operation}: ${error.detail}`;
-    case "file-not-found":
-      return `file ${JSON.stringify(error.path)} was not found`;
-    case "binary-file":
-      return `file ${JSON.stringify(error.path)} is binary`;
-    case "empty-search":
-      return "edit search text must not be empty";
-    case "no-match":
-      return "expected exactly one match, found none";
-    case "ambiguous-match":
-      return `expected exactly one match, found ${error.occurrences}`;
-    case "timeout":
-      return `workspace command timed out after ${error.timeoutMs}ms`;
-    case "invalid-timeout":
-      return `invalid bash timeout ${error.timeoutMs}`;
-    default:
-      return assertNever(error, "preflight primitive failure detail");
-  }
+/**
+ * The preflight-facing wording for a primitive failure. Built here rather than read off the
+ * error's own `message`, which is developer-facing and free to change.
+ */
+function primitiveFailureDetail(error: PrimitiveError): string {
+  return error.match<PrimitiveError, string>({
+    InvalidWorkspacePathError: (e) => `invalid path ${JSON.stringify(e.path)} (${e.rejection})`,
+    WorkspaceOperationError: (e) => `workspace error during ${e.operation}: ${e.detail}`,
+    WorkspaceFileNotFoundError: (e) => `file ${JSON.stringify(e.path)} was not found`,
+    BinaryFileError: (e) => `file ${JSON.stringify(e.path)} is binary`,
+    EmptyEditSearchError: () => "edit search text must not be empty",
+    EditNoMatchError: () => "expected exactly one match, found none",
+    EditAmbiguousMatchError: (e) => `expected exactly one match, found ${e.occurrences}`,
+    CommandTimeoutError: (e) => `workspace command timed out after ${e.timeoutMs}ms`,
+    InvalidCommandTimeoutError: (e) => `invalid bash timeout ${e.timeoutMs}`,
+  });
 }
 
 function pass(capability: Exclude<PreflightCapability, "materialization">): PreflightCheck {

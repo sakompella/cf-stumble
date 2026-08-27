@@ -29,6 +29,13 @@ export default defineConfig({
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off",
 
+    // The default of 1 assumes a class is a whole module's worth of concept. That holds for a
+    // stateful class and fails for a tagged-error family, where each variant is a few lines and
+    // the family read together *is* the design — splitting `src/tools/errors.ts` into nine files
+    // would hide the failure taxonomy to satisfy a count. A ceiling still catches a real
+    // grab-bag; only the default of 1 is wrong here.
+    "eslint/max-classes-per-file": ["warn", { max: 12 }],
+
     // Clean on adoption — enforced immediately.
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-module-mocking": "error",
