@@ -103,8 +103,8 @@ The workspace API supplied by `@cloudflare/computer`, which may implement an age
 _Avoid_: workspace (when the platform API is meant)
 
 **Four primitives**:
-The tool registry generation 0 ships with: `read`, `write`, `edit`, and `bash`. They are the bootstrap harness, not a permanent ceiling on what a later agent definition is allowed to grow into, because the facet's harness is meant to evolve.
-_Avoid_: fixed action space, permanent capabilities
+The tool registry generation 0 ships with: `read`, `write`, `edit`, and `bash`. They are the bootstrap tool registry, not a permanent ceiling on what a later agent definition is allowed to grow into, because the facet's harness is meant to evolve. They are one part of the harness, not the whole of it: the harness also covers the model loop, prompts, policies, runtime, and workspace.
+_Avoid_: fixed action space, permanent capabilities, bootstrap harness
 
 **Agent definition**:
 The versioned material that describes agent behavior: model loop, tool registry, prompt, policy, skills, and agent-authored modules. It excludes the supervisor and accumulated context.

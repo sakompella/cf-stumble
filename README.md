@@ -12,7 +12,7 @@ The supervisor is not agent-authored code. Its Durable Object holds the generati
 
 Generation 0 stays pinned and reachable. Reset goes through the supervisor, without running agent code, and is tested against a candidate that cannot load and one that throws during init. An escape hatch the agent can break is no recovery path.
 
-The facet owns the part that must evolve: its model loop, tools, prompts, skills, policies, module code, and work environment. The supervisor keeps recovery authority: the generation registry, live pointer, and validation gate. `read`, `write`, `edit`, and `bash` are the bootstrap harness the first generation ships with, not a permanent ceiling on what a later agent definition is allowed to grow into.
+The facet owns the part that must evolve: its model loop, tools, prompts, skills, policies, module code, and work environment. The supervisor keeps recovery authority: the generation registry, live pointer, and validation gate. `read`, `write`, `edit`, and `bash` are the bootstrap tool registry the first generation ships with, not a permanent ceiling on what a later agent definition is allowed to grow into.
 
 ## Storage
 
@@ -39,7 +39,7 @@ Everything under `docs/agents/` is agent-authored. `docs/` outside that director
 
 ```
 pnpm install
-pnpm test          # all tests, inside real workerd
+pnpm test          # both projects: behaviour in workerd, properties in Node
 pnpm typecheck     # tsc --noEmit, strict, typed against workers-types
 pnpm lint          # oxlint type-aware, --max-warnings=0
 ```
@@ -56,6 +56,6 @@ Facet isolation runs in workerd. The facet gets separate SQLite, an empty `env` 
 
 Promotion cannot be forged. `POST /promote` accepts only a candidate sha; the supervisor runs the gate and retains the attestation. Privileged routes use a constant-time-compared secret and fail closed. Rollback targets only generations previously recorded as live, and quarantine prevents a known-bad generation from returning.
 
-259 tests pass across 43 files in two vitest projects.
+291 tests pass across 43 files: 269 in workerd, and 22 Hegel property tests in Node (ADR-0008).
 
 **What is honestly not done.** Garbage collection is cut (ADR-0007). The current agent runtime materializes prompt, policy, and skills around the bootstrap four-tool executor, but does not yet load a generation's complete evolvable harness into a facet. The last hop from stored bytes to candidate-owned execution is unexercised. There is no real model provider, `@cloudflare/computer` is not wired as the facet's workspace, the sanctioned candidate-submission boundary is not designed, and nothing has been deployed. `docs/agents/design/review-findings.md` explains what a green suite does not prove.
