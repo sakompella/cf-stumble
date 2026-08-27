@@ -59,16 +59,20 @@ replacement.
 
 ## Documentation
 
-- **`docs/adr/`** — every resolved design decision, one per file, in a paragraph each. Superseded
+Everything under `docs/agents/` was written by agents working on this project. `docs/` outside
+that directory is reserved for hand-written human documentation.
+
+- **`docs/agents/adr/README.md`** — the decision index, grouped by area. Start here.
+- **`docs/agents/adr/`** — every resolved design decision, one per file, in a paragraph each. Superseded
   decisions keep their file and say what replaced them, so the corrections where research or
   review contradicted the original architecture stay visible rather than being quietly patched.
-- **`docs/design-history.md`** — the reasoning behind those decisions: what we thought, what
+- **`docs/agents/design/design-history.md`** — the reasoning behind those decisions: what we thought, what
   changed our mind, and what the change cost. The ADRs carry the position; this carries the arc.
-- **`docs/slices.md`** — the work broken into independently verifiable slices, each with a
+- **`docs/agents/design/slices.md`** — the work broken into independently verifiable slices, each with a
   command that exits 0 or non-zero. No slice whose done condition is prose.
-- **`docs/review-findings.md`** — what a green test suite does _not_ prove. Read this before
+- **`docs/agents/design/review-findings.md`** — what a green test suite does _not_ prove. Read this before
   trusting the validation gate.
-- **`docs/integration-findings.md`** — what did and did not compose when the layers were first
+- **`docs/agents/design/integration-findings.md`** — what did and did not compose when the layers were first
   driven end to end, including the gaps that remain.
 
 ## Development
@@ -111,4 +115,4 @@ real and shared by the gate and the live path, but it is not yet loaded into a f
 Dynamic Worker Loader, so the last hop from stored bytes to sandboxed execution is unexercised.
 There is no real model provider, `@cloudflare/computer` is not wired as the workspace backend,
 and nothing has been deployed — hosted Dynamic Workers need Workers Paid. See
-`docs/review-findings.md` for what a green suite does not prove.
+`docs/agents/design/review-findings.md` for what a green suite does not prove.

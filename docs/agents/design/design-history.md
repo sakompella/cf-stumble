@@ -1,7 +1,7 @@
 # Design history
 
 Not a changelog. This is organized by decision: what we thought, what changed our mind, and what
-it cost to change it. Read `docs/adr/` for the resolved position on each of these and
+it cost to change it. Read `docs/agents/adr/` for the resolved position on each of these and
 `docs/agents/domain.md` for the vocabulary; this document exists to carry the reasoning that a
 decision record alone tends to compress away.
 
@@ -107,7 +107,7 @@ to avoid. Once that constraint was explicitly lifted — "deps are not an issue,
 as little as possible" — the calculus flips entirely. `@cloudflare/computer` provides a real
 filesystem (a Workspace), and against a real filesystem isomorphic-git's ordinary
 `writeFile` → `add` → `commit` workflow is exactly the workflow it was built for, no working-tree
-avoidance required. The plan as of `docs/computer-integration.md` deletes the 614-line codec and
+avoidance required. The plan as of `docs/agents/design/computer-integration.md` deletes the 614-line codec and
 the four-function object store entirely, in favor of isomorphic-git operating on a
 Computer-provided filesystem. As of this writing that plan is written but not executed in source —
 `src/git/` and `src/storage/` still exist on `main`.
@@ -147,7 +147,7 @@ it couldn't.
 
 The fix replaces lineage depth with a monotonic counter, and separately drops "every commit is a
 generation" in favor of "a generation is one attempted facet materialization" — see
-`docs/generations.md` for the full model. This also fixed a second problem lineage-depth
+`docs/agents/design/generations.md` for the full model. This also fixed a second problem lineage-depth
 numbering had: if every commit is a generation, the agent has nowhere to make exploratory commits
 without each one becoming a generation attempt.
 

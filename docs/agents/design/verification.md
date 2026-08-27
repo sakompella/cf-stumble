@@ -6,7 +6,7 @@ a suite that can't fail proves nothing by passing — so each practice below is 
 concrete check that the suite _can_ fail, applied to a real defect or a deliberately introduced
 one.
 
-This document covers technique and instances. It does not repeat `docs/review-findings.md`,
+This document covers technique and instances. It does not repeat `docs/agents/design/review-findings.md`,
 which is the separate, harder question of what a green suite does _not_ prove — read that
 document for the boundaries of everything below.
 
@@ -120,5 +120,5 @@ conformance suite proves the two storage implementations satisfy the same interf
 by itself prove that interface is complete. The cold-clone check proves reproducibility from the
 repository, not correctness of what's in it. None of these techniques address production
 authorization, real Cloudflare account behavior versus local workerd, or the maturity of
-`@cloudflare/computer` as a dependency — those are exactly the gaps `docs/review-findings.md`
+`@cloudflare/computer` as a dependency — those are exactly the gaps `docs/agents/design/review-findings.md`
 exists to hold open rather than let a green suite quietly paper over.

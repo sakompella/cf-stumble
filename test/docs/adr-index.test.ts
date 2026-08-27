@@ -17,12 +17,12 @@ declare global {
 }
 
 // Vite rewrites these calls at build time, so both option objects have to be inline literals.
-const adrFiles = import.meta.glob("../../docs/adr/[0-9]*.md", {
+const adrFiles = import.meta.glob("../../docs/agents/adr/[0-9]*.md", {
   eager: true,
   query: "?raw",
   import: "default",
 });
-const indexFiles = import.meta.glob("../../docs/adr/README.md", {
+const indexFiles = import.meta.glob("../../docs/agents/adr/README.md", {
   eager: true,
   query: "?raw",
   import: "default",
@@ -48,6 +48,6 @@ describe("the ADR index", () => {
       .filter((file) => !linked.includes(`(${file})`))
       .toSorted();
 
-    expect(missing, "add these to docs/adr/README.md").toEqual([]);
+    expect(missing, "add these to docs/agents/adr/README.md").toEqual([]);
   });
 });

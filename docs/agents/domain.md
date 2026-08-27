@@ -1,12 +1,12 @@
 # Domain Docs
 
 How the engineering skills should consume this repo's domain documentation when exploring the
-codebase. This repo is **single-context**: one `CONTEXT.md` and one `docs/adr/` at the root.
+codebase. This repo is **single-context**: one `CONTEXT.md` and one `docs/agents/adr/` at the root.
 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root — the glossary of domain terms.
-- **`docs/adr/README.md`** — the ADR index, grouped by area. Start here to find which ADRs touch
+- **`docs/agents/adr/README.md`** — the ADR index, grouped by area. Start here to find which ADRs touch
   the area you are about to work in, then read those.
 
 Both exist in this repo. Read `CONTEXT.md` in full, and read the ADRs touching the area you are
@@ -16,24 +16,31 @@ actually gets resolved.
 
 ## Also read the design docs
 
-This repo carries substantial design documentation that predates the ADR convention, and it is
-the real source of truth for why things are shaped the way they are:
+Everything under `docs/agents/` is agent-generated, including the ADRs. `docs/` outside this
+directory is reserved for hand-written human documentation and is currently empty. Write new
+agent-authored documentation here, not there.
 
-- **`docs/generations.md`** — the generation data model. A commit is an ordinary commit; a
+The directory splits three ways: `adr/` holds resolved positions, `design/` holds the reasoning
+and findings behind them, and the loose files at this level are skill configuration. New design
+writing goes in `design/`.
+
+These carry the reasoning the ADRs compress away:
+
+- **`docs/agents/design/generations.md`** — the generation data model. A commit is an ordinary commit; a
   generation is one attempted facet materialization. Materialization is immutable, activation is
   an append-only ledger.
-- **`docs/design-history.md`** — the reasoning behind the ADRs: what we thought, what changed our
+- **`docs/agents/design/design-history.md`** — the reasoning behind the ADRs: what we thought, what changed our
   mind, and what the change cost. Retractions are left visible rather than quietly edited, so read
   the corrections as well as the conclusions.
-- **`docs/review-findings.md`** — what a green test suite does _not_ prove. Read this before
+- **`docs/agents/design/review-findings.md`** — what a green test suite does _not_ prove. Read this before
   trusting any guarantee.
-- **`docs/prior-art.md`** — what already exists in this space and what it teaches.
-- **`docs/slices.md`** — the work breakdown, each slice with a command that exits 0 or non-zero.
+- **`docs/agents/design/prior-art.md`** — what already exists in this space and what it teaches.
+- **`docs/agents/design/slices.md`** — the work breakdown, each slice with a command that exits 0 or non-zero.
 
-The decisions that used to live in a single `docs/decisions.md` have been merged into `docs/adr/`,
+The decisions that used to live in a single `docs/decisions.md` have been merged into `docs/agents/adr/`,
 which is now the only register of resolved positions. Nothing else should grow into a second one:
-when a decision is made or revisited, it goes in `docs/adr/` and the reasoning behind it goes in
-`docs/design-history.md`. A new ADR also needs a line in `docs/adr/README.md`, and
+when a decision is made or revisited, it goes in `docs/agents/adr/` and the reasoning behind it goes in
+`docs/agents/design/design-history.md`. A new ADR also needs a line in `docs/agents/adr/README.md`, and
 `test/docs/adr-index.test.ts` fails until it has one.
 
 ## File structure
@@ -41,15 +48,25 @@ when a decision is made or revisited, it goes in `docs/adr/` and the reasoning b
 ```
 /
 ├── CONTEXT.md
-├── docs/
-│   ├── adr/
-│   │   ├── 0001-....md
-│   │   └── 0002-....md
-│   ├── design-history.md
-│   ├── generations.md
-│   └── ...
+├── docs/                              ← hand-written human docs only
+│   └── agents/                        ← everything agent-generated
+│       ├── adr/                       ← resolved positions
+│       │   ├── README.md             ← the ADR index
+│       │   ├── 0001-....md
+│       │   └── 0002-....md
+│       ├── design/                    ← reasoning and findings
+│       │   ├── design-history.md
+│       │   ├── generations.md
+│       │   └── ...
+│       ├── domain.md                 ← skill config; this file
+│       ├── issue-tracker.md
+│       └── triage-labels.md
 └── src/
 ```
+
+The `/domain-modeling` skill's default layout puts ADRs at `docs/adr/`. This repo overrides that
+to `docs/agents/adr/` so the agent-generated boundary is one directory rather than two. Read the
+path from here rather than from the skill.
 
 A `CONTEXT-MAP.md` at the root would signal a multi-context repo with per-context `CONTEXT.md`
 files. This repo has none and is not a monorepo — the `pnpm-workspace.yaml` present here only

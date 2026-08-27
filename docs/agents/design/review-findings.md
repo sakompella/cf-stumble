@@ -194,14 +194,14 @@ the error forward.
 `readFile`, `writeFile`, `listFiles`, `exists` and `execute`. The four primitives sit _on top_ of
 that, so `Workspace` is the substrate rather than the capability.
 
-That naming is a trap aimed squarely at the migration. `docs/computer-integration.md` says to
+That naming is a trap aimed squarely at the migration. `docs/agents/design/computer-integration.md` says to
 expose a four-method proxy to the facet; anyone reading "proxy the Workspace" would hand it
 `listFiles` and raw `execute` — a materially wider surface than intended. `CONTEXT.md` now
 deliberately avoids claiming the interface has four methods.
 
 ## Questions still on the human, not the machine (open)
 
-Carried over from `docs/decisions.md` when its resolved decisions moved into `docs/adr/`. These
+Carried over from `docs/decisions.md` when its resolved decisions moved into `docs/agents/adr/`. These
 never resolved, so they are not decisions and never became ADRs. Each has a default chosen to be
 cheap to reverse, which is what makes leaving them open tolerable rather than negligent.
 

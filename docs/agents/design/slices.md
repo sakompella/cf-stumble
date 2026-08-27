@@ -12,22 +12,22 @@ pnpm test && pnpm typecheck && pnpm lint
 Status legend: `DONE` / `IN PROGRESS` / `NOT DONE (reason)`.
 
 **Generation model remodelled.** Commits are ordinary commits; a generation is one attempted
-facet materialization, numbered from a monotonic registry. See `docs/generations.md`. This
+facet materialization, numbered from a monotonic registry. See `docs/agents/design/generations.md`. This
 replaced lineage-depth numbering, which was not an identity — rolling back and branching gave two
 distinct generations both claiming number 1.
 
 **Final state: every slice DONE except garbage collection, which was deliberately cut (ADR-0007).**
 The full suite runs as a single `pnpm test`, inside real workerd — there is no separate Node
-run and no `test:workers` script; see `docs/design-history.md` ("one runtime") for why the
+run and no `test:workers` script; see `docs/agents/design/design-history.md` ("one runtime") for why the
 two-runtime split was removed. `pnpm test`, `pnpm typecheck`, and `pnpm lint --max-warnings=0`
 are all green, verified from a cold clone (`rm -rf node_modules && pnpm install --frozen-lockfile`),
-not just incrementally. See `docs/verification.md` for what that check is guarding against and
+not just incrementally. See `docs/agents/design/verification.md` for what that check is guarding against and
 for the current state of in-flight work not yet reflected here.
 
 Slices S12, S13 and S14 were added after an architectural review and each closed a real hole:
 canary identity was controlled by the mutable corpus, the integration test used a scripted
 executor rather than the real one, and promotion accepted a forgeable caller-supplied
-attestation over unauthenticated routes. See `docs/review-findings.md`.
+attestation over unauthenticated routes. See `docs/agents/design/review-findings.md`.
 
 The remaining gaps are honest and recorded: the runtime is real but is not yet loaded into a
 facet through the Dynamic Worker Loader, there is no real model provider, `@cloudflare/computer`
@@ -234,7 +234,7 @@ Build only what the vertical path in S8 needs; resist widening this.
 
 Added after review. Content-derived corpus versions plus mandatory canaries make a weak corpus
 _identifiable_ but not _adequate_ — a hash tells you the input changed, not that it is still
-sufficient. Enforces the four conditions from `docs/review-findings.md`: canary identity comes
+sufficient. Enforces the four conditions from `docs/agents/design/review-findings.md`: canary identity comes
 from a trusted side, every required canary passes individually, a corpus update cannot drop or
 weaken a canary while producing a fresh valid hash, and a scorer failure is `INCONCLUSIVE`.
 

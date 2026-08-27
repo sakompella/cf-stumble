@@ -1,7 +1,7 @@
 /**
  * The generation registry: attempts to materialize a facet, and the record of what was live.
  *
- * See docs/generations.md. The essential split is that a generation is an immutable *attempt*
+ * See docs/agents/design/generations.md. The essential split is that a generation is an immutable *attempt*
  * while promotion and rollback are repeatable *activations*, so they cannot share one status
  * field — a validated generation may be promoted, superseded, rolled back to, and promoted
  * again.

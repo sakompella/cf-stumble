@@ -12,4 +12,4 @@ The five canonical triage roles use their default label strings (`needs-triage`,
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` and one `docs/adr/` at the repo root, both read before exploring. See `docs/agents/domain.md`.
+Single-context: one `CONTEXT.md` at the repo root and one ADR directory at `docs/agents/adr/`, both read before exploring. Everything under `docs/agents/` is agent-generated; `docs/` outside it is reserved for hand-written human documentation. See `docs/agents/domain.md`.

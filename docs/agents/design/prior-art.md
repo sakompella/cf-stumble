@@ -40,7 +40,7 @@ knowing; not obviously worth doing.
 ## Nix: three places we diverge, now deliberately
 
 Read from Nix source rather than documentation, and it corrects claims made in
-`docs/generations.md`:
+`docs/agents/design/generations.md`:
 
 - **Nix skips creating a generation when the output path is unchanged.** We always allocate,
   because our unit is the _attempt_ rather than the _result_ — re-attempting an identical commit is

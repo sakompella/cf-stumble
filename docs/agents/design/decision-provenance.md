@@ -117,6 +117,6 @@ the most reliable. Decisions in the second section are agent-made; the review ca
 independently verified with tests, but the local implementation calls have had less scrutiny and
 are the most likely place for something to be quietly wrong.
 
-`docs/design-history.md` carries the reasoning, including the reasoning that failed.
-`docs/review-findings.md` records what a green test suite does not prove. Neither has been sanded
+`docs/agents/design/design-history.md` carries the reasoning, including the reasoning that failed.
+`docs/agents/design/review-findings.md` records what a green test suite does not prove. Neither has been sanded
 into a story where every decision was correct the first time, because several were not.
