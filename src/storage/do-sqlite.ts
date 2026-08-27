@@ -163,8 +163,10 @@ export class DurableObjectSqliteStore implements SweepableStore {
   }
 
   deleteObject(sha: Sha): Promise<void> {
-    this.sql.exec(`DELETE FROM ${CHUNKS_TABLE} WHERE sha = ?`, sha);
-    this.sql.exec(`DELETE FROM ${OBJECTS_TABLE} WHERE sha = ?`, sha);
+    this.storage.transactionSync(() => {
+      this.sql.exec(`DELETE FROM ${CHUNKS_TABLE} WHERE sha = ?`, sha);
+      this.sql.exec(`DELETE FROM ${OBJECTS_TABLE} WHERE sha = ?`, sha);
+    });
     return Promise.resolve();
   }
 }

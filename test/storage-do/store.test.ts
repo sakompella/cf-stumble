@@ -61,7 +61,7 @@ class TestStore implements SweepableStore {
 
   countChunkRows(): Promise<number> {
     return runInDurableObject(this.stub, (_instance, state) => {
-      new DurableObjectSqliteStore(state);
+      initializeStore(state);
       const rows = state.storage.sql
         .exec<{ readonly count: number }>(
           "SELECT COUNT(*) AS count FROM cf_stumble_object_chunks",
@@ -73,7 +73,7 @@ class TestStore implements SweepableStore {
 
   installChunkWriteFailure(chunkIndex: number): Promise<void> {
     return runInDurableObject(this.stub, (_instance, state) => {
-      new DurableObjectSqliteStore(state);
+      initializeStore(state);
       state.storage.sql.exec(`
         CREATE TRIGGER cf_stumble_test_abort_chunk_write
         BEFORE INSERT ON cf_stumble_object_chunks
@@ -84,6 +84,10 @@ class TestStore implements SweepableStore {
       `);
     });
   }
+}
+
+function initializeStore(state: DurableObjectState): DurableObjectSqliteStore {
+  return new DurableObjectSqliteStore(state);
 }
 
 function makeStore(): Promise<TestStore> {
@@ -114,7 +118,7 @@ afterEach(async () => {
 
 describeStoreConformance("DurableObjectSqliteStore", makeStore);
 
-describe("DurableObjectSqliteStore chunking", () => {
+function testLargeObjectRoundTrip(): void {
   it("round-trips an object larger than the single-row limit", async () => {
     const store = await makeStore();
     const input = makeBytes(4 * 1024 * 1024);
@@ -123,7 +127,9 @@ describe("DurableObjectSqliteStore chunking", () => {
 
     expect(await store.readObject(address)).toEqual(input);
   }, 30_000);
+}
 
+function testExactChunkRoundTrip(): void {
   it("round-trips an object exactly one chunk long", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE);
@@ -132,7 +138,9 @@ describe("DurableObjectSqliteStore chunking", () => {
 
     expect(await store.readObject(address)).toEqual(input);
   });
+}
 
+function testChunkPlusOneRoundTrip(): void {
   it("round-trips an object one byte larger than one chunk", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE + 1);
@@ -141,7 +149,9 @@ describe("DurableObjectSqliteStore chunking", () => {
 
     expect(await store.readObject(address)).toEqual(input);
   });
+}
 
+function testChunkMinusOneRoundTrip(): void {
   it("round-trips an object one byte smaller than one chunk", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE - 1);
@@ -150,7 +160,9 @@ describe("DurableObjectSqliteStore chunking", () => {
 
     expect(await store.readObject(address)).toEqual(input);
   });
+}
 
+function testEmptyObjectRoundTrip(): void {
   it("round-trips an empty object", async () => {
     const store = await makeStore();
 
@@ -158,7 +170,9 @@ describe("DurableObjectSqliteStore chunking", () => {
 
     expect(await store.readObject(address)).toEqual(new Uint8Array());
   });
+}
 
+function testInterruptedWriteRollback(): void {
   it("leaves no readable object after an interrupted multi-chunk write", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE * 3);
@@ -171,7 +185,9 @@ describe("DurableObjectSqliteStore chunking", () => {
     expect(await store.listObjects()).toHaveLength(0);
     expect(await store.countChunkRows()).toBe(0);
   });
+}
 
+function testChunkDeletion(): void {
   it("deletes every chunk of a multi-chunk object", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE * 2 + 1);
@@ -186,7 +202,9 @@ describe("DurableObjectSqliteStore chunking", () => {
     expect(await store.listObjects()).toHaveLength(0);
     expect(await store.countChunkRows()).toBe(0);
   });
+}
 
+function testLargeWriteIdempotence(): void {
   it("does not duplicate chunks when rewriting identical large content", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE * 2 + 1);
@@ -198,4 +216,15 @@ describe("DurableObjectSqliteStore chunking", () => {
     expect(await store.listObjects()).toHaveLength(1);
     expect(await store.countChunkRows()).toBe(3);
   });
+}
+
+describe("DurableObjectSqliteStore chunking", () => {
+  testLargeObjectRoundTrip();
+  testExactChunkRoundTrip();
+  testChunkPlusOneRoundTrip();
+  testChunkMinusOneRoundTrip();
+  testEmptyObjectRoundTrip();
+  testInterruptedWriteRollback();
+  testChunkDeletion();
+  testLargeWriteIdempotence();
 });
