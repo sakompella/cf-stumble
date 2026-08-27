@@ -1,6 +1,7 @@
+import { Result } from "better-result";
 import { parseSha } from "../git/types.js";
 import type { Sha } from "../git/types.js";
-import type { SweepableStore } from "./types.js";
+import { MAX_OBJECT_BYTES, ObjectTooLargeError, type SweepableStore } from "./types.js";
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -14,7 +15,12 @@ export class MemoryStore implements SweepableStore {
     return Promise.resolve(this.objects.get(sha)?.slice());
   }
 
-  async writeObject(bytes: Uint8Array): Promise<Sha> {
+  async writeObject(bytes: Uint8Array): Promise<Result<Sha, ObjectTooLargeError>> {
+    if (bytes.byteLength > MAX_OBJECT_BYTES) {
+      return Result.err(
+        new ObjectTooLargeError({ actualBytes: bytes.byteLength, maxBytes: MAX_OBJECT_BYTES }),
+      );
+    }
     const copy = bytes.slice();
     const digest = await crypto.subtle.digest("SHA-1", copy);
     const sha = parseSha(bytesToHex(new Uint8Array(digest)));
@@ -22,7 +28,7 @@ export class MemoryStore implements SweepableStore {
     if (!this.objects.has(sha)) {
       this.objects.set(sha, copy);
     }
-    return sha;
+    return Result.ok(sha);
   }
 
   readPointer(): Promise<Sha | undefined> {

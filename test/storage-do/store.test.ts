@@ -8,6 +8,7 @@ import type { Sha } from "../../src/git/types.js";
 import { describeStoreConformance } from "../../src/storage/conformance.js";
 import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import type { SweepableStore } from "../../src/storage/types.js";
+import { expectOk } from "../support/result.js";
 
 const CHUNK_SIZE = 512 * 1024;
 
@@ -101,6 +102,10 @@ function makeBytes(size: number): Uint8Array {
   return bytes;
 }
 
+async function writeObject(store: SweepableStore, bytes: Uint8Array): Promise<Sha> {
+  return expectOk(await store.writeObject(bytes));
+}
+
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -121,7 +126,7 @@ function testLargeObjectRoundTrip(): void {
     const store = await makeStore();
     const input = makeBytes(4 * 1024 * 1024);
 
-    const address = await store.writeObject(input);
+    const address = await writeObject(store, input);
 
     expect(await store.readObject(address)).toEqual(input);
   }, 30_000);
@@ -132,7 +137,7 @@ function testExactChunkRoundTrip(): void {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE);
 
-    const address = await store.writeObject(input);
+    const address = await writeObject(store, input);
 
     expect(await store.readObject(address)).toEqual(input);
   });
@@ -143,7 +148,7 @@ function testChunkPlusOneRoundTrip(): void {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE + 1);
 
-    const address = await store.writeObject(input);
+    const address = await writeObject(store, input);
 
     expect(await store.readObject(address)).toEqual(input);
   });
@@ -154,7 +159,7 @@ function testChunkMinusOneRoundTrip(): void {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE - 1);
 
-    const address = await store.writeObject(input);
+    const address = await writeObject(store, input);
 
     expect(await store.readObject(address)).toEqual(input);
   });
@@ -164,7 +169,7 @@ function testEmptyObjectRoundTrip(): void {
   it("round-trips an empty object", async () => {
     const store = await makeStore();
 
-    const address = await store.writeObject(new Uint8Array());
+    const address = await writeObject(store, new Uint8Array());
 
     expect(await store.readObject(address)).toEqual(new Uint8Array());
   });
@@ -177,7 +182,9 @@ function testInterruptedWriteRollback(): void {
     const address = await shaFor(input);
     await store.installChunkWriteFailure(1);
 
-    await expect(store.writeObject(input)).rejects.toThrow("interrupted chunk write");
+    await expect(store.writeObject(input)).rejects.toThrow(
+      "SQLite storage failed to write an object",
+    );
 
     expect(await store.readObject(address)).toBeUndefined();
     expect(await store.listObjects()).toHaveLength(0);
@@ -189,7 +196,7 @@ function testChunkDeletion(): void {
   it("deletes every chunk of a multi-chunk object", async () => {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE * 2 + 1);
-    const address = await store.writeObject(input);
+    const address = await writeObject(store, input);
 
     expect(await store.listObjects()).toEqual([address]);
     expect(await store.countChunkRows()).toBe(3);
@@ -207,8 +214,8 @@ function testLargeWriteIdempotence(): void {
     const store = await makeStore();
     const input = makeBytes(CHUNK_SIZE * 2 + 1);
 
-    const firstAddress = await store.writeObject(input);
-    const secondAddress = await store.writeObject(input);
+    const firstAddress = await writeObject(store, input);
+    const secondAddress = await writeObject(store, input);
 
     expect(secondAddress).toBe(firstAddress);
     expect(await store.listObjects()).toHaveLength(1);

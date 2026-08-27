@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { Result } from "better-result";
 import { parseSha } from "../git/types.js";
-import type { SweepableStore } from "./types.js";
+import type { Sha } from "../git/types.js";
+import { MAX_OBJECT_BYTES, ObjectTooLargeError, type SweepableStore } from "./types.js";
 
 const EMPTY_SHA = parseSha("da39a3ee5e6b4b0d3255bfef95601890afd80709");
 const BYTES_SHA = parseSha("c62c27924f4c967f5eddb1850c091d54c7a2ab58");
@@ -10,6 +12,14 @@ const POINTER_NEXT = parseSha("2222222222222222222222222222222222222222");
 const POINTER_OTHER = parseSha("3333333333333333333333333333333333333333");
 
 type StoreFactory = () => Promise<SweepableStore>;
+
+async function writeObject(store: SweepableStore, bytes: Uint8Array): Promise<Sha> {
+  const result = await store.writeObject(bytes);
+  if (Result.isError(result)) {
+    throw result.error;
+  }
+  return result.value;
+}
 
 function makeBarrier(parties: number): () => Promise<void> {
   let arrived = 0;
@@ -34,9 +44,9 @@ function testContentAddressing(makeStore: StoreFactory): void {
     const sameBytes = new Uint8Array([0, 1, 2, 255]);
     const differentBytes = new Uint8Array([0, 1, 2, 254]);
 
-    const address = await store.writeObject(bytes);
-    const sameAddress = await store.writeObject(sameBytes);
-    const differentAddress = await store.writeObject(differentBytes);
+    const address = await writeObject(store, bytes);
+    const sameAddress = await writeObject(store, sameBytes);
+    const differentAddress = await writeObject(store, differentBytes);
 
     expect(address).toBe(BYTES_SHA);
     expect(address).toMatch(/^[0-9a-f]{40}$/u);
@@ -50,8 +60,8 @@ function testIdempotentWrites(makeStore: StoreFactory): void {
     const store = await makeStore();
     const bytes = new Uint8Array([10, 20, 30]);
 
-    const firstAddress = await store.writeObject(bytes);
-    const secondAddress = await store.writeObject(bytes);
+    const firstAddress = await writeObject(store, bytes);
+    const secondAddress = await writeObject(store, bytes);
 
     expect(secondAddress).toBe(firstAddress);
     expect(await store.listObjects()).toHaveLength(1);
@@ -76,13 +86,13 @@ function testByteFidelity(makeStore: StoreFactory): void {
     const inputs = [new Uint8Array(), new Uint8Array([0, 255, 0, 1]), large];
 
     for (const input of inputs) {
-      const address = await store.writeObject(input);
+      const address = await writeObject(store, input);
       const output = await store.readObject(address);
 
       expect(output).toEqual(input);
     }
 
-    expect(await store.writeObject(new Uint8Array())).toBe(EMPTY_SHA);
+    expect(await writeObject(store, new Uint8Array())).toBe(EMPTY_SHA);
   });
 }
 
@@ -90,7 +100,7 @@ function testBufferIsolation(makeStore: StoreFactory): void {
   it("does not retain caller-owned byte arrays", async () => {
     const store = await makeStore();
     const input = new Uint8Array([1, 2, 3]);
-    const address = await store.writeObject(input);
+    const address = await writeObject(store, input);
     input[0] = 99;
 
     const firstRead = await store.readObject(address);
@@ -148,8 +158,8 @@ function testConcurrentPointerCas(makeStore: StoreFactory): void {
 function testSweep(makeStore: StoreFactory): void {
   it("sweeps objects and tolerates missing deletes", async () => {
     const store = await makeStore();
-    const retained = await store.writeObject(new Uint8Array([1]));
-    const removed = await store.writeObject(new Uint8Array([2]));
+    const retained = await writeObject(store, new Uint8Array([1]));
+    const removed = await writeObject(store, new Uint8Array([2]));
 
     expect(await store.listObjects()).toHaveLength(2);
     await store.deleteObject(removed);
@@ -158,6 +168,26 @@ function testSweep(makeStore: StoreFactory): void {
     expect(await store.listObjects()).toEqual(expect.arrayContaining([retained]));
     expect(await store.listObjects()).not.toContain(removed);
     await store.deleteObject(removed);
+  });
+}
+
+function testObjectSizeLimit(makeStore: StoreFactory): void {
+  it("returns an ObjectTooLargeError for an object above the shared limit", async () => {
+    const store = await makeStore();
+    const bytes = new Uint8Array();
+    Object.defineProperty(bytes, "byteLength", { value: MAX_OBJECT_BYTES + 1 });
+
+    const result = await store.writeObject(bytes);
+
+    expect(Result.isError(result)).toBe(true);
+    if (Result.isOk(result)) {
+      throw new Error("expected object above the size limit to be rejected");
+    }
+    expect(ObjectTooLargeError.is(result.error)).toBe(true);
+    expect(result.error).toMatchObject({
+      actualBytes: MAX_OBJECT_BYTES + 1,
+      maxBytes: MAX_OBJECT_BYTES,
+    });
   });
 }
 
@@ -171,5 +201,6 @@ export function describeStoreConformance(name: string, makeStore: StoreFactory):
     testPointerCas(makeStore);
     testConcurrentPointerCas(makeStore);
     testSweep(makeStore);
+    testObjectSizeLimit(makeStore);
   });
 }

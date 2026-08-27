@@ -39,6 +39,7 @@ import type {
 import { parseReplaySession, runReplay } from "../replay/index.js";
 import type { ReplayOutcome } from "../replay/index.js";
 import { DurableObjectSqliteStore } from "../storage/do-sqlite.js";
+import { ObjectTooLargeError } from "../storage/types.js";
 import {
   computeCorpusVersion,
   computeGateVersion,
@@ -2125,6 +2126,12 @@ class SafetyViolationError extends Error {
 }
 
 function requestErrorResponse(error: Error | string): Response {
+  if (ObjectTooLargeError.is(error)) {
+    return Response.json(
+      { error: { kind: "object-too-large", message: error.message } },
+      { status: 413 },
+    );
+  }
   if (error instanceof InvalidRequestError) {
     return Response.json(
       { error: { kind: error.kind, message: error.message } satisfies InvalidRequest },

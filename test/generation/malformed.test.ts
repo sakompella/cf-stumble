@@ -79,17 +79,19 @@ describe("generation commit validation", () => {
   it("rejects a commit whose manifest tree is missing", async () => {
     const store = new MemoryStore();
     const missingTree = parseSha("ffffffffffffffffffffffffffffffffffffffff");
-    const commit = await store.writeObject(
-      encodeObject({
-        type: "commit",
-        commit: {
-          tree: missingTree,
-          parents: [],
-          author,
-          committer: author,
-          message: "missing tree",
-        },
-      }),
+    const commit = expectOk(
+      await store.writeObject(
+        encodeObject({
+          type: "commit",
+          commit: {
+            tree: missingTree,
+            parents: [],
+            author,
+            committer: author,
+            message: "missing tree",
+          },
+        }),
+      ),
     );
 
     await expect(readGeneration(store, commit)).rejects.toThrow(/missing.*tree/u);

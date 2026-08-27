@@ -7,6 +7,7 @@ import { parseSha } from "../../src/git/types.js";
 import type { Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { CommitSnapshot, Module } from "../../src/generation/types.js";
+import { expectOk } from "../support/result.js";
 
 const author = {
   name: "Build Bot",
@@ -72,17 +73,19 @@ it("walkLineage fails cleanly when a parent object is missing", async () => {
   const store = new MemoryStore();
   const root = await build(store, undefined, author.timestamp, "root");
   const missingParent = parseSha("ffffffffffffffffffffffffffffffffffffffff");
-  const broken = await store.writeObject(
-    encodeObject({
-      type: "commit",
-      commit: {
-        tree: root.manifest,
-        parents: [missingParent],
-        author,
-        committer: author,
-        message: "broken",
-      },
-    }),
+  const broken = expectOk(
+    await store.writeObject(
+      encodeObject({
+        type: "commit",
+        commit: {
+          tree: root.manifest,
+          parents: [missingParent],
+          author,
+          committer: author,
+          message: "broken",
+        },
+      }),
+    ),
   );
 
   await expect(walkLineage(store, broken)).rejects.toThrow(/missing.*commit/u);
