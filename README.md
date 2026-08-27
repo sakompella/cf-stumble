@@ -71,9 +71,9 @@ Everything under `docs/agents/` was written by agents working on this project. `
 that directory is reserved for hand-written human documentation.
 
 - **`docs/agents/adr/README.md`** — the decision index, grouped by area. Start here.
-- **`docs/agents/adr/`** — the current decision register, one decision per file. Superseded records
-  normally remain and point to their replacement; explicitly dropped stale premises live only in
-  design history rather than continuing to look like supported architecture.
+- **`docs/agents/adr/`** — the current decision register, one decision per file. When a decision is
+  replaced, whatever still matters is folded into the new ADR and the old file is deleted; Git
+  keeps the history, so the register only ever holds currently-useful positions.
 - **`docs/agents/design/design-history.md`** — the reasoning behind those decisions: what we thought, what
   changed our mind, and what the change cost. The ADRs carry the position; this carries the arc.
 - **`docs/agents/design/slices.md`** — the work broken into independently verifiable slices, each with a

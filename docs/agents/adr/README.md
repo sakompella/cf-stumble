@@ -1,8 +1,9 @@
 # Architecture decisions
 
-One decision per file, in a paragraph. Superseded decisions normally keep their file and name the
-replacement; stale premises explicitly dropped from the architecture live in design history
-instead of remaining in this current-decision register.
+One decision per file, in a paragraph. When a decision stops being true, whatever still matters
+about it is folded into the replacement and the file is deleted; Git keeps the history, and
+design history carries the arc of what changed and why. This register holds only currently-useful
+records, not a trail of tombstones a reader has to page past.
 
 This index exists so that "read the ADRs touching your area" is a lookup rather than a directory
 of file opens. Grouped by area; a decision that spans two areas is listed under the one that owns it.
@@ -22,8 +23,6 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
   roots.
 - **[ADR-0013](0013-migrate-facet-state-lazily.md)** — facet state migrates on first read rather
   than at promotion, which keeps promotion an atomic pointer switch.
-- **[ADR-0001](0001-commits-define-generations.md)** — _superseded by ADR-0002._ Commits were
-  generations, numbered by DAG depth. Depth is not an identity.
 
 ## Agent isolation
 
@@ -88,5 +87,7 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
 ## Adding one
 
 Take the next number, write a paragraph, and add a line here under the area it belongs to. Add a
-`Status:` frontmatter field only when a decision is proposed or has been superseded; most ADRs
-never need one.
+`Status:` frontmatter field only while a decision is still proposed and not yet resolved; drop it
+once resolved, and most ADRs never need one at all. When a decision is later replaced, fold
+whatever still matters into the ADR that replaces it and delete the old file rather than marking
+it superseded — Git keeps the history.
