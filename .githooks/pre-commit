@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs the three cheap gates before every commit (~7s combined).
+# Checks the working tree, not the index, so a partial `git add` can still
+# commit while unstaged work is broken. Bypass with `git commit --no-verify`.
+#
+# jj does not run git hooks. Under `jj commit`, run `pnpm verify` yourself.
+set -e
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pre-commit: pnpm not on PATH, skipping checks" >&2
+  exit 0
+fi
+
+pnpm verify

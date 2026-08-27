@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --max-warnings=0",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1",
