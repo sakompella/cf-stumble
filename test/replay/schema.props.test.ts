@@ -39,6 +39,16 @@ test("parsing arbitrary JSON is total: a session, or a ReplaySchemaError, and no
   });
 });
 
+/**
+ * Unlike its neighbours this is not a property: it asserts that `arbitraryJson` is diverse enough
+ * for the totality property above to mean anything. A generator that produced only junk would be
+ * rejected at `$.schemaVersion` every time, and totality would prove one `if` statement.
+ *
+ * That makes it a claim about counts over a draw sequence, so it needs a fixed seed. Hegel only
+ * derandomizes in CI, which left this failing roughly one local run in ten and made the
+ * pre-commit gate unreliable. The counts still move if the generator regresses; they just no
+ * longer move on their own.
+ */
 test("generated JSON reaches past the version check, so totality is not one `if`", () => {
   let accepted = 0;
   const rejectedAt = new Set<string>();
@@ -52,7 +62,7 @@ test("generated JSON reaches past the version check, so totality is not one `if`
         if (error instanceof ReplaySchemaError) rejectedAt.add(error.path);
       }
     },
-    { testCases: 500 },
+    { testCases: 500, seed: 1, derandomize: true },
   );
 
   expect(accepted).toBeGreaterThan(0);
