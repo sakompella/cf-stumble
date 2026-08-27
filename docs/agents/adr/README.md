@@ -69,8 +69,10 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
 
 ## How the code is written and verified
 
-- **[ADR-0008](0008-test-in-workerd-only.md)** — one test and typecheck runtime, workerd, because
-  the Node path masked Worker-specific typing errors.
+- **[ADR-0008](0008-test-in-workerd-only.md)** — behavioural coverage and typechecking run in
+  workerd, because the Node path masked Worker-specific typing errors. Property tests are a bounded
+  exception, since their engine is native code workerd cannot load, and a guard keeps them from
+  being any module's only coverage.
 - **[ADR-0015](0015-brand-with-a-type-predicate.md)** — branded values come from a type predicate,
   never an `as` assertion, so the brand cannot lie about having been checked.
 - **[ADR-0016](0016-parse-at-the-boundary-without-a-schema-library.md)** — untrusted input is

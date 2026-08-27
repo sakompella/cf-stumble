@@ -312,3 +312,28 @@ WebAssembly-only shell and fixed capability floor into decisions that were later
 Autolith-inspired product boundary was restored. That is the real lesson: narrative can hide both
 missing decisions and assumptions that never deserved decision status, because nothing goes red
 when either drifts from the product.
+
+## Reopening the Node test path, narrowly, and what it immediately found
+
+The two-runtime test setup was deleted for a good reason: a Node suite that passed told you nothing
+about workerd, and it had been quietly masking Worker-specific typing errors. So when property-based
+testing came up, the obvious move was to run Hegel inside workerd like everything else. That turned
+out to be impossible rather than merely awkward. Hegel's generation engine is a native library
+reached through FFI, workerd exposes no Node-API and throws on `process.dlopen`, and the entire
+`@hegeldev` npm scope is the wrapper plus five per-platform native builds — there is no WASM target
+to wait for. The choice was a Node project or no generative testing at all.
+
+What makes the reopening narrow rather than a repeal is that Node may only add a layer over modules
+workerd already covers, enforced by `test/docs/props-siblings.test.ts`, which runs in workerd and
+fails when a `*.props.test.ts` has no `*.test.ts` beside it. The original failure mode — a green Node
+run standing in for evidence about the deployed runtime — cannot recur while that holds, because
+nothing is ever covered in Node alone. ADR-0008 carries the amended rule.
+
+The first differential property paid for the exercise immediately, and in a way fixed fixtures had
+not in months. Generating trees and checking byte agreement against isomorphic-git turned up two
+disagreements: our encoder accepts tree entry names git's own `verify_path` refuses, and the two
+implementations sort tree entries differently for a specific class of Unicode names. The second one
+is isomorphic-git's bug rather than ours, which is worth noticing on its own — ADR-0009 and ADR-0011
+lean on that library as an independent oracle, and an oracle with a known divergence corner is still
+useful but is no longer simply authoritative. Both are pinned as characterisation tests that go red
+when someone fixes them, rather than papered over inside a generator.

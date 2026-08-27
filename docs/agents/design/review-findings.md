@@ -119,6 +119,32 @@ was a deliberate trade (ADR-0011) and is fine while content is not adversarial �
 is agent-authored, so if object identity ever becomes a security boundary, add a second SHA-256
 digest rather than relying on the git oid.
 
+## Two codec disagreements the differential property found (open)
+
+Generating trees and checking byte agreement against isomorphic-git surfaced two divergences that
+the fixed fixtures had never reached. Both are pinned as characterisation tests in
+`test/git/oracle.props.test.ts` that go red when someone fixes them.
+
+**Our encoder writes tree entry names git refuses to read.** `validateTreeNameBytes`
+(`src/git/tree.ts:154`) rejects only an empty name, NUL, and `/`. Git's `verify_path` also refuses
+`.`, `..`, `.git`, and its NTFS/HFS aliases, and isomorphic-git enforces that list when reading, so
+`encodeObject` can produce a tree that real git tooling treats as corrupt. `..` inside a tree is
+also a path traversal on checkout. `parseWorkspacePath` rejects traversal one layer up in
+`src/tools/`, but the git layer does not, and that matters for the submission boundary: once a facet
+submits candidate bytes and the supervisor derives identity through `buildGeneration`, this is a
+validation the trusted side is not performing. Fix it in the encoder, where the invariant belongs,
+rather than relying on a caller.
+
+**The oracle sorts tree entries wrongly, and we sort them right.** Git orders entries by raw bytes;
+isomorphic-git compares names as JavaScript strings, which is UTF-16 code-unit order. The two
+disagree exactly when one name holds a supplementary-plane character and another holds
+`U+E000`–`U+FFFF`. Our codec sorts by bytes, matching real git, so here the reference implementation
+is the one that is wrong. The generators exclude that corner so the differential property stays
+meaningful. Worth carrying forward: ADR-0009 and ADR-0011 both rest on isomorphic-git being an
+independent oracle, and an oracle with a known divergence is still valuable but is not flatly
+authoritative — a future disagreement needs checking against git's own behaviour before assuming the
+bug is ours.
+
 ## Rollback deserves a guard rail — RESOLVED (S14)
 
 **Update:** rollback targets are now restricted to generations previously recorded as live, and
