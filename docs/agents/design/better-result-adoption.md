@@ -329,12 +329,34 @@ slices land. `src/integration/turn.ts` is excluded entirely: it drives a superse
 | 5 - Git object decoding          | **Complete**                   |
 | 7 - Storage                      | **Complete**                   |
 | 4 - Untrusted JSON and replay    | **Complete**                   |
-| 6 - Generation reads and rows    | Next. Specified in section 9   |
+| 6 - Generation reads and rows    | **Complete**                   |
 | 8 - Supervisor transport         | Last, and pairs with the split |
 
 **Baseline before migration.** With `better-result@3.0.1` installed and no source change,
 `pnpm verify` passed and all 214 tests across 37 files ran green in the workerd pool, so the
 dependency alone regresses nothing.
+
+**Seven of eight slices are done.** Only slice 8 remains, and it should land with the supervisor
+split rather than editing that 2120-line file twice. `throw` sites in `src/` are down from 204 to
+115, against 29 `panic` calls.
+
+**An independent audit of every `panic` and `.unwrap` in `src/` cleared 11 of 15 dispositions** with
+specific reasons — regex captures that cannot fail, two searches over the same immutable string, a
+classifier disagreeing with the predicate backed by that same classifier. The bias is confined to
+mutable boundaries rather than being pervasive, and its cause is more general than "the supervisor
+wrote this": it is treating a current implementation's properties as enduring invariants.
+
+The audit's rule for slice 8, which we are adopting: keep `Panic` as one concept meaning a violated
+internal invariant, surfaced only as a generic 500 with internal telemetry, and give transient
+failures their own tagged errors instead — `StorageUnavailableError` mapping to 503. Retries come
+only after idempotency, bounds, and backoff are defined. **Splitting `sqlitePanic` is the one item
+that should happen before slice 8**, and it needs a failure-classification design rather than a
+refactor.
+
+It also found that no facet can deliberately reach a supervisor panic today: facets get no bindings
+and no outbound network (`src/agent/loader.ts:95`), and mutation routes require supervisor
+credentials (`supervisor.ts:234`). Under the planned workspace and submission changes two become
+reachable, but they land as `INCONCLUSIVE` or `load_failed` rather than at reset.
 
 **Slices 2, 3, and 5 ran in parallel** in separate worktrees, which the ranking in section 9 does
 not anticipate. It was safe because their files are disjoint and because slice 5 keeps the throwing
