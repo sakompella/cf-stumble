@@ -1,0 +1,76 @@
+# Architecture decisions
+
+One decision per file, in a paragraph. Superseded decisions keep their file and say what replaced
+them, so a reader who follows an old reference lands somewhere that explains itself rather than on
+a 404.
+
+This index exists so that "read the ADRs touching your area" is a lookup rather than sixteen file
+opens. Grouped by area; a decision that spans two areas is listed under the one that owns it.
+`test/docs/adr-index.test.ts` fails if a file here is missing from the list below.
+
+## Generations and activation
+
+- **[ADR-0002](0002-generations-are-materialization-attempts.md)** — a generation is one numbered
+  attempt to materialize a commit, not the commit itself. Numbers never repeat, materialization is
+  immutable, activation is an append-only ledger, and a turn pins its generation at start.
+- **[ADR-0003](0003-supervisor-sqlite-controls-activation.md)** — the registry, live pointer,
+  ledger, validation records, corpus and context all live in supervisor SQLite, and promotion moves
+  them in one transaction with a compare-and-swap. Nothing outside that transaction decides what is
+  live.
+- **[ADR-0007](0007-prioritize-recovery-over-reclamation.md)** — generation 0 is pinned, rollback
+  needs no fresh attestation, and nothing is garbage collected until a collector can prove its
+  roots.
+- **[ADR-0013](0013-migrate-facet-state-lazily.md)** — facet state migrates on first read rather
+  than at promotion, which keeps promotion an atomic pointer switch.
+- **[ADR-0001](0001-commits-define-generations.md)** — _superseded by ADR-0002._ Commits were
+  generations, numbered by DAG depth. Depth is not an identity.
+
+## Agent isolation
+
+- **[ADR-0004](0004-isolate-agent-code-behind-four-capabilities.md)** — agent code runs in a facet
+  with an action space of exactly `read`, `write`, `edit`, `bash`. A facet never receives a general
+  Computer Workspace, because that carries filesystem, git, Assets and Artifacts with it.
+
+## The validation gate
+
+- **[ADR-0005](0005-use-replay-as-a-compatibility-ratchet.md)** — replay measures executor
+  compatibility, not prompt quality, because the tape came from the old prompt. Regressions from the
+  live generation block promotion, and supervisor-pinned canaries must pass outright.
+- **[ADR-0006](0006-supervisor-produces-promotion-evidence.md)** — the supervisor runs the gate and
+  keeps the attestation; a caller cannot submit one. Corpus and gate versions are content-derived
+  hashes.
+- **[ADR-0014](0014-replay-cases-assert-observable-effects.md)** — a case asserts tool calls and
+  workspace state rather than text, pins every source of variation, and reports `INCONCLUSIVE` for
+  harness failure so the ratchet is never fed noise.
+
+## Git storage
+
+- **[ADR-0009](0009-store-git-objects-directly.md)** — Git's uncompressed framed bytes go straight
+  into a content-addressed store rather than giving isomorphic-git a filesystem. Carries the case
+  against the hand-written codec and the evidence behind the retraction.
+- **[ADR-0011](0011-sha1-for-oracle-testability.md)** — SHA-1 is chosen so an independent
+  implementation can check every encoding. It is not a security claim.
+- **[ADR-0010](0010-adopt-computer-for-workspace-git.md)** — _proposed._ Replace the hand-written
+  codec and store with `@cloudflare/computer` once the containment, compatibility and performance
+  slices succeed. ADR-0009 stays current until then.
+
+## The agent definition
+
+- **[ADR-0012](0012-config-is-a-typed-record-not-generated-code.md)** — config is a validated,
+  versioned, typed record in the manifest tree. No code generation stands between a validated
+  generation and a running one.
+
+## How the code is written and verified
+
+- **[ADR-0008](0008-test-in-workerd-only.md)** — one test and typecheck runtime, workerd, because
+  the Node path masked Worker-specific typing errors.
+- **[ADR-0015](0015-brand-with-a-type-predicate.md)** — branded values come from a type predicate,
+  never an `as` assertion, so the brand cannot lie about having been checked.
+- **[ADR-0016](0016-parse-at-the-boundary-without-a-schema-library.md)** — untrusted input is
+  narrowed once by hand at the boundary. No schema library.
+
+## Adding one
+
+Take the next number, write a paragraph, and add a line here under the area it belongs to. Add a
+`Status:` frontmatter field only when a decision is proposed or has been superseded; most ADRs
+never need one.

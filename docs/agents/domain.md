@@ -6,7 +6,8 @@ codebase. This repo is **single-context**: one `CONTEXT.md` and one `docs/adr/` 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root — the glossary of domain terms.
-- **`docs/adr/`** — read the ADRs that touch the area you are about to work in.
+- **`docs/adr/README.md`** — the ADR index, grouped by area. Start here to find which ADRs touch
+  the area you are about to work in, then read those.
 
 Both exist in this repo. Read `CONTEXT.md` in full, and read the ADRs touching the area you are
 about to work in. When a term or a decision is missing, the `/domain-modeling` skill (reached via
@@ -32,7 +33,8 @@ the real source of truth for why things are shaped the way they are:
 The decisions that used to live in a single `docs/decisions.md` have been merged into `docs/adr/`,
 which is now the only register of resolved positions. Nothing else should grow into a second one:
 when a decision is made or revisited, it goes in `docs/adr/` and the reasoning behind it goes in
-`docs/design-history.md`.
+`docs/design-history.md`. A new ADR also needs a line in `docs/adr/README.md`, and
+`test/docs/adr-index.test.ts` fails until it has one.
 
 ## File structure
 
