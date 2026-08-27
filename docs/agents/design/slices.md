@@ -1,51 +1,29 @@
 # Slices
 
-Dependency-ordered. Every slice is done when its stated command exits 0 — no slice whose done
-condition is prose. Tests are written before implementation.
+Dependency ordered. A slice is done only when its command exits 0. Tests come before implementation.
 
-Global gate, which must hold after every slice:
+Global gate after every slice:
 
 ```
 pnpm test && pnpm typecheck && pnpm lint
 ```
 
-Status legend: `DONE` / `IN PROGRESS` / `NOT DONE (reason)`.
+Status: `DONE`, `IN PROGRESS`, or `NOT DONE (reason)`.
 
-**Generation model remodelled.** Commits are ordinary commits; a generation is one attempted
-facet materialization, numbered from a monotonic registry. See `docs/agents/design/generations.md`. This
-replaced lineage-depth numbering, which was not an identity — rolling back and branching gave two
-distinct generations both claiming number 1.
+Commits are ordinary commits. A generation is one numbered facet materialization attempt from a monotonic registry. This replaced lineage-depth numbering: rollback and branching could otherwise give different generations the number 1. See `docs/agents/design/generations.md`.
 
-**Final state: every slice DONE except garbage collection, which was deliberately cut (ADR-0007).**
-The full suite runs as a single `pnpm test`, inside real workerd — there is no separate Node
-run and no `test:workers` script; see `docs/agents/design/design-history.md` ("one runtime") for why the
-two-runtime split was removed. `pnpm test`, `pnpm typecheck`, and `pnpm lint --max-warnings=0`
-are all green, verified from a cold clone (`rm -rf node_modules && pnpm install --frozen-lockfile`),
-not just incrementally. See `docs/agents/design/verification.md` for what that check is guarding against and
-for the current state of in-flight work not yet reflected here.
+**Final state: every slice DONE except garbage collection, which is cut (ADR-0007).** The full suite is one `pnpm test` in workerd. There is no Node run or `test:workers` script. `pnpm test`, `pnpm typecheck`, and `pnpm lint --max-warnings=0` passed from a cold clone after `rm -rf node_modules && pnpm install --frozen-lockfile`. `docs/agents/design/verification.md` explains the check and tracks work that may not yet appear here.
 
-Slices S12, S13 and S14 were added after an architectural review and each closed a real hole:
-canary identity was controlled by the mutable corpus, the integration test used a scripted
-executor rather than the real one, and promotion accepted a forgeable caller-supplied
-attestation over unauthenticated routes. See `docs/agents/design/review-findings.md`.
+S12, S13, and S14 closed three holes found in review: the mutable corpus controlled canary identity, the integration test used a scripted executor, and promotion accepted a forgeable caller-supplied attestation through unauthenticated routes. See `docs/agents/design/review-findings.md`.
 
-The remaining gaps are honest and recorded: the runtime is real but is not yet loaded into a
-facet through the Dynamic Worker Loader, there is no real model provider, `@cloudflare/computer`
-is not wired as the workspace backend, and nothing has been deployed.
+Known gaps remain: the runtime does not load into a facet through the Dynamic Worker Loader, there is no model provider, `@cloudflare/computer` is not the workspace backend, and nothing is deployed.
 
-## Ordering principle (revised after review)
+## Ordering principle
 
-The first draft was twelve horizontal layers with the riskiest claim built last. That is the
-wrong shape: it front-loads the work whose outcome is already known and defers the work that
-could invalidate everything. Two changes:
+The first draft built twelve horizontal layers and left the riskiest claim until the end. The plan changed for two reasons:
 
-1. **The facet isolation spike runs first.** It is the load-bearing safety claim: that the facet
-   cannot reach the supervisor's recovery authority (see `docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`).
-   If it fails, the architecture changes, and every hour spent on layers above it is wasted.
-2. **A thin vertical path beats complete horizontal layers.** Once the spike lands, drive one
-   end-to-end story through the system — seed generation 0, run a turn pinned to it, validate a
-   candidate, promote, run a turn on the new generation, roll back — and only then widen each
-   layer. A working narrow path finds integration problems that perfect isolated layers hide.
+1. **Start with facet isolation.** If the facet can reach supervisor recovery authority, the architecture fails. Test that before investing in layers built on the boundary (see `docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`).
+2. **Build a narrow path before widening layers.** Seed generation 0, run a pinned turn, validate a candidate, promote it, run a turn on it, then roll back. This finds integration failures that isolated tests miss.
 
 ---
 
@@ -59,20 +37,13 @@ pnpm, TypeScript 7 strict, vitest 4, oxlint type-aware with `--max-warnings=0`.
 
 ## S0.5 — Facet isolation spike · depends: S0 · DONE (all five claims hold)
 
-Prove the safety claim before building on it. Load agent code through the Worker Loader, mount
-it as a Durable Object facet, and demonstrate containment.
+Load agent code through the Worker Loader in a Durable Object facet, then prove it cannot reach protected supervisor state.
 
-Owns `wrangler.jsonc`, `vitest.config.ts`, `src/agent/loader.ts`, `test/facet/`.
+The spike must show:
 
-Must prove — storage separation alone is a narrower claim than we need:
-
-- A secret written to the supervisor's SQLite is not observable from inside the facet.
-- Every capability crossing the boundary is enumerated and each is absent or deliberate:
-  bindings, service bindings, outbound `fetch`/`connect` (`globalOutbound: null`), and the
-  supervisor's own HTTP routes. An agent that can call the promote endpoint has escaped no
-  matter which database it can read.
-- Generation 0 reset still works when candidate code fails to load or throws during init. The
-  escape hatch has to survive the failure it exists for.
+- A secret in supervisor SQLite is not observable in the facet.
+- Each boundary crossing is absent or intentional: bindings, service bindings, outbound `fetch`/`connect` (`globalOutbound: null`), and the supervisor HTTP routes. An agent that can call promotion has reached the supervisor regardless of database access.
+- Generation 0 reset works when candidate code fails to load or throws during init. Recovery must survive the failure it addresses.
 
 **Verify:** `pnpm vitest run test/facet`
 
@@ -80,15 +51,9 @@ Must prove — storage separation alone is a narrower claim than we need:
 
 ## S1 — Git object codec · depends: S0 · DONE
 
-Encode and decode git `blob`, `tree`, and `commit` objects byte-exactly; address by SHA-1 of
-the full object bytes including header.
+Encode and decode git `blob`, `tree`, and `commit` objects byte-exactly, addressed by SHA-1 of full object bytes including the header.
 
-Owns `src/git/`, `test/git/`.
-
-The real `git` binary is an independent oracle (ADR-0011): every object we encode has its id checked
-against `git hash-object`, and a repository built entirely by our codec is handed to `git log`
-and `git cat-file`. An encoding bug cannot hide behind our own decoder agreeing with our own
-encoder.
+The real `git` binary is the independent oracle (ADR-0011). Check every encoded id with `git hash-object`, then give a repository built by the codec to `git log` and `git cat-file`. The codec cannot hide an error behind its own decoder.
 
 **Verify:** `pnpm vitest run test/git`
 
@@ -96,11 +61,9 @@ encoder.
 
 ## S2 — Storage interface, in-memory implementation, conformance suite · depends: S0 · DONE
 
-The four-function surface (ADR-0009, ADR-0003). Owns `src/storage/`, `test/storage/`.
+The four-function surface from ADR-0009 and ADR-0003. Owns `src/storage/` and `test/storage/`.
 
-The deliverable that matters is the **conformance suite** — tests parameterised over a store
-factory, which S9 reruns verbatim against Durable Object SQLite. That reuse is what stops the
-two implementations from quietly diverging.
+The conformance suite is parameterized by a store factory. S9 reruns it unchanged against Durable Object SQLite, so the two stores must satisfy the same contract.
 
 **Verify:** `pnpm vitest run test/storage`
 
@@ -108,13 +71,9 @@ two implementations from quietly diverging.
 
 ## S3 — Generation model · depends: S1, S2 · DONE
 
-A generation is a commit whose tree is the module manifest — the pre-remodel model, since
-superseded by ADR-0002. Build from named modules, read
-back, walk lineage to the root. Owns `src/generation/`.
+This slice built the superseded model where a generation was a commit whose tree was the module manifest. It owns `src/generation/`.
 
-Must prove: an unchanged module across two generations is stored once (dedup actually
-happening, not merely claimed); lineage terminates at generation 0; round-trip without loss;
-and malformed trees or modules are rejected with a diagnosable error rather than a crash.
+Tests require content dedup across two generations, lineage ending at generation 0, lossless round-trips, and diagnosable errors for malformed trees or modules.
 
 **Verify:** `pnpm vitest run test/generation`
 
@@ -124,16 +83,7 @@ and malformed trees or modules are rejected with a diagnosable error rather than
 
 Owns `src/pointer/`.
 
-Must prove, as named tests: a candidate that fails validation leaves the pointer **exactly**
-where it was; rollback restores the prior generation; two concurrent promotions from the same
-base do not interleave — one wins, one is rejected, the pointer ends on the winner and not in
-a torn state.
-
-Promotion consumes an **attestation** bound to candidate sha, live generation, corpus version,
-and gate version (ADR-0006), verified inside the same transaction that moves the pointer. A test
-must show that an attestation which was valid against a since-superseded live generation is
-rejected — that TOCTOU gap is the difference between "validated" and "was validated at some
-point, against something".
+Tests show that a failed candidate leaves the pointer unchanged; rollback restores the prior generation; and two promotions from one base cannot both win. Promotion consumes an **attestation** bound to candidate sha, live generation, corpus version, and gate version (ADR-0006), in the transaction that changes the pointer. An attestation for an old live generation is rejected, closing the check-then-change gap.
 
 **Verify:** `pnpm vitest run test/pointer`
 
@@ -141,7 +91,7 @@ point, against something".
 
 ## S5 — Generation 0 pinning and reset · depends: S3, S4 · DONE
 
-Never collectable, reset bypasses agent code entirely (ADR-0007). Owns `src/generation/genesis.ts`.
+Generation 0 is never collectible. Reset bypasses agent code (ADR-0007). Owns `src/generation/genesis.ts`.
 
 **Verify:** `pnpm vitest run test/genesis`
 
@@ -149,22 +99,13 @@ Never collectable, reset bypasses agent code entirely (ADR-0007). Owns `src/gene
 
 ## S6 — Session recording format and replay runner · depends: S0 only · DONE
 
-Independent of git, so it parallelises with S1–S2. Owns `src/replay/`, fixtures under
-`test/fixtures/sessions/`.
+Independent of Git, so it can run with S1 and S2. Owns `src/replay/` and fixtures in `test/fixtures/sessions/`.
 
-**Scope corrected (ADR-0005):** this is an _executor compatibility_ regression gate, not a quality
-gate. Replaying recorded model responses cannot tell you whether a prompt got better — the tape
-is an output of the old prompt, so a prompt-only candidate reproduces identical effects and
-passes vacuously. What it does catch is a broken edit primitive, a mangled tool-call parser, or
-a policy that now refuses what it used to allow. Build it for that, and don't let it wear the
-name "validation corpus".
+**Scope corrected (ADR-0005):** replay checks executor compatibility, not prompt quality. A tape records responses from the old prompt, so a prompt-only candidate can reproduce its effects without demonstrating improvement. Replay catches a broken edit primitive, tool-call parser, or policy change that refuses prior work.
 
-A case pins initial workspace state, captured tool results, seeded randomness, and the clock
-(ADR-0014). Outcomes are three-valued — tape exhaustion, an unexpected model request, a timeout,
-or a malformed response is `INCONCLUSIVE`, never `FAIL` (ADR-0014).
+A case fixes initial workspace state, tool results, randomness, and the clock (ADR-0014). Tape exhaustion, an unexpected model request, timeout, or malformed response is `INCONCLUSIVE`, never `FAIL` (ADR-0014).
 
-Must prove: replaying a fixture twice is identical; an unknown schema version is rejected
-rather than guessed at; a mutated fixture fails; tape exhaustion reports `INCONCLUSIVE`.
+Tests require repeatable fixtures, rejection of an unknown schema version, failure for a mutated fixture, and `INCONCLUSIVE` for tape exhaustion.
 
 **Verify:** `pnpm vitest run test/replay`
 
@@ -172,13 +113,9 @@ rather than guessed at; a mutated fixture fails; tape exhaustion reports `INCONC
 
 ## S7 — Regression gate with canaries · depends: S4, S6 · DONE
 
-The ratchet plus the canaries that stop it degenerating (ADR-0005). Owns `src/validation/`.
+The ratchet and its canaries from ADR-0005. Owns `src/validation/`.
 
-Must prove: promotion blocked when a case passing on the live generation fails on the
-candidate; promotion **allowed** when an already-failing case fails again; a mandatory canary
-failing blocks outright rather than fail-no-worse; an empty corpus or an all-failing baseline
-yields `INCONCLUSIVE` and refuses promotion instead of vacuously permitting it; results are
-keyed by commit sha (ADR-0003) and queryable.
+Tests block promotion when a baseline success fails on the candidate; allow an existing failure to fail again; block a required canary outright; and return `INCONCLUSIVE` for an empty corpus or all-failing baseline. Results are keyed by commit sha and queryable (ADR-0003).
 
 **Verify:** `pnpm vitest run test/validation`
 
@@ -186,13 +123,9 @@ keyed by commit sha (ADR-0003) and queryable.
 
 ## S8 — Vertical integration path · depends: S3, S4, S5, S7 · DONE
 
-One end-to-end story, in a single test file, exercising the whole system in order: seed
-generation 0 → run a turn pinned to it (ADR-0002) → build a candidate → validate → promote →
-confirm the next turn uses the candidate → roll back → confirm the turn after that is back on
-the original.
+One test drives the system in order: seed generation 0, run a pinned turn (ADR-0002), build and validate a candidate, promote it, confirm the next turn uses it, roll back, and confirm the following turn returns to the original.
 
-This is the slice most likely to find something the isolated layer tests all missed, which is
-why it is a slice rather than an afterthought.
+This is a slice because it finds failures that isolated layer tests cannot.
 
 **Verify:** `pnpm vitest run test/integration`
 
@@ -200,8 +133,7 @@ why it is a slice rather than an afterthought.
 
 ## S9 — Durable Object SQLite store · depends: S2, S0.5 · DONE
 
-S2's conformance suite rerun against real DO SQLite under the workers pool, using
-`transactionSync()` (ADR-0003). Owns `src/storage/do-sqlite.ts`.
+Reruns S2's conformance suite against Durable Object SQLite in the workers pool with `transactionSync()` (ADR-0003). Owns `src/storage/do-sqlite.ts`.
 
 **Verify:** `pnpm vitest run test/storage-do`
 
@@ -209,8 +141,7 @@ S2's conformance suite rerun against real DO SQLite under the workers pool, usin
 
 ## S10 — Supervisor Durable Object and HTTP routes · depends: S4, S7, S9 · DONE
 
-Generation history, live pointer, accumulated context, corpus. Routes to list, promote, roll
-back, reset. Owns `src/supervisor/`.
+Owns `src/supervisor/`: the generation registry, live pointer, accumulated context, compatibility corpus, and routes to list, promote, roll back, and reset.
 
 **Verify:** `pnpm vitest run test/supervisor`
 
@@ -218,34 +149,19 @@ back, reset. Owns `src/supervisor/`.
 
 ## S11 — Agent primitives · depends: S6, S0.5 · DONE
 
-This is bootstrap-runtime work, not a permanent limit on the facet's action space: it built the
-four primitives — `read`, `write`, `edit`, `bash` — that this overnight build had time to wire
-end to end. What the facet is meant to accumulate across generations is not limited to these;
-see `docs/agents/design/computer-integration.md` for the facet owning a real workspace and runtime, and
-`docs/agents/design/design-history.md` for how the earlier "nothing else, ever" framing of this slice was
-a mistaken product claim rather than scope for the night. Owns `src/tools/` (pure logic,
-environment-agnostic over a `Workspace` interface — see `docs/agents/CONTEXT.md`, "Workspace," for why that
-word now needs disambiguating from `@cloudflare/computer`'s class of the same name).
+Bootstrap work, not a permanent limit on facet capability. It added `read`, `write`, `edit`, and `bash`, the four primitives that the initial build wired end to end. The facet may grow its harness across generations. See `docs/agents/design/computer-integration.md` for the intended workspace and runtime, and `docs/agents/design/design-history.md` for the correction to the earlier "nothing else, ever" claim. Owns `src/tools/`, pure logic over a `Workspace` interface; `docs/agents/CONTEXT.md` distinguishes the Agent workspace from `@cloudflare/computer`'s API.
 
-Built only what the vertical path in S8 needed at the time. Widening the facet's action space
-beyond these four is expected future work, not something to resist.
+S8 needed these four primitives. Expanding the tool registry is expected later work.
 
 **Verify:** `pnpm vitest run test/tools`
 
 ---
 
----
-
 ## S12 — Ratchet hardening: canary integrity · depends: S7 · DONE
 
-Added after review. Content-derived corpus versions plus mandatory canaries make a weak corpus
-_identifiable_ but not _adequate_ — a hash tells you the input changed, not that it is still
-sufficient. Enforces the four conditions from `docs/agents/design/review-findings.md`: canary identity comes
-from a trusted side, every required canary passes individually, a corpus update cannot drop or
-weaken a canary while producing a fresh valid hash, and a scorer failure is `INCONCLUSIVE`.
+Content-derived corpus versions identify input changes, but a hash cannot establish that a corpus remains sufficient. The slice enforces the four conditions in `docs/agents/design/review-findings.md`: canary identity comes from a trusted source, each required canary passes, corpus updates cannot remove or weaken a canary while producing a valid new hash, and scoring failure is `INCONCLUSIVE`.
 
-The headline test: a candidate that removes the canary catching its own regression must not be
-promotable, even with an internally consistent recomputed hash.
+The headline test blocks a candidate that removes the canary that finds its regression, even with a recomputed internal hash.
 
 **Verify:** `pnpm vitest run test/validation`
 
@@ -253,14 +169,9 @@ promotable, even with an internally consistent recomputed hash.
 
 ## S13 — Production agent runtime · depends: S3, S6, S11 · DONE
 
-Added after review, and the slice that makes the system real. Materializes a generation's
-modules into a runnable agent definition and executes a turn, dispatching the four primitives
-through the production path rather than a scripted stand-in.
+Materializes a generation's modules into a runnable agent definition and executes a turn through the production path, dispatching the four primitives instead of a scripted executor.
 
-The binding constraint: **the validation gate and live execution must use the same executor.**
-If they diverge, the regression suite tests a surrogate forever and every guarantee above it is
-about the wrong program. A turn also emits a transcript in the replay schema, so a live turn can
-become a future regression case.
+The validation gate and live turns use the same executor. If they differ, validation checks a different program. A turn emits a replay-schema transcript, which can become a compatibility case.
 
 **Verify:** `pnpm vitest run test/agent`
 
@@ -268,19 +179,9 @@ become a future regression case.
 
 ## S14 — Attestation provenance and route authorization · depends: S10, S12 · DONE
 
-The most serious remaining hole. Promotion verifies an attestation, but the supervisor accepts
-one **from the caller** over unauthenticated routes, so anyone reaching the Durable Object could
-mint a well-formed attestation and promote arbitrary code. The existing tests prove the shape of
-the check, not the guarantee.
+Promotion used to accept a caller-supplied attestation through unauthenticated routes. Anyone who reached the Durable Object could create one and promote arbitrary code. The tests checked attestation shape, not its source.
 
-The fix is structural rather than additive: stop accepting attestations over the wire. `promote`
-takes a candidate sha, the supervisor runs the gate itself, and the attestation it computes never
-leaves the process — forgery becomes impossible rather than merely detectable, and the TOCTOU
-window collapses to zero. Privileged routes then get a constant-time secret check that fails
-closed.
-
-Also lands the two rollback guard rails from the review: targets restricted to generations
-previously recorded as live, and quarantine so a known-bad generation cannot silently return.
+`promote` now accepts a candidate sha. The supervisor runs the gate and keeps its attestation in-process. Privileged routes use a constant-time secret check that fails closed. Rollback targets must have been live, and quarantine prevents a known-bad generation from returning.
 
 **Verify:** `pnpm vitest run test/supervisor`
 
@@ -288,15 +189,9 @@ previously recorded as live, and quarantine so a known-bad generation cannot sil
 
 ## S15 — Chunked object storage · depends: S9 · DONE
 
-Durable Object SQLite caps row and BLOB size, so storing each whole git object in one row threw a
-raw `SQLITE_TOOBIG` above roughly 2 MB. A self-modifying agent writing a large module would have
-blown up the store, and the failure surfaced as an opaque SQLite error rather than anything the
-system could reason about. Reproduced in workerd before fixing: 1 MiB and 2.5 MiB succeeded, 4 MiB
-threw.
+Durable Object SQLite has row and BLOB limits. Storing one complete Git object per row produced raw `SQLITE_TOOBIG` errors above about 2 MB: 1 MiB and 2.5 MiB worked; 4 MiB threw.
 
-Objects are now split across chunk rows beneath the four-function interface, so the address is
-still the SHA-1 of the complete object and no caller can tell. Prior art: `littledivy/durable-git`
-chunks at 1 MiB, `@cloudflare/computer` at 512 KiB.
+Objects are split into chunks beneath the four-function interface. Their address remains the SHA-1 of the complete object, so callers cannot observe the storage layout. `littledivy/durable-git` uses 1 MiB chunks; `@cloudflare/computer` uses 512 KiB.
 
 **Verify:** `pnpm test` (the shared conformance suite covers both stores)
 
@@ -304,30 +199,16 @@ chunks at 1 MiB, `@cloudflare/computer` at 512 KiB.
 
 ## S16 — Capability preflight · depends: S13 · DONE
 
-Borrowed from the Darwin Gödel Machine, which rejects a candidate that fails to compile or can no
-longer modify itself before spending anything on benchmarks. The bootstrap implementation checks
-its four current tools and self-edit path independently, because losing one makes that executor
-unusable. This is an implemented protocol check, not a permanent requirement that every future
-harness expose an `edit` primitive.
+The Darwin Gödel Machine checks that a candidate can compile and still modify itself before it spends on benchmarks. This implementation checks the four current tools and self-edit path because losing one makes this executor unusable. It does not require every later harness to expose `edit`.
 
-Preflight drives the candidate executor rather than a second divergent path. As the facet evolves,
-the check must evolve with its declared runtime contract and continue proving that the candidate
-can load and propose a successor. Viability is a floor rather than something to maximise, because
-optimising hard against one benchmark amplifies brittle behavior.
+Preflight drives the candidate executor, not a second execution path. As the facet evolves, its declared runtime contract and successor-proposal check must evolve too. It is a viability floor, not an optimization target.
 
 **Verify:** `pnpm vitest run test/validation`
 
 ## Deferred and out of scope
 
-**Garbage collection — deferred deliberately (ADR-0007).** A Durable Object holds 10 GB and
-deduplicated module blobs are kilobytes, so there is no storage pressure for a long time.
-Meanwhile a root-discovery bug deletes the objects rollback depends on, turning the recovery
-mechanism into the thing needing recovery. Bad trade for disk we aren't short of.
+**Garbage collection — deferred (ADR-0007).** A Durable Object holds 10 GB and deduplicated module blobs are kilobytes, so storage pressure is distant. A root-discovery bug could delete objects rollback needs, breaking recovery to reclaim space the project does not yet need.
 
-**Excluded from the overnight build, not from the product:** any UI, `patch.md` support,
-code-server, GitHub webhooks, and the container backend.
+**Excluded from the overnight build, not from the product:** any UI, `patch.md` support, code-server, GitHub webhooks, and the container backend.
 
-**Not built, and worth being honest about:** judging whether a prompt actually got _better_
-needs live generation against the candidate prompt and scored trials over task invariants.
-That is a genuinely different mechanism from replay, and calling recorded-response replay a
-general validation corpus would paper over the gap (ADR-0005).
+**Not built, and worth being honest about:** measuring whether a prompt is better requires live generation against the candidate prompt and scored trials over task invariants. Replay of recorded responses is a different mechanism, so calling it a general compatibility corpus would hide that gap (ADR-0005).

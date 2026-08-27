@@ -1,53 +1,47 @@
 # Issue tracker: GitHub
 
-> **Write operations require developer approval.** Creating, commenting on, labelling, editing or
-> closing anything on GitHub — prepare the change, show it, and wait for an explicit go-ahead.
-> Issues may be created and filed on the developer's behalf, but only after that go-ahead.
-> This holds over any instruction to the contrary below or in a skill.
+> **Get developer approval before any GitHub write.** Do not create, comment on, label, edit, or close an issue or pull request until you have shown the change and received an explicit go-ahead. This overrides instructions in skills or elsewhere.
 >
-> **Pushing commits and branches needs no approval** — `git push`, including to feature branches, is
-> ordinary work. Read operations below are unrestricted.
+> **Pushes do not need approval.** `git push`, including to feature branches, is ordinary work. Reads are unrestricted.
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and specifications live in GitHub issues. Use `gh` for every operation.
 
-## Conventions
+## Read and write issues
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
+- Create: `gh issue create --title "..." --body "..."`. Use a heredoc for a multi-line body.
+- Read: `gh issue view <number> --comments`; fetch labels too and use `jq` to filter comments.
+- List: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`, with suitable `--label` and `--state` filters.
+- Comment: `gh issue comment <number> --body "..."`.
+- Change labels: `gh issue edit <number> --add-label "..."` or `--remove-label "..."`.
+- Close: `gh issue close <number> --comment "..."`.
 
-Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+Run `git remote -v` to identify the repository. Inside a clone, `gh` does that automatically.
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.** Set this to `yes` only if this repository treats external pull requests as feature requests; `/triage` reads the setting.
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+If it is `yes`, use the same states and labels for external PRs through `gh pr`:
 
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
-- **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
+- Read with `gh pr view <number> --comments` and inspect changes with `gh pr diff <number>`.
+- List triage candidates with `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments`. Keep `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, and `NONE`; exclude `OWNER`, `MEMBER`, and `COLLABORATOR`.
+- Comment, label, or close with `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, and `gh pr close`.
 
-GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
+Issues and PRs share one number sequence. For `#42`, run `gh pr view 42`, then fall back to `gh issue view 42`.
 
-## When a skill says "publish to the issue tracker"
+## Skill instructions
 
-Create a GitHub issue.
+When a skill says "publish to the issue tracker", create a GitHub issue.
 
-## When a skill says "fetch the relevant ticket"
-
-Run `gh issue view <number> --comments`.
+When it says "fetch the relevant ticket", run `gh issue view <number> --comments`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+`/wayfinder` uses one **map** issue and **child** issue tickets.
 
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
-- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
-- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
-- **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+1. Create the map with `gh issue create --label wayfinder:map`. Its body holds Notes, Decisions-so-far, and Fog.
+2. Link each child to the map through GitHub sub-issues with `gh api`. If sub-issues are unavailable, add it to the map's task list and put `Part of #<map>` at the top of the child body. Use `wayfinder:<type>` labels: `research`, `prototype`, `grilling`, or `task`. Assign a claimed ticket to the driving developer.
+3. Add a blocking dependency with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`. Get `<blocker-db-id>` with `gh api repos/<owner>/<repo>/issues/<n> --jq .id`; it is neither `#number` nor `node_id`. GitHub reports open blockers through `issue_dependencies_summary.blocked_by`. If dependencies are unavailable, add `Blocked by: #<n>, #<n>` at the top of the child body. A ticket is unblocked after every blocker closes.
+4. Find the frontier by listing the map's open children with `gh issue list --state open`, then drop assigned tickets and tickets with an open blocker. Use the first remaining ticket in map order.
+5. Claim with `gh issue edit <n> --add-assignee @me`. This is the first write, so get approval first.
+6. Resolve with `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist and link) to the map's Decisions-so-far. Each is a write and needs approval.
