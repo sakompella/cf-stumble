@@ -1,8 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { panic, Result } from "better-result";
 import { parseSha } from "../git/types.js";
 import type { Sha } from "../git/types.js";
-import type { SweepableStore } from "./types.js";
+import { MAX_OBJECT_BYTES, ObjectTooLargeError, type SweepableStore } from "./types.js";
 
 // Keep the existing object table as the one-row-per-object index. New rows use an empty
 // marker in its legacy `bytes` column, while old rows with no chunk rows remain readable.
@@ -11,30 +12,6 @@ const CHUNKS_TABLE = "cf_stumble_object_chunks";
 const POINTER_TABLE = "cf_stumble_pointer";
 // 512 KiB leaves four times the documented 2 MiB row limit for SQLite values and metadata.
 const CHUNK_SIZE = 512 * 1024;
-const MAX_OBJECT_BYTES = 10 * 1024 * 1024 * 1024;
-
-export interface ObjectTooLargeError extends Error {
-  readonly actualBytes: number;
-  readonly code: "OBJECT_TOO_LARGE";
-  readonly maxBytes: number;
-}
-
-function makeObjectTooLargeError(actualBytes: number, maxBytes: number): ObjectTooLargeError {
-  const error = new Error(`object is ${actualBytes} bytes, but the maximum is ${maxBytes} bytes`);
-  error.name = "ObjectTooLargeError";
-  const code: ObjectTooLargeError["code"] = "OBJECT_TOO_LARGE";
-  return Object.assign(error, { actualBytes, code, maxBytes });
-}
-
-export function isObjectTooLargeError(error: Error): error is ObjectTooLargeError {
-  return (
-    error instanceof Error &&
-    error.name === "ObjectTooLargeError" &&
-    "code" in error &&
-    error.code === "OBJECT_TOO_LARGE"
-  );
-}
-
 type ObjectRow = {
   readonly bytes: ArrayBuffer;
 };
@@ -62,6 +39,11 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
+/** SQLite failures mean the supervisor's own durable state is unavailable or corrupt, not bad input. */
+function sqlitePanic(operation: string, cause: unknown): never {
+  return panic(`SQLite storage failed to ${operation}`, cause);
+}
+
 export class DurableObjectSqliteStore implements SweepableStore {
   private readonly sql: SqlStorage;
   private readonly storage: DurableObjectState["storage"];
@@ -84,101 +66,127 @@ export class DurableObjectSqliteStore implements SweepableStore {
   }
 
   readObject(sha: Sha): Promise<Uint8Array | undefined> {
-    const rows = this.sql
-      .exec<ObjectRow>(`SELECT bytes FROM ${OBJECTS_TABLE} WHERE sha = ?`, sha)
-      .toArray();
-    const stored = rows[0]?.bytes;
-    if (stored === undefined) {
-      return Promise.resolve(stored);
-    }
+    try {
+      const rows = this.sql
+        .exec<ObjectRow>(`SELECT bytes FROM ${OBJECTS_TABLE} WHERE sha = ?`, sha)
+        .toArray();
+      const stored = rows[0]?.bytes;
+      if (stored === undefined) {
+        return Promise.resolve(stored);
+      }
 
-    const chunks = this.sql
-      .exec<ChunkRow>(
-        `SELECT chunk_index, bytes FROM ${CHUNKS_TABLE} WHERE sha = ? ORDER BY chunk_index`,
-        sha,
-      )
-      .toArray();
-    if (chunks.length === 0) {
-      return Promise.resolve(new Uint8Array(stored).slice());
-    }
+      const chunks = this.sql
+        .exec<ChunkRow>(
+          `SELECT chunk_index, bytes FROM ${CHUNKS_TABLE} WHERE sha = ? ORDER BY chunk_index`,
+          sha,
+        )
+        .toArray();
+      if (chunks.length === 0) {
+        return Promise.resolve(new Uint8Array(stored).slice());
+      }
 
-    let totalBytes = 0;
-    for (const chunk of chunks) {
-      totalBytes += chunk.bytes.byteLength;
+      let totalBytes = 0;
+      for (const chunk of chunks) {
+        totalBytes += chunk.bytes.byteLength;
+      }
+      const output = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const chunk of chunks) {
+        const chunkBytes = new Uint8Array(chunk.bytes);
+        output.set(chunkBytes, offset);
+        offset += chunkBytes.byteLength;
+      }
+      return Promise.resolve(output);
+    } catch (cause: unknown) {
+      return sqlitePanic("read an object", cause);
     }
-    const output = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      const chunkBytes = new Uint8Array(chunk.bytes);
-      output.set(chunkBytes, offset);
-      offset += chunkBytes.byteLength;
-    }
-    return Promise.resolve(output);
   }
 
-  async writeObject(bytes: Uint8Array): Promise<Sha> {
-    const copy = bytes.slice();
-    if (copy.byteLength > MAX_OBJECT_BYTES) {
-      throw makeObjectTooLargeError(copy.byteLength, MAX_OBJECT_BYTES);
-    }
-    const digest = await crypto.subtle.digest("SHA-1", copy);
-    const sha = parseSha(bytesToHex(new Uint8Array(digest)));
-
-    this.storage.transactionSync(() => {
-      const result = this.sql.exec(
-        `INSERT OR IGNORE INTO ${OBJECTS_TABLE} (sha, bytes) VALUES (?, ?)`,
-        sha,
-        toArrayBuffer(new Uint8Array()),
+  async writeObject(bytes: Uint8Array): Promise<Result<Sha, ObjectTooLargeError>> {
+    if (bytes.byteLength > MAX_OBJECT_BYTES) {
+      return Result.err(
+        new ObjectTooLargeError({ actualBytes: bytes.byteLength, maxBytes: MAX_OBJECT_BYTES }),
       );
-      if (result.rowsWritten === 0) {
-        return;
-      }
+    }
+    try {
+      const copy = bytes.slice();
+      const digest = await crypto.subtle.digest("SHA-1", copy);
+      const sha = parseSha(bytesToHex(new Uint8Array(digest)));
 
-      let chunkIndex = 0;
-      for (let offset = 0; offset < copy.byteLength; offset += CHUNK_SIZE) {
-        const end = Math.min(offset + CHUNK_SIZE, copy.byteLength);
-        this.sql.exec(
-          `INSERT INTO ${CHUNKS_TABLE} (sha, chunk_index, bytes) VALUES (?, ?, ?)`,
+      this.storage.transactionSync(() => {
+        const result = this.sql.exec(
+          `INSERT OR IGNORE INTO ${OBJECTS_TABLE} (sha, bytes) VALUES (?, ?)`,
           sha,
-          chunkIndex,
-          toArrayBuffer(copy.slice(offset, end)),
+          toArrayBuffer(new Uint8Array()),
         );
-        chunkIndex += 1;
-      }
-    });
-    return sha;
+        if (result.rowsWritten === 0) {
+          return;
+        }
+
+        let chunkIndex = 0;
+        for (let offset = 0; offset < copy.byteLength; offset += CHUNK_SIZE) {
+          const end = Math.min(offset + CHUNK_SIZE, copy.byteLength);
+          this.sql.exec(
+            `INSERT INTO ${CHUNKS_TABLE} (sha, chunk_index, bytes) VALUES (?, ?, ?)`,
+            sha,
+            chunkIndex,
+            toArrayBuffer(copy.slice(offset, end)),
+          );
+          chunkIndex += 1;
+        }
+      });
+      return Result.ok(sha);
+    } catch (cause: unknown) {
+      return sqlitePanic("write an object", cause);
+    }
   }
 
   readPointer(): Promise<Sha | undefined> {
-    const rows = this.sql
-      .exec<PointerRow>(`SELECT sha FROM ${POINTER_TABLE} WHERE id = 1`)
-      .toArray();
-    const sha = rows[0]?.sha;
-    return Promise.resolve(sha === null || sha === undefined ? undefined : parseSha(sha));
+    try {
+      const rows = this.sql
+        .exec<PointerRow>(`SELECT sha FROM ${POINTER_TABLE} WHERE id = 1`)
+        .toArray();
+      const sha = rows[0]?.sha;
+      return Promise.resolve(sha === null || sha === undefined ? undefined : parseSha(sha));
+    } catch (cause: unknown) {
+      return sqlitePanic("read the pointer", cause);
+    }
   }
 
   setPointer(next: Sha, expected: Sha | undefined): Promise<boolean> {
-    const result =
-      expected === undefined
-        ? this.sql.exec(`UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`, next)
-        : this.sql.exec(
-            `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha = ?`,
-            next,
-            expected,
-          );
-    return Promise.resolve(result.rowsWritten === 1);
+    try {
+      const result =
+        expected === undefined
+          ? this.sql.exec(`UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha IS NULL`, next)
+          : this.sql.exec(
+              `UPDATE ${POINTER_TABLE} SET sha = ? WHERE id = 1 AND sha = ?`,
+              next,
+              expected,
+            );
+      return Promise.resolve(result.rowsWritten === 1);
+    } catch (cause: unknown) {
+      return sqlitePanic("set the pointer", cause);
+    }
   }
 
   listObjects(): Promise<readonly Sha[]> {
-    const rows = this.sql.exec<ShaRow>(`SELECT sha FROM ${OBJECTS_TABLE} ORDER BY sha`).toArray();
-    return Promise.resolve(rows.map((row) => parseSha(row.sha)));
+    try {
+      const rows = this.sql.exec<ShaRow>(`SELECT sha FROM ${OBJECTS_TABLE} ORDER BY sha`).toArray();
+      return Promise.resolve(rows.map((row) => parseSha(row.sha)));
+    } catch (cause: unknown) {
+      return sqlitePanic("list objects", cause);
+    }
   }
 
   deleteObject(sha: Sha): Promise<void> {
-    this.storage.transactionSync(() => {
-      this.sql.exec(`DELETE FROM ${CHUNKS_TABLE} WHERE sha = ?`, sha);
-      this.sql.exec(`DELETE FROM ${OBJECTS_TABLE} WHERE sha = ?`, sha);
-    });
-    return Promise.resolve();
+    try {
+      this.storage.transactionSync(() => {
+        this.sql.exec(`DELETE FROM ${CHUNKS_TABLE} WHERE sha = ?`, sha);
+        this.sql.exec(`DELETE FROM ${OBJECTS_TABLE} WHERE sha = ?`, sha);
+      });
+      return Promise.resolve();
+    } catch (cause: unknown) {
+      return sqlitePanic("delete an object", cause);
+    }
   }
 }

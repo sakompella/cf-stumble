@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { encodeObject } from "../git/index.js";
 import { isSha, FILE_MODE } from "../git/types.js";
 import type { Signature, Sha, TreeEntry } from "../git/types.js";
@@ -36,14 +37,15 @@ export async function buildGeneration(
   }
 
   for (const module of options.modules) {
-    const blob = await store.writeObject(encodeObject({ type: "blob", data: module.content }));
+    const blob = await writeObject(store, encodeObject({ type: "blob", data: module.content }));
     findModuleEntry(root, module.path).blob = blob;
   }
 
   const manifest = await writeTree(store, root);
   const summary = normalizeCommitMessage(options.summary);
   const parent = options.parent;
-  const sha = await store.writeObject(
+  const sha = await writeObject(
+    store,
     encodeObject({
       type: "commit",
       commit: {
@@ -131,7 +133,21 @@ async function writeTree(store: Store, node: TreeNode): Promise<Sha> {
       sha: entry.blob,
     });
   }
-  return store.writeObject(encodeObject({ type: "tree", entries }));
+  return writeObject(store, encodeObject({ type: "tree", entries }));
+}
+
+/**
+ * The storage Result stops at the generation seam until slice 6 migrates this builder's public
+ * contract. Oversize candidate content remains recoverable: rethrowing its tagged error preserves
+ * the existing supervisor error path, which maps it to HTTP 413. Any other store failure still
+ * rejects as an infrastructure defect rather than pretending it is candidate input.
+ */
+async function writeObject(store: Store, bytes: Uint8Array): Promise<Sha> {
+  const result = await store.writeObject(bytes);
+  if (Result.isError(result)) {
+    throw result.error;
+  }
+  return result.value;
 }
 
 function validateOptions(options: BuildGenerationOptions): void {

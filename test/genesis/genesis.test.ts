@@ -83,7 +83,7 @@ class TestStore implements Store {
     return this.delegate.readObject(sha);
   }
 
-  writeObject(bytes: Uint8Array): Promise<Sha> {
+  writeObject(bytes: Uint8Array): ReturnType<Store["writeObject"]> {
     return this.delegate.writeObject(bytes);
   }
 

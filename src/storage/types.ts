@@ -6,7 +6,25 @@
  * than like anything git-specific. The store never parses what it holds.
  */
 
+import { TaggedError, type Result } from "better-result";
 import type { Sha } from "../git/types.js";
+
+/** The maximum complete object size accepted by every store implementation. */
+export const MAX_OBJECT_BYTES = 10 * 1024 * 1024 * 1024;
+
+/** A complete Git object would exceed the store's shared size ceiling. */
+export class ObjectTooLargeError extends TaggedError("ObjectTooLargeError")<{
+  actualBytes: number;
+  maxBytes: number;
+  message: string;
+}> {
+  constructor(args: { actualBytes: number; maxBytes: number }) {
+    super({
+      ...args,
+      message: `object is ${args.actualBytes} bytes, but the maximum is ${args.maxBytes} bytes`,
+    });
+  }
+}
 
 export interface ObjectStore {
   /** Returns undefined for an address that was never written. */
@@ -17,7 +35,7 @@ export interface ObjectStore {
    * those bytes. Writing content that is already present is a no-op that returns the same
    * address, which is what makes an unchanged module across generations cost nothing.
    */
-  writeObject(bytes: Uint8Array): Promise<Sha>;
+  writeObject(bytes: Uint8Array): Promise<Result<Sha, ObjectTooLargeError>>;
 }
 
 export interface PointerStore {
