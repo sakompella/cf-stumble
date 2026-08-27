@@ -321,14 +321,16 @@ slices land. `src/integration/turn.ts` is excluded entirely: it drives a superse
 
 ## 11. Migration progress and validation log
 
-| Slice                            | Status                              |
-| -------------------------------- | ----------------------------------- |
-| 1 - Primitive execution failures | **Complete**                        |
-| 2 - Turn failures                | **Complete**                        |
-| 3 - Agent materialization        | **Complete**                        |
-| 5 - Git object decoding          | **Complete**                        |
-| 4 - Untrusted JSON and replay    | Next. Specified in section 9        |
-| 6-8                              | Specified in section 9, not started |
+| Slice                            | Status                         |
+| -------------------------------- | ------------------------------ |
+| 1 - Primitive execution failures | **Complete**                   |
+| 2 - Turn failures                | **Complete**                   |
+| 3 - Agent materialization        | **Complete**                   |
+| 5 - Git object decoding          | **Complete**                   |
+| 7 - Storage                      | **Complete**                   |
+| 4 - Untrusted JSON and replay    | In progress                    |
+| 6 - Generation reads and rows    | Blocked on slice 4             |
+| 8 - Supervisor transport         | Last, and pairs with the split |
 
 **Baseline before migration.** With `better-result@3.0.1` installed and no source change,
 `pnpm verify` passed and all 214 tests across 37 files ran green in the workerd pool, so the
@@ -362,6 +364,20 @@ property tests), up from 259.
 - **`snapshotWorkspace` panics on a list-then-read race** (`src/agent/runtime/transcript.ts:20`).
   Correct against `InMemoryWorkspace`, wrong against a real filesystem where the agent's own `bash`
   can delete a file between the two calls.
+- **`sqlitePanic` treats storage being unavailable and storage being corrupt as one failure**
+  (`src/storage/do-sqlite.ts:42`, whose own comment says "unavailable or corrupt"). Corruption is a
+  defect and should panic. Transient unavailability — overload, exceeded limits, an eviction race —
+  is retryable, and panicking makes it permanent. That matters more here than in an ordinary
+  service: ADR-0007 ranks keeping recovery reachable above everything else, so the supervisor
+  becoming unrecoverable exactly when its storage is under stress is the wrong failure mode. This is
+  not a regression, since these paths threw before, but slice 8 will build a `.match()` that maps
+  `Panic` to an unrecoverable 500, and at that point the mislabel becomes behaviour. Splitting it
+  needs a retry policy, which is a design decision rather than a refactor.
+- **Both recoverable branches added so far are close to unreachable.** Slice 7's 413 needs a single
+  object above `MAX_OBJECT_BYTES`, which is 10 GiB, against modules measured in kilobytes; slice 3's
+  422 for non-UTF-8 content cannot be reached through the JSON API at all. The panic paths are the
+  live ones. Worth knowing when judging how much the migration has actually changed at runtime
+  rather than in the types.
 
 ### Slice 1 - Primitive execution failures (complete)
 
