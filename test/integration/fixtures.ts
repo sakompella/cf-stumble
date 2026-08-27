@@ -99,7 +99,7 @@ export function runConfiguredTurn(store: MemoryStore, workspace: InMemoryWorkspa
       { name: "integration-turn", seed: 0, nowMs: definition.generation.createdAt },
     );
     if (turn.status !== "completed") {
-      throw new Error(`turn failed: ${turn.failure.kind}`);
+      throw new Error(`turn failed: ${turn.failure.message}`);
     }
     const write = turn.trace.find(
       (call): call is { readonly kind: "write"; readonly path: string; readonly content: string } =>

@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { isJsonObjectValue, type JsonObject, type JsonValue } from "../../json.js";
 import { assertNever } from "../../git/types.js";
 import type {
@@ -13,16 +14,20 @@ import {
   type PrimitiveSuccess as ToolPrimitiveSuccess,
 } from "../../tools/index.js";
 import type { AgentDefinition } from "./definition.js";
-import { ModelSourceError } from "./model-errors.js";
+import {
+  MalformedToolCallError,
+  ModelSourceExhaustedError,
+  ModelSourceFailedError,
+  StepBudgetExceededError,
+  UnknownToolError,
+} from "./model-errors.js";
 import { DEFAULT_MODEL_REQUEST_ID, type ModelResponseSource } from "./model.js";
 import { parseAgentResponse } from "./protocol.js";
 import type { ParsedToolCall } from "./protocol.js";
 import type { TurnFailure } from "./types.js";
 
 /** Outcome of decoding one tool call from model output: a domain call, or why it was rejected. */
-type PrimitiveCallParse =
-  | { readonly ok: true; readonly call: ToolPrimitiveCall }
-  | { readonly ok: false; readonly failure: TurnFailure };
+type PrimitiveCallParse = Result<ToolPrimitiveCall, MalformedToolCallError | UnknownToolError>;
 
 export type ToolExecution =
   | { readonly ok: true; readonly result: ReplayPrimitiveResult }
@@ -55,30 +60,26 @@ export async function executeLoop(
   const toolResults: ReplayPrimitiveResult[] = [];
 
   for (let step = 0; step < environment.maxSteps; step += 1) {
-    const response = await requestModel(input, environment, toolResults, trace);
-    if (!response.ok) {
-      return response.failure;
+    const response = await requestModel(input, environment, toolResults);
+    if (Result.isError(response)) {
+      return { status: "failed", failure: response.error, trace };
     }
 
-    const parsed = parseAgentResponse(response.response);
-    if (!parsed.ok) {
-      return {
-        status: "failed",
-        failure: { kind: "malformed-tool-call", detail: parsed.detail },
-        trace,
-      };
+    const parsed = parseAgentResponse(response.value);
+    if (Result.isError(parsed)) {
+      return { status: "failed", failure: parsed.error, trace };
     }
-    if (parsed.response.kind === "final") {
-      return { status: "completed", response: parsed.response.content, trace };
+    if (parsed.value.kind === "final") {
+      return { status: "completed", response: parsed.value.content, trace };
     }
 
-    for (const action of parsed.response.calls) {
+    for (const action of parsed.value.calls) {
       const parsedCall = primitiveCall(action);
-      if (!parsedCall.ok) {
-        return { status: "failed", failure: parsedCall.failure, trace };
+      if (Result.isError(parsedCall)) {
+        return { status: "failed", failure: parsedCall.error, trace };
       }
-      trace.push(parsedCall.call);
-      const execution = await environment.callPrimitive(parsedCall.call);
+      trace.push(parsedCall.value);
+      const execution = await environment.callPrimitive(parsedCall.value);
       if (!execution.ok) {
         return { status: "failed", failure: execution.failure, trace };
       }
@@ -88,52 +89,36 @@ export async function executeLoop(
 
   return {
     status: "failed",
-    failure: { kind: "step-budget-exceeded", maxSteps: environment.maxSteps },
+    failure: new StepBudgetExceededError({ maxSteps: environment.maxSteps }),
     trace,
   };
 }
-
-type RequestResult =
-  | { readonly ok: true; readonly response: RecordedModelResponse }
-  | { readonly ok: false; readonly failure: LoopResult };
 
 async function requestModel(
   input: string,
   environment: LoopEnvironment,
   toolResults: readonly ReplayPrimitiveResult[],
-  trace: readonly ToolPrimitiveCall[],
-): Promise<RequestResult> {
+): Promise<Result<RecordedModelResponse, ModelSourceExhaustedError | ModelSourceFailedError>> {
   try {
-    return {
-      ok: true,
-      response: await environment.requestModel({
+    return Result.ok(
+      await environment.requestModel({
         requestId: DEFAULT_MODEL_REQUEST_ID,
         input,
         definition: environment.definition,
         toolResults,
       }),
-    };
+    );
   } catch (error) {
-    if (!(error instanceof ModelSourceError)) {
-      throw error;
+    if (ModelSourceExhaustedError.is(error) || ModelSourceFailedError.is(error)) {
+      return Result.err(error);
     }
-    return {
-      ok: false,
-      failure: {
-        status: "failed",
-        failure:
-          error.kind === "exhausted"
-            ? { kind: "model-source-exhausted", detail: error.message }
-            : { kind: "model-source-error", detail: error.message },
-        trace,
-      },
-    };
+    throw error;
   }
 }
 
 function primitiveCall(action: ParsedToolCall): PrimitiveCallParse {
   if (!isPrimitiveKind(action.name)) {
-    return { ok: false, failure: { kind: "unknown-tool", name: action.name } };
+    return Result.err(new UnknownToolError({ toolName: action.name }));
   }
   if (!isJsonObjectValue(action.arguments)) {
     return malformedArguments(action.name);
@@ -155,9 +140,7 @@ function primitiveCall(action: ParsedToolCall): PrimitiveCallParse {
 
 function readCall(argumentsObject: JsonObject): PrimitiveCallParse {
   const path = stringArgument(argumentsObject, "path");
-  return path === undefined
-    ? malformedArgument("read", "path")
-    : { ok: true, call: { kind: "read", path } };
+  return path === undefined ? malformedArgument("read", "path") : Result.ok({ kind: "read", path });
 }
 
 function writeCall(argumentsObject: JsonObject): PrimitiveCallParse {
@@ -168,7 +151,7 @@ function writeCall(argumentsObject: JsonObject): PrimitiveCallParse {
   }
   return content === undefined
     ? malformedArgument("write", "content")
-    : { ok: true, call: { kind: "write", path, content } };
+    : Result.ok({ kind: "write", path, content });
 }
 
 function editCall(argumentsObject: JsonObject): PrimitiveCallParse {
@@ -183,34 +166,30 @@ function editCall(argumentsObject: JsonObject): PrimitiveCallParse {
   }
   return newText === undefined
     ? malformedArgument("edit", "newText")
-    : { ok: true, call: { kind: "edit", path, oldText, newText } };
+    : Result.ok({ kind: "edit", path, oldText, newText });
 }
 
 function bashCall(argumentsObject: JsonObject): PrimitiveCallParse {
   const command = stringArgument(argumentsObject, "command");
   return command === undefined
     ? malformedArgument("bash", "command")
-    : { ok: true, call: { kind: "bash", command } };
+    : Result.ok({ kind: "bash", command });
 }
 
 function malformedArguments(name: PrimitiveKind): PrimitiveCallParse {
-  return {
-    ok: false,
-    failure: {
-      kind: "malformed-tool-call",
+  return Result.err(
+    new MalformedToolCallError({
       detail: `tool ${JSON.stringify(name)} arguments must be an object`,
-    },
-  };
+    }),
+  );
 }
 
 function malformedArgument(name: PrimitiveKind, argument: string): PrimitiveCallParse {
-  return {
-    ok: false,
-    failure: {
-      kind: "malformed-tool-call",
+  return Result.err(
+    new MalformedToolCallError({
       detail: `tool ${JSON.stringify(name)} argument ${JSON.stringify(argument)} must be a string`,
-    },
-  };
+    }),
+  );
 }
 
 function stringArgument(argumentsObject: JsonObject, name: string): string | undefined {

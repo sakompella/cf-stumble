@@ -1,4 +1,4 @@
-import { assertNever } from "../../git/types.js";
+import { panic } from "better-result";
 import type { WorkspaceTree } from "../../replay/schema.js";
 import type { Workspace, WorkspaceFileContent } from "../../tools/types.js";
 import type { ExecuteTurnOptions, TurnFailure } from "./types.js";
@@ -17,7 +17,7 @@ export async function snapshotWorkspace(workspace: Workspace): Promise<Workspace
   for (const path of files) {
     const content = await workspace.readFile(path);
     if (content === undefined) {
-      throw new TypeError(`workspace listed ${JSON.stringify(path)} but read returned no file`);
+      panic(`workspace listed ${JSON.stringify(path)} but read returned no file`);
     }
     if (!isTextContent(content)) {
       throw new TypeError(
@@ -52,24 +52,7 @@ export function recordingOptionsFor(options: ExecuteTurnOptions): RecordingOptio
 }
 
 export function describeFailure(failure: TurnFailure): string {
-  switch (failure.kind) {
-    case "malformed-tool-call":
-      return failure.detail;
-    case "unknown-tool":
-      return `unknown tool ${JSON.stringify(failure.name)}`;
-    case "primitive-failure":
-      // The tagged error's own message already names the operation and the offending input, which
-      // is strictly more than the old `kind` gave a reader of this line.
-      return `primitive ${failure.call.kind} failed: ${failure.error.message}`;
-    case "model-source-exhausted":
-    case "model-source-error":
-    case "transcript-error":
-      return failure.detail;
-    case "step-budget-exceeded":
-      return `turn exceeded its ${failure.maxSteps}-step budget`;
-    default:
-      return assertNever(failure, "turn failure");
-  }
+  return failure.message;
 }
 
 export function errorDetail(error: Error | string): string {
