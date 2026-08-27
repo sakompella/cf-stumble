@@ -1,8 +1,8 @@
 # cf-stumble
 
 A personal AI coding-agent harness on Cloudflare Workers where the agent's own definition —
-its prompts, skills, policies, and module code — is versioned as immutable **generations**,
-modelled on NixOS system generations.
+its model loop, tool registry, prompts, skills, policies, and module code — is versioned as
+immutable **generations**, modelled on NixOS system generations.
 
 The agent can modify itself. A self-modification is a _candidate_ build that must pass a gate
 before it can go live. Promotion is an atomic pointer switch. Rollback is the same switch in
@@ -18,17 +18,20 @@ accumulated context, and the replay corpus live in a supervisor Durable Object t
 normally. Agent code runs in a Durable Object _facet_ loaded through the Dynamic Worker Loader,
 with its own isolated SQLite and no route back to the supervisor's state. That containment is
 the entire safety argument, which is why it is the first thing built and tested rather than the
-last (see ADR-0004).
+last (see ADR-0024).
 
 **Generation 0 is pinned and always reachable.** It is never garbage-collected, and reset routes
 through the supervisor without touching agent code. An escape hatch the agent can break is not
 an escape hatch, so it is tested against candidate code that fails to load and candidate code
 that throws on init.
 
-**The action space is fixed at four primitives** — `read`, `write`, `edit`, `bash` — and never
-grows. What accumulates across generations is skills, prompts, policies, and context. An agent
-that can add its own tools can add one that escapes the sandbox; an agent that can only write
-better instructions for four fixed tools cannot.
+**The facet is the mutable half; the supervisor is not.** Model loop, tool registry, prompts,
+skills, policies, module code, and the agent's work environment can all change from one candidate
+to the next — that evolvability is the point of the project. What stays fixed is the supervisor's
+recovery authority: generation history, the live pointer, and the validation gate, none of which
+a facet can reach except through the sanctioned build → validate → promote path (see ADR-0024).
+`read`, `write`, `edit`, and `bash` are the bootstrap harness the first generation ships with, not
+a permanent ceiling on what a later agent definition is allowed to grow into.
 
 ## Storage
 
@@ -54,8 +57,8 @@ ten-method `FsClient` and writes zlib-compressed loose objects into it, which wo
 emulating a filesystem over Durable Object SQLite so git can emulate a content-addressed store
 on top of something that already is one. The codec is 614 lines, keeps the four-function store
 honest, and because it keeps git's exact byte format the real `git` binary works as an
-independent test oracle. See ADR-0009 for the case against and ADR-0010 for the proposed
-replacement.
+independent test oracle. See ADR-0009 for the case against the hand-written codec and for the
+replacement it was later measured against.
 
 ## Documentation
 
