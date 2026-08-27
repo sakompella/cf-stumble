@@ -1,6 +1,8 @@
+import { assertNever } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type { Attestation, Verdict } from "../generation/types.js";
 import type { GenerationNumber } from "../generation/types.js";
+import type { GenerationRegistry, MaterializationTransition } from "../generation/registry.js";
 import type { EffectsDifference } from "../replay/comparison.js";
 import type { ReplaySession } from "../replay/index.js";
 import type { PointerStore } from "../storage/types.js";
@@ -9,6 +11,8 @@ import {
   type ValidationCase,
   type ValidationCaseResult,
   type ValidationExecutor,
+  type PreflightResult,
+  type PreflightRunner,
   type ValidationResult,
   type ValidationResultStore,
 } from "./results.js";
@@ -29,6 +33,10 @@ export type ValidationGateOptions = {
   /** Supervisor-owned canaries; corpus metadata cannot add, remove, or alter these cases. */
   readonly pinnedCanaries?: readonly PinnedCanary[];
   readonly execute: ValidationExecutor;
+  /** Optional cheap capability gate; corpus execution starts only after it passes. */
+  readonly preflight?: PreflightRunner;
+  /** Records a preflight rejection in the generation lifecycle before the corpus is considered. */
+  readonly generationRegistry?: Pick<GenerationRegistry, "transition">;
   readonly executorTimeoutMs?: number;
   readonly now?: () => number;
 };
@@ -50,6 +58,8 @@ export class ValidationGate {
   private readonly corpus: readonly ValidationCase[];
   private readonly pinnedCanaries: readonly PinnedCanary[];
   private readonly execute: ValidationExecutor;
+  private readonly preflight: PreflightRunner | undefined;
+  private readonly generationRegistry: Pick<GenerationRegistry, "transition"> | undefined;
   private readonly executorTimeoutMs: number;
   private readonly now: () => number;
 
@@ -62,26 +72,33 @@ export class ValidationGate {
     this.corpus = [...options.corpus];
     this.pinnedCanaries = [...pinnedCanaries];
     this.execute = options.execute;
+    this.preflight = options.preflight;
+    this.generationRegistry = options.generationRegistry;
     this.executorTimeoutMs = validateExecutorTimeout(options.executorTimeoutMs ?? 30_000);
     this.now = options.now ?? Date.now;
   }
 
   async validate(candidate: Sha, validationIdentity: ValidationIdentity): Promise<ValidationRun> {
+    const preflight = await executePreflight(this.preflight, candidate);
+    await recordPreflightFailure(this.generationRegistry, preflight, validationIdentity);
     const [corpusVersion, gateVersion, validatedAgainst, pinnedCorpusMatches] = await Promise.all([
       computeCorpusVersion(this.corpus),
       computeGateVersion(),
       this.pointerStore.readPointer(),
       corpusContainsPinnedCanaries(this.corpus, this.pinnedCanaries),
     ]);
-    const caseResults = pinnedCorpusMatches
-      ? await runCases(
-          this.execute,
-          candidate,
-          validatedAgainst,
-          evaluationCases(this.corpus, this.pinnedCanaries),
-          this.executorTimeoutMs,
-        )
-      : [];
+    const caseResults =
+      preflight === undefined || preflight.status === "PASS"
+        ? pinnedCorpusMatches
+          ? await runCases(
+              this.execute,
+              candidate,
+              validatedAgainst,
+              evaluationCases(this.corpus, this.pinnedCanaries),
+              this.executorTimeoutMs,
+            )
+          : []
+        : [];
 
     const result = makeValidationResult(
       candidate,
@@ -91,9 +108,61 @@ export class ValidationGate {
       gateVersion,
       caseResults,
       this.now(),
+      preflight,
     );
     await this.resultStore.put(result);
     return { result, attestation: passingAttestation(result) };
+  }
+}
+
+async function recordPreflightFailure(
+  generationRegistry: Pick<GenerationRegistry, "transition"> | undefined,
+  preflight: PreflightResult | undefined,
+  identity: ValidationIdentity,
+): Promise<void> {
+  if (generationRegistry === undefined || preflight === undefined || preflight.status === "PASS") {
+    return;
+  }
+  const failure = preflight.failure ?? `preflight ${preflight.status.toLowerCase()}`;
+  const transition: MaterializationTransition = hasMaterializationFailure(preflight)
+    ? { state: "load_failed", artifactDigest: identity.artifactDigest, failure }
+    : { state: "validation_failed", failure };
+  const result = await generationRegistry.transition(identity.generation, transition);
+  if (result.outcome === "rejected") {
+    throw new Error(
+      `could not record preflight ${preflight.status.toLowerCase()} for generation ${identity.generation}: ${result.reason.kind}`,
+    );
+  }
+}
+
+function hasMaterializationFailure(preflight: PreflightResult): boolean {
+  return preflight.checks.some(
+    (check) => check.capability === "materialization" && check.status === "FAIL",
+  );
+}
+
+async function executePreflight(
+  preflight: PreflightRunner | undefined,
+  candidate: Sha,
+): Promise<PreflightResult | undefined> {
+  if (preflight === undefined) {
+    return undefined;
+  }
+  try {
+    return await preflight(candidate);
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      status: "INCONCLUSIVE",
+      checks: [
+        {
+          capability: "materialization",
+          status: "INCONCLUSIVE",
+          detail: `preflight harness error: ${detail}`,
+        },
+      ],
+      failure: `preflight harness error: ${detail}`,
+    };
   }
 }
 
@@ -105,7 +174,9 @@ function makeValidationResult(
   gateVersion: string,
   caseResults: readonly ValidationCaseResult[],
   createdAt: number,
+  preflight: PreflightResult | undefined,
 ): ValidationResult {
+  const preflightEvidence = preflight === undefined ? {} : { preflight };
   return {
     candidate,
     generation: identity.generation,
@@ -114,10 +185,30 @@ function makeValidationResult(
     validatedAgainstGeneration: identity.validatedAgainstGeneration,
     corpusVersion,
     gateVersion,
-    verdict: evaluateRatchet(caseResults),
+    verdict: evaluateVerdict(preflight, caseResults),
     createdAt,
     caseResults,
+    ...preflightEvidence,
   };
+}
+
+function evaluateVerdict(
+  preflight: PreflightResult | undefined,
+  caseResults: readonly ValidationCaseResult[],
+): Verdict {
+  if (preflight === undefined) {
+    return evaluateRatchet(caseResults);
+  }
+  switch (preflight.status) {
+    case "PASS":
+      return evaluateRatchet(caseResults);
+    case "FAIL":
+      return "fail";
+    case "INCONCLUSIVE":
+      return "inconclusive";
+    default:
+      return assertNever(preflight.status, "preflight status");
+  }
 }
 
 function passingAttestation(result: ValidationResult): Attestation | undefined {
@@ -202,5 +293,4 @@ function evaluateRatchet(caseResults: readonly ValidationCaseResult[]): Verdict 
   }
   return "pass";
 }
-
 export type { EffectsDifference, ReplaySession };
