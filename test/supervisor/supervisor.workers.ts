@@ -576,3 +576,69 @@ export class Agent extends DurableObject {
   const nextTurn = readRecord(await readJson(await supervisorRequest("/turn")));
   expect(readRecord(nextTurn["result"])["label"]).toBe("candidate");
 });
+
+/**
+ * The reason the storage failures were split into their own tagged errors rather than left as one
+ * `panic`: a read failure used to reach `markLoadFailed`, so a moment of storage trouble marked a
+ * healthy candidate permanently unloadable and no rollback would bring it back. This asserts the
+ * candidate survives the outage untouched, which is the claim the whole change rests on.
+ *
+ * The outage is injected by renaming the objects table, so the `SELECT` in `readObject` fails with
+ * an error the store has no discriminator for — exactly the unknown operational failure that must
+ * now classify as unavailable rather than as corruption.
+ */
+test("a storage outage during promotion answers 503 and leaves the candidate loadable", async () => {
+  const createdResponse = await createGeneration();
+  expect(createdResponse.status).toBe(201);
+  const candidate = readNumberField(
+    readRecord(readRecord(await readJson(createdResponse))["generation"]),
+    "number",
+  );
+  await writeValidationCase();
+
+  const stateBefore = readStringField(
+    readRecord(
+      readRecord(await readJson(await supervisorRequest(`/generations/${candidate}`)))[
+        "generation"
+      ],
+    ),
+    "state",
+  );
+  expect(stateBefore).not.toBe("load_failed");
+
+  const stub = env.SUPERVISOR.getByName("supervisor-s10");
+  await runInDurableObject(stub, (_instance, state) => {
+    state.storage.sql.exec("ALTER TABLE cf_stumble_objects RENAME TO cf_stumble_objects_hidden");
+  });
+
+  const promotion = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({ candidate }),
+  });
+
+  expect(promotion.status).toBe(503);
+  const body = readRecord(await readJson(promotion));
+  expect(readRecord(body["error"])["kind"]).toBe("storage-unavailable");
+  // The cause names our table and would hand an internal detail to the caller.
+  expect(JSON.stringify(body)).not.toContain("cf_stumble_objects");
+
+  const stateDuring = readStringField(
+    readRecord(
+      readRecord(await readJson(await supervisorRequest(`/generations/${candidate}`)))[
+        "generation"
+      ],
+    ),
+    "state",
+  );
+  expect(stateDuring).toBe(stateBefore);
+
+  await runInDurableObject(stub, (_instance, state) => {
+    state.storage.sql.exec("ALTER TABLE cf_stumble_objects_hidden RENAME TO cf_stumble_objects");
+  });
+
+  const retried = await supervisorRequest("/promote", {
+    method: "POST",
+    body: JSON.stringify({ candidate }),
+  });
+  expect(retried.status).not.toBe(503);
+});
