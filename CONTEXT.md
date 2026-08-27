@@ -1,284 +1,161 @@
-# cf-stumble domain glossary
+# cf-stumble
 
-Single-context repo; see `docs/agents/domain.md` for how skills should read this. Read
-`docs/generations.md` and `docs/decisions.md` alongside this file — they carry the reasoning
-this glossary states only the conclusion of.
+cf-stumble is a self-modifying agent harness: the agent can revise its own definition, but a separate authority decides which revisions may run. This glossary fixes the project-specific language needed to keep authored history, attempted executions, and live operation distinct.
 
-Several terms here were sharpened after an earlier, looser usage turned out to hide a real bug
-or a real ambiguity. Where that happened, the rejected word is named and why it lost.
+## Language
 
-## Generation
+### History and identity
 
-**One attempted facet materialization** — one try at loading a specific commit as a running
-agent. Not a commit, and not a piece of content.
+**Commit**:
+An ordinary Git revision in the agent's authored history. It is not a generation, an attempt, or evidence that anything has run.
+_Avoid_: generation, release, deployment
 
-The earlier model made every commit a generation and numbered generations by walking parent
-links (lineage depth). That broke in a way a test now proves: build generation 0, build
-generation 1 from it, roll back to 0, then build a *different* candidate from 0 — both
-candidates compute depth 1, so two distinct generations claimed the same number. Depth is not
-an identity. It also gave the agent nowhere to work, since a system where every commit is a
-generation cannot let the agent make three exploratory commits before trying one.
+**Authored history**:
+The commit DAG containing the agent definition's revisions and their ancestry. It is Git history, not the history of which generations were live.
+_Avoid_: generation history, activation history
 
-A generation number comes from a monotonic counter that never reuses a value, allocated and
-written to the registry *before* the loader runs — so a crash mid-load still leaves a numbered
-row rather than a gap. A generation that fails to load still consumes its number, the same way
-a NixOS system that will not boot still occupies a slot in the boot menu.
+**Working tree**:
+A mutable checkout used to assemble an ordinary commit. In the Git analogy it is scratch space, not an immutable revision or a generation.
+_Avoid_: generation, snapshot
 
-**Generation-to-commit is many-to-one, deliberately.** Attempting the same commit twice produces
-two generations, because the unit here is the attempt, not the content. Content dedup still
-happens one level down, in the object store.
+**Generation**:
+One attempted facet materialization of a particular commit, identified by a never-reused number. It resembles a NixOS generation in being a numbered attempt, but it is an agent attempt rather than a bootable operating system.
+_Avoid_: commit, snapshot, version, revision
 
-## Commit
+**Generation registry**:
+The authoritative catalogue of generations and their materialization records. It is not Git tags: tags name revisions, while the registry identifies attempts.
+_Avoid_: tags, generation refs, generation list
 
-An ordinary git commit: content plus ancestry, nothing else. Under the current design a
-commit's tree is the module manifest and its parent is the previous commit in the working
-history — but a commit is not itself a generation, activated, or promoted. Only a generation
-is any of those things. This distinction is the fix for the bug described above; conflating the
-two is the mistake that produced it.
+**Generation 0 (genesis)**:
+The known-good initial generation and the guaranteed recovery target. It resembles a NixOS fallback generation, but is a project recovery point rather than an operating-system boot entry.
+_Avoid_: root commit, default branch, initial commit
 
-## Materialization
+**Candidate**:
+A generation being considered for activation. It is a role a generation plays before its first promotion, not a separate kind of content.
+_Avoid_: draft, proposed commit, untrusted commit
 
-The immutable half of what happens to a generation: the record of what was tried and how it
-turned out. States are terminal, not a straight-line pipeline —
-`loading -> load_failed`, or `loading -> loaded -> validation_failed`, or
-`loading -> loaded -> validated`. Once terminal, a materialization record never changes again.
+**Baseline**:
+The live generation against which a candidate is evaluated. It records the relevant operational starting point, not the candidate's commit parent.
+_Avoid_: parent, predecessor, previous commit
 
-## Activation
+**Artifact**:
+The concrete agent definition loaded for one materialization attempt. It is evidence of what ran, rather than merely the commit that was selected.
+_Avoid_: commit, source, build output
 
-The repeatable half, kept separate from materialization on purpose. A validated generation can
-be promoted, superseded by a later promotion, rolled back to, and promoted again — a single
-mutable status field on the generation cannot represent that history, so activation lives in its
-own **append-only ledger** of promotion and rollback events. A generation record answers "what
-did we try and how did it go"; the ledger answers "what was live, and when."
+### Attempts and activation
 
-## Promotion
+**Materialization**:
+The outcome of one attempt to turn a commit into a running facet. It says what was tried and whether it became usable; it does not say whether it was ever live.
+_Avoid_: activation, deployment, promotion
 
-An activation event that atomically switches the live pointer to a generation that has a
-successful materialization and at least one attestation the supervisor itself produced. Requires
-the target to have been validated; requires nothing from the caller beyond a candidate sha, since
-promotion no longer accepts an attestation over the wire (see `docs/review-findings.md`,
-"attestation provenance").
+**Activation**:
+An event that makes one generation live. A generation may be activated more than once, so activation is distinct from its one materialization attempt.
+_Avoid_: materialization, generation status, deployment
 
-## Rollback
+**Activation ledger**:
+The ordered history of activation events. It answers when a generation was live, while the registry answers what generation was attempted.
+_Avoid_: generation history, status history, changelog
 
-An activation event that returns the live pointer to a previously-live generation. Has a
-subtlety worth keeping straight: if the target's facet still exists, rollback is a reactivation
-of an existing generation — a ledger event, no new number. If the facet has to be loaded again
-from scratch, that fresh load is, by this model's own definition, a *new* generation. Both are
-legitimate outcomes of the word "rollback"; they must not be conflated with each other.
+**Live pointer**:
+The current activation's generation number. It identifies an attempted materialization, not merely a commit.
+_Avoid_: live branch, current commit, active ref
 
-Rollback requires no attestation, deliberately — recovery has to survive validation itself being
-unavailable — but it is restricted to generations previously recorded as live, and blocked for
-any generation currently quarantined.
+**Promotion**:
+An activation that makes a validated candidate live. It is a decision about an attempted generation, not a Git operation.
+_Avoid_: merge, deploy, publish
 
-## Reset
+**Rollback**:
+An activation that returns to a generation that was live before. It is not time travel through authored history and does not erase later activations.
+_Avoid_: undo, revert, reset
 
-The escape hatch: an activation that returns the live pointer to generation 0 (genesis),
-bypassing agent code entirely and bypassing quarantine. If the agent could break the path back to
-generation 0, there would be no escape hatch, so reset does not route through anything the agent
-controls, and it is tested against candidate code that fails to load and candidate code that
-throws during init.
+**Reset**:
+The recovery activation that returns directly to genesis. Unlike rollback, it remains available even when ordinary recovery rules no longer permit a target.
+_Avoid_: rollback, revert, restart
 
-## Quarantine
+**Quarantine**:
+A restriction that prevents a particular generation from becoming live again through ordinary activation. It names a known-bad attempt, not a bad commit in every possible context.
+_Avoid_: blacklist, ban, rejected commit
 
-A per-generation flag that blocks a specific generation number from becoming live again, even via
-rollback. Exists because rollback alone would let a generation known to be bad silently come
-back; quarantine is the guard rail that stops that. Reset ignores quarantine, since otherwise
-quarantining generation 0 itself would remove the only guaranteed way back.
+**Attestation**:
+The supervisor's validation evidence for a particular candidate, baseline, artifact, and evaluation context. It is proof tied to one reality, not a caller-supplied approval.
+_Avoid_: approval token, validation token, certificate
 
-## Candidate
+### The agent boundary
 
-A generation undergoing validation, not yet promoted. "Candidate" describes a generation's role
-in the promotion flow, not a separate type — the same `GenerationRecord` shape is a candidate
-before promotion and simply "the live generation" after.
+**Supervisor**:
+The trusted authority outside the agent definition that governs generations and activation. It is not agent-authored code and does not become a candidate.
+_Avoid_: agent, facet, controller
 
-## Baseline
+**Facet**:
+The isolated execution compartment in which one generation's agent code runs. It is the subject of a materialization attempt, not the generation record for that attempt.
+_Avoid_: generation, sandbox, worker
 
-The live generation a candidate was materialized against and is validated relative to. Stored on
-the generation record because counter order is not causal ancestry, so "what was live when this
-was built" has to be recorded explicitly rather than inferred.
+**Facet capability**:
+The deliberately narrow authority a facet receives to work on its task. It is limited to the four primitives and is not access to the supervisor or to a broad platform workspace.
+_Avoid_: workspace access, supervisor access, full computer
 
-## Attestation
-
-The record binding a candidate's validation result to the specific reality it was validated
-against: candidate sha, baseline generation, the digest of the artifact actually loaded, corpus
-version, and gate version. The binding exists to close a time-of-check/time-of-use gap — a
-compare-and-swap on the pointer stops two promotions from interleaving, but it does not stop a
-promoter from presenting validation evidence for a world that has since moved (a different live
-generation, an updated corpus, an older gate).
-
-The attestation used to be something a caller could hand to `/promote`. It no longer is: the
-supervisor computes it itself and it never leaves the process, so it cannot be forged. See
-`docs/review-findings.md` and D16b in `docs/decisions.md` for why the binding alone, without that
-change, proved the shape of a check rather than the guarantee.
-
-## Corpus
-
-The set of replay cases used by the regression gate — recorded sessions the candidate must
-reproduce the observable effects of. Deliberately **not** called "the validation corpus" without
-qualification, because replay cannot judge whether a prompt got better (see design-history.md);
-it is an executor-compatibility corpus.
+**Agent workspace**:
+The bounded work area an agent reaches through its primitives. It is a project capability, not the broad `Workspace` provided by `@cloudflare/computer`.
+_Avoid_: Workspace, filesystem access
 
-## Canary
-
-A corpus case marked mandatory, whose identity and expected outcome are pinned in
-supervisor-owned state, independent of the corpus's own content hash. A canary must pass
-individually on the candidate, never merely "no worse than baseline" — the distinction that
-closes the hole where a corpus update could quietly drop the one case that would have caught a
-regression while still producing a valid, freshly-computed corpus hash.
-
-## Ratchet
-
-The promotion rule the gate enforces: no corpus case that passes under the live generation may
-fail under the candidate. New failures on cases that were already failing do not block —
-otherwise the gate would punish a candidate for a pre-existing defect it merely didn't fix.
-Ratchet alone, without mandatory canaries, degenerates: an empty or all-failing corpus makes "no
-previously-passing case regressed" vacuously true.
-
-## Preflight
-
-A cheap, mandatory capability check that runs before the (expensive) regression gate: does the
-candidate still retain the ability to use all four primitives and edit its own definition? A
-candidate that has lost the ability to edit code is a dead end regardless of what it might score,
-so this is a hard floor, not something the gate maximises. Borrowed from the Darwin Gödel
-Machine's practice of cheap gates before expensive evaluation (`docs/prior-art.md`). As of this
-writing it is designed (`docs/generations.md` step 1) and under active implementation on an
-agent branch not yet merged to `main` — check `docs/slices.md` before assuming it is live.
-
-## Facet
-
-An isolated Durable Object execution context, loaded from stored bytes through the Dynamic
-Worker Loader, in which one generation's agent code actually runs. Has its own SQLite, an `env`
-containing only what the supervisor deliberately grants, `globalOutbound: null`, and no route
-back to the supervisor's routes or storage. This containment is the entire safety argument for
-letting an agent modify itself, which is why proving it (D2, D2a, D2b) was the first thing built
-rather than the last.
-
-## Supervisor
-
-The Durable Object that is not modifiable by agent code: it holds the generation registry, the
-activation ledger, the live pointer, the accumulated context, the corpus, and the routes that
-promote, roll back, reset, and quarantine. Deployed normally, never loaded through the Worker
-Loader. The load-bearing property is asymmetric: the facet cannot see or reach the supervisor,
-but the supervisor decides everything about the facet.
-
-## Live pointer
-
-One row in the supervisor's SQLite naming the currently-active **generation number** — not a
-commit sha, because "which generation is live" is the actual question and a commit sha alone
-loses which attempt it was. Kept in the same transaction domain as the registry and ledger so a
-reader can never observe the pointer and the state it names disagree (D5, D6).
-
-## Registry
-
-The supervisor's table of generation records: number, source commit, baseline, materialization
-state, artifact digest, idempotency key. Immutable once terminal; numbers are never reused.
-
-The word "tags" was proposed for this and deliberately rejected. Git tags are refs, refs are
-mutable named pointers, and refs aren't content-addressed, so they don't belong in the
-content-addressed object store; the registry also has to live in the supervisor's SQLite anyway,
-to stay in the same transaction domain as the pointer switch. "Registry" says what it actually
-is: an immutable number-to-commit mapping with append-only lifecycle transitions, not a set of
-movable labels. Emitting real git tag refs for external tooling to read is a separate, later,
-strictly weaker thing than the registry itself.
-
-## Activation ledger
-
-The append-only log of promotion and rollback events — see Activation, above. Distinct from the
-registry: the registry says what a generation is, the ledger says when it was live.
-
-## Generation 0 / genesis
-
-The first generation, seeded directly by the supervisor rather than by any candidate build.
-Never garbage-collected (GC is deferred entirely, D13), and reachable via reset without agent
-code in the path. Functions as the NixOS analogue of the generation you can always boot into no
-matter how badly a later one breaks.
-
-## The four primitives
-
-The fixed action space: `read`, `write`, `edit`, `bash` — exactly these four, enforced at compile
-time (adding a fifth fails the build at an `assertNever` exhaustiveness check, not merely by
-convention or comment). What accumulates across generations is skills, prompts, and policy —
-never new primitives. An agent that can add its own tools can add one that escapes the sandbox;
-an agent that can only write better instructions for four fixed tools cannot.
-
-Note the wire name for the fourth primitive may become `run` if `@cloudflare/computer` is
-adopted as the execution backend (see `docs/computer-integration.md`) — that is a naming change
-to the transport, not a fifth primitive, and the plan is explicit that it must be made as one
-deliberate compatibility change, not a drift.
-
-## Skills, policy, prompt
-
-The parts of a generation's manifest that are expected to change across generations, as opposed
-to the fixed primitives that never do. `prompt.md` and `policy.md` are required modules;
-`skills/*.md` are optional. A generation materializing without a required module fails loudly
-(`AgentMaterializationError` naming the missing module) rather than running with a silently empty
-prompt.
-
-## Turn
-
-One interaction with the agent, from the model's perspective. A turn **pins** its generation:
-it resolves the live pointer exactly once at turn start and runs to completion on that sha, even
-if a promotion happens while the turn is in progress. Without pinning, a promotion mid-turn would
-change the agent's behavior underneath itself mid-reasoning, and any resulting bug report would
-be unreproducible.
-
-## Object store / git object codec
-
-The content-addressed layer beneath generations: `readObject` / `writeObject` /
-`readPointer` / `setPointer`, over full git object bytes (a blob, tree, or commit, including its
-type/length header), addressed by the SHA-1 of exactly those bytes. Hand-written rather than
-delegated to isomorphic-git's own on-disk format — see `docs/design-history.md` for the full,
-twice-revised argument for why, since an earlier stated reason for this was flatly wrong and was
-retracted rather than quietly fixed.
-
-## Workspace — a genuinely overloaded word, read carefully
-
-Two unrelated things currently share this name, and the difference is safety-critical, not
-cosmetic.
-
-- **`Workspace` the interface** (`src/tools/types.ts`), used by the four primitives today: four
-  methods (`readFile`, `writeFile`, `listFiles`/`exists`, `execute`) over an in-memory or
-  facet-local filesystem. This is the narrow thing a facet is allowed to touch.
-- **`Workspace` the class**, from `@cloudflare/computer`, proposed in `docs/computer-integration.md`
-  but not yet adopted in source. It hands its holder a filesystem root, host-forwarded git,
-  Assets, and Artifacts — and git network operations under it run host-side, bypassing
-  `globalOutbound: null` entirely (D2a-bis). Handing this class directly to a facet would breach
-  containment even with every other setting correct.
-
-If `@cloudflare/computer` is adopted, the design is explicit that the facet must never hold a
-`Workspace` instance of the second kind: the supervisor holds it privately and exposes exactly a
-four-method proxy shaped like the first kind. Anyone editing this area should say which
-"workspace" they mean.
-
-## Working tree
-
-A checked-out, mutable copy of files on a filesystem, as opposed to objects addressed and stored
-by content hash. The original design banned working trees entirely — everything built in memory,
-written straight to the object store — because the source brief assumed no filesystem was
-available. That assumption is what's currently being revisited: with `@cloudflare/computer`
-providing a real filesystem, the reason for the ban evaporates, and it was the ban that made
-writing a hand-rolled commit codec necessary in the first place (see `docs/design-history.md`).
-
-## TOCTOU (time-of-check/time-of-use)
-
-The gap between validating a candidate and promoting it, during which the world can move — a
-different generation could become live, the corpus could be updated, the gate itself could
-change. Closed by binding the attestation to all four of candidate sha, baseline generation,
-corpus version, and gate version, and having the supervisor compute that attestation itself
-rather than accept one from a caller.
-
-## INCONCLUSIVE
-
-The third replay outcome, alongside `PASS` and `FAIL`. Used for tape exhaustion, an unexpected
-model request, a timeout, or a malformed response — anything that means the harness didn't get a
-clean answer, as opposed to the candidate having behaved wrongly. Collapsing this into an
-ordinary failure would make "ran out of tape" indistinguishable from "the candidate regressed",
-which would eventually make the gate impossible to diagnose and easy to ignore.
-
-## Executor
-
-The code that turns a sequence of model responses into primitive calls and their effects on a
-workspace — the thing the gate and the live path must share. If the gate validates against a
-different executor than the one that actually runs turns, the regression suite is forever testing
-a stand-in, and every guarantee built on top of it is about the wrong program.
+**Computer Workspace**:
+The broad platform workspace supplied by `@cloudflare/computer`. It must be named with the qualifier because it is a different, wider concept than an agent workspace.
+_Avoid_: workspace (unqualified), agent workspace
+
+**Four primitives**:
+The fixed agent action set: `read`, `write`, `edit`, and `bash`. They may be used more skilfully over time, but the agent definition does not add new primitive kinds.
+_Avoid_: extensible tools, arbitrary tools, capabilities
+
+**Agent definition**:
+The versioned material that describes how the agent behaves, including its prompt, policy, skills, and agent-authored modules. It excludes the supervisor and accumulated context.
+_Avoid_: agent state, supervisor configuration, runtime state
+
+**Prompt, policy, and skills**:
+The changeable parts of an agent definition: the prompt directs the model, policy states constraints, and skills provide reusable task guidance. They are definition content, not new primitives.
+_Avoid_: tools, plugins, runtime state
+
+**Accumulated context**:
+The supervisor-owned knowledge and history that persist across generations. It belongs to the running system, not to a commit or a rollback target.
+_Avoid_: generation state, commit state, snapshot state
+
+### Evaluation and execution
+
+**Turn**:
+One interaction with the agent from input through result. A turn is an operational unit, not a commit or a generation attempt.
+_Avoid_: session, generation, task
+
+**Turn pinning**:
+The rule that a turn uses the live generation selected at its start for its entire duration. It protects one interaction from an activation that happens partway through.
+_Avoid_: live reload, mid-turn migration
+
+**Executor**:
+The component that turns model responses into primitive calls and their effects. The gate and live path use the same executor so validation concerns the behavior that will actually run.
+_Avoid_: model, facet, tool
+
+**Replay session**:
+A recorded interaction used to reproduce a defined sequence of model responses, primitive calls, and observable effects. It is a compatibility case, not a fresh evaluation of whether a prompt is better.
+_Avoid_: benchmark, quality trial, live trial
+
+**Compatibility corpus**:
+The set of replay sessions used to check that a candidate preserves established executor behavior. It is not a general measure of agent quality.
+_Avoid_: quality benchmark, validation corpus, training set
+
+**Validation gate**:
+The acceptance process that evaluates a candidate before promotion. It provides a compatibility floor, not a claim that the candidate improved the agent.
+_Avoid_: quality gate, evaluator, promotion
+
+**Ratchet**:
+The gate rule that a candidate must not turn a baseline success into a failure. It preserves a floor of known behavior without treating existing failures as new regressions.
+_Avoid_: score, quality metric, benchmark
+
+**Canary**:
+A compatibility case that must pass in its own right and whose identity is protected independently of the rest of the corpus. It is a mandatory floor check, not a representative sample.
+_Avoid_: optional test, sample case, corpus entry
+
+**Preflight**:
+The cheap viability check before the compatibility gate, including whether a candidate retains the four primitives and can revise its own definition. It rejects a dead-end candidate before more costly evaluation.
+_Avoid_: validation gate, smoke test, quality check
+
+**Inconclusive**:
+An evaluation outcome meaning the system could not determine pass or fail. It is distinct from failure because it describes insufficient or invalid evidence, not a demonstrated regression.
+_Avoid_: failure, pass, ignored result
