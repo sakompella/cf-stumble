@@ -1,8 +1,8 @@
 # Review findings
 
-An architectural review of the finished overnight build. These are the things a green test
-suite does _not_ prove. Recorded here rather than fixed silently, because several are judgement
-calls for the human and one changes what "validated" means.
+This is an architectural review of the finished overnight build. It records what a green test
+suite does not prove. Several findings need human judgment, and one changes what "validated"
+means, so they remain visible instead of being quietly folded into fixes.
 
 ## The one that matters most: attestation provenance — RESOLVED (S14)
 
@@ -17,12 +17,11 @@ Promotion verifies an attestation bound to candidate sha, the live generation it
 against, corpus version, and gate version. That closes the time-of-check/time-of-use gap where
 validation evidence could be replayed against a world that has moved.
 
-It does not close the gap where **the evidence was never trustworthy in the first place**. The
-bindings only mean something if attestations can be issued exclusively by an authenticated,
-independent validator. Today the supervisor's routes are unauthenticated and a caller can
-construct a well-formed attestation directly, which is exactly what the tests do. So the current
-test proves the _shape_ of the check, not the _guarantee_ — a perfectly bound result that
-anybody can mint proves nothing.
+It does not establish that the evidence was trustworthy. Bindings matter only when an
+authenticated, independent validator exclusively issues attestations. The supervisor's routes were
+unauthenticated, and a caller could construct a well-formed attestation directly, which is exactly
+what the tests did. The test proved the check’s shape, not its guarantee: a result that anyone can
+mint provides no evidence.
 
 Concretely, before this is deployed: trace who can mutate corpus and context, submit validation
 results, promote, roll back, and reset. Each of those is a privileged operation and none is
@@ -46,10 +45,9 @@ selection → Dynamic Worker Loader → real executor → primitive dispatch. It
 executor instead. Everything the test exercises genuinely composes, but the claim should be read
 as "the generation machinery composes", not "the system works end to end".
 
-The corollary is a design constraint on the next slice: **the gate and live execution must use
-the same executor implementation.** If they diverge, compatibility validation is forever testing
-a surrogate, and the regression suite stops being evidence about the thing that actually runs.
-Now recorded as ADR-0017.
+The next slice needed one constraint: the gate and live execution must use the same executor
+implementation. If they diverge, compatibility validation tests a surrogate and the regression
+suite no longer provides evidence about the code that runs. ADR-0017 records that rule.
 
 ## Canaries don't close the ratchet hole on their own — RESOLVED (S12)
 
@@ -83,20 +81,18 @@ run on Cloudflare's infrastructure.
 ## The audit question for Computer, or any binding, is recovery authority, not tool breadth (open)
 
 An earlier version of this review treated a facet holding a real `@cloudflare/computer` Workspace
-as an isolation breach by itself — broad filesystem and shell access looked dangerous on sight, so
-the conclusion was to keep the facet on a narrow, hand-proxied set of methods forever. That
-conclusion doesn't survive contact with what containment is actually supposed to guarantee. The
-facet is meant to be the mutable, active harness; it is supposed to own its tools, its workspace,
-and its runtime, and a full Computer workspace is a reasonable thing for it to have. Breadth of
-tooling is not the hazard.
+as an isolation breach. Filesystem and shell access looked dangerous, so it proposed a permanent,
+narrow hand-proxied method set. That misses what containment must guarantee. The facet is the
+mutable active harness and should own its tools, workspace, and runtime. A full Computer workspace
+is reasonable; tool breadth is not the hazard.
 
-The question a containment audit actually has to answer is narrower and harder to fake: **can the
-facet, through Computer or through any binding it holds, mutate or impersonate the supervisor's
-recovery authority** — its candidate and generation records, materialization state, validation
-evidence, the live pointer, rollback, or the genesis reset? A facet that can read and write its
-own filesystem, run its own shell, and commit its own git history has lost nothing that matters if
-none of that reaches the supervisor's SQLite, its promotion transaction, or its reset path except
-through the sanctioned candidate-submission pathway.
+A containment audit has to answer one question: can the facet, through Computer or any binding it
+holds, mutate or impersonate the supervisor's recovery authority, including candidate and
+generation records, materialization state, validation evidence, the live pointer, rollback, and
+the genesis reset? The facet may read and write its own filesystem, run its own shell, and commit
+its own git history without compromising recovery, provided those powers do not reach supervisor
+SQLite, the promotion transaction, or the reset path except through sanctioned candidate
+submission.
 
 That pathway is where the real work is, and it is not yet designed. `docs/agents/design/computer-integration.md`
 names the open questions: how a facet's mutable workspace hands the supervisor immutable candidate
@@ -121,8 +117,8 @@ digest rather than relying on the git oid.
 
 ## Two codec disagreements the differential property found (open)
 
-Generating trees and checking byte agreement against isomorphic-git surfaced two divergences that
-the fixed fixtures had never reached. Both are pinned as characterisation tests in
+Generating trees and checking byte agreement against isomorphic-git found two divergences that the
+fixed fixtures had never reached. Both are pinned as characterisation tests in
 `test/git/oracle.props.test.ts` that go red when someone fixes them.
 
 **Our encoder writes tree entry names git refuses to read.** `validateTreeNameBytes`
@@ -139,11 +135,10 @@ rather than relying on a caller.
 isomorphic-git compares names as JavaScript strings, which is UTF-16 code-unit order. The two
 disagree exactly when one name holds a supplementary-plane character and another holds
 `U+E000`–`U+FFFF`. Our codec sorts by bytes, matching real git, so here the reference implementation
-is the one that is wrong. The generators exclude that corner so the differential property stays
-meaningful. Worth carrying forward: ADR-0009 and ADR-0011 both rest on isomorphic-git being an
-independent oracle, and an oracle with a known divergence is still valuable but is not flatly
-authoritative — a future disagreement needs checking against git's own behaviour before assuming the
-bug is ours.
+is the one that is wrong. The generators exclude that corner so the differential property remains meaningful. ADR-0009 and
+ADR-0011 treat isomorphic-git as an independent oracle, but this known divergence means it is not
+authoritative. Check a future disagreement against git's own behaviour before assuming our codec is
+wrong.
 
 ## Rollback deserves a guard rail — RESOLVED (S14)
 
@@ -151,8 +146,8 @@ bug is ours.
 quarantine is implemented. Reset remains the deliberate escape hatch that bypasses quarantine,
 since otherwise quarantining everything would leave no way back. Original analysis below.
 
-Rollback needs no attestation, deliberately, so that recovery survives validation being
-unavailable. Two things should temper that:
+Rollback needs no attestation so recovery survives an unavailable validation gate. Two constraints
+still apply:
 
 - It should be restricted to authenticated operators and to targets **previously recorded as
   live**, rather than arbitrary shas.
@@ -172,8 +167,8 @@ provenance, endpoint authorization, and real workspace capability containment.
 
 ## Lint debt worth naming (open)
 
-Adopting anti-slop surfaced something unrelated to its own rules: `src/supervisor/supervisor.ts`
-is **1755 lines** and carries a file-wide
+Adopting anti-slop also found an unrelated problem: `src/supervisor/supervisor.ts` is **1755 lines**
+and carries a file-wide
 
 ```
 /* oxlint-disable eslint/max-lines, eslint/max-lines-per-function,
@@ -191,8 +186,8 @@ was not attempted tonight because it touches the component every workerd test dr
 
 ## Two known inconsistencies between the code and the model (open)
 
-Both surfaced by cross-checking `docs/agents/CONTEXT.md` against `src/`, which is the main argument for
-keeping a glossary at all.
+Cross-checking `docs/agents/CONTEXT.md` against `src/` found both, which is why the project keeps a
+glossary.
 
 **The vertical integration test still drives the pre-remodel pointer.** `src/integration/turn.ts`
 reads the legacy `PointerStore`, receives a commit sha, and calls it a generation. Its only
@@ -201,19 +196,18 @@ entire job is proving the system composes end to end. The supervisor was rewired
 generation registry; this helper was not, and because it still typechecks and passes, nothing
 complained.
 
-This is the failure mode where a green test is actively misleading rather than merely incomplete:
-the headline proof currently validates a design we no longer use. It should be migrated before the
-`@cloudflare/computer` work, since migrating a test that already tests the wrong thing just carries
-the error forward.
+This green test is misleading rather than merely incomplete: the headline proof validates a design
+the project no longer uses. Migrate it before the `@cloudflare/computer` work, or that work will
+carry the wrong model forward.
 
 **`Workspace` in `src/tools/types.ts` names two different things.** The bootstrap interface
 exposes `readFile`, `writeFile`, `listFiles`, `exists` and `execute`; the bootstrap primitives
 (`read`, `write`, `edit`, `bash`) sit on top of that as one client of it, not as the whole of it.
 That is also the same identifier `@cloudflare/computer` uses for its own, much larger `Workspace`
-class. The overlap is confusing rather than load-bearing now that the facet is expected to own a
-real workspace outright rather than be proxied through a fixed method list, but the two things
-still need distinct names before source migration starts, so a reader can tell "this repository's
-bootstrap workspace shim" from "Computer's `Workspace`" on sight.
+class. The overlap is confusing and no longer supports an invariant: the facet is expected to own
+a real workspace rather than use a fixed method list. Give the two types distinct names before
+source migration so a reader can tell this repository's bootstrap workspace shim from Computer's
+`Workspace`.
 
 ## Questions still on the human, not the machine (open)
 

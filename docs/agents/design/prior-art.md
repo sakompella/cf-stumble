@@ -1,8 +1,7 @@
 # Prior art
 
-Findings from surveying what already exists, after a reasonable suspicion that both of this
-project's central choices were reinventing wheels. Two of them were, and the survey changed two
-decisions and corrected three claims.
+This survey asked whether the project had rebuilt existing work. It had in two places. The results
+changed two decisions and corrected three claims.
 
 ## The git object store: js-git already did exactly this
 
@@ -37,15 +36,14 @@ One real escape hatch was found: direct `isomorphic-git` plus a transient `FsCli
 the codec while keeping the invariant, at the cost of retaining a filesystem shim and zlib. Worth
 knowing; not obviously worth doing.
 
-## Nix: three places we diverge, now deliberately
+## Nix: three deliberate differences
 
 Read from Nix source rather than documentation, and it corrects claims made in
 `docs/agents/design/generations.md`:
 
 - **Nix skips creating a generation when the output path is unchanged.** We always allocate,
-  because our unit is the _attempt_ rather than the _result_ — re-attempting an identical commit is
-  a meaningful event when the thing being attempted is a facet load that might fail transiently.
-  A deliberate divergence, not an oversight.
+  because our unit is the _attempt_, not the _result_. Re-attempting an identical commit records a
+  meaningful event when a facet load can fail transiently. This difference is intentional.
 - **Nix generation numbers can be reused** after pruning the highest generation. Ours never are.
   Ours is the stronger guarantee and we keep it, since attempt records are evidence.
 - **A failed Nix _build_ creates no generation; a failed _activation_ consumes one**, because
@@ -63,25 +61,23 @@ repeated deployment of one commit. Its useful ideas are retention controls (`--r
 modelled on, not a dependency of it. It draws the same line we draw, between an active image that
 is meant to change and a small stable authority that is not:
 
-- The **active image** — terminal, agent, tools, and state — is broadly mutable. Autolith keeps all
-  application definitions in one package specifically so the running system can rewrite itself;
-  nothing about the active image's surface is kept deliberately small.
-- The **stable launcher** and the **pristine recovery image** are kept separate from the active
-  image and from each other. The launcher is what boots and can fall back; the recovery image is
-  the untouched last-known-good state, closer to what we call generation 0 than to anything the
-  agent runs day to day.
+- The **active image** contains the terminal, agent, tools, and state, and is broadly mutable.
+  Autolith keeps application definitions in one package so the running system can rewrite itself.
+  It does not keep the active image small.
+- The **stable launcher** and **pristine recovery image** remain separate from the active image
+  and from each other. The launcher boots the system and can fall back. The recovery image is the
+  untouched last-known-good state, closer to generation 0 than to ordinary agent work.
 - `self.*` installs _complete_ definitions, not incremental patches — the same reason our
   generations are whole materializations rather than diffs applied to a running facet.
 
-Autolith's own `AGENTS.md` draws this distinction explicitly: the stable launcher, the mutable
-active agent, its workers, and the pristine recovery path are named as four separate things, and
-only a small operation set is reserved for _durable self-mutation_ — the actions that change what
-boots next. Everything else — ordinary workspace tools and the active image's tool registry — stays broad and
-extensible. That is the shape we borrowed: a small, auditable set of operations governs recovery
-and promotion, while the facet's own loop, tools, prompts, skills, and policies are the parts meant
-to keep growing (see ADR-0024). Autolith does not fix the active agent's action space to a handful
-of primitives. This project did so only after a derivative prompt was mistaken for the product;
-see `docs/agents/design/decision-provenance.md` for how that happened.
+Autolith's `AGENTS.md` names the stable launcher, mutable active agent, its workers, and the
+pristine recovery path separately. It reserves a small operation set for _durable self-mutation_,
+the actions that change what boots next. Ordinary workspace tools and the active image's tool
+registry remain broad and extensible. Cf-stumble borrows that shape: a small auditable recovery and
+promotion mechanism, with a facet loop, tools, prompts, skills, and policies that may grow (see
+ADR-0024). Autolith does not limit the active agent to a handful of primitives. This project did
+so after mistaking a derivative prompt for the product; see
+`docs/agents/design/decision-provenance.md`.
 
 ## Self-modifying agents: the Darwin Gödel Machine
 
@@ -100,8 +96,8 @@ Three things it learned that we had not:
    candidates that scored badly. Our model prunes nothing, so we are accidentally fine here, but it
    is a reason not to add aggressive pruning later.
 3. **Optimising one benchmark amplifies brittle and unsafe behaviour**, so safety checks belong as a
-   _separate objective_ rather than as part of the score. Our ratchet is score-shaped by nature, so
-   preflight is deliberately a hard capability floor rather than something to maximise.
+   _separate objective_ rather than part of the score. The ratchet has a score-shaped form, so
+   preflight sets a hard capability floor rather than something to maximise.
 
 DGM also independently confirms the replay problem we hit: a recorded response tape can validate
 protocol behaviour but cannot validate a _prompt_ change. Its answer is fresh execution with

@@ -1,12 +1,11 @@
 # Decision provenance
 
-Who decided what. This project was built by a human directing AI agents, and the record is worth
-keeping straight for one practical reason: **a decision no human ever ratified deserves more
-scrutiny than one that was argued over.** When you find something here that looks odd, this file
-tells you whether to trust it or interrogate it.
+This record distinguishes human decisions from agent decisions. A decision no human ratified needs
+more scrutiny than one a human argued over. When something looks odd, this file says whether to
+trust it or investigate it.
 
-The distinction drawn is human versus agent. Which agent — reviewer, researcher, implementer —
-doesn't matter for the purpose of this file, and was never recorded systematically anywhere.
+It distinguishes human from agent decisions. The role of a particular agent, whether reviewer,
+researcher, or implementer, does not matter here and was never recorded consistently.
 
 ## The human's decisions
 
@@ -14,13 +13,11 @@ These set direction. Everything else is downstream of them.
 
 **The architecture itself.** Generations modelled on NixOS, a supervisor Durable Object the agent
 cannot modify, agent code in an isolated facet, storage on the git object model, a validation gate
-before promotion, generation 0 pinned with a reset that bypasses agent code. This was modelled on
-[Autolith](https://github.com/lambda-symbolics/autolith)'s split between a broadly mutable active
-image and a small stable launcher plus pristine recovery image (see
-`docs/agents/design/prior-art.md`), and was handed over as a brief: the facet's own harness —
-model loop, tool registry, prompts, skills, policies, module code, and work environment — is meant
-to keep evolving, while the supervisor's job is only to materialize, validate, and recover. The
-agents implemented it; they did not invent it.
+before promotion, generation 0 pinned with a reset that bypasses agent code. This was modelled on [Autolith](https://github.com/lambda-symbolics/autolith)'s split between a
+broadly mutable active image, a small stable launcher, and a pristine recovery image (see
+`docs/agents/design/prior-art.md`). The brief said the facet's model loop, tool registry, prompts,
+skills, policies, modules, and work environment should evolve, while the supervisor materializes,
+validates, and recovers. Agents implemented that direction; they did not invent it.
 
 **The generation remodel.** Commits became ordinary commits; a generation became one _attempted
 facet materialization_, numbered by a monotonic counter. This is the largest design change the
@@ -30,8 +27,8 @@ rolling back then branching produced two distinct generations both claiming numb
 **Adopt `@cloudflare/computer`, home-roll as little as possible, dependencies are not a concern.**
 This reversed a long-running agent argument for keeping a hand-written git object codec.
 
-**One runtime.** The whole test suite runs in workerd; there is no Node-side path. A test passing
-in Node says nothing about the runtime we deploy to.
+**One runtime.** The whole test suite runs in workerd. A Node test does not provide evidence about
+the deployed runtime.
 
 **Replace the `git` binary oracle** with isomorphic-git, which is what made the single-runtime move
 possible at all, since a subprocess cannot run in workerd.
@@ -88,24 +85,20 @@ ambiguous-match as distinct typed failures; canaries pinned outside the corpus; 
 These matter more than the rest of this file, because they are the cases where the agent was
 confidently wrong and the documentation would have preserved the error.
 
-**The fixed-four action space was a derivative narrowing, mistaken for the product.** An overnight
-build prompt written against a historical local export constrained the agent to exactly four
-action primitives, forever. That prompt was a derivative of the original design, not the design
-itself, and the constraint got carried into the codebase and this documentation as if it had been
-the human's intent from the start. It wasn't: the human's brief was the Autolith-inspired split
-between a broadly mutable active harness and a small stable recovery authority (see
-`docs/agents/design/prior-art.md`), where containment protects the supervisor's independent
-recovery, not a permanent four-tool ceiling on the facet. The export the overnight prompt came
-from also has no role labels and starts mid-conversation, so it cannot itself be read as an
-authoritative statement of intent either way — the correction here rests on the primary Autolith
-sources, not on re-reading that export more carefully.
+**The four-action limit came from a derivative prompt, not the product.** An overnight build prompt
+based on a historical local export constrained the agent to four action primitives forever. The
+constraint entered the codebase and documentation as though it expressed human intent. The human
+brief instead followed Autolith: a broadly mutable active harness and a small stable recovery
+authority (see `docs/agents/design/prior-art.md`). Containment protects the supervisor's
+independent recovery; it does not impose a permanent four-tool ceiling on the facet. The export
+has no role labels and begins mid-conversation, so it cannot settle intent. This correction rests
+on primary Autolith sources, not a closer reading of that export.
 
-**The git codec justification was false.** The claim that you cannot write a commit against an
-in-memory filesystem was simply untrue — isomorphic-git exports `writeTree` and `writeCommit`, and
-both work on an in-memory filesystem. The question "are you sure?" exposed it. The claim had
-already been written into the decision record as justification. Two of the three replacement
-arguments then also failed under scrutiny: the oracle argument was circular, and the dedup argument
-conflated content-addressing with git's byte format.
+**The git codec justification was false.** Isomorphic-git exports `writeTree` and `writeCommit`,
+and both work on an in-memory filesystem. Asking "are you sure?" found the error after it had
+already entered the decision record. Two of the three replacement arguments also failed: the
+oracle argument was circular, and the dedup argument conflated content addressing with git's byte
+format.
 
 **Jargon standing in for explanation.** "What do you mean git codec?" and "you haven't discussed
 this" both caught explanations that assumed context never provided. The lineage cycle guard had
