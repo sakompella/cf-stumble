@@ -1,5 +1,6 @@
 import fixtureData from "../fixtures/sessions/four-primitives.json";
 import { expect, test } from "vitest";
+import { expectOk } from "../support/result.js";
 import {
   parseReplaySession,
   type ReplayAgentLoop,
@@ -38,8 +39,16 @@ const fixtureAgent: ReplayAgentLoop = {
 
 function loadFixture(): Promise<ReplaySession> {
   const untrustedFixture = structuredClone(fixtureData);
-  return Promise.resolve(parseReplaySession(untrustedFixture));
+  return Promise.resolve(expectOk(parseReplaySession(untrustedFixture)));
 }
+
+test("parsing preserves the stored fixture JSON exactly", () => {
+  const untrustedFixture = structuredClone(fixtureData);
+
+  expect(JSON.stringify(expectOk(parseReplaySession(untrustedFixture)))).toBe(
+    JSON.stringify(fixtureData),
+  );
+});
 
 test("the fixture exercises every allowed primitive", async () => {
   const fixture = await loadFixture();
