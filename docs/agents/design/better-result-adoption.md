@@ -328,8 +328,8 @@ slices land. `src/integration/turn.ts` is excluded entirely: it drives a superse
 | 3 - Agent materialization        | **Complete**                   |
 | 5 - Git object decoding          | **Complete**                   |
 | 7 - Storage                      | **Complete**                   |
-| 4 - Untrusted JSON and replay    | In progress                    |
-| 6 - Generation reads and rows    | Blocked on slice 4             |
+| 4 - Untrusted JSON and replay    | **Complete**                   |
+| 6 - Generation reads and rows    | Next. Specified in section 9   |
 | 8 - Supervisor transport         | Last, and pairs with the split |
 
 **Baseline before migration.** With `better-result@3.0.1` installed and no source change,
@@ -373,6 +373,16 @@ property tests), up from 259.
   not a regression, since these paths threw before, but slice 8 will build a `.match()` that maps
   `Panic` to an unrecoverable 500, and at that point the mislabel becomes behaviour. Splitting it
   needs a retry policy, which is a design decision rather than a refactor.
+- **Panicking on a stored corpus session turns a replay-schema bump into a bricked supervisor.**
+  Slice 4 made `readCorpusCases` (`src/supervisor/supervisor.ts:1468`) `unwrap` with a panic, which is
+  right for corruption: `writeCorpus` validates every incoming session at `supervisor.ts:1881` and
+  stores the re-serialized parsed value, so a stored session that fails to parse cannot have come
+  from a request. But `REPLAY_SCHEMA_VERSION` is `1 as const` and the parser enforces that literal,
+  so bumping it makes every previously stored corpus row unparseable and every read panic. The corpus
+  is supervisor state and has no migration path — ADR-0013's lazy migration covers facet state only.
+  That is not hypothetical for a system built to evolve itself, and it lands on the facet plan, whose
+  manifest slice makes the observable-effect contract versioned, which _is_ a replay schema change.
+  A corpus migration has to exist before anything bumps that version.
 - **Both recoverable branches added so far are close to unreachable.** Slice 7's 413 needs a single
   object above `MAX_OBJECT_BYTES`, which is 10 GiB, against modules measured in kilobytes; slice 3's
   422 for non-UTF-8 content cannot be reached through the JSON API at all. The panic paths are the

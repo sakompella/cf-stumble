@@ -9,6 +9,7 @@ import {
   REPLAY_SCHEMA_VERSION,
 } from "../../src/replay/schema-parser.js";
 import { arbitraryJson, replaySessionJson } from "../support/json-generators.js";
+import { persistedExamples } from "../support/hegel.js";
 import { expectErr, expectOk } from "../support/result.js";
 
 /**
@@ -28,7 +29,7 @@ test("parsing arbitrary JSON is total: a session, or a ReplaySchemaError, and no
       return;
     }
     expect(parsed.value.schemaVersion).toBe(REPLAY_SCHEMA_VERSION);
-  });
+  }, persistedExamples);
 });
 
 /**
@@ -54,7 +55,7 @@ test("generated JSON reaches past the version check, so totality is not one `if`
         accepted += 1;
       }
     },
-    { testCases: 500, seed: 1, derandomize: true },
+    { ...persistedExamples, testCases: 500, seed: 1, derandomize: true },
   );
 
   expect(accepted).toBeGreaterThan(0);
@@ -76,7 +77,7 @@ test("parsing an arbitrary string is total, malformed JSON included", () => {
     if (parsed.isErr()) {
       expect(parsed.error).toMatchObject({ _tag: "ReplaySchemaError" });
     }
-  });
+  }, persistedExamples);
 });
 
 test("a recorded session survives a trip through JSON", () => {
@@ -88,7 +89,7 @@ test("a recorded session survives a trip through JSON", () => {
     // pass rather than against the input: the claim is that parsing settles, not that it is
     // the identity.
     expect(expectOk(parseReplaySessionJson(JSON.stringify(parsed)))).toEqual(parsed);
-  });
+  }, persistedExamples);
 });
 
 test("dropping any required field is rejected rather than defaulted", () => {
@@ -112,7 +113,7 @@ test("dropping any required field is rejected rather than defaulted", () => {
     expect(expectErr(parseReplaySession(withoutKey))).toMatchObject({
       _tag: "ReplaySchemaError",
     });
-  });
+  }, persistedExamples);
 });
 
 test("the JSON guard accepts exactly what JSON.stringify can round-trip", () => {
@@ -129,7 +130,7 @@ test("the JSON guard accepts exactly what JSON.stringify can round-trip", () => 
       throw new Error("JSON.parse produced a value the JSON guard does not accept");
     }
     expect(reparsed).toEqual(value);
-  });
+  }, persistedExamples);
 });
 
 test("the JSON guard rejects values JSON cannot carry", () => {
@@ -148,5 +149,5 @@ test("the JSON guard rejects values JSON cannot carry", () => {
 
     expect(isJsonValue(notJson)).toBe(false);
     expect(isJsonValue([tc.draw(arbitraryJson), notJson])).toBe(false);
-  });
+  }, persistedExamples);
 });
