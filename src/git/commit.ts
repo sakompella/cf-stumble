@@ -1,6 +1,11 @@
-import { isSha, parseSha } from "./types.js";
+import { Result, panic } from "better-result";
+import { isSha, parseShaResult } from "./types.js";
 import type { Commit, GitObject, Sha, Signature } from "./types.js";
+import { GitObjectDecodeError } from "./errors.js";
+import type { GitObjectDecodeCondition } from "./errors.js";
 import { concat, concatMany, decodeUtf8, encodeUtf8 } from "./binary.js";
+
+type DecodedCommit = Extract<GitObject, { type: "commit" }>;
 
 export function encodeCommit(commit: Commit): Uint8Array {
   const parts: Uint8Array[] = [
@@ -20,75 +25,89 @@ export function encodeCommit(commit: Commit): Uint8Array {
   return concat(encodeUtf8(`commit ${body.byteLength}\0`, "object header"), body);
 }
 
-export function decodeCommit(body: Uint8Array): Extract<GitObject, { type: "commit" }> {
-  const text = decodeUtf8(body, "commit");
-  const separator = text.indexOf("\n\n");
-  if (separator < 0) {
-    throw new Error("malformed git commit: missing header separator");
-  }
+export function decodeCommit(body: Uint8Array): Result<DecodedCommit, GitObjectDecodeError> {
+  return Result.gen(function* () {
+    const text = yield* decodeUtf8(body, "commit", "commit body");
+    const separator = text.indexOf("\n\n");
+    if (separator < 0) {
+      return Result.err(commitError("missing-separator", "missing header separator"));
+    }
 
-  const headers = text.slice(0, separator).split("\n");
-  let index = 0;
-  const treeLine = requireCommitLine(headers, index, "tree");
-  index += 1;
-  const tree = parseShaLine(treeLine, "tree");
-  const parents: Sha[] = [];
-  while (headers[index]?.startsWith("parent ") === true) {
-    const parentLine = requireCommitLine(headers, index, "parent");
-    parents.push(parseShaLine(parentLine, "parent"));
+    const headers = text.slice(0, separator).split("\n");
+    let index = 0;
+    const tree = yield* parseShaLine(yield* requireCommitLine(headers, index, "tree"), "tree");
     index += 1;
-  }
 
-  const authorLine = requireCommitLine(headers, index, "author");
-  index += 1;
-  const committerLine = requireCommitLine(headers, index, "committer");
-  index += 1;
-  if (index !== headers.length) {
-    throw new Error("malformed git commit: unexpected header");
-  }
+    const parents: Sha[] = [];
+    while (headers[index]?.startsWith("parent ") === true) {
+      const line = yield* requireCommitLine(headers, index, "parent");
+      parents.push(yield* parseShaLine(line, "parent"));
+      index += 1;
+    }
 
-  return {
-    type: "commit",
-    commit: {
-      tree,
-      parents,
-      author: parseSignature(authorLine, "author"),
-      committer: parseSignature(committerLine, "committer"),
-      message: text.slice(separator + 2),
-    },
-  };
+    const authorLine = yield* requireCommitLine(headers, index, "author");
+    index += 1;
+    const committerLine = yield* requireCommitLine(headers, index, "committer");
+    index += 1;
+    if (index !== headers.length) {
+      return Result.err(commitError("unexpected-header", "unexpected header"));
+    }
+
+    const author = yield* parseSignature(authorLine, "author");
+    const committer = yield* parseSignature(committerLine, "committer");
+    const decoded = {
+      type: "commit",
+      commit: { tree, parents, author, committer, message: text.slice(separator + 2) },
+    } satisfies DecodedCommit;
+    return Result.ok<DecodedCommit>(decoded);
+  });
 }
 
-function requireCommitLine(headers: readonly string[], index: number, label: string): string {
+function commitError(condition: GitObjectDecodeCondition, detail: string): GitObjectDecodeError {
+  return new GitObjectDecodeError({ layer: "commit", condition, detail });
+}
+
+function requireCommitLine(
+  headers: readonly string[],
+  index: number,
+  label: string,
+): Result<string, GitObjectDecodeError> {
   const line = headers[index];
   if (line === undefined) {
-    throw new Error(`malformed git commit: missing ${label} header`);
+    return Result.err(commitError("missing-header", `missing ${label} header`));
   }
-  return line;
+  return Result.ok(line);
 }
 
-function parseShaLine(line: string, label: string): Sha {
+function parseShaLine(line: string, label: string): Result<Sha, GitObjectDecodeError> {
   const prefix = `${label} `;
   if (!line.startsWith(prefix)) {
-    throw new Error(`malformed git commit: expected ${label} header`);
+    return Result.err(commitError("expected-header", `expected ${label} header`));
   }
-  try {
-    return parseSha(line.slice(prefix.length));
-  } catch (error: unknown) {
-    throw new Error(`malformed git commit: invalid ${label} sha`, {
-      cause: error,
-    });
+  const sha = parseShaResult(line.slice(prefix.length));
+  if (Result.isError(sha)) {
+    return Result.err(
+      new GitObjectDecodeError({
+        layer: "commit",
+        condition: "invalid-sha",
+        detail: `invalid ${label} sha`,
+        cause: sha.error,
+      }),
+    );
   }
+  return sha;
 }
 
-function parseSignature(line: string, label: string): Signature {
+const SIGNATURE = /^(.+) <([^<>]+)> (-?[0-9]+) ([+-][0-9]{4})$/u;
+
+function parseSignature(line: string, label: string): Result<Signature, GitObjectDecodeError> {
   const prefix = `${label} `;
   if (!line.startsWith(prefix)) {
-    throw new Error(`malformed git commit: expected ${label} header`);
+    return Result.err(commitError("expected-header", `expected ${label} header`));
   }
-  const match = /^(.+) <([^<>]+)> (-?[0-9]+) ([+-][0-9]{4})$/u.exec(line.slice(prefix.length));
+  const match = SIGNATURE.exec(line.slice(prefix.length));
   if (match === null) {
-    throw new Error(`malformed git commit: invalid ${label} signature`);
+    return Result.err(commitError("invalid-signature", `invalid ${label} signature`));
   }
   const name = match[1];
   const email = match[2];
@@ -100,37 +119,44 @@ function parseSignature(line: string, label: string): Signature {
     timestampText === undefined ||
     timezoneText === undefined
   ) {
-    throw new Error(`malformed git commit: incomplete ${label} signature`);
+    // All four groups are unconditional in SIGNATURE, so a match always captures them.
+    panic(`git ${label} signature matched ${String(SIGNATURE)} without capturing all four groups`);
   }
-  validateIdentityPart(name, "name");
-  validateIdentityPart(email, "email");
+  // `.` and `[^<>]` both admit a carriage return, which the encoder refuses to write, so a
+  // signature can be well-shaped and still hold a character that would not round-trip.
+  if (!isValidIdentityPart(name) || !isValidIdentityPart(email)) {
+    return Result.err(commitError("invalid-identity", `invalid ${label} name or email`));
+  }
 
   const timestamp = Number(timestampText);
   if (!Number.isSafeInteger(timestamp) || String(timestamp) !== timestampText) {
-    throw new Error(`malformed git commit: invalid ${label} timestamp`);
+    return Result.err(commitError("invalid-timestamp", `invalid ${label} timestamp`));
   }
   const timezoneOffsetMinutes = parseTimezone(timezoneText, label);
-  return { name, email, timestamp, timezoneOffsetMinutes };
+  if (Result.isError(timezoneOffsetMinutes)) {
+    return timezoneOffsetMinutes;
+  }
+  return Result.ok({ name, email, timestamp, timezoneOffsetMinutes: timezoneOffsetMinutes.value });
 }
 
-function parseTimezone(value: string, label: string): number {
+function parseTimezone(value: string, label: string): Result<number, GitObjectDecodeError> {
   const sign = value[0];
   const hoursText = value.slice(1, 3);
   const minutesText = value.slice(3, 5);
   if (sign === undefined || (sign !== "+" && sign !== "-")) {
-    throw new Error(`malformed git commit: invalid ${label} timezone`);
+    return Result.err(commitError("invalid-timezone", `invalid ${label} timezone`));
   }
   const hours = Number(hoursText);
   const minutes = Number(minutesText);
   const absoluteMinutes = hours * 60 + minutes;
   if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
-    throw new Error(`malformed git commit: invalid ${label} timezone`);
+    return Result.err(commitError("invalid-timezone", `invalid ${label} timezone`));
   }
   const offset = sign === "-" ? -absoluteMinutes : absoluteMinutes;
   if (formatTimezone(offset) !== value) {
-    throw new Error(`malformed git commit: non-canonical ${label} timezone`);
+    return Result.err(commitError("non-canonical-timezone", `non-canonical ${label} timezone`));
   }
-  return offset;
+  return Result.ok(offset);
 }
 
 function formatSignature(signature: Signature): string {
@@ -142,8 +168,13 @@ function formatSignature(signature: Signature): string {
   return `${signature.name} <${signature.email}> ${signature.timestamp} ${formatTimezone(signature.timezoneOffsetMinutes)}`;
 }
 
+/** The shared rule: an identity part must be non-empty and free of the delimiters git writes. */
+function isValidIdentityPart(value: string): boolean {
+  return value.length > 0 && !/[\r\n<>]/u.test(value);
+}
+
 function validateIdentityPart(value: string, label: string): void {
-  if (value.length === 0 || /[\r\n<>]/u.test(value)) {
+  if (!isValidIdentityPart(value)) {
     throw new TypeError(`git signature ${label} is invalid`);
   }
 }

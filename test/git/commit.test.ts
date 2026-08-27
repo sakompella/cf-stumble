@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { GitObjectDecodeCondition } from "../../src/git/index.js";
 import { decodeObject, encodeObject, parseSha } from "../../src/git/index.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 const encoder = new TextEncoder();
 
@@ -48,7 +50,7 @@ describe("git root commit objects", () => {
     expect(encodeObject(object)).toEqual(
       concat(encoder.encode(`commit ${content.byteLength}\0`), content),
     );
-    expect(decodeObject(encodeObject(object))).toEqual(object);
+    expect(expectOk(decodeObject(encodeObject(object)))).toEqual(object);
   });
 });
 
@@ -79,8 +81,74 @@ describe("git merge commit objects", () => {
     };
 
     const encoded = encodeObject(object);
-    expect(decodeObject(encoded)).toEqual(object);
+    expect(expectOk(decodeObject(encoded))).toEqual(object);
     expect(new TextDecoder().decode(encoded)).toContain("-0530");
     expect(new TextDecoder().decode(encoded)).toContain("merge: café\n\n内容");
+  });
+});
+
+const TREE = "tree 0123456789012345678901234567890123456789\n";
+const AUTHOR = "author Alice <alice@example.com> 0 +0000\n";
+const COMMITTER = "committer Alice <alice@example.com> 0 +0000\n";
+
+function expectCommitFailure(body: Uint8Array, condition: GitObjectDecodeCondition): void {
+  const wrapped = concat(encoder.encode(`commit ${body.byteLength}\0`), body);
+
+  expect(expectErr(decodeObject(wrapped))).toMatchObject({ layer: "commit", condition });
+}
+
+/** An author header carrying `rest` where a valid one carries `"<timestamp> <timezone>"`. */
+function authoredWith(rest: string): string {
+  return `author Alice <alice@example.com> ${rest}\n`;
+}
+
+/**
+ * Every rejection the commit reader can produce, named by its `condition`. Each case is a whole
+ * commit body that differs from a valid one in exactly the way the case is about, so a condition
+ * firing for the wrong reason shows up as the wrong tag rather than as a pass.
+ */
+const MALFORMED_COMMITS = [
+  ["no blank line before the message", `${TREE}${AUTHOR}${COMMITTER}`, "missing-separator"],
+  ["no committer header", `${TREE}${AUTHOR}\nm`, "missing-header"],
+  ["a header after the committer", `${TREE}${AUTHOR}${COMMITTER}${AUTHOR}\nm`, "unexpected-header"],
+  ["an author where the tree belongs", `${AUTHOR}${AUTHOR}${COMMITTER}\nm`, "expected-header"],
+  ["a tree that is not an object id", `tree nope\n${AUTHOR}${COMMITTER}\nm`, "invalid-sha"],
+  ["a parent that is not an object id", `${TREE}parent x\n${AUTHOR}${COMMITTER}\nm`, "invalid-sha"],
+  [
+    "a signature with no timezone",
+    `${TREE}${authoredWith("0")}${COMMITTER}\nm`,
+    "invalid-signature",
+  ],
+  // The signature pattern is looser than the encoder: `(.+)` before the address happily takes an
+  // angle bracket, which `encodeCommit` refuses to write back out.
+  [
+    "an angle bracket in an author name",
+    `${TREE}author A>B <alice@example.com> 0 +0000\n${COMMITTER}\nm`,
+    "invalid-identity",
+  ],
+  [
+    "a timestamp past 2^53",
+    `${TREE}${authoredWith("99999999999999999999 +0000")}${COMMITTER}\nm`,
+    "invalid-timestamp",
+  ],
+  [
+    "a timezone with more than 59 minutes",
+    `${TREE}${authoredWith("0 +0060")}${COMMITTER}\nm`,
+    "invalid-timezone",
+  ],
+  [
+    "a negative-zero timezone, which git writes but we do not",
+    `${TREE}${authoredWith("0 -0000")}${COMMITTER}\nm`,
+    "non-canonical-timezone",
+  ],
+] as const;
+
+describe("malformed git commits", () => {
+  it("rejects a commit body that is not UTF-8", () => {
+    expectCommitFailure(Uint8Array.of(255), "invalid-utf8");
+  });
+
+  it.each(MALFORMED_COMMITS)("rejects %s", (_case, text, condition) => {
+    expectCommitFailure(encoder.encode(text), condition);
   });
 });

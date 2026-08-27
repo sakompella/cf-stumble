@@ -1,3 +1,4 @@
+import { Result, panic } from "better-result";
 import { decodeObject } from "../git/index.js";
 import { assertNever, FILE_MODE } from "../git/types.js";
 import type { Commit, GitObject, Sha } from "../git/types.js";
@@ -97,14 +98,27 @@ function onlyParent(commit: Commit): Sha | undefined {
   return commit.parents[0];
 }
 
+/**
+ * The seam between `src/git/`, which now carries decode failures in a `Result`, and the rest of
+ * `src/generation/`, which still throws. Slice 6 migrates this module; until then the `Result`
+ * stops here rather than half-propagating.
+ *
+ * A malformed object is a `panic` because of where the bytes came from: `sha` addresses content
+ * this supervisor hashed and wrote itself, so bytes that will not decode mean the store lost or
+ * corrupted them, or the encoder is wrong. Neither is a condition a caller can report and carry
+ * on from, and neither is the requester's doing — it stays a 500 either way, which is the
+ * disposition the adoption plan records for F18. A missing object keeps throwing, because that one
+ * is ordinary: an object can be absent because a generation was never fully written, and callers
+ * do surface it.
+ */
 async function readObject(store: Store, sha: Sha, description: string): Promise<GitObject> {
   const bytes = await store.readObject(sha);
   if (bytes === undefined) {
     throw new Error(`missing ${description} object ${sha}`);
   }
-  try {
-    return decodeObject(bytes);
-  } catch (error: unknown) {
-    throw new Error(`malformed ${description} object ${sha}`, { cause: error });
+  const decoded = decodeObject(bytes);
+  if (Result.isError(decoded)) {
+    panic(`malformed ${description} object ${sha}`, decoded.error);
   }
+  return decoded.value;
 }

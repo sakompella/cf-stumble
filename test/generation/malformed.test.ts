@@ -6,6 +6,7 @@ import { decodeObject, encodeObject } from "../../src/git/index.js";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
+import { expectOk } from "../support/result.js";
 
 const author = {
   name: "Build Bot",
@@ -60,7 +61,7 @@ describe("generation manifest validation", () => {
     if (manifestBytes === undefined) {
       throw new Error("expected a stored manifest");
     }
-    const manifest = decodeObject(manifestBytes);
+    const manifest = expectOk(decodeObject(manifestBytes));
     if (manifest.type !== "tree") {
       throw new Error("expected a tree manifest");
     }

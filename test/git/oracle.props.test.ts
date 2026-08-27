@@ -9,6 +9,7 @@ import {
   prefixSharingTreeEntries,
 } from "../support/git-generators.js";
 import { assertOracleAgreement } from "../support/git-oracle.js";
+import { expectOk } from "../support/result.js";
 
 /**
  * The differential layer over `test/git/oracle.test.ts`. That test pins three hand-chosen objects
@@ -91,7 +92,7 @@ test("tree entries sort by UTF-8 bytes, where isomorphic-git sorts by UTF-16 cod
     { mode: FILE_MODE.regular, name: "\uE000", sha },
   ];
 
-  const decoded = decodeObject(encodeObject({ type: "tree", entries }));
+  const decoded = expectOk(decodeObject(encodeObject({ type: "tree", entries })));
   if (decoded.type !== "tree") throw new Error(`expected a tree, got ${decoded.type}`);
 
   // U+E000 is EE 80 80 and U+1F600 is F0 9F 98 80, so git puts U+E000 first. By code unit the

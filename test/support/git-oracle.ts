@@ -22,6 +22,7 @@ import {
 } from "../../src/git/index.js";
 import type { Commit, GitObject, Sha, TreeEntry } from "../../src/git/index.js";
 import { createMemoryFs } from "./memory-fs.js";
+import { expectOk } from "./result.js";
 
 /**
  * isomorphic-git as an independent oracle for `src/git/` (ADR-0011): a second implementation
@@ -60,7 +61,9 @@ export async function assertOracleAgreement(object: GitObject): Promise<Sha> {
     throw new Error(`expected a wrapped object, got ${writtenByOracle.type}`);
   }
   expect(new Uint8Array(writtenByOracle.object)).toEqual(encoded);
-  expect(decodeObject(new Uint8Array(writtenByOracle.object))).toEqual(canonicalObject(object));
+  expect(expectOk(decodeObject(new Uint8Array(writtenByOracle.object)))).toEqual(
+    canonicalObject(object),
+  );
 
   const encodedFs = createOracleFs();
   // The wrapped form is the only isomorphic-git API that accepts our exact encoded bytes.

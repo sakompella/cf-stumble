@@ -1,10 +1,12 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import { Result } from "better-result";
 import { expect, test } from "vitest";
 
 import { decodeObject, encodeObject } from "../../src/git/index.js";
 import { gitObjects, treeEntries } from "../support/git-generators.js";
 import { canonicalObject } from "../support/git-oracle.js";
+import { expectOk } from "../support/result.js";
 
 /**
  * A property layer over `test/git/codec.test.ts`, which round-trips a fixed list of objects. These
@@ -18,7 +20,7 @@ test("decoding undoes encoding for every object", () => {
 
     // A tree comes back in git's order rather than the order it was written in; that reordering
     // is the encoder's job, so it is part of the expected value, not a weakening of the property.
-    expect(decodeObject(encodeObject(object))).toEqual(canonicalObject(object));
+    expect(expectOk(decodeObject(encodeObject(object)))).toEqual(canonicalObject(object));
   });
 });
 
@@ -28,7 +30,7 @@ test("re-encoding a decoded object is a fixpoint on the bytes", () => {
 
     // A format that drifts on the second pass still passes a one-shot round-trip, so check the
     // bytes settle rather than only that the value survives.
-    expect(encodeObject(decodeObject(encoded))).toEqual(encoded);
+    expect(encodeObject(expectOk(decodeObject(encoded)))).toEqual(encoded);
   });
 });
 
@@ -75,19 +77,18 @@ test("whatever the decoder accepts is canonical", () => {
   hegel.test((tc) => {
     const bytes = tc.draw(decoderInput);
 
-    let decoded;
-    try {
-      decoded = decodeObject(bytes);
-    } catch (error) {
-      // Rejection is always a valid answer; that it rejects *as an Error* is the other half of
-      // the contract, since callers above this layer catch rather than crash.
-      expect(error).toBeInstanceOf(Error);
+    const decoded = decodeObject(bytes);
+    if (Result.isError(decoded)) {
+      // Rejection is always a valid answer, and since the migration it is the *only* way to fail:
+      // the decoder returns its rejection, so anything that escapes as a throw from here is a
+      // defect rather than malformed input, and hegel reports it as one.
+      expect(decoded.error).toMatchObject({ _tag: "GitObjectDecodeError" });
       return;
     }
 
     // The store is content-addressed, so two byte strings that decode to the same object would be
     // two names for one thing. Accepting only canonical bytes is what rules that out.
-    expect(encodeObject(decoded)).toEqual(bytes);
+    expect(encodeObject(decoded.value)).toEqual(bytes);
   });
 });
 
@@ -95,11 +96,8 @@ test("mutated encodings still reach the decoder, so the property above is not va
   let accepted = 0;
   hegel.test(
     (tc) => {
-      try {
-        decodeObject(tc.draw(decoderInput));
+      if (Result.isOk(decodeObject(tc.draw(decoderInput)))) {
         accepted += 1;
-      } catch {
-        // Counting acceptances; rejections are the other test's business.
       }
     },
     { testCases: 300 },
