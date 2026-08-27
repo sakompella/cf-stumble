@@ -121,8 +121,8 @@ Generating trees and checking byte agreement against isomorphic-git found two di
 fixed fixtures had never reached. Both are pinned as characterisation tests in
 `test/git/oracle.props.test.ts` that go red when someone fixes them.
 
-**Our encoder writes tree entry names git refuses to read.** `validateTreeNameBytes`
-(`src/git/tree.ts:154`) rejects only an empty name, NUL, and `/`. Git's `verify_path` also refuses
+**Our encoder writes tree entry names git refuses to read.** `treeNameRejection`
+(`src/git/tree.ts:232`) rejects only an empty name, NUL, and `/`. Git's `verify_path` also refuses
 `.`, `..`, `.git`, and its NTFS/HFS aliases, and isomorphic-git enforces that list when reading, so
 `encodeObject` can produce a tree that real git tooling treats as corrupt. `..` inside a tree is
 also a path traversal on checkout. `parseWorkspacePath` rejects traversal one layer up in

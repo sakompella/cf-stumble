@@ -51,7 +51,7 @@ test("commit encoding agrees with isomorphic-git", () =>
 /**
  * A bug this suite found, pinned rather than fixed.
  *
- * `validateTreeNameBytes` in `src/git/tree.ts` rejects only an empty name, NUL and `/`. Git's own
+ * `treeNameRejection` in `src/git/tree.ts` rejects only an empty name, NUL and `/`. Git's own
  * `verify_path` also refuses `.`, `..`, `.git` and its NTFS/HFS aliases, and isomorphic-git
  * enforces that list when reading a tree — so `encodeObject` will happily produce a tree object
  * that real git tooling treats as corrupt, and `..` inside a tree is a path traversal on checkout,
