@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import { readGeneration } from "../../src/generation/read.js";
 import { decodeObject, encodeObject } from "../../src/git/index.js";
 import { parseSha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
-import { expectOk } from "../support/result.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 const author = {
   name: "Build Bot",
@@ -21,14 +21,16 @@ const validModule = {
   executable: false,
 } satisfies Module;
 
-function buildValidGeneration(store: MemoryStore) {
-  return buildGeneration(store, {
-    modules: [validModule],
-    parent: undefined,
-    author,
-    createdAt: author.timestamp,
-    summary: "valid",
-  });
+async function buildValidGeneration(store: MemoryStore) {
+  return expectOk(
+    await buildGenerationResult(store, {
+      modules: [validModule],
+      parent: undefined,
+      author,
+      createdAt: author.timestamp,
+      summary: "valid",
+    }),
+  );
 }
 
 describe("generation module path validation", () => {
@@ -40,15 +42,19 @@ describe("generation module path validation", () => {
   ])("rejects a %s module path before writing objects", async (_label, path) => {
     const store = new MemoryStore();
 
-    await expect(
-      buildGeneration(store, {
+    const error = expectErr(
+      await buildGenerationResult(store, {
         modules: [{ ...validModule, path }],
         parent: undefined,
         author,
         createdAt: author.timestamp,
         summary: "invalid",
       }),
-    ).rejects.toThrow(/module path/u);
+    );
+    expect(error).toMatchObject({
+      _tag: "InvalidGenerationInputError",
+      condition: "invalid-module-path",
+    });
     expect(await store.listObjects()).toHaveLength(0);
   });
 });
@@ -72,6 +78,7 @@ describe("generation manifest validation", () => {
     await store.deleteObject(file.sha);
 
     await expect(readGeneration(store, generation.sha)).rejects.toThrow(/missing.*blob/u);
+    await expect(readGeneration(store, generation.sha)).rejects.toMatchObject({ _tag: "Panic" });
   });
 });
 
@@ -95,5 +102,6 @@ describe("generation commit validation", () => {
     );
 
     await expect(readGeneration(store, commit)).rejects.toThrow(/missing.*tree/u);
+    await expect(readGeneration(store, commit)).rejects.toMatchObject({ _tag: "Panic" });
   });
 });

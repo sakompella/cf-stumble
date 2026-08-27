@@ -38,7 +38,7 @@ async function readTree(
 ): Promise<void> {
   const object = await readObject(store, treeSha, `manifest tree ${treeSha}`);
   if (object.type !== "tree") {
-    throw new Error(`manifest tree ${treeSha} is ${object.type}, not a tree`);
+    panic(`manifest tree ${treeSha} is ${object.type}, not a tree`);
   }
 
   for (const entry of object.entries) {
@@ -57,7 +57,7 @@ async function readTree(
         });
         break;
       case FILE_MODE.symlink:
-        throw new Error(`manifest module ${JSON.stringify(path)} is a symlink`);
+        return panic(`manifest module ${JSON.stringify(path)} is a symlink`);
       default:
         assertNever(entry.mode, "generation manifest mode");
     }
@@ -67,16 +67,14 @@ async function readTree(
 function validateManifestName(name: string, parentPath: string): void {
   if (name === "." || name === "..") {
     const path = parentPath.length === 0 ? name : `${parentPath}/${name}`;
-    throw new Error(`manifest contains invalid module path ${JSON.stringify(path)}`);
+    panic(`manifest contains invalid module path ${JSON.stringify(path)}`);
   }
 }
 
 async function readBlob(store: Store, sha: Sha, path: string): Promise<Uint8Array> {
   const object = await readObject(store, sha, `manifest blob for ${JSON.stringify(path)}`);
   if (object.type !== "blob") {
-    throw new Error(
-      `manifest blob ${sha} for ${JSON.stringify(path)} is ${object.type}, not a blob`,
-    );
+    panic(`manifest blob ${sha} for ${JSON.stringify(path)} is ${object.type}, not a blob`);
   }
   return object.data.slice();
 }
@@ -84,12 +82,10 @@ async function readBlob(store: Store, sha: Sha, path: string): Promise<Uint8Arra
 async function readCommit(store: Store, sha: Sha): Promise<Commit> {
   const object = await readObject(store, sha, `commit ${sha}`);
   if (object.type !== "commit") {
-    throw new Error(`commit object ${sha} is ${object.type}, not a commit`);
+    panic(`commit object ${sha} is ${object.type}, not a commit`);
   }
   if (object.commit.parents.length > 1) {
-    throw new Error(
-      `commit ${sha} has ${object.commit.parents.length} parents; expected at most one`,
-    );
+    panic(`commit ${sha} has ${object.commit.parents.length} parents; expected at most one`);
   }
   return object.commit;
 }
@@ -101,20 +97,15 @@ function onlyParent(commit: Commit): Sha | undefined {
 /**
  * The seam between `src/git/`, which now carries decode failures in a `Result`, and the rest of
  * `src/generation/`, which still throws. Slice 6 migrates this module; until then the `Result`
- * stops here rather than half-propagating.
- *
- * A malformed object is a `panic` because of where the bytes came from: `sha` addresses content
- * this supervisor hashed and wrote itself, so bytes that will not decode mean the store lost or
- * corrupted them, or the encoder is wrong. Neither is a condition a caller can report and carry
- * on from, and neither is the requester's doing — it stays a 500 either way, which is the
- * disposition the adoption plan records for F18. A missing object keeps throwing, because that one
- * is ordinary: an object can be absent because a generation was never fully written, and callers
- * do surface it.
+ * A malformed object is a `panic` because `sha` addresses content this supervisor hashed and
+ * wrote itself. Decode failure, a missing object, or an unexpected object shape means the store is
+ * corrupt or the writer is wrong; rows are inserted only after `buildGeneration` stores the commit.
+ * None is a condition a caller can report and continue from, and none is the requester's doing.
  */
 async function readObject(store: Store, sha: Sha, description: string): Promise<GitObject> {
   const bytes = await store.readObject(sha);
   if (bytes === undefined) {
-    throw new Error(`missing ${description} object ${sha}`);
+    panic(`missing ${description} object ${sha}`);
   }
   const decoded = decodeObject(bytes);
   if (Result.isError(decoded)) {

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import { readGeneration } from "../../src/generation/read.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
+import { expectOk } from "../support/result.js";
 
 const author = {
   name: "Build Bot",
@@ -24,6 +25,10 @@ const modules = [
     executable: true,
   },
 ] satisfies readonly Module[];
+
+async function buildGeneration(...args: Parameters<typeof buildGenerationResult>) {
+  return expectOk(await buildGenerationResult(...args));
+}
 
 describe("readGeneration", () => {
   it("round-trips module paths, bytes, and executable bits", async () => {

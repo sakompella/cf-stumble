@@ -1,12 +1,14 @@
+import { Result } from "better-result";
 import { expect, it } from "vitest";
 
 import { decodeObject } from "../../src/git/index.js";
 import type { Commit, Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
+import { ObjectTooLargeError } from "../../src/storage/types.js";
 import type { SweepableStore } from "../../src/storage/types.js";
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
-import { expectOk } from "../support/result.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 const author = {
   name: "Build Bot",
@@ -28,6 +30,18 @@ const options = {
   createdAt: author.timestamp,
   summary: "initial generation",
 } as const;
+
+async function buildGeneration(...args: Parameters<typeof buildGenerationResult>) {
+  return expectOk(await buildGenerationResult(...args));
+}
+
+class ObjectLimitStore extends MemoryStore {
+  override writeObject(bytes: Uint8Array): ReturnType<MemoryStore["writeObject"]> {
+    return Promise.resolve(
+      Result.err(new ObjectTooLargeError({ actualBytes: bytes.byteLength, maxBytes: 1 })),
+    );
+  }
+}
 
 async function readCommit(store: MemoryStore, sha: Sha): Promise<Commit> {
   const bytes = await store.readObject(sha);
@@ -57,6 +71,17 @@ it("buildGeneration writes a root commit with a manifest", async () => {
     message: `${options.summary}\n`,
   });
   expect(await store.listObjects()).toHaveLength(4);
+});
+
+it("buildGeneration preserves an object-size error from storage", async () => {
+  const error = expectErr(await buildGenerationResult(new ObjectLimitStore(), options));
+
+  expect(ObjectTooLargeError.is(error)).toBe(true);
+  if (!ObjectTooLargeError.is(error)) {
+    expect.fail("expected ObjectTooLargeError");
+  }
+  expect(error.actualBytes).toBeGreaterThan(1);
+  expect(error.maxBytes).toBe(1);
 });
 
 it("buildGeneration deduplicates an unchanged module across commits", async () => {

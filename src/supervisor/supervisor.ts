@@ -21,7 +21,12 @@ import {
 import { buildGeneration } from "../generation/build.js";
 import { makeGenesisPin, seedGenesis } from "../generation/genesis.js";
 import type { GenesisPin } from "../generation/genesis.js";
-import { GENESIS_NUMBER, parseGenerationNumber } from "../generation/types.js";
+import {
+  GENESIS_NUMBER,
+  parseGenerationNumber,
+  parseGenerationNumberResult,
+} from "../generation/types.js";
+import { InvalidGenerationInputError } from "../generation/errors.js";
 import { readGeneration } from "../generation/read.js";
 import type { LoadedGeneration } from "../generation/read.js";
 import type { Attestation, CommitSnapshot, Module, Verdict } from "../generation/types.js";
@@ -1001,21 +1006,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         }
         throw error;
       }
-      let generation: CommitSnapshot;
-      try {
-        generation = await buildGeneration(this.store, {
-          modules,
-          parent: parentSnapshot,
-          author: genesisAuthor,
-          createdAt,
-          summary,
-        });
-      } catch (error: unknown) {
-        if (error instanceof TypeError) {
-          throw new InvalidRequestError(error.message);
+      const built = await buildGeneration(this.store, {
+        modules,
+        parent: parentSnapshot,
+        author: genesisAuthor,
+        createdAt,
+        summary,
+      });
+      if (Result.isError(built)) {
+        if (InvalidGenerationInputError.is(built.error)) {
+          throw new InvalidRequestError(built.error.message);
         }
-        throw error;
+        throw built.error;
       }
+      const generation = built.value;
       let row: GenerationRow | undefined;
       this.ctx.storage.transactionSync(() => {
         row = this.allocateGeneration(
@@ -1827,12 +1831,11 @@ function parseGenerationNumberField(value: JsonValue | undefined, path: string):
   } else {
     raw = readSafeInteger(value, path);
   }
-  try {
-    return parseGenerationNumber(raw);
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new InvalidRequestError(`${path} is invalid: ${detail}`);
+  const parsed = parseGenerationNumberResult(raw);
+  if (Result.isError(parsed)) {
+    throw new InvalidRequestError(`${path} is invalid: ${parsed.error.message}`);
   }
+  return parsed.value;
 }
 
 function parseNullableGenerationNumber(
