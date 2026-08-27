@@ -8,7 +8,7 @@ import {
   loadAgent,
   syntaxErrorAgentSource,
 } from "../agent/loader.js";
-import { Result } from "better-result";
+import { panic, Result } from "better-result";
 import {
   AgentExecutor,
   InvalidModuleError,
@@ -1473,7 +1473,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       .toArray();
     return rows.map((row) => ({
       name: row.name,
-      session: parseReplaySession(parseStoredJson(row.session_json, `corpus ${row.name}`)),
+      session: parseReplaySession(parseStoredJson(row.session_json, `corpus ${row.name}`)).unwrap(
+        `stored corpus ${JSON.stringify(row.name)} does not satisfy the replay schema`,
+      ),
       mandatoryCanary: row.mandatory_canary === 1,
     }));
   }
@@ -1761,13 +1763,18 @@ function verifyAttestation(
 }
 
 async function readRequestRecord(request: Request): Promise<JsonObject> {
-  let value: JsonValue;
+  let parsed: unknown;
   try {
-    value = parseJsonValue(JSON.parse(await request.text()));
+    parsed = JSON.parse(await request.text());
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new InvalidRequestError(`request body is not valid JSON: ${detail}`);
   }
+  const json = parseJsonValue(parsed);
+  if (Result.isError(json)) {
+    throw new InvalidRequestError(`request body is not valid JSON: ${json.error.message}`);
+  }
+  const value = json.value;
   if (!isJsonObjectValue(value)) {
     throw new InvalidRequestError("request body must be a JSON object");
   }
@@ -1871,13 +1878,11 @@ function parseModules(value: JsonValue | undefined): readonly Module[] {
 function parseValidationCase(value: JsonValue | undefined, path: string): ValidationCase {
   const record = readRecord(value, path);
   const name = readNonEmptyString(record.name, `${path}.name`);
-  let session: ValidationCase["session"];
-  try {
-    session = parseReplaySession(record.session);
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new InvalidRequestError(`${path}.session is invalid: ${detail}`);
+  const parsedSession = parseReplaySession(record.session);
+  if (Result.isError(parsedSession)) {
+    throw new InvalidRequestError(`${path}.session is invalid: ${parsedSession.error.message}`);
   }
+  const session = parsedSession.value;
   return {
     name,
     session,
@@ -2054,17 +2059,24 @@ function readBoolean(value: JsonValue | undefined, path: string): boolean {
 }
 
 function parseStoredJson(value: string, path: string): JsonValue {
+  let parsed: unknown;
   try {
-    return parseJsonValue(JSON.parse(value));
+    parsed = JSON.parse(value);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`${path} contains invalid JSON: ${detail}`, { cause: error });
+    panic(`${path} contains invalid JSON: ${detail}`, error);
   }
+  const json = parseJsonValue(parsed);
+  if (Result.isError(json)) {
+    panic(`${path} contains invalid JSON: ${json.error.message}`, json.error);
+  }
+  return json.value;
 }
 
 function parseJsonOrText(value: string): JsonValue {
   try {
-    return parseJsonValue(JSON.parse(value));
+    const json = parseJsonValue(JSON.parse(value));
+    return Result.isOk(json) ? json.value : value;
   } catch {
     return value;
   }

@@ -6,10 +6,10 @@ import { isJsonValue } from "../../src/json.js";
 import {
   parseReplaySession,
   parseReplaySessionJson,
-  ReplaySchemaError,
   REPLAY_SCHEMA_VERSION,
 } from "../../src/replay/schema-parser.js";
 import { arbitraryJson, replaySessionJson } from "../support/json-generators.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 /**
  * A property layer over `test/replay/schema.test.ts`, which parses one good recording and four
@@ -20,22 +20,14 @@ import { arbitraryJson, replaySessionJson } from "../support/json-generators.js"
 
 test("parsing arbitrary JSON is total: a session, or a ReplaySchemaError, and nothing else", () => {
   hegel.test((tc) => {
-    const value = tc.draw(arbitraryJson);
+    const parsed = parseReplaySession(tc.draw(arbitraryJson));
 
-    let parsed;
-    try {
-      parsed = parseReplaySession(value);
-    } catch (error) {
-      // A `TypeError` or a bare `Error` escaping here would reach the gate as harness noise
-      // instead of as a rejected tape, which ADR-0014 is explicit about not wanting.
-      expect(error).toBeInstanceOf(ReplaySchemaError);
-      // A real `instanceof` narrows without a cast; the `expect` above already fails the test
-      // if this branch is impossible, so the rethrow below is unreachable in practice.
-      if (!(error instanceof ReplaySchemaError)) throw error;
-      expect(error.path).not.toBe("");
+    if (parsed.isErr()) {
+      expect(parsed.error).toMatchObject({ _tag: "ReplaySchemaError" });
+      expect(parsed.error.path).not.toBe("");
       return;
     }
-    expect(parsed.schemaVersion).toBe(REPLAY_SCHEMA_VERSION);
+    expect(parsed.value.schemaVersion).toBe(REPLAY_SCHEMA_VERSION);
   });
 });
 
@@ -55,11 +47,11 @@ test("generated JSON reaches past the version check, so totality is not one `if`
 
   hegel.test(
     (tc) => {
-      try {
-        parseReplaySession(tc.draw(arbitraryJson));
+      const parsed = parseReplaySession(tc.draw(arbitraryJson));
+      if (parsed.isErr()) {
+        rejectedAt.add(parsed.error.path);
+      } else {
         accepted += 1;
-      } catch (error) {
-        if (error instanceof ReplaySchemaError) rejectedAt.add(error.path);
       }
     },
     { testCases: 500, seed: 1, derandomize: true },
@@ -80,10 +72,9 @@ test("parsing an arbitrary string is total, malformed JSON included", () => {
       ),
     );
 
-    try {
-      parseReplaySessionJson(text);
-    } catch (error) {
-      expect(error).toBeInstanceOf(ReplaySchemaError);
+    const parsed = parseReplaySessionJson(text);
+    if (parsed.isErr()) {
+      expect(parsed.error).toMatchObject({ _tag: "ReplaySchemaError" });
     }
   });
 });
@@ -91,13 +82,12 @@ test("parsing an arbitrary string is total, malformed JSON included", () => {
 test("a recorded session survives a trip through JSON", () => {
   hegel.test((tc) => {
     const session = tc.draw(replaySessionJson);
-
-    const parsed = parseReplaySessionJson(JSON.stringify(session));
+    const parsed = expectOk(parseReplaySessionJson(JSON.stringify(session)));
 
     // The parser sorts workspace trees by path, so compare against its own output on a second
     // pass rather than against the input: the claim is that parsing settles, not that it is
     // the identity.
-    expect(parseReplaySessionJson(JSON.stringify(parsed))).toEqual(parsed);
+    expect(expectOk(parseReplaySessionJson(JSON.stringify(parsed)))).toEqual(parsed);
   });
 });
 
@@ -119,7 +109,9 @@ test("dropping any required field is rejected rather than defaulted", () => {
 
     // A parser that fills in a default here would let a tape recorded under one schema be
     // replayed as though it were another, which is the failure ADR-0005's ratchet cannot see.
-    expect(() => parseReplaySession(withoutKey)).toThrow(ReplaySchemaError);
+    expect(expectErr(parseReplaySession(withoutKey))).toMatchObject({
+      _tag: "ReplaySchemaError",
+    });
   });
 });
 

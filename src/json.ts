@@ -1,3 +1,5 @@
+import { Result, TaggedError } from "better-result";
+
 export type JsonPrimitive = string | number | boolean | null;
 
 export type JsonValue = JsonPrimitive | readonly JsonValue[] | JsonObject;
@@ -49,13 +51,22 @@ export function isJsonValue(value: unknown): value is JsonValue {
   return true;
 }
 
+/** A value from an untyped boundary cannot be represented in JSON. */
+export class NotJsonValueError extends TaggedError("NotJsonValueError")<{
+  message: string;
+}> {
+  constructor() {
+    super({ message: "value is not a JSON value" });
+  }
+}
+
 /** Parse a JSON value returned by JSON.parse without allowing an untyped representation inward. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JSON.parse is the I/O boundary.
-export function parseJsonValue(value: unknown): JsonValue {
+export function parseJsonValue(value: unknown): Result<JsonValue, NotJsonValueError> {
   if (!isJsonValue(value)) {
-    throw new TypeError("value is not a JSON value");
+    return Result.err(new NotJsonValueError());
   }
-  return value;
+  return Result.ok(value);
 }
 
 export function isJsonObjectValue(value: JsonValue | undefined): value is JsonObject {

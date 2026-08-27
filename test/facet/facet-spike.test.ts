@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { isJsonObjectValue, parseJsonValue, type JsonObject } from "../../src/json.js";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { expectOk } from "../support/result.js";
 
 type JsonRecord = JsonObject;
 
@@ -14,7 +15,7 @@ function supervisorRequest(path: string): Promise<Response> {
 }
 
 async function readRecord(response: Response): Promise<JsonRecord> {
-  const value = parseJsonValue(JSON.parse(await response.text()));
+  const value = expectOk(parseJsonValue(JSON.parse(await response.text())));
   if (!isJsonObjectValue(value)) {
     throw new Error("expected a JSON object");
   }

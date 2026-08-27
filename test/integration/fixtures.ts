@@ -12,6 +12,7 @@ import type { ReplaySession } from "../../src/replay/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { InMemoryWorkspace, WriteResult } from "../../src/tools/index.js";
 import { runPinnedTurn } from "../../src/integration/turn.js";
+import { expectOk } from "../support/result.js";
 
 export const author = {
   name: "Integration Bot",
@@ -32,7 +33,7 @@ export const genesisModules = [
 
 export function loadFixture(): Promise<ReplaySession> {
   const untrustedFixture = structuredClone(fixtureData);
-  return Promise.resolve(parseReplaySession(untrustedFixture));
+  return Promise.resolve(expectOk(parseReplaySession(untrustedFixture)));
 }
 
 export function moduleByPath(modules: readonly Module[], path: string): Module {

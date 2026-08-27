@@ -15,6 +15,7 @@ import { readGeneration } from "../../src/generation/read.js";
 import { parseSha } from "../../src/git/types.js";
 import { DurableObjectSqliteStore } from "../../src/storage/do-sqlite.js";
 import { afterEach, expect, test } from "vitest";
+import { expectOk } from "../support/result.js";
 
 type Credential = "valid" | "missing" | "wrong" | "empty";
 
@@ -37,7 +38,7 @@ function supervisorRequest(
 }
 
 async function readJson(response: Response): Promise<JsonValue> {
-  return parseJsonValue(JSON.parse(await response.text()));
+  return expectOk(parseJsonValue(JSON.parse(await response.text())));
 }
 
 function readRecord(value: JsonValue | undefined): JsonObject {

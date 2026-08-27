@@ -20,13 +20,18 @@ export type ModelResponseParseResult = Result<ParsedModelResponse, MalformedTool
  * `{ "type": "tool_call", "name": "write", "arguments": { ... } }`.
  */
 export function parseAgentResponse(response: RecordedModelResponse): ModelResponseParseResult {
-  let value: JsonValue;
+  let parsed: unknown;
   try {
-    value = parseJsonValue(JSON.parse(response.content));
+    parsed = JSON.parse(response.content);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return malformed(`response is not valid JSON: ${detail}`);
   }
+  const json = parseJsonValue(parsed);
+  if (Result.isError(json)) {
+    return malformed(`response is not valid JSON: ${json.error.message}`);
+  }
+  const value = json.value;
   if (Array.isArray(value)) {
     return parseToolCalls(value, "tool calls");
   }
@@ -131,12 +136,18 @@ function parseNamedArguments(
 ): Result<ParsedToolCall, MalformedToolCallError> {
   let args = value;
   if (isString(args)) {
+    let parsed: unknown;
     try {
-      args = parseJsonValue(JSON.parse(args));
+      parsed = JSON.parse(args);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       return malformed(`${path} field "arguments" is not valid JSON: ${detail}`);
     }
+    const json = parseJsonValue(parsed);
+    if (Result.isError(json)) {
+      return malformed(`${path} field "arguments" is not valid JSON: ${json.error.message}`);
+    }
+    args = json.value;
   }
   return Result.ok({ name, arguments: args });
 }

@@ -178,7 +178,7 @@ test("dispatches all four real primitives and feeds results into the next model 
   if (result.status === "completed") {
     expect(result.transcript.expectedEffects.trace).toHaveLength(4);
     const replayed = await runReplay(
-      parseReplaySessionJson(JSON.stringify(result.transcript)),
+      expectOk(parseReplaySessionJson(JSON.stringify(result.transcript))),
       new AgentExecutor(definition),
     );
     expect(replayed.status).toBe("PASS");
@@ -213,7 +213,7 @@ test("the same executor and effects work with recorded replay and live sources",
     return;
   }
 
-  const recording = parseReplaySessionJson(JSON.stringify(live.transcript));
+  const recording = expectOk(parseReplaySessionJson(JSON.stringify(live.transcript)));
   const recordedWorkspace = new InMemoryWorkspace();
   const recorded = await new AgentExecutor(definition).executeTurn(
     "write a result",

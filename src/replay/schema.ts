@@ -1,3 +1,5 @@
+import { TaggedError } from "better-result";
+
 export const REPLAY_SCHEMA_VERSION = 1 as const;
 
 type ReplaySchemaVersion = typeof REPLAY_SCHEMA_VERSION;
@@ -97,12 +99,16 @@ export type ReplaySession = {
   readonly expectedEffects: ObservableEffects;
 };
 
-export class ReplaySchemaError extends Error {
-  readonly path: string;
-
-  constructor(path: string, message: string) {
-    super(`replay schema error at ${path}: ${message}`);
-    this.name = "ReplaySchemaError";
-    this.path = path;
+/** A persisted or request-supplied replay session does not satisfy the current schema. */
+export class ReplaySchemaError extends TaggedError("ReplaySchemaError")<{
+  path: string;
+  condition: string;
+  message: string;
+}> {
+  constructor(args: { path: string; condition: string }) {
+    super({
+      ...args,
+      message: `replay schema error at ${args.path}: ${args.condition}`,
+    });
   }
 }
