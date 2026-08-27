@@ -6,7 +6,7 @@ scrutiny than one that was argued over.** When you find something here that look
 tells you whether to trust it or interrogate it.
 
 The distinction drawn is human versus agent. Which agent — reviewer, researcher, implementer —
-is recorded in `decisions.tsv` and doesn't matter for the purpose of this file.
+doesn't matter for the purpose of this file, and was never recorded systematically anywhere.
 
 ## The human's decisions
 

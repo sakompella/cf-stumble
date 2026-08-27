@@ -70,7 +70,6 @@ replacement.
   trusting the validation gate.
 - **`docs/integration-findings.md`** — what did and did not compose when the layers were first
   driven end to end, including the gaps that remain.
-- **`decisions.tsv`** — running log of decisions made during implementation.
 
 ## Development
 
