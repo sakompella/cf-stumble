@@ -1,15 +1,14 @@
 # Computer integration plan
 
-This document used to plan a supervisor-owned working tree exposed to the facet through a narrow,
-hand-proxied four-method capability, on the premise that a facet holding a real
-`@cloudflare/computer` `Workspace` was itself an isolation breach. That premise was wrong — see
-`docs/agents/design/design-history.md` and `docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`. The
-facet is the mutable, active harness; it is supposed to own a real workspace, real tools, and a
-real runtime, and grow all of that as ordinary work. Computer is the intended platform for that
-role. What follows separates a historical research snapshot of
-`@cloudflare/computer@0.2.1` from the open design question: how does a facet's mutable workspace
-hand the supervisor an immutable candidate without ever giving the facet a write path into the
-supervisor's own recovery records?
+This document originally planned a supervisor-owned working tree exposed through a narrow,
+hand-proxied four-method capability. It assumed that giving a facet a real
+`@cloudflare/computer` `Workspace` breached isolation. That assumption was wrong; see
+`docs/agents/design/design-history.md` and
+`docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`. The facet is the mutable active
+harness and should own a workspace, tools, and runtime that evolve as ordinary work. Computer is
+the intended platform. This document separates the historical research snapshot of
+`@cloudflare/computer@0.2.1` from the open design issue: handing the supervisor an immutable
+candidate without giving the facet a write path into supervisor recovery records.
 
 ## What Computer is for now: the facet's own work environment
 
@@ -26,12 +25,11 @@ against the current Computer API before implementation.
 
 ## The question that is actually unresolved: sanctioned candidate submission
 
-The supervisor still needs immutable candidate material — a commit, a tree, an artifact digest —
-that it can materialize, validate, and promote without trusting the facet's say-so about what that
-material contains. The facet, meanwhile, needs some way to hand that material over without the
-handoff becoming a channel the facet can use to mutate supervisor state directly. That boundary is
-not designed yet. It needs to be, before any source migration happens, and it is the actual
-successor to the question this document used to answer with a four-method proxy.
+The supervisor needs immutable candidate material, such as a commit, tree, or artifact digest. It
+must materialize, validate, and promote that material without trusting the facet's claim about its
+contents. The facet needs to hand it over without gaining a route to mutate supervisor state. That
+boundary is still undesigned and must be resolved before source migration. It replaces the question
+this document formerly answered with a four-method proxy.
 
 Two shapes are worth naming as starting points, not as a decision:
 
@@ -50,19 +48,16 @@ Two shapes are worth naming as starting points, not as a decision:
   touch a registry row, the live pointer, or the activation ledger, because the supervisor's own
   code decides what happens with what it pulled.
 
-Either shape (or some other one) has to satisfy the same audit question named in
-`docs/agents/design/review-findings.md`: after the facet uses this pathway, can it mutate or
-impersonate the supervisor's candidate/generation records, materialization state, validation
-evidence, live pointer, rollback, or genesis reset? If the answer is no, the pathway is sanctioned
-regardless of how much filesystem or shell access the facet has elsewhere. If the answer is yes
-for any input the facet controls, the pathway is broken regardless of how narrow it looks on
-paper — a four-method surface that happens to let the facet drive a promotion is exactly as
-dangerous as handing it the promotion route directly.
+Any shape has to satisfy the audit question in `docs/agents/design/review-findings.md`: after using
+this path, can the facet mutate or impersonate the supervisor's candidate and generation records,
+materialization state, validation evidence, live pointer, rollback, or genesis reset? If it cannot,
+the path is sanctioned even if the facet has broad filesystem and shell access. If any
+facet-controlled input can do so, the path is broken. A four-method API that lets the facet trigger
+promotion is as dangerous as a direct promotion route.
 
-This is deliberately left as an open design question here rather than a worked slice plan. Picking
-a shape means deciding how the supervisor authenticates the facet, how it verifies bytes it did
-not itself write, and what happens when a submission is malformed or adversarial — that is real
-design work, not something to default into while writing this document.
+This remains an open design question rather than a slice plan. Choosing a shape requires an
+authentication model, independent verification of bytes the supervisor did not write, and behaviour
+for malformed or adversarial submissions. Those decisions should precede implementation.
 
 ## What the supervisor still needs, regardless of which submission shape is chosen
 
@@ -144,15 +139,12 @@ them as implementation constraints.
 
 ## What still needs to be built, once the submission boundary is designed
 
-This is deliberately not a slice plan. The existing hand-written git codec and object store
-(`src/git/`, `src/storage/`) are still real, still tested, and still the current implementation;
-nothing here is asking for them to be deleted before there is a replacement design to move to.
-Source migration — deciding what the facet's workspace binding actually looks like, choosing and
-building the candidate-submission pathway, wiring the supervisor's own git read path over whatever
-arrives, and retiring the parts of `src/git/` and `src/storage/` that the chosen design makes
-redundant — is future work, gated on resolving the submission boundary above. Planning that
-migration in detail before the boundary is chosen would just be re-committing the same mistake
-this document made the first time, in a new shape.
+This is not a slice plan. The hand-written git codec and object store (`src/git/`,
+`src/storage/`) remain current, tested code, and should stay until a replacement design exists.
+Source migration comes after the submission boundary is resolved: define the facet workspace
+binding, build candidate submission, give the supervisor its own git read path, then retire the
+parts of `src/git/` and `src/storage/` that the chosen design replaces. Detailed migration planning
+before that decision would repeat the original mistake.
 
 ## Source references
 

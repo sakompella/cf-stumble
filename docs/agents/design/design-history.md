@@ -1,42 +1,39 @@
 # Design history
 
-Not a changelog. This is organized by decision: what we thought, what changed our mind, and what
-it cost to change it. Read `docs/agents/adr/` for the resolved position on each of these and
-`docs/agents/domain.md` for the vocabulary; this document exists to carry the reasoning that a
-decision record alone tends to compress away.
+This is the project’s design history: what we thought, what changed our mind, and what the change
+cost. `docs/agents/adr/` holds the settled positions, and `docs/agents/domain.md` defines the
+terms. This document keeps the reasoning that those short records cannot carry.
 
-The project's own convention is to leave retractions visible rather than edit them quietly. This
-document follows that convention on purpose — several of the arcs below took two or three wrong
-turns before landing somewhere defensible, and the wrong turns are worth as much as the landing.
+The project leaves retractions visible instead of quietly editing them away. Several arcs below
+took two or three wrong turns before reaching a defensible position, and those wrong turns explain
+why the current decisions exist.
 
 ## The brief made two claims research contradicted before any code existed
 
-The source document — a Claude Desktop export sketching this system — made two load-bearing
-claims that turned out to be wrong, and both were checked before writing a line of source.
+A Claude Desktop export that sketched this system made two claims that would have broken the plan.
+The project checked both before writing source.
 
 It said to build generations on `@cloudflare/computer`'s bundled git client. That package's
 wrapper bundles isomorphic-git but only re-exports `hashObject`, `catFile`, `lsTree`,
-`updateRef`, `commit`, and `log` — never `writeTree` or `writeCommit`, and its `commit()` needs a
-working tree. So the wrapper specifically cannot write a commit pointing at an in-memory tree,
-which is the single most common operation this system needs. This became the seed of the git
-codec decision, and — as covered below — the finding was real but got overgeneralized into a
-false claim about git itself.
+`updateRef`, `commit`, and `log`, but never `writeTree` or `writeCommit`; its `commit()` also needs
+a working tree. The wrapper cannot write a commit pointing at an in-memory tree, the operation this
+system needs most often. That finding started the git codec decision. It was correct about the
+wrapper but later became an incorrect claim about git itself.
 
 It said facets need Workers Paid, so stub the facet load behind an interface and test against the
 stub. Also wrong, in the useful direction: both the Dynamic Worker Loader and facets run locally
 in workerd with no Cloudflare account at all, and `@cloudflare/vitest-plugin` understands
-`worker_loaders` bindings. Isolation — that a facet cannot read the supervisor's SQLite or reach
-its routes — is the entire safety argument for letting an agent modify itself. Being able to test
-that claim for real, rather than mock it, changed the build order: the isolation spike moved from
-the last slice planned to the first thing built (see "facet isolation moves first," below).
+`worker_loaders` bindings. The safety argument depends on a facet being unable to read supervisor SQLite or reach supervisor
+routes. Testing that claim directly, rather than with a mock, changed the build order: the isolation
+spike moved from the final planned slice to the first one.
 
 Cost of getting these right early: none, beyond the research time. Cost of getting them wrong
 would have been building eleven slices on top of an isolation claim nobody had actually tested.
 
 ## The validation gate was circular, and catching it saved the whole plan
 
-The plan, before any code, was "recorded model-response sessions are the validation corpus":
-replay a session's tape against a candidate and see if it still produces the same effects.
+Before any code, the plan was to use recorded model-response replay sessions as the compatibility
+corpus: replay a tape against a candidate and check whether it still produces the same effects.
 
 An external review caught that this is circular for the one change that matters most. A recorded
 model response is an _output of the old prompt_. Replay that tape against a prompt-only
@@ -50,20 +47,20 @@ The fix was to rescope, not to abandon. Replay is honest about a narrower, still
 given a fixed sequence of model responses, does the candidate's _executor_ still turn them into
 the same tool calls and the same effects? That catches a broken edit primitive, a mangled
 tool-call parser, or a policy that now refuses something it used to allow — real regressions, just
-not the one everyone assumes "validation" means. Judging whether a _prompt_ got better needs live
-generation against the candidate prompt and scored trials over task invariants, which is a
-different mechanism with a different cost model and is explicitly not built. The corpus is named
-an executor-compatibility corpus, deliberately, so nobody mistakes what it checks.
+not the broader claim readers often attach to "validation." Judging whether a _prompt_ improved
+requires live generation against the candidate prompt and trials scored against task invariants. That
+is a different mechanism with a different cost model, and the project does not build it. The
+compatibility corpus name makes the narrower claim explicit.
 
-This is worth calling the single most important correction in the project's history: it would
-have wasted an entire night of building a validation system that validated nothing, and it would
-have failed silently rather than loudly, which is the worse of the two ways a safety mechanism can
-fail.
+This correction changed the project’s direction. Without it, the team would have spent a night
+building a validation system that did not exercise prompt changes, while every promotion appeared
+validated. A safety mechanism that reports success without testing its premise is worse than one
+that visibly breaks.
 
 ## The git codec: wrong, then weak, then actually justified, then reversed anyway
 
-This decision was argued four separate times, and each time is worth keeping distinct because
-each correction taught something different.
+The project argued this decision four times. Keeping the rounds separate shows what each correction
+changed.
 
 **First justification (wrong).** "You cannot write a commit pointing at an in-memory tree
 without a working tree." Stated as fact, used to justify hand-writing a codec instead of
@@ -83,10 +80,9 @@ _because_ we chose to copy git's byte format; invent our own record type and the
 spec to violate, so the entire class of bug the oracle catches stops existing, and ordinary
 round-trip tests would cover what's left. The dedup argument is simply wrong — dedup comes from
 content addressing (hash the bytes, use the hash as the key), which has nothing to do with git's
-particular byte layout; any format gets you dedup if you hash it. Only the third reason,
-interop, survives, and at the time it was purely latent: the codec stores raw uncompressed rows
-keyed by sha, while real git wants zlib-deflated files at `objects/ab/cdef…` paths, so `git log`
-could not actually be pointed at the store without an export step that had never been written.
+particular byte layout; any format gets you dedup if you hash it. Only the third reason, interop, survives. Even that was latent: the codec stores raw uncompressed
+rows keyed by sha, while real git expects zlib-deflated files at `objects/ab/cdef…` paths. `git log`
+could not read the store without an export step that had never been written.
 
 **Third justification (the one that actually holds up).** A prior-art survey — commissioned
 specifically because "surely someone has done this before" — found that `js-git` had already
@@ -109,17 +105,15 @@ filesystem (a Workspace), and against a real filesystem isomorphic-git's ordinar
 `writeFile` → `add` → `commit` workflow is exactly the workflow it was built for, no working-tree
 avoidance required. The direction this points in, laid out in `docs/agents/design/computer-integration.md`, is retiring the
 614-line codec and the four-function object store in favor of isomorphic-git operating on a
-Computer-provided filesystem. That direction is written, not executed — `src/git/` and
-`src/storage/` still exist on `main`, and the migration is gated on designing how a facet's
-workspace hands the supervisor an immutable candidate, which is not yet decided.
+Computer-provided filesystem. That direction is documented but not executed. `src/git/` and `src/storage/` still exist on
+`main`. Migration waits for a design for handing an immutable candidate from a facet workspace to
+the supervisor.
 
-The honest accounting: three of the four reasons ever given for the codec turned out to be either
-false, circular, or beside the point, and the one durable reason (interop) was never actually
-cashed before the decision to remove the codec was made anyway. That is not a failure of the
-codec's engineering — it typechecks, it round-trips, its mutation tests discriminate real bugs —
-it is a case study in a decision being re-justified until the justification held, and then being
-overtaken by a change in a constraint (dependencies are fine now) that made the whole question
-moot in a different direction.
+Three of the four reasons given for the codec were false, circular, or beside the point. The one
+that held up, interop, never became operational before the project chose to remove the codec.
+That does not make the codec poorly engineered: it typechecks, round-trips, and its mutation tests
+discriminate real bugs. It does show how a decision can acquire a sound justification after several
+bad ones, then lose force when a changed constraint makes the question irrelevant.
 
 ## The "no working tree" rule caused the codec question, and its cause disappeared
 
@@ -137,14 +131,10 @@ things out onto, and simplicity was the whole point of removing the codec.
 
 ## Lineage depth is not an identity
 
-The original generation model made every commit a generation, numbered by walking parent links —
-lineage depth. A test built specifically to check this constructed generation 0, built generation
-1 from it, then rolled back to 0 and built a _different_ candidate from 0: both candidates
-computed depth 1, so two distinct generations claimed the same number. Depth is a property of a
-position in the graph, and rollback-then-branch produces two different positions at the same
-depth. It is not an identity, and treating it as one is a real bug, not a modeling nitpick — a
-generation number was supposed to be something you could use to say "this specific attempt," and
-it couldn't.
+The original model made each commit a generation and numbered it by lineage depth. A test built
+generation 0, built generation 1 from it, rolled back to 0, then built a different candidate from 0. Both candidates had depth 1 and claimed the same number. Depth describes a graph position, and
+a rollback followed by a branch can produce distinct positions at that depth. A generation number
+must identify one attempt; lineage depth could not do that.
 
 The fix replaces lineage depth with a monotonic counter, and separately drops "every commit is a
 generation" in favor of "a generation is one attempted facet materialization" — see
@@ -161,11 +151,10 @@ promoted, later superseded by a different promotion, rolled back to, and promote
 is not a one-way trip down a pipeline, so a single mutable status column cannot hold its history
 without losing information every time it happens twice.
 
-The fix splits the concept in two. Materialization is immutable and belongs to the generation —
-what was tried, and how it terminated (`load_failed`, `validation_failed`, or `validated`).
-Activation is repeatable and lives in its own append-only ledger — what was live, and when. A
-generation record answers one question; the ledger answers a different one; neither can stand in
-for the other.
+The fix separates two concepts. Materialization is immutable and belongs to the generation: what
+was tried and how it ended (`load_failed`, `validation_failed`, or `validated`). Activation can
+repeat and belongs in an append-only ledger: what was live and when. The generation record and
+ledger answer different questions, so neither can replace the other.
 
 ## The four-function store's justification collapsed when Artifacts turned out to be something else
 
@@ -226,10 +215,9 @@ Both of the reasons for the Node half went away together. Once isomorphic-git re
 binary as the codec's cross-implementation oracle (a subprocess can't run inside workerd, so the
 old oracle could only ever prove the codec correct in a runtime the project doesn't ship to), and
 fixture files were imported as JSON instead of read through `node:fs`, nothing left in the suite
-needed Node specifically. Collapsing to one `vitest.config.ts` and one `tsconfig.json` immediately
-surfaced three latent typing bugs — `globalThis.crypto` and two `TextDecoder({ fatal: true })`
-calls — that had only ever type-checked correctly against Node's global lib types, which
-`@cloudflare/workers-types` doesn't provide. The Node half hadn't just been redundant; it had been
+needed Node specifically. Collapsing to one `vitest.config.ts` and one `tsconfig.json` found three latent typing bugs:
+`globalThis.crypto` and two `TextDecoder({ fatal: true })` calls had only type-checked against
+Node's global lib types, which `@cloudflare/workers-types` does not provide. The Node half hadn't just been redundant; it had been
 quietly masking bugs in code that only ever needs to run in the one runtime that matters.
 
 ## A bootstrap constraint got mistaken for the product
@@ -247,31 +235,29 @@ and `bash`; a facet must never receive a general `@cloudflare/computer` Workspac
 layer after layer treated that sentence as settled product architecture rather than as the shape
 of one night's tooling. The WebAssembly shell was justified partly on its own merits and partly
 as the thing that keeps a container from ever sitting behind the facet, full stop, rather than as
-a bootstrap-runtime choice that a later, more capable runtime could supersede. The `@cloudflare/computer`
-integration plan inherited the same premise and designed a four-method proxy specifically so the
-facet would never hold anything Computer calls a `Workspace`, treating breadth of tooling itself as
-the danger rather than a proxy for it.
+a bootstrap-runtime choice that a later, more capable runtime could supersede. The `@cloudflare/computer` integration plan inherited the premise and designed a four-method proxy
+so the facet would never hold anything Computer calls a `Workspace`. It treated broad tooling as
+the danger instead of asking whether those tools reached the supervisor.
 
 Once that premise was in the design, everything downstream entrenched it further, each time
 making it harder to notice it was scope, not spec. The primitive-kind union got an `assertNever`
 exhaustiveness check, so adding a fifth action failed the build — a genuinely good technique for
 enforcing whatever the invariant is, but it was pointed at "four primitives, forever" instead of
 at the actual invariant underneath. Slice and verification prose then cited that compiler check as
-proof the four-action limit itself was correct, phrases like "the fixed action space: `read`,
-`write`, `edit`, `bash`, and nothing else ever" got written down as the final state rather than as a
-description of what one slice had built so far, and review findings treated a facet holding a real
+proof the four-action limit itself was correct, phrases like "the bootstrap tool registry: `read`,
+`write`, `edit`, `bash`" got written down as the final state rather than as a description of what
+one slice had built so far, and review findings treated a facet holding a real
 filesystem and shell as an isolation breach on sight, before asking what it could actually do with
 them.
 
-The actual invariant was never about how many tools the facet has. The facet is the mutable, active
-harness — it is supposed to own the model loop, its tools, its workspace and runtime, its prompts,
-skills, policy, and modules, and to keep evolving all of that as ordinary work. The supervisor is
-the small, stable recovery authority underneath it — immutable candidate and generation records,
-materialization, validation evidence, atomic live selection, rollback, and a genesis reset the facet
-cannot design around. Containment is judged by whether the facet can disable or impersonate that
-recovery authority, not by whether it has broad tools, native execution, networking, or a Computer
-workspace. `read`/`write`/`edit`/`bash` is the bootstrap runtime currently implemented in this repository;
-it is not the recovery boundary.
+The invariant concerns recovery authority, not a tool count. The facet is the mutable active
+harness. It owns the model loop, tools, workspace, runtime, prompts, skills, policy, and modules,
+and evolves them as ordinary work. The supervisor is the small stable authority underneath it:
+immutable candidate and generation records, materialization, validation evidence, atomic live
+selection, rollback, and a genesis reset the facet cannot design around. Containment asks whether
+the facet can disable or impersonate that authority. Broad tools, native execution, networking, or
+a Computer workspace are not breaches by themselves. `read`/`write`/`edit`/`bash` is the bootstrap
+runtime currently implemented in this repository, not the recovery boundary.
 
 The shape this project should have started from was already built and documented elsewhere:
 Autolith's split between a mutable active image carrying tools and state and a stable launcher
@@ -305,18 +291,17 @@ convention, the reason an untestable cycle guard exists, and about fifteen evide
 that made other decisions checkable — and its chronology was already better served by 224 git
 commits covering the same window.
 
-Consolidating onto ADRs cost about thirty rewritten cross-references and surfaced positions that
-had been sitting in prose, including one executor for gate and live turns, keeping Git rather than
-two SQL tables, and ranking supervisor reachability above egress. It also promoted the
-WebAssembly-only shell and fixed capability floor into decisions that were later dropped when the
-Autolith-inspired product boundary was restored. That is the real lesson: narrative can hide both
-missing decisions and assumptions that never deserved decision status, because nothing goes red
-when either drifts from the product.
+Consolidating onto ADRs cost about thirty rewritten cross-references and found positions that had
+been sitting in prose, including one executor for gate and live turns, keeping Git rather than two
+SQL tables, and ranking supervisor reachability above egress. It also promoted the WebAssembly-only
+shell and fixed capability floor into decisions later dropped when the Autolith-inspired product
+boundary was restored. Narrative can hide missing decisions and assumptions that never deserved
+decision status, because no check reports when either drifts from the product.
 
 ## Reopening the Node test path, narrowly, and what it immediately found
 
-The two-runtime test setup was deleted for a good reason: a Node suite that passed told you nothing
-about workerd, and it had been quietly masking Worker-specific typing errors. So when property-based
+The project deleted the two-runtime setup for a good reason: a Node suite that passed gave no
+evidence about workerd and had quietly masked Worker-specific typing errors. So when property-based
 testing came up, the obvious move was to run Hegel inside workerd like everything else. That turned
 out to be impossible rather than merely awkward. Hegel's generation engine is a native library
 reached through FFI, workerd exposes no Node-API and throws on `process.dlopen`, and the entire
@@ -329,11 +314,10 @@ fails when a `*.props.test.ts` has no `*.test.ts` beside it. The original failur
 run standing in for evidence about the deployed runtime — cannot recur while that holds, because
 nothing is ever covered in Node alone. ADR-0008 carries the amended rule.
 
-The first differential property paid for the exercise immediately, and in a way fixed fixtures had
-not in months. Generating trees and checking byte agreement against isomorphic-git turned up two
-disagreements: our encoder accepts tree entry names git's own `verify_path` refuses, and the two
-implementations sort tree entries differently for a specific class of Unicode names. The second one
-is isomorphic-git's bug rather than ours, which is worth noticing on its own — ADR-0009 and ADR-0011
-lean on that library as an independent oracle, and an oracle with a known divergence corner is still
-useful but is no longer simply authoritative. Both are pinned as characterisation tests that go red
-when someone fixes them, rather than papered over inside a generator.
+The first differential property found what fixed fixtures had missed for months. Generating trees
+and checking byte agreement against isomorphic-git found two disagreements: our encoder accepts
+tree entry names that git's `verify_path` rejects, and the implementations sort one class of
+Unicode names differently. Isomorphic-git is wrong about the second case. ADR-0009 and ADR-0011 use
+it as an independent oracle, so a known divergence means a future disagreement needs checking
+against git before blaming our codec. Characterisation tests preserve both cases until someone fixes
+them; the generator does not hide them.
