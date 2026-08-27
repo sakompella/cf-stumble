@@ -13,6 +13,9 @@
     "verify": "pnpm typecheck && pnpm format:check && pnpm lint && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
+  "dependencies": {
+    "better-result": "^3.0.1"
+  },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1",
     "@cloudflare/workers-types": "^5",
