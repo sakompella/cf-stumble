@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import { Result, isPanic } from "better-result";
 import {
   REPLAY_SCHEMA_VERSION,
   type CapturedToolResult,
@@ -21,8 +21,9 @@ import {
   type LoopEnvironment,
   type LoopResult,
 } from "./loop.js";
+import { TranscriptSnapshotError } from "./model-errors.js";
 import { errorDetail, recordingOptionsFor, snapshotWorkspace } from "./transcript.js";
-import type { ExecuteTurnOptions, TurnFailure, TurnResult } from "./types.js";
+import type { ExecuteTurnOptions, TurnResult } from "./types.js";
 
 export async function executeLiveTurn(
   definition: AgentDefinition,
@@ -35,8 +36,8 @@ export async function executeLiveTurn(
 ): Promise<TurnResult> {
   const recordingOptions = recordingOptionsFor(options);
   const initial = await safeSnapshot(workspace);
-  if (!initial.ok) {
-    return transcriptFailure(initial.detail);
+  if (Result.isError(initial)) {
+    return transcriptFailure(initial.error);
   }
 
   const modelResponses: RecordedModelResponse[] = [];
@@ -59,7 +60,7 @@ export async function executeLiveTurn(
   return makeCompletedTurn(
     input,
     recordingOptions,
-    initial.workspace,
+    initial.value,
     modelResponses,
     capturedToolResults,
     loop,
@@ -67,15 +68,21 @@ export async function executeLiveTurn(
   );
 }
 
-type SnapshotResult =
-  | { readonly ok: true; readonly workspace: WorkspaceTree }
-  | { readonly ok: false; readonly detail: string };
-
-async function safeSnapshot(workspace: Workspace): Promise<SnapshotResult> {
+async function safeSnapshot(
+  workspace: Workspace,
+): Promise<Result<WorkspaceTree, TranscriptSnapshotError>> {
   try {
-    return { ok: true, workspace: await snapshotWorkspace(workspace) };
+    return Result.ok(await snapshotWorkspace(workspace));
   } catch (error: unknown) {
-    return { ok: false, detail: errorDetail(error instanceof Error ? error : String(error)) };
+    if (isPanic(error)) {
+      throw error;
+    }
+    return Result.err(
+      new TranscriptSnapshotError({
+        detail: errorDetail(error instanceof Error ? error : String(error)),
+        cause: error,
+      }),
+    );
   }
 }
 
@@ -118,20 +125,17 @@ async function executeLiveTool(
   if (Result.isError(result)) {
     return {
       ok: false as const,
-      failure: { kind: "primitive-failure", call, error: result.error } satisfies TurnFailure,
+      failure: result.error,
     };
   }
 
   let workspaceAfter: WorkspaceTree | undefined;
   if (call.kind === "bash") {
     const snapshot = await safeSnapshot(workspace);
-    if (!snapshot.ok) {
-      return {
-        ok: false as const,
-        failure: { kind: "transcript-error", detail: snapshot.detail } satisfies TurnFailure,
-      };
+    if (Result.isError(snapshot)) {
+      return { ok: false as const, failure: snapshot.error };
     }
-    workspaceAfter = snapshot.workspace;
+    workspaceAfter = snapshot.value;
   }
   const captured = capturedToolResult(call, result.value, workspaceAfter);
   capturedToolResults.push(captured);
@@ -148,8 +152,8 @@ async function makeCompletedTurn(
   workspace: Workspace,
 ): Promise<TurnResult> {
   const final = await safeSnapshot(workspace);
-  if (!final.ok) {
-    return transcriptFailure(final.detail, loop.trace);
+  if (Result.isError(final)) {
+    return transcriptFailure(final.error, loop.trace);
   }
   const transcript: ReplaySession = {
     schemaVersion: REPLAY_SCHEMA_VERSION,
@@ -160,12 +164,15 @@ async function makeCompletedTurn(
     turns: [{ input, modelResponses, capturedToolResults }],
     expectedEffects: {
       trace: loop.trace.map(toReplayCall),
-      finalWorkspace: final.workspace,
+      finalWorkspace: final.value,
     },
   };
   return { status: "completed", response: loop.response, trace: loop.trace, transcript };
 }
 
-function transcriptFailure(detail: string, trace: readonly ToolPrimitiveCall[] = []): TurnResult {
-  return { status: "failed", failure: { kind: "transcript-error", detail }, trace };
+function transcriptFailure(
+  failure: TranscriptSnapshotError,
+  trace: readonly ToolPrimitiveCall[] = [],
+): TurnResult {
+  return { status: "failed", failure, trace };
 }

@@ -1,7 +1,7 @@
 import { assertNever } from "../git/types.js";
 import type { AgentDefinition, TurnFailure, TurnResult } from "../agent/runtime/index.js";
 import type { CapturedToolResult } from "../replay/schema.js";
-import type { PrimitiveCall, PrimitiveError } from "../tools/index.js";
+import type { PrimitiveCall } from "../tools/index.js";
 import { parseWorkspacePath } from "../tools/index.js";
 import type { Workspace, WorkspaceFileContent } from "../tools/index.js";
 import type { PreflightCapability, PreflightCheck, PreflightProbe } from "./preflight.js";
@@ -172,65 +172,28 @@ export function failedTurn(
   capability: Exclude<PreflightCapability, "materialization">,
   failure: TurnFailure,
 ): PreflightCheck {
-  switch (failure.kind) {
-    case "primitive-failure":
-      return isHarnessPrimitiveError(failure.error)
-        ? inconclusive(capability, primitiveFailureDetail(failure.error))
-        : fail(capability, primitiveFailureDetail(failure.error));
-    case "model-source-exhausted":
-    case "model-source-error":
-    case "transcript-error":
-      return inconclusive(capability, failure.detail);
-    case "malformed-tool-call":
-      return fail(capability, failure.detail);
-    case "unknown-tool":
-      return fail(capability, `unknown tool ${JSON.stringify(failure.name)}`);
-    case "step-budget-exceeded":
-      return fail(capability, `turn exceeded its ${failure.maxSteps}-step budget`);
-    default:
-      return assertNever(failure, "preflight turn failure");
-  }
-}
-
-/**
- * Whether the harness failed rather than the candidate.
- *
- * This split is the reason preflight has three outcomes instead of two: charging a candidate with
- * a FAIL for the harness's own broken workspace would ratchet in a regression the candidate never
- * caused. A harness fault is INCONCLUSIVE, which blocks promotion without recording a regression.
- *
- * Exhaustive over `PrimitiveError`, so adding a primitive failure forces a decision here rather
- * than defaulting into one.
- */
-function isHarnessPrimitiveError(error: PrimitiveError): boolean {
-  return error.match<PrimitiveError, boolean>({
-    WorkspaceOperationError: () => true,
-    CommandTimeoutError: () => true,
-    InvalidCommandTimeoutError: () => true,
-    InvalidWorkspacePathError: () => false,
-    WorkspaceFileNotFoundError: () => false,
-    BinaryFileError: () => false,
-    EmptyEditSearchError: () => false,
-    EditNoMatchError: () => false,
-    EditAmbiguousMatchError: () => false,
-  });
-}
-
-/**
- * The preflight-facing wording for a primitive failure. Built here rather than read off the
- * error's own `message`, which is developer-facing and free to change.
- */
-function primitiveFailureDetail(error: PrimitiveError): string {
-  return error.match<PrimitiveError, string>({
-    InvalidWorkspacePathError: (e) => `invalid path ${JSON.stringify(e.path)} (${e.rejection})`,
-    WorkspaceOperationError: (e) => `workspace error during ${e.operation}: ${e.detail}`,
-    WorkspaceFileNotFoundError: (e) => `file ${JSON.stringify(e.path)} was not found`,
-    BinaryFileError: (e) => `file ${JSON.stringify(e.path)} is binary`,
-    EmptyEditSearchError: () => "edit search text must not be empty",
-    EditNoMatchError: () => "expected exactly one match, found none",
-    EditAmbiguousMatchError: (e) => `expected exactly one match, found ${e.occurrences}`,
-    CommandTimeoutError: (e) => `workspace command timed out after ${e.timeoutMs}ms`,
-    InvalidCommandTimeoutError: (e) => `invalid bash timeout ${e.timeoutMs}`,
+  return failure.match<TurnFailure, PreflightCheck>({
+    InvalidWorkspacePathError: (error) =>
+      fail(capability, `invalid path ${JSON.stringify(error.path)} (${error.rejection})`),
+    WorkspaceOperationError: (error) =>
+      inconclusive(capability, `workspace error during ${error.operation}: ${error.detail}`),
+    WorkspaceFileNotFoundError: (error) =>
+      fail(capability, `file ${JSON.stringify(error.path)} was not found`),
+    BinaryFileError: (error) => fail(capability, `file ${JSON.stringify(error.path)} is binary`),
+    EmptyEditSearchError: () => fail(capability, "edit search text must not be empty"),
+    EditNoMatchError: () => fail(capability, "expected exactly one match, found none"),
+    EditAmbiguousMatchError: (error) =>
+      fail(capability, `expected exactly one match, found ${error.occurrences}`),
+    CommandTimeoutError: (error) =>
+      inconclusive(capability, `workspace command timed out after ${error.timeoutMs}ms`),
+    InvalidCommandTimeoutError: (error) =>
+      inconclusive(capability, `invalid bash timeout ${error.timeoutMs}`),
+    ModelSourceExhaustedError: (error) => inconclusive(capability, error.detail),
+    ModelSourceFailedError: (error) => inconclusive(capability, error.detail),
+    MalformedToolCallError: (error) => fail(capability, error.detail),
+    UnknownToolError: (error) => fail(capability, error.message),
+    StepBudgetExceededError: (error) => fail(capability, error.message),
+    TranscriptSnapshotError: (error) => inconclusive(capability, error.detail),
   });
 }
 

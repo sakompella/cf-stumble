@@ -1,5 +1,6 @@
+import { isPanic } from "better-result";
 import { isJsonObjectValue, isJsonValue, type JsonValue } from "../../json.js";
-import { ModelSourceError } from "./model-errors.js";
+import { ModelSourceFailedError } from "./model-errors.js";
 import type { AgentModelRequest, ModelProvider, ModelResponseSource } from "./model.js";
 import type { RecordedModelResponse } from "../../replay/schema.js";
 
@@ -20,32 +21,35 @@ export class LiveModelResponseSource implements ModelResponseSource {
       }
       raw = provided;
     } catch (error) {
-      throw new ModelSourceError("error", "live model provider failed", error);
+      if (isPanic(error)) {
+        throw error;
+      }
+      throw new ModelSourceFailedError({ detail: "live model provider failed", cause: error });
     }
 
     if (isString(raw)) {
       return { requestId: request.requestId, content: raw };
     }
     if (!isJsonObjectValue(raw) || !isString(raw.content)) {
-      throw new ModelSourceError(
-        "error",
-        "live model provider returned a response without string content",
-      );
+      throw new ModelSourceFailedError({
+        detail: "live model provider returned a response without string content",
+      });
     }
     let requestId = request.requestId;
     if ("requestId" in raw) {
       if (raw.requestId !== undefined && !isString(raw.requestId)) {
-        throw new ModelSourceError("error", "live model provider returned an invalid request id");
+        throw new ModelSourceFailedError({
+          detail: "live model provider returned an invalid request id",
+        });
       }
       if (isString(raw.requestId)) {
         requestId = raw.requestId;
       }
     }
     if (requestId !== request.requestId) {
-      throw new ModelSourceError(
-        "error",
-        `live model provider returned response for ${JSON.stringify(requestId)}, expected ${JSON.stringify(request.requestId)}`,
-      );
+      throw new ModelSourceFailedError({
+        detail: `live model provider returned response for ${JSON.stringify(requestId)}, expected ${JSON.stringify(request.requestId)}`,
+      });
     }
     return { requestId, content: raw.content };
   }

@@ -16,7 +16,14 @@ export {
   type ModelProvider,
   type ModelResponseSource,
 } from "./model.js";
-export { ModelSourceError, type ModelSourceErrorKind } from "./model-errors.js";
+export {
+  MalformedToolCallError,
+  ModelSourceExhaustedError,
+  ModelSourceFailedError,
+  StepBudgetExceededError,
+  TranscriptSnapshotError,
+  UnknownToolError,
+} from "./model-errors.js";
 export { LiveModelResponseSource } from "./live-source.js";
 export { RecordedModelResponseSource } from "./recorded-source.js";
 export { recordedSourceFromReplayRuntime } from "./replay-source.js";

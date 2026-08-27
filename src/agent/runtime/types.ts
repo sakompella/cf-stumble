@@ -4,6 +4,14 @@ import type {
   PrimitiveError,
   PrimitiveOptions,
 } from "../../tools/index.js";
+import type {
+  MalformedToolCallError,
+  ModelSourceExhaustedError,
+  ModelSourceFailedError,
+  StepBudgetExceededError,
+  TranscriptSnapshotError,
+  UnknownToolError,
+} from "./model-errors.js";
 
 export type AgentExecutorOptions = {
   readonly maxSteps?: number;
@@ -16,20 +24,15 @@ export type ExecuteTurnOptions = {
   readonly nowMs?: number;
 };
 
+/** Every known recoverable failure of a turn. */
 export type TurnFailure =
-  | { readonly kind: "malformed-tool-call"; readonly detail: string }
-  | { readonly kind: "unknown-tool"; readonly name: string }
-  // The primitive family is migrated to tagged errors; the variants around it are not yet, so
-  // this is the slice seam. See docs/agents/design/better-result-adoption.md, slice 2.
-  | {
-      readonly kind: "primitive-failure";
-      readonly call: ToolPrimitiveCall;
-      readonly error: PrimitiveError;
-    }
-  | { readonly kind: "model-source-exhausted"; readonly detail: string }
-  | { readonly kind: "model-source-error"; readonly detail: string }
-  | { readonly kind: "step-budget-exceeded"; readonly maxSteps: number }
-  | { readonly kind: "transcript-error"; readonly detail: string };
+  | PrimitiveError
+  | ModelSourceExhaustedError
+  | ModelSourceFailedError
+  | MalformedToolCallError
+  | UnknownToolError
+  | StepBudgetExceededError
+  | TranscriptSnapshotError;
 
 export type TurnResult =
   | {

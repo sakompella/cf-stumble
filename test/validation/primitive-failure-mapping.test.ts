@@ -1,6 +1,14 @@
 import { expect, test } from "vitest";
 import { failedTurn } from "../../src/validation/preflight-results.js";
 import {
+  MalformedToolCallError,
+  ModelSourceExhaustedError,
+  ModelSourceFailedError,
+  StepBudgetExceededError,
+  TranscriptSnapshotError,
+  UnknownToolError,
+} from "../../src/agent/runtime/index.js";
+import {
   BinaryFileError,
   CommandTimeoutError,
   EditAmbiguousMatchError,
@@ -69,24 +77,60 @@ const harnessFaults: readonly { readonly error: PrimitiveError; readonly detail:
 ];
 
 test.each(candidateFaults)("$error._tag is the candidate's fault, so it FAILs", (entry) => {
-  expect(
-    failedTurn("read", {
-      kind: "primitive-failure",
-      call: { kind: "read", path: "p" },
-      error: entry.error,
-    }),
-  ).toEqual({ capability: "read", status: "FAIL", detail: `read: ${entry.detail}` });
+  expect(failedTurn("read", entry.error)).toEqual({
+    capability: "read",
+    status: "FAIL",
+    detail: `read: ${entry.detail}`,
+  });
 });
 
 test.each(harnessFaults)("$error._tag is the harness's fault, so it is INCONCLUSIVE", (entry) => {
-  expect(
-    failedTurn("bash", {
-      kind: "primitive-failure",
-      call: { kind: "bash", command: "c" },
-      error: entry.error,
-    }),
-  ).toEqual({ capability: "bash", status: "INCONCLUSIVE", detail: `bash: ${entry.detail}` });
+  expect(failedTurn("bash", entry.error)).toEqual({
+    capability: "bash",
+    status: "INCONCLUSIVE",
+    detail: `bash: ${entry.detail}`,
+  });
 });
+
+const otherTurnFailures = [
+  [
+    "read",
+    new MalformedToolCallError({ detail: "response was malformed" }),
+    "FAIL",
+    "response was malformed",
+  ],
+  ["read", new UnknownToolError({ toolName: "explode" }), "FAIL", 'unknown tool "explode"'],
+  ["bash", new StepBudgetExceededError({ maxSteps: 2 }), "FAIL", "turn exceeded its 2-step budget"],
+  [
+    "read",
+    new ModelSourceExhaustedError({ detail: "recorded source exhausted" }),
+    "INCONCLUSIVE",
+    "recorded source exhausted",
+  ],
+  [
+    "read",
+    new ModelSourceFailedError({ detail: "provider failed" }),
+    "INCONCLUSIVE",
+    "provider failed",
+  ],
+  [
+    "read",
+    new TranscriptSnapshotError({ detail: "snapshot failed", cause: new Error("disk gone") }),
+    "INCONCLUSIVE",
+    "snapshot failed",
+  ],
+] as const;
+
+test.each(otherTurnFailures)(
+  "%s maps %o without changing its preflight detail",
+  (capability, error, status, detail) => {
+    expect(failedTurn(capability, error)).toEqual({
+      capability,
+      status,
+      detail: `${capability}: ${detail}`,
+    });
+  },
+);
 
 test("every PrimitiveError variant has a verdict recorded above", () => {
   // TaggedError sets `name` to the tag, so this reads the same value without the private-looking
@@ -113,11 +157,7 @@ test("a workspace operation error keeps the cause for debugging without leaking 
   expect(error.cause).toBe(cause);
   expect(error.message).toBe("workspace error during write: disk gone");
 
-  const check = failedTurn("write", {
-    kind: "primitive-failure",
-    call: { kind: "write", path: "p", content: "c" },
-    error,
-  });
+  const check = failedTurn("write", error);
 
   // The preflight detail is built at the boundary, not read off the error's own message.
   expect(check).toEqual({

@@ -248,12 +248,15 @@ async function failedTurn(
 
 test("reports distinct typed turn failures", async () => {
   const malformed = await failedTurn("not json");
-  expect(malformed).toMatchObject({ status: "failed", failure: { kind: "malformed-tool-call" } });
+  expect(malformed).toMatchObject({
+    status: "failed",
+    failure: { _tag: "MalformedToolCallError" },
+  });
 
   const unknown = await failedTurn(toolResponse("explode", {}));
   expect(unknown).toMatchObject({
     status: "failed",
-    failure: { kind: "unknown-tool", name: "explode" },
+    failure: { _tag: "UnknownToolError", toolName: "explode" },
   });
 
   const primitive = await failedTurn(
@@ -262,16 +265,13 @@ test("reports distinct typed turn failures", async () => {
   );
   expect(primitive).toMatchObject({
     status: "failed",
-    failure: {
-      kind: "primitive-failure",
-      error: { _tag: "WorkspaceFileNotFoundError", path: "missing.txt" },
-    },
+    failure: { _tag: "WorkspaceFileNotFoundError", path: "missing.txt" },
   });
 
   const exhausted = await failedTurn();
   expect(exhausted).toMatchObject({
     status: "failed",
-    failure: { kind: "model-source-exhausted" },
+    failure: { _tag: "ModelSourceExhaustedError" },
   });
 });
 
@@ -286,6 +286,6 @@ test("stops a model loop at its configured step budget", async () => {
 
   expect(result).toMatchObject({
     status: "failed",
-    failure: { kind: "step-budget-exceeded", maxSteps: 2 },
+    failure: { _tag: "StepBudgetExceededError", maxSteps: 2 },
   });
 });
