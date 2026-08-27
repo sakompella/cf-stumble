@@ -27,9 +27,15 @@ opens. Grouped by area; a decision that spans two areas is listed under the one 
 
 ## Agent isolation
 
+- **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — the threat being contained
+  is the agent reaching the supervisor and disabling its own rollback. Exfiltration is ranked second,
+  deliberately, and that ranking is what makes the rest of the isolation design coherent.
 - **[ADR-0004](0004-isolate-agent-code-behind-four-capabilities.md)** — agent code runs in a facet
   with an action space of exactly `read`, `write`, `edit`, `bash`. A facet never receives a general
   Computer Workspace, because that carries filesystem, git, Assets and Artifacts with it.
+- **[ADR-0020](0020-the-agent-shell-is-wasm-never-a-container.md)** — `bash` is a WebAssembly shell
+  with no OS processes and no package installs. Native execution, if ever needed, goes behind a
+  supervisor-owned validator rather than behind the facet.
 
 ## The validation gate
 
@@ -42,9 +48,15 @@ opens. Grouped by area; a decision that spans two areas is listed under the one 
 - **[ADR-0014](0014-replay-cases-assert-observable-effects.md)** — a case asserts tool calls and
   workspace state rather than text, pins every source of variation, and reports `INCONCLUSIVE` for
   harness failure so the ratchet is never fed noise.
+- **[ADR-0017](0017-one-executor-for-the-gate-and-live-turns.md)** — the gate and live turns run the
+  same executor behind two response sources. A gate running different code validates a surrogate.
+- **[ADR-0021](0021-preflight-is-a-capability-floor.md)** — preflight is a hard floor checked before
+  the corpus, not another score, so a candidate cannot trade away a capability for a better result.
 
 ## Git storage
 
+- **[ADR-0018](0018-keep-git-as-the-storage-model.md)** — authored history is real Git objects, not
+  two SQL tables. The others argue how to hold Git objects; this is the decision to hold them at all.
 - **[ADR-0009](0009-store-git-objects-directly.md)** — Git's uncompressed framed bytes go straight
   into a content-addressed store rather than giving isomorphic-git a filesystem. Carries the case
   against the hand-written codec and the evidence behind the retraction.

@@ -75,7 +75,7 @@ Three things it learned that we had not:
    is a reason not to add aggressive pruning later.
 3. **Optimising one benchmark amplifies brittle and unsafe behaviour**, so safety checks belong as a
    _separate objective_ rather than as part of the score. Our ratchet is score-shaped by nature, so
-   preflight is deliberately a hard capability floor rather than something to maximise.
+   preflight is deliberately a hard capability floor rather than something to maximise (ADR-0021).
 
 DGM also independently confirms the replay problem we hit: a recorded response tape can validate
 protocol behaviour but cannot validate a _prompt_ change. Its answer is fresh execution with

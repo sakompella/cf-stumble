@@ -49,6 +49,7 @@ as "the generation machinery composes", not "the system works end to end".
 The corollary is a design constraint on the next slice: **the gate and live execution must use
 the same executor implementation.** If they diverge, compatibility validation is forever testing
 a surrogate, and the regression suite stops being evidence about the thing that actually runs.
+Now recorded as ADR-0017.
 
 ## Canaries don't close the ratchet hole on their own — RESOLVED (S12)
 

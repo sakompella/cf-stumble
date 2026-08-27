@@ -33,13 +33,13 @@ in Node says nothing about the runtime we deploy to.
 possible at all, since a subprocess cannot run in workerd.
 
 **Keep git**, when the agent argued that the simplest solution was to drop it entirely for two
-plain SQL tables.
+plain SQL tables. Recorded as ADR-0018.
 
 **Workers Paid is acceptable**, which unblocked the production shell and the facet loader.
 
 **Network egress is not the main risk.** A correct deprioritisation; the agent had overweighted
 exfiltration relative to the containment that actually matters, which is the agent being unable to
-reach the supervisor and disable its own rollback.
+reach the supervisor and disable its own rollback. Recorded as ADR-0019.
 
 **Adopt the `anti-slop` lint rules.** **Nothing reaches GitHub without approval.** And every
 instruction about process: work overnight in slices, parallelise, commit small and often, use
