@@ -6,9 +6,12 @@
  * bug shows up as a hash mismatch against a tool we did not write.
  */
 
+import { Result } from "better-result";
+import { InvalidShaError } from "./errors.js";
+
 declare const shaBrand: unique symbol;
 
-/** A SHA-1 object id: 40 lowercase hex characters. Construct via {@link parseSha}. */
+/** A SHA-1 object id: 40 lowercase hex characters. Construct via {@link parseShaResult}. */
 export type Sha = string & { readonly [shaBrand]: true };
 
 export const SHA_HEX_LENGTH = 40;
@@ -19,7 +22,34 @@ export function isSha(value: string): value is Sha {
   return SHA_PATTERN.test(value);
 }
 
-/** Parse untrusted input into a {@link Sha}, throwing if it is not one. */
+/**
+ * Narrow an untrusted string into a {@link Sha}.
+ *
+ * The brand comes from {@link isSha}, a type predicate, so no assertion is involved (ADR-0015).
+ * This is the entry point for anything whose provenance is a request body, a URL segment, or bytes
+ * read off the wire — every one of those can legitimately carry a string that is not an object id,
+ * and the caller decides what to say about it.
+ */
+export function parseShaResult(value: string): Result<Sha, InvalidShaError> {
+  if (isSha(value)) {
+    return Result.ok(value);
+  }
+  return Result.err(new InvalidShaError({ value }));
+}
+
+/**
+ * Re-parse a string that is already known to be an object id, throwing if it is not.
+ *
+ * This is a defect path, not a boundary: every remaining caller either builds the hex itself from
+ * a twenty-byte digest ({@link "./hash.js"}, `src/storage/`) or reads back a column the supervisor
+ * wrote from a {@link Sha} it already held. A throw here means the digest formatter is wrong or
+ * the store is corrupt, and neither is something the caller can report and continue from. Use
+ * {@link parseShaResult} for anything a request or a decoder supplies.
+ *
+ * The throw stays a `TypeError` rather than becoming a `panic` because one caller —
+ * `parseShaField` in `src/supervisor/supervisor.ts` — still catches it to build a 400. Slice 8
+ * moves that caller to {@link parseShaResult}, after which this can panic instead.
+ */
 export function parseSha(value: string): Sha {
   if (!isSha(value)) {
     throw new TypeError(`not a sha-1 object id: ${JSON.stringify(value)}`);

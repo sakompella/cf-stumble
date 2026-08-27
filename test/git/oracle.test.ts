@@ -6,6 +6,7 @@ import { decodeObject, FILE_MODE, parseSha } from "../../src/git/index.js";
 import type { GitObject } from "../../src/git/index.js";
 import type { Module } from "../../src/generation/types.js";
 import { assertOracleAgreement } from "../support/git-oracle.js";
+import { expectOk } from "../support/result.js";
 
 describe("isomorphic-git codec oracle", () => {
   it("agrees on blob hashes and reads blobs in both directions", async () => {
@@ -72,7 +73,7 @@ describe("generation commit messages", () => {
     if (bytes === undefined) {
       throw new Error("expected a stored generation commit");
     }
-    const object = decodeObject(bytes);
+    const object = expectOk(decodeObject(bytes));
     if (object.type !== "commit") {
       throw new Error(`expected a commit, got ${object.type}`);
     }

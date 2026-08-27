@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import type { GitObject } from "../../src/git/index.js";
+import type {
+  GitObject,
+  GitObjectDecodeCondition,
+  GitObjectDecodeError,
+} from "../../src/git/index.js";
 import { decodeObject, encodeObject, FILE_MODE, parseSha } from "../../src/git/index.js";
+import { expectErr, expectOk } from "../support/result.js";
 
 const encoder = new TextEncoder();
+const SHA = parseSha("0123456789012345678901234567890123456789");
+
+function decodeFailure(bytes: Uint8Array): GitObjectDecodeError {
+  return expectErr(decodeObject(bytes));
+}
+
+function wrapped(type: string, body: Uint8Array): Uint8Array {
+  return concat(encoder.encode(`${type} ${body.byteLength}\0`), body);
+}
+
+function expectTreeFailure(body: Uint8Array, condition: GitObjectDecodeCondition): void {
+  expect(decodeFailure(wrapped("tree", body))).toMatchObject({ layer: "tree", condition });
+}
+
+/** One tree entry: the literal `"<mode> <name>\0"` prefix followed by twenty raw sha bytes. */
+function treeEntry(prefix: string): Uint8Array {
+  return concat(encoder.encode(prefix), shaBytes(SHA));
+}
 
 function shaBytes(value: string): Uint8Array {
   const bytes = new Uint8Array(value.length / 2);
@@ -34,7 +57,7 @@ describe("git blob objects", () => {
     const data = Uint8Array.from([0, 1, 2, 255, 0]);
     const encoded = encodeObject({ type: "blob", data });
 
-    expect(decodeObject(encoded)).toEqual({ type: "blob", data });
+    expect(expectOk(decodeObject(encoded))).toEqual({ type: "blob", data });
   });
 });
 
@@ -93,45 +116,86 @@ describe("unicode git tree names", () => {
       ],
     };
 
-    expect(decodeObject(encodeObject(object))).toEqual(object);
+    expect(expectOk(decodeObject(encodeObject(object)))).toEqual(object);
   });
 });
 
 describe("git object round trips", () => {
   it("preserves every generated object", () => {
     for (const object of generatedObjects()) {
-      expect(decodeObject(encodeObject(object))).toEqual(object);
+      expect(expectOk(decodeObject(encodeObject(object)))).toEqual(object);
     }
   });
 });
 
-describe("malformed git objects", () => {
-  it("rejects an object whose header length does not match its body", () => {
-    const bytes = encoder.encode("blob 4\0abc");
+/**
+ * Every rejection is asserted by its `condition` rather than by its message, so the taxonomy is
+ * what the test pins and rewording an error does not go red. The commit reader's conditions are
+ * in `commit.test.ts`.
+ */
+describe("malformed git object headers", () => {
+  it.each([
+    ["no header terminator", encoder.encode("blob 4"), "missing-terminator"],
+    ["a header that is not UTF-8", Uint8Array.of(255, 0), "invalid-utf8"],
+    ["an unrecognised object type", encoder.encode("tag 0\0"), "malformed-header"],
+    ["a zero-padded length", encoder.encode("blob 04\0abcd"), "non-canonical-length"],
+    ["a length past 2^53", encoder.encode("blob 99999999999999999999\0"), "invalid-length"],
+    ["a length that disagrees with the body", encoder.encode("blob 4\0abc"), "length-mismatch"],
+  ] as const)("rejects %s", (_case, bytes, condition) => {
+    expect(decodeFailure(bytes)).toMatchObject({ layer: "header", condition });
+  });
 
-    expect(() => decodeObject(bytes)).toThrow(/declares 4 bytes, got 3/u);
+  it("keeps the specifics on the developer-facing message", () => {
+    const { _tag, message } = decodeFailure(encoder.encode("blob 4\0abc"));
+
+    expect({ _tag, saysWhat: /declares 4 bytes, got 3/u.test(message) }).toEqual({
+      _tag: "GitObjectDecodeError",
+      saysWhat: true,
+    });
+  });
+});
+
+describe("malformed git trees", () => {
+  it("rejects a tree entry whose mode has no separator", () => {
+    expectTreeFailure(treeEntry("40000nested\0"), "missing-mode-separator");
   });
 
   it("rejects a tree with an unsupported mode", () => {
-    const body = concat(
-      encoder.encode("040000 nested\0"),
-      shaBytes("0123456789012345678901234567890123456789"),
-    );
-
-    expect(() => decodeObject(concat(encoder.encode(`tree ${body.byteLength}\0`), body))).toThrow(
-      /invalid git tree entry mode/u,
-    );
+    expectTreeFailure(treeEntry("040000 nested\0"), "invalid-mode");
   });
 
-  it("rejects a commit without a header separator", () => {
-    const body = encoder.encode(
-      "tree 0123456789012345678901234567890123456789\n" +
-        "author Alice <alice@example.com> 0 +0000\n",
-    );
+  it("rejects a tree entry name with no terminator", () => {
+    expectTreeFailure(encoder.encode("100644 nested"), "missing-name-terminator");
+  });
 
-    expect(() => decodeObject(concat(encoder.encode(`commit ${body.byteLength}\0`), body))).toThrow(
-      /missing header separator/u,
-    );
+  it("rejects a tree entry name that is not UTF-8", () => {
+    const body = concat(concat(encoder.encode("100644 "), Uint8Array.of(255, 0)), shaBytes(SHA));
+
+    expectTreeFailure(body, "invalid-utf8");
+  });
+
+  it("rejects an empty tree entry name", () => {
+    expectTreeFailure(treeEntry("100644 \0"), "invalid-name");
+  });
+
+  it("rejects a tree entry with fewer than twenty sha bytes", () => {
+    const body = concat(encoder.encode("100644 a\0"), shaBytes(SHA).subarray(0, 19));
+
+    expectTreeFailure(body, "truncated-sha");
+  });
+
+  it("rejects a tree that names the same entry twice", () => {
+    const entry = treeEntry("100644 a\0");
+
+    expectTreeFailure(concat(entry, entry), "duplicate-entry-name");
+  });
+
+  // Out-of-order entries would give a content-addressed store a second name for an object that
+  // already has one, so rejecting them is what keeps the address unique.
+  it("rejects a tree whose entries are out of order", () => {
+    const body = concat(treeEntry("100644 b\0"), treeEntry("100644 a\0"));
+
+    expectTreeFailure(body, "unsorted-entries");
   });
 });
 

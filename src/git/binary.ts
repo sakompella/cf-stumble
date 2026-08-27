@@ -1,3 +1,7 @@
+import { Result } from "better-result";
+import { GitObjectDecodeError } from "./errors.js";
+import type { GitObjectDecodeLayer } from "./errors.js";
+
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
@@ -16,13 +20,27 @@ export function encodeUtf8(value: string, context: string): Uint8Array {
   return textEncoder.encode(value);
 }
 
-export function decodeUtf8(bytes: Uint8Array, context: string): string {
+/**
+ * Read bytes that arrived from outside as text. The decoder is strict (`fatal: true`), so this is
+ * the one place in the codec where a byte string the caller did not produce can be rejected purely
+ * for its encoding, which is why it reports which layer asked rather than throwing.
+ */
+export function decodeUtf8(
+  bytes: Uint8Array,
+  layer: GitObjectDecodeLayer,
+  context: string,
+): Result<string, GitObjectDecodeError> {
   try {
-    return textDecoder.decode(bytes);
+    return Result.ok(textDecoder.decode(bytes));
   } catch (error: unknown) {
-    throw new Error(`malformed git object ${context}: invalid UTF-8`, {
-      cause: error,
-    });
+    return Result.err(
+      new GitObjectDecodeError({
+        layer,
+        condition: "invalid-utf8",
+        detail: `invalid UTF-8 in ${context}`,
+        cause: error,
+      }),
+    );
   }
 }
 

@@ -6,6 +6,7 @@ import { MemoryStore } from "../../src/storage/memory.js";
 import type { SweepableStore } from "../../src/storage/types.js";
 import { buildGeneration } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
+import { expectOk } from "../support/result.js";
 
 const author = {
   name: "Build Bot",
@@ -33,7 +34,7 @@ async function readCommit(store: MemoryStore, sha: Sha): Promise<Commit> {
   if (bytes === undefined) {
     throw new Error("expected a stored commit");
   }
-  const object = decodeObject(bytes);
+  const object = expectOk(decodeObject(bytes));
   if (object.type !== "commit") {
     throw new Error(`expected commit, got ${object.type}`);
   }
