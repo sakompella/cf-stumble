@@ -27,7 +27,7 @@ It is grouped by area; a decision spanning two areas appears under the one that 
 
 - **[ADR-0024](0024-facet-owns-the-evolvable-harness.md)** — the facet owns its model loop, tools,
   prompts, policies, modules, and work environment as ordinary work that can evolve. `read`,
-  `write`, `edit`, and `bash` are the bootstrap harness, not a permanent ceiling on what a later
+  `write`, `edit`, and `bash` are the bootstrap tool registry, not a permanent ceiling on what a later
   agent definition is allowed to grow into. Capability breadth depends on whether it reaches
   supervisor recovery authority directly, not on tool count.
 - **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — first contain the agent
