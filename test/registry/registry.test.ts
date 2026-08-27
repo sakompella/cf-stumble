@@ -3,7 +3,8 @@ import { parseSha } from "../../src/git/types.js";
 import { describeGenerationRegistryConformance } from "../../src/generation/conformance.js";
 import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import type { AllocationRequest } from "../../src/generation/registry-types.js";
-import { parseGenerationNumber } from "../../src/generation/types.js";
+import { parseGenerationNumber, parseGenerationNumberResult } from "../../src/generation/types.js";
+import { expectErr } from "../support/result.js";
 
 const COMMIT = parseSha("1111111111111111111111111111111111111111");
 const OTHER_COMMIT = parseSha("2222222222222222222222222222222222222222");
@@ -21,6 +22,14 @@ function request(idempotencyKey: string, commit: typeof COMMIT = COMMIT): Alloca
     createdAt: 1,
   };
 }
+
+describe("generation number parsing", () => {
+  it("returns a tagged error for a request number outside the registry domain", () => {
+    const error = expectErr(parseGenerationNumberResult(-1));
+
+    expect(error).toMatchObject({ _tag: "InvalidGenerationNumberError", value: -1 });
+  });
+});
 
 describe("MemoryGenerationRegistry allocation", () => {
   it("writes the loading record before the load outcome is known", async () => {

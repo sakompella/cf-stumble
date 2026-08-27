@@ -5,7 +5,7 @@ import {
   type AgentDefinition,
   type ModelResponseSource,
 } from "../../src/agent/runtime/index.js";
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import { MemoryGenerationRegistry } from "../../src/generation/registry.js";
 import { PointerManager } from "../../src/pointer/index.js";
 import { MemoryStore } from "../../src/storage/memory.js";
@@ -20,9 +20,13 @@ const author = {
   email: "preflight@example.com",
   timestamp: 1_700_000_000,
   timezoneOffsetMinutes: 0,
-} satisfies Parameters<typeof buildGeneration>[1]["author"];
+} satisfies Parameters<typeof buildGenerationResult>[1]["author"];
 
 const encoder = new TextEncoder();
+
+async function buildGeneration(...args: Parameters<typeof buildGenerationResult>) {
+  return (await buildGenerationResult(...args)).unwrap("preflight fixture must build");
+}
 
 function module(path: string, content: string) {
   return { path, content: encoder.encode(content), executable: false };

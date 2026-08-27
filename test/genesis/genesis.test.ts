@@ -11,12 +11,13 @@ import {
 } from "../../src/generation/genesis.js";
 import { parseSha } from "../../src/git/types.js";
 import { parseGenerationNumber } from "../../src/generation/types.js";
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import type { Sha } from "../../src/git/types.js";
 import { MemoryStore } from "../../src/storage/memory.js";
 import type { Module } from "../../src/generation/types.js";
 import type { Store } from "../../src/storage/types.js";
 import { PointerManager } from "../../src/pointer/index.js";
+import { expectOk } from "../support/result.js";
 
 const author = {
   name: "Genesis Bot",
@@ -37,6 +38,10 @@ const options = {
   createdAt: author.timestamp,
   summary: "known-good genesis",
 } as const;
+
+async function buildGeneration(...args: Parameters<typeof buildGenerationResult>) {
+  return expectOk(await buildGenerationResult(...args));
+}
 
 function makeBarrier(parties: number): () => Promise<void> {
   let arrived = 0;

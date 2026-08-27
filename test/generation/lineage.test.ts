@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import { walkLineage } from "../../src/generation/lineage.js";
 import { encodeObject } from "../../src/git/index.js";
 import { parseSha } from "../../src/git/types.js";
@@ -22,19 +22,21 @@ const module = {
   executable: false,
 } satisfies Module;
 
-function build(
+async function build(
   store: MemoryStore,
   parent: CommitSnapshot | undefined,
   createdAt: number,
   summary: string,
 ): Promise<CommitSnapshot> {
-  return buildGeneration(store, {
-    modules: [module],
-    parent,
-    author,
-    createdAt,
-    summary,
-  });
+  return expectOk(
+    await buildGenerationResult(store, {
+      modules: [module],
+      parent,
+      author,
+      createdAt,
+      summary,
+    }),
+  );
 }
 
 class CyclicStore extends MemoryStore {

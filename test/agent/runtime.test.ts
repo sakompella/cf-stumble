@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { JsonObject } from "../../src/json.js";
-import { buildGeneration } from "../../src/generation/build.js";
+import { buildGeneration as buildGenerationResult } from "../../src/generation/build.js";
 import type { Module } from "../../src/generation/types.js";
 import {
   AgentExecutor,
@@ -22,6 +22,10 @@ const author = {
 } as const;
 
 const encoder = new TextEncoder();
+
+async function buildGeneration(...args: Parameters<typeof buildGenerationResult>) {
+  return expectOk(await buildGenerationResult(...args));
+}
 
 function modules(extra: readonly Module[] = []): readonly Module[] {
   return [

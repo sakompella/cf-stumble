@@ -68,7 +68,7 @@ export function buildChild(
     author,
     createdAt: parent.createdAt + 1,
     summary,
-  });
+  }).then((result) => expectOk(result));
 }
 
 export function buildPromptCandidate(

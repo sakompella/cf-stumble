@@ -5,7 +5,11 @@
  * not to this content-addressed layer.
  */
 
-import type { Sha } from "../git/types.js";
+import { Result, type Result as ResultType } from "better-result";
+import { isSha } from "../git/types.js";
+import type { Sha, Signature } from "../git/types.js";
+import { InvalidGenerationInputError, InvalidGenerationNumberError } from "./errors.js";
+import type { BuildGenerationOptions } from "./build.js";
 
 declare const generationNumberBrand: unique symbol;
 
@@ -16,11 +20,25 @@ export function isGenerationNumber(value: number): value is GenerationNumber {
   return Number.isInteger(value) && value >= 0;
 }
 
-export function parseGenerationNumber(value: number): GenerationNumber {
-  if (!isGenerationNumber(value)) {
-    throw new RangeError(`generation number must be a non-negative integer, got ${value}`);
+/** Narrow a request value into a generation number without trusting its provenance. */
+export function parseGenerationNumberResult(
+  value: number,
+): Result<GenerationNumber, InvalidGenerationNumberError> {
+  if (isGenerationNumber(value)) {
+    return Result.ok(value);
   }
-  return value;
+  return Result.err(new InvalidGenerationNumberError({ value }));
+}
+
+/**
+ * Re-parse a value that came from supervisor-owned state. A rejected number means a corrupt row
+ * or broken counter, neither of which a request can repair. Request parsers use
+ * {@link parseGenerationNumberResult} instead.
+ */
+export function parseGenerationNumber(value: number): GenerationNumber {
+  return parseGenerationNumberResult(value).unwrap(
+    `supervisor state contains an invalid generation number: ${value}`,
+  );
 }
 
 export const GENESIS_NUMBER: GenerationNumber = parseGenerationNumber(0);
@@ -42,6 +60,136 @@ export type CommitSnapshot = {
   /** Human-facing summary; lives in the commit message so `git log` shows it (D7). */
   readonly summary: string;
 };
+
+/** Validate untrusted candidate input before it is encoded into a generation. */
+export function validateBuildGenerationOptions(
+  options: BuildGenerationOptions,
+): ResultType<null, InvalidGenerationInputError> {
+  if (!Number.isSafeInteger(options.createdAt)) {
+    return Result.err(invalidInput("invalid-created-at", "createdAt must be a safe integer"));
+  }
+  const author = validateSignature(options.author, "author");
+  if (Result.isError(author)) {
+    return author;
+  }
+  const committer = makeGenerationCommitter(options);
+  const validCommitter = validateSignature(committer, "committer");
+  if (Result.isError(validCommitter)) {
+    return validCommitter;
+  }
+  if (committer.timestamp !== options.createdAt) {
+    return Result.err(
+      invalidInput("created-at-mismatch", "createdAt must equal committer timestamp"),
+    );
+  }
+  if (options.parent !== undefined && !isValidParent(options.parent)) {
+    return Result.err(invalidInput("invalid-parent", "commit parent contains an invalid sha"));
+  }
+  for (const module of options.modules) {
+    if (!(module.content instanceof Uint8Array)) {
+      return Result.err(
+        invalidInput(
+          "invalid-module-content",
+          `module content must be bytes for ${JSON.stringify(module.path)}`,
+        ),
+      );
+    }
+    const path = validateGenerationModulePath(module.path);
+    if (Result.isError(path)) {
+      return path;
+    }
+  }
+  return Result.ok(null);
+}
+
+export function validateGenerationModulePath(
+  path: string,
+): ResultType<readonly string[], InvalidGenerationInputError> {
+  if (path.length === 0) {
+    return invalidModulePath(path, "must not be empty");
+  }
+  if (path.startsWith("/")) {
+    return invalidModulePath(path, "must be relative");
+  }
+  if (path.includes("\0")) {
+    return invalidModulePath(path, "must not contain NUL");
+  }
+
+  const parts = path.split("/");
+  for (const part of parts) {
+    if (part.length === 0) {
+      return invalidModulePath(path, "contains an empty segment");
+    }
+    if (part === "..") {
+      return invalidModulePath(path, "must not contain '..'");
+    }
+    if (part === ".") {
+      return invalidModulePath(path, "must not contain '.'");
+    }
+  }
+  return Result.ok(parts);
+}
+
+export function makeGenerationCommitter(options: BuildGenerationOptions): Signature {
+  return (
+    options.committer ?? {
+      name: options.author.name,
+      email: options.author.email,
+      timestamp: options.createdAt,
+      timezoneOffsetMinutes: options.author.timezoneOffsetMinutes,
+    }
+  );
+}
+
+function validateSignature(
+  value: Signature,
+  label: "author" | "committer",
+): ResultType<null, InvalidGenerationInputError> {
+  const condition = label === "author" ? "invalid-author" : "invalid-committer";
+  const invalidIdentity =
+    value.name.length === 0 ||
+    /[\r\n<>]/u.test(value.name) ||
+    value.email.length === 0 ||
+    /[\r\n<>]/u.test(value.email);
+  if (invalidIdentity) {
+    return Result.err(invalidInput(condition, `${label} has an invalid identity`));
+  }
+  if (!Number.isSafeInteger(value.timestamp)) {
+    return Result.err(invalidInput(condition, `${label} timestamp must be a safe integer`));
+  }
+  if (
+    !Number.isSafeInteger(value.timezoneOffsetMinutes) ||
+    value.timezoneOffsetMinutes < -1439 ||
+    value.timezoneOffsetMinutes > 1439
+  ) {
+    return Result.err(invalidInput(condition, `${label} timezone is out of range`));
+  }
+  return Result.ok(null);
+}
+
+function isValidParent(parent: CommitSnapshot): boolean {
+  return (
+    isSha(parent.sha) &&
+    isSha(parent.manifest) &&
+    (parent.parent === undefined || isSha(parent.parent))
+  );
+}
+
+function invalidModulePath(
+  path: string,
+  requirement: string,
+): ResultType<never, InvalidGenerationInputError> {
+  return Result.err(
+    invalidInput("invalid-module-path", `module path ${requirement}: ${JSON.stringify(path)}`),
+  );
+}
+
+function invalidInput(
+  condition: InvalidGenerationInputError["condition"],
+  detail: string,
+): InvalidGenerationInputError {
+  return new InvalidGenerationInputError({ condition, detail });
+}
 
 export type Verdict = "pass" | "fail" | "inconclusive";
 

@@ -1,3 +1,4 @@
+import { panic } from "better-result";
 import { assertNever } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type {
@@ -54,13 +55,13 @@ export class MemoryGenerationRegistry implements GenerationRegistry {
     if (existingNumber !== undefined) {
       const existing = this.records.get(existingNumber);
       if (existing === undefined) {
-        throw new Error("generation idempotency index is inconsistent");
+        panic("generation idempotency index is inconsistent");
       }
       return Promise.resolve(copyRecord(existing));
     }
 
     if (this.nextNumber > Number.MAX_SAFE_INTEGER) {
-      throw new RangeError("generation number counter is exhausted");
+      panic("generation number counter is exhausted");
     }
     const number = parseGenerationNumber(this.nextNumber);
     this.nextNumber += 1;

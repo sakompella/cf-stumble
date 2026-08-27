@@ -1,3 +1,4 @@
+import { panic, Result } from "better-result";
 import { buildGeneration } from "./build.js";
 import type { BuildGenerationOptions } from "./build.js";
 import { walkLineage } from "./lineage.js";
@@ -40,7 +41,11 @@ export async function seedGenesis(
   options: GenesisOptions,
   seedOptions: GenesisSeedOptions = {},
 ): Promise<CommitSnapshot> {
-  const genesis = await buildGeneration(store, { ...options, parent: undefined });
+  const built = await buildGeneration(store, { ...options, parent: undefined });
+  if (Result.isError(built)) {
+    panic("genesis options cannot build a generation", built.error);
+  }
+  const genesis = built.value;
   if (seedOptions.claimPointer !== false) {
     const current = await store.readPointer();
     if (current === undefined) {
@@ -58,7 +63,7 @@ export function isGenesisCommit(commit: Pick<CommitSnapshot, "parent">): boolean
 /** Turn a root commit snapshot into explicit identity for recovery and reachability checks. */
 export function makeGenesisPin(commit: CommitSnapshot): GenesisPin {
   if (!isGenesisCommit(commit)) {
-    throw new TypeError("only a root commit without a parent can be pinned as genesis");
+    panic("only a root commit without a parent can be pinned as genesis");
   }
   return { kind: "genesis", sha: commit.sha };
 }
@@ -89,7 +94,7 @@ export async function assertGenesisReachable(
   const lineage = await walkLineage(store, start);
   const root = lineage.at(-1);
   if (root === undefined || !isGenesisSha(root.sha, pin)) {
-    throw new Error(`commit ${start} does not reach pinned genesis ${pin.sha}`);
+    panic(`commit ${start} does not reach pinned genesis ${pin.sha}`);
   }
 }
 

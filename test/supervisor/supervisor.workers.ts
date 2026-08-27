@@ -288,30 +288,36 @@ test("does not promote an object-store commit without a registry attempt", async
   const candidateCommit = await runInDurableObject(stub, async (_instance, state) => {
     const store = new DurableObjectSqliteStore(state);
     const parent = (await readGeneration(store, parseSha(genesisCommit))).generation;
-    const generation = await buildGeneration(store, {
-      modules: [
-        { path: "agent.js", content: new TextEncoder().encode(candidateSource), executable: false },
-        {
-          path: "prompt.md",
-          content: new TextEncoder().encode("candidate prompt\n"),
-          executable: false,
+    const generation = expectOk(
+      await buildGeneration(store, {
+        modules: [
+          {
+            path: "agent.js",
+            content: new TextEncoder().encode(candidateSource),
+            executable: false,
+          },
+          {
+            path: "prompt.md",
+            content: new TextEncoder().encode("candidate prompt\n"),
+            executable: false,
+          },
+          {
+            path: "policy.md",
+            content: new TextEncoder().encode("candidate policy\n"),
+            executable: false,
+          },
+        ],
+        parent,
+        author: {
+          name: "test builder",
+          email: "builder@example.com",
+          timestamp: 1_700_000_001,
+          timezoneOffsetMinutes: 0,
         },
-        {
-          path: "policy.md",
-          content: new TextEncoder().encode("candidate policy\n"),
-          executable: false,
-        },
-      ],
-      parent,
-      author: {
-        name: "test builder",
-        email: "builder@example.com",
-        timestamp: 1_700_000_001,
-        timezoneOffsetMinutes: 0,
-      },
-      createdAt: 1_700_000_001,
-      summary: "directly stored candidate",
-    });
+        createdAt: 1_700_000_001,
+        summary: "directly stored candidate",
+      }),
+    );
     return generation.sha;
   });
   await writeValidationCase();
