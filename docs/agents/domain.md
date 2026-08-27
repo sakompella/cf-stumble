@@ -1,15 +1,17 @@
 # Domain Docs
 
 How the engineering skills should consume this repo's domain documentation when exploring the
-codebase. This repo is **single-context**: one `CONTEXT.md` and one `docs/agents/adr/` at the root.
+codebase. This repo is **single-context**: one `docs/agents/CONTEXT.md` and one
+`docs/agents/adr/`.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root — the glossary of domain terms.
+- **`docs/agents/CONTEXT.md`** — the glossary of domain terms. Not at the repo root; see the
+  override note below.
 - **`docs/agents/adr/README.md`** — the ADR index, grouped by area. Start here to find which ADRs touch
   the area you are about to work in, then read those.
 
-Both exist in this repo. Read `CONTEXT.md` in full, and read the ADRs touching the area you are
+Both exist in this repo. Read `docs/agents/CONTEXT.md` in full, and read the ADRs touching the area you are
 about to work in. When a term or a decision is missing, the `/domain-modeling` skill (reached via
 `/grill-with-docs` and `/improve-codebase-architecture`) adds it lazily, when that term or decision
 actually gets resolved.
@@ -47,9 +49,9 @@ when a decision is made or revisited, it goes in `docs/agents/adr/` and the reas
 
 ```
 /
-├── CONTEXT.md
 ├── docs/                              ← hand-written human docs only
 │   └── agents/                        ← everything agent-generated
+│       ├── CONTEXT.md                 ← the glossary
 │       ├── adr/                       ← resolved positions
 │       │   ├── README.md             ← the ADR index
 │       │   ├── 0001-....md
@@ -64,18 +66,24 @@ when a decision is made or revisited, it goes in `docs/agents/adr/` and the reas
 └── src/
 ```
 
-The `/domain-modeling` skill's default layout puts ADRs at `docs/adr/`. This repo overrides that
-to `docs/agents/adr/` so the agent-generated boundary is one directory rather than two. Read the
-path from here rather than from the skill.
+The `/domain-modeling` skill's default layout puts `CONTEXT.md` at the repo root and ADRs at
+`docs/adr/`. This repo overrides both, to `docs/agents/CONTEXT.md` and `docs/agents/adr/`, so that
+everything agents generate sits under one directory. Read these paths from here rather than from
+the skill, which will otherwise look at the root and find nothing.
+
+The glossary override is the sharper of the two, because several skills name `CONTEXT.md` at the
+repo root as a one-line habit rather than reading it from this config. If one of them reports no
+glossary, this is why.
 
 A `CONTEXT-MAP.md` at the root would signal a multi-context repo with per-context `CONTEXT.md`
-files. This repo has none and is not a monorepo — the `pnpm-workspace.yaml` present here only
-carries build-script approvals for esbuild and workerd, not workspace packages.
+files (that signal is still read from the root). This repo has none and is not a monorepo — the
+`pnpm-workspace.yaml` present here only carries build-script approvals for esbuild and workerd,
+not workspace packages.
 
 ## Use the glossary's vocabulary
 
 When your output names a domain concept — an issue title, a refactor proposal, a hypothesis, a
-test name — use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary
+test name — use the term as defined in `docs/agents/CONTEXT.md`. Don't drift to synonyms the glossary
 explicitly avoids.
 
 If the concept you need isn't in the glossary yet, that's a signal: either you're inventing

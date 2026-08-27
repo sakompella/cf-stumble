@@ -219,7 +219,7 @@ back, reset. Owns `src/supervisor/`.
 
 The fixed action space: `read`, `write`, `edit`, `bash`, and nothing else ever. What
 accumulates across generations is skills, prompts, and policies. Owns `src/tools/` (pure logic,
-environment-agnostic over a `Workspace` interface — see CONTEXT.md, "Workspace," for why that
+environment-agnostic over a `Workspace` interface — see `docs/agents/CONTEXT.md`, "Workspace," for why that
 word now needs disambiguating from `@cloudflare/computer`'s class of the same name).
 
 Build only what the vertical path in S8 needs; resist widening this.

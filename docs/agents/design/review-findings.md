@@ -175,7 +175,7 @@ tombstones. Fine to build a workspace on; not something to make load-bearing for
 
 ## Two known inconsistencies between the code and the model (open)
 
-Both surfaced by cross-checking `CONTEXT.md` against `src/`, which is the main argument for
+Both surfaced by cross-checking `docs/agents/CONTEXT.md` against `src/`, which is the main argument for
 keeping a glossary at all.
 
 **The vertical integration test still drives the pre-remodel pointer.** `src/integration/turn.ts`
@@ -196,7 +196,7 @@ that, so `Workspace` is the substrate rather than the capability.
 
 That naming is a trap aimed squarely at the migration. `docs/agents/design/computer-integration.md` says to
 expose a four-method proxy to the facet; anyone reading "proxy the Workspace" would hand it
-`listFiles` and raw `execute` — a materially wider surface than intended. `CONTEXT.md` now
+`listFiles` and raw `execute` — a materially wider surface than intended. The glossary now
 deliberately avoids claiming the interface has four methods.
 
 ## Questions still on the human, not the machine (open)
