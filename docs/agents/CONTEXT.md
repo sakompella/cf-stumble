@@ -91,7 +91,7 @@ The isolated execution compartment in which one generation's agent code runs. It
 _Avoid_: generation, sandbox, worker
 
 **Facet capability**:
-The deliberately narrow authority a facet receives to work on its task. It is limited to the four primitives and is not access to the supervisor or to a broad platform workspace.
+The authority a facet receives to work on its task, bounded by whatever tool registry the current agent definition exposes. It is not access to the supervisor or to a broad platform workspace, regardless of how that tool registry evolves.
 _Avoid_: workspace access, supervisor access, full computer
 
 **Agent workspace**:
@@ -103,11 +103,11 @@ The broad platform workspace supplied by `@cloudflare/computer`. It must be name
 _Avoid_: workspace (unqualified), agent workspace
 
 **Four primitives**:
-The fixed agent action set: `read`, `write`, `edit`, and `bash`. They may be used more skilfully over time, but the agent definition does not add new primitive kinds.
-_Avoid_: extensible tools, arbitrary tools, capabilities
+The agent action set generation 0 ships with: `read`, `write`, `edit`, and `bash`. They are the bootstrap tool registry, not a permanent ceiling — a later agent definition may extend its own tool registry, since the facet's harness is meant to evolve.
+_Avoid_: fixed action space, permanent capabilities
 
 **Agent definition**:
-The versioned material that describes how the agent behaves, including its prompt, policy, skills, and agent-authored modules. It excludes the supervisor and accumulated context.
+The versioned material that describes how the agent behaves, including its model loop, tool registry, prompt, policy, skills, and agent-authored modules. It excludes the supervisor and accumulated context.
 _Avoid_: agent state, supervisor configuration, runtime state
 
 **Prompt, policy, and skills**:
@@ -153,7 +153,7 @@ A compatibility case that must pass in its own right and whose identity is prote
 _Avoid_: optional test, sample case, corpus entry
 
 **Preflight**:
-The cheap viability check before the compatibility gate, including whether a candidate retains the four primitives and can revise its own definition. It rejects a dead-end candidate before more costly evaluation.
+The cheap viability check before the compatibility gate, including whether a candidate retains the ability to read, write, edit, and revise its own definition. It rejects a dead-end candidate before more costly evaluation.
 _Avoid_: validation gate, smoke test, quality check
 
 **Inconclusive**:

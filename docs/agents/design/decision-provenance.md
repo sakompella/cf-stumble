@@ -14,9 +14,13 @@ These set direction. Everything else is downstream of them.
 
 **The architecture itself.** Generations modelled on NixOS, a supervisor Durable Object the agent
 cannot modify, agent code in an isolated facet, storage on the git object model, a validation gate
-before promotion, generation 0 pinned with a reset that bypasses agent code. This came from a
-prior design conversation and was handed over as a brief. The agents implemented it; they did not
-invent it.
+before promotion, generation 0 pinned with a reset that bypasses agent code. This was modelled on
+[Autolith](https://github.com/lambda-symbolics/autolith)'s split between a broadly mutable active
+image and a small stable launcher plus pristine recovery image (see
+`docs/agents/design/prior-art.md`), and was handed over as a brief: the facet's own harness —
+model loop, tool registry, prompts, skills, policies, module code, and work environment — is meant
+to keep evolving, while the supervisor's job is only to materialize, validate, and recover. The
+agents implemented it; they did not invent it.
 
 **The generation remodel.** Commits became ordinary commits; a generation became one _attempted
 facet materialization_, numbered by a monotonic counter. This is the largest design change the
@@ -83,6 +87,18 @@ ambiguous-match as distinct typed failures; canaries pinned outside the corpus; 
 
 These matter more than the rest of this file, because they are the cases where the agent was
 confidently wrong and the documentation would have preserved the error.
+
+**The fixed-four action space was a derivative narrowing, mistaken for the product.** An overnight
+build prompt written against a historical local export constrained the agent to exactly four
+action primitives, forever. That prompt was a derivative of the original design, not the design
+itself, and the constraint got carried into the codebase and this documentation as if it had been
+the human's intent from the start. It wasn't: the human's brief was the Autolith-inspired split
+between a broadly mutable active harness and a small stable recovery authority (see
+`docs/agents/design/prior-art.md`), where containment protects the supervisor's independent
+recovery, not a permanent four-tool ceiling on the facet. The export the overnight prompt came
+from also has no role labels and starts mid-conversation, so it cannot itself be read as an
+authoritative statement of intent either way — the correction here rests on the primary Autolith
+sources, not on re-reading that export more carefully.
 
 **The git codec justification was false.** The claim that you cannot write a commit against an
 in-memory filesystem was simply untrue — isomorphic-git exports `writeTree` and `writeCommit`, and

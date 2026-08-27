@@ -57,6 +57,33 @@ libostree's `deployserial` turned out **not** to be a global attempt counter —
 repeated deployment of one commit. Its useful ideas are retention controls (`--retain-pending`,
 `--retain-rollback`, pinning) and the atomic swap between two boot directories.
 
+## Autolith: the primary inspiration for the facet/supervisor split
+
+**[Autolith](https://github.com/lambda-symbolics/autolith)** is the project this architecture is
+modelled on, not a dependency of it. It draws the same line we draw, between an active image that
+is meant to change and a small stable authority that is not:
+
+- The **active image** — terminal, agent, tools, and state — is broadly mutable. Autolith keeps all
+  application definitions in one package specifically so the running system can rewrite itself;
+  nothing about the active image's surface is kept deliberately small.
+- The **stable launcher** and the **pristine recovery image** are kept separate from the active
+  image and from each other. The launcher is what boots and can fall back; the recovery image is
+  the untouched last-known-good state, closer to what we call generation 0 than to anything the
+  agent runs day to day.
+- `self.*` installs _complete_ definitions, not incremental patches — the same reason our
+  generations are whole materializations rather than diffs applied to a running facet.
+
+Autolith's own `AGENTS.md` draws this distinction explicitly: the stable launcher, the mutable
+active agent, its workers, and the pristine recovery path are named as four separate things, and
+only a small operation set is reserved for _durable self-mutation_ — the actions that change what
+boots next. Everything else — ordinary workspace tools, the tool registry a worker reaches for its
+task — stays broad and extensible. That is the shape we borrowed: a small, auditable set of
+operations governs recovery and promotion, while the facet's own tool registry, prompts, skills,
+and policies are exactly the parts meant to keep growing (see ADR-0024). Autolith does not fix a
+worker's action space to a handful of primitives, and neither was that ever this project's stated
+intent — an internal document mistook a derivative demo prompt's fixed-four constraint for the
+whole design; see `docs/agents/design/decision-provenance.md` for how that happened.
+
 ## Self-modifying agents: the Darwin Gödel Machine
 
 The closest complete system is the **Darwin Gödel Machine**
@@ -75,7 +102,7 @@ Three things it learned that we had not:
    is a reason not to add aggressive pruning later.
 3. **Optimising one benchmark amplifies brittle and unsafe behaviour**, so safety checks belong as a
    _separate objective_ rather than as part of the score. Our ratchet is score-shaped by nature, so
-   preflight is deliberately a hard capability floor rather than something to maximise (ADR-0021).
+   preflight is deliberately a hard capability floor rather than something to maximise.
 
 DGM also independently confirms the replay problem we hit: a recorded response tape can validate
 protocol behaviour but cannot validate a _prompt_ change. Its answer is fresh execution with
