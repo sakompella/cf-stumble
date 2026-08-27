@@ -17,9 +17,12 @@ replaced lineage-depth numbering, which was not an identity — rolling back and
 distinct generations both claiming number 1.
 
 **Final state: every slice DONE except garbage collection, which was deliberately cut (D13).**
-134 Node tests and 29 workerd tests pass; `pnpm test`, `pnpm test:workers`, `pnpm typecheck` and
-`pnpm lint --max-warnings=0` are all green. Verified green from a cold clone
-(`rm -rf node_modules && pnpm install --frozen-lockfile`), not just incrementally.
+The full suite runs as a single `pnpm test`, inside real workerd — there is no separate Node
+run and no `test:workers` script; see `docs/design-history.md` ("one runtime") for why the
+two-runtime split was removed. `pnpm test`, `pnpm typecheck`, and `pnpm lint --max-warnings=0`
+are all green, verified from a cold clone (`rm -rf node_modules && pnpm install --frozen-lockfile`),
+not just incrementally. See `docs/verification.md` for what that check is guarding against and
+for the current state of in-flight work not yet reflected here.
 
 Slices S12, S13 and S14 were added after an architectural review and each closed a real hole:
 canary identity was controlled by the mutable corpus, the integration test used a scripted
@@ -58,7 +61,7 @@ pnpm, TypeScript 7 strict, vitest 4, oxlint type-aware with `--max-warnings=0`.
 Prove the safety claim before building on it. Load agent code through the Worker Loader, mount
 it as a Durable Object facet, and demonstrate containment.
 
-Owns `wrangler.jsonc`, `vitest.workers.config.ts`, `src/agent/loader.ts`, `test/facet/`.
+Owns `wrangler.jsonc`, `vitest.config.ts`, `src/agent/loader.ts`, `test/facet/`.
 
 Must prove, per D2a — storage separation alone is a narrower claim than we need:
 - A secret written to the supervisor's SQLite is not observable from inside the facet.
@@ -69,7 +72,7 @@ Must prove, per D2a — storage separation alone is a narrower claim than we nee
 - Generation 0 reset still works when candidate code fails to load or throws during init. The
   escape hatch has to survive the failure it exists for.
 
-**Verify:** `pnpm vitest run --config vitest.workers.config.ts test/facet`
+**Verify:** `pnpm vitest run test/facet`
 
 ---
 
@@ -197,7 +200,7 @@ why it is a slice rather than an afterthought.
 S2's conformance suite rerun against real DO SQLite under the workers pool, using
 `transactionSync()` (D6). Owns `src/storage/do-sqlite.ts`.
 
-**Verify:** `pnpm vitest run --config vitest.workers.config.ts test/storage-do`
+**Verify:** `pnpm vitest run test/storage-do`
 
 ---
 
@@ -206,14 +209,16 @@ S2's conformance suite rerun against real DO SQLite under the workers pool, usin
 Generation history, live pointer, accumulated context, corpus. Routes to list, promote, roll
 back, reset. Owns `src/supervisor/`.
 
-**Verify:** `pnpm vitest run --config vitest.workers.config.ts test/supervisor`
+**Verify:** `pnpm vitest run test/supervisor`
 
 ---
 
 ## S11 — Agent primitives · depends: S6, S0.5 · DONE
 
 The fixed action space: `read`, `write`, `edit`, `bash`, and nothing else ever. What
-accumulates across generations is skills, prompts, and policies. Owns `src/tools/` (Node-side program, environment-agnostic over a `Workspace` interface).
+accumulates across generations is skills, prompts, and policies. Owns `src/tools/` (pure logic,
+environment-agnostic over a `Workspace` interface — see CONTEXT.md, "Workspace," for why that
+word now needs disambiguating from `@cloudflare/computer`'s class of the same name).
 
 Build only what the vertical path in S8 needs; resist widening this.
 
@@ -269,7 +274,7 @@ closed.
 Also lands the two rollback guard rails from the review: targets restricted to generations
 previously recorded as live, and quarantine so a known-bad generation cannot silently return.
 
-**Verify:** `pnpm vitest run --config vitest.workers.config.ts test/supervisor`
+**Verify:** `pnpm vitest run test/supervisor`
 
 ## Deferred and out of scope
 
