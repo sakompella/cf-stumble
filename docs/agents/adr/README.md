@@ -1,12 +1,11 @@
 # Architecture decisions
 
-One decision per file, in a paragraph. When a decision stops being true, whatever still matters
-about it is folded into the replacement and the file is deleted; Git keeps the history, and
-design history carries the arc of what changed and why. This register holds only currently-useful
-records, not a trail of tombstones a reader has to page past.
+One decision per file, usually a paragraph. When a decision stops being true, fold what still
+matters into its replacement and delete the old file. Git keeps the history. This register holds
+live decisions, not tombstones a reader has to page past.
 
-This index exists so that "read the ADRs touching your area" is a lookup rather than a directory
-of file opens. Grouped by area; a decision that spans two areas is listed under the one that owns it.
+This index makes "read the ADRs touching your area" a lookup instead of a directory of file opens.
+It is grouped by area; a decision spanning two areas appears under the one that owns it.
 `test/docs/adr-index.test.ts` fails if a file here is missing from the list below.
 
 ## Generations and activation
@@ -15,11 +14,11 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
   attempt to materialize a commit, not the commit itself. Numbers never repeat, materialization is
   immutable, activation is an append-only ledger, and a turn pins its generation at start.
 - **[ADR-0003](0003-supervisor-sqlite-controls-activation.md)** — the registry, live pointer,
-  ledger, validation records, corpus and context all live in supervisor SQLite, and promotion moves
+  ledger, validation records, compatibility corpus and accumulated context all live in supervisor SQLite, and promotion moves
   them in one transaction with a compare-and-swap. Nothing outside that transaction decides what is
   live.
 - **[ADR-0007](0007-prioritize-recovery-over-reclamation.md)** — generation 0 is pinned, rollback
-  needs no fresh attestation, and nothing is garbage collected until a collector can prove its
+  needs no fresh attestation, and nothing is collected until a collector can prove its
   roots.
 - **[ADR-0013](0013-migrate-facet-state-lazily.md)** — facet state migrates on first read rather
   than at promotion, which keeps promotion an atomic pointer switch.
@@ -27,37 +26,38 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
 ## Agent isolation
 
 - **[ADR-0024](0024-facet-owns-the-evolvable-harness.md)** — the facet owns its model loop, tools,
-  prompts, policies, modules, and work environment as ordinary, evolvable work; `read`, `write`,
-  `edit`, `bash` were a bootstrap action space, not a ceiling. Capability breadth is judged by
-  whether it reaches supervisor recovery authority directly, not by counting tools.
-- **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — the threat being contained
-  is the agent reaching the supervisor and disabling its own rollback. Exfiltration is ranked second,
-  deliberately, and that ranking is what makes the rest of the isolation design coherent — and it is
-  the reason a broad facet workspace isn't itself a containment concession.
+  prompts, policies, modules, and work environment as ordinary work that can evolve. `read`,
+  `write`, `edit`, and `bash` are the bootstrap harness, not a permanent ceiling on what a later
+  agent definition is allowed to grow into. Capability breadth depends on whether it reaches
+  supervisor recovery authority directly, not on tool count.
+- **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — first contain the agent
+  from reaching the supervisor and disabling its own rollback. Data exfiltration ranks second,
+  because a broad facet workspace is not a containment concession unless it reaches supervisor
+  recovery authority directly.
 
 ## The validation gate
 
 - **[ADR-0005](0005-use-replay-as-a-compatibility-ratchet.md)** — replay measures compatibility
-  against the actual candidate facet at the protocol version the tape was recorded under, not prompt
-  quality and not a frozen surrogate. Regressions from the live generation block promotion, and
-  supervisor-pinned canaries must pass outright.
+  against the actual candidate facet at the tape's protocol version, not prompt quality or a frozen
+  surrogate. Regressions from the live generation block promotion, and supervisor-pinned canaries
+  must pass outright.
 - **[ADR-0006](0006-supervisor-produces-promotion-evidence.md)** — the supervisor runs the gate and
-  keeps the attestation; a caller cannot submit one. Corpus and gate versions are content-derived
-  hashes.
+  keeps the attestation; a caller cannot submit one. Compatibility-corpus and gate versions are
+  content-derived hashes.
 - **[ADR-0014](0014-replay-cases-assert-observable-effects.md)** — a case asserts tool calls and
   workspace state rather than text, pins every source of variation, and reports `INCONCLUSIVE` for
   harness failure so the ratchet is never fed noise.
 - **[ADR-0017](0017-one-executor-for-the-gate-and-live-turns.md)** — the gate and live turns run
-  whatever executor the candidate generation actually is, behind two response sources, so a facet
-  that changes its own loop or tools carries that change into the gate automatically.
+  the candidate generation's executor behind two response sources, so a facet that changes its
+  loop or tools carries that change into the gate.
 
 ## Git storage
 
 - **[ADR-0018](0018-keep-git-as-the-storage-model.md)** — authored history is real Git objects, not
   two SQL tables. The others argue how to hold Git objects; this is the decision to hold them at all.
 - **[ADR-0009](0009-store-git-objects-directly.md)** — Git's uncompressed framed bytes go straight
-  into a content-addressed store rather than giving isomorphic-git a filesystem. Carries the case
-  against the hand-written codec and the evidence behind the retraction.
+  into a content-addressed store rather than an isomorphic-git filesystem. It records the case
+  against the hand-written codec and the evidence for retracting the old claim.
 - **[ADR-0011](0011-sha1-for-oracle-testability.md)** — SHA-1 is chosen so an independent
   implementation can check every encoding. It is not a security claim.
 
@@ -75,8 +75,8 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
   being any module's only coverage.
 - **[ADR-0015](0015-brand-with-a-type-predicate.md)** — branded values come from a type predicate,
   never an `as` assertion, so the brand cannot lie about having been checked.
-- **[ADR-0016](0016-parse-at-the-boundary-without-a-schema-library.md)** — untrusted input is
-  narrowed once by hand at the boundary. No schema library.
+- **[ADR-0016](0016-parse-at-the-boundary-without-a-schema-library.md)** — narrow untrusted input
+  once by hand at the boundary. Do not add a schema library.
 
 ## How this documentation works
 
@@ -88,8 +88,7 @@ of file opens. Grouped by area; a decision that spans two areas is listed under 
 
 ## Adding one
 
-Take the next number, write a paragraph, and add a line here under the area it belongs to. Add a
-`Status:` frontmatter field only while a decision is still proposed and not yet resolved; drop it
-once resolved, and most ADRs never need one at all. When a decision is later replaced, fold
-whatever still matters into the ADR that replaces it and delete the old file rather than marking
-it superseded — Git keeps the history.
+Take the next number, write a paragraph, and add a line here under its area. Add a `Status:`
+frontmatter field only while a decision is proposed; remove it when resolved. When a decision is
+replaced, fold what still matters into its replacement and delete the old file. Git keeps the
+history.
