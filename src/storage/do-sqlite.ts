@@ -4,9 +4,12 @@ import { parseSha } from "../git/types.js";
 import type { Sha } from "../git/types.js";
 import type { SweepableStore } from "./types.js";
 
+// Keep the existing object table as the one-row-per-object index. New rows use an empty
+// marker in its legacy `bytes` column, while old rows with no chunk rows remain readable.
 const OBJECTS_TABLE = "cf_stumble_objects";
 const CHUNKS_TABLE = "cf_stumble_object_chunks";
 const POINTER_TABLE = "cf_stumble_pointer";
+// 512 KiB leaves four times the documented 2 MiB row limit for SQLite values and metadata.
 const CHUNK_SIZE = 512 * 1024;
 const MAX_OBJECT_BYTES = 10 * 1024 * 1024 * 1024;
 
@@ -21,6 +24,15 @@ function makeObjectTooLargeError(actualBytes: number, maxBytes: number): ObjectT
   error.name = "ObjectTooLargeError";
   const code: ObjectTooLargeError["code"] = "OBJECT_TOO_LARGE";
   return Object.assign(error, { actualBytes, code, maxBytes });
+}
+
+export function isObjectTooLargeError(error: Error): error is ObjectTooLargeError {
+  return (
+    error instanceof Error &&
+    error.name === "ObjectTooLargeError" &&
+    "code" in error &&
+    error.code === "OBJECT_TOO_LARGE"
+  );
 }
 
 type ObjectRow = {
