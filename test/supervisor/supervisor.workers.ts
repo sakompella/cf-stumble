@@ -587,6 +587,23 @@ export class Agent extends DurableObject {
  * an error the store has no discriminator for — exactly the unknown operational failure that must
  * now classify as unavailable rather than as corruption.
  */
+test("a supervisor panic returns a fixed public error without its detail", async () => {
+  await supervisorRequest("/corpus");
+  const stub = env.SUPERVISOR.getByName("supervisor-s10");
+  await runInDurableObject(stub, (_instance, state) => {
+    state.storage.sql.exec(
+      `INSERT INTO cf_stumble_corpus (name, session_json, mandatory_canary) VALUES ('panic-test', '{', 0)`,
+    );
+  });
+
+  const response = await supervisorRequest("/corpus");
+
+  expect(response.status).toBe(500);
+  const body = await readJson(response);
+  expect(body).toEqual({ error: { kind: "internal", message: "internal server error" } });
+  expect(JSON.stringify(body)).not.toContain("panic-test");
+});
+
 test("a storage outage during promotion answers 503 and leaves the candidate loadable", async () => {
   const createdResponse = await createGeneration();
   expect(createdResponse.status).toBe(201);
