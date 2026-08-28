@@ -1,158 +1,54 @@
-# Computer integration plan
+# Computer adoption decision
 
-This document originally planned a supervisor-owned working tree exposed through a narrow,
-hand-proxied four-method capability. It assumed that giving a facet a real
-`@cloudflare/computer` `Workspace` breached isolation. That assumption was wrong; see
-`docs/agents/design/design-history.md` and
-`docs/agents/adr/0024-facet-owns-the-evolvable-harness.md`. The facet is the mutable active
-harness and should own a workspace, tools, and runtime that evolve as ordinary work. Computer is
-the intended platform. This document separates the historical research snapshot of
-`@cloudflare/computer@0.2.1` from the open design issue: handing the supervisor an immutable
-candidate without giving the facet a write path into supervisor recovery records.
+The facet's agent workspace uses `@cloudflare/computer@0.2.1` for its durable filesystem, ordinary Git workflow, and runtime, starting on the Worker-shell backend. ADR-0026 records the decision. The package version must stay exactly pinned; it supplies facet-owned mutable state without granting supervisor recovery authority.
 
-## What Computer is for now: the facet's own work environment
+This document was checked against npm and GitHub at the time of the decision. npm's `latest` tag is `0.2.1`; the `main` branch at `de87919a4fd37242e960e13b7b3ba802d1eef0a0` also declares `0.2.1`. The package remains preview software, so an upgrade needs a fresh review of its package, source, issue tracker, and Cloudflare documentation.
 
-Use a current, exactly pinned `@cloudflare/computer` release to back the facet's durable
-filesystem, ordinary Git workflow, and runtime. This is facet-owned mutable state; holding a full
-Computer Workspace does not threaten the supervisor unless its bindings also expose supervisor
-recovery authority. The candidate and generation registry, activation ledger, validation
-evidence, and live pointer remain independent supervisor-owned data.
+## Start on Worker-shell
 
-The exact Cloudflare wiring remains unresolved. Conceptually the facet owns the Computer-backed
-workspace rather than calling a supervisor-owned four-method proxy, but whether that means a
-binding to a separate workspace Durable Object or another supported arrangement must be checked
-against the current Computer API before implementation.
+Worker-shell is just-bash over a virtual filesystem with roughly 77 core utilities. It has no OS processes, compiler, or `npm install`. That is sufficient for the first working loop: the facet edits its own harness and submits a candidate, while Worker Loader accepts its JavaScript artifact.
 
-## The question that is actually unresolved: sanctioned candidate submission
+The supervisor validates the candidate by replaying it against the compatibility corpus. The facet therefore does not need a test runner to prove its work, and any self-run test result would improve candidate quality at most; it cannot become gate evidence because the candidate's self-report is not trusted. Worker-shell adds no container awake charge, image or credential surface, or cold start.
 
-The supervisor needs immutable candidate material, such as a commit, tree, or artifact digest. It
-must materialize, validate, and promote that material without trusting the facet's claim about its
-contents. The facet needs to hand it over without gaining a route to mutate supervisor state. That
-boundary is still undesigned and must be resolved before source migration. It replaces the question
-this document formerly answered with a four-method proxy.
+## Container upgrade path
 
-Two shapes are worth naming as starting points, not as a decision:
+Move to the container backend when the facet needs to run a compiler, install packages, or execute a real test runner in its own agent workspace. This is a judgement about the harness's needs, not a milestone. The container backend is a real Linux process environment running `computerd`; standard-2 costs about $0.129 per hour while awake, cold-starts in roughly 1–3 seconds, and carries a larger credential and image surface.
 
-- **Push to a remote the supervisor treats as untrusted input.** The facet's Computer workspace
-  gets a git remote pointing at something the supervisor listens on. The supervisor never trusts
-  bytes because they arrived over that remote — it re-reads the pushed commit through its own git
-  read path (`show`, recursive `lsTree`, `catFile`), computes its own digest of what it actually
-  read, and only then allocates a generation number and materializes. The remote is a delivery
-  mechanism, not an authority; the supervisor's own read is what makes the candidate immutable
-  from its point of view.
-- **A sanctioned "submit candidate" call.** The facet calls a supervisor-owned entrypoint with a
-  sha (or an equivalent reference into its own workspace), and the supervisor pulls the bytes
-  itself — from the facet's workspace, treated as read-only source, or from wherever the facet
-  published them — rather than accepting a payload the facet asserts is authoritative. The
-  difference from a plain RPC is that the call can only ever _propose_ a candidate; it cannot
-  touch a registry row, the live pointer, or the activation ledger, because the supervisor's own
-  code decides what happens with what it pulled.
+As checked for this decision, [#114](https://github.com/cloudflare/computer/issues/114) remains open. It reports that deployed container WebSocket upgrades never complete, so deferring a container dependency avoids relying on an unresolved deployment problem. Both backends use the Computer API, so changing backends does not change the API the facet codes against.
 
-Any shape has to satisfy the audit question in `docs/agents/design/review-findings.md`: after using
-this path, can the facet mutate or impersonate the supervisor's candidate and generation records,
-materialization state, validation evidence, live pointer, rollback, or genesis reset? If it cannot,
-the path is sanctioned even if the facet has broad filesystem and shell access. If any
-facet-controlled input can do so, the path is broken. A four-method API that lets the facet trigger
-promotion is as dangerous as a direct promotion route.
+## Authoring and loading
 
-This remains an open design question rather than a slice plan. Choosing a shape requires an
-authentication model, independent verification of bytes the supervisor did not write, and behaviour
-for malformed or adversarial submissions. Those decisions should precede implementation.
+The facet authors and emits plain JavaScript. Worker Loader receives JavaScript regardless of backend, and Worker-shell has no compiler. If the facet later moves to the container backend, TypeScript becomes possible and the authoring-language decision can be revisited with that backend change.
 
-## What the supervisor still needs, regardless of which submission shape is chosen
+`loadAgent` (`src/agent/loader.ts:88`) currently passes one `agent.js` module despite Worker Loader accepting a module map and a stored generation being able to contain many modules. Supporting multi-module or vendored output needs that small code change.
 
-- **Its own immutable read path over git bytes.** Whatever arrives, the supervisor should never
-  trust a caller's claim about a commit's contents. Reading with `git.show`, recursive `git.lsTree`,
-  and `git.catFile` against its own git client — rather than checking out a mutable working tree
-  and trusting it — is what lets an attestation bind to bytes the supervisor actually inspected.
-- **A registry and ledger that live in its own SQLite**, independent of whatever storage backs the
-  facet's workspace. Promotion still has to update the candidate's registry state, the validation
-  result, the activation ledger, and the live pointer inside one `ctx.storage.transactionSync()`
-  call; nothing about the submission pathway should be allowed to split that transaction.
-- **A validation gate with no Computer opinion baked into it.** Baseline ratchets, mandatory
-  canaries, `INCONCLUSIVE`, attestation provenance, and the candidate-to-live comparison are
-  cf-stumble's rules, not something the package provides.
+A compiler run in the agent workspace after a backend change is a self-check that improves candidate quality; it is not evidence for the validation gate. The supervisor still runs the candidate to produce validation evidence. Faking a self-check only leaves the facet with a candidate that fails replay.
 
-## Historical research snapshot: `@cloudflare/computer@0.2.1`
+## The open submission boundary
 
-These facts were verified against version 0.2.1 during the original design work. They explain the
-old plan and identify questions to re-check, but they are not current version guidance. Refresh
-the package, source, open issues, and Cloudflare documentation before implementation.
+Candidate submission remains open: we have not designed a sanctioned path that hands the supervisor immutable candidate material without giving the facet a write path into supervisor recovery records.
 
-The npm package at `@cloudflare/computer@0.2.1` is MIT-licensed, preview-only, and its
-`package.json` has `publishConfig.tag: "unreleased"`. Its `Workspace` constructs
-`@cloudflare/dofs`'s SQLite database and a `WorkspaceFilesystem`; `Workspace.git` is opt-in through
-`createGitClient()` from `@cloudflare/computer/git`. The git client wraps isomorphic-git over the
-workspace filesystem provider, and its public path is `writeFile` → `add` → `commit`, not
-`writeTree` or `writeCommit` — a real filesystem, so the ordinary working-tree workflow applies
-with no working-tree avoidance required.
+The supervisor must obtain and inspect candidate bytes itself before allocating a generation, materializing it, and deciding whether it can become live. A submission capability may propose material but must not mutate the generation registry, materialization records, validation evidence, live pointer, rollback, or genesis reset. A remote or RPC transport alone does not establish immutability, authentication, or independent byte verification. Source migration waits for this boundary's design.
 
-The shipped `dist/index.js` shows `WorkspaceStub` exposing `fs`, `runtime`, `git`, `assets`, and
-`artifacts`. Its `dist/backends/worker-shell/index.js` passes that whole stub through
-`WorkspaceServiceProxy.getWorkspace()` and registers host-forwarded `git`, Assets, and Artifacts
-commands. Whatever holds a `WorkspaceStub` gets all of that, including host-forwarded git network
-operations — **git clone, fetch, and push execute host-side and bypass a Worker's
-`globalOutbound: null`.** That fact matters regardless of who holds the workspace: if the facet's
-own Computer workspace ever gets a real git remote, that remote is an egress path independent of
-ambient `fetch`/`connect` denial, and it needs to be accounted for in its own right, not assumed
-closed because `globalOutbound` is set.
+## Egress and containment
 
-At the time of that review, GitHub `main` at commit
-`de87919a4fd37242e960e13b7b3ba802d1eef0a0` contained changes described by release PR
-[#112](https://github.com/cloudflare/computer/issues/112) as unreleased `0.3.0`: container bearer
-authentication, changed container launch arguments, `/api` replacing `/ws`, and filtered
-container environments. The fetched `main` `package.json` still said `0.2.1`, whose RPC had no
-bearer authentication or environment allowlist. None of those version or issue states should be
-assumed current; the durable lesson is to pin the selected preview release exactly and give every
-facet-to-supervisor binding its own authentication.
+Computer's `git clone`, `fetch`, and `push` execute host-side. A Computer Workspace with a real Git remote can therefore reach the network even when the Worker's `globalOutbound: null` blocks ambient `fetch` and `connect`. The remote is a passed capability, and ADR-0019 requires it to be reviewed as an egress path in its own right.
 
-**Worker wiring facts.** `nodejs_compat` is required by Computer's VFS/git bundle.
-`experimental` is required by the Worker-shell backend and the Dynamic Worker Loader path.
-`enable_ctx_exports` is required by the package's `ctx.exports.WorkspaceServiceProxy(...)` access
-pattern; open issue [#105](https://github.com/cloudflare/computer/issues/105) documents that
-omission from the 0.2.1 setup instructions.
+This does not grant supervisor recovery authority. ADR-0019 ranks containment against the supervisor first and egress second, but a facet-to-supervisor binding must still never expose the supervisor's registry, validation evidence, live pointer, rollback, or genesis reset.
 
-**Runtime facts.** The Worker-shell backend is just-bash over a virtual filesystem: real shell
-syntax and roughly 77 core utilities, but no OS processes, no compiler, and no npm install. The
-optional `js-exec` group runs QuickJS compiled to WebAssembly; the optional `python` group exposes
-CPython via Emscripten; the generated source uses `node:worker_threads` to isolate those
-interpreters, which needs proving in workerd rather than assumed from a Node-side bundle passing.
-The container backend is a real Linux process environment (an amd64 image running `computerd`) —
-the only way to run something like this repository's own `pnpm test` — and it carries real
-per-hour cost (standard-2 around $0.129/hour while awake, 1–3s cold start) and a larger credential
-and image surface than the Worker-shell path.
+## Checked issue state
 
-**Performance facts.** Computer's VFS stores file content in content-addressed 512 KiB chunks in
-SQLite. Its own git source notes that reparsing packs from this SQLite-backed VFS changed a diff
-from sub-second to minutes, which is why it keeps an unbounded per-client pack/index cache that is
-only reused if the same `GitClient` instance stays alive. Whoever owns a long-lived `Workspace`
-should benchmark cold and warm latency for small commits, `git log` at increasing depth, and
-history growth over the expected retention period before assuming "our workload is small" holds
-without measurement. Open issues [#68](https://github.com/cloudflare/computer/issues/68)
-(unreachable GC) and [#67](https://github.com/cloudflare/computer/issues/67) (unbounded VFS
-tombstones) mean "small" needs re-checking as history accumulates, not just on the first turn.
+All six cited GitHub items remain open:
 
-**Issues open at the time of review:** [#106](https://github.com/cloudflare/computer/issues/106)
-(broken published sqlite shell content) and [#114](https://github.com/cloudflare/computer/issues/114)
-(deployed container WebSocket upgrades that never complete). Re-check their status before using
-them as implementation constraints.
+- [#68](https://github.com/cloudflare/computer/issues/68), reachable garbage collection for orphaned blobs and manifests.
+- [#67](https://github.com/cloudflare/computer/issues/67), pruning acknowledged `vfs_changes` tombstones.
+- [#105](https://github.com/cloudflare/computer/issues/105), undocumented `enable_ctx_exports` required by Worker-shell.
+- [#106](https://github.com/cloudflare/computer/issues/106), missing published sqlite shell content.
+- [#112](https://github.com/cloudflare/computer/pull/112), the `Version Packages` pull request.
+- [#114](https://github.com/cloudflare/computer/issues/114), deployed container WebSocket upgrades that never complete.
 
-## What still needs to be built, once the submission boundary is designed
+None of these items has closed. In particular, #112 remains an open pull request and its unreleased changes do not make `0.3.0` a published package version. #114 remains open and supports starting on Worker-shell rather than relying on deployed containers.
 
-This is not a slice plan. The hand-written git codec and object store (`src/git/`,
-`src/storage/`) remain current, tested code, and should stay until a replacement design exists.
-Source migration comes after the submission boundary is resolved: define the facet workspace
-binding, build candidate submission, give the supervisor its own git read path, then retire the
-parts of `src/git/` and `src/storage/` that the chosen design replaces. Detailed migration planning
-before that decision would repeat the original mistake.
+## Current implementation boundary
 
-## Source references
-
-The verified package facts above come from the unpacked `@cloudflare/computer@0.2.1` `dist/index.d.ts`,
-`dist/git.d.ts`, `dist/backends/worker-shell/index.d.ts`, `dist/backends/container/index.d.ts`, and
-corresponding JavaScript. The main-branch source reviewed was `packages/computer/src/workspace.ts`,
-`src/proxy.ts`, `src/git/index.ts`, `src/backends/worker-shell/worker-shell.ts`,
-`src/backends/worker-shell/entrypoint.ts`, and `src/backends/container/cloudflare-container.ts`.
-The Cloudflare whole-product references consulted at the time were
-`https://developers.cloudflare.com/dynamic-workers/llms-full.txt` and
-`https://developers.cloudflare.com/containers/llms-full.txt`.
+This decision does not migrate the existing source. The hand-written Git codec and object store remain current, tested code until the submission boundary is designed. After that, define the facet's Computer binding, implement the sanctioned submission path, give the supervisor its independent Git read path, and then retire only the code the replacement makes obsolete.
