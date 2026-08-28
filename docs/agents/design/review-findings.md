@@ -225,10 +225,13 @@ that judgement yet. Default in place: fixtures on disk, schema versioned, swap t
 skill grows into a directory with attachments, this wants nested trees instead. Cheap to change
 while the corpus is small, and progressively less so after.
 
-**May the agent promote itself unattended?** The machinery supports unattended promotion and the
-endpoint exists, but nothing calls it automatically, which keeps the interesting capability built
-and the dangerous behaviour switched off. Turning it on is a decision about risk appetite, not
-about code.
+**May the agent promote itself unattended? Decided: no, for now.** The machinery supports unattended
+promotion and the endpoint exists, but nothing calls it automatically, which keeps the interesting
+capability built and the dangerous behaviour switched off. Leaving it off costs nothing, since no
+code has to be written or removed to keep it manual, and it is the one capability whose bad outcome
+cannot be undone by hand - an agent that promotes itself can remove the mechanism that would roll it
+back. Revisit when validation evidence is trusted enough that a human approving a promotion is
+rubber-stamping it, which would mean the gate is doing the real work already.
 
 ## The supervisor is publicly reachable and its credential names nobody (open)
 
