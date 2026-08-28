@@ -102,6 +102,14 @@ _Avoid_: supervisor workspace, recovery store
 The workspace API supplied by `@cloudflare/computer`, which may implement an agent workspace. Use this name when referring to that API rather than the domain concept.
 _Avoid_: workspace (when the platform API is meant)
 
+**Worker-shell backend**:
+The `@cloudflare/computer` backend that runs just-bash over a virtual filesystem. It has shell syntax and core utilities but no OS processes, compiler, or package installation.
+_Avoid_: container backend, Linux runtime
+
+**Container backend**:
+The `@cloudflare/computer` backend that runs `computerd` in a Linux process environment. It can compile and run project tooling, at the cost of awake time, cold starts, and a larger credential and image surface.
+_Avoid_: Worker-shell backend
+
 **Four primitives**:
 The tool registry generation 0 ships with: `read`, `write`, `edit`, and `bash`. They are the bootstrap tool registry, not a permanent ceiling on what a later agent definition is allowed to grow into, because the facet's harness is meant to evolve. They are one part of the harness, not the whole of it: the harness also covers the model loop, prompts, policies, runtime, and workspace.
 _Avoid_: fixed action space, permanent capabilities, bootstrap harness

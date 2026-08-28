@@ -267,6 +267,25 @@ the same distinction under different names. This correction is recorded in
 fixed-tool facet, supervisor-owned workspace, WebAssembly-only shell, and fixed capability floor
 were dropped; this design history preserves why.
 
+## Computer adoption put the first loop on Worker-shell
+
+The first workspace design treated a real `@cloudflare/computer` workspace as an isolation breach,
+because it gave the facet durable files, Git, and a broad runtime. ADR-0024 corrected that premise:
+those are facet-owned capabilities unless their bindings reach supervisor recovery authority. Plain
+JavaScript was then chosen because no compiler-equipped workspace seemed available before the first
+self-modification and Worker Loader required a JavaScript artifact.
+
+Adopting Computer resolves the isolation question and puts the first working loop on Worker-shell.
+The facet only needs to edit its harness and submit a JavaScript candidate; the supervisor runs the
+replay gate, so a facet test runner would not produce validation evidence. Worker-shell is enough
+for that loop without a container cost, image or credential surface, or cold start. The container
+backend remains an upgrade when the harness needs a compiler, package installation, or its own test
+runner. It would make TypeScript possible, but it brings awake cost, cold start, a larger credential
+and image surface, and open issue #114 on deployed WebSocket upgrades. The missing
+candidate-submission boundary remains open: broad workspace authority does not explain how the
+supervisor receives immutable candidate material without exposing recovery records. ADR-0026
+records the current position.
+
 ## Three decision registers, and the one that had quietly gone wrong
 
 The project accumulated three places where a decision could be recorded, none of them wrong on

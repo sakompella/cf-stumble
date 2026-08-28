@@ -4,7 +4,7 @@ This architecture first stops the agent from reaching the supervisor and disabli
 
 ## Consequences
 
-The design keeps `globalOutbound: null` for ambient egress by default. We can give the facet more room to risk data exfiltration over time because it is a bounded loss. Any path to the supervisor's registry, materialization records, validation evidence, live pointer, rollback, or genesis recovery must instead use a sanctioned control path that the supervisor validates and attests; the facet never gets direct access. A broader facet workspace or runtime is not a containment concession unless it can reach supervisor authority directly.
+The design keeps `globalOutbound: null` for ambient egress by default. We can give the facet more room to risk data exfiltration over time because it is a bounded loss. Any path to the supervisor's registry, materialization records, validation evidence, live pointer, rollback, or genesis recovery must instead use a sanctioned control path that the supervisor validates and attests; the facet never gets direct access. A broader facet workspace or runtime is not a containment concession unless it can reach supervisor authority directly. Computer's host-side `git clone`, `fetch`, and `push` bypass `globalOutbound: null`, so a Computer Workspace with a real remote carries an egress path that ambient Worker settings do not close. That remote is a passed capability and needs the same review as every other deliberate capability.
 
 Research against Cloudflare's documentation and the `workerd` source sharpened how this is enforced.
 An empty `env` genuinely isolates the guest: workerd populates a dynamically loaded Worker's

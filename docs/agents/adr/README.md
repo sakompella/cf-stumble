@@ -30,11 +30,11 @@ It is grouped by area; a decision spanning two areas appears under the one that 
   `write`, `edit`, and `bash` are the bootstrap tool registry, not a permanent ceiling on what a later
   agent definition is allowed to grow into. Capability breadth depends on whether it reaches
   supervisor recovery authority directly, not on tool count.
-- **[ADR-0025](0025-the-facet-writes-plain-javascript.md)** — the facet emits plain JavaScript that
-  Worker Loader runs directly, so a workspace and build step become an improvement rather than a
-  prerequisite for the first self-modification. Facet-authored code gets no type checker, which puts
-  more weight on validation evidence; bare import specifiers do not resolve, though vendoring a
-  compiled dependency into the module map stays possible.
+- **[ADR-0026](0026-adopt-computer-for-facet-work-environment.md)** — the facet uses an exactly
+  pinned `@cloudflare/computer` release for its durable filesystem, ordinary Git workflow, and
+  runtime, starting on Worker-shell. It authors JavaScript; the container backend and TypeScript
+  authoring are a later upgrade when the facet needs a compiler, package installation, or its own
+  test runner. The supervisor remains the source of validation evidence.
 - **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — first contain the agent
   from reaching the supervisor and disabling its own rollback. Data exfiltration ranks second,
   because a broad facet workspace is not a containment concession unless it reaches supervisor
