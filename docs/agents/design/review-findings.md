@@ -229,3 +229,30 @@ while the corpus is small, and progressively less so after.
 endpoint exists, but nothing calls it automatically, which keeps the interesting capability built
 and the dangerous behaviour switched off. Turning it on is a decision about risk appetite, not
 about code.
+
+## The supervisor is publicly reachable and its credential names nobody (open)
+
+`src/supervisor/worker.ts` forwards every inbound request to the supervisor Durable Object with no
+filtering, and `wrangler.jsonc` declares no routes, so a deployment is reachable on a public
+`workers.dev` hostname. The bearer check at `supervisor.ts:246` is therefore the entire perimeter in
+front of promote, rollback, and reset. It fails closed when the secret is unset, which is the right
+default, but a single static shared token is a thin control for operations that install code.
+
+Two specific gaps. Cloudflare documents no way to attribute a request authenticated by a shared
+secret to a particular caller, so promotion history records that something authorized the change
+rather than who - awkward for a project whose thesis is provenance, and directly relevant to the
+unattended-promotion question. And Cloudflare documents no rotation protocol for such a secret, nor
+any position on whether one static token is adequate for destructive operations.
+
+The documented remedy has two halves. Making the supervisor reachable only through a service binding
+requires `workers_dev: false`, `preview_urls: false`, no `routes`, no Custom Domain, and removal of
+any route previously added through the dashboard; the `preview_urls` setting matters because preview
+URLs are public when enabled and their default only follows `workers_dev` when left unset. There is
+no documented end-to-end command to verify the result, so it has to be checked against the Domains
+and Routes inventory. For the human and CI callers that remain, Cloudflare Access fits: an
+identity-provider policy identifies humans by email, and a Service Auth policy identifies CI by
+service-token ID. That buys the caller identity the bearer token cannot provide. Note that the
+`mtls_certificates` binding is outbound-only and does not authenticate inbound callers.
+
+Not yet done. Making the supervisor non-public should land before the facet gains network egress,
+since a public hostname plus a leaked token would otherwise be a self-promotion path.

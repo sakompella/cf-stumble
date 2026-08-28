@@ -118,3 +118,35 @@ ten when it constructs its wrapper, so a four-method shim fails before anything 
 
 Its verdict — keep the codec — has since been overtaken by the decision to adopt
 `@cloudflare/computer` and stop home-rolling. The measurements remain valid.
+
+## Cloudflare's own answer: mediated capabilities, not credentials
+
+Cloudflare solved a structurally identical problem before we did, twice, and both answers agree on
+the mechanism. In Dynamic Workers the trusted loader passes narrow RPC stubs into the untrusted
+Worker, with credentials and per-tenant scope held in private `props` the guest cannot read; the
+privileged work runs in trusted code and the guest only asks for it. Workers for Platforms does the
+same for outbound calls, where an Outbound Worker injects authentication headers the user Worker
+never sees. Neither design hands untrusted code a credential and hopes it behaves.
+
+That maps onto this project directly. The facet should not hold a supervisor credential, and
+should not get a supervisor binding either. It should get a stub for the operations it is allowed to
+request, with promotion and reset simply absent from that stub.
+
+Two limits in the prior art are worth carrying over rather than discovering later. The Outbound
+Worker is an enforced interception point for user-Worker `fetch()` and disables `connect()` when
+enabled, but Cloudflare excludes "fetch requests made from Durable Objects or mTLS certificate
+bindings" from interception - and our supervisor is a Durable Object, so egress mediation would not
+cover its path. And `globalOutbound: null` blocks ambient global `fetch()` and `connect()`, not
+every capability: an explicitly passed RPC or service binding still executes host code and can
+return further stubs. Containment therefore rests on what gets passed in, not on the outbound
+setting.
+
+The honest reading of the guarantee is narrower than the marketing. Cloudflare markets Dynamic
+Workers for sandboxing untrusted and AI-generated code, but it is open beta rather than GA, its own
+security writing concedes that "a single arbitrary read vulnerability within a Worker process can
+lead to cross-tenant leakage", and the `workerd` repository states plainly that "workerd is not a
+hardened sandbox" and that possibly-malicious code belongs in an additional sandbox such as a VM.
+The strongest product claim is complete isolation _between tenants_, which is a different assertion
+from no-escape against code actively trying to break out. That is an argument for keeping the
+supervisor's authority structurally separate rather than trusting isolate integrity, which is what
+ADR-0007 and ADR-0019 already say.
