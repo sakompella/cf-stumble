@@ -102,45 +102,9 @@ class TargetReadBarrierRegistry implements GenerationRegistry {
   }
 }
 
-describe("MemoryActivationLedger promotion", () => {
-  it("rejects promotion of a non-validated generation and leaves the pointer unchanged", async () => {
-    const registry = new MemoryGenerationRegistry();
-    const ledger = new MemoryActivationLedger({ registry, now: () => 42 });
-    const candidate = await registry.allocate(request("loading"));
-
-    const result = await ledger.promote(candidate.number, NO_POINTER);
-
-    expect(result).toEqual({
-      outcome: "rejected",
-      reason: { kind: "not-validated", state: "loading" },
-    });
-    expect(await ledger.readPointer()).toBeUndefined();
-  });
-
-  it("promotes a validated generation with a compare-and-swap and records the event", async () => {
-    const registry = new MemoryGenerationRegistry();
-    const ledger = new MemoryActivationLedger({ registry, now: () => 42 });
-    const candidate = await validatedGeneration(registry, "candidate");
-
-    const result = await ledger.promote(candidate.number, NO_POINTER);
-
-    expect(result).toEqual({
-      outcome: "activated",
-      from: undefined,
-      to: candidate.number,
-    });
-    expect(await ledger.readPointer()).toBe(candidate.number);
-    expect(await ledger.readEvents()).toEqual([
-      {
-        sequence: 1,
-        kind: "promoted",
-        generation: candidate.number,
-        from: undefined,
-        at: 42,
-      },
-    ]);
-  });
-});
+// A non-validated promotion attempt and a plain first promotion are already pinned by
+// `describeActivationLedgerConformance` above; the plain-promotion event shape (including its
+// `at` timestamp) is also exercised as the first step of the ordered-history test below.
 
 describe("MemoryActivationLedger unknown generations", () => {
   it("returns a typed rejection without changing the pointer", async () => {
@@ -158,24 +122,8 @@ describe("MemoryActivationLedger unknown generations", () => {
   });
 });
 
-describe("MemoryActivationLedger compare-and-swap", () => {
-  it("rejects a promotion with a stale expected pointer and leaves the winner intact", async () => {
-    const registry = new MemoryGenerationRegistry();
-    const ledger = new MemoryActivationLedger({ registry, now: () => 42 });
-    const base = await validatedGeneration(registry, "base");
-    const contender = await validatedGeneration(registry, "contender");
-    await ledger.promote(base.number, NO_POINTER);
-
-    const rejected = await ledger.promote(contender.number, NO_POINTER);
-
-    expect(rejected).toEqual({
-      outcome: "rejected",
-      reason: { kind: "pointer-moved", expected: NO_POINTER, actual: base.number },
-    });
-    expect(await ledger.readPointer()).toBe(base.number);
-    expect(await ledger.readEvents()).toHaveLength(1);
-  });
-});
+// A stale compare-and-swap expectation is already pinned by
+// `describeActivationLedgerConformance` above with the same rejection shape.
 
 describe("MemoryActivationLedger rollback", () => {
   it("rejects rollback to a generation never previously recorded as live", async () => {

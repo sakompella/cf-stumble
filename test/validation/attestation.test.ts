@@ -83,10 +83,19 @@ test("corpus versions change when case content or canary markings change", async
   expect(await computeCorpusVersion([validationCase])).toBe(baseline);
 });
 
+/**
+ * The policy text `computeGateVersion` hashes is a private constant, so nothing outside
+ * `versions.ts` can vary it to prove the hash tracks it. Determinism and shape alone would
+ * still pass a `computeGateVersion` hardcoded to return a fixed string, which is exactly the
+ * silent-drift bug this version exists to prevent: a real policy change would keep comparing
+ * equal to stale attestations forever. Pinning the literal digest closes that gap, because any
+ * change to the policy text, its field order, or the hash's own namespace or algorithm changes
+ * this string too, and this test is what forces that change to be deliberate.
+ */
 test("the gate version is a content-derived stable hash", async () => {
   const first = await computeGateVersion();
   const second = await computeGateVersion();
 
   expect(first).toBe(second);
-  expect(first).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  expect(first).toBe("sha256:e7005858a4bee8ae7a473083e7315b307c4897225436a6ba5328908b5782f975");
 });

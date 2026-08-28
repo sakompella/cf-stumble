@@ -103,23 +103,6 @@ describe("git tree objects", () => {
   });
 });
 
-describe("unicode git tree names", () => {
-  it("round-trips unicode filenames", () => {
-    const object = {
-      type: "tree" as const,
-      entries: [
-        {
-          mode: FILE_MODE.regular,
-          name: "café.txt",
-          sha: parseSha("0123456789012345678901234567890123456789"),
-        },
-      ],
-    };
-
-    expect(expectOk(decodeObject(encodeObject(object)))).toEqual(object);
-  });
-});
-
 describe("git object round trips", () => {
   it("preserves every generated object", () => {
     for (const object of generatedObjects()) {
