@@ -32,8 +32,9 @@ It is grouped by area; a decision spanning two areas appears under the one that 
   supervisor recovery authority directly, not on tool count.
 - **[ADR-0025](0025-the-facet-writes-plain-javascript.md)** — the facet emits plain JavaScript that
   Worker Loader runs directly, so a workspace and build step become an improvement rather than a
-  prerequisite for the first self-modification. Its successors get no dependencies, and no type
-  checker, which puts more weight on validation evidence.
+  prerequisite for the first self-modification. Facet-authored code gets no type checker, which puts
+  more weight on validation evidence; bare import specifiers do not resolve, though vendoring a
+  compiled dependency into the module map stays possible.
 - **[ADR-0019](0019-contain-against-the-supervisor-before-egress.md)** — first contain the agent
   from reaching the supervisor and disabling its own rollback. Data exfiltration ranks second,
   because a broad facet workspace is not a containment concession unless it reaches supervisor
