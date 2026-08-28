@@ -9,10 +9,11 @@ import {
 } from "../../src/tools/index.js";
 import { expectErr } from "../support/result.js";
 
+// One representative rejection is enough here: every filesystem primitive calls the same
+// `parseWorkspacePath` and returns its error unchanged, so this pins that wiring rather than the
+// parser's rejection taxonomy, which `everyRejection` below already covers exhaustively.
 const invalidPaths = [
   { path: "../../etc/passwd", rejection: "path-traversal" },
-  { path: "/etc/passwd", rejection: "absolute" },
-  { path: "safe\0file", rejection: "nul-byte" },
 ] as const satisfies readonly { path: string; rejection: WorkspacePathRejection }[];
 
 /** Every reason the parser can give, so a new one cannot be added without a case here. */

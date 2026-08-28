@@ -32,27 +32,8 @@ describe("generation number parsing", () => {
 });
 
 describe("MemoryGenerationRegistry allocation", () => {
-  it("writes the loading record before the load outcome is known", async () => {
-    const registry = new MemoryGenerationRegistry();
-
-    const record = await registry.allocate(request("before-load"));
-
-    expect(record.state).toBe("loading");
-    expect(await registry.get(record.number)).toEqual(record);
-  });
-
-  it("allocates monotonic numbers and never reuses a value after a failure", async () => {
-    const registry = new MemoryGenerationRegistry();
-    const first = await registry.allocate(request("first"));
-    await registry.transition(first.number, { state: "load_failed", failure: "failed" });
-
-    const second = await registry.allocate(request("second", OTHER_COMMIT));
-
-    expect(first.number).toBe(0);
-    expect(second.number).toBe(1);
-    expect(await registry.list()).toHaveLength(2);
-  });
-
+  // Allocation-before-load and monotonic, no-reuse numbering are already pinned by
+  // `describeGenerationRegistryConformance` above against this same implementation.
   it("returns the same generation for a retried idempotency key but allocates again for a new key", async () => {
     const registry = new MemoryGenerationRegistry();
 
