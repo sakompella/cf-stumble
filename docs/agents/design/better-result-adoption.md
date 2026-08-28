@@ -115,7 +115,7 @@ onto a plain `Error`).
 | F22 | Resource not found                                                                                                      | `MissingResourceError`                                         | `throw`                                                              | Recoverable tagged error                                                                   | HTTP 404                               |
 | F23 | Safety violation: `not-live` or `quarantined`                                                                           | `SafetyViolationError`                                         | `throw` with a `kind` field                                          | Recoverable, 2 tagged errors                                                               | HTTP 422                               |
 | F24 | Any other exception inside a route                                                                                      | 30 catches, `requestErrorResponse` fallthrough                 | 500 with `error.message` on the wire                                 | **Defect**; should become `panic` reaching one telemetry boundary, with a generic 500 body | HTTP 500, generic                      |
-| F25 | Exhaustiveness guard reached                                                                                            | 39 `assertNever` calls                                         | `throw new Error`                                                    | **Defect**, `panic`                                                                        | Never surfaces                         |
+| F25 | Exhaustiveness guard reached (now `panic`)                                                                              | 39 `assertNever` calls                                         | `throw new Error`                                                    | **Defect**, `panic`                                                                        | Never surfaces                         |
 | F26 | Replay aborted                                                                                                          | `ReplayAbort`, `src/replay/abort.ts`                           | thrown and caught as control flow                                    | Not an error. Model as an outcome variant, not a `TaggedError`                             | Not user-facing                        |
 
 ### Headline findings
@@ -538,3 +538,26 @@ comment was added anywhere, and `supervisor.ts` was not touched.
 **Next slice: 2 (turn failures).** It is the natural continuation - slice 1 stops exactly at the
 `TurnFailure` seam, and slice 2 collapses the `switch` over the remaining variants and the
 `.match()` over primitive errors into one exhaustive match at the same boundary.
+
+### Closing audit
+
+Checking the catalog against the code after slice 8 found one entry no slice had claimed. F25 said an
+exhaustiveness violation should be a defect routed through `panic`, but `assertNever`
+(`src/git/types.ts:104`) still threw a plain `Error`. Slice 8's catch-all had been giving it the
+right outcome by accident — an untagged throw becomes a `Panic` at the route boundary anyway — so
+nothing looked wrong from outside. It now calls `panic` at the source, which is what the catalog
+claimed and what makes the disposition true in the code rather than true by fallback. The call count
+also drifted, 39 sites down to 34, from unrelated refactoring.
+
+F26 stays open on purpose: whether `ReplayAbort` becomes an outcome variant is a domain-model
+question, not an error-handling one.
+
+**One unexplained flake, recorded rather than dismissed.** A single run of
+`authorized reset restores genesis after the gate rejects a candidate`
+(`test/supervisor/supervisor.workers.ts:442`) failed during a full `pnpm verify`, and did not recur
+in six later runs — three full verifies and three workers-only runs, plus three on an unmodified
+tree. The assertion message was lost, so the failing line is unknown, which is the main reason this
+is worth writing down. Cross-test leakage is unlikely, since `afterEach` calls `reset()`. The
+better guesses are timing under load: the test promotes a real generation and mounts a facet, and
+the file's last test deliberately races an in-flight `/turn` against a promotion. If it returns,
+capture the full vitest output before doing anything else.
