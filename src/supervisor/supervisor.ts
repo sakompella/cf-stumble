@@ -1,14 +1,15 @@
 /// <reference types="@cloudflare/workers-types" />
-/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, eslint/max-classes-per-file, import/max-dependencies, unicorn/no-array-sort */
+/* oxlint-disable eslint/max-lines, eslint/max-lines-per-function, import/max-dependencies, unicorn/no-array-sort */
 
 import { authorizeSupervisorRequest } from "./auth.js";
+import { InvalidRequestError, MissingResourceError, SafetyViolationError } from "./errors.js";
 import {
   healthyAgentSource,
   initializationErrorAgentSource,
   loadAgent,
   syntaxErrorAgentSource,
 } from "../agent/loader.js";
-import { panic, Result } from "better-result";
+import { isPanic, panic, Panic, Result } from "better-result";
 import {
   AgentExecutor,
   InvalidModuleError,
@@ -239,86 +240,122 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   override async fetch(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
-    if (
-      isPrivilegedRoute(pathname, request.method) &&
-      !authorizeSupervisorRequest(request, this.supervisorSecret)
-    ) {
-      return unauthorizedResponse();
-    }
-    if (
-      pathname !== "/facet/ping" &&
-      pathname !== "/facet/probe" &&
-      !pathname.startsWith("/candidate/")
-    ) {
-      await this.ensureInitialized();
-    }
+    try {
+      if (
+        isPrivilegedRoute(pathname, request.method) &&
+        !authorizeSupervisorRequest(request, this.supervisorSecret)
+      ) {
+        return unauthorizedResponse();
+      }
+      if (
+        pathname !== "/facet/ping" &&
+        pathname !== "/facet/probe" &&
+        !pathname.startsWith("/candidate/")
+      ) {
+        await this.ensureInitialized();
+      }
 
-    if (pathname === "/facet/ping") {
-      return this.fetchFacet("ping");
+      if (pathname === "/facet/ping") {
+        return await this.routeResponse(() => this.fetchFacet("ping"));
+      }
+      if (pathname === "/facet/probe") {
+        return await this.routeResponse(() => this.fetchFacet("probe"));
+      }
+      if (pathname === "/seed") {
+        return await this.routeResponse(() => this.seed());
+      }
+      if (pathname === "/inspect") {
+        return await this.routeResponse(() => this.inspect());
+      }
+      if (pathname === "/state") {
+        return await this.routeResponse(() => this.state());
+      }
+      if (pathname === "/promote") {
+        return await this.routeResponse(() =>
+          request.method === "GET" ? this.legacyPromote() : this.promote(request),
+        );
+      }
+      if (pathname === "/rollback") {
+        return await this.routeResponse(() => this.rollback(request));
+      }
+      if (pathname === "/reset") {
+        return await this.routeResponse(() =>
+          request.method === "GET" ? this.legacyReset() : this.reset(),
+        );
+      }
+      if (pathname === "/generations") {
+        return await this.routeResponse(() =>
+          request.method === "POST" ? this.createGeneration(request) : this.listGenerations(),
+        );
+      }
+      if (pathname === "/generations/live") {
+        return await this.routeResponse(() => this.live());
+      }
+      if (pathname === "/history") {
+        return await this.routeResponse(() => this.history());
+      }
+      if (pathname.startsWith("/generations/")) {
+        return await this.routeResponse(() =>
+          this.showGeneration(pathname.slice("/generations/".length)),
+        );
+      }
+      if (pathname === "/live" || pathname === "/generation/live") {
+        return await this.routeResponse(() => this.live());
+      }
+      if (pathname === "/context") {
+        return await this.routeResponse(() =>
+          request.method === "POST" ? this.writeContext(request) : this.readContext(),
+        );
+      }
+      if (pathname === "/corpus") {
+        return await this.routeResponse(() =>
+          request.method === "POST" ? this.writeCorpus(request) : this.readCorpus(),
+        );
+      }
+      if (pathname === "/validation-results") {
+        return await this.routeResponse(() =>
+          request.method === "POST"
+            ? this.writeValidationResult(request)
+            : this.readValidationResults(new URL(request.url)),
+        );
+      }
+      if (pathname === "/quarantine") {
+        return await this.routeResponse(() =>
+          request.method === "POST" ? this.quarantine(request) : this.readQuarantine(),
+        );
+      }
+      if (pathname === "/turn") {
+        return await this.routeResponse(() => this.turn(request));
+      }
+      if (pathname === "/candidate/healthy") {
+        return await this.routeResponse(() => this.setCandidate("healthy"));
+      }
+      if (pathname === "/candidate/syntax") {
+        return await this.routeResponse(() => this.setCandidate("syntax"));
+      }
+      if (pathname === "/candidate/init") {
+        return await this.routeResponse(() => this.setCandidate("init"));
+      }
+      return new Response("not found", { status: 404 });
+    } catch (error: unknown) {
+      console.error("supervisor request failed", error);
+      return internalServerErrorResponse();
     }
-    if (pathname === "/facet/probe") {
-      return this.fetchFacet("probe");
+  }
+
+  private async routeResponse(operation: () => Response | Promise<Response>): Promise<Response> {
+    const response = await Result.tryPromise({
+      try: () => Promise.resolve(operation()),
+      catch: requestError,
+    });
+    if (Result.isError(response)) {
+      if (isPanic(response.error)) {
+        console.error("supervisor request failed", response.error);
+        return internalServerErrorResponse();
+      }
+      return requestErrorResponse(response.error);
     }
-    if (pathname === "/seed") {
-      return this.seed();
-    }
-    if (pathname === "/inspect") {
-      return this.inspect();
-    }
-    if (pathname === "/state") {
-      return this.state();
-    }
-    if (pathname === "/promote") {
-      return request.method === "GET" ? this.legacyPromote() : this.promote(request);
-    }
-    if (pathname === "/rollback") {
-      return this.rollback(request);
-    }
-    if (pathname === "/reset") {
-      return request.method === "GET" ? this.legacyReset() : this.reset();
-    }
-    if (pathname === "/generations") {
-      return request.method === "POST" ? this.createGeneration(request) : this.listGenerations();
-    }
-    if (pathname === "/generations/live") {
-      return this.live();
-    }
-    if (pathname === "/history") {
-      return this.history();
-    }
-    if (pathname.startsWith("/generations/")) {
-      return this.showGeneration(pathname.slice("/generations/".length));
-    }
-    if (pathname === "/live" || pathname === "/generation/live") {
-      return this.live();
-    }
-    if (pathname === "/context") {
-      return request.method === "POST" ? this.writeContext(request) : this.readContext();
-    }
-    if (pathname === "/corpus") {
-      return request.method === "POST" ? this.writeCorpus(request) : this.readCorpus();
-    }
-    if (pathname === "/validation-results") {
-      return request.method === "POST"
-        ? this.writeValidationResult(request)
-        : this.readValidationResults(new URL(request.url));
-    }
-    if (pathname === "/quarantine") {
-      return request.method === "POST" ? this.quarantine(request) : this.readQuarantine();
-    }
-    if (pathname === "/turn") {
-      return this.turn(request);
-    }
-    if (pathname === "/candidate/healthy") {
-      return this.setCandidate("healthy");
-    }
-    if (pathname === "/candidate/syntax") {
-      return this.setCandidate("syntax");
-    }
-    if (pathname === "/candidate/init") {
-      return this.setCandidate("init");
-    }
-    return new Response("not found", { status: 404 });
+    return response.value;
   }
 
   private ensureInitialized(): Promise<void> {
@@ -508,57 +545,51 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   // The old GET spike API only exercises facet loading and never changes the live pointer.
   private async legacyPromote(): Promise<Response> {
-    try {
-      const facet = this.mountFacet(this.readCandidateSource());
-      const response = await facet.fetch(new Request("https://facet/probe"));
-      if (!response.ok) {
-        return Response.json(
-          { promoted: false, reason: `facet returned ${response.status}` },
-          { status: 422 },
-        );
-      }
-      this.writeState("generation", "candidate");
-      return Response.json({ promoted: true });
-    } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error);
-      return Response.json({ promoted: false, reason: detail }, { status: 422 });
+    const result = await Result.tryPromise({
+      try: async () => {
+        const facet = this.mountFacet(this.readCandidateSource());
+        const response = await facet.fetch(new Request("https://facet/probe"));
+        return response.ok;
+      },
+      catch: () => false,
+    });
+    if (Result.isError(result) || !result.value) {
+      return Response.json({ promoted: false }, { status: 422 });
     }
+    this.writeState("generation", "candidate");
+    return Response.json({ promoted: true });
   }
 
   private async promote(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const number = parseGenerationNumberField(body.candidate ?? body.generation, "candidate");
-      const candidate = await this.readCandidateGeneration(number);
-      if (Result.isError(candidate)) {
-        throw candidate.error;
-      }
-      if (this.isQuarantined(number)) {
-        throw new SafetyViolationError("quarantined", `generation ${number} is quarantined`);
-      }
-      const loaded = await this.loadCandidate(candidate.value);
-      if (loaded.outcome === "failed") {
-        return promotionResponse({
-          outcome: "rejected",
-          reason: { kind: "not-passing", verdict: "inconclusive" },
-        });
-      }
-      if (candidate.value.loaded === undefined) {
-        throw new Error(`generation ${number} has no materialized commit`);
-      }
-      const validation = await this.validateCandidate(
-        number,
-        candidate.value.loaded.generation.sha,
-        loaded.artifactDigest,
-      );
-      if (Result.isError(validation)) {
-        throw validation.error;
-      }
-      const result = this.promoteTransaction(number, validation.value, loaded.artifactDigest);
-      return promotionResponse(result);
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const body = await readRequestRecord(request);
+    const number = parseGenerationNumberField(body.candidate ?? body.generation, "candidate");
+    const candidate = await this.readCandidateGeneration(number);
+    if (Result.isError(candidate)) {
+      throw candidate.error;
     }
+    if (this.isQuarantined(number)) {
+      throw new SafetyViolationError("quarantined", `generation ${number} is quarantined`);
+    }
+    const loaded = await this.loadCandidate(candidate.value);
+    if (loaded.outcome === "failed") {
+      return promotionResponse({
+        outcome: "rejected",
+        reason: { kind: "not-passing", verdict: "inconclusive" },
+      });
+    }
+    if (candidate.value.loaded === undefined) {
+      throw new Error(`generation ${number} has no materialized commit`);
+    }
+    const validation = await this.validateCandidate(
+      number,
+      candidate.value.loaded.generation.sha,
+      loaded.artifactDigest,
+    );
+    if (Result.isError(validation)) {
+      throw validation.error;
+    }
+    const result = this.promoteTransaction(number, validation.value, loaded.artifactDigest);
+    return promotionResponse(result);
   }
 
   private validateCandidate(number: GenerationNumber, candidate: Sha, artifactDigest: Sha) {
@@ -776,15 +807,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private async rollback(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const target = parseGenerationNumberField(body.target, "target");
-      const expected = parseNullableGenerationNumber(body.expected, "expected");
-      const result = this.rollbackTransaction(target, expected);
-      return promotionResponse(result);
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const body = await readRequestRecord(request);
+    const target = parseGenerationNumberField(body.target, "target");
+    const expected = parseNullableGenerationNumber(body.expected, "expected");
+    const result = this.rollbackTransaction(target, expected);
+    return promotionResponse(result);
   }
 
   private rollbackTransaction(
@@ -839,27 +866,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private resetResponse(legacy: boolean): Response {
-    try {
-      this.deleteActiveFacet();
-      const result = this.resetTransaction();
-      if (result.outcome === "contended") {
-        return Response.json(
-          { outcome: result.outcome, attempts: result.attempts },
-          { status: 409 },
-        );
-      }
-      if (legacy) {
-        return Response.json({ generation: "0", reset: true });
-      }
-      return Response.json({
-        outcome: result.outcome,
-        generation: 0,
-        from: result.from ?? null,
-        to: result.to,
-      });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    this.deleteActiveFacet();
+    const result = this.resetTransaction();
+    if (result.outcome === "contended") {
+      return Response.json({ outcome: result.outcome, attempts: result.attempts }, { status: 409 });
     }
+    if (legacy) {
+      return Response.json({ generation: "0", reset: true });
+    }
+    return Response.json({
+      outcome: result.outcome,
+      generation: 0,
+      from: result.from ?? null,
+      to: result.to,
+    });
   }
 
   private resetTransaction(): GenerationResetResult {
@@ -894,369 +914,299 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private listGenerations(): Response {
-    try {
-      const rows = this.readGenerationRows();
-      const generations = rows.map((row) => generationResponse(row));
-      return Response.json({ generations });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const rows = this.readGenerationRows();
+    const generations = rows.map((row) => generationResponse(row));
+    return Response.json({ generations });
   }
 
   private history(): Response {
-    try {
-      const rows = this.ctx.storage.sql
-        .exec<HistoryRow>(
-          `SELECT id AS sequence, kind, generation_number, from_generation_number, at FROM ${HISTORY_TABLE} ORDER BY id`,
-        )
-        .toArray();
-      return Response.json({
-        history: rows.map((row) => ({
-          sequence: row.sequence,
-          kind: row.kind,
-          generation: parseGenerationNumber(row.generation_number),
-          from:
-            row.from_generation_number === null
-              ? null
-              : parseGenerationNumber(row.from_generation_number),
-          at: row.at,
-        })),
-      });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const rows = this.ctx.storage.sql
+      .exec<HistoryRow>(
+        `SELECT id AS sequence, kind, generation_number, from_generation_number, at FROM ${HISTORY_TABLE} ORDER BY id`,
+      )
+      .toArray();
+    return Response.json({
+      history: rows.map((row) => ({
+        sequence: row.sequence,
+        kind: row.kind,
+        generation: parseGenerationNumber(row.generation_number),
+        from:
+          row.from_generation_number === null
+            ? null
+            : parseGenerationNumber(row.from_generation_number),
+        at: row.at,
+      })),
+    });
   }
 
   private showGeneration(rawNumber: string): Response {
-    try {
-      let decodedNumber: string;
-      try {
-        decodedNumber = decodeURIComponent(rawNumber);
-      } catch (error: unknown) {
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new InvalidRequestError(`generation number is not valid URL encoding: ${detail}`);
-      }
-      const number = parseGenerationNumberField(decodedNumber, "generation");
-      const row = this.readGenerationRow(number);
-      if (row === undefined) {
-        return Response.json(
-          { error: { kind: "not-found", resource: "generation", number } },
-          { status: 404 },
-        );
-      }
-      return Response.json({ generation: generationResponse(row) });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const decodedNumber = decodeGenerationNumber(rawNumber);
+    const number = parseGenerationNumberField(decodedNumber, "generation");
+    const row = this.readGenerationRow(number);
+    if (row === undefined) {
+      return Response.json(
+        { error: { kind: "not-found", resource: "generation", number } },
+        { status: 404 },
+      );
     }
+    return Response.json({ generation: generationResponse(row) });
   }
 
   private live(): Response {
-    try {
-      const live = this.readPointerSql();
-      if (live === undefined) {
-        return Response.json({ generation: null });
-      }
-      const row = this.readGenerationRow(live);
-      if (row === undefined) {
-        return Response.json(
-          { error: { kind: "corrupt-state", message: `live generation ${live} is missing` } },
-          { status: 500 },
-        );
-      }
-      return Response.json({ generation: generationResponse(row) });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const live = this.readPointerSql();
+    if (live === undefined) {
+      return Response.json({ generation: null });
     }
+    const row = this.readGenerationRow(live);
+    if (row === undefined) {
+      throw new Error(`live generation ${live} is missing`);
+    }
+    return Response.json({ generation: generationResponse(row) });
   }
 
   private async createGeneration(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const modules = parseModules(body.modules);
-      const summary = readNonEmptyString(body.summary, "summary");
-      const idempotencyKey =
-        body.idempotencyKey === undefined
-          ? crypto.randomUUID()
-          : readNonEmptyString(body.idempotencyKey, "idempotencyKey");
-      const createdAt =
-        body.createdAt === undefined
-          ? Math.floor(Date.now() / 1_000)
-          : readSafeInteger(body.createdAt, "createdAt");
-      const existing = this.readGenerationByIdempotencyKey(idempotencyKey);
-      if (existing !== undefined) {
-        return Response.json({ generation: generationResponse(existing) });
-      }
-      const liveNumber = this.readPointerSql();
-      if (liveNumber === undefined) {
-        return Response.json(
-          {
-            error: {
-              kind: "conflict",
-              message: "cannot create a candidate without a live generation",
-            },
-          },
-          { status: 409 },
-        );
-      }
-      const parent = this.readGenerationRow(liveNumber);
-      if (parent === undefined) {
-        return Response.json(
-          { error: { kind: "corrupt-state", message: `live generation ${liveNumber} is missing` } },
-          { status: 500 },
-        );
-      }
-      const parentRead = await readGeneration(this.store, parseSha(parent.commit_sha));
-      if (Result.isError(parentRead)) {
-        throw parentRead.error;
-      }
-      const parentSnapshot = parentRead.value.generation;
-      const built = await buildGeneration(this.store, {
-        modules,
-        parent: parentSnapshot,
-        author: genesisAuthor,
-        createdAt,
-        summary,
-      });
-      if (Result.isError(built)) {
-        if (InvalidGenerationInputError.is(built.error)) {
-          throw new InvalidRequestError(built.error.message);
-        }
-        throw built.error;
-      }
-      const generation = built.value;
-      let row: GenerationRow | undefined;
-      this.ctx.storage.transactionSync(() => {
-        row = this.allocateGeneration(
-          generation.sha,
-          liveNumber,
-          idempotencyKey,
-          generation.createdAt,
-        );
-      });
-      if (row === undefined) {
-        throw new Error("generation allocation did not produce a row");
-      }
-      return Response.json({ generation: generationResponse(row) }, { status: 201 });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const body = await readRequestRecord(request);
+    const modules = parseModules(body.modules);
+    const summary = readNonEmptyString(body.summary, "summary");
+    const idempotencyKey =
+      body.idempotencyKey === undefined
+        ? crypto.randomUUID()
+        : readNonEmptyString(body.idempotencyKey, "idempotencyKey");
+    const createdAt =
+      body.createdAt === undefined
+        ? Math.floor(Date.now() / 1_000)
+        : readSafeInteger(body.createdAt, "createdAt");
+    const existing = this.readGenerationByIdempotencyKey(idempotencyKey);
+    if (existing !== undefined) {
+      return Response.json({ generation: generationResponse(existing) });
     }
+    const liveNumber = this.readPointerSql();
+    if (liveNumber === undefined) {
+      return Response.json(
+        {
+          error: {
+            kind: "conflict",
+            message: "cannot create a candidate without a live generation",
+          },
+        },
+        { status: 409 },
+      );
+    }
+    const parent = this.readGenerationRow(liveNumber);
+    if (parent === undefined) {
+      throw new Error(`live generation ${liveNumber} is missing`);
+    }
+    const parentRead = await readGeneration(this.store, parseSha(parent.commit_sha));
+    if (Result.isError(parentRead)) {
+      throw parentRead.error;
+    }
+    const parentSnapshot = parentRead.value.generation;
+    const built = await buildGeneration(this.store, {
+      modules,
+      parent: parentSnapshot,
+      author: genesisAuthor,
+      createdAt,
+      summary,
+    });
+    if (Result.isError(built)) {
+      if (InvalidGenerationInputError.is(built.error)) {
+        throw new InvalidRequestError(built.error.message);
+      }
+      throw built.error;
+    }
+    const generation = built.value;
+    let row: GenerationRow | undefined;
+    this.ctx.storage.transactionSync(() => {
+      row = this.allocateGeneration(
+        generation.sha,
+        liveNumber,
+        idempotencyKey,
+        generation.createdAt,
+      );
+    });
+    if (row === undefined) {
+      throw new Error("generation allocation did not produce a row");
+    }
+    return Response.json({ generation: generationResponse(row) }, { status: 201 });
   }
 
   private async writeContext(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const key = readNonEmptyString(body.key, "key");
-      const value = body.value;
-      if (value === undefined) {
-        throw new InvalidRequestError("value must be present and JSON-compatible");
-      }
-      const encoded = JSON.stringify(value);
-      if (encoded === undefined) {
-        throw new InvalidRequestError("value must be JSON-compatible");
-      }
-      this.ctx.storage.sql.exec(
-        `INSERT OR REPLACE INTO ${CONTEXT_TABLE} (key, value, updated_at) VALUES (?, ?, ?)`,
-        key,
-        encoded,
-        Date.now(),
-      );
-      return Response.json({ key, value }, { status: 201 });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const body = await readRequestRecord(request);
+    const key = readNonEmptyString(body.key, "key");
+    const value = body.value;
+    if (value === undefined) {
+      throw new InvalidRequestError("value must be present and JSON-compatible");
     }
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) {
+      throw new InvalidRequestError("value must be JSON-compatible");
+    }
+    this.ctx.storage.sql.exec(
+      `INSERT OR REPLACE INTO ${CONTEXT_TABLE} (key, value, updated_at) VALUES (?, ?, ?)`,
+      key,
+      encoded,
+      Date.now(),
+    );
+    return Response.json({ key, value }, { status: 201 });
   }
 
   private readContext(): Response {
-    try {
-      const rows = this.ctx.storage.sql
-        .exec<ContextRow>(`SELECT key, value, updated_at FROM ${CONTEXT_TABLE} ORDER BY key`)
-        .toArray();
-      return Response.json({
-        context: rows.map((row) => ({
-          key: row.key,
-          value: parseStoredJson(row.value, `context ${row.key}`),
-          updatedAt: row.updated_at,
-        })),
-      });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const rows = this.ctx.storage.sql
+      .exec<ContextRow>(`SELECT key, value, updated_at FROM ${CONTEXT_TABLE} ORDER BY key`)
+      .toArray();
+    return Response.json({
+      context: rows.map((row) => ({
+        key: row.key,
+        value: parseStoredJson(row.value, `context ${row.key}`),
+        updatedAt: row.updated_at,
+      })),
+    });
   }
 
   private async writeCorpus(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const validationCase = parseValidationCase(body, "case");
-      const current = this.readCorpusCases();
-      const withoutCurrent = current.filter((entry) => entry.name !== validationCase.name);
-      const corpus = [...withoutCurrent, validationCase];
-      const corpusVersion = await computeCorpusVersion(corpus);
-      this.ctx.storage.transactionSync(() => {
-        this.ctx.storage.sql.exec(
-          `INSERT OR REPLACE INTO ${CORPUS_TABLE} (name, session_json, mandatory_canary) VALUES (?, ?, ?)`,
-          validationCase.name,
-          JSON.stringify(validationCase.session),
-          validationCase.mandatoryCanary ? 1 : 0,
-        );
-        this.ctx.storage.sql.exec(
-          `UPDATE ${META_TABLE} SET value = ? WHERE key = ?`,
-          corpusVersion,
-          CORPUS_VERSION_META_KEY,
-        );
-      });
-      return Response.json({ validationCase, corpusVersion }, { status: 201 });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const body = await readRequestRecord(request);
+    const validationCase = parseValidationCase(body, "case");
+    const current = this.readCorpusCases();
+    const withoutCurrent = current.filter((entry) => entry.name !== validationCase.name);
+    const corpus = [...withoutCurrent, validationCase];
+    const corpusVersion = await computeCorpusVersion(corpus);
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO ${CORPUS_TABLE} (name, session_json, mandatory_canary) VALUES (?, ?, ?)`,
+        validationCase.name,
+        JSON.stringify(validationCase.session),
+        validationCase.mandatoryCanary ? 1 : 0,
+      );
+      this.ctx.storage.sql.exec(
+        `UPDATE ${META_TABLE} SET value = ? WHERE key = ?`,
+        corpusVersion,
+        CORPUS_VERSION_META_KEY,
+      );
+    });
+    return Response.json({ validationCase, corpusVersion }, { status: 201 });
   }
 
   private readCorpus(): Response {
-    try {
-      return Response.json({
-        corpus: this.readCorpusCases(),
-        corpusVersion: this.readMetaOrThrow(CORPUS_VERSION_META_KEY),
-      });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    return Response.json({
+      corpus: this.readCorpusCases(),
+      corpusVersion: this.readMetaOrThrow(CORPUS_VERSION_META_KEY),
+    });
   }
 
   private async writeValidationResult(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const result = parseValidationResult(body.result ?? body, "result");
-      this.insertValidationResult(result);
-      return Response.json({ result }, { status: 201 });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const body = await readRequestRecord(request);
+    const result = parseValidationResult(body.result ?? body, "result");
+    this.insertValidationResult(result);
+    return Response.json({ result }, { status: 201 });
   }
 
   private readValidationResults(url: URL): Response {
-    try {
-      const candidateValue = url.searchParams.get("candidate");
-      const generationValue = url.searchParams.get("generation");
-      const verdictValue = url.searchParams.get("verdict");
-      const candidate =
-        candidateValue === null ? undefined : parseShaField(candidateValue, "candidate");
-      const generation =
-        generationValue === null
-          ? undefined
-          : parseGenerationNumberField(generationValue, "generation");
-      const verdict = verdictValue === null ? undefined : parseVerdict(verdictValue, "verdict");
-      const clauses: string[] = [];
-      const parameters: (string | number | null)[] = [];
-      if (generation !== undefined) {
-        clauses.push("generation_number = ?");
-        parameters.push(generation);
-      }
-      if (candidate !== undefined) {
-        clauses.push("candidate_sha = ?");
-        parameters.push(candidate);
-      }
-      if (verdict !== undefined) {
-        clauses.push("verdict = ?");
-        parameters.push(verdict);
-      }
-      const where = clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`;
-      const rows = this.ctx.storage.sql
-        .exec<ValidationRow>(
-          `SELECT generation_number, candidate_sha, artifact_digest, validated_against, validated_against_generation, corpus_version, gate_version, verdict, created_at, case_results_json FROM ${VALIDATION_TABLE}${where} ORDER BY created_at`,
-          ...parameters,
-        )
-        .toArray();
-      return Response.json({ results: rows.map((row) => validationResponse(row)) });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const candidateValue = url.searchParams.get("candidate");
+    const generationValue = url.searchParams.get("generation");
+    const verdictValue = url.searchParams.get("verdict");
+    const candidate =
+      candidateValue === null ? undefined : parseShaField(candidateValue, "candidate");
+    const generation =
+      generationValue === null
+        ? undefined
+        : parseGenerationNumberField(generationValue, "generation");
+    const verdict = verdictValue === null ? undefined : parseVerdict(verdictValue, "verdict");
+    const clauses: string[] = [];
+    const parameters: (string | number | null)[] = [];
+    if (generation !== undefined) {
+      clauses.push("generation_number = ?");
+      parameters.push(generation);
     }
+    if (candidate !== undefined) {
+      clauses.push("candidate_sha = ?");
+      parameters.push(candidate);
+    }
+    if (verdict !== undefined) {
+      clauses.push("verdict = ?");
+      parameters.push(verdict);
+    }
+    const where = clauses.length === 0 ? "" : ` WHERE ${clauses.join(" AND ")}`;
+    const rows = this.ctx.storage.sql
+      .exec<ValidationRow>(
+        `SELECT generation_number, candidate_sha, artifact_digest, validated_against, validated_against_generation, corpus_version, gate_version, verdict, created_at, case_results_json FROM ${VALIDATION_TABLE}${where} ORDER BY created_at`,
+        ...parameters,
+      )
+      .toArray();
+    return Response.json({ results: rows.map((row) => validationResponse(row)) });
   }
 
   private async quarantine(request: Request): Promise<Response> {
-    try {
-      const body = await readRequestRecord(request);
-      const target = parseGenerationNumberField(
-        body.target ?? body.generation ?? body.candidate,
-        "target",
-      );
-      const reason =
-        body.reason === undefined
-          ? "marked bad by supervisor"
-          : readNonEmptyString(body.reason, "reason");
-      if (this.readGenerationRow(target) === undefined) {
-        throw new MissingResourceError(`generation ${target} does not exist`);
-      }
-      this.ctx.storage.transactionSync(() => {
-        this.ctx.storage.sql.exec(
-          `INSERT OR REPLACE INTO ${QUARANTINE_TABLE} (generation_number, reason, created_at) VALUES (?, ?, ?)`,
-          target,
-          reason,
-          Date.now(),
-        );
-      });
-      return Response.json({ quarantined: target, reason }, { status: 201 });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
+    const body = await readRequestRecord(request);
+    const target = parseGenerationNumberField(
+      body.target ?? body.generation ?? body.candidate,
+      "target",
+    );
+    const reason =
+      body.reason === undefined
+        ? "marked bad by supervisor"
+        : readNonEmptyString(body.reason, "reason");
+    if (this.readGenerationRow(target) === undefined) {
+      throw new MissingResourceError(`generation ${target} does not exist`);
     }
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO ${QUARANTINE_TABLE} (generation_number, reason, created_at) VALUES (?, ?, ?)`,
+        target,
+        reason,
+        Date.now(),
+      );
+    });
+    return Response.json({ quarantined: target, reason }, { status: 201 });
   }
 
   private readQuarantine(): Response {
-    try {
-      const rows = this.ctx.storage.sql
-        .exec<QuarantineRow>(
-          `SELECT generation_number, reason, created_at FROM ${QUARANTINE_TABLE} ORDER BY created_at, generation_number`,
-        )
-        .toArray();
-      return Response.json({
-        quarantined: rows.map((row) => ({
-          generation: parseGenerationNumber(row.generation_number),
-          reason: row.reason,
-          createdAt: row.created_at,
-        })),
-      });
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
-    }
+    const rows = this.ctx.storage.sql
+      .exec<QuarantineRow>(
+        `SELECT generation_number, reason, created_at FROM ${QUARANTINE_TABLE} ORDER BY created_at, generation_number`,
+      )
+      .toArray();
+    return Response.json({
+      quarantined: rows.map((row) => ({
+        generation: parseGenerationNumber(row.generation_number),
+        reason: row.reason,
+        createdAt: row.created_at,
+      })),
+    });
   }
 
   private async turn(request: Request): Promise<Response> {
-    try {
-      const pinned = this.readPointerSql();
-      if (pinned === undefined) {
-        return Response.json(
-          { error: { kind: "conflict", message: "cannot start a turn without a live generation" } },
-          { status: 409 },
-        );
-      }
-      const row = this.readGenerationRow(pinned);
-      if (row === undefined) {
-        throw new Error(`live generation ${pinned} is missing`);
-      }
-      const loaded = await readGeneration(this.store, parseSha(row.commit_sha));
-      if (Result.isError(loaded)) {
-        throw loaded.error;
-      }
-      const source = loaded.value.modules.find((module) => module.path === "agent.js");
-      if (source === undefined) {
-        throw new Error(`generation ${pinned} has no agent.js module`);
-      }
-      const facet = this.mountFacet(new TextDecoder().decode(source.content));
-      const body =
-        request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
-      const facetRequest =
-        body === undefined
-          ? new Request("https://facet/turn", { method: "POST" })
-          : new Request("https://facet/turn", { method: "POST", body });
-      const facetResponse = await facet.fetch(facetRequest);
-      const facetText = await facetResponse.text();
+    const pinned = this.readPointerSql();
+    if (pinned === undefined) {
       return Response.json(
-        { generation: pinned, result: parseJsonOrText(facetText) },
-        {
-          status: facetResponse.status,
-        },
+        { error: { kind: "conflict", message: "cannot start a turn without a live generation" } },
+        { status: 409 },
       );
-    } catch (error: unknown) {
-      return requestErrorResponse(error instanceof Error ? error : String(error));
     }
+    const row = this.readGenerationRow(pinned);
+    if (row === undefined) {
+      throw new Error(`live generation ${pinned} is missing`);
+    }
+    const loaded = await readGeneration(this.store, parseSha(row.commit_sha));
+    if (Result.isError(loaded)) {
+      throw loaded.error;
+    }
+    const source = loaded.value.modules.find((module) => module.path === "agent.js");
+    if (source === undefined) {
+      throw new Error(`generation ${pinned} has no agent.js module`);
+    }
+    const facet = this.mountFacet(new TextDecoder().decode(source.content));
+    const body =
+      request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
+    const facetRequest =
+      body === undefined
+        ? new Request("https://facet/turn", { method: "POST" })
+        : new Request("https://facet/turn", { method: "POST", body });
+    const facetResponse = await facet.fetch(facetRequest);
+    const facetText = await facetResponse.text();
+    return Response.json(
+      { generation: pinned, result: parseJsonOrText(facetText) },
+      { status: facetResponse.status },
+    );
   }
 
   private setCandidate(mode: CandidateMode): Response {
@@ -2068,6 +2018,15 @@ function readBoolean(value: JsonValue | undefined, path: string): boolean {
   return value;
 }
 
+function decodeGenerationNumber(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new InvalidRequestError(`generation number is not valid URL encoding: ${detail}`);
+  }
+}
+
 function parseStoredJson(value: string, path: string): JsonValue {
   let parsed: unknown;
   try {
@@ -2117,81 +2076,104 @@ function validationResponse(row: ValidationRow): ValidationResult {
   };
 }
 
-class InvalidRequestError extends Error implements InvalidRequest {
-  readonly kind = "invalid-request";
+type SupervisorRequestError =
+  | InvalidRequestError
+  | MissingResourceError
+  | SafetyViolationError
+  | StorageUnavailableError
+  | StorageCapacityError
+  | ObjectTooLargeError
+  | AgentMaterializationError;
 
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidRequestError";
+function requestError(cause: unknown): SupervisorRequestError | Panic {
+  if (InvalidRequestError.is(cause)) {
+    return cause;
   }
+  if (MissingResourceError.is(cause)) {
+    return cause;
+  }
+  if (SafetyViolationError.is(cause)) {
+    return cause;
+  }
+  if (StorageUnavailableError.is(cause)) {
+    return cause;
+  }
+  if (StorageCapacityError.is(cause)) {
+    return cause;
+  }
+  if (ObjectTooLargeError.is(cause)) {
+    return cause;
+  }
+  if (MissingModuleError.is(cause)) {
+    return cause;
+  }
+  if (InvalidModuleError.is(cause)) {
+    return cause;
+  }
+  if (UnsupportedModuleError.is(cause)) {
+    return cause;
+  }
+  return new Panic({ message: "supervisor route threw an untagged error", cause });
 }
 
-class MissingResourceError extends Error {
-  readonly kind = "not-found";
-
-  constructor(message: string) {
-    super(message);
-    this.name = "MissingResourceError";
-  }
+function requestErrorResponse(error: SupervisorRequestError): Response {
+  return error.match<SupervisorRequestError, Response>({
+    StorageUnavailableError: () =>
+      Response.json(
+        { error: { kind: "storage-unavailable", message: "storage temporarily unavailable" } },
+        { status: 503 },
+      ),
+    StorageCapacityError: () =>
+      Response.json(
+        { error: { kind: "storage-capacity", message: "supervisor storage capacity exceeded" } },
+        { status: 507 },
+      ),
+    ObjectTooLargeError: (transportError) =>
+      Response.json(
+        { error: { kind: "object-too-large", message: transportError.message } },
+        { status: 413 },
+      ),
+    InvalidRequestError: (transportError) =>
+      Response.json(
+        {
+          error: {
+            kind: "invalid-request",
+            message: transportError.message,
+          } satisfies InvalidRequest,
+        },
+        { status: 400 },
+      ),
+    MissingResourceError: (transportError) =>
+      Response.json(
+        { error: { kind: "not-found", message: transportError.message } },
+        { status: 404 },
+      ),
+    SafetyViolationError: (transportError) =>
+      Response.json(
+        { error: { kind: transportError.kind, message: transportError.message } },
+        { status: 422 },
+      ),
+    MissingModuleError: (transportError) =>
+      Response.json(
+        { error: { kind: "missing-module", message: transportError.message } },
+        { status: 422 },
+      ),
+    InvalidModuleError: (transportError) =>
+      Response.json(
+        { error: { kind: "invalid-module", message: transportError.message } },
+        { status: 422 },
+      ),
+    UnsupportedModuleError: (transportError) =>
+      Response.json(
+        { error: { kind: "unsupported-module", message: transportError.message } },
+        { status: 422 },
+      ),
+  });
 }
 
-type SafetyViolationKind = "not-live" | "quarantined";
-
-class SafetyViolationError extends Error {
-  readonly kind: SafetyViolationKind;
-
-  constructor(kind: SafetyViolationKind, message: string) {
-    super(message);
-    this.name = "SafetyViolationError";
-    this.kind = kind;
-  }
-}
-
-function requestErrorResponse(error: Error | string): Response {
-  if (StorageUnavailableError.is(error)) {
-    return Response.json(
-      { error: { kind: "storage-unavailable", message: "storage temporarily unavailable" } },
-      { status: 503 },
-    );
-  }
-  if (StorageCapacityError.is(error)) {
-    return Response.json(
-      { error: { kind: "storage-capacity", message: "supervisor storage capacity exceeded" } },
-      { status: 507 },
-    );
-  }
-  if (ObjectTooLargeError.is(error)) {
-    return Response.json(
-      { error: { kind: "object-too-large", message: error.message } },
-      { status: 413 },
-    );
-  }
-  if (error instanceof InvalidRequestError) {
-    return Response.json(
-      { error: { kind: error.kind, message: error.message } satisfies InvalidRequest },
-      { status: 400 },
-    );
-  }
-  if (error instanceof MissingResourceError) {
-    return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 404 });
-  }
-  if (error instanceof SafetyViolationError) {
-    return Response.json({ error: { kind: error.kind, message: error.message } }, { status: 422 });
-  }
-  if (
-    error instanceof MissingModuleError ||
-    error instanceof InvalidModuleError ||
-    error instanceof UnsupportedModuleError
-  ) {
-    const kind = error.match({
-      MissingModuleError: () => "missing-module" as const,
-      InvalidModuleError: () => "invalid-module" as const,
-      UnsupportedModuleError: () => "unsupported-module" as const,
-    });
-    return Response.json({ error: { kind, message: error.message } }, { status: 422 });
-  }
+function internalServerErrorResponse(): Response {
   return Response.json(
-    { error: { kind: "internal", message: error instanceof Error ? error.message : error } },
+    { error: { kind: "internal", message: "internal server error" } },
     { status: 500 },
   );
 }
