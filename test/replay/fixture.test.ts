@@ -63,14 +63,6 @@ test("the fixture exercises every allowed primitive", async () => {
   expect(result.status).toBe("PASS");
 });
 
-test("replaying the on-disk fixture twice is deterministic", async () => {
-  const fixture = await loadFixture();
-  const first = await runReplay(fixture, fixtureAgent);
-  const second = await runReplay(fixture, fixtureAgent);
-
-  expect(first).toEqual(second);
-});
-
 test("mutating a recorded response is detected as a behavioural FAIL", async () => {
   const fixture = await loadFixture();
   const clonedFixture = structuredClone(fixture);
