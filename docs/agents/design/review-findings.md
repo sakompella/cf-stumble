@@ -254,5 +254,8 @@ identity-provider policy identifies humans by email, and a Service Auth policy i
 service-token ID. That buys the caller identity the bearer token cannot provide. Note that the
 `mtls_certificates` binding is outbound-only and does not authenticate inbound callers.
 
-Not yet done. Making the supervisor non-public should land before the facet gains network egress,
-since a public hostname plus a leaked token would otherwise be a self-promotion path.
+Deliberately deferred. The project is prototyping, nothing is deployed, and the facet has no egress
+(`env: {}` and `globalOutbound: null`), so today the exposure is theoretical and the fail-closed
+bearer check is proportionate. The remedy above is a config change rather than a design change, so
+it stays cheap to apply later. The trigger to apply it is a public deployment or the facet gaining
+network access, whichever comes first - not a milestone in its own right.
