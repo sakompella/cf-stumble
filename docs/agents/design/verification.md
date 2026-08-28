@@ -36,6 +36,46 @@ The project enabled a rule whenever the codebase was already clean. For a rule w
 
 This also caught a merge regression: a conflict resolution restored two violations that an enforced rule had removed. The next lint run failed.
 
+## Pruning the suite, and what mutation found in it
+
+A pass over the suite for duplicated and tautological tests removed nine and strengthened one. The
+duplicates were the dull kind: a unicode filename round-trip already inside a generated-object list,
+and several tests whose bodies matched the conformance suite running in the same file word for word.
+
+The tautological ones are the reason the pass was worth doing. A test named for a content-derived
+stable hash asserted only that `computeGateVersion` was deterministic and matched a regex, both
+trivially true of a constant, and replacing the whole function with a fixed digest left the entire
+workers suite green. It now pins the actual digest, so a policy change has to be deliberate. A
+second test claimed to prove replay determinism but compared two runs against each other, so
+replacing `runReplay` with a hardcoded FAIL still passed - twenty other tests caught that mutation,
+so this one was deleted rather than repaired.
+
+The general lesson is that a test's name is not evidence. Both of these read as coverage of exactly
+the property they failed to check, and only mutation told them apart from the real ones.
+
+Property tests get the same treatment. Truncating `walkLineage` to return only the tip fails both
+lineage properties, and breaking content addressing fails the memory property. But that memory
+mutation - hashing only the first byte, so any two blobs sharing it collide - passed on one run and
+failed on the next in 92ms, because detection depends on the generator drawing two distinct blobs
+with a common first byte from a pool of at most five. The property is sound and its detection is
+probabilistic, which is worth knowing before treating one green run as proof.
+
+## Flaky failures were the machine, not the code
+
+Several runs failed with two to seven tests down, always timeouts on the storage round-trips that
+move one and four megabytes, never a wrong answer. The tempting fixes were raising the timeouts or
+blaming contention between the two vitest projects.
+
+Both were wrong. Running the workers project alone still flaked, which killed the contention theory,
+and `uptime` then reported a load average of 36 on a ten-core machine - unrelated desktop software
+was using several cores. A five-second timeout on a one-megabyte round-trip fails easily at 3.6x
+oversubscription. Nothing in the repository was at fault, and raising the timeouts would have
+hidden a real signal about how long that operation takes.
+
+One genuine risk stays open: CI runners usually have fewer cores than a developer machine, so these
+same timeouts could flake there for the same reason. That should be judged on evidence from CI
+rather than pre-emptively patched here.
+
 ## Limits
 
 Mutation testing checks one known bug class at a time; it cannot cover bugs nobody tried to introduce. Independent implementations can agree on a blind spot. The conformance suite checks that two stores meet one interface, not that the interface covers every needed behavior. A cold clone proves reproducibility from the repository, not code correctness.
