@@ -6,7 +6,7 @@
  * bug shows up as a hash mismatch against a tool we did not write.
  */
 
-import { Result } from "better-result";
+import { Result, panic } from "better-result";
 import { InvalidShaError } from "./errors.js";
 
 declare const shaBrand: unique symbol;
@@ -102,5 +102,5 @@ export type GitObject =
   | { readonly type: "commit"; readonly commit: Commit };
 
 export function assertNever(value: never, context: string): never {
-  throw new Error(`${context}: unexpected variant ${JSON.stringify(value)}`);
+  panic(`${context}: unexpected variant ${JSON.stringify(value)}`);
 }
