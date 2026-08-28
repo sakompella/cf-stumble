@@ -321,24 +321,37 @@ slices land. `src/integration/turn.ts` is excluded entirely: it drives a superse
 
 ## 11. Migration progress and validation log
 
-| Slice                            | Status                         |
-| -------------------------------- | ------------------------------ |
-| 1 - Primitive execution failures | **Complete**                   |
-| 2 - Turn failures                | **Complete**                   |
-| 3 - Agent materialization        | **Complete**                   |
-| 5 - Git object decoding          | **Complete**                   |
-| 7 - Storage                      | **Complete**                   |
-| 4 - Untrusted JSON and replay    | **Complete**                   |
-| 6 - Generation reads and rows    | **Complete**                   |
-| 8 - Supervisor transport         | Last, and pairs with the split |
+| Slice                            | Status       |
+| -------------------------------- | ------------ |
+| 1 - Primitive execution failures | **Complete** |
+| 2 - Turn failures                | **Complete** |
+| 3 - Agent materialization        | **Complete** |
+| 5 - Git object decoding          | **Complete** |
+| 7 - Storage                      | **Complete** |
+| 4 - Untrusted JSON and replay    | **Complete** |
+| 6 - Generation reads and rows    | **Complete** |
+| 8 - Supervisor transport         | **Complete** |
 
 **Baseline before migration.** With `better-result@3.0.1` installed and no source change,
 `pnpm verify` passed and all 214 tests across 37 files ran green in the workerd pool, so the
 dependency alone regresses nothing.
 
-**Seven of eight slices are done.** Only slice 8 remains, and it should land with the supervisor
-split rather than editing that 2120-line file twice. `throw` sites in `src/` are down from 204 to
-115, against 29 `panic` calls.
+**All eight slices are done.** `throw` sites in `src/` are down from 204 to 123, and the ones that
+remain are largely deliberate: `panic` for broken invariants, plus a few throwing entry points kept
+for values this codebase built itself.
+
+Slice 8 landed **without** the structural split of `supervisor.ts`, departing from this section's
+earlier plan. The split is scheduled after the facet protocol exists, because splitting around
+interfaces that are about to change means doing it twice. Slice 8 still earned back one suppression:
+`eslint/max-classes-per-file` is gone from the file-wide `oxlint-disable`, since the error classes
+moved to `src/supervisor/errors.ts`. `max-lines`, `max-lines-per-function`, `import/max-dependencies`
+and `unicorn/no-array-sort` remain, and remain honest — the file is still 2179 lines.
+
+The leak that motivated the slice is closed: an unmatched failure becomes a `Panic` at the route
+boundary, is logged internally, and returns exactly
+`{"error":{"kind":"internal","message":"internal server error"}}`. Two tests hold that line, and
+both were checked by mutation — reinstating the leak makes the panic test fail on the message, and
+reinstating `markLoadFailed` on a storage error makes the outage test fail on the candidate state.
 
 **An independent audit of every `panic` and `.unwrap` in `src/` cleared 11 of 15 dispositions** with
 specific reasons — regex captures that cannot fail, two searches over the same immutable string, a
