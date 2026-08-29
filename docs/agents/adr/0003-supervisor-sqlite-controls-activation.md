@@ -1,3 +1,7 @@
-# Keep activation authority in supervisor SQLite
+# Let the supervisor decide generation state changes and recovery
 
-The generation registry, live pointer, activation ledger, validation records, compatibility corpus, and accumulated context belong in the supervisor Durable Object's SQLite database. Promotion changes its authority rows in one `transactionSync()` transaction with a compare-and-swap check. Git refs, Workers KV, and a workspace filesystem may hold content or caches, but none can decide what is live: they sit outside that transaction and could expose a torn state. Keeping the compatibility corpus and accumulated context outside generations also means rollback never rewinds the evidence used to judge it.
+The Supervisor Durable Object is the primary Durable Object for a cf-stumble instance. It contains the immutable recovery harness and protects the state that records generations and recovery.
+
+The user or mutable main harness may request creation, activation, or rollback and may name a specific target generation. The supervisor validates each request and alone performs or rejects the state change. Mutable code cannot write protected generation state directly, replace the recovery harness, or bypass its checks.
+
+The interface between the supervisor and a main facet, the transport for generation requests, and the detailed recovery policy remain open. Ordinary Worker `fetch` forwarding is a tested option, not part of this decision.

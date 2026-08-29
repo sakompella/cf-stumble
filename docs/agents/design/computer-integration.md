@@ -1,54 +1,37 @@
-# Computer adoption decision
+# Computer integration
 
-The facet's agent workspace uses `@cloudflare/computer@0.2.1` for its durable filesystem, ordinary Git workflow, and runtime, starting on the Worker-shell backend. ADR-0026 records the decision. The package version must stay exactly pinned; it supplies facet-owned mutable state without granting supervisor recovery authority.
+cf-stumble uses Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. ADR-0026 records the decision.
 
-This document was checked against npm and GitHub at the time of the decision. npm's `latest` tag is `0.2.1`; the `main` branch at `de87919a4fd37242e960e13b7b3ba802d1eef0a0` also declares `0.2.1`. The package remains preview software, so an upgrade needs a fresh review of its package, source, issue tracker, and Cloudflare documentation.
+## Pinned pair
 
-## Start on Worker-shell
+Both pins must change and be retested together. The source contains unreleased `@cloudflare/computer` and `@cloudflare/computerd` 0.3.0, while npm `latest` remains 0.2.1; changing only one pin could combine incompatible versions.
 
-Worker-shell is just-bash over a virtual filesystem with roughly 77 core utilities. It has no OS processes, compiler, or `npm install`. That is sufficient for the first working loop: the facet edits its own harness and submits a candidate, while Worker Loader accepts its JavaScript artifact.
+## Verified capabilities
 
-The supervisor validates the candidate by replaying it against the compatibility corpus. The facet therefore does not need a test runner to prove its work, and any self-run test result would improve candidate quality at most; it cannot become gate evidence because the candidate's self-report is not trusted. Worker-shell adds no container awake charge, image or credential surface, or cold start.
+Worker-shell handles text operations and host-forwarded Git. The container handles Node, pnpm, TypeScript compilation, tests, and project commands.
 
-## Container upgrade path
+The paired source and image ran on a paid Cloudflare account on 2026-08-29. Container commands worked after cold starts of about 2.6–2.9 seconds. Files persisted across requests and stayed isolated by workspace identity. The stock example provided Node 22.23.2, pnpm 11.24.0, Git, and FUSE. `pnpm add is-odd@3.0.1` installed and ran through network package access.
 
-Move to the container backend when the facet needs to run a compiler, install packages, or execute a real test runner in its own agent workspace. This is a judgement about the harness's needs, not a milestone. The container backend is a real Linux process environment running `computerd`; standard-2 costs about $0.129 per hour while awake, cold-starts in roughly 1–3 seconds, and carries a larger credential and image surface.
+Computer issue [#114](https://github.com/cloudflare/computer/issues/114) reports a deployed WebSocket failure in 0.2.1. The exact 0.2.1 reproduction was not deployed, so the issue is neither disproved nor known to be fixed. Repeated warm and cold requests using the pinned 0.3.0 pair did not show the failure.
 
-As checked for this decision, [#114](https://github.com/cloudflare/computer/issues/114) remains open. It reports that deployed container WebSocket upgrades never complete, so deferring a container dependency avoids relying on an unresolved deployment problem. Both backends use the Computer API, so changing backends does not change the API the facet codes against.
+## Workspace layout remains open
 
-## Authoring and loading
+The deployed test proves that Computer can provide durable, isolated files. It does not decide how cf-stumble should arrange them.
 
-The facet authors and emits plain JavaScript. Worker Loader receives JavaScript regardless of backend, and Worker-shell has no compiler. If the facet later moves to the container backend, TypeScript becomes possible and the authoring-language decision can be revisited with that backend change.
+Possible layouts include one workspace per project, a separate harness project, a shared workspace with isolated roots, or a temporary combined view when the main harness needs both project and harness source. The design should grant the model access to the projects needed for the current work without requiring every repository to share one filesystem.
 
-`loadAgent` (`src/agent/loader.ts:88`) currently passes one `agent.js` module despite Worker Loader accepting a module map and a stored generation being able to contain many modules. Supporting multi-module or vendored output needs that small code change.
+Sessions and accumulated context must survive useful generation changes, but they do not have to live beside project files. The supervisor should not own or interpret project files or accumulated context.
 
-A compiler run in the agent workspace after a backend change is a self-check that improves candidate quality; it is not evidence for the validation gate. The supervisor still runs the candidate to produce validation evidence. Faking a self-check only leaves the facet with a candidate that fails replay.
+## Harness execution remains open
 
-## The open submission boundary
+The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. The project still needs to choose whether it emits one bundle or a module map and where those outputs are stored. Computer supplies the environment in which compilation and tests can run; it does not decide the artifact format.
 
-Candidate submission remains open: we have not designed a sanctioned path that hands the supervisor immutable candidate material without giving the facet a write path into supervisor recovery records.
+Worker Loader names are cached. A production design must distinguish different executable contents so a changed harness does not silently reuse old code.
 
-The supervisor must obtain and inspect candidate bytes itself before allocating a generation, materializing it, and deciding whether it can become live. A submission capability may propose material but must not mutate the generation registry, materialization records, validation evidence, live pointer, rollback, or genesis reset. A remote or RPC transport alone does not establish immutability, authentication, or independent byte verification. Source migration waits for this boundary's design.
+## Generation requests
 
-## Egress and containment
+Normal Git commits do not create generations. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests. The exact command, transport, and authentication mechanism remain open.
 
-Computer's `git clone`, `fetch`, and `push` execute host-side. A Computer Workspace with a real Git remote can therefore reach the network even when the Worker's `globalOutbound: null` blocks ambient `fetch` and `connect`. The remote is a passed capability, and ADR-0019 requires it to be reviewed as an egress path in its own right.
+## Deployment risk
 
-This does not grant supervisor recovery authority. ADR-0019 ranks containment against the supervisor first and egress second, but a facet-to-supervisor binding must still never expose the supervisor's registry, validation evidence, live pointer, rollback, or genesis reset.
-
-## Checked issue state
-
-All six cited GitHub items remain open:
-
-- [#68](https://github.com/cloudflare/computer/issues/68), reachable garbage collection for orphaned blobs and manifests.
-- [#67](https://github.com/cloudflare/computer/issues/67), pruning acknowledged `vfs_changes` tombstones.
-- [#105](https://github.com/cloudflare/computer/issues/105), undocumented `enable_ctx_exports` required by Worker-shell.
-- [#106](https://github.com/cloudflare/computer/issues/106), missing published sqlite shell content.
-- [#112](https://github.com/cloudflare/computer/pull/112), the `Version Packages` pull request.
-- [#114](https://github.com/cloudflare/computer/issues/114), deployed container WebSocket upgrades that never complete.
-
-None of these items has closed. In particular, #112 remains an open pull request and its unreleased changes do not make `0.3.0` a published package version. #114 remains open and supports starting on Worker-shell rather than relying on deployed containers.
-
-## Current implementation boundary
-
-This decision does not migrate the existing source. The hand-written Git codec and object store remain current, tested code until the submission boundary is designed. After that, define the facet's Computer binding, implement the sanctioned submission path, give the supervisor its independent Git read path, and then retire only the code the replacement makes obsolete.
+Dynamic Workers and Durable Object facets are beta, and Computer is preview software. Paid-account tests must exercise the exact Worker Loader, facet, Computer, and workspace-capability path before the project treats the integration as deployable.

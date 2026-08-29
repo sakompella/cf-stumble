@@ -1,7 +1,5 @@
-# Model generations as materialization attempts
+# Keep generations distinct from Git commits
 
-A commit is ordinary content and ancestry. A generation is one numbered attempt to materialize that commit as a running agent. Numbers come from a never-reused counter, failed attempts keep their number, and one commit may have several generations. Materialization records one immutable outcome; the separate append-only activation ledger records repeated promotions and rollbacks. A turn pins its generation when it starts.
+A Git commit records source history. A generation records one numbered attempt to prepare a main-harness version and make it available to run. The supervisor assigns generation identities before each attempt, so failed attempts remain identifiable and numbers do not repeat. Generation 0 is the first mutable main harness, not the immutable recovery harness.
 
-## Why not numbering by commit depth
-
-The initial design made each commit a generation and used commit-DAG depth as its number, so Git held content, lineage, and generation naming. That made exploratory commits unintended materialization attempts: committing was the only way to make progress, and every commit became a generation whether anyone meant to run it or not. It also let two branches made after a rollback claim the same depth-derived number, because depth describes a position in the graph rather than a specific attempt. Generations need their own counter and record, separate from Git.
+The source of a generation may be a harness commit, but commits in any repository remain ordinary Git commits and do not create generations automatically. The checks required before a generation runs or becomes known good are separate decisions.

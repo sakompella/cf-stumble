@@ -1,3 +1,0 @@
-# Assert replay cases on observable effects, with a third outcome for harness failure
-
-A replay case passes on the agent's tool calls and resulting workspace state, never text equality with the recorded prose, which whitespace alone would break. It pins the initial workspace state, captured tool results, seeded randomness, the clock, and recorded model responses. Any unpinned variation makes the regression suite flaky, and a flaky gate gets ignored and then removed. Results are three-valued: tape exhaustion, an unexpected model request, a timeout, or a malformed response returns `INCONCLUSIVE`, not `FAIL`, so harness noise never reaches the ratchet as a candidate defect.

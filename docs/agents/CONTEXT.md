@@ -1,169 +1,78 @@
 # cf-stumble
 
-cf-stumble is a self-modifying agent harness. The agent may revise its own definition, but the supervisor decides which revisions may run. This glossary keeps authored history, materialization attempts, and live operation separate.
+cf-stumble is a personal agent whose mutable main harness is kept separate from its immutable recovery harness. This glossary names concepts that must remain distinct; implementation choices belong in design documents and ADRs.
 
-## Language
+## Harness and execution
 
-### History and identity
+**Main harness**:
+The mutable agent harness that performs the user's work. A generation supplies one version of it.
+_Avoid_: supervisor, recovery harness
 
-**Commit**:
-An ordinary Git revision in authored history. A commit does not show that anything ran.
-_Avoid_: generation, release, deployment
+**Recovery harness**:
+The immutable agent code that diagnoses failures and restores a usable main harness. It runs in the Supervisor Durable Object but is not itself a generation.
+_Avoid_: Generation 0, main harness
 
-**Authored history**:
-The Git commit DAG for an agent definition and its ancestry. It does not record which generations were live.
-_Avoid_: generation history, activation history
+**Supervisor Durable Object**:
+The primary Durable Object for a cf-stumble instance. It contains the recovery harness, manages main-harness facets, protects generation state, and decides whether requested generation changes may occur. It is not a facet.
+_Avoid_: main facet, workspace
 
-**Working tree**:
-A mutable checkout used to assemble a commit. It is scratch space, not an immutable revision or generation.
-_Avoid_: generation, snapshot
+**Main facet**:
+A Dynamic Worker facet that runs one generation of the main harness.
+_Avoid_: supervisor, recovery harness
 
 **Generation**:
-One attempted facet materialization for a commit, identified by a number that never repeats. Like a NixOS generation, it is a numbered attempt, but it is an agent attempt rather than an operating-system boot entry.
-_Avoid_: commit, snapshot, version, revision
+One numbered attempt to prepare a version of the main harness and make it available to run. Its identity is distinct from any Git commit used as its source.
+_Avoid_: commit, revision, version
 
-**Generation registry**:
-The authoritative catalogue of generations and their materialization records. Tags name Git revisions; the registry identifies attempts.
-_Avoid_: tags, generation refs, generation list
+**Generation 0**:
+The first mutable main-harness generation, initially based closely on Pi. It is neither the recovery harness nor a special recovery target.
 
-**Generation 0 (genesis)**:
-The known-good initial generation and guaranteed recovery target. It is a recovery point, not a branch or a boot entry.
-_Avoid_: root commit, default branch, initial commit
+**Active generation**:
+The generation currently selected and running as the main harness.
 
-**Candidate**:
-A generation under consideration for activation. This is a role before first promotion, not a different content type.
-_Avoid_: draft, proposed commit, untrusted commit
+**Last active generation**:
+The generation that most recently ran as the main harness when no generation is currently active.
 
-**Baseline**:
-The live generation used to evaluate a candidate. It records the operational starting point, not the candidate's commit parent.
-_Avoid_: parent, predecessor, previous commit
+**Known-good generation**:
+A generation for which the supervisor has enough evidence to consider it a safe recovery target. The required evidence and threshold remain open.
 
-**Artifact**:
-The concrete agent definition loaded for one materialization attempt. It records what ran, rather than only the selected commit.
-_Avoid_: commit, source, build output
+**Probation**:
+A period in which a generation may run but has not yet gathered enough evidence to become known good.
 
-### Attempts and activation
+**Real turn**:
+A user interaction that may contribute evidence about a generation. A successful HTTP status alone does not prove that a streamed interaction completed.
 
-**Materialization**:
-The result of trying to turn a commit into a running facet. It records what was tried and whether it became usable; it does not say that the generation was live.
-_Avoid_: activation, deployment, promotion
+**Recovery report**:
+The supervisor's durable record of a recovery attempt, its error, and its result.
 
-**Activation**:
-An event that makes one generation live. A generation can be activated more than once, so activation differs from its one materialization attempt.
-_Avoid_: materialization, generation status, deployment
+## Repositories and files
 
-**Activation ledger**:
-The ordered record of activation events. The registry answers what was attempted; the ledger answers when it was live.
-_Avoid_: generation history, status history, changelog
+**Commit**:
+An ordinary Git commit in any repository. A commit does not create or activate a generation by itself.
+_Avoid_: generation
 
-**Live pointer**:
-The generation number of the current activation. It names a materialization attempt, not only a commit.
-_Avoid_: live branch, current commit, active ref
+**Harness repository**:
+A Git repository containing main-harness source. It is logically separate from repositories used for the user's other work.
 
-**Promotion**:
-An activation that makes a validated candidate live. It decides the fate of a generation; it is not a Git operation.
-_Avoid_: merge, deploy, publish
+**Project repository**:
+A Git repository used for a piece of user work. GitHub is the first planned remote integration, not part of the definition.
 
-**Rollback**:
-An activation that returns to a generation that was live before. It does not rewrite authored history or erase later activations.
-_Avoid_: undo, revert, reset
-
-**Reset**:
-The recovery activation that returns directly to genesis. It remains available when ordinary recovery rules deny every other target.
-_Avoid_: rollback, revert, restart
-
-**Quarantine**:
-A restriction on ordinary reactivation of one generation. It marks a bad attempt, not a commit that must fail in every context.
-_Avoid_: blacklist, ban, rejected commit
-
-**Attestation**:
-The supervisor's validation evidence for a candidate, baseline, artifact, and evaluation context. It is evidence for that exact situation, not caller-supplied approval.
-_Avoid_: approval token, validation token, certificate
-
-### The agent boundary
-
-**Supervisor**:
-The trusted authority outside the agent definition that controls generations and activation. It is not agent-authored code and cannot become a candidate.
-_Avoid_: agent, facet, controller
-
-**Facet**:
-The isolated compartment where one generation's agent code runs. It is the subject of materialization, not that materialization's record.
-_Avoid_: generation, sandbox, worker
-
-**Facet capability**:
-Authority available to the active harness for ordinary work, including its tool registry, runtime, and workspace. It may evolve with the agent definition, but it never grants direct access to supervisor recovery state.
-_Avoid_: supervisor access, recovery authority
-
-**Agent workspace**:
-The facet-owned mutable environment for tasks and harness development. A Computer Workspace may back it, but it is ordinary agent state rather than supervisor recovery state.
-_Avoid_: supervisor workspace, recovery store
-
-**Computer Workspace**:
-The workspace API supplied by `@cloudflare/computer`, which may implement an agent workspace. Use this name when referring to that API rather than the domain concept.
-_Avoid_: workspace (when the platform API is meant)
-
-**Worker-shell backend**:
-The `@cloudflare/computer` backend that runs just-bash over a virtual filesystem. It has shell syntax and core utilities but no OS processes, compiler, or package installation.
-_Avoid_: container backend, Linux runtime
-
-**Container backend**:
-The `@cloudflare/computer` backend that runs `computerd` in a Linux process environment. It can compile and run project tooling, at the cost of awake time, cold starts, and a larger credential and image surface.
-_Avoid_: Worker-shell backend
-
-**Four primitives**:
-The tool registry generation 0 ships with: `read`, `write`, `edit`, and `bash`. They are the bootstrap tool registry, not a permanent ceiling on what a later agent definition is allowed to grow into, because the facet's harness is meant to evolve. They are one part of the harness, not the whole of it: the harness also covers the model loop, prompts, policies, runtime, and workspace.
-_Avoid_: fixed action space, permanent capabilities, bootstrap harness
-
-**Agent definition**:
-The versioned material that describes agent behavior: model loop, tool registry, prompt, policy, skills, and agent-authored modules. It excludes the supervisor and accumulated context.
-_Avoid_: agent state, supervisor configuration, runtime state
-
-**Prompt, policy, and skills**:
-Parts of an agent definition. The prompt directs the model, policy states constraints, and skills give reusable task guidance. They can change with the model loop, tool registry, and other harness modules.
-_Avoid_: runtime state, accumulated context
+**Computer workspace**:
+A durable filesystem provided by `@cloudflare/computer`. A cf-stumble instance may use one or several Computer workspaces; the mapping between workspaces, projects, harness source, sessions, and accumulated context remains open.
 
 **Accumulated context**:
-Knowledge and history that survive across generations without joining the agent definition. Rollback does not rewind it.
-_Avoid_: generation state, commit state, snapshot state
+Session history and other useful context that can survive a change of main-harness generation. Its storage layout remains open.
 
-### Evaluation and execution
+**Worker-shell**:
+Computer's text-oriented execution backend, including host-forwarded Git.
 
-**Turn**:
-One interaction with the agent, from input to result. A turn is operational work, not a commit or a materialization attempt.
-_Avoid_: session, generation, task
+**Container backend**:
+Computer's Linux process backend for Node, package managers, builds, tests, and project commands.
 
-**Turn pinning**:
-The rule that each turn uses the generation live when it started until it finishes. An activation during the turn cannot change its behavior.
-_Avoid_: live reload, mid-turn migration
+## Generation requests
 
-**Executor**:
-The part of an agent definition that turns model responses into tool calls and effects. The validation gate evaluates the candidate executor, so it checks the behavior that would run.
-_Avoid_: model, facet, individual tool
+**Generation candidate submission**:
+A request for the supervisor to create and check a generation from a particular main-harness revision. Submission does not guarantee activation.
 
-**Replay session**:
-A recorded interaction that reproduces a sequence of model responses, primitive calls, and observable effects. It checks compatibility, not whether a prompt is better.
-_Avoid_: benchmark, quality trial, live trial
-
-**Compatibility corpus**:
-The replay sessions used to check that a candidate preserves established executor behavior. It does not measure agent quality in general.
-_Avoid_: quality benchmark, validation corpus, training set
-
-**Validation gate**:
-The process that evaluates a candidate before promotion. It preserves a compatibility floor; it does not claim that the candidate improved the agent.
-_Avoid_: quality gate, evaluator, promotion
-
-**Ratchet**:
-The gate rule that a candidate must not turn a baseline success into a failure. It retains known behavior without classifying existing failures as regressions.
-_Avoid_: score, quality metric, benchmark
-
-**Canary**:
-A compatibility case that must pass independently and whose identity is protected outside the corpus. It is a required floor check, not a representative sample.
-_Avoid_: optional test, sample case, corpus entry
-
-**Preflight**:
-The cheap viability check before the compatibility gate. It confirms the candidate loads, meets its runtime contract, and can propose a successor through a sanctioned path.
-_Avoid_: validation gate, quality evaluation
-
-**Inconclusive**:
-An evaluation outcome where the system cannot determine pass or fail. It describes insufficient or invalid evidence, not a regression.
-_Avoid_: failure, pass, ignored result
+**Generation activation request**:
+A request to make a specific existing generation active. The requester may name the target, but the supervisor checks and performs or rejects the change.

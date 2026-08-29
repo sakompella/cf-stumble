@@ -1,7 +1,5 @@
-# Let the facet own the harness it runs, and contain only the supervisor's recovery authority
+# Let the main facet own the mutable harness
 
-The facet is the mutable active agent. A generation may change its model loop, tools, prompts, policies, modules, runtime, and work environment. `read`, `write`, `edit`, and `bash` are the bootstrap tool registry, not a permanent ceiling on what a later agent definition is allowed to grow into. A broad facet-owned workspace, native runtime, or redesigned tool set is not itself a containment breach. The boundary prevents the facet from reaching supervisor recovery authority: the generation registry, materialization records, validation evidence, live pointer, rollback, and genesis recovery. The facet can reach those only through sanctioned requests that the supervisor validates and executes. Tool count does not measure capability breadth; whether it compromises independent recovery does.
+A main-facet generation may replace all main-harness code, including its model loop, prompts, tools, policies, runtime, and use of files. The recovery harness stays immutable and outside every generation.
 
-## Consequences
-
-The bootstrap tool registry and current shell are implementation choices that later generations may replace. Changes to sanctioned supervisor paths, including candidate submission, promotion, rollback, attestation, and the transaction boundary in ADR-0003, require separate review because those paths form the containment boundary.
+The mutable harness may submit a generation candidate or request activation or rollback of a specific generation. The supervisor checks and performs those requests; the facet cannot alter protected generation state or recovery code directly.

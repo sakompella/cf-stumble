@@ -1,63 +1,49 @@
 # Domain docs
 
-Use this file to find and apply the repository's domain documentation. This is a single-context repository: it has one glossary at `docs/agents/CONTEXT.md` and one ADR directory at `docs/agents/adr/`.
+Use this file to find the repository's agent-authored domain documentation. cf-stumble has one context: the glossary is `docs/agents/CONTEXT.md`, and current architecture decisions live in `docs/agents/adr/`.
 
 ## Before exploring
 
-1. Read `docs/agents/CONTEXT.md` in full. It defines the terms used in this project.
-2. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change. The index groups decisions by owner.
+1. Read `docs/agents/design/overview.md` for the product and its authority boundaries.
+2. Read `docs/agents/CONTEXT.md` in full for the project's terms.
+3. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change.
+4. Read `docs/agents/design/slices.md` for planned work and `docs/agents/design/computer-integration.md` for the pinned Computer integration.
 
-When the glossary or ADRs lack a resolved term or decision, use `/domain-modeling` through `/grill-with-docs` or `/improve-codebase-architecture` after the issue is resolved.
+The ignored files `docs/agents/_original-vision-audit.md` and `docs/agents/_cloudflare-viability.md` are evidence notes. They provide historical and platform research, not current decisions.
 
-## Read the design docs too
+## Records and decisions
 
-Everything in `docs/agents/` is agent-authored. `docs/` outside it is for human-authored documentation and is empty. Put new agent-authored documentation here.
+Everything in `docs/agents/` is agent-authored. `docs/` outside that directory is for human-written documentation.
 
-`adr/` records current decisions. `design/` records the reasoning and findings behind them. Loose files in this directory configure skills.
+- `adr/` records current durable decisions.
+- `design/overview.md` describes the product, its two harnesses, the workspace, and the self-improvement loop.
+- `design/slices.md` is the current implementation plan.
+- `design/computer-integration.md` records the verified Computer pair and backend roles.
 
-- `docs/agents/design/generations.md` defines the generation data model. A commit is an ordinary commit; a generation is one attempted facet materialization. Materialization is immutable and activation uses an append-only ledger.
-- `docs/agents/design/design-history.md` records what changed the project's mind and what it cost. Read corrections as well as conclusions.
-- `docs/agents/design/review-findings.md` records what a green suite does _not_ prove. Read it before relying on a guarantee.
-- `docs/agents/design/prior-art.md` compares existing systems and records the lessons used here.
-- `docs/agents/design/slices.md` is the work plan. Each slice has a command that exits 0 or non-zero.
-
-The old `docs/decisions.md` was consolidated into `docs/agents/adr/`, which is the only decision register. Add a resolved decision there and put its reasoning in `docs/agents/design/design-history.md`. New ADRs also need an entry in `docs/agents/adr/README.md`; `test/docs/adr-index.test.ts` checks the index.
+Add an ADR only when a decision will be expensive to reverse, has a meaningful alternative, and would surprise a future reader. Add every surviving ADR to `docs/agents/adr/README.md`; `test/docs/adr-index.test.ts` checks the index. Delete ADRs that no longer apply instead of preserving obsolete architecture as current guidance.
 
 ## File structure
 
 ```
 /
-├── docs/                              ← hand-written human docs only
-│   └── agents/                        ← everything agent-generated
-│       ├── CONTEXT.md                 ← the glossary
-│       ├── adr/                       ← resolved positions
-│       │   ├── README.md             ← the ADR index
-│       │   ├── 0001-....md
+├── docs/
+│   └── agents/
+│       ├── CONTEXT.md
+│       ├── adr/
+│       │   ├── README.md
 │       │   └── 0002-....md
-│       ├── design/                    ← reasoning and findings
-│       │   ├── design-history.md
-│       │   ├── generations.md
-│       │   └── ...
-│       ├── domain.md                 ← skill config; this file
-│       ├── issue-tracker.md
-│       └── triage-labels.md
+│       ├── design/
+│       │   ├── overview.md
+│       │   ├── computer-integration.md
+│       │   └── slices.md
+│       └── domain.md
 └── src/
 ```
 
-The `/domain-modeling` skill normally looks for `CONTEXT.md` at the repository root and ADRs in `docs/adr/`. This repository puts them in `docs/agents/CONTEXT.md` and `docs/agents/adr/`, so that all agent-authored documentation stays together. Use the paths in this file, not the skill defaults.
-
-A root `CONTEXT-MAP.md` would indicate a multi-context repository with per-context glossaries. This repository has none and is not a monorepo. `pnpm-workspace.yaml` only approves build scripts for esbuild and workerd; it does not define workspace packages.
+The domain-modeling skill normally expects `CONTEXT.md` at the repository root and ADRs in `docs/adr/`. This repository keeps both under `docs/agents/`, so use the paths in this file.
 
 ## Use the glossary
 
-Use terms from `docs/agents/CONTEXT.md` whenever you name a domain concept in an issue title, refactor proposal, hypothesis, or test name. Do not substitute words listed under `_Avoid_:`.
+Use terms from `docs/agents/CONTEXT.md` when naming project concepts in an issue, plan, or test. If a needed term is missing, reconsider the wording first and add it only when the project needs the distinction.
 
-A missing concept means either the project does not use that language or the glossary needs a new term. Reconsider the wording first; record a real gap for `/domain-modeling`.
-
-The distinction between a generation and a commit, for example, affects the data model. A registry identifies attempts; Git tags name revisions. This vocabulary prevents those concepts from collapsing into one another.
-
-## Flag ADR conflicts
-
-State an ADR conflict instead of silently overriding it:
-
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+When an existing ADR conflicts with a proposed change, state the conflict and either preserve the ADR or replace it. Do not let a design document silently override a current decision.
