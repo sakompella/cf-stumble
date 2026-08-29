@@ -225,9 +225,8 @@ function decodeTreeName(bytes: Uint8Array): Result<string, GitObjectDecodeError>
  * Why a tree entry name is unusable, or `undefined` when it is fine.
  *
  * This is narrower than git's own `verify_path`, which also refuses `.`, `..`, `.git` and its
- * NTFS/HFS aliases — a known open bug pinned by `test/git/oracle.props.test.ts` and recorded in
- * `docs/agents/design/review-findings.md`. Widening it changes which trees encode, so it is a
- * behavioural fix and belongs in its own change, not in this one.
+ * NTFS/HFS aliases. `test/git/oracle.props.test.ts` pins that known gap. Widening this check
+ * changes which trees encode, so it needs its own behavioural change.
  */
 function treeNameRejection(bytes: Uint8Array): "empty" | "reserved-byte" | undefined {
   if (bytes.byteLength === 0) {
