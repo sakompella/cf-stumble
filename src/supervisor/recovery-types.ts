@@ -165,8 +165,7 @@ type WithId<T> = T extends unknown ? T & { readonly id: RecoveryEpisodeId } : ne
 export type RecoveryEpisode = WithId<RecoveryEpisodeDetails>;
 export type RecoveryEpisodeDraft = RecoveryEpisodeDetails;
 
-export type StructuredCloneObject = object;
-export type RecoveryOperationErrorInput = string | StructuredCloneObject;
+export type RecoveryOperationErrorInput = string;
 
 export type RecoveryOperationOutcomeInput =
   | { readonly kind: "repair-succeeded"; readonly repairedHarnessCommit: string }

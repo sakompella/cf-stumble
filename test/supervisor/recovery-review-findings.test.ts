@@ -133,16 +133,21 @@ test("rejects the retained fallback as a verified repair candidate", async () =>
 test("rejects a structured-clone object error without changing its persisted episode", async () => {
   const { control, episode } = await episodeWithFallback("recovery-rejects-object-error");
   const opened = await openRepair(control, episode);
-  const report = await control.reportRecoveryOperation(
-    episode.id,
-    repairKey(opened),
-    { kind: "repair-failed", error: { reason: "structured clone carries this object" } },
-    episode.startedAt + 1,
-  );
+  try {
+    throw structuredClone(new Error("structured clone carries this object"));
+  } catch (objectError) {
+    const report = await control.reportRecoveryOperation(
+      episode.id,
+      repairKey(opened),
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: JavaScript/RPC callers can violate TypeScript, and this assertion exists solely to exercise runtime parsing.
+      { kind: "repair-failed", error: objectError as string },
+      episode.startedAt + 1,
+    );
 
-  expect(report).toEqual({ applied: false, episode: opened });
-  await evictDurableObject(control);
-  expect(await control.getRecoveryEpisode(episode.id)).toEqual(opened);
+    expect(report).toEqual({ applied: false, episode: opened });
+    await evictDurableObject(control);
+    expect(await control.getRecoveryEpisode(episode.id)).toEqual(opened);
+  }
 });
 
 test("rejects an ill-formed Unicode operation error without changing its persisted episode", async () => {
