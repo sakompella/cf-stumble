@@ -32,8 +32,13 @@ export type RelayAttempt =
       readonly finishedAt: number;
     })
   | (RelayAttemptBase & {
-      readonly outcome: "body-completed" | "body-failed" | "relay-cancelled";
+      readonly outcome: "body-completed" | "body-failed";
       readonly responseStatus: number;
+      readonly finishedAt: number;
+    })
+  | (RelayAttemptBase & {
+      readonly outcome: "relay-cancelled";
+      readonly responseStatus: number | undefined;
       readonly finishedAt: number;
     })
   | (RelayAttemptBase & {
@@ -93,11 +98,11 @@ export function attemptFromRow(row: AttemptRow): RelayAttempt {
       break;
     case "body-completed":
     case "body-failed":
-    case "relay-cancelled":
       if (status !== undefined && finishedAt !== undefined) {
         return { ...base, outcome: row.outcome, responseStatus: status, finishedAt };
       }
       break;
+    case "relay-cancelled":
     case "bounded-abandonment":
       if (finishedAt !== undefined) {
         return { ...base, outcome: row.outcome, responseStatus: status, finishedAt };

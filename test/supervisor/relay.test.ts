@@ -1,9 +1,10 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { env } from "cloudflare:workers";
-import { reset } from "cloudflare:test";
+import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
+import { RelayFacts } from "../../src/supervisor/relay-facts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
@@ -110,6 +111,33 @@ test("leaves a local caller cancellation pending until a bounded sweep", async (
 
   expect(await control.getRelayAttempts()).toMatchObject([
     { outcome: "pending", responseStatus: 200 },
+  ]);
+  expect(
+    await control.getGenerationEligibility(0, {
+      minimumCreditedTurns: 1,
+      minimumObservationSpanMs: 0,
+    }),
+  ).toMatchObject({ kind: "ineligible", reason: "insufficient-credited-turns" });
+});
+
+test("reloads a pre-header cancellation as neutral relay evidence", async () => {
+  const control = await activeSupervisor("relay-pre-header-cancellation-reloads");
+
+  await runInDurableObject(control, (instance, state) => {
+    const active = instance.getActiveGeneration();
+    const preparationCheck = instance.getPreparationCheckHistory(0).at(-1);
+    if (active.generation === undefined || preparationCheck === undefined) {
+      throw new Error("an active generation needs a preparation check");
+    }
+
+    const facts = new RelayFacts(state.storage);
+    const attempt = facts.start(active, preparationCheck.id, 1_000, 100);
+    facts.settle(attempt.id, "relay-cancelled", 1_001);
+  });
+  await evictDurableObject(control);
+
+  expect(await control.getRelayAttempts()).toMatchObject([
+    { outcome: "relay-cancelled", responseStatus: undefined },
   ]);
   expect(
     await control.getGenerationEligibility(0, {
