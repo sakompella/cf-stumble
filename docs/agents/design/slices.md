@@ -6,7 +6,7 @@ Start with local workerd tests, then use the paid account for behavior that loca
 
 ## First vertical path
 
-1. **Test the supervisor boundary.** Run the primary Supervisor Durable Object with a Worker Loader and one Dynamic Worker facet built from a small executable fixture. Test ordinary `fetch` forwarding because local prototypes show that it works, while keeping the supervisor-to-facet interface replaceable until the project chooses it.
+1. **Test the supervisor boundary.** Run the primary Supervisor Durable Object with a Worker Loader and one Dynamic Worker facet built from a small executable fixture. Materialize the fixture as emitted executable bytes, verify its artifact digest, and derive the per-generation mount key as ADR-0027 requires. Test ordinary `fetch` forwarding because local prototypes show that it works, while keeping the supervisor-to-facet interface replaceable until the project chooses it.
 
 2. **Test startup.** Load the first mutable Pi-fork generation, force a cold start, and run an ordinary interaction through the proposed boundary. Record what demonstrates that the generation is ready rather than turning the check into a permanent custom facet protocol.
 
@@ -39,7 +39,7 @@ The vertical path is complete when a paid deployment proves all of the following
 - The model egress or gateway choice.
 - HTTP, SSE, or WebSocket for the UI transport.
 - Repair count and operation timeouts.
-- How executable Worker modules are produced, identified, and retained.
+- How executable Worker modules are produced, stored, and retained. ADR-0027 settles the distinction between reusable artifact identity and generation mount identity, not the module encoding or retention policy.
 
 Do not settle these by implication in an implementation. The paid-account spike should produce evidence for each choice, and the resulting decision should be recorded before the dependent path grows.
 

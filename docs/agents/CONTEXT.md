@@ -27,6 +27,14 @@ _Avoid_: commit, revision, version
 **Generation 0**:
 The first mutable main-harness generation, initially based closely on Pi. It is neither the recovery harness nor a special recovery target.
 
+**Artifact digest**:
+A content address for emitted main-harness executable bytes and the metadata required to interpret them. It may be reused by more than one generation.
+_Avoid_: generation, mount key
+
+**Mount key**:
+An identity the Supervisor Durable Object derives from its own identity, a generation, and an artifact digest when it mounts a main facet. It is distinct even when two generations reuse the same artifact.
+_Avoid_: artifact digest, generation
+
 **Active generation**:
 The generation currently selected and running as the main harness.
 
