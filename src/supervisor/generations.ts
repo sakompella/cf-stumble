@@ -1,6 +1,8 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { HarnessCommitId } from "../harness-commit.js";
+import { PreparationChecks } from "./preparation-checks.js";
+import type { PreparationCheck } from "./preparation-checks.js";
 import type {
   ActivationResult,
   ActiveGeneration,
@@ -35,10 +37,12 @@ type StateRow = {
 export class Generations {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
+  private readonly preparationChecks: PreparationChecks;
 
   constructor(storage: DurableObjectStorage, fixtureHarnessCommit: string) {
     this.storage = storage;
     this.sql = storage.sql;
+    this.preparationChecks = new PreparationChecks(storage);
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS generations (
         label INTEGER PRIMARY KEY CHECK (label >= 0),
@@ -118,18 +122,22 @@ export class Generations {
       const status = outcome === "passed" ? "ready" : "failed";
 
       if (generation.status !== "candidate") {
-        return generation.status === status
-          ? { ok: true, generation, epoch: this.state().epoch, effect: "no-op" }
-          : {
-              ok: false,
-              problem: {
-                code: "contradicts-recorded-outcome",
-                label,
-                recorded: generation.status,
-              },
-            };
+        if (generation.status !== status) {
+          return {
+            ok: false,
+            problem: {
+              code: "contradicts-recorded-outcome",
+              label,
+              recorded: generation.status,
+            },
+          };
+        }
+
+        this.preparationChecks.record(label, outcome);
+        return { ok: true, generation, epoch: this.state().epoch, effect: "no-op" };
       }
 
+      this.preparationChecks.record(label, outcome);
       this.sql.exec("UPDATE generations SET status = ? WHERE label = ?", status, label);
       const epoch = this.incrementEpoch();
 
@@ -200,6 +208,14 @@ export class Generations {
       )
       .toArray()
       .map((row) => generationFromRow(row));
+  }
+
+  latestPreparationCheck(label: number): PreparationCheck | undefined {
+    return isGenerationLabel(label) ? this.preparationChecks.latestPass(label) : undefined;
+  }
+
+  preparationCheckHistory(label: number): readonly PreparationCheck[] {
+    return isGenerationLabel(label) ? this.preparationChecks.all(label) : [];
   }
 
   hasBeenActive(label: number): boolean {

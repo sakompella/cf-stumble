@@ -17,6 +17,7 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0028](0028-harness-artifacts-are-module-maps.md)**: a generation's executable form is a module map, and a bundle is a one-module map.
 - **[ADR-0029](0029-startup-check-is-an-ordinary-request.md)**: a generation's startup check is one bounded ordinary request, not a health protocol.
 - **[ADR-0030](0030-generation-requests-are-journaled-and-epoch-bound.md)**: generation requests are epoch-checked and journaled by request ID.
+- **[ADR-0031](0031-relay-facts-decide-known-good.md)**: the supervisor records raw relay facts and derives known-good eligibility from them.
 
 ## Adding a decision
 

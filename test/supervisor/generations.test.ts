@@ -82,6 +82,12 @@ test("keeps the first preparation outcome and refuses a later contradicting one"
     },
   });
   expect(await control.getGeneration(labeled.generation.label)).toEqual(recorded.generation);
+  const history = await control.getPreparationCheckHistory(labeled.generation.label);
+
+  expect(
+    history.map((check) => check.outcome),
+    "a refused check is not evidence and must leave no record behind",
+  ).toEqual(["passed", "passed"]);
 });
 
 test("refuses to label a value that is not a harness commit", async () => {
