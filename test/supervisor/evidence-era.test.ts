@@ -18,6 +18,36 @@ afterEach(async () => {
   await reset();
 });
 
+test("discards credited turns when a redundant preparation check starts a new era", async () => {
+  const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era-recheck");
+  const prepared = await control.recordPreparationCheck(0, "passed");
+  const activated = await control.activateGeneration(0);
+  if (!prepared.ok || !activated.ok) {
+    throw new Error("Generation 0 must become active before it can earn evidence");
+  }
+
+  await completedTurn(control);
+  const strictPolicy = { minimumCreditedTurns: 1, minimumObservationSpanMs: 0 };
+  expect(await control.getGenerationEligibility(0, strictPolicy)).toMatchObject({
+    kind: "eligible",
+    creditedTurns: 1,
+  });
+
+  const rechecked = await control.recordPreparationCheck(0, "passed");
+  if (!rechecked.ok) {
+    throw new Error("a repeated passing check must be accepted");
+  }
+
+  expect(
+    rechecked.effect,
+    "the store reports no effect even though the check resets the evidence era",
+  ).toBe("no-op");
+  expect(
+    await control.getGenerationEligibility(0, strictPolicy),
+    "clearing a failure observation and discarding good evidence are the same act today",
+  ).toMatchObject({ kind: "ineligible", creditedTurns: 0 });
+});
+
 test("keeps a generation's credited turns when unrelated protected state changes", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era");
   const prepared = await control.recordPreparationCheck(0, "passed");

@@ -10,4 +10,12 @@ Whether a generation is known good is derived at read time from those facts, nev
 
 Qualification requires both a count of credited turns and a span of time between the first and the qualifying one, so a burst of quick requests does not qualify a generation that has never survived being used. The numbers are placeholders. `overview.md` says the threshold is unsettled and that twenty successful turns was illustrative, so the policy is a value passed in, and choosing it is a product decision this ADR does not make.
 
-Two limits worth stating. Nothing local proves a client disconnect reaches the Supervisor: an aborted request left the attempt pending until it was swept, which matches what a paid probe saw earlier. And the bound on an unresolved attempt is applied by an explicit sweep rather than a Durable Object alarm, because alarm survival across hibernation needs paid-runtime evidence this project does not have.
+Four limits, and the first one bounds how much any of this evidence is currently worth.
+
+The facts are attributed to the generation the Supervisor records as active, but the Supervisor still serves every request from the one fixture artifact it mounts at construction, because wiring traffic to the active generation needs artifact bytes retained across a restart and that storage is still open. So a generation can accumulate credited turns, qualify, and be chosen as a recovery fallback on the strength of bytes some other code produced. Until activation moves traffic, treat eligibility as a tested mechanism rather than as a statement about a generation.
+
+A body that completes early is only detected when the response declared a `content-length`. A streamed response does not, so a facet that closes its stream half way through a turn is recorded as a completed body. That is the case a coding agent's turns actually live in, and catching it needs something the response itself carries, which is a protocol question this decision does not answer.
+
+Nothing local proves a client disconnect reaches the Supervisor: an aborted request left the attempt pending until it was swept, which matches what a paid probe saw earlier.
+
+The bound on an unresolved attempt is applied by an explicit sweep rather than a Durable Object alarm, because alarm survival across hibernation needs paid-runtime evidence this project does not have. Nothing in production calls that sweep yet; only tests do.
