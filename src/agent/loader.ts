@@ -1,16 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
-class HarnessCommitId {
-  readonly value: string;
-
-  private constructor(value: string) {
-    this.value = value;
-  }
-
-  static parse(value: string): HarnessCommitId | undefined {
-    return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u.test(value) ? new HarnessCommitId(value) : undefined;
-  }
-}
+import { HarnessCommitId } from "../harness-commit.js";
 
 type HarnessModule = {
   readonly name: string;
@@ -159,8 +149,10 @@ export type MainFacetLoadResult =
       readonly problem: MainHarnessArtifactProblem;
     };
 
+export const fixtureMainHarnessCommit = "f53a0e1c1bdbe213ab700a84b1db23615cc24b00";
+
 const fixtureMainFacetArtifact: MainHarnessArtifactInput = {
-  harnessCommit: "f53a0e1c1bdbe213ab700a84b1db23615cc24b00",
+  harnessCommit: fixtureMainHarnessCommit,
   entryModule: "main-facet.js",
   modules: [
     {
@@ -170,9 +162,18 @@ import { DurableObject } from "cloudflare:workers";
 import { pingResponse } from "./ping.js";
 
 export class MainFacet extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.bindingNames = Object.keys(env).sort();
+  }
+
   fetch(request) {
     if (new URL(request.url).pathname === "/facet/ping") {
       return pingResponse();
+    }
+
+    if (new URL(request.url).pathname === "/facet/bindings") {
+      return Response.json(this.bindingNames);
     }
 
     return new Response("Not found", { status: 404 });

@@ -1,8 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
-declare namespace Cloudflare {
-  interface Env {
-    readonly LOADER: WorkerLoader;
-    readonly SUPERVISOR: DurableObjectNamespace;
+import type { Supervisor } from "./supervisor.js";
+
+declare global {
+  namespace Cloudflare {
+    interface Env {
+      readonly LOADER: WorkerLoader;
+      readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
+    }
   }
 }

@@ -20,3 +20,12 @@ test("forwards an ordinary request to the main facet", async () => {
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("pong");
 });
+
+test("runs the main facet without Supervisor bindings", async () => {
+  const response = await supervisorRequest("/facet/bindings");
+
+  expect(response.status).toBe(200);
+  expect(await response.json(), "the running facet must receive no environment bindings").toEqual(
+    [],
+  );
+});
