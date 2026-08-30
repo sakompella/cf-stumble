@@ -71,11 +71,11 @@ export class GenerationControl {
 
   private decide(request: GenerationRequest): GenerationControlResult {
     const active = this.generations.active();
-    if (
-      request.principal.kind === "harness" &&
-      parseGenerationLabel(request.principal.generationLabel) !== active.generation?.label
-    ) {
-      return rejected("revoked-capability");
+    if (request.principal.kind === "harness") {
+      const generationLabel = parseGenerationLabel(request.principal.generationLabel);
+      if (generationLabel === undefined || generationLabel !== active.generation?.label) {
+        return rejected("revoked-capability");
+      }
     }
 
     switch (request.command.kind) {

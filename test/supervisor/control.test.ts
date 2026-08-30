@@ -66,6 +66,21 @@ test("a user submission labels its harness commit as a generation candidate", as
   });
 });
 
+test("an invalid harness generation label cannot submit before activation", async () => {
+  const control = supervisor("control-invalid-harness-label-before-activation");
+  const requestWithInvalidLabel = request(
+    "invalid-harness-label-before-activation",
+    { kind: "harness", generationLabel: -1 },
+    { kind: "submit-candidate", harnessCommit: commits.first },
+  );
+
+  const result = await control.controlGeneration(requestWithInvalidLabel);
+
+  expect(result).toEqual({ ok: false, problem: { code: "revoked-capability" } });
+  expect(await control.getGenerations()).toHaveLength(1);
+  expect(await control.controlGeneration(requestWithInvalidLabel)).toEqual(result);
+});
+
 test("the active harness can submit a generation candidate", async () => {
   const control = supervisor("control-active-harness-submission");
   await activateFixture(control);
