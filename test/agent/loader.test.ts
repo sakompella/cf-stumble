@@ -98,7 +98,7 @@ test("loads a one-module main harness through the artifact loader", async () => 
   expect(await responseText(loadedHarness.worker)).toBe("from one module");
 });
 
-test("uses each labeled harness commit as the Worker Loader name", async () => {
+test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader name", async () => {
   const loaderNames: string[] = [];
   const loader = loaderWithRecordedNames(loaderNames);
   const firstHarness = loadMainFacet(
@@ -112,7 +112,7 @@ test("uses each labeled harness commit as the Worker Loader name", async () => {
   );
   const secondHarness = loadMainFacet(
     loader,
-    artifact("3123456789abcdef0123456789abcdef01234567", "main.js", [
+    artifact("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "main.js", [
       {
         name: "main.js",
         source: facetModule('"second harness"'),
@@ -124,7 +124,7 @@ test("uses each labeled harness commit as the Worker Loader name", async () => {
   expect(secondHarness.ok).toBe(true);
   expect(loaderNames).toEqual([
     "2123456789abcdef0123456789abcdef01234567",
-    "3123456789abcdef0123456789abcdef01234567",
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   ]);
   if (!firstHarness.ok || !secondHarness.ok) {
     return;

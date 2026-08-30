@@ -97,16 +97,14 @@ export class GenerationControl {
     }
 
     const result = this.generations.labelInTransaction(parsedHarnessCommit);
-    return result.ok
-      ? {
-          ok: true,
-          outcome: {
-            kind: "candidate-submitted",
-            generation: result.generation,
-            epoch: result.epoch,
-          },
-        }
-      : rejected(result.problem.code);
+    return {
+      ok: true,
+      outcome: {
+        kind: "candidate-submitted",
+        generation: result.generation,
+        epoch: result.epoch,
+      },
+    };
   }
 
   private activate(label: number, observedEpoch: number): GenerationControlResult {

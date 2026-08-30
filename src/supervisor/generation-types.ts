@@ -29,19 +29,11 @@ export type ActiveGeneration = {
   readonly activationId: number | undefined;
 };
 
-export type LabelGenerationResult =
-  | {
-      readonly ok: true;
-      readonly generation: Generation;
-      readonly epoch: number;
-    }
-  | {
-      readonly ok: false;
-      readonly problem: {
-        readonly code: "invalid-harness-commit";
-        readonly harnessCommit: string;
-      };
-    };
+export type LabelGenerationResult = {
+  readonly ok: true;
+  readonly generation: Generation;
+  readonly epoch: number;
+};
 
 export type PreparationCheckOutcome = "passed" | "failed";
 
@@ -55,7 +47,6 @@ export type PreparationCheckResult =
   | {
       readonly ok: false;
       readonly problem:
-        | { readonly code: "invalid-generation-label"; readonly label: number }
         | { readonly code: "unknown-generation"; readonly label: number }
         | { readonly code: "invalid-preparation-check-outcome" }
         | {
@@ -75,7 +66,6 @@ export type ActivationResult =
   | {
       readonly ok: false;
       readonly problem:
-        | { readonly code: "invalid-generation-label"; readonly label: number }
         | { readonly code: "unknown-generation"; readonly label: number }
         | { readonly code: "not-ready"; readonly label: number };
     };

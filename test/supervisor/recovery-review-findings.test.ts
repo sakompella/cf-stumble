@@ -150,13 +150,13 @@ test("rejects a structured-clone object error without changing its persisted epi
   }
 });
 
-test("rejects an ill-formed Unicode operation error without changing its persisted episode", async () => {
-  const { control, episode } = await episodeWithFallback("recovery-rejects-surrogate-error");
+test("rejects a trailing lone surrogate operation error without URIError or persistence mutation", async () => {
+  const { control, episode } = await episodeWithFallback("recovery-rejects-trailing-surrogate");
   const opened = await openRepair(control, episode);
   const report = await control.reportRecoveryOperation(
     episode.id,
     repairKey(opened),
-    { kind: "repair-failed", error: "bad \uD800 error" },
+    { kind: "repair-failed", error: "bad error \uD800" },
     episode.startedAt + 1,
   );
 

@@ -1,4 +1,4 @@
-const gitObjectId = /^[0-9a-f]{40}$/u;
+const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 
 declare const harnessCommitBrand: unique symbol;
 
