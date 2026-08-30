@@ -1,6 +1,6 @@
 # Product overview
 
-cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. The initial harness is a fork of Pi, running on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
+cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main and recovery harnesses both start from Pi-derived forks, running on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
 
 The product is meant first for one person. It should grow around that person's projects, instructions, working habits, and accumulated context. Coding is its primary use, not a permanent limit on what the harness may help with.
 
@@ -10,7 +10,7 @@ The system separates normal work from recovery.
 
 The **main harness** handles the user's work. Its model loop, prompts, tools, policies, and use of files may all change. One generation of the main harness runs in a Dynamic Worker facet.
 
-The **recovery harness** is immutable code in the Supervisor Durable Object. The Supervisor Durable Object is the primary Durable Object for a cf-stumble instance; it is not a facet. It creates or obtains main-harness facets, decides which generation may run, and restores service when a main harness fails.
+The **recovery harness** is an immutable Pi-derived fork in the Supervisor Durable Object. It remains close to the Pi base but omits the main harness's connector for requesting Supervisor capabilities. The Supervisor Durable Object is the primary Durable Object for a cf-stumble instance; it is not a facet. It creates or obtains main-harness facets, decides which generation may run, and restores service when a main harness fails.
 
 The interface between the supervisor and a main facet is not settled. Forwarding an ordinary Worker `fetch(Request): Promise<Response>` call is attractive because it uses the platform's native interface and keeps the permanent contract small, and local prototypes show that it works. That evidence does not make `fetch` the only acceptable design.
 

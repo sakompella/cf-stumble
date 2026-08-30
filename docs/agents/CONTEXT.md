@@ -9,7 +9,7 @@ The mutable agent harness that performs the user's work. A generation supplies o
 _Avoid_: supervisor, recovery harness
 
 **Recovery harness**:
-The immutable agent code that diagnoses failures and restores a usable main harness. It runs in the Supervisor Durable Object but is not itself a generation.
+The immutable, Pi-derived agent code that diagnoses failures and restores a usable main harness. It stays close to the Pi base but omits the main harness's connector for requesting Supervisor capabilities. It runs in the Supervisor Durable Object but is not itself a generation.
 _Avoid_: Generation 0, main harness
 
 **Supervisor Durable Object**:
