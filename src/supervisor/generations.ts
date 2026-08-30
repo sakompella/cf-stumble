@@ -137,7 +137,8 @@ export class Generations {
         }
 
         this.preparationChecks.record(label, outcome);
-        return { ok: true, generation, epoch: this.state().epoch, effect: "no-op" };
+        const epoch = this.incrementEpoch();
+        return { ok: true, generation, epoch, effect: "no-op" };
       }
 
       this.preparationChecks.record(label, outcome);

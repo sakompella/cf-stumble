@@ -55,6 +55,48 @@ test("discards credited turns when a redundant preparation check starts a new er
   ).toMatchObject({ kind: "ineligible", creditedTurns: 0 });
 });
 
+test("a repeated passing check advances the epoch and rejects an activation from its prior view", async () => {
+  const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName(
+    "evidence-era-recheck-stale-activation",
+  );
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
+  const targetLabel = await submitCandidate(
+    control,
+    unrelatedHarnessCommit,
+    "submit-activation-target",
+  );
+  await prepareGeneration(control, targetLabel, unrelatedHarnessCommit);
+
+  const beforeRecheck = await control.getActiveGeneration();
+  const checksBefore = await control.getPreparationCheckHistory(0);
+  const rechecked = await control.checkGenerationStartup(
+    0,
+    readyArtifact(fixtureMainHarnessCommit),
+  );
+  const checksAfter = await control.getPreparationCheckHistory(0);
+  const afterRecheck = await control.getActiveGeneration();
+  const result = await control.controlGeneration({
+    requestId: "recheck-stale-activation",
+    principal: { kind: "user" },
+    command: {
+      kind: "activate",
+      label: targetLabel,
+      observedEpoch: beforeRecheck.epoch,
+    },
+  });
+
+  if (!rechecked.ok) {
+    throw new Error("a repeated passing check must be accepted");
+  }
+
+  expect(rechecked.report.effect).toBe("no-op");
+  expect(checksAfter).toHaveLength(checksBefore.length + 1);
+  expect(checksAfter.at(-1)?.id).not.toBe(checksBefore.at(-1)?.id);
+  expect(afterRecheck).toEqual({ ...beforeRecheck, epoch: beforeRecheck.epoch + 1 });
+  expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
+});
+
 test("keeps a generation's credited turns when unrelated protected state changes", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era");
   await prepareGeneration(control, 0, fixtureMainHarnessCommit);
