@@ -1,6 +1,10 @@
 # First implementation plan
 
-**Status: NOT STARTED.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. The current source is only a local Supervisor-to-fixture-facet forwarding spike, not the product main harness.
+**Status: the locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. The source is still a Supervisor with a fixture main facet, not the product main harness.
+
+What exists: a module-map artifact loaded under the labeled harness commit (ADR-0028), supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked and journaled generation requests (ADR-0030), a relay that records what happened to each turn and derives known-good eligibility from those facts (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032).
+
+Two gaps matter more than the rest. Activation changes the recorded active generation but not which facet serves traffic, because that needs the Supervisor to hold artifact bytes across a restart and artifact storage is still open. And nothing authenticates a principal, because the transport that would carry a request from a browser or from the main facet is still open.
 
 Start with local workerd tests, then use the paid account for behavior that local tests cannot prove. Build one small end-to-end path before broadening the harness.
 
@@ -32,6 +36,8 @@ The vertical path is complete when a paid deployment proves all of the following
 - A defined external failure produces a recovery report and returns to a known-good generation after the chosen repair bound.
 
 ## Open choices before implementation commits to them
+
+ADRs 0028 through 0032 settle the startup check, the artifact shape, the request checks, the real-turn facts and the recovery bounds. Each of those records what it does not settle. The rest of this list stands.
 
 - The supervisor-to-facet interface and the startup check that fits it.
 - The filesystem layout for projects, harness source, sessions, and accumulated context.
