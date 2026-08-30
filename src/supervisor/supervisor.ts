@@ -3,6 +3,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { fixtureMainHarnessCommit, loadFixtureMainFacet } from "../agent/loader.js";
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../agent/loader.js";
+import { GenerationControl } from "./control.js";
 import { Generations } from "./generations.js";
 import { mainFacetName } from "./facet-name.js";
 import { checkGenerationStartup } from "./startup-check.js";
@@ -15,6 +16,7 @@ import type {
   PreparationCheckOutcome,
   PreparationCheckResult,
 } from "./generations.js";
+import type { GenerationControlResult, GenerationRequest } from "./control.js";
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
@@ -24,11 +26,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly mainFacet:
     | { readonly fetcher: Fetcher }
     | { readonly problem: MainHarnessArtifactProblem };
+  private readonly control: GenerationControl;
   private readonly generations: Generations;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
+    this.control = new GenerationControl(ctx.storage, this.generations);
     const loadedFacet = loadFixtureMainFacet(env.LOADER);
 
     this.mainFacet = loadedFacet.ok
@@ -77,6 +81,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   getGenerations(): readonly Generation[] {
     return this.generations.all();
+  }
+
+  controlGeneration(request: GenerationRequest): GenerationControlResult {
+    return this.control.execute(request);
   }
 
   override fetch(request: Request): Promise<Response> {
