@@ -8,7 +8,9 @@ import type {
   GenerationRequest,
   Principal,
 } from "../../src/supervisor/control.js";
+import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
 const commits = {
   first: "0123456789abcdef0123456789abcdef01234567",
@@ -31,34 +33,17 @@ function request(
 }
 
 async function activateFixture(control: DurableObjectStub<Supervisor>): Promise<number> {
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-
-  const activated = await control.activateGeneration(0);
-  if (!activated.ok) {
-    throw new Error("Generation 0 must become active");
-  }
-
-  return activated.epoch;
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  return activateGeneration(control, 0, "activate-fixture");
 }
 
 async function readyGeneration(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
 ): Promise<number> {
-  const labeled = await control.labelGeneration(harnessCommit);
-  if (!labeled.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
-
-  const prepared = await control.recordPreparationCheck(labeled.generation.label, "passed");
-  if (!prepared.ok) {
-    throw new Error("a labeled generation must accept its preparation check");
-  }
-
-  return labeled.generation.label;
+  const label = await submitCandidate(control, harnessCommit, `submit-${harnessCommit}`);
+  await prepareGeneration(control, label, harnessCommit);
+  return label;
 }
 
 afterEach(async () => {
@@ -106,10 +91,7 @@ test("a replaced harness cannot submit a candidate through its revoked capabilit
   const control = supervisor("control-revoked-harness");
   await activateFixture(control);
   const replacement = await readyGeneration(control, commits.first);
-  const activated = await control.activateGeneration(replacement);
-  if (!activated.ok) {
-    throw new Error("a ready replacement must become active");
-  }
+  await activateGeneration(control, replacement, "activate-replacement");
 
   const before = await control.getActiveGeneration();
   const result = await control.controlGeneration(
@@ -155,10 +137,7 @@ test("a stale activation request leaves the active generation unchanged", async 
 test("activation rejects unknown and unchecked generation targets with distinct codes", async () => {
   const control = supervisor("control-invalid-activation-targets");
   const epoch = await activateFixture(control);
-  const candidate = await control.labelGeneration(commits.first);
-  if (!candidate.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
+  const candidate = await submitCandidate(control, commits.first, "unchecked-candidate");
 
   const unknown = await control.controlGeneration(
     request("unknown-activation", user, { kind: "activate", label: 99, observedEpoch: epoch + 1 }),
@@ -166,7 +145,7 @@ test("activation rejects unknown and unchecked generation targets with distinct 
   const unchecked = await control.controlGeneration(
     request("candidate-activation", user, {
       kind: "activate",
-      label: candidate.generation.label,
+      label: candidate,
       observedEpoch: epoch + 1,
     }),
   );

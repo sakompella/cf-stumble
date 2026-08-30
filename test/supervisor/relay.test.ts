@@ -3,7 +3,9 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -11,16 +13,8 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 
 async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = supervisor(name);
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-
-  const activated = await control.activateGeneration(0);
-  if (!activated.ok) {
-    throw new Error("Generation 0 must become active");
-  }
-
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   return control;
 }
 
@@ -158,13 +152,10 @@ test("retains an earlier activation's facts without crediting a reactivated gene
   }
 
   const secondCommit = "0123456789abcdef0123456789abcdef01234567";
-  const labeled = await control.labelGeneration(secondCommit);
-  if (!labeled.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
-  await control.recordPreparationCheck(labeled.generation.label, "passed");
-  await control.activateGeneration(labeled.generation.label);
-  await control.activateGeneration(0);
+  const label = await submitCandidate(control, secondCommit, "submit-replacement");
+  await prepareGeneration(control, label, secondCommit);
+  await activateGeneration(control, label, "activate-replacement");
+  await activateGeneration(control, 0, "reactivate-fixture");
 
   expect(await control.getRelayAttempts()).toMatchObject([
     { generationLabel: 0, activationId: firstAttempt.activationId },

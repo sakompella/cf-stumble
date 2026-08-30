@@ -20,13 +20,9 @@ import {
 } from "./eligibility.js";
 import {
   Generations,
-  type ActivationResult,
   type ActiveGeneration,
   type Generation,
-  type LabelGenerationResult,
   type PreparationCheck,
-  type PreparationCheckOutcome,
-  type PreparationCheckResult,
 } from "./generations.js";
 import { RelayFacts, type RelayAttempt, type RelayFact } from "./relay-facts.js";
 import {
@@ -77,14 +73,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       : { problem: loadedFacet.problem };
   }
 
-  labelGeneration(harnessCommit: string): LabelGenerationResult {
-    return this.generations.label(harnessCommit);
-  }
-
-  recordPreparationCheck(label: number, outcome: PreparationCheckOutcome): PreparationCheckResult {
-    return this.generations.recordPreparationCheck(label, outcome);
-  }
-
   checkGenerationStartup(
     label: number,
     artifact: MainHarnessArtifactInput,
@@ -98,10 +86,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       artifact,
       options,
     );
-  }
-
-  activateGeneration(label: number): ActivationResult {
-    return this.generations.activate(label);
   }
 
   getActiveGeneration(): ActiveGeneration {

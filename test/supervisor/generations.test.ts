@@ -5,49 +5,93 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { artifact, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 const thirdHarnessCommit = "1123456789abcdef0123456789abcdef01234567";
 
+function stagedPreparationArtifact(harnessCommit: string) {
+  return artifact(
+    harnessCommit,
+    `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS checks (count INTEGER NOT NULL)");
+    ctx.storage.sql.exec("INSERT INTO checks (count) VALUES (1)");
+  }
+  fetch() {
+    const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM checks").one().count;
+    return new Response("check " + count, { status: count < 3 ? 200 : 500 });
+  }
+}
+`,
+  );
+}
+
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
+}
+
+function submit(control: DurableObjectStub<Supervisor>, requestId: string, harnessCommit: string) {
+  return control.controlGeneration({
+    requestId,
+    principal: { kind: "user" },
+    command: { kind: "submit-candidate", harnessCommit },
+  });
+}
+
+async function activate(control: DurableObjectStub<Supervisor>, requestId: string, label: number) {
+  const active = await control.getActiveGeneration();
+  return control.controlGeneration({
+    requestId,
+    principal: { kind: "user" },
+    command: { kind: "activate", label, observedEpoch: active.epoch },
+  });
 }
 
 afterEach(async () => {
   await reset();
 });
 
-test("labels the fixture harness commit as Generation 0 and the next commit as Generation 1", async () => {
+test("submits the fixture harness commit as Generation 0 and the next commit as Generation 1", async () => {
   const control = supervisor("labels-generations");
 
-  const first = await control.labelGeneration(fixtureMainHarnessCommit);
-  const second = await control.labelGeneration(secondHarnessCommit);
+  const first = await submit(control, "submit-fixture", fixtureMainHarnessCommit);
+  const second = await submit(control, "submit-second", secondHarnessCommit);
 
   expect(first).toEqual({
     ok: true,
-    generation: {
-      label: 0,
-      harnessCommit: fixtureMainHarnessCommit,
-      status: "candidate",
+    outcome: {
+      kind: "candidate-submitted",
+      generation: {
+        label: 0,
+        harnessCommit: fixtureMainHarnessCommit,
+        status: "candidate",
+      },
+      epoch: 0,
     },
-    epoch: 0,
   });
   expect(second).toMatchObject({
     ok: true,
-    generation: {
-      label: 1,
-      harnessCommit: secondHarnessCommit,
-      status: "candidate",
+    outcome: {
+      kind: "candidate-submitted",
+      generation: {
+        label: 1,
+        harnessCommit: secondHarnessCommit,
+        status: "candidate",
+      },
     },
   });
   expect(await control.getGenerations()).toHaveLength(2);
 });
 
-test("labeling an existing harness commit preserves its label count and epoch", async () => {
+test("submitting an existing harness commit preserves its label count and epoch", async () => {
   const control = supervisor("labels-idempotently");
 
-  const first = await control.labelGeneration(secondHarnessCommit);
-  const repeated = await control.labelGeneration(secondHarnessCommit);
+  const first = await submit(control, "submit-first", secondHarnessCommit);
+  const repeated = await submit(control, "submit-repeated", secondHarnessCommit);
 
   expect(repeated).toEqual(first);
   expect(await control.getGenerations()).toHaveLength(2);
@@ -55,21 +99,21 @@ test("labeling an existing harness commit preserves its label count and epoch", 
 
 test("keeps the first preparation outcome and refuses a later contradicting one", async () => {
   const control = supervisor("records-one-preparation-outcome");
-  const labeled = await control.labelGeneration(secondHarnessCommit);
+  const label = await submitCandidate(control, secondHarnessCommit, "submit-candidate");
 
-  if (!labeled.ok) {
-    throw new Error("a harness commit must be labelable");
-  }
-
-  const recorded = await control.recordPreparationCheck(labeled.generation.label, "passed");
-  const repeated = await control.recordPreparationCheck(labeled.generation.label, "passed");
-  const contradicted = await control.recordPreparationCheck(labeled.generation.label, "failed");
+  const preparationArtifact = stagedPreparationArtifact(secondHarnessCommit);
+  const recorded = await control.checkGenerationStartup(label, preparationArtifact);
+  const repeated = await control.checkGenerationStartup(label, preparationArtifact);
+  const contradicted = await control.checkGenerationStartup(label, preparationArtifact);
 
   if (!recorded.ok || !repeated.ok) {
     throw new Error("a labeled generation must accept its first preparation check");
   }
 
-  expect(repeated).toEqual({ ...recorded, effect: "no-op" });
+  expect(repeated).toEqual({
+    ...recorded,
+    report: { ...recorded.report, effect: "no-op" },
+  });
   expect(
     contradicted,
     "a second, different outcome is a real event and must not be swallowed",
@@ -77,12 +121,12 @@ test("keeps the first preparation outcome and refuses a later contradicting one"
     ok: false,
     problem: {
       code: "contradicts-recorded-outcome",
-      label: labeled.generation.label,
+      label,
       recorded: "ready",
     },
   });
-  expect(await control.getGeneration(labeled.generation.label)).toEqual(recorded.generation);
-  const history = await control.getPreparationCheckHistory(labeled.generation.label);
+  expect(await control.getGeneration(label)).toEqual(recorded.report.generation);
+  const history = await control.getPreparationCheckHistory(label);
 
   expect(
     history.map((check) => check.outcome),
@@ -90,12 +134,12 @@ test("keeps the first preparation outcome and refuses a later contradicting one"
   ).toEqual(["passed", "passed"]);
 });
 
-test("refuses to label a value that is not a harness commit", async () => {
+test("refuses a candidate submission that does not name a harness commit", async () => {
   const control = supervisor("rejects-malformed-commits");
 
-  expect(await control.labelGeneration("main")).toEqual({
+  expect(await submit(control, "submit-malformed", "main")).toEqual({
     ok: false,
-    problem: { code: "invalid-harness-commit", harnessCommit: "main" },
+    problem: { code: "invalid-harness-commit" },
   });
   expect(await control.getGenerations(), "only the seeded Generation 0 may exist").toHaveLength(1);
 });
@@ -103,60 +147,51 @@ test("refuses to label a value that is not a harness commit", async () => {
 test("rejects unknown and candidate generations without throwing during activation", async () => {
   const control = supervisor("rejects-unready-generations");
 
-  expect(await control.activateGeneration(99)).toEqual({
+  expect(await activate(control, "activate-unknown", 99)).toEqual({
     ok: false,
-    problem: { code: "unknown-generation", label: 99 },
+    problem: { code: "unknown-generation" },
   });
-  expect(await control.activateGeneration(0)).toEqual({
+  expect(await activate(control, "activate-candidate", 0)).toEqual({
     ok: false,
-    problem: { code: "not-ready", label: 0 },
+    problem: { code: "not-ready" },
   });
 });
 
 test("activates a ready generation once and preserves its epoch on a repeated request", async () => {
   const control = supervisor("activates-ready-generation");
-  const labeled = await control.labelGeneration(secondHarnessCommit);
+  const label = await submitCandidate(control, secondHarnessCommit, "submit-candidate");
+  await prepareGeneration(control, label, secondHarnessCommit);
 
-  if (!labeled.ok) {
-    throw new Error("a harness commit must be labelable");
-  }
-
-  const prepared = await control.recordPreparationCheck(labeled.generation.label, "passed");
-  if (!prepared.ok) {
-    throw new Error("a labeled generation must accept its first preparation check");
-  }
-
-  const activated = await control.activateGeneration(labeled.generation.label);
-  const repeated = await control.activateGeneration(labeled.generation.label);
-  if (!activated.ok || !repeated.ok) {
+  const prepared = await control.getGeneration(label);
+  const activated = await activate(control, "activate-ready", label);
+  const repeated = await activate(control, "activate-ready-again", label);
+  if (!activated.ok || !repeated.ok || prepared === undefined) {
     throw new Error("a ready generation must be activatable");
   }
 
   expect(activated).toMatchObject({
     ok: true,
-    generation: { label: labeled.generation.label, status: "ready" },
-    effect: "activated",
+    outcome: {
+      kind: "activated",
+      generation: { label, status: "ready" },
+      effect: "activated",
+    },
   });
   expect(await control.getActiveGeneration()).toEqual({
-    generation: prepared.generation,
-    epoch: activated.epoch,
+    generation: prepared,
+    epoch: activated.outcome.epoch,
     activationId: 1,
   });
-  expect(repeated).toEqual({ ...activated, effect: "no-op" });
+  expect(repeated).toEqual({
+    ...activated,
+    outcome: { ...activated.outcome, effect: "no-op" },
+  });
 });
 
 test("preserves generation state across eviction without reseeding Generation 0", async () => {
   const control = supervisor("persists-across-eviction");
-  const labeled = await control.labelGeneration(thirdHarnessCommit);
-
-  if (!labeled.ok) {
-    throw new Error("a harness commit must be labelable");
-  }
-
-  const prepared = await control.recordPreparationCheck(labeled.generation.label, "passed");
-  if (!prepared.ok) {
-    throw new Error("a labeled generation must accept its first preparation check");
-  }
+  const label = await submitCandidate(control, thirdHarnessCommit, "submit-candidate");
+  await prepareGeneration(control, label, thirdHarnessCommit);
 
   await evictDurableObject(control);
 
@@ -166,6 +201,6 @@ test("preserves generation state across eviction without reseeding Generation 0"
   ]);
   expect(await control.getActiveGeneration()).toEqual({
     generation: undefined,
-    epoch: prepared.epoch,
+    epoch: 2,
   });
 });

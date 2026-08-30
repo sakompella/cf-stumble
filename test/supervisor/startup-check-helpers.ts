@@ -29,31 +29,76 @@ export function artifact(harnessCommit: string, source: string): MainHarnessArti
   };
 }
 
+export function readyArtifact(harnessCommit: string): MainHarnessArtifactInput {
+  return artifact(
+    harnessCommit,
+    `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  fetch() { return new Response("ready"); }
+}
+`,
+  );
+}
+
 export async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = env.SUPERVISOR.getByName(name);
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-
-  const activated = await control.activateGeneration(0);
-  if (!activated.ok) {
-    throw new Error("Generation 0 must become active");
-  }
-
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   return control;
 }
 
-export async function labelCandidate(
+export async function submitCandidate(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
+  requestId: string,
 ): Promise<number> {
-  const labeled = await control.labelGeneration(harnessCommit);
-  if (!labeled.ok) {
+  const result = await control.controlGeneration({
+    requestId,
+    principal: { kind: "user" },
+    command: { kind: "submit-candidate", harnessCommit },
+  });
+  if (!result.ok || result.outcome.kind !== "candidate-submitted") {
     throw new Error("a valid harness commit must receive a generation label");
   }
 
-  return labeled.generation.label;
+  return result.outcome.generation.label;
+}
+
+export function labelCandidate(
+  control: DurableObjectStub<Supervisor>,
+  harnessCommit: string,
+): Promise<number> {
+  return submitCandidate(control, harnessCommit, `submit-${harnessCommit}`);
+}
+
+export async function prepareGeneration(
+  control: DurableObjectStub<Supervisor>,
+  label: number,
+  harnessCommit: string,
+): Promise<void> {
+  const result = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
+  if (!result.ok || result.report.stage !== "ready") {
+    throw new Error("a valid generation must pass startup checking");
+  }
+}
+
+export async function activateGeneration(
+  control: DurableObjectStub<Supervisor>,
+  label: number,
+  requestId: string,
+): Promise<number> {
+  const active = await control.getActiveGeneration();
+  const result = await control.controlGeneration({
+    requestId,
+    principal: { kind: "user" },
+    command: { kind: "activate", label, observedEpoch: active.epoch },
+  });
+  if (!result.ok || result.outcome.kind !== "activated") {
+    throw new Error("a ready generation must become active");
+  }
+
+  return result.outcome.epoch;
 }
 
 export async function expectFailedCandidate(

@@ -3,11 +3,18 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { PreparationCheck } from "../../src/supervisor/preparation-checks.js";
 import type { RelayAttempt } from "../../src/supervisor/relay-facts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import {
+  activateGeneration,
+  prepareGeneration,
+  readyArtifact,
+  submitCandidate,
+} from "./startup-check-helpers.js";
 
 const policy: EligibilityPolicy = {
   minimumCreditedTurns: 3,
@@ -46,24 +53,6 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
 }
 
-function artifact(harnessCommit: string) {
-  return {
-    harnessCommit,
-    entryModule: "main.js",
-    modules: [
-      {
-        name: "main.js",
-        source: `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  fetch() { return new Response("ready"); }
-}
-`,
-      },
-    ],
-  };
-}
-
 afterEach(async () => {
   await reset();
 });
@@ -86,21 +75,19 @@ test("requires credited turns to span time instead of arriving in one burst", ()
 
 test("qualifies a no-longer-active generation from its retained most recent era", async () => {
   const control = supervisor("eligibility-inactive-generation");
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-  await control.activateGeneration(0);
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const labeled = await control.labelGeneration("0123456789abcdef0123456789abcdef01234567");
-  if (!labeled.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
-  await control.recordPreparationCheck(labeled.generation.label, "passed");
-  await control.activateGeneration(labeled.generation.label);
+  const label = await submitCandidate(
+    control,
+    "0123456789abcdef0123456789abcdef01234567",
+    "submit-replacement",
+  );
+  await prepareGeneration(control, label, "0123456789abcdef0123456789abcdef01234567");
+  await activateGeneration(control, label, "activate-replacement");
 
   expect(
     await control.getGenerationEligibility(0, {
@@ -112,22 +99,20 @@ test("qualifies a no-longer-active generation from its retained most recent era"
 
 test("rejects a generation when its most recent era fails after an older era succeeded", async () => {
   const control = supervisor("eligibility-latest-era-failure");
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-  await control.activateGeneration(0);
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   const completion = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await completion.text();
-  const labeled = await control.labelGeneration("0123456789abcdef0123456789abcdef01234567");
-  if (!labeled.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
-  await control.recordPreparationCheck(labeled.generation.label, "passed");
-  await control.activateGeneration(labeled.generation.label);
-  await control.activateGeneration(0);
+  const label = await submitCandidate(
+    control,
+    "0123456789abcdef0123456789abcdef01234567",
+    "submit-replacement",
+  );
+  await prepareGeneration(control, label, "0123456789abcdef0123456789abcdef01234567");
+  await activateGeneration(control, label, "activate-replacement");
+  await activateGeneration(control, 0, "reactivate-fixture");
   const failure = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/error-status"),
   );
@@ -144,19 +129,13 @@ test("rejects a generation when its most recent era fails after an older era suc
 test("requires a fresh passing startup check after a failure observation", async () => {
   const control = supervisor("eligibility-fresh-startup-check");
   const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
-  const labeled = await control.labelGeneration(harnessCommit);
-  if (!labeled.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
+  const label = await submitCandidate(control, harnessCommit, "submit-candidate");
 
-  const firstStartup = await control.checkGenerationStartup(
-    labeled.generation.label,
-    artifact(harnessCommit),
-  );
+  const firstStartup = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
   if (!firstStartup.ok) {
     throw new Error("a valid candidate must produce a startup-check report");
   }
-  await control.activateGeneration(labeled.generation.label);
+  await activateGeneration(control, label, "activate-candidate");
 
   const failure = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/error-status"),
@@ -164,17 +143,12 @@ test("requires a fresh passing startup check after a failure observation", async
   await failure.text();
   const strictPolicy = { minimumCreditedTurns: 1, minimumObservationSpanMs: 0 };
 
-  expect(
-    await control.getGenerationEligibility(labeled.generation.label, strictPolicy),
-  ).toMatchObject({
+  expect(await control.getGenerationEligibility(label, strictPolicy)).toMatchObject({
     kind: "ineligible",
     reason: "failure-observed",
   });
 
-  const freshStartup = await control.checkGenerationStartup(
-    labeled.generation.label,
-    artifact(harnessCommit),
-  );
+  const freshStartup = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
   if (!freshStartup.ok) {
     throw new Error("a fresh startup check must produce a report");
   }
@@ -184,9 +158,7 @@ test("requires a fresh passing startup check after a failure observation", async
   );
   await completion.text();
 
-  expect(
-    await control.getGenerationEligibility(labeled.generation.label, strictPolicy),
-  ).toMatchObject({
+  expect(await control.getGenerationEligibility(label, strictPolicy)).toMatchObject({
     kind: "eligible",
     creditedTurns: 1,
   });

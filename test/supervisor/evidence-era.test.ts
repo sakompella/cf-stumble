@@ -3,7 +3,14 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import {
+  activateGeneration,
+  prepareGeneration,
+  readyArtifact,
+  submitCandidate,
+} from "./startup-check-helpers.js";
 
 const unrelatedHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -20,11 +27,8 @@ afterEach(async () => {
 
 test("discards credited turns when a redundant preparation check starts a new era", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era-recheck");
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  const activated = await control.activateGeneration(0);
-  if (!prepared.ok || !activated.ok) {
-    throw new Error("Generation 0 must become active before it can earn evidence");
-  }
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
 
   await completedTurn(control);
   const strictPolicy = { minimumCreditedTurns: 1, minimumObservationSpanMs: 0 };
@@ -33,13 +37,16 @@ test("discards credited turns when a redundant preparation check starts a new er
     creditedTurns: 1,
   });
 
-  const rechecked = await control.recordPreparationCheck(0, "passed");
+  const rechecked = await control.checkGenerationStartup(
+    0,
+    readyArtifact(fixtureMainHarnessCommit),
+  );
   if (!rechecked.ok) {
     throw new Error("a repeated passing check must be accepted");
   }
 
   expect(
-    rechecked.effect,
+    rechecked.report.effect,
     "the store reports no effect even though the check resets the evidence era",
   ).toBe("no-op");
   expect(
@@ -50,17 +57,11 @@ test("discards credited turns when a redundant preparation check starts a new er
 
 test("keeps a generation's credited turns when unrelated protected state changes", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era");
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  const activated = await control.activateGeneration(0);
-  if (!prepared.ok || !activated.ok) {
-    throw new Error("Generation 0 must become active before it can earn evidence");
-  }
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
 
   await completedTurn(control);
-  const labeled = await control.labelGeneration(unrelatedHarnessCommit);
-  if (!labeled.ok) {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
+  await submitCandidate(control, unrelatedHarnessCommit, "submit-unrelated");
 
   await completedTurn(control);
   await completedTurn(control);

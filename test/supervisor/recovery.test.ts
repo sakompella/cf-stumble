@@ -3,9 +3,11 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { RecoveryPolicy } from "../../src/supervisor/recovery.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 const strictEligibility: EligibilityPolicy = {
@@ -24,33 +26,15 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 
 async function fallbackReady(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = supervisor(name);
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-  const activated = await control.activateGeneration(0);
-  if (!activated.ok) {
-    throw new Error("Generation 0 must become active");
-  }
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const labeled = await control.labelGeneration(replacementCommit);
-  if (!labeled.ok) {
-    throw new Error("a valid replacement commit must receive a generation label");
-  }
-  const replacementPrepared = await control.recordPreparationCheck(
-    labeled.generation.label,
-    "passed",
-  );
-  if (!replacementPrepared.ok) {
-    throw new Error("the replacement must accept its preparation check");
-  }
-  const replacement = await control.activateGeneration(labeled.generation.label);
-  if (!replacement.ok) {
-    throw new Error("the replacement must become active");
-  }
+  const replacement = await submitCandidate(control, replacementCommit, "submit-replacement");
+  await prepareGeneration(control, replacement, replacementCommit);
+  await activateGeneration(control, replacement, "activate-replacement");
   return control;
 }
 
@@ -84,14 +68,8 @@ test("deduplicates a failure event into one recovery episode", async () => {
 
 test("blocks recovery without a qualifying fallback and leaves traffic on its generation", async () => {
   const control = supervisor("recovery-blocked-without-fallback");
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-  const activated = await control.activateGeneration(0);
-  if (!activated.ok) {
-    throw new Error("Generation 0 must become active");
-  }
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   const before = await control.getActiveGeneration();
   const episode = await control.startRecovery(
     { failureEventId: "failure-0", failedGenerationLabel: 0 },
@@ -112,14 +90,8 @@ test("blocks recovery without a qualifying fallback and leaves traffic on its ge
 
 test("never chooses the failed generation as its fallback", async () => {
   const control = supervisor("recovery-excludes-failed-generation");
-  const prepared = await control.recordPreparationCheck(0, "passed");
-  if (!prepared.ok) {
-    throw new Error("Generation 0 must accept its preparation check");
-  }
-  const activated = await control.activateGeneration(0);
-  if (!activated.ok) {
-    throw new Error("Generation 0 must become active");
-  }
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
