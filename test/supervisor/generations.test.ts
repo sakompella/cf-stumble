@@ -188,6 +188,18 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   });
 });
 
+test("keeps branded generation identities plain through structured clone and eviction", async () => {
+  const control = supervisor("cloneable-generation-identities");
+  await submitCandidate(control, secondHarnessCommit, "submit-cloneable-generation");
+  const beforeEviction = await control.getGenerations();
+
+  expect(structuredClone(beforeEviction)).toEqual(beforeEviction);
+
+  await evictDurableObject(control);
+
+  expect(await control.getGenerations()).toEqual(beforeEviction);
+});
+
 test("preserves generation state across eviction without reseeding Generation 0", async () => {
   const control = supervisor("persists-across-eviction");
   const label = await submitCandidate(control, thirdHarnessCommit, "submit-candidate");

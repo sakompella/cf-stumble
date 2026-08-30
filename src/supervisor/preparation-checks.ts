@@ -1,13 +1,15 @@
+import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
+
 export type PreparationCheck = {
   readonly id: number;
-  readonly generationLabel: number;
+  readonly generationLabel: GenerationLabel;
   readonly outcome: "passed" | "failed";
 };
 
 type PreparationCheckRow = {
   readonly id: number;
   readonly generation_label: number;
-  readonly outcome: "passed" | "failed";
+  readonly outcome: string;
 };
 
 export class PreparationChecks {
@@ -24,7 +26,7 @@ export class PreparationChecks {
     `);
   }
 
-  record(generationLabel: number, outcome: PreparationCheck["outcome"]): PreparationCheck {
+  record(generationLabel: GenerationLabel, outcome: PreparationCheck["outcome"]): PreparationCheck {
     const row = this.sql
       .exec<PreparationCheckRow>(
         `INSERT INTO preparation_checks (generation_label, outcome)
@@ -38,7 +40,7 @@ export class PreparationChecks {
     return preparationCheckFromRow(row);
   }
 
-  latestPass(generationLabel: number): PreparationCheck | undefined {
+  latestPass(generationLabel: GenerationLabel): PreparationCheck | undefined {
     const row = this.sql
       .exec<PreparationCheckRow>(
         `SELECT id, generation_label, outcome
@@ -53,7 +55,7 @@ export class PreparationChecks {
     return row === undefined ? undefined : preparationCheckFromRow(row);
   }
 
-  all(generationLabel: number): readonly PreparationCheck[] {
+  all(generationLabel: GenerationLabel): readonly PreparationCheck[] {
     return this.sql
       .exec<PreparationCheckRow>(
         `SELECT id, generation_label, outcome
@@ -68,9 +70,10 @@ export class PreparationChecks {
 }
 
 function preparationCheckFromRow(row: PreparationCheckRow): PreparationCheck {
-  return {
-    id: row.id,
-    generationLabel: row.generation_label,
-    outcome: row.outcome,
-  };
+  const generationLabel = parseGenerationLabel(row.generation_label);
+  if (generationLabel === undefined || (row.outcome !== "passed" && row.outcome !== "failed")) {
+    throw new Error(`invalid persisted preparation check ${row.id}`);
+  }
+
+  return { id: row.id, generationLabel, outcome: row.outcome };
 }

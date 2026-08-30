@@ -1,4 +1,8 @@
-import type { Generation, GenerationStatus } from "./generations.js";
+import { parseHarnessCommit } from "../harness-commit.js";
+import { parseGenerationLabel } from "./generation-types.js";
+import { resultFromJournalRow } from "./control-journal.js";
+import type { JournalRow } from "./control-journal.js";
+import type { Generation } from "./generations.js";
 import type { Generations } from "./generations.js";
 import type {
   CommandEffect,
@@ -15,19 +19,10 @@ export type {
   Principal,
 } from "./control-types.js";
 
-type JournalRow = {
-  readonly fingerprint: string;
-  readonly outcome_kind: "candidate-submitted" | "activated" | "rolled-back" | "rejected";
-  readonly generation_label: number | null;
-  readonly generation_harness_commit: string | null;
-  readonly generation_status: GenerationStatus | null;
-  readonly epoch: number | null;
-  readonly effect: CommandEffect | null;
-  readonly problem_code: ControlProblemCode | null;
-};
+type JournalOutcomeKind = "candidate-submitted" | "activated" | "rolled-back" | "rejected";
 
 type JournalValues = {
-  readonly outcomeKind: JournalRow["outcome_kind"];
+  readonly outcomeKind: JournalOutcomeKind;
   readonly generation: Generation | undefined;
   readonly epoch: number | undefined;
   readonly effect: CommandEffect | undefined;
@@ -78,7 +73,7 @@ export class GenerationControl {
     const active = this.generations.active();
     if (
       request.principal.kind === "harness" &&
-      request.principal.generationLabel !== active.generation?.label
+      parseGenerationLabel(request.principal.generationLabel) !== active.generation?.label
     ) {
       return rejected("revoked-capability");
     }
@@ -96,7 +91,12 @@ export class GenerationControl {
   }
 
   private submit(harnessCommit: string): GenerationControlResult {
-    const result = this.generations.labelInTransaction(harnessCommit);
+    const parsedHarnessCommit = parseHarnessCommit(harnessCommit);
+    if (parsedHarnessCommit === undefined) {
+      return rejected("invalid-harness-commit");
+    }
+
+    const result = this.generations.labelInTransaction(parsedHarnessCommit);
     return result.ok
       ? {
           ok: true,
@@ -114,7 +114,12 @@ export class GenerationControl {
       return rejected("stale-epoch");
     }
 
-    const result = this.generations.activateInTransaction(label);
+    const generationLabel = parseGenerationLabel(label);
+    if (generationLabel === undefined) {
+      return rejected("invalid-generation-label");
+    }
+
+    const result = this.generations.activateInTransaction(generationLabel);
     return result.ok
       ? {
           ok: true,
@@ -133,7 +138,12 @@ export class GenerationControl {
       return rejected("stale-epoch");
     }
 
-    const target = this.generations.byLabel(label);
+    const generationLabel = parseGenerationLabel(label);
+    if (generationLabel === undefined) {
+      return rejected("invalid-generation-label");
+    }
+
+    const target = this.generations.byLabel(generationLabel);
     if (target === undefined) {
       return rejected("unknown-generation");
     }
@@ -142,11 +152,11 @@ export class GenerationControl {
       return rejected("not-ready");
     }
 
-    if (!this.generations.hasBeenActive(label)) {
+    if (!this.generations.hasBeenActive(generationLabel)) {
       return rejected("not-previously-active");
     }
 
-    const result = this.generations.activateInTransaction(label);
+    const result = this.generations.activateInTransaction(generationLabel);
     return result.ok
       ? {
           ok: true,
@@ -235,46 +245,6 @@ function journalValues(result: GenerationControlResult): JournalValues {
     effect: "effect" in result.outcome ? result.outcome.effect : undefined,
     problemCode: undefined,
   };
-}
-
-function resultFromJournalRow(row: JournalRow): GenerationControlResult {
-  if (row.outcome_kind === "rejected" && row.problem_code !== null) {
-    return rejected(row.problem_code);
-  }
-
-  if (
-    row.generation_label !== null &&
-    row.generation_harness_commit !== null &&
-    row.generation_status !== null &&
-    row.epoch !== null
-  ) {
-    const generation = {
-      label: row.generation_label,
-      harnessCommit: row.generation_harness_commit,
-      status: row.generation_status,
-    };
-
-    if (row.outcome_kind === "candidate-submitted") {
-      return { ok: true, outcome: { kind: "candidate-submitted", generation, epoch: row.epoch } };
-    }
-
-    if (
-      row.effect !== null &&
-      (row.outcome_kind === "activated" || row.outcome_kind === "rolled-back")
-    ) {
-      return {
-        ok: true,
-        outcome: {
-          kind: row.outcome_kind,
-          generation,
-          epoch: row.epoch,
-          effect: row.effect,
-        },
-      };
-    }
-  }
-
-  throw new Error("invalid generation control journal entry");
 }
 
 function impossible(value: never): never {

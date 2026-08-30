@@ -162,6 +162,21 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
   ).toBe("code the commit was labeled with");
 });
 
+test("returns the raw invalid harness commit in artifact input diagnostics", () => {
+  const loaderNames: string[] = [];
+
+  expect(
+    loadMainFacet(
+      loaderWithRecordedNames(loaderNames),
+      artifact("main", "main.js", [{ name: "main.js", source: facetModule('"ignored"') }]),
+    ),
+  ).toEqual({
+    ok: false,
+    problem: { code: "invalid-harness-commit", harnessCommit: "main" },
+  });
+  expect(loaderNames).toEqual([]);
+});
+
 test("rejects an artifact with no entry module before calling the Worker Loader", () => {
   const loaderNames: string[] = [];
   const loadedHarness = loadMainFacet(

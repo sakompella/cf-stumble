@@ -1,3 +1,5 @@
+import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
+
 export type RelayOutcome =
   | "pending"
   | "pre-header-failure"
@@ -9,7 +11,7 @@ export type RelayOutcome =
 export type RelayFactKind = Exclude<RelayOutcome, "pending"> | "headers-received";
 
 export type RelayAttribution = {
-  readonly generationLabel: number | undefined;
+  readonly generationLabel: GenerationLabel | undefined;
   readonly activationId: number | undefined;
   readonly preparationCheckId: number | undefined;
 };
@@ -62,7 +64,7 @@ export type AttemptRow = {
   readonly started_at: number;
   readonly deadline_at: number;
   readonly response_status: number | null;
-  readonly outcome: RelayOutcome;
+  readonly outcome: string;
   readonly finished_at: number | null;
 };
 
@@ -71,15 +73,16 @@ export type FactRow = {
   readonly generation_label: number | null;
   readonly activation_id: number | null;
   readonly preparation_check_id: number | null;
-  readonly kind: RelayFactKind;
+  readonly kind: string;
   readonly response_status: number | null;
   readonly observed_at: number;
 };
 
 export function attemptFromRow(row: AttemptRow): RelayAttempt {
+  const outcome = relayOutcomeFromRow(row.outcome, row.id);
   const base: RelayAttemptBase = {
     id: row.id,
-    generationLabel: row.generation_label ?? undefined,
+    generationLabel: nullableGenerationLabelFromRow(row.generation_label, "relay attempt", row.id),
     activationId: row.activation_id ?? undefined,
     preparationCheckId: row.preparation_check_id ?? undefined,
     startedAt: row.started_at,
@@ -88,43 +91,95 @@ export function attemptFromRow(row: AttemptRow): RelayAttempt {
   const status = row.response_status ?? undefined;
   const finishedAt = row.finished_at ?? undefined;
 
-  switch (row.outcome) {
+  switch (outcome) {
     case "pending":
-      return { ...base, outcome: row.outcome, responseStatus: status, finishedAt: undefined };
+      return { ...base, outcome, responseStatus: status, finishedAt: undefined };
     case "pre-header-failure":
       if (status === undefined && finishedAt !== undefined) {
-        return { ...base, outcome: row.outcome, responseStatus: undefined, finishedAt };
+        return { ...base, outcome, responseStatus: undefined, finishedAt };
       }
       break;
     case "body-completed":
     case "body-failed":
       if (status !== undefined && finishedAt !== undefined) {
-        return { ...base, outcome: row.outcome, responseStatus: status, finishedAt };
+        return { ...base, outcome, responseStatus: status, finishedAt };
       }
       break;
     case "relay-cancelled":
     case "bounded-abandonment":
       if (finishedAt !== undefined) {
-        return { ...base, outcome: row.outcome, responseStatus: status, finishedAt };
+        return { ...base, outcome, responseStatus: status, finishedAt };
       }
       break;
     default:
-      return impossible(row.outcome);
+      return impossible(outcome);
   }
 
   throw new Error(`invalid persisted relay attempt ${row.id}`);
 }
 
 export function factFromRow(row: FactRow): RelayFact {
+  const kind = relayFactKindFromRow(row.kind, row.attempt_id);
   return {
     attemptId: row.attempt_id,
-    generationLabel: row.generation_label ?? undefined,
+    generationLabel: nullableGenerationLabelFromRow(
+      row.generation_label,
+      "relay fact",
+      row.attempt_id,
+    ),
     activationId: row.activation_id ?? undefined,
     preparationCheckId: row.preparation_check_id ?? undefined,
-    kind: row.kind,
+    kind,
     responseStatus: row.response_status ?? undefined,
     observedAt: row.observed_at,
   };
+}
+
+function relayOutcomeFromRow(value: string, id: number): RelayOutcome {
+  if (
+    value === "pending" ||
+    value === "pre-header-failure" ||
+    value === "body-completed" ||
+    value === "body-failed" ||
+    value === "relay-cancelled" ||
+    value === "bounded-abandonment"
+  ) {
+    return value;
+  }
+
+  throw new Error(`invalid persisted relay attempt outcome for ${id}`);
+}
+
+function relayFactKindFromRow(value: string, attemptId: number): RelayFactKind {
+  if (
+    value === "headers-received" ||
+    value === "pre-header-failure" ||
+    value === "body-completed" ||
+    value === "body-failed" ||
+    value === "relay-cancelled" ||
+    value === "bounded-abandonment"
+  ) {
+    return value;
+  }
+
+  throw new Error(`invalid persisted relay fact kind for ${attemptId}`);
+}
+
+function nullableGenerationLabelFromRow(
+  value: number | null,
+  kind: string,
+  id: number,
+): GenerationLabel | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  const generationLabel = parseGenerationLabel(value);
+  if (generationLabel === undefined) {
+    throw new Error(`invalid persisted ${kind} generation label for ${id}`);
+  }
+
+  return generationLabel;
 }
 
 function impossible(value: never): never {

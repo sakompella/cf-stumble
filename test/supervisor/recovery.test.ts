@@ -121,6 +121,17 @@ test("selects a fallback from persisted relay facts after Durable Object evictio
   ).toMatchObject({ fallbackGenerationLabel: 0, phase: "ready" });
 });
 
+test("round-trips recovery failure and fallback generation labels after eviction", async () => {
+  const { control, episode } = await episodeWithFallback("recovery-label-round-trip");
+
+  await evictDurableObject(control);
+
+  expect(await control.getRecoveryEpisode(episode.id)).toMatchObject({
+    failure: { failedGenerationLabel: 1 },
+    fallbackGenerationLabel: 0,
+  });
+});
+
 test("replays an open repair operation with its original key", async () => {
   const { control, episode } = await episodeWithFallback("recovery-replays-operation-key");
   const first = await control.resumeRecovery(episode.id, 1_000);

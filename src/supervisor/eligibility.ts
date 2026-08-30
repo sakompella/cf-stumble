@@ -1,3 +1,4 @@
+import type { GenerationLabel } from "./generation-types.js";
 import type { PreparationCheck } from "./preparation-checks.js";
 import type { RelayFact } from "./relay-facts.js";
 
@@ -29,7 +30,7 @@ export type GenerationEligibility =
     };
 
 export type GenerationEligibilityEvidence = {
-  readonly generationLabel: number;
+  readonly generationLabel: GenerationLabel;
   readonly latestActivationId: number | undefined;
   readonly latestPreparationCheck: PreparationCheck | undefined;
   readonly facts: readonly RelayFact[];
@@ -76,7 +77,7 @@ export function deriveGenerationEligibility(
 
 function belongsToMostRecentEra(
   fact: RelayFact,
-  generationLabel: number,
+  generationLabel: GenerationLabel,
   activationId: number,
   preparationCheck: PreparationCheck,
 ): boolean {

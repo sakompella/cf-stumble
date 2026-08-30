@@ -20,6 +20,7 @@ import {
 } from "./eligibility.js";
 import {
   Generations,
+  parseGenerationLabel,
   type ActiveGeneration,
   type Generation,
   type PreparationCheck,
@@ -28,7 +29,7 @@ import { RelayFacts, type RelayAttempt, type RelayFact } from "./relay-facts.js"
 import {
   Recovery,
   type RecoveryEpisode,
-  type RecoveryFailure,
+  type RecoveryFailureInput,
   type RecoveryOperationReport,
   type RecoveryPolicy,
   type RepairOperationOutcome,
@@ -93,7 +94,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   getGeneration(label: number): Generation | undefined {
-    return this.generations.byLabel(label);
+    const generationLabel = parseGenerationLabel(label);
+    return generationLabel === undefined ? undefined : this.generations.byLabel(generationLabel);
   }
 
   getGenerations(): readonly Generation[] {
@@ -105,7 +107,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   getPreparationCheckHistory(label: number): readonly PreparationCheck[] {
-    return this.generations.preparationCheckHistory(label);
+    const generationLabel = parseGenerationLabel(label);
+    return generationLabel === undefined
+      ? []
+      : this.generations.preparationCheckHistory(generationLabel);
   }
 
   getRelayAttempts(): readonly RelayAttempt[] {
@@ -121,7 +126,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   startRecovery(
-    failure: RecoveryFailure,
+    failure: RecoveryFailureInput,
     policy: RecoveryPolicy,
     now: number,
     eligibilityPolicy?: EligibilityPolicy,
@@ -159,11 +164,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     label: number,
     policy: EligibilityPolicy = DEFAULT_ELIGIBILITY_POLICY,
   ): GenerationEligibility {
+    const generationLabel = parseGenerationLabel(label);
+    if (generationLabel === undefined) {
+      return {
+        kind: "ineligible",
+        reason: "startup-check-required",
+        creditedTurns: 0,
+        observationSpanMs: 0,
+      };
+    }
+
     return deriveGenerationEligibility(
       {
-        generationLabel: label,
-        latestActivationId: this.generations.latestActivationId(label),
-        latestPreparationCheck: this.generations.latestPreparationCheck(label),
+        generationLabel,
+        latestActivationId: this.generations.latestActivationId(generationLabel),
+        latestPreparationCheck: this.generations.latestPreparationCheck(generationLabel),
         facts: this.relayFacts.facts(),
       },
       policy,

@@ -1,12 +1,19 @@
+import type { GenerationLabel } from "./generation-types.js";
+
 export type RecoveryPolicy = {
   readonly maxRepairAttempts: number;
   readonly recoveryBudgetMs: number;
   readonly operationDeadlineMs: number;
 };
 
-export type RecoveryFailure = {
+export type RecoveryFailureInput = {
   readonly failureEventId: string;
   readonly failedGenerationLabel: number;
+};
+
+export type RecoveryFailure = {
+  readonly failureEventId: string;
+  readonly failedGenerationLabel: GenerationLabel;
 };
 
 export type RecoveryOperation = {
@@ -27,7 +34,7 @@ export type RecoveryPhase =
 export type RecoveryEpisode = {
   readonly id: number;
   readonly failure: RecoveryFailure;
-  readonly fallbackGenerationLabel: number | undefined;
+  readonly fallbackGenerationLabel: GenerationLabel | undefined;
   readonly policy: RecoveryPolicy;
   readonly startedAt: number;
   readonly recoveryDeadlineAt: number;

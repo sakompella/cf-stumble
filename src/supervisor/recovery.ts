@@ -1,5 +1,6 @@
 import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "./eligibility.js";
 import type { EligibilityPolicy } from "./eligibility.js";
+import type { GenerationLabel } from "./generation-types.js";
 import type { Generations } from "./generations.js";
 import type { RelayFacts } from "./relay-facts.js";
 import {
@@ -21,7 +22,7 @@ import {
 import type { EpisodeRow } from "./recovery-model.js";
 import type {
   RecoveryEpisode,
-  RecoveryFailure,
+  RecoveryFailureInput,
   RecoveryOperation,
   RecoveryOperationReport,
   RecoveryPolicy,
@@ -31,6 +32,7 @@ import type {
 export type {
   RecoveryEpisode,
   RecoveryFailure,
+  RecoveryFailureInput,
   RecoveryOperation,
   RecoveryOperationReport,
   RecoveryPolicy,
@@ -53,15 +55,15 @@ export class Recovery {
   }
 
   start(
-    failure: RecoveryFailure,
+    failure: RecoveryFailureInput,
     policy: RecoveryPolicy,
     now: number,
     eligibilityPolicy: EligibilityPolicy = DEFAULT_ELIGIBILITY_POLICY,
   ): RecoveryEpisode {
-    validateFailure(failure);
+    const parsedFailure = validateFailure(failure);
     validateNow(now);
     return this.storage.transactionSync(() => {
-      const existing = this.byFailureEventId(failure.failureEventId);
+      const existing = this.byFailureEventId(parsedFailure.failureEventId);
       if (existing !== undefined) {
         return existing;
       }
@@ -69,13 +71,13 @@ export class Recovery {
       validateRecoveryPolicy(policy);
       validateRecoveryDeadline(now, policy);
       const fallbackGenerationLabel = this.chooseFallback(
-        failure.failedGenerationLabel,
+        parsedFailure.failedGenerationLabel,
         eligibilityPolicy,
       );
       const episode =
         fallbackGenerationLabel === undefined
-          ? blockedEpisode(failure, policy, now)
-          : readyEpisode(failure, fallbackGenerationLabel, policy, now);
+          ? blockedEpisode(parsedFailure, policy, now)
+          : readyEpisode(parsedFailure, fallbackGenerationLabel, policy, now);
       this.insert(episode);
       return {
         ...episode,
@@ -207,9 +209,9 @@ export class Recovery {
   }
 
   private chooseFallback(
-    failedGenerationLabel: number,
+    failedGenerationLabel: GenerationLabel,
     policy: EligibilityPolicy,
-  ): number | undefined {
+  ): GenerationLabel | undefined {
     const facts = this.relayFacts.facts();
     return this.generations
       .all()

@@ -3,6 +3,7 @@ import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../ag
 import { deadlineAfter } from "./startup-check-deadline.js";
 import { drainResponseBody } from "./startup-check-body.js";
 import { mainFacetName } from "./facet-name.js";
+import { parseGenerationLabel } from "./generation-types.js";
 import type { Deadline } from "./startup-check-deadline.js";
 import type { Generation, Generations, PreparationCheckResult } from "./generations.js";
 
@@ -61,7 +62,12 @@ export async function checkGenerationStartup(
   input: MainHarnessArtifactInput,
   options: StartupCheckOptions = {},
 ): Promise<StartupCheckResult> {
-  const generation = generations.byLabel(label);
+  const generationLabel = parseGenerationLabel(label);
+  if (generationLabel === undefined) {
+    return { ok: false, problem: { code: "unknown-generation", label } };
+  }
+
+  const generation = generations.byLabel(generationLabel);
   if (generation === undefined) {
     return { ok: false, problem: { code: "unknown-generation", label } };
   }
@@ -71,21 +77,21 @@ export async function checkGenerationStartup(
     return parsedArtifact;
   }
 
-  if (parsedArtifact.artifact.harnessCommit.value !== generation.harnessCommit) {
+  if (parsedArtifact.artifact.harnessCommit !== generation.harnessCommit) {
     return {
       ok: false,
       problem: {
         code: "artifact-harness-commit-mismatch",
         label,
         generationHarnessCommit: generation.harnessCommit,
-        artifactHarnessCommit: parsedArtifact.artifact.harnessCommit.value,
+        artifactHarnessCommit: parsedArtifact.artifact.harnessCommit,
       },
     };
   }
 
   const outcome = await runStartupCheck(ctx, loader, input, generation.harnessCommit, options);
   const recorded = generations.recordPreparationCheck(
-    label,
+    generationLabel,
     outcome.stage === "ready" ? "passed" : "failed",
   );
 

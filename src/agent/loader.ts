@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { HarnessCommitId } from "../harness-commit.js";
+import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 
 type HarnessModule = {
   readonly name: string;
@@ -57,11 +57,11 @@ type ModuleMapValidation =
     };
 
 export class MainHarnessArtifact {
-  readonly harnessCommit: HarnessCommitId;
+  readonly harnessCommit: HarnessCommit;
   readonly modules: readonly [entryModule: HarnessModule, ...otherModules: HarnessModule[]];
 
   private constructor(
-    harnessCommit: HarnessCommitId,
+    harnessCommit: HarnessCommit,
     modules: readonly [entryModule: HarnessModule, ...otherModules: HarnessModule[]],
   ) {
     this.harnessCommit = harnessCommit;
@@ -74,7 +74,7 @@ export class MainHarnessArtifact {
       return moduleMap;
     }
 
-    const harnessCommit = HarnessCommitId.parse(input.harnessCommit);
+    const harnessCommit = parseHarnessCommit(input.harnessCommit);
     if (harnessCommit === undefined) {
       return {
         ok: false,
@@ -229,7 +229,7 @@ function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] 
 }
 
 function loadArtifact(loader: WorkerLoader, artifact: MainHarnessArtifact): WorkerStub {
-  return loader.get(artifact.harnessCommit.value, () => ({
+  return loader.get(artifact.harnessCommit, () => ({
     compatibilityDate: "2025-01-01",
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),

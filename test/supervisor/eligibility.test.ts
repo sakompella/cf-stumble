@@ -5,8 +5,6 @@ import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
-import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
-import type { PreparationCheck } from "../../src/supervisor/preparation-checks.js";
 import { RelayFacts, type RelayFact } from "../../src/supervisor/relay-facts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
@@ -16,51 +14,13 @@ import {
   submitCandidate,
 } from "./startup-check-helpers.js";
 
-const policy: EligibilityPolicy = {
-  minimumCreditedTurns: 3,
-  minimumObservationSpanMs: 60_000,
-};
-
-const startupCheck: PreparationCheck = { id: 9, generationLabel: 1, outcome: "passed" };
-
-type FactAttribution = Partial<
-  Pick<RelayFact, "generationLabel" | "activationId" | "preparationCheckId">
->;
-
-function relayFact(
-  attemptId: number,
-  kind: RelayFact["kind"],
-  responseStatus: number | undefined,
-  observedAt: number,
-  attribution: FactAttribution = {},
-): RelayFact {
-  return {
-    attemptId,
-    generationLabel: 1,
-    activationId: 4,
-    preparationCheckId: 9,
-    kind,
-    responseStatus,
-    observedAt,
-    ...attribution,
-  };
-}
-
-function completedFact(attemptId: number, observedAt: number, activationId = 4): RelayFact {
-  return relayFact(attemptId, "body-completed", 200, observedAt, { activationId });
-}
-
-function eligibility(facts: readonly RelayFact[]) {
-  return deriveGenerationEligibility(
-    {
-      generationLabel: 1,
-      latestActivationId: 4,
-      latestPreparationCheck: startupCheck,
-      facts,
-    },
-    policy,
-  );
-}
+import {
+  completedFact,
+  eligibility,
+  generationLabel,
+  relayFact,
+  startupCheck,
+} from "./eligibility-fixtures.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -89,7 +49,7 @@ test("requires credited turns to span time instead of arriving in one burst", ()
 test("treats headers, completed 4xx, cancellation, and abandonment as neutral facts", () => {
   const result = deriveGenerationEligibility(
     {
-      generationLabel: 1,
+      generationLabel: generationLabel(1),
       latestActivationId: 4,
       latestPreparationCheck: startupCheck,
       facts: [
@@ -133,13 +93,13 @@ test("uses only matching current-era facts and terminal timestamps in any order"
     completedFact(1, 0),
     relayFact(3, "body-completed", 200, 120_000, { preparationCheckId: 8 }),
     relayFact(4, "body-completed", 200, 120_000, { activationId: 3 }),
-    relayFact(5, "body-completed", 200, 120_000, { generationLabel: 2 }),
+    relayFact(5, "body-completed", 200, 120_000, { generationLabel: generationLabel(2) }),
   ];
   const strictPolicy = { minimumCreditedTurns: 2, minimumObservationSpanMs: 60_000 };
 
   const currentEra = deriveGenerationEligibility(
     {
-      generationLabel: 1,
+      generationLabel: generationLabel(1),
       latestActivationId: 4,
       latestPreparationCheck: startupCheck,
       facts,
@@ -148,7 +108,7 @@ test("uses only matching current-era facts and terminal timestamps in any order"
   );
   const reversedFacts = deriveGenerationEligibility(
     {
-      generationLabel: 1,
+      generationLabel: generationLabel(1),
       latestActivationId: 4,
       latestPreparationCheck: startupCheck,
       facts: facts.toReversed(),

@@ -1,6 +1,8 @@
+import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
 import type {
   RecoveryEpisode,
   RecoveryFailure,
+  RecoveryFailureInput,
   RecoveryOperation,
   RecoveryPhase,
   RecoveryPolicy,
@@ -18,13 +20,13 @@ export type EpisodeRow = {
   readonly started_at: number;
   readonly recovery_deadline_at: number;
   readonly attempts_used: number;
-  readonly phase: RecoveryPhase;
+  readonly phase: string;
   readonly result: string;
   readonly errors_text: string;
   readonly operation_key: string | null;
   readonly operation_attempt: number | null;
   readonly operation_deadline_at: number | null;
-  readonly operation_state: "open" | "needs-reconciliation" | null;
+  readonly operation_state: string | null;
 };
 
 export const recoverySchema = `
@@ -90,7 +92,7 @@ export function blockedEpisode(
 
 export function readyEpisode(
   failure: RecoveryFailure,
-  fallbackGenerationLabel: number,
+  fallbackGenerationLabel: GenerationLabel,
   policy: RecoveryPolicy,
   now: number,
 ): RecoveryEpisode {
@@ -131,13 +133,20 @@ export function settleOperation(
 }
 
 export function episodeFromRow(row: EpisodeRow): RecoveryEpisode {
+  const failedGenerationLabel = generationLabelFromRow(row.failed_generation_label, row.id);
+  const fallbackGenerationLabel = nullableGenerationLabelFromRow(
+    row.fallback_generation_label,
+    row.id,
+  );
+  const phase = recoveryPhaseFromRow(row.phase, row.id);
+
   return {
     id: row.id,
     failure: {
       failureEventId: row.failure_event_id,
-      failedGenerationLabel: row.failed_generation_label,
+      failedGenerationLabel,
     },
-    fallbackGenerationLabel: row.fallback_generation_label ?? undefined,
+    fallbackGenerationLabel,
     policy: {
       maxRepairAttempts: row.max_repair_attempts,
       recoveryBudgetMs: row.recovery_budget_ms,
@@ -146,7 +155,7 @@ export function episodeFromRow(row: EpisodeRow): RecoveryEpisode {
     startedAt: row.started_at,
     recoveryDeadlineAt: row.recovery_deadline_at,
     attemptsUsed: row.attempts_used,
-    phase: row.phase,
+    phase,
     result: row.result,
     errors: errorsFromText(row.errors_text),
     currentOperation: operationFromRow(row),
@@ -174,7 +183,7 @@ function operationFromRow(row: EpisodeRow): RecoveryOperation | undefined {
       key: row.operation_key,
       attempt: row.operation_attempt,
       deadlineAt: row.operation_deadline_at,
-      state: row.operation_state,
+      state: recoveryOperationStateFromRow(row.operation_state, row.id),
     };
   }
 
@@ -189,14 +198,67 @@ function errorsFromText(encoded: string): readonly string[] {
   return encoded.length === 0 ? [] : encoded.split("|").map((error) => decodeURIComponent(error));
 }
 
-export function validateFailure(failure: RecoveryFailure): void {
+export function validateFailure(failure: RecoveryFailureInput): RecoveryFailure {
   if (failure.failureEventId.length === 0) {
     throw new Error("failureEventId must not be empty");
   }
 
-  if (!Number.isSafeInteger(failure.failedGenerationLabel) || failure.failedGenerationLabel < 0) {
+  const failedGenerationLabel = parseGenerationLabel(failure.failedGenerationLabel);
+  if (failedGenerationLabel === undefined) {
     throw new TypeError("failedGenerationLabel must be a non-negative safe integer");
   }
+
+  return { failureEventId: failure.failureEventId, failedGenerationLabel };
+}
+
+function recoveryPhaseFromRow(value: string, episodeId: number): RecoveryPhase {
+  if (
+    value === "blocked" ||
+    value === "ready" ||
+    value === "repair-open" ||
+    value === "needs-reconciliation" ||
+    value === "completed"
+  ) {
+    return value;
+  }
+
+  throw new Error(`invalid persisted recovery phase for ${episodeId}`);
+}
+
+function recoveryOperationStateFromRow(
+  value: string,
+  episodeId: number,
+): RecoveryOperation["state"] {
+  if (value === "open" || value === "needs-reconciliation") {
+    return value;
+  }
+
+  throw new Error(`invalid persisted recovery operation state for ${episodeId}`);
+}
+
+function generationLabelFromRow(value: number, episodeId: number): GenerationLabel {
+  const generationLabel = parseGenerationLabel(value);
+  if (generationLabel === undefined) {
+    throw new Error(`invalid persisted failed generation label for recovery ${episodeId}`);
+  }
+
+  return generationLabel;
+}
+
+function nullableGenerationLabelFromRow(
+  value: number | null,
+  episodeId: number,
+): GenerationLabel | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  const generationLabel = parseGenerationLabel(value);
+  if (generationLabel === undefined) {
+    throw new Error(`invalid persisted fallback generation label for recovery ${episodeId}`);
+  }
+
+  return generationLabel;
 }
 
 export function validateRecoveryDeadline(now: number, policy: RecoveryPolicy): void {

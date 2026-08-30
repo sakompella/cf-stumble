@@ -1,13 +1,16 @@
-const gitObjectId = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
+const gitObjectId = /^[0-9a-f]{40}$/u;
 
-export class HarnessCommitId {
-  readonly value: string;
+declare const harnessCommitBrand: unique symbol;
 
-  private constructor(value: string) {
-    this.value = value;
+export type HarnessCommit = string & {
+  readonly [harnessCommitBrand]: "HarnessCommit";
+};
+
+export function parseHarnessCommit(value: string): HarnessCommit | undefined {
+  if (!gitObjectId.test(value)) {
+    return undefined;
   }
 
-  static parse(value: string): HarnessCommitId | undefined {
-    return gitObjectId.test(value) ? new HarnessCommitId(value) : undefined;
-  }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: gitObjectId accepts exactly the HarnessCommit syntax.
+  return value as HarnessCommit;
 }

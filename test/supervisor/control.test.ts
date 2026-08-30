@@ -134,6 +134,20 @@ test("a stale activation request leaves the active generation unchanged", async 
   expect(await control.getActiveGeneration()).toEqual(active);
 });
 
+test("rejects an invalid generation-label RPC input with its existing error code", async () => {
+  const control = supervisor("control-invalid-generation-label");
+
+  expect(
+    await control.controlGeneration(
+      request("invalid-generation-label", user, {
+        kind: "activate",
+        label: -1,
+        observedEpoch: 0,
+      }),
+    ),
+  ).toEqual({ ok: false, problem: { code: "invalid-generation-label" } });
+});
+
 test("activation rejects unknown and unchecked generation targets with distinct codes", async () => {
   const control = supervisor("control-invalid-activation-targets");
   const epoch = await activateFixture(control);

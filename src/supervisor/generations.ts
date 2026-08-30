@@ -1,23 +1,27 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { HarnessCommitId } from "../harness-commit.js";
+import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
 import type { PreparationCheck } from "./preparation-checks.js";
-import type {
-  ActivationResult,
-  ActiveGeneration,
-  Generation,
-  GenerationStatus,
-  LabelGenerationResult,
-  PreparationCheckOutcome,
-  PreparationCheckResult,
+import {
+  type ActivationResult,
+  type ActiveGeneration,
+  type Generation,
+  type GenerationLabel,
+  type LabelGenerationResult,
+  type PreparationCheckOutcome,
+  type PreparationCheckResult,
 } from "./generation-types.js";
+import { generationFromRow, generationLabelFromPersistence } from "./generation-row.js";
+import type { GenerationRow } from "./generation-row.js";
 
+export { parseGenerationLabel } from "./generation-types.js";
 export type {
   ActivationResult,
   ActiveGeneration,
   Generation,
+  GenerationLabel,
   GenerationStatus,
   LabelGenerationResult,
   PreparationCheckOutcome,
@@ -25,16 +29,16 @@ export type {
 } from "./generation-types.js";
 export type { PreparationCheck } from "./preparation-checks.js";
 
-type GenerationRow = {
-  readonly label: number;
-  readonly harness_commit: string;
-  readonly status: GenerationStatus;
-};
-
 type StateRow = {
   readonly active_label: number | null;
   readonly epoch: number;
   readonly activation_id: number;
+};
+
+type State = {
+  readonly activeLabel: GenerationLabel | undefined;
+  readonly epoch: number;
+  readonly activationId: number;
 };
 
 export class Generations {
@@ -44,6 +48,11 @@ export class Generations {
   private readonly activationHistory: ActivationHistory;
 
   constructor(storage: DurableObjectStorage, fixtureHarnessCommit: string) {
+    const fixtureCommit = parseHarnessCommit(fixtureHarnessCommit);
+    if (fixtureCommit === undefined) {
+      throw new Error("invalid fixture harness commit");
+    }
+
     this.storage = storage;
     this.sql = storage.sql;
     this.preparationChecks = new PreparationChecks(storage);
@@ -69,49 +78,42 @@ export class Generations {
       `INSERT INTO generations (label, harness_commit, status)
        VALUES (0, ?, 'candidate')
        ON CONFLICT DO NOTHING`,
-      fixtureHarnessCommit,
+      fixtureCommit,
     );
   }
 
-  label(harnessCommit: string): LabelGenerationResult {
-    return this.transaction(() => this.labelInTransaction(harnessCommit));
-  }
-
-  labelInTransaction(harnessCommit: string): LabelGenerationResult {
-    const commit = HarnessCommitId.parse(harnessCommit);
-    if (commit === undefined) {
-      return { ok: false, problem: { code: "invalid-harness-commit", harnessCommit } };
-    }
-
-    const existing = this.generationByCommit(commit.value);
+  labelInTransaction(harnessCommit: HarnessCommit): LabelGenerationResult {
+    const existing = this.generationByCommit(harnessCommit);
     if (existing !== undefined) {
       return { ok: true, generation: existing, epoch: this.state().epoch };
     }
 
-    const nextLabel = this.sql
-      .exec<{ readonly label: number }>(
-        "SELECT COALESCE(MAX(label), -1) + 1 AS label FROM generations",
-      )
-      .one().label;
+    const nextLabel = generationLabelFromPersistence(
+      this.sql
+        .exec<{ readonly label: number }>(
+          "SELECT COALESCE(MAX(label), -1) + 1 AS label FROM generations",
+        )
+        .one().label,
+      "next generation label",
+    );
     this.sql.exec(
       "INSERT INTO generations (label, harness_commit, status) VALUES (?, ?, 'candidate')",
       nextLabel,
-      commit.value,
+      harnessCommit,
     );
     const epoch = this.incrementEpoch();
 
     return {
       ok: true,
-      generation: { label: nextLabel, harnessCommit: commit.value, status: "candidate" },
+      generation: { label: nextLabel, harnessCommit, status: "candidate" },
       epoch,
     };
   }
 
-  recordPreparationCheck(label: number, outcome: PreparationCheckOutcome): PreparationCheckResult {
-    if (!isGenerationLabel(label)) {
-      return { ok: false, problem: { code: "invalid-generation-label", label } };
-    }
-
+  recordPreparationCheck(
+    label: GenerationLabel,
+    outcome: PreparationCheckOutcome,
+  ): PreparationCheckResult {
     if (outcome !== "passed" && outcome !== "failed") {
       return { ok: false, problem: { code: "invalid-preparation-check-outcome" } };
     }
@@ -154,15 +156,7 @@ export class Generations {
     });
   }
 
-  activate(label: number): ActivationResult {
-    return this.transaction(() => this.activateInTransaction(label));
-  }
-
-  activateInTransaction(label: number): ActivationResult {
-    if (!isGenerationLabel(label)) {
-      return { ok: false, problem: { code: "invalid-generation-label", label } };
-    }
-
+  activateInTransaction(label: GenerationLabel): ActivationResult {
     const generation = this.generationByLabel(label);
     if (generation === undefined) {
       return { ok: false, problem: { code: "unknown-generation", label } };
@@ -173,7 +167,7 @@ export class Generations {
     }
 
     const state = this.state();
-    if (state.active_label === label) {
+    if (state.activeLabel === label) {
       return {
         ok: true,
         generation,
@@ -195,14 +189,14 @@ export class Generations {
     const state = this.state();
     return {
       generation:
-        state.active_label === null ? undefined : this.generationByLabel(state.active_label),
+        state.activeLabel === undefined ? undefined : this.generationByLabel(state.activeLabel),
       epoch: state.epoch,
-      activationId: state.active_label === null ? undefined : state.activation_id,
+      activationId: state.activeLabel === undefined ? undefined : state.activationId,
     };
   }
 
-  byLabel(label: number): Generation | undefined {
-    return isGenerationLabel(label) ? this.generationByLabel(label) : undefined;
+  byLabel(label: GenerationLabel): Generation | undefined {
+    return this.generationByLabel(label);
   }
 
   all(): readonly Generation[] {
@@ -214,27 +208,27 @@ export class Generations {
       .map((row) => generationFromRow(row));
   }
 
-  latestPreparationCheck(label: number): PreparationCheck | undefined {
-    return isGenerationLabel(label) ? this.preparationChecks.latestPass(label) : undefined;
+  latestPreparationCheck(label: GenerationLabel): PreparationCheck | undefined {
+    return this.preparationChecks.latestPass(label);
   }
 
-  latestActivationId(label: number): number | undefined {
-    return isGenerationLabel(label) ? this.activationHistory.latestId(label) : undefined;
+  latestActivationId(label: GenerationLabel): number | undefined {
+    return this.activationHistory.latestId(label);
   }
 
-  preparationCheckHistory(label: number): readonly PreparationCheck[] {
-    return isGenerationLabel(label) ? this.preparationChecks.all(label) : [];
+  preparationCheckHistory(label: GenerationLabel): readonly PreparationCheck[] {
+    return this.preparationChecks.all(label);
   }
 
-  hasBeenActive(label: number): boolean {
-    return isGenerationLabel(label) && this.activationHistory.hasBeenActive(label);
+  hasBeenActive(label: GenerationLabel): boolean {
+    return this.activationHistory.hasBeenActive(label);
   }
 
   transaction<T>(operation: () => T): T {
     return this.storage.transactionSync(operation);
   }
 
-  private generationByCommit(harnessCommit: string): Generation | undefined {
+  private generationByCommit(harnessCommit: HarnessCommit): Generation | undefined {
     const row = this.sql
       .exec<GenerationRow>(
         "SELECT label, harness_commit, status FROM generations WHERE harness_commit = ?",
@@ -245,7 +239,7 @@ export class Generations {
     return row === undefined ? undefined : generationFromRow(row);
   }
 
-  private generationByLabel(label: number): Generation | undefined {
+  private generationByLabel(label: GenerationLabel): Generation | undefined {
     const row = this.sql
       .exec<GenerationRow>(
         "SELECT label, harness_commit, status FROM generations WHERE label = ?",
@@ -256,12 +250,21 @@ export class Generations {
     return row === undefined ? undefined : generationFromRow(row);
   }
 
-  private state(): StateRow {
-    return this.sql
+  private state(): State {
+    const row = this.sql
       .exec<StateRow>(
         "SELECT active_label, epoch, activation_id FROM generation_state WHERE singleton = 1",
       )
       .one();
+
+    return {
+      activeLabel:
+        row.active_label === null
+          ? undefined
+          : generationLabelFromPersistence(row.active_label, "active generation label"),
+      epoch: row.epoch,
+      activationId: row.activation_id,
+    };
   }
 
   private incrementEpoch(): number {
@@ -273,18 +276,6 @@ export class Generations {
     this.sql.exec(
       "UPDATE generation_state SET activation_id = activation_id + 1 WHERE singleton = 1",
     );
-    return this.state().activation_id;
+    return this.state().activationId;
   }
-}
-
-function generationFromRow(row: GenerationRow): Generation {
-  return {
-    label: row.label,
-    harnessCommit: row.harness_commit,
-    status: row.status,
-  };
-}
-
-function isGenerationLabel(label: number): boolean {
-  return Number.isSafeInteger(label) && label >= 0;
 }

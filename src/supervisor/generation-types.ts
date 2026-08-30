@@ -1,8 +1,25 @@
+import type { HarnessCommit } from "../harness-commit.js";
+
 export type GenerationStatus = "candidate" | "ready" | "failed";
 
+declare const generationLabelBrand: unique symbol;
+
+export type GenerationLabel = number & {
+  readonly [generationLabelBrand]: "GenerationLabel";
+};
+
+export function parseGenerationLabel(value: number): GenerationLabel | undefined {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    return undefined;
+  }
+
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the guard accepts only non-negative safe integer GenerationLabel values.
+  return value as GenerationLabel;
+}
+
 export type Generation = {
-  readonly label: number;
-  readonly harnessCommit: string;
+  readonly label: GenerationLabel;
+  readonly harnessCommit: HarnessCommit;
   readonly status: GenerationStatus;
 };
 

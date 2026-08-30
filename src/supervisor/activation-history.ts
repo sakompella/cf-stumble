@@ -1,3 +1,5 @@
+import type { GenerationLabel } from "./generation-types.js";
+
 type ActivationHistoryRow = {
   readonly activation_id: number;
 };
@@ -18,7 +20,7 @@ export class ActivationHistory {
     `);
   }
 
-  record(generationLabel: number, activationId: number): void {
+  record(generationLabel: GenerationLabel, activationId: number): void {
     this.sql.exec(
       "INSERT INTO generation_activation_history (activation_id, generation_label) VALUES (?, ?)",
       activationId,
@@ -26,14 +28,14 @@ export class ActivationHistory {
     );
   }
 
-  recordActive(generationLabel: number): void {
+  recordActive(generationLabel: GenerationLabel): void {
     this.sql.exec(
       "INSERT INTO active_generation_history (label) VALUES (?) ON CONFLICT DO NOTHING",
       generationLabel,
     );
   }
 
-  latestId(generationLabel: number): number | undefined {
+  latestId(generationLabel: GenerationLabel): number | undefined {
     return this.sql
       .exec<ActivationHistoryRow>(
         `SELECT activation_id
@@ -46,7 +48,7 @@ export class ActivationHistory {
       .toArray()[0]?.activation_id;
   }
 
-  hasBeenActive(generationLabel: number): boolean {
+  hasBeenActive(generationLabel: GenerationLabel): boolean {
     return (
       this.sql
         .exec<{ readonly label: number }>(
