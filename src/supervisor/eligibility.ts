@@ -1,5 +1,5 @@
 import type { PreparationCheck } from "./preparation-checks.js";
-import type { RelayAttempt } from "./relay-facts.js";
+import type { RelayFact } from "./relay-facts.js";
 
 export type EligibilityPolicy = {
   readonly minimumCreditedTurns: number;
@@ -32,7 +32,12 @@ export type GenerationEligibilityEvidence = {
   readonly generationLabel: number;
   readonly latestActivationId: number | undefined;
   readonly latestPreparationCheck: PreparationCheck | undefined;
-  readonly attempts: readonly RelayAttempt[];
+  readonly facts: readonly RelayFact[];
+};
+
+type AttemptEvidence = {
+  readonly attemptId: number;
+  readonly terminalFact: RelayFact | undefined;
 };
 
 export function deriveGenerationEligibility(
@@ -46,13 +51,15 @@ export function deriveGenerationEligibility(
     return ineligible("startup-check-required", 0, 0);
   }
 
-  const currentAttempts = evidence.attempts.filter((attempt) =>
-    belongsToMostRecentEra(attempt, evidence.generationLabel, activationId, preparationCheck),
+  const attempts = foldAttempts(
+    evidence.facts.filter((fact) =>
+      belongsToMostRecentEra(fact, evidence.generationLabel, activationId, preparationCheck),
+    ),
   );
-  const credited = currentAttempts.filter((attempt) => isCreditedTurn(attempt));
+  const credited = attempts.filter((attempt) => isCreditedTurn(attempt));
   const observationSpanMs = creditedSpan(credited);
 
-  if (currentAttempts.some((attempt) => isFailureObservation(attempt))) {
+  if (attempts.some((attempt) => isFailureObservation(attempt))) {
     return ineligible("failure-observed", credited.length, observationSpanMs);
   }
 
@@ -68,44 +75,95 @@ export function deriveGenerationEligibility(
 }
 
 function belongsToMostRecentEra(
-  attempt: RelayAttempt,
+  fact: RelayFact,
   generationLabel: number,
   activationId: number,
   preparationCheck: PreparationCheck,
 ): boolean {
   return (
-    attempt.generationLabel === generationLabel &&
-    attempt.activationId === activationId &&
-    attempt.preparationCheckId === preparationCheck.id
+    fact.generationLabel === generationLabel &&
+    fact.activationId === activationId &&
+    fact.preparationCheckId === preparationCheck.id
   );
 }
 
-function isCreditedTurn(attempt: RelayAttempt): boolean {
-  return attempt.outcome === "body-completed" && attempt.responseStatus < 400;
-}
+function foldAttempts(facts: readonly RelayFact[]): readonly AttemptEvidence[] {
+  const attempts = new Map<number, AttemptEvidence>();
 
-function isFailureObservation(attempt: RelayAttempt): boolean {
-  return (
-    attempt.outcome === "pre-header-failure" ||
-    attempt.outcome === "body-failed" ||
-    (attempt.outcome === "body-completed" && attempt.responseStatus >= 500)
-  );
-}
+  for (const fact of facts) {
+    validateFact(fact);
+    const attempt = attempts.get(fact.attemptId) ?? {
+      attemptId: fact.attemptId,
+      terminalFact: undefined,
+    };
 
-function creditedSpan(attempts: readonly RelayAttempt[]): number {
-  if (attempts.length < 2) {
-    return 0;
+    if (isTerminal(fact)) {
+      if (attempt.terminalFact !== undefined) {
+        throw new Error(
+          `invalid relay fact history for attempt ${fact.attemptId}: multiple terminal facts`,
+        );
+      }
+
+      attempts.set(fact.attemptId, { ...attempt, terminalFact: fact });
+    } else {
+      attempts.set(fact.attemptId, attempt);
+    }
   }
 
-  const times = attempts.map((attempt) => {
-    if (attempt.finishedAt === undefined) {
-      throw new Error("a credited attempt must have a completion time");
-    }
+  return [...attempts.values()];
+}
 
-    return attempt.finishedAt;
-  });
+function isTerminal(fact: RelayFact): boolean {
+  return fact.kind !== "headers-received";
+}
 
-  return Math.max(...times) - Math.min(...times);
+function validateFact(fact: RelayFact): void {
+  if (fact.kind === "headers-received" && fact.responseStatus === undefined) {
+    throw new Error(`invalid relay fact for attempt ${fact.attemptId}: headers require a status`);
+  }
+
+  if (
+    (fact.kind === "body-completed" || fact.kind === "body-failed") &&
+    fact.responseStatus === undefined
+  ) {
+    throw new Error(
+      `invalid relay fact for attempt ${fact.attemptId}: body terminal requires a status`,
+    );
+  }
+
+  if (fact.kind === "pre-header-failure" && fact.responseStatus !== undefined) {
+    throw new Error(
+      `invalid relay fact for attempt ${fact.attemptId}: pre-header failure has a status`,
+    );
+  }
+}
+
+function isCreditedTurn(attempt: AttemptEvidence): boolean {
+  const fact = attempt.terminalFact;
+  return (
+    fact?.kind === "body-completed" &&
+    fact.responseStatus !== undefined &&
+    fact.responseStatus < 400
+  );
+}
+
+function isFailureObservation(attempt: AttemptEvidence): boolean {
+  const fact = attempt.terminalFact;
+  return (
+    fact?.kind === "pre-header-failure" ||
+    fact?.kind === "body-failed" ||
+    (fact?.kind === "body-completed" &&
+      fact.responseStatus !== undefined &&
+      fact.responseStatus >= 500)
+  );
+}
+
+function creditedSpan(attempts: readonly AttemptEvidence[]): number {
+  const times = attempts
+    .map((attempt) => attempt.terminalFact?.observedAt)
+    .filter((observedAt): observedAt is number => observedAt !== undefined);
+
+  return times.length < 2 ? 0 : Math.max(...times) - Math.min(...times);
 }
 
 function ineligible(

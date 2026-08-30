@@ -210,7 +210,7 @@ export class Recovery {
     failedGenerationLabel: number,
     policy: EligibilityPolicy,
   ): number | undefined {
-    const attempts = this.relayFacts.attempts();
+    const facts = this.relayFacts.facts();
     return this.generations
       .all()
       .toReversed()
@@ -222,7 +222,7 @@ export class Recovery {
               generationLabel: generation.label,
               latestActivationId: this.generations.latestActivationId(generation.label),
               latestPreparationCheck: this.generations.latestPreparationCheck(generation.label),
-              attempts,
+              facts,
             },
             policy,
           ).kind === "eligible",

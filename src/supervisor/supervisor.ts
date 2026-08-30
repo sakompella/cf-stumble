@@ -164,7 +164,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         generationLabel: label,
         latestActivationId: this.generations.latestActivationId(label),
         latestPreparationCheck: this.generations.latestPreparationCheck(label),
-        attempts: this.relayFacts.attempts(),
+        facts: this.relayFacts.facts(),
       },
       policy,
     );

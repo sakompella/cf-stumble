@@ -1,13 +1,13 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { env } from "cloudflare:workers";
-import { reset } from "cloudflare:test";
+import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { PreparationCheck } from "../../src/supervisor/preparation-checks.js";
-import type { RelayAttempt } from "../../src/supervisor/relay-facts.js";
+import { RelayFacts, type RelayFact } from "../../src/supervisor/relay-facts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
@@ -23,27 +23,40 @@ const policy: EligibilityPolicy = {
 
 const startupCheck: PreparationCheck = { id: 9, generationLabel: 1, outcome: "passed" };
 
-function completedAttempt(id: number, finishedAt: number, activationId = 4): RelayAttempt {
+type FactAttribution = Partial<
+  Pick<RelayFact, "generationLabel" | "activationId" | "preparationCheckId">
+>;
+
+function relayFact(
+  attemptId: number,
+  kind: RelayFact["kind"],
+  responseStatus: number | undefined,
+  observedAt: number,
+  attribution: FactAttribution = {},
+): RelayFact {
   return {
-    id,
+    attemptId,
     generationLabel: 1,
-    activationId,
+    activationId: 4,
     preparationCheckId: 9,
-    startedAt: finishedAt,
-    deadlineAt: finishedAt + 1,
-    outcome: "body-completed",
-    responseStatus: 200,
-    finishedAt,
+    kind,
+    responseStatus,
+    observedAt,
+    ...attribution,
   };
 }
 
-function eligibility(attempts: readonly RelayAttempt[]) {
+function completedFact(attemptId: number, observedAt: number, activationId = 4): RelayFact {
+  return relayFact(attemptId, "body-completed", 200, observedAt, { activationId });
+}
+
+function eligibility(facts: readonly RelayFact[]) {
   return deriveGenerationEligibility(
     {
       generationLabel: 1,
       latestActivationId: 4,
       latestPreparationCheck: startupCheck,
-      attempts,
+      facts,
     },
     policy,
   );
@@ -59,18 +72,140 @@ afterEach(async () => {
 
 test("requires credited turns to span time instead of arriving in one burst", () => {
   const burst = eligibility([
-    completedAttempt(1, 0),
-    completedAttempt(2, 1_000),
-    completedAttempt(3, 2_000),
+    completedFact(1, 0),
+    completedFact(2, 1_000),
+    completedFact(3, 2_000),
   ]);
   const spread = eligibility([
-    completedAttempt(1, 0),
-    completedAttempt(2, 1_000),
-    completedAttempt(3, 60_000),
+    completedFact(1, 0),
+    completedFact(2, 1_000),
+    completedFact(3, 60_000),
   ]);
 
   expect(burst).toMatchObject({ kind: "ineligible", reason: "insufficient-observation-span" });
   expect(spread).toMatchObject({ kind: "eligible", creditedTurns: 3, observationSpanMs: 60_000 });
+});
+
+test("treats headers, completed 4xx, cancellation, and abandonment as neutral facts", () => {
+  const result = deriveGenerationEligibility(
+    {
+      generationLabel: 1,
+      latestActivationId: 4,
+      latestPreparationCheck: startupCheck,
+      facts: [
+        relayFact(1, "headers-received", 200, 0),
+        completedFact(1, 10),
+        relayFact(2, "headers-received", 503, 20),
+        relayFact(3, "body-completed", 404, 30),
+        relayFact(4, "relay-cancelled", 200, 40),
+        relayFact(5, "bounded-abandonment", undefined, 50),
+      ],
+    },
+    { minimumCreditedTurns: 1, minimumObservationSpanMs: 0 },
+  );
+
+  expect(result).toMatchObject({ kind: "eligible", creditedTurns: 1, observationSpanMs: 0 });
+});
+
+test.each([
+  ["pre-header failure", "pre-header-failure", undefined],
+  ["body failure", "body-failed", 200],
+  ["completed 5xx", "body-completed", 500],
+] as const)("revokes eligibility for a %s terminal fact", (_, kind, responseStatus) => {
+  const result = eligibility([
+    completedFact(1, 0),
+    relayFact(2, kind, responseStatus, 60_000),
+    completedFact(3, 120_000),
+  ]);
+
+  expect(result).toMatchObject({
+    kind: "ineligible",
+    reason: "failure-observed",
+    creditedTurns: 2,
+    observationSpanMs: 120_000,
+  });
+});
+
+test("uses only matching current-era facts and terminal timestamps in any order", () => {
+  const facts: readonly RelayFact[] = [
+    completedFact(2, 60_000),
+    relayFact(1, "headers-received", 200, 1_000_000),
+    completedFact(1, 0),
+    relayFact(3, "body-completed", 200, 120_000, { preparationCheckId: 8 }),
+    relayFact(4, "body-completed", 200, 120_000, { activationId: 3 }),
+    relayFact(5, "body-completed", 200, 120_000, { generationLabel: 2 }),
+  ];
+  const strictPolicy = { minimumCreditedTurns: 2, minimumObservationSpanMs: 60_000 };
+
+  const currentEra = deriveGenerationEligibility(
+    {
+      generationLabel: 1,
+      latestActivationId: 4,
+      latestPreparationCheck: startupCheck,
+      facts,
+    },
+    strictPolicy,
+  );
+  const reversedFacts = deriveGenerationEligibility(
+    {
+      generationLabel: 1,
+      latestActivationId: 4,
+      latestPreparationCheck: startupCheck,
+      facts: facts.toReversed(),
+    },
+    strictPolicy,
+  );
+
+  expect(currentEra).toMatchObject({
+    kind: "eligible",
+    creditedTurns: 2,
+    observationSpanMs: 60_000,
+  });
+  expect(reversedFacts).toEqual(currentEra);
+});
+
+test.each([
+  [completedFact(1, 0), completedFact(1, 1)],
+  [completedFact(1, 0), relayFact(1, "body-failed", 200, 1)],
+])("rejects duplicate or contradictory terminal facts for one attempt", (first, second) => {
+  expect(() => eligibility([first, second])).toThrow(
+    "invalid relay fact history for attempt 1: multiple terminal facts",
+  );
+});
+
+test("does not credit a completed attempt summary without a terminal fact after eviction", async () => {
+  const control = supervisor("eligibility-facts-authoritative");
+  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
+  await activateGeneration(control, 0, "activate-fixture");
+
+  await runInDurableObject(control, (instance, state) => {
+    const active = instance.getActiveGeneration();
+    const preparationCheck = instance.getPreparationCheckHistory(0).at(-1);
+    if (active.generation === undefined || preparationCheck === undefined) {
+      throw new Error("an active generation needs a preparation check");
+    }
+
+    const facts = new RelayFacts(state.storage);
+    const attempt = facts.start(active, preparationCheck.id, 0, 100);
+    state.storage.sql.exec(
+      `UPDATE relay_attempts
+       SET response_status = 200, outcome = 'body-completed', finished_at = 1
+       WHERE id = ?`,
+      attempt.id,
+    );
+  });
+  await evictDurableObject(control);
+
+  expect(await control.getRelayAttempts()).toMatchObject([
+    { outcome: "body-completed", responseStatus: 200, finishedAt: 1 },
+  ]);
+  expect(await control.getRelayFacts()).toEqual([]);
+  expect(
+    await control.getGenerationEligibility(0, {
+      minimumCreditedTurns: 1,
+      minimumObservationSpanMs: 0,
+    }),
+  ).toMatchObject({ kind: "ineligible", reason: "insufficient-credited-turns" });
 });
 
 test("qualifies a no-longer-active generation from its retained most recent era", async () => {

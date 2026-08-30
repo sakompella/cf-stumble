@@ -107,6 +107,20 @@ test("never chooses the failed generation as its fallback", async () => {
   expect(episode.fallbackGenerationLabel).toBeUndefined();
 });
 
+test("selects a fallback from persisted relay facts after Durable Object eviction", async () => {
+  const control = await fallbackReady("recovery-fallback-after-eviction");
+  await evictDurableObject(control);
+
+  expect(
+    await control.startRecovery(
+      { failureEventId: "failure-after-eviction", failedGenerationLabel: 1 },
+      policy,
+      1_000,
+      strictEligibility,
+    ),
+  ).toMatchObject({ fallbackGenerationLabel: 0, phase: "ready" });
+});
+
 test("replays an open repair operation with its original key", async () => {
   const { control, episode } = await episodeWithFallback("recovery-replays-operation-key");
   const first = await control.resumeRecovery(episode.id, 1_000);
