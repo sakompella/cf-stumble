@@ -1,7 +1,7 @@
-# Keep generations distinct from Git commits
+# Define a generation as a labeled harness commit
 
 > **Review:** Human-approved
 
-A Git commit records source history. A generation records one numbered attempt to prepare a main-harness version and make it available to run. The supervisor assigns generation identities before each attempt, so failed attempts remain identifiable and numbers do not repeat. Generation 0 is the first mutable main harness, not the immutable recovery harness.
+A generation is one specific, labeled Git commit in the harness repository. The Supervisor gives a selected harness commit its generation label, then records its preparation checks, activation, and recovery evidence against that generation. A failed check is an event on that labeled commit, not a different generation. Generation 0 is the first labeled mutable main-harness commit, not the immutable recovery harness.
 
-The source of a generation may be a harness commit, but commits in any repository remain ordinary Git commits and do not create generations automatically. The checks required before a generation runs or becomes known good are separate decisions.
+Project commits always remain ordinary commits. A harness commit also remains ordinary until the Supervisor gives it a generation label. The checks required before a generation runs or becomes known good are separate decisions.

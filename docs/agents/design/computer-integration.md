@@ -30,7 +30,7 @@ Worker Loader names are cached. A production design must distinguish different e
 
 ## Generation requests
 
-Normal Git commits do not create generations. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests. The exact command, transport, and authentication mechanism remain open.
+A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests. The exact command, transport, and authentication mechanism remain open.
 
 ## Deployment risk
 

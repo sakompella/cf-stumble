@@ -2,7 +2,7 @@
 
 > **Review:** Agent-only
 
-`docs/agents/adr/` is the only place that records a resolved position. A second register creates a fork, not a backup. This project once ran three: numbered `decisions.md`, an append-only `decisions.tsv` journal, and the ADRs. No rule decided which won, and the oldest still said a generation was a commit after two ADRs and the glossary replaced that model.
+`docs/agents/adr/` is the only place that records a resolved position. A second register creates a fork, not a backup. This project once ran three: numbered `decisions.md`, an append-only `decisions.tsv` journal, and the ADRs. No rule decided which won, and the oldest used a different generation model after later ADRs and the glossary replaced it.
 
 ## Consequences
 

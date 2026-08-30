@@ -40,9 +40,9 @@ GitHub is the first remote integration, not a restriction on what counts as a pr
 
 ## Generations and self-improvement
 
-A Git commit is just a Git commit. Committing project code or harness code does not create or activate a generation.
+A project Git commit is just a Git commit. A harness commit becomes a generation only when the Supervisor gives that specific commit a generation label; committing it alone does not activate it.
 
-A new main-harness revision may be submitted as a **generation candidate**. The supervisor assigns the generation identity, checks the candidate, records the result, and decides whether it may run. The exact submission command and transport remain design choices.
+A new main-harness revision may be submitted as a **generation candidate**. The Supervisor labels the specific harness commit, checks it, records the result against that generation, and decides whether it may run. The exact submission command and transport remain design choices.
 
 The user or mutable main harness may also request that the supervisor activate a specific existing generation or return to an earlier one. Naming a target is not the same as controlling the live system. The supervisor validates the request and performs or rejects the state change; mutable code cannot write the protected generation state directly or bypass recovery checks.
 

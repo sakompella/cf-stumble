@@ -21,11 +21,11 @@ A Dynamic Worker facet that runs one generation of the main harness.
 _Avoid_: supervisor, recovery harness
 
 **Generation**:
-One numbered attempt to prepare a version of the main harness and make it available to run. Its identity is distinct from any Git commit used as its source.
-_Avoid_: commit, revision, version
+A specific, labeled Git commit in the harness repository. The Supervisor records preparation checks, activation, and recovery evidence against it.
+_Avoid_: ordinary commit, revision, version
 
 **Generation 0**:
-The first mutable main-harness generation, initially based closely on Pi. It is neither the recovery harness nor a special recovery target.
+The first labeled mutable main-harness commit, initially based closely on Pi. It is neither the recovery harness nor a special recovery target.
 
 **Artifact digest**:
 A content address for emitted main-harness executable bytes and the metadata required to interpret them. It may be reused by more than one generation.
@@ -56,7 +56,7 @@ The supervisor's durable record of a recovery attempt, its error, and its result
 ## Repositories and files
 
 **Commit**:
-An ordinary Git commit in any repository. A commit does not create or activate a generation by itself.
+An ordinary Git commit in any repository. A harness commit becomes a generation only when the Supervisor gives that specific commit a generation label; a project commit never does so automatically.
 _Avoid_: generation
 
 **Harness repository**:

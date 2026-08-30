@@ -26,7 +26,7 @@ The vertical path is complete when a paid deployment proves all of the following
 
 - Generation 0 is a mutable main facet, while the recovery harness remains immutable and outside generation selection.
 - Normal traffic and the startup check exercise the same proposed supervisor-to-facet boundary.
-- A committed harness change can become a generation candidate without granting the requester direct recovery authority.
+- A specific harness commit can receive a generation label and become a generation candidate without granting the requester direct recovery authority.
 - The main harness can work with durable Computer files while project and harness Git histories remain separate.
 - A generation can gather evidence toward becoming known good without hard-coding an arbitrary turn threshold.
 - A defined external failure produces a recovery report and returns to a known-good generation after the chosen repair bound.

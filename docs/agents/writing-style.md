@@ -4,7 +4,7 @@ Write project documentation in plain technical English. The goal is clear, accur
 
 Name the actor and the action. Say who makes a decision, stores data, runs code, or checks a condition, then explain what happens. A sentence such as "the supervisor selects the active generation" gives the reader a responsible component and a concrete result. Passive voice is fine when the actor does not matter, but it should not hide an important one.
 
-Use the terms in `docs/agents/CONTEXT.md` consistently when they name project concepts. The glossary distinguishes a commit, a generation, materialization, and activation because those are different things. Do not invent a near-synonym merely to vary the prose. Ordinary words do not need a new project term.
+Use the terms in `docs/agents/CONTEXT.md` consistently when they name project concepts. The glossary distinguishes an ordinary commit, a labeled generation commit, and activation because they are different things. Do not invent a near-synonym merely to vary the prose. Ordinary words do not need a new project term.
 
 Explain the mechanism and its consequence together when the connection matters. If a rule exists because a failure would be costly or confusing, say why. Complete the reasoning rather than leaving the reader to infer it:
 
