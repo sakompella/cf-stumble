@@ -53,7 +53,7 @@ function isWithinBounds(row: CompleteOperationRow): boolean {
   return (
     Number.isSafeInteger(row.operation_attempt) &&
     row.operation_attempt >= 1 &&
-    row.operation_attempt <= row.attempts_used &&
+    row.operation_attempt === row.attempts_used &&
     Number.isSafeInteger(row.operation_deadline_at) &&
     row.operation_deadline_at >= row.started_at &&
     row.operation_deadline_at <= row.recovery_deadline_at

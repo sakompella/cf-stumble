@@ -1,4 +1,5 @@
 import { parseHarnessCommit } from "../harness-commit.js";
+import { isNonemptyWellFormedUnicode } from "./recovery-error.js";
 import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
 import type {
   RecoveryEpisodeDraft,
@@ -92,21 +93,21 @@ export const recoverySchema = `
       (phase = 'repair-open' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NULL AND
        verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
        verified_preparation_check_id IS NULL AND result = 'repair-open' AND operation_kind = 'repair' AND
-       operation_key = 'recovery-' || id || ':repair:' || operation_attempt AND operation_attempt <= attempts_used AND
+       operation_key = 'recovery-' || id || ':repair:' || operation_attempt AND operation_attempt = attempts_used AND
        operation_deadline_at IS NOT NULL AND operation_state = 'open' AND preparation_check_id_at_open IS NULL)
       OR
       (phase = 'startup-check-open' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NOT NULL AND
        verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
        verified_preparation_check_id IS NULL AND result = 'startup-check-open' AND
        operation_kind = 'startup-check' AND operation_key = 'recovery-' || id || ':startup-check:' || operation_attempt AND
-       operation_attempt <= attempts_used AND operation_deadline_at IS NOT NULL AND operation_state = 'open' AND
+       operation_attempt = attempts_used AND operation_deadline_at IS NOT NULL AND operation_state = 'open' AND
        preparation_check_id_at_open IS NOT NULL)
       OR
       (phase = 'needs-reconciliation' AND fallback_generation_label IS NOT NULL AND
        verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
        verified_preparation_check_id IS NULL AND result = 'operation-needs-reconciliation' AND
        operation_kind = 'repair' AND repaired_harness_commit IS NULL AND
-       operation_key = 'recovery-' || id || ':repair:' || operation_attempt AND operation_attempt <= attempts_used AND
+       operation_key = 'recovery-' || id || ':repair:' || operation_attempt AND operation_attempt = attempts_used AND
        operation_deadline_at IS NOT NULL AND operation_state = 'needs-reconciliation' AND
        preparation_check_id_at_open IS NULL)
       OR
@@ -114,7 +115,7 @@ export const recoverySchema = `
        verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
        verified_preparation_check_id IS NULL AND result = 'operation-needs-reconciliation' AND
        operation_kind = 'startup-check' AND repaired_harness_commit IS NOT NULL AND
-       operation_key = 'recovery-' || id || ':startup-check:' || operation_attempt AND operation_attempt <= attempts_used AND
+       operation_key = 'recovery-' || id || ':startup-check:' || operation_attempt AND operation_attempt = attempts_used AND
        operation_deadline_at IS NOT NULL AND operation_state = 'needs-reconciliation' AND
        preparation_check_id_at_open IS NOT NULL)
       OR
@@ -205,14 +206,18 @@ export function parseRecoveryOperationOutcome(
       const repairedHarnessCommit = parseHarnessCommit(outcome.repairedHarnessCommit);
       return repairedHarnessCommit === undefined
         ? undefined
-        : { ...outcome, repairedHarnessCommit };
+        : { kind: "repair-succeeded", repairedHarnessCommit };
     }
     case "repair-failed":
     case "startup-check-failed":
-      return outcome.error.length === 0 ? undefined : outcome;
+      return isNonemptyWellFormedUnicode(outcome.error)
+        ? { kind: outcome.kind, error: outcome.error }
+        : undefined;
     case "startup-check-passed": {
       const generationLabel = parseGenerationLabel(outcome.generationLabel);
-      return generationLabel === undefined ? undefined : { ...outcome, generationLabel };
+      return generationLabel === undefined
+        ? undefined
+        : { kind: "startup-check-passed", generationLabel };
     }
     default:
       return undefined;

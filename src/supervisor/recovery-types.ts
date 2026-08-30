@@ -165,11 +165,14 @@ type WithId<T> = T extends unknown ? T & { readonly id: RecoveryEpisodeId } : ne
 export type RecoveryEpisode = WithId<RecoveryEpisodeDetails>;
 export type RecoveryEpisodeDraft = RecoveryEpisodeDetails;
 
+export type StructuredCloneObject = object;
+export type RecoveryOperationErrorInput = string | StructuredCloneObject;
+
 export type RecoveryOperationOutcomeInput =
   | { readonly kind: "repair-succeeded"; readonly repairedHarnessCommit: string }
-  | { readonly kind: "repair-failed"; readonly error: string }
+  | { readonly kind: "repair-failed"; readonly error: RecoveryOperationErrorInput }
   | { readonly kind: "startup-check-passed"; readonly generationLabel: number }
-  | { readonly kind: "startup-check-failed"; readonly error: string };
+  | { readonly kind: "startup-check-failed"; readonly error: RecoveryOperationErrorInput };
 
 export type RecoveryOperationOutcome =
   | { readonly kind: "repair-succeeded"; readonly repairedHarnessCommit: HarnessCommit }

@@ -1,5 +1,6 @@
 import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "./eligibility.js";
 import type { EligibilityPolicy } from "./eligibility.js";
+import { verifiedStartupCandidate } from "./recovery-candidate.js";
 import type { GenerationLabel } from "./generation-types.js";
 import type { Generations } from "./generations.js";
 import {
@@ -20,7 +21,6 @@ import {
   settleRepair,
   settleStartupCheck,
 } from "./recovery-operations.js";
-import type { VerifiedStartupCandidate } from "./recovery-operations.js";
 import type { RelayFacts } from "./relay-facts.js";
 import { RecoveryEpisodeStore } from "./recovery-store.js";
 import type {
@@ -77,6 +77,11 @@ export class Recovery {
     return this.storage.transactionSync(() => {
       const existing = this.episodeStore.byFailureEventId(parsedFailure.failureEventId);
       if (existing !== undefined) {
+        if (existing.failure.failedGenerationLabel !== parsedFailure.failedGenerationLabel) {
+          throw new Error(
+            `failure event ID already belongs to generation ${existing.failure.failedGenerationLabel}`,
+          );
+        }
         return existing;
       }
       validateRecoveryPolicy(policy);
@@ -124,6 +129,7 @@ export class Recovery {
     const parsedOutcome = parseRecoveryOperationOutcome(outcome);
     return this.storage.transactionSync(() => {
       const episode = this.requiredById(id);
+      this.validateEpisodeTime(episode, now);
       const operation = episode.currentOperation;
       if (
         parsedOutcome === undefined ||
@@ -147,6 +153,7 @@ export class Recovery {
     outcome: RecoveryOperationOutcome | undefined,
     now: number,
   ): RecoveryOperationReport {
+    this.validateEpisodeTime(episode, now);
     const operation = episode.currentOperation;
     if (
       outcome === undefined ||
@@ -167,6 +174,7 @@ export class Recovery {
     outcome: RecoveryOperationOutcome,
     now: number,
   ): RecoveryOperationReport {
+    this.validateEpisodeTime(episode, now);
     if (isRepairSettlementEpisode(episode)) {
       if (outcome.kind !== "repair-succeeded" && outcome.kind !== "repair-failed") {
         return { applied: false, episode };
@@ -190,7 +198,7 @@ export class Recovery {
       const settled = settleStartupCheck(
         episode,
         outcome,
-        this.verifiedCandidate(episode, outcome),
+        verifiedStartupCandidate(this.generations, episode, outcome),
       );
       if (settled === undefined) {
         return { applied: false, episode };
@@ -201,32 +209,8 @@ export class Recovery {
     return { applied: false, episode };
   }
 
-  private verifiedCandidate(
-    episode: StartupCheckSettlementEpisode,
-    outcome: RecoveryOperationOutcome,
-  ): VerifiedStartupCandidate | undefined {
-    if (outcome.kind !== "startup-check-passed") {
-      return undefined;
-    }
-    const generation = this.generations.byLabel(outcome.generationLabel);
-    const latestPreparationCheck = this.generations.latestPreparationCheck(outcome.generationLabel);
-    if (
-      generation === undefined ||
-      generation.harnessCommit !== episode.repairedHarnessCommit ||
-      generation.status !== "ready" ||
-      latestPreparationCheck?.outcome !== "passed" ||
-      latestPreparationCheck.id <= episode.currentOperation.preparationCheckIdAtOpen
-    ) {
-      return undefined;
-    }
-    return {
-      harnessCommit: generation.harnessCommit,
-      generationLabel: generation.label,
-      preparationCheckId: latestPreparationCheck.id,
-    };
-  }
-
   private advance(episode: RecoveryEpisode, now: number): RecoveryEpisode {
+    this.validateEpisodeTime(episode, now);
     if (episode.phase === "blocked" || episode.phase === "completed") {
       return episode;
     }
@@ -249,6 +233,12 @@ export class Recovery {
       );
     }
     return this.storeAndReturn(openRepair(episode, now));
+  }
+
+  private validateEpisodeTime(episode: RecoveryEpisode, now: number): void {
+    if (now < episode.startedAt) {
+      throw new RangeError("recovery time cannot precede episode start");
+    }
   }
 
   private storeAndReturn(episode: RecoveryEpisode): RecoveryEpisode {
