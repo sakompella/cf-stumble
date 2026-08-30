@@ -23,7 +23,7 @@ export class RelayFacts {
       CREATE TABLE IF NOT EXISTS relay_attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         generation_label INTEGER,
-        activation_epoch INTEGER NOT NULL,
+        activation_id INTEGER,
         preparation_check_id INTEGER,
         started_at INTEGER NOT NULL,
         deadline_at INTEGER NOT NULL,
@@ -38,7 +38,7 @@ export class RelayFacts {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         attempt_id INTEGER NOT NULL,
         generation_label INTEGER,
-        activation_epoch INTEGER NOT NULL,
+        activation_id INTEGER,
         preparation_check_id INTEGER,
         kind TEXT NOT NULL CHECK (kind IN (
           'headers-received', 'pre-header-failure', 'body-completed', 'body-failed',
@@ -58,19 +58,19 @@ export class RelayFacts {
   ): RelayAttempt {
     const attribution: RelayAttribution = {
       generationLabel: active.generation?.label,
-      activationEpoch: active.epoch,
+      activationId: active.activationId,
       preparationCheckId,
     };
     const row = this.sql
       .exec<AttemptRow>(
         `INSERT INTO relay_attempts (
-           generation_label, activation_epoch, preparation_check_id, started_at, deadline_at,
+           generation_label, activation_id, preparation_check_id, started_at, deadline_at,
            response_status, outcome, finished_at
          ) VALUES (?, ?, ?, ?, ?, NULL, 'pending', NULL)
-         RETURNING id, generation_label, activation_epoch, preparation_check_id, started_at,
+         RETURNING id, generation_label, activation_id, preparation_check_id, started_at,
                    deadline_at, response_status, outcome, finished_at`,
         attribution.generationLabel ?? null,
-        attribution.activationEpoch,
+        attribution.activationId ?? null,
         attribution.preparationCheckId ?? null,
         startedAt,
         startedAt + deadlineMs,
@@ -117,7 +117,7 @@ export class RelayFacts {
     return this.storage.transactionSync(() => {
       const pending = this.sql
         .exec<AttemptRow>(
-          `SELECT id, generation_label, activation_epoch, preparation_check_id, started_at,
+          `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
                   deadline_at, response_status, outcome, finished_at
            FROM relay_attempts
            WHERE outcome = 'pending' AND deadline_at <= ?
@@ -147,7 +147,7 @@ export class RelayFacts {
   attempts(): readonly RelayAttempt[] {
     return this.sql
       .exec<AttemptRow>(
-        `SELECT id, generation_label, activation_epoch, preparation_check_id, started_at,
+        `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
                 deadline_at, response_status, outcome, finished_at
          FROM relay_attempts
          ORDER BY id ASC`,
@@ -159,7 +159,7 @@ export class RelayFacts {
   facts(): readonly RelayFact[] {
     return this.sql
       .exec<FactRow>(
-        `SELECT attempt_id, generation_label, activation_epoch, preparation_check_id, kind,
+        `SELECT attempt_id, generation_label, activation_id, preparation_check_id, kind,
                 response_status, observed_at
          FROM relay_facts
          ORDER BY id ASC`,
@@ -171,7 +171,7 @@ export class RelayFacts {
   private byId(attemptId: number): RelayAttempt | undefined {
     const row = this.sql
       .exec<AttemptRow>(
-        `SELECT id, generation_label, activation_epoch, preparation_check_id, started_at,
+        `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
                 deadline_at, response_status, outcome, finished_at
          FROM relay_attempts
          WHERE id = ?`,
@@ -190,12 +190,12 @@ export class RelayFacts {
   ): void {
     this.sql.exec(
       `INSERT INTO relay_facts (
-         attempt_id, generation_label, activation_epoch, preparation_check_id, kind,
+         attempt_id, generation_label, activation_id, preparation_check_id, kind,
          response_status, observed_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       attempt.id,
       attempt.generationLabel ?? null,
-      attempt.activationEpoch,
+      attempt.activationId ?? null,
       attempt.preparationCheckId ?? null,
       kind,
       responseStatus ?? null,

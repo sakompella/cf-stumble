@@ -1,4 +1,3 @@
-import type { ActiveGeneration } from "./generations.js";
 import type { PreparationCheck } from "./preparation-checks.js";
 import type { RelayAttempt } from "./relay-facts.js";
 
@@ -21,7 +20,6 @@ export type GenerationEligibility =
   | {
       readonly kind: "ineligible";
       readonly reason:
-        | "not-active"
         | "startup-check-required"
         | "failure-observed"
         | "insufficient-credited-turns"
@@ -32,7 +30,7 @@ export type GenerationEligibility =
 
 export type GenerationEligibilityEvidence = {
   readonly generationLabel: number;
-  readonly active: ActiveGeneration;
+  readonly latestActivationId: number | undefined;
   readonly latestPreparationCheck: PreparationCheck | undefined;
   readonly attempts: readonly RelayAttempt[];
 };
@@ -42,17 +40,14 @@ export function deriveGenerationEligibility(
   policy: EligibilityPolicy,
 ): GenerationEligibility {
   validatePolicy(policy);
-  if (evidence.active.generation?.label !== evidence.generationLabel) {
-    return ineligible("not-active", 0, 0);
-  }
-
   const preparationCheck = evidence.latestPreparationCheck;
-  if (preparationCheck === undefined) {
+  const activationId = evidence.latestActivationId;
+  if (preparationCheck === undefined || activationId === undefined) {
     return ineligible("startup-check-required", 0, 0);
   }
 
   const currentAttempts = evidence.attempts.filter((attempt) =>
-    belongsToCurrentActivation(attempt, evidence, preparationCheck),
+    belongsToMostRecentEra(attempt, evidence.generationLabel, activationId, preparationCheck),
   );
   const credited = currentAttempts.filter((attempt) => isCreditedTurn(attempt));
   const observationSpanMs = creditedSpan(credited);
@@ -72,14 +67,15 @@ export function deriveGenerationEligibility(
   return { kind: "eligible", creditedTurns: credited.length, observationSpanMs };
 }
 
-function belongsToCurrentActivation(
+function belongsToMostRecentEra(
   attempt: RelayAttempt,
-  evidence: GenerationEligibilityEvidence,
+  generationLabel: number,
+  activationId: number,
   preparationCheck: PreparationCheck,
 ): boolean {
   return (
-    attempt.generationLabel === evidence.generationLabel &&
-    attempt.activationEpoch === evidence.active.epoch &&
+    attempt.generationLabel === generationLabel &&
+    attempt.activationId === activationId &&
     attempt.preparationCheckId === preparationCheck.id
   );
 }

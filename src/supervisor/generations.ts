@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { HarnessCommitId } from "../harness-commit.js";
+import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
 import type { PreparationCheck } from "./preparation-checks.js";
 import type {
@@ -22,6 +23,7 @@ export type {
   PreparationCheckOutcome,
   PreparationCheckResult,
 } from "./generation-types.js";
+export type { PreparationCheck } from "./preparation-checks.js";
 
 type GenerationRow = {
   readonly label: number;
@@ -32,12 +34,14 @@ type GenerationRow = {
 type StateRow = {
   readonly active_label: number | null;
   readonly epoch: number;
+  readonly activation_id: number;
 };
 
 export class Generations {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
   private readonly preparationChecks: PreparationChecks;
+  private readonly activationHistory: ActivationHistory;
 
   constructor(storage: DurableObjectStorage, fixtureHarnessCommit: string) {
     this.storage = storage;
@@ -52,15 +56,14 @@ export class Generations {
       CREATE TABLE IF NOT EXISTS generation_state (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
         active_label INTEGER REFERENCES generations(label),
-        epoch INTEGER NOT NULL CHECK (epoch >= 0)
+        epoch INTEGER NOT NULL CHECK (epoch >= 0),
+        activation_id INTEGER NOT NULL CHECK (activation_id >= 0)
       );
-      CREATE TABLE IF NOT EXISTS active_generation_history (
-        label INTEGER PRIMARY KEY REFERENCES generations(label)
-      );
-      INSERT INTO generation_state (singleton, active_label, epoch)
-      VALUES (1, NULL, 0)
+      INSERT INTO generation_state (singleton, active_label, epoch, activation_id)
+      VALUES (1, NULL, 0, 0)
       ON CONFLICT (singleton) DO NOTHING;
     `);
+    this.activationHistory = new ActivationHistory(storage);
 
     this.sql.exec(
       `INSERT INTO generations (label, harness_commit, status)
@@ -179,11 +182,10 @@ export class Generations {
     }
 
     this.sql.exec("UPDATE generation_state SET active_label = ? WHERE singleton = 1", label);
-    this.sql.exec(
-      "INSERT INTO active_generation_history (label) VALUES (?) ON CONFLICT DO NOTHING",
-      label,
-    );
     const epoch = this.incrementEpoch();
+    const activationId = this.incrementActivationId();
+    this.activationHistory.recordActive(label);
+    this.activationHistory.record(label, activationId);
 
     return { ok: true, generation, epoch, effect: "activated" };
   }
@@ -194,6 +196,7 @@ export class Generations {
       generation:
         state.active_label === null ? undefined : this.generationByLabel(state.active_label),
       epoch: state.epoch,
+      activationId: state.active_label === null ? undefined : state.activation_id,
     };
   }
 
@@ -214,20 +217,16 @@ export class Generations {
     return isGenerationLabel(label) ? this.preparationChecks.latestPass(label) : undefined;
   }
 
+  latestActivationId(label: number): number | undefined {
+    return isGenerationLabel(label) ? this.activationHistory.latestId(label) : undefined;
+  }
+
   preparationCheckHistory(label: number): readonly PreparationCheck[] {
     return isGenerationLabel(label) ? this.preparationChecks.all(label) : [];
   }
 
   hasBeenActive(label: number): boolean {
-    return (
-      isGenerationLabel(label) &&
-      this.sql
-        .exec<{ readonly label: number }>(
-          "SELECT label FROM active_generation_history WHERE label = ?",
-          label,
-        )
-        .toArray()[0] !== undefined
-    );
+    return isGenerationLabel(label) && this.activationHistory.hasBeenActive(label);
   }
 
   transaction<T>(operation: () => T): T {
@@ -258,13 +257,22 @@ export class Generations {
 
   private state(): StateRow {
     return this.sql
-      .exec<StateRow>("SELECT active_label, epoch FROM generation_state WHERE singleton = 1")
+      .exec<StateRow>(
+        "SELECT active_label, epoch, activation_id FROM generation_state WHERE singleton = 1",
+      )
       .one();
   }
 
   private incrementEpoch(): number {
     this.sql.exec("UPDATE generation_state SET epoch = epoch + 1 WHERE singleton = 1");
     return this.state().epoch;
+  }
+
+  private incrementActivationId(): number {
+    this.sql.exec(
+      "UPDATE generation_state SET activation_id = activation_id + 1 WHERE singleton = 1",
+    );
+    return this.state().activation_id;
   }
 }
 

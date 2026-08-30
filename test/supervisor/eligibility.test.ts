@@ -5,7 +5,6 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
-import type { ActiveGeneration } from "../../src/supervisor/generations.js";
 import type { PreparationCheck } from "../../src/supervisor/preparation-checks.js";
 import type { RelayAttempt } from "../../src/supervisor/relay-facts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
@@ -15,22 +14,13 @@ const policy: EligibilityPolicy = {
   minimumObservationSpanMs: 60_000,
 };
 
-const active: ActiveGeneration = {
-  generation: {
-    label: 1,
-    harnessCommit: "0123456789abcdef0123456789abcdef01234567",
-    status: "ready",
-  },
-  epoch: 4,
-};
-
 const startupCheck: PreparationCheck = { id: 9, generationLabel: 1, outcome: "passed" };
 
-function completedAttempt(id: number, finishedAt: number): RelayAttempt {
+function completedAttempt(id: number, finishedAt: number, activationId = 4): RelayAttempt {
   return {
     id,
     generationLabel: 1,
-    activationEpoch: 4,
+    activationId,
     preparationCheckId: 9,
     startedAt: finishedAt,
     deadlineAt: finishedAt + 1,
@@ -42,7 +32,12 @@ function completedAttempt(id: number, finishedAt: number): RelayAttempt {
 
 function eligibility(attempts: readonly RelayAttempt[]) {
   return deriveGenerationEligibility(
-    { generationLabel: 1, active, latestPreparationCheck: startupCheck, attempts },
+    {
+      generationLabel: 1,
+      latestActivationId: 4,
+      latestPreparationCheck: startupCheck,
+      attempts,
+    },
     policy,
   );
 }
@@ -87,6 +82,63 @@ test("requires credited turns to span time instead of arriving in one burst", ()
 
   expect(burst).toMatchObject({ kind: "ineligible", reason: "insufficient-observation-span" });
   expect(spread).toMatchObject({ kind: "eligible", creditedTurns: 3, observationSpanMs: 60_000 });
+});
+
+test("qualifies a no-longer-active generation from its retained most recent era", async () => {
+  const control = supervisor("eligibility-inactive-generation");
+  const prepared = await control.recordPreparationCheck(0, "passed");
+  if (!prepared.ok) {
+    throw new Error("Generation 0 must accept its preparation check");
+  }
+  await control.activateGeneration(0);
+  const response = await control.fetch(
+    new Request("https://cf-stumble.test/facet/relay/body-complete"),
+  );
+  await response.text();
+  const labeled = await control.labelGeneration("0123456789abcdef0123456789abcdef01234567");
+  if (!labeled.ok) {
+    throw new Error("a valid harness commit must receive a generation label");
+  }
+  await control.recordPreparationCheck(labeled.generation.label, "passed");
+  await control.activateGeneration(labeled.generation.label);
+
+  expect(
+    await control.getGenerationEligibility(0, {
+      minimumCreditedTurns: 1,
+      minimumObservationSpanMs: 0,
+    }),
+  ).toMatchObject({ kind: "eligible", creditedTurns: 1 });
+});
+
+test("rejects a generation when its most recent era fails after an older era succeeded", async () => {
+  const control = supervisor("eligibility-latest-era-failure");
+  const prepared = await control.recordPreparationCheck(0, "passed");
+  if (!prepared.ok) {
+    throw new Error("Generation 0 must accept its preparation check");
+  }
+  await control.activateGeneration(0);
+  const completion = await control.fetch(
+    new Request("https://cf-stumble.test/facet/relay/body-complete"),
+  );
+  await completion.text();
+  const labeled = await control.labelGeneration("0123456789abcdef0123456789abcdef01234567");
+  if (!labeled.ok) {
+    throw new Error("a valid harness commit must receive a generation label");
+  }
+  await control.recordPreparationCheck(labeled.generation.label, "passed");
+  await control.activateGeneration(labeled.generation.label);
+  await control.activateGeneration(0);
+  const failure = await control.fetch(
+    new Request("https://cf-stumble.test/facet/relay/error-status"),
+  );
+  await failure.text();
+
+  expect(
+    await control.getGenerationEligibility(0, {
+      minimumCreditedTurns: 1,
+      minimumObservationSpanMs: 0,
+    }),
+  ).toMatchObject({ kind: "ineligible", reason: "failure-observed" });
 });
 
 test("requires a fresh passing startup check after a failure observation", async () => {

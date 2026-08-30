@@ -9,6 +9,7 @@ export type Generation = {
 export type ActiveGeneration = {
   readonly generation: Generation | undefined;
   readonly epoch: number;
+  readonly activationId: number | undefined;
 };
 
 export type LabelGenerationResult =

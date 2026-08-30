@@ -140,6 +140,7 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   expect(await control.getActiveGeneration()).toEqual({
     generation: prepared.generation,
     epoch: activated.epoch,
+    activationId: 1,
   });
   expect(repeated).toEqual({ ...activated, effect: "no-op" });
 });

@@ -167,7 +167,7 @@ test("retains an earlier activation's facts without crediting a reactivated gene
   await control.activateGeneration(0);
 
   expect(await control.getRelayAttempts()).toMatchObject([
-    { generationLabel: 0, activationEpoch: firstAttempt.activationEpoch },
+    { generationLabel: 0, activationId: firstAttempt.activationId },
   ]);
   expect(
     await control.getGenerationEligibility(0, {

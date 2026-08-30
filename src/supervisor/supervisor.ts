@@ -1,28 +1,49 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
-import { fixtureMainHarnessCommit, loadFixtureMainFacet } from "../agent/loader.js";
-import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../agent/loader.js";
-import { GenerationControl } from "./control.js";
-import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "./eligibility.js";
-import type { EligibilityPolicy, GenerationEligibility } from "./eligibility.js";
-import { Generations } from "./generations.js";
-import { RelayFacts } from "./relay-facts.js";
-import type { RelayAttempt, RelayFact } from "./relay-facts.js";
+import {
+  fixtureMainHarnessCommit,
+  loadFixtureMainFacet,
+  type MainHarnessArtifactInput,
+  type MainHarnessArtifactProblem,
+} from "../agent/loader.js";
+import {
+  GenerationControl,
+  type GenerationControlResult,
+  type GenerationRequest,
+} from "./control.js";
+import {
+  DEFAULT_ELIGIBILITY_POLICY,
+  deriveGenerationEligibility,
+  type EligibilityPolicy,
+  type GenerationEligibility,
+} from "./eligibility.js";
+import {
+  Generations,
+  type ActivationResult,
+  type ActiveGeneration,
+  type Generation,
+  type LabelGenerationResult,
+  type PreparationCheck,
+  type PreparationCheckOutcome,
+  type PreparationCheckResult,
+} from "./generations.js";
+import { RelayFacts, type RelayAttempt, type RelayFact } from "./relay-facts.js";
+import {
+  Recovery,
+  type RecoveryEpisode,
+  type RecoveryFailure,
+  type RecoveryOperationReport,
+  type RecoveryPolicy,
+  type RepairOperationOutcome,
+} from "./recovery.js";
 import { FacetRelay } from "./relay.js";
 import { mainFacetName } from "./facet-name.js";
-import { checkGenerationStartup } from "./startup-check.js";
-import type { StartupCheckOptions, StartupCheckResult } from "./startup-check.js";
-import type {
-  ActivationResult,
-  ActiveGeneration,
-  Generation,
-  LabelGenerationResult,
-  PreparationCheckOutcome,
-  PreparationCheckResult,
-} from "./generations.js";
-import type { GenerationControlResult, GenerationRequest } from "./control.js";
-import type { PreparationCheck } from "./preparation-checks.js";
+import {
+  checkGenerationStartup,
+  type StartupCheckOptions,
+  type StartupCheckResult,
+} from "./startup-check.js";
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
@@ -35,6 +56,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
   private readonly generations: Generations;
   private readonly relayFacts: RelayFacts;
+  private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
@@ -42,6 +64,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
     this.control = new GenerationControl(ctx.storage, this.generations);
     this.relayFacts = new RelayFacts(ctx.storage);
+    this.recovery = new Recovery(ctx.storage, this.generations, this.relayFacts);
     this.relay = new FacetRelay(this.relayFacts);
     const loadedFacet = loadFixtureMainFacet(env.LOADER);
 
@@ -113,6 +136,41 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.relayFacts.sweepExpired(now);
   }
 
+  startRecovery(
+    failure: RecoveryFailure,
+    policy: RecoveryPolicy,
+    now: number,
+    eligibilityPolicy?: EligibilityPolicy,
+  ): RecoveryEpisode {
+    return this.recovery.start(failure, policy, now, eligibilityPolicy);
+  }
+
+  resumeRecovery(id: number, now: number): RecoveryEpisode {
+    return this.recovery.resume(id, now);
+  }
+
+  reportRecoveryOperation(
+    id: number,
+    key: string,
+    outcome: RepairOperationOutcome,
+    now: number,
+  ): RecoveryOperationReport {
+    return this.recovery.reportOperation(id, key, outcome, now);
+  }
+
+  reconcileRecoveryOperation(
+    id: number,
+    key: string,
+    outcome: RepairOperationOutcome,
+    now: number,
+  ): RecoveryOperationReport {
+    return this.recovery.reconcileOperation(id, key, outcome, now);
+  }
+
+  getRecoveryEpisode(id: number): RecoveryEpisode | undefined {
+    return this.recovery.get(id);
+  }
+
   getGenerationEligibility(
     label: number,
     policy: EligibilityPolicy = DEFAULT_ELIGIBILITY_POLICY,
@@ -120,7 +178,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return deriveGenerationEligibility(
       {
         generationLabel: label,
-        active: this.generations.active(),
+        latestActivationId: this.generations.latestActivationId(label),
         latestPreparationCheck: this.generations.latestPreparationCheck(label),
         attempts: this.relayFacts.attempts(),
       },

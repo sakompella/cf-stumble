@@ -10,7 +10,7 @@ export type RelayFactKind = Exclude<RelayOutcome, "pending"> | "headers-received
 
 export type RelayAttribution = {
   readonly generationLabel: number | undefined;
-  readonly activationEpoch: number;
+  readonly activationId: number | undefined;
   readonly preparationCheckId: number | undefined;
 };
 
@@ -52,7 +52,7 @@ export type RelayFact = RelayAttribution & {
 export type AttemptRow = {
   readonly id: number;
   readonly generation_label: number | null;
-  readonly activation_epoch: number;
+  readonly activation_id: number | null;
   readonly preparation_check_id: number | null;
   readonly started_at: number;
   readonly deadline_at: number;
@@ -64,7 +64,7 @@ export type AttemptRow = {
 export type FactRow = {
   readonly attempt_id: number;
   readonly generation_label: number | null;
-  readonly activation_epoch: number;
+  readonly activation_id: number | null;
   readonly preparation_check_id: number | null;
   readonly kind: RelayFactKind;
   readonly response_status: number | null;
@@ -75,7 +75,7 @@ export function attemptFromRow(row: AttemptRow): RelayAttempt {
   const base: RelayAttemptBase = {
     id: row.id,
     generationLabel: row.generation_label ?? undefined,
-    activationEpoch: row.activation_epoch,
+    activationId: row.activation_id ?? undefined,
     preparationCheckId: row.preparation_check_id ?? undefined,
     startedAt: row.started_at,
     deadlineAt: row.deadline_at,
@@ -114,7 +114,7 @@ export function factFromRow(row: FactRow): RelayFact {
   return {
     attemptId: row.attempt_id,
     generationLabel: row.generation_label ?? undefined,
-    activationEpoch: row.activation_epoch,
+    activationId: row.activation_id ?? undefined,
     preparationCheckId: row.preparation_check_id ?? undefined,
     kind: row.kind,
     responseStatus: row.response_status ?? undefined,
