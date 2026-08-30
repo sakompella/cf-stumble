@@ -26,7 +26,7 @@ Sessions and accumulated context must survive useful generation changes, but the
 
 The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. The project still needs to choose whether it emits one bundle or a module map and where those outputs are stored. Computer supplies the environment in which compilation and tests can run; it does not decide the artifact format.
 
-Worker Loader names are cached. A production design must distinguish different executable contents so a changed harness does not silently reuse old code.
+Worker Loader names are cached. The Supervisor uses the labeled harness commit ID as the Loader name, so a changed harness commit does not silently reuse old code.
 
 ## Generation requests
 

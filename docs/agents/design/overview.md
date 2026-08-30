@@ -52,7 +52,7 @@ A newly started generation should pass a basic cold-start check before normal us
 
 Computer's Worker-shell backend is useful for text operations and host-forwarded Git. Its container backend provides Node, pnpm, TypeScript compilation, tests, and project commands. The tested source and image pair are recorded in `computer-integration.md`.
 
-The harness source is TypeScript. Dynamic Workers execute Worker-compatible modules, so some compilation or transformation is necessary before a generation runs. The supervisor identifies reusable emitted contents by an artifact digest and derives a separate mount key for each generation, so changed bytes cannot reuse a Loader identity while identical contents remain reusable. The output could be one bundle or a module map; its production, storage, and retention are not settled.
+The harness source is TypeScript. Dynamic Workers execute Worker-compatible modules, so some compilation or transformation is necessary before a generation runs. The Supervisor uses each generation's labeled harness commit ID as its Worker Loader identity, so a changed commit cannot reuse old loaded code. The output could be one bundle or a module map; its production, storage, and retention are not settled.
 
 ## The first useful version
 
