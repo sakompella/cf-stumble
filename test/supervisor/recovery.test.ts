@@ -171,7 +171,7 @@ test("ends at the repair-attempt bound while retaining the fallback", async () =
   await control.reportRecoveryOperation(
     episode.id,
     firstKey,
-    { kind: "failed", error: "first" },
+    { kind: "repair-failed", error: "first" },
     1_001,
   );
   const second = await control.resumeRecovery(episode.id, 1_002);
@@ -182,7 +182,7 @@ test("ends at the repair-attempt bound while retaining the fallback", async () =
   await control.reportRecoveryOperation(
     episode.id,
     secondKey,
-    { kind: "failed", error: "second" },
+    { kind: "repair-failed", error: "second" },
     1_003,
   );
   const completed = await control.resumeRecovery(episode.id, 1_004);
@@ -205,7 +205,7 @@ test("ends at the recovery budget while retaining the fallback", async () => {
   await control.reportRecoveryOperation(
     episode.id,
     key,
-    { kind: "failed", error: "failed" },
+    { kind: "repair-failed", error: "failed" },
     1_001,
   );
   const completed = await control.resumeRecovery(episode.id, 1_100);

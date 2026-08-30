@@ -209,7 +209,11 @@ export class Generations {
   }
 
   latestPreparationCheck(label: GenerationLabel): PreparationCheck | undefined {
-    return this.preparationChecks.latestPass(label);
+    return this.preparationChecks.latest(label);
+  }
+
+  latestPreparationCheckId(): number {
+    return this.preparationChecks.latestId();
   }
 
   latestActivationId(label: GenerationLabel): number | undefined {

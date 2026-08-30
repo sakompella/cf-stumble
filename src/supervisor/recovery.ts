@@ -2,56 +2,68 @@ import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "./eligi
 import type { EligibilityPolicy } from "./eligibility.js";
 import type { GenerationLabel } from "./generation-types.js";
 import type { Generations } from "./generations.js";
-import type { RelayFacts } from "./relay-facts.js";
 import {
   blockedEpisode,
-  complete,
-  episodeFromRow,
-  episodeSelect,
-  errorsToText,
+  parseRecoveryOperationOutcome,
   readyEpisode,
-  recoverySchema,
-  settleOperation,
   validateEpisodeId,
   validateFailure,
   validateNow,
-  validateOutcome,
   validateRecoveryDeadline,
   validateRecoveryPolicy,
+  withEpisodeId,
 } from "./recovery-model.js";
-import type { EpisodeRow } from "./recovery-model.js";
+import {
+  completeForBudget,
+  markNeedsReconciliation,
+  openRepair,
+  settleRepair,
+  settleStartupCheck,
+} from "./recovery-operations.js";
+import type { VerifiedStartupCandidate } from "./recovery-operations.js";
+import type { RelayFacts } from "./relay-facts.js";
+import { RecoveryEpisodeStore } from "./recovery-store.js";
 import type {
   RecoveryEpisode,
   RecoveryFailureInput,
-  RecoveryOperation,
+  RecoveryOperationOutcome,
+  RecoveryOperationOutcomeInput,
   RecoveryOperationReport,
   RecoveryPolicy,
-  RepairOperationOutcome,
 } from "./recovery-types.js";
 
+type RepairSettlementEpisode = Extract<
+  RecoveryEpisode,
+  { readonly currentOperation: { readonly kind: "repair" } }
+>;
+type StartupCheckSettlementEpisode = Extract<
+  RecoveryEpisode,
+  { readonly currentOperation: { readonly kind: "startup-check" } }
+>;
+
 export type {
+  CompletedRecoveryEpisode,
   RecoveryEpisode,
   RecoveryFailure,
   RecoveryFailureInput,
   RecoveryOperation,
+  RecoveryOperationOutcomeInput,
   RecoveryOperationReport,
   RecoveryPolicy,
-  RepairOperationOutcome,
 } from "./recovery-types.js";
 export { validateRecoveryPolicy } from "./recovery-model.js";
 
 export class Recovery {
   private readonly storage: DurableObjectStorage;
-  private readonly sql: SqlStorage;
   private readonly generations: Generations;
   private readonly relayFacts: RelayFacts;
+  private readonly episodeStore: RecoveryEpisodeStore;
 
   constructor(storage: DurableObjectStorage, generations: Generations, relayFacts: RelayFacts) {
     this.storage = storage;
-    this.sql = storage.sql;
     this.generations = generations;
     this.relayFacts = relayFacts;
-    this.sql.exec(recoverySchema);
+    this.episodeStore = new RecoveryEpisodeStore(storage);
   }
 
   start(
@@ -63,26 +75,21 @@ export class Recovery {
     const parsedFailure = validateFailure(failure);
     validateNow(now);
     return this.storage.transactionSync(() => {
-      const existing = this.byFailureEventId(parsedFailure.failureEventId);
+      const existing = this.episodeStore.byFailureEventId(parsedFailure.failureEventId);
       if (existing !== undefined) {
         return existing;
       }
-
       validateRecoveryPolicy(policy);
       validateRecoveryDeadline(now, policy);
       const fallbackGenerationLabel = this.chooseFallback(
         parsedFailure.failedGenerationLabel,
         eligibilityPolicy,
       );
-      const episode =
+      const draft =
         fallbackGenerationLabel === undefined
           ? blockedEpisode(parsedFailure, policy, now)
           : readyEpisode(parsedFailure, fallbackGenerationLabel, policy, now);
-      this.insert(episode);
-      return {
-        ...episode,
-        id: this.sql.exec<{ readonly id: number }>("SELECT last_insert_rowid() AS id").one().id,
-      };
+      return withEpisodeId(draft, this.episodeStore.insert(draft));
     });
   }
 
@@ -95,117 +102,158 @@ export class Recovery {
   reportOperation(
     id: number,
     key: string,
-    outcome: RepairOperationOutcome,
+    outcome: RecoveryOperationOutcomeInput,
     now: number,
   ): RecoveryOperationReport {
     validateEpisodeId(id);
     validateNow(now);
-    validateOutcome(outcome);
-    return this.storage.transactionSync(() => {
-      const episode = this.requiredById(id);
-      const operation = episode.currentOperation;
-      if (operation?.state === "open" && now >= operation.deadlineAt) {
-        return { applied: false, episode: this.advance(episode, now) };
-      }
-
-      if (operation === undefined || operation.key !== key || operation.state !== "open") {
-        return { applied: false, episode };
-      }
-
-      const settled = settleOperation(episode, outcome);
-      this.store(settled);
-      return { applied: true, episode: settled };
-    });
+    const parsedOutcome = parseRecoveryOperationOutcome(outcome);
+    return this.storage.transactionSync(() =>
+      this.report(this.requiredById(id), key, parsedOutcome, now),
+    );
   }
 
   reconcileOperation(
     id: number,
     key: string,
-    outcome: RepairOperationOutcome,
+    outcome: RecoveryOperationOutcomeInput,
     now: number,
   ): RecoveryOperationReport {
     validateEpisodeId(id);
     validateNow(now);
-    validateOutcome(outcome);
+    const parsedOutcome = parseRecoveryOperationOutcome(outcome);
     return this.storage.transactionSync(() => {
       const episode = this.requiredById(id);
       const operation = episode.currentOperation;
       if (
+        parsedOutcome === undefined ||
         operation === undefined ||
         operation.key !== key ||
         operation.state !== "needs-reconciliation"
       ) {
         return { applied: false, episode };
       }
-
-      const settled = settleOperation(episode, outcome);
-      this.store(settled);
-      return { applied: true, episode: settled };
+      return this.settle(episode, parsedOutcome, now);
     });
   }
 
   get(id: number): RecoveryEpisode | undefined {
-    return Number.isSafeInteger(id) && id > 0 ? this.byId(id) : undefined;
+    return Number.isSafeInteger(id) && id > 0 ? this.episodeStore.byId(id) : undefined;
+  }
+
+  private report(
+    episode: RecoveryEpisode,
+    key: string,
+    outcome: RecoveryOperationOutcome | undefined,
+    now: number,
+  ): RecoveryOperationReport {
+    const operation = episode.currentOperation;
+    if (
+      outcome === undefined ||
+      operation === undefined ||
+      operation.key !== key ||
+      operation.state !== "open"
+    ) {
+      return { applied: false, episode };
+    }
+    if (now >= operation.deadlineAt) {
+      return { applied: false, episode: this.advance(episode, now) };
+    }
+    return this.settle(episode, outcome, now);
+  }
+
+  private settle(
+    episode: RecoveryEpisode,
+    outcome: RecoveryOperationOutcome,
+    now: number,
+  ): RecoveryOperationReport {
+    if (isRepairSettlementEpisode(episode)) {
+      if (outcome.kind !== "repair-succeeded" && outcome.kind !== "repair-failed") {
+        return { applied: false, episode };
+      }
+      const preparationCheckIdAtOpen =
+        outcome.kind === "repair-succeeded" ? this.generations.latestPreparationCheckId() : 0;
+      const settled = settleRepair(
+        episode,
+        outcome,
+        now,
+        preparationCheckIdAtOpen,
+        now < episode.recoveryDeadlineAt,
+      );
+      this.episodeStore.store(settled);
+      return { applied: true, episode: settled };
+    }
+    if (isStartupCheckSettlementEpisode(episode)) {
+      if (outcome.kind !== "startup-check-passed" && outcome.kind !== "startup-check-failed") {
+        return { applied: false, episode };
+      }
+      const settled = settleStartupCheck(
+        episode,
+        outcome,
+        this.verifiedCandidate(episode, outcome),
+      );
+      if (settled === undefined) {
+        return { applied: false, episode };
+      }
+      this.episodeStore.store(settled);
+      return { applied: true, episode: settled };
+    }
+    return { applied: false, episode };
+  }
+
+  private verifiedCandidate(
+    episode: StartupCheckSettlementEpisode,
+    outcome: RecoveryOperationOutcome,
+  ): VerifiedStartupCandidate | undefined {
+    if (outcome.kind !== "startup-check-passed") {
+      return undefined;
+    }
+    const generation = this.generations.byLabel(outcome.generationLabel);
+    const latestPreparationCheck = this.generations.latestPreparationCheck(outcome.generationLabel);
+    if (
+      generation === undefined ||
+      generation.harnessCommit !== episode.repairedHarnessCommit ||
+      generation.status !== "ready" ||
+      latestPreparationCheck?.outcome !== "passed" ||
+      latestPreparationCheck.id <= episode.currentOperation.preparationCheckIdAtOpen
+    ) {
+      return undefined;
+    }
+    return {
+      harnessCommit: generation.harnessCommit,
+      generationLabel: generation.label,
+      preparationCheckId: latestPreparationCheck.id,
+    };
   }
 
   private advance(episode: RecoveryEpisode, now: number): RecoveryEpisode {
     if (episode.phase === "blocked" || episode.phase === "completed") {
       return episode;
     }
-
-    if (now >= episode.recoveryDeadlineAt) {
-      const exhausted = complete(episode, "fallback-retained:recovery-budget-exhausted");
-      this.store(exhausted);
-      return exhausted;
+    if (episode.phase === "repair-open" || episode.phase === "startup-check-open") {
+      return now >= episode.currentOperation.deadlineAt
+        ? this.storeAndReturn(markNeedsReconciliation(episode))
+        : episode;
     }
-
-    const operation = episode.currentOperation;
-    if (operation !== undefined) {
-      return this.advanceOperation(episode, operation, now);
-    }
-
-    if (episode.attemptsUsed >= episode.policy.maxRepairAttempts) {
-      const exhausted = complete(episode, "fallback-retained:repair-attempt-budget-exhausted");
-      this.store(exhausted);
-      return exhausted;
-    }
-
-    const attempt = episode.attemptsUsed + 1;
-    const opened = {
-      ...episode,
-      attemptsUsed: attempt,
-      phase: "repair-open" as const,
-      result: "repair-open",
-      currentOperation: {
-        kind: "repair" as const,
-        attempt,
-        key: `recovery-${episode.id}:repair:${attempt}`,
-        deadlineAt: Math.min(now + episode.policy.operationDeadlineMs, episode.recoveryDeadlineAt),
-        state: "open" as const,
-      },
-    };
-    this.store(opened);
-    return opened;
-  }
-
-  private advanceOperation(
-    episode: RecoveryEpisode,
-    operation: RecoveryOperation,
-    now: number,
-  ): RecoveryEpisode {
-    if (operation.state !== "open" || now < operation.deadlineAt) {
+    if (episode.phase === "needs-reconciliation") {
       return episode;
     }
+    if (now >= episode.recoveryDeadlineAt) {
+      return this.storeAndReturn(
+        completeForBudget(episode, "fallback-retained:recovery-budget-exhausted"),
+      );
+    }
+    if (episode.attemptsUsed >= episode.policy.maxRepairAttempts) {
+      return this.storeAndReturn(
+        completeForBudget(episode, "fallback-retained:repair-attempt-budget-exhausted"),
+      );
+    }
+    return this.storeAndReturn(openRepair(episode, now));
+  }
 
-    const expired = {
-      ...episode,
-      phase: "needs-reconciliation" as const,
-      result: "operation-needs-reconciliation",
-      errors: [...episode.errors, "operation-deadline-exceeded"],
-      currentOperation: { ...operation, state: "needs-reconciliation" as const },
-    };
-    this.store(expired);
-    return expired;
+  private storeAndReturn(episode: RecoveryEpisode): RecoveryEpisode {
+    this.episodeStore.store(episode);
+    return episode;
   }
 
   private chooseFallback(
@@ -231,69 +279,21 @@ export class Recovery {
       )?.label;
   }
 
-  private byFailureEventId(failureEventId: string): RecoveryEpisode | undefined {
-    const row = this.sql
-      .exec<EpisodeRow>(`${episodeSelect} WHERE failure_event_id = ?`, failureEventId)
-      .toArray()[0];
-    return row === undefined ? undefined : episodeFromRow(row);
-  }
-
-  private byId(id: number): RecoveryEpisode | undefined {
-    const row = this.sql.exec<EpisodeRow>(`${episodeSelect} WHERE id = ?`, id).toArray()[0];
-    return row === undefined ? undefined : episodeFromRow(row);
-  }
-
   private requiredById(id: number): RecoveryEpisode {
-    const episode = this.byId(id);
+    const episode = this.episodeStore.byId(id);
     if (episode === undefined) {
       throw new Error(`unknown recovery: ${id}`);
     }
-
     return episode;
   }
+}
 
-  private insert(episode: RecoveryEpisode): void {
-    this.sql.exec(
-      `INSERT INTO recovery_episodes (
-         failure_event_id, failed_generation_label, fallback_generation_label, max_repair_attempts,
-         recovery_budget_ms, operation_deadline_ms, started_at, recovery_deadline_at, attempts_used,
-         phase, result, errors_text, operation_key, operation_attempt, operation_deadline_at,
-         operation_state
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      episode.failure.failureEventId,
-      episode.failure.failedGenerationLabel,
-      episode.fallbackGenerationLabel ?? null,
-      episode.policy.maxRepairAttempts,
-      episode.policy.recoveryBudgetMs,
-      episode.policy.operationDeadlineMs,
-      episode.startedAt,
-      episode.recoveryDeadlineAt,
-      episode.attemptsUsed,
-      episode.phase,
-      episode.result,
-      errorsToText(episode.errors),
-      episode.currentOperation?.key ?? null,
-      episode.currentOperation?.attempt ?? null,
-      episode.currentOperation?.deadlineAt ?? null,
-      episode.currentOperation?.state ?? null,
-    );
-  }
+function isRepairSettlementEpisode(episode: RecoveryEpisode): episode is RepairSettlementEpisode {
+  return episode.currentOperation?.kind === "repair";
+}
 
-  private store(episode: RecoveryEpisode): void {
-    this.sql.exec(
-      `UPDATE recovery_episodes
-       SET attempts_used = ?, phase = ?, result = ?, errors_text = ?, operation_key = ?,
-           operation_attempt = ?, operation_deadline_at = ?, operation_state = ?
-       WHERE id = ?`,
-      episode.attemptsUsed,
-      episode.phase,
-      episode.result,
-      errorsToText(episode.errors),
-      episode.currentOperation?.key ?? null,
-      episode.currentOperation?.attempt ?? null,
-      episode.currentOperation?.deadlineAt ?? null,
-      episode.currentOperation?.state ?? null,
-      episode.id,
-    );
-  }
+function isStartupCheckSettlementEpisode(
+  episode: RecoveryEpisode,
+): episode is StartupCheckSettlementEpisode {
+  return episode.currentOperation?.kind === "startup-check";
 }

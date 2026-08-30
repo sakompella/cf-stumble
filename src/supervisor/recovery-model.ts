@@ -1,12 +1,13 @@
+import { parseHarnessCommit } from "../harness-commit.js";
 import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
 import type {
-  RecoveryEpisode,
+  RecoveryEpisodeDraft,
+  RecoveryEpisodeId,
   RecoveryFailure,
   RecoveryFailureInput,
-  RecoveryOperation,
-  RecoveryPhase,
+  RecoveryOperationOutcome,
+  RecoveryOperationOutcomeInput,
   RecoveryPolicy,
-  RepairOperationOutcome,
 } from "./recovery-types.js";
 
 export type EpisodeRow = {
@@ -23,40 +24,124 @@ export type EpisodeRow = {
   readonly phase: string;
   readonly result: string;
   readonly errors_text: string;
+  readonly repaired_harness_commit: string | null;
+  readonly verified_harness_commit: string | null;
+  readonly verified_generation_label: number | null;
+  readonly verified_preparation_check_id: number | null;
+  readonly operation_kind: string | null;
   readonly operation_key: string | null;
   readonly operation_attempt: number | null;
   readonly operation_deadline_at: number | null;
   readonly operation_state: string | null;
+  readonly preparation_check_id_at_open: number | null;
 };
 
 export const recoverySchema = `
   CREATE TABLE IF NOT EXISTS recovery_episodes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT CHECK (id > 0),
     failure_event_id TEXT NOT NULL UNIQUE,
-    failed_generation_label INTEGER NOT NULL,
-    fallback_generation_label INTEGER,
-    max_repair_attempts INTEGER NOT NULL,
-    recovery_budget_ms INTEGER NOT NULL,
-    operation_deadline_ms INTEGER NOT NULL,
+    failed_generation_label INTEGER NOT NULL CHECK (failed_generation_label >= 0),
+    fallback_generation_label INTEGER CHECK (fallback_generation_label >= 0),
+    max_repair_attempts INTEGER NOT NULL CHECK (max_repair_attempts > 0),
+    recovery_budget_ms INTEGER NOT NULL CHECK (recovery_budget_ms > 0),
+    operation_deadline_ms INTEGER NOT NULL CHECK (
+      operation_deadline_ms > 0 AND operation_deadline_ms <= recovery_budget_ms
+    ),
     started_at INTEGER NOT NULL,
-    recovery_deadline_at INTEGER NOT NULL,
-    attempts_used INTEGER NOT NULL,
+    recovery_deadline_at INTEGER NOT NULL CHECK (
+      recovery_deadline_at = started_at + recovery_budget_ms
+    ),
+    attempts_used INTEGER NOT NULL CHECK (
+      attempts_used >= 0 AND attempts_used <= max_repair_attempts
+    ),
     phase TEXT NOT NULL CHECK (phase IN (
-      'blocked', 'ready', 'repair-open', 'needs-reconciliation', 'completed'
+      'blocked', 'ready', 'repair-open', 'startup-check-open', 'needs-reconciliation', 'completed'
     )),
     result TEXT NOT NULL,
     errors_text TEXT NOT NULL,
+    repaired_harness_commit TEXT,
+    verified_harness_commit TEXT,
+    verified_generation_label INTEGER CHECK (verified_generation_label >= 0),
+    verified_preparation_check_id INTEGER CHECK (verified_preparation_check_id > 0),
+    operation_kind TEXT CHECK (operation_kind IN ('repair', 'startup-check')),
     operation_key TEXT,
-    operation_attempt INTEGER,
+    operation_attempt INTEGER CHECK (operation_attempt > 0),
     operation_deadline_at INTEGER,
-    operation_state TEXT CHECK (operation_state IN ('open', 'needs-reconciliation'))
+    operation_state TEXT CHECK (operation_state IN ('open', 'needs-reconciliation')),
+    preparation_check_id_at_open INTEGER CHECK (preparation_check_id_at_open >= 0),
+    CHECK (
+      operation_deadline_at IS NULL OR (
+        operation_deadline_at >= started_at AND operation_deadline_at <= recovery_deadline_at
+      )
+    ),
+    CHECK (
+      (phase = 'blocked' AND fallback_generation_label IS NULL AND attempts_used = 0 AND
+       result = 'blocked:no-known-good-generation' AND repaired_harness_commit IS NULL AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND operation_kind IS NULL AND operation_key IS NULL AND
+       operation_attempt IS NULL AND operation_deadline_at IS NULL AND operation_state IS NULL AND
+       preparation_check_id_at_open IS NULL)
+      OR
+      (phase = 'ready' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NULL AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND result IN (
+         'fallback-retained:repair-pending', 'repair-failed', 'startup-check-failed'
+       ) AND operation_kind IS NULL AND operation_key IS NULL AND operation_attempt IS NULL AND
+       operation_deadline_at IS NULL AND operation_state IS NULL AND preparation_check_id_at_open IS NULL)
+      OR
+      (phase = 'repair-open' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NULL AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND result = 'repair-open' AND operation_kind = 'repair' AND
+       operation_key = 'recovery-' || id || ':repair:' || operation_attempt AND operation_attempt <= attempts_used AND
+       operation_deadline_at IS NOT NULL AND operation_state = 'open' AND preparation_check_id_at_open IS NULL)
+      OR
+      (phase = 'startup-check-open' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NOT NULL AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND result = 'startup-check-open' AND
+       operation_kind = 'startup-check' AND operation_key = 'recovery-' || id || ':startup-check:' || operation_attempt AND
+       operation_attempt <= attempts_used AND operation_deadline_at IS NOT NULL AND operation_state = 'open' AND
+       preparation_check_id_at_open IS NOT NULL)
+      OR
+      (phase = 'needs-reconciliation' AND fallback_generation_label IS NOT NULL AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND result = 'operation-needs-reconciliation' AND
+       operation_kind = 'repair' AND repaired_harness_commit IS NULL AND
+       operation_key = 'recovery-' || id || ':repair:' || operation_attempt AND operation_attempt <= attempts_used AND
+       operation_deadline_at IS NOT NULL AND operation_state = 'needs-reconciliation' AND
+       preparation_check_id_at_open IS NULL)
+      OR
+      (phase = 'needs-reconciliation' AND fallback_generation_label IS NOT NULL AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND result = 'operation-needs-reconciliation' AND
+       operation_kind = 'startup-check' AND repaired_harness_commit IS NOT NULL AND
+       operation_key = 'recovery-' || id || ':startup-check:' || operation_attempt AND operation_attempt <= attempts_used AND
+       operation_deadline_at IS NOT NULL AND operation_state = 'needs-reconciliation' AND
+       preparation_check_id_at_open IS NOT NULL)
+      OR
+      (phase = 'completed' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NULL AND
+       result IN ('fallback-retained:repair-attempt-budget-exhausted', 'fallback-retained:recovery-budget-exhausted') AND
+       verified_harness_commit IS NULL AND verified_generation_label IS NULL AND
+       verified_preparation_check_id IS NULL AND operation_kind IS NULL AND operation_key IS NULL AND
+       operation_attempt IS NULL AND operation_deadline_at IS NULL AND operation_state IS NULL AND
+       preparation_check_id_at_open IS NULL)
+      OR
+      (phase = 'completed' AND fallback_generation_label IS NOT NULL AND repaired_harness_commit IS NULL AND
+       result = 'fallback-retained:repaired-generation-verified' AND verified_harness_commit IS NOT NULL AND
+       verified_generation_label IS NOT NULL AND verified_preparation_check_id IS NOT NULL AND
+       operation_kind IS NULL AND operation_key IS NULL AND operation_attempt IS NULL AND
+       operation_deadline_at IS NULL AND operation_state IS NULL AND preparation_check_id_at_open IS NULL)
+    )
   );
 `;
 
-export const episodeSelect = `SELECT id, failure_event_id, failed_generation_label, fallback_generation_label,
-  max_repair_attempts, recovery_budget_ms, operation_deadline_ms, started_at, recovery_deadline_at,
-  attempts_used, phase, result, errors_text, operation_key, operation_attempt, operation_deadline_at,
-  operation_state FROM recovery_episodes`;
+export const episodeSelect = `SELECT id, failure_event_id, failed_generation_label,
+  fallback_generation_label, max_repair_attempts, recovery_budget_ms, operation_deadline_ms,
+  started_at, recovery_deadline_at, attempts_used, phase, result, errors_text,
+  repaired_harness_commit, verified_harness_commit, verified_generation_label,
+  verified_preparation_check_id, operation_kind, operation_key, operation_attempt,
+  operation_deadline_at, operation_state, preparation_check_id_at_open FROM recovery_episodes`;
+
+export { episodeFromRow } from "./recovery-row.js";
 
 export function validateRecoveryPolicy(policy: RecoveryPolicy): void {
   for (const [name, value] of Object.entries(policy)) {
@@ -64,7 +149,6 @@ export function validateRecoveryPolicy(policy: RecoveryPolicy): void {
       throw new Error(`${name} must be a positive safe integer`);
     }
   }
-
   if (policy.operationDeadlineMs > policy.recoveryBudgetMs) {
     throw new Error("operationDeadlineMs cannot exceed recoveryBudgetMs");
   }
@@ -74,20 +158,8 @@ export function blockedEpisode(
   failure: RecoveryFailure,
   policy: RecoveryPolicy,
   now: number,
-): RecoveryEpisode {
-  return {
-    id: 0,
-    failure,
-    fallbackGenerationLabel: undefined,
-    policy,
-    startedAt: now,
-    recoveryDeadlineAt: now + policy.recoveryBudgetMs,
-    attemptsUsed: 0,
-    phase: "blocked",
-    result: "blocked:no-known-good-generation",
-    errors: [],
-    currentOperation: undefined,
-  };
+): RecoveryEpisodeDraft {
+  return episodeDraft(failure, policy, now);
 }
 
 export function readyEpisode(
@@ -95,106 +167,22 @@ export function readyEpisode(
   fallbackGenerationLabel: GenerationLabel,
   policy: RecoveryPolicy,
   now: number,
-): RecoveryEpisode {
-  return {
-    id: 0,
-    failure,
-    fallbackGenerationLabel,
-    policy,
-    startedAt: now,
-    recoveryDeadlineAt: now + policy.recoveryBudgetMs,
-    attemptsUsed: 0,
-    phase: "ready",
-    result: "fallback-retained:repair-pending",
-    errors: [],
-    currentOperation: undefined,
-  };
+): RecoveryEpisodeDraft {
+  return episodeDraft(failure, policy, now, fallbackGenerationLabel);
 }
 
-export function complete(episode: RecoveryEpisode, result: string): RecoveryEpisode {
-  return { ...episode, phase: "completed", result, currentOperation: undefined };
-}
-
-export function settleOperation(
-  episode: RecoveryEpisode,
-  outcome: RepairOperationOutcome,
-): RecoveryEpisode {
-  if (outcome.kind === "succeeded") {
-    return complete(episode, "fallback-retained:repair-succeeded-without-materialized-generation");
-  }
-
-  return {
-    ...episode,
-    phase: "ready",
-    result: "repair-failed",
-    errors: [...episode.errors, outcome.error],
-    currentOperation: undefined,
-  };
-}
-
-export function episodeFromRow(row: EpisodeRow): RecoveryEpisode {
-  const failedGenerationLabel = generationLabelFromRow(row.failed_generation_label, row.id);
-  const fallbackGenerationLabel = nullableGenerationLabelFromRow(
-    row.fallback_generation_label,
-    row.id,
-  );
-  const phase = recoveryPhaseFromRow(row.phase, row.id);
-
-  return {
-    id: row.id,
-    failure: {
-      failureEventId: row.failure_event_id,
-      failedGenerationLabel,
-    },
-    fallbackGenerationLabel,
-    policy: {
-      maxRepairAttempts: row.max_repair_attempts,
-      recoveryBudgetMs: row.recovery_budget_ms,
-      operationDeadlineMs: row.operation_deadline_ms,
-    },
-    startedAt: row.started_at,
-    recoveryDeadlineAt: row.recovery_deadline_at,
-    attemptsUsed: row.attempts_used,
-    phase,
-    result: row.result,
-    errors: errorsFromText(row.errors_text),
-    currentOperation: operationFromRow(row),
-  };
-}
-
-function operationFromRow(row: EpisodeRow): RecoveryOperation | undefined {
-  if (
-    row.operation_key === null &&
-    row.operation_attempt === null &&
-    row.operation_deadline_at === null &&
-    row.operation_state === null
-  ) {
-    return undefined;
-  }
-
-  if (
-    row.operation_key !== null &&
-    row.operation_attempt !== null &&
-    row.operation_deadline_at !== null &&
-    row.operation_state !== null
-  ) {
-    return {
-      kind: "repair",
-      key: row.operation_key,
-      attempt: row.operation_attempt,
-      deadlineAt: row.operation_deadline_at,
-      state: recoveryOperationStateFromRow(row.operation_state, row.id),
-    };
-  }
-
-  throw new Error(`invalid recovery operation ${row.id}`);
+export function withEpisodeId<T extends RecoveryEpisodeDraft>(
+  draft: T,
+  id: RecoveryEpisodeId,
+): T & { readonly id: RecoveryEpisodeId } {
+  return { ...draft, id };
 }
 
 export function errorsToText(errors: readonly string[]): string {
   return errors.map((error) => encodeURIComponent(error)).join("|");
 }
 
-function errorsFromText(encoded: string): readonly string[] {
+export function errorsFromText(encoded: string): readonly string[] {
   return encoded.length === 0 ? [] : encoded.split("|").map((error) => decodeURIComponent(error));
 }
 
@@ -202,75 +190,45 @@ export function validateFailure(failure: RecoveryFailureInput): RecoveryFailure 
   if (failure.failureEventId.length === 0) {
     throw new Error("failureEventId must not be empty");
   }
-
   const failedGenerationLabel = parseGenerationLabel(failure.failedGenerationLabel);
   if (failedGenerationLabel === undefined) {
     throw new TypeError("failedGenerationLabel must be a non-negative safe integer");
   }
-
   return { failureEventId: failure.failureEventId, failedGenerationLabel };
 }
 
-function recoveryPhaseFromRow(value: string, episodeId: number): RecoveryPhase {
-  if (
-    value === "blocked" ||
-    value === "ready" ||
-    value === "repair-open" ||
-    value === "needs-reconciliation" ||
-    value === "completed"
-  ) {
-    return value;
+export function parseRecoveryOperationOutcome(
+  outcome: RecoveryOperationOutcomeInput,
+): RecoveryOperationOutcome | undefined {
+  switch (outcome.kind) {
+    case "repair-succeeded": {
+      const repairedHarnessCommit = parseHarnessCommit(outcome.repairedHarnessCommit);
+      return repairedHarnessCommit === undefined
+        ? undefined
+        : { ...outcome, repairedHarnessCommit };
+    }
+    case "repair-failed":
+    case "startup-check-failed":
+      return outcome.error.length === 0 ? undefined : outcome;
+    case "startup-check-passed": {
+      const generationLabel = parseGenerationLabel(outcome.generationLabel);
+      return generationLabel === undefined ? undefined : { ...outcome, generationLabel };
+    }
+    default:
+      return undefined;
   }
-
-  throw new Error(`invalid persisted recovery phase for ${episodeId}`);
 }
 
-function recoveryOperationStateFromRow(
-  value: string,
-  episodeId: number,
-): RecoveryOperation["state"] {
-  if (value === "open" || value === "needs-reconciliation") {
-    return value;
+export function recoveryEpisodeId(value: number): RecoveryEpisodeId {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new TypeError("recovery id must be a positive safe integer");
   }
-
-  throw new Error(`invalid persisted recovery operation state for ${episodeId}`);
-}
-
-function generationLabelFromRow(value: number, episodeId: number): GenerationLabel {
-  const generationLabel = parseGenerationLabel(value);
-  if (generationLabel === undefined) {
-    throw new Error(`invalid persisted failed generation label for recovery ${episodeId}`);
-  }
-
-  return generationLabel;
-}
-
-function nullableGenerationLabelFromRow(
-  value: number | null,
-  episodeId: number,
-): GenerationLabel | undefined {
-  if (value === null) {
-    return undefined;
-  }
-
-  const generationLabel = parseGenerationLabel(value);
-  if (generationLabel === undefined) {
-    throw new Error(`invalid persisted fallback generation label for recovery ${episodeId}`);
-  }
-
-  return generationLabel;
-}
-
-export function validateRecoveryDeadline(now: number, policy: RecoveryPolicy): void {
-  if (now > Number.MAX_SAFE_INTEGER - policy.recoveryBudgetMs) {
-    throw new RangeError("recovery deadline must be a safe integer");
-  }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the guard accepts only positive safe integer recovery episode IDs.
+  return value as RecoveryEpisodeId;
 }
 
 export function validateEpisodeId(id: number): void {
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw new TypeError("recovery id must be a positive safe integer");
-  }
+  recoveryEpisodeId(id);
 }
 
 export function validateNow(now: number): void {
@@ -279,8 +237,42 @@ export function validateNow(now: number): void {
   }
 }
 
-export function validateOutcome(outcome: RepairOperationOutcome): void {
-  if (outcome.kind === "failed" && outcome.error.length === 0) {
-    throw new TypeError("failed repair outcomes need an error");
+export function validateRecoveryDeadline(now: number, policy: RecoveryPolicy): void {
+  if (now > Number.MAX_SAFE_INTEGER - policy.recoveryBudgetMs) {
+    throw new RangeError("recovery deadline must be a safe integer");
   }
+}
+
+function episodeDraft(
+  failure: RecoveryFailure,
+  policy: RecoveryPolicy,
+  now: number,
+  fallbackGenerationLabel?: GenerationLabel,
+): RecoveryEpisodeDraft {
+  const base = {
+    failure,
+    policy,
+    startedAt: now,
+    recoveryDeadlineAt: now + policy.recoveryBudgetMs,
+    attemptsUsed: 0,
+    errors: [],
+    repairedHarnessCommit: undefined,
+    verifiedHarnessCommit: undefined,
+    verifiedGenerationLabel: undefined,
+    verifiedPreparationCheckId: undefined,
+    currentOperation: undefined,
+  } as const;
+  return fallbackGenerationLabel === undefined
+    ? {
+        ...base,
+        fallbackGenerationLabel,
+        phase: "blocked",
+        result: "blocked:no-known-good-generation",
+      }
+    : {
+        ...base,
+        fallbackGenerationLabel,
+        phase: "ready",
+        result: "fallback-retained:repair-pending",
+      };
 }

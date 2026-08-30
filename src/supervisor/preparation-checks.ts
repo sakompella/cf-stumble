@@ -40,12 +40,12 @@ export class PreparationChecks {
     return preparationCheckFromRow(row);
   }
 
-  latestPass(generationLabel: GenerationLabel): PreparationCheck | undefined {
+  latest(generationLabel: GenerationLabel): PreparationCheck | undefined {
     const row = this.sql
       .exec<PreparationCheckRow>(
         `SELECT id, generation_label, outcome
          FROM preparation_checks
-         WHERE generation_label = ? AND outcome = 'passed'
+         WHERE generation_label = ?
          ORDER BY id DESC
          LIMIT 1`,
         generationLabel,
@@ -53,6 +53,13 @@ export class PreparationChecks {
       .toArray()[0];
 
     return row === undefined ? undefined : preparationCheckFromRow(row);
+  }
+
+  latestId(): number {
+    const id = this.sql
+      .exec<{ readonly id: number | null }>("SELECT MAX(id) AS id FROM preparation_checks")
+      .one().id;
+    return id ?? 0;
   }
 
   all(generationLabel: GenerationLabel): readonly PreparationCheck[] {

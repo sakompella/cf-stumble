@@ -31,8 +31,8 @@ import {
   type RecoveryEpisode,
   type RecoveryFailureInput,
   type RecoveryOperationReport,
+  type RecoveryOperationOutcomeInput,
   type RecoveryPolicy,
-  type RepairOperationOutcome,
 } from "./recovery.js";
 import { FacetRelay } from "./relay.js";
 import { mainFacetName } from "./facet-name.js";
@@ -141,7 +141,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   reportRecoveryOperation(
     id: number,
     key: string,
-    outcome: RepairOperationOutcome,
+    outcome: RecoveryOperationOutcomeInput,
     now: number,
   ): RecoveryOperationReport {
     return this.recovery.reportOperation(id, key, outcome, now);
@@ -150,7 +150,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   reconcileRecoveryOperation(
     id: number,
     key: string,
-    outcome: RepairOperationOutcome,
+    outcome: RecoveryOperationOutcomeInput,
     now: number,
   ): RecoveryOperationReport {
     return this.recovery.reconcileOperation(id, key, outcome, now);
