@@ -1,6 +1,6 @@
 # First implementation plan
 
-**Status: NOT STARTED.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. The current source and tests implement a discarded architecture.
+**Status: NOT STARTED.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. The current source is only a local Supervisor-to-fixture-facet forwarding spike, not the product main harness.
 
 Start with local workerd tests, then use the paid account for behavior that local tests cannot prove. Build one small end-to-end path before broadening the harness.
 
