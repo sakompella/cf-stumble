@@ -1,5 +1,7 @@
 # Put every agent-generated document under `docs/agents/`
 
+> **Review:** Agent-only
+
 Everything agents wrote lives under `docs/agents/`: the glossary, ADRs, design narrative, and skill configuration. `docs/` outside it is for hand-written human documentation. In a repository where a human set direction and agents wrote nearly all the prose, the directory makes provenance visible at a glance without a per-file convention nobody would maintain.
 
 ## Consequences

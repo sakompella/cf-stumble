@@ -1,5 +1,7 @@
 # Use the verified Computer source and image pair
 
+> **Review:** Human-approved
+
 Use Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. Upgrade and retest the pair together because its internal `@cloudflare/computer` and `@cloudflare/computerd` packages are unreleased `0.3.0`, while npm `latest` is still `0.2.1`.
 
 Worker-shell provides text operations and host-forwarded Git. The container provides Node, pnpm, TypeScript compilation, tests, and project commands.

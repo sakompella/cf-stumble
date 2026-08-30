@@ -50,4 +50,21 @@ describe("the ADR index", () => {
 
     expect(missing, "add these to docs/agents/adr/README.md").toEqual([]);
   });
+
+  it("marks every ADR as human-approved or agent-only", () => {
+    const unmarked = Object.entries(adrFiles)
+      .filter(([, contents]) => !/^> \*\*Review:\*\* (Human-approved|Agent-only)$/mu.test(contents))
+      .map(([path]) => basename(path))
+      .toSorted();
+
+    expect(unmarked, "add one supported review marker to each ADR").toEqual([]);
+  });
+
+  it("lists human-approved ADRs before agent-only ADRs", () => {
+    const linked = index ?? "";
+    expect(linked.indexOf("## Human-approved decisions")).toBeGreaterThanOrEqual(0);
+    expect(linked.indexOf("## Agent-only decisions")).toBeGreaterThan(
+      linked.indexOf("## Human-approved decisions"),
+    );
+  });
 });
