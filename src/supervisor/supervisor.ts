@@ -2,8 +2,11 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { fixtureMainHarnessCommit, loadFixtureMainFacet } from "../agent/loader.js";
-import type { MainHarnessArtifactProblem } from "../agent/loader.js";
+import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../agent/loader.js";
 import { Generations } from "./generations.js";
+import { mainFacetName } from "./facet-name.js";
+import { checkGenerationStartup } from "./startup-check.js";
+import type { StartupCheckOptions, StartupCheckResult } from "./startup-check.js";
 import type {
   ActivationResult,
   ActiveGeneration,
@@ -30,7 +33,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
     this.mainFacet = loadedFacet.ok
       ? {
-          fetcher: ctx.facets.get("main-facet-fixture", () => ({
+          fetcher: ctx.facets.get(mainFacetName(fixtureMainHarnessCommit, "serving"), () => ({
             class: loadedFacet.facetClass,
           })),
         }
@@ -43,6 +46,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   recordPreparationCheck(label: number, outcome: PreparationCheckOutcome): PreparationCheckResult {
     return this.generations.recordPreparationCheck(label, outcome);
+  }
+
+  checkGenerationStartup(
+    label: number,
+    artifact: MainHarnessArtifactInput,
+    options?: StartupCheckOptions,
+  ): Promise<StartupCheckResult> {
+    return checkGenerationStartup(
+      this.ctx,
+      this.env.LOADER,
+      this.generations,
+      label,
+      artifact,
+      options,
+    );
   }
 
   activateGeneration(label: number): ActivationResult {
