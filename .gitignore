@@ -4,6 +4,3 @@ dist/
 *.log
 .DS_Store
 .dev.vars
-
-# hegel persists failing property-test examples here so it can replay them.
-.hegel/

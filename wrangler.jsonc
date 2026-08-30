@@ -18,7 +18,4 @@
     },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
-  "secrets": {
-    "required": ["SUPERVISOR_SECRET"],
-  },
 }
