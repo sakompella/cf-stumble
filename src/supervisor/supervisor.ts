@@ -6,7 +6,7 @@ import {
   GenerationControl,
   type GenerationControlResult,
   type GenerationRequest,
-} from "./control.js";
+} from "./control/index.js";
 import {
   DEFAULT_ELIGIBILITY_POLICY,
   deriveGenerationEligibility,
@@ -20,7 +20,7 @@ import {
   type Generation,
   type PreparationCheck,
 } from "./generations/index.js";
-import { RelayAttempts, type RelayAttempt } from "./relay-attempts.js";
+import { RelayAttempts, type RelayAttempt } from "./relay/index.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -29,7 +29,7 @@ import {
   type RecoveryOperationOutcomeInput,
   type RecoveryPolicy,
 } from "./recovery.js";
-import { FacetRelay } from "./relay.js";
+import { FacetRelay } from "./relay/index.js";
 import { HarnessArtifacts } from "./harness-artifacts.js";
 import {
   checkGenerationStartup,

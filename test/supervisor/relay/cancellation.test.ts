@@ -2,14 +2,14 @@
 
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
-import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { RelayAttempts } from "../../../src/supervisor/relay/index.js";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
   activeSupervisor,
   prepareGeneration,
   submitCandidate,
-} from "./helpers.js";
+} from "../helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 

@@ -7,10 +7,10 @@ import type {
   GenerationCommand,
   GenerationRequest,
   Principal,
-} from "../../src/supervisor/control.js";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
-import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
+} from "../../../src/supervisor/control/index.js";
+import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
 
 const commits = {
   first: "0123456789abcdef0123456789abcdef01234567",

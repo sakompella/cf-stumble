@@ -1,6 +1,6 @@
 import type { GenerationLabel } from "./generations/index.js";
 import type { PreparationCheck } from "./generations/index.js";
-import type { RelayAttempt } from "./relay-types.js";
+import type { RelayAttempt } from "./relay/index.js";
 
 export type EligibilityPolicy = {
   readonly minimumCreditedTurns: number;

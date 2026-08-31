@@ -3,7 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
-import type { RelayAttempt } from "../../src/supervisor/relay-types.js";
+import type { RelayAttempt } from "../../src/supervisor/relay/index.js";
 import { generationLabel, policy, relayAttempt, startupCheck } from "./eligibility-fixtures.js";
 
 const terminalOutcomes = [

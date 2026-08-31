@@ -1,23 +1,23 @@
-import { parseHarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel } from "./generations/index.js";
-import { resultFromJournalRow } from "./control-journal.js";
-import type { JournalRow } from "./control-journal.js";
-import type { Generation } from "./generations/index.js";
-import type { Generations } from "./generations/index.js";
+import { parseHarnessCommit } from "../../harness-commit.js";
+import { parseGenerationLabel } from "../generations/index.js";
+import { resultFromJournalRow } from "./journal.js";
+import type { JournalRow } from "./journal.js";
+import type { Generation } from "../generations/index.js";
+import type { Generations } from "../generations/index.js";
 import type {
   CommandEffect,
   ControlProblemCode,
   GenerationCommand,
   GenerationControlResult,
   GenerationRequest,
-} from "./control-types.js";
+} from "./request.js";
 
 export type {
   GenerationCommand,
   GenerationControlResult,
   GenerationRequest,
   Principal,
-} from "./control-types.js";
+} from "./request.js";
 
 type JournalOutcomeKind = "candidate-submitted" | "activated" | "rolled-back" | "rejected";
 

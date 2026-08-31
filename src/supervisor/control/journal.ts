@@ -1,11 +1,7 @@
-import { parseHarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel } from "./generations/index.js";
-import type {
-  CommandEffect,
-  ControlProblemCode,
-  GenerationControlResult,
-} from "./control-types.js";
-import type { GenerationStatus } from "./generations/index.js";
+import { parseHarnessCommit } from "../../harness-commit.js";
+import { parseGenerationLabel } from "../generations/index.js";
+import type { CommandEffect, ControlProblemCode, GenerationControlResult } from "./request.js";
+import type { GenerationStatus } from "../generations/index.js";
 
 export type JournalRow = {
   readonly fingerprint: string;

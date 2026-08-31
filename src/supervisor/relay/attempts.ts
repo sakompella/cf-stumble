@@ -1,8 +1,8 @@
-import type { ActiveGeneration } from "./generations/index.js";
-import { attemptFromRow } from "./relay-types.js";
-import type { AttemptRow, RelayAttempt, RelayAttribution, RelayOutcome } from "./relay-types.js";
+import type { ActiveGeneration } from "../generations/index.js";
+import { attemptFromRow } from "./attempt.js";
+import type { AttemptRow, RelayAttempt, RelayAttribution, RelayOutcome } from "./attempt.js";
 
-export type { RelayAttempt } from "./relay-types.js";
+export type { RelayAttempt } from "./attempt.js";
 
 export class RelayAttempts {
   private readonly storage: DurableObjectStorage;

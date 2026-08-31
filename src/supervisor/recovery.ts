@@ -21,7 +21,7 @@ import {
   settleRepair,
   settleStartupCheck,
 } from "./recovery-operations.js";
-import type { RelayAttempts } from "./relay-attempts.js";
+import type { RelayAttempts } from "./relay/index.js";
 import { RecoveryEpisodeStore } from "./recovery-store.js";
 import type {
   RecoveryEpisode,

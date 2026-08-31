@@ -1,5 +1,5 @@
-import type { ActiveGeneration } from "./generations/index.js";
-import type { RelayAttempts } from "./relay-attempts.js";
+import type { ActiveGeneration } from "../generations/index.js";
+import type { RelayAttempts } from "./attempts.js";
 
 export const RELAY_ATTEMPT_DEADLINE_MS = 5 * 60 * 1_000;
 
@@ -148,3 +148,6 @@ function responseWithBody(body: BodyInit | null, upstream: Response): Response {
     headers: upstream.headers,
   });
 }
+
+export { RelayAttempts } from "./attempts.js";
+export type { RelayAttempt, RelayAttribution, RelayOutcome } from "./attempt.js";
