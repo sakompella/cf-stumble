@@ -10,6 +10,7 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0026](0026-adopt-computer-for-facet-work-environment.md)**: use the verified Computer source and image pair, without fixing the workspace layout or Worker artifact format.
 - **[ADR-0027](0027-use-labeled-commit-as-loader-identity.md)**: the labeled harness commit ID is the Worker Loader identity.
 - **[ADR-0033](0033-epoch-versions-generation-control-state.md)**: the generation-control epoch changes only when generation-control state changes.
+- **[ADR-0034](0034-cache-rebuildable-module-maps-in-r2.md)**: R2 caches rebuildable module maps under the labeled harness commit, while Computer rebuilds cache misses.
 
 ## Agent-only decisions
 

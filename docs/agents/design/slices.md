@@ -1,10 +1,10 @@
 # First implementation plan
 
-**Status: the locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic now uses the active generation's retained module map rather than a constructor-bound fixture.
+**Status: the locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
 
-What exists: a module-map artifact retained under the labeled harness commit and loaded after activation or Durable Object eviction (ADR-0028), supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked and journaled generation requests (ADR-0030), a relay that records one attempt for each turn and derives known-good eligibility from terminal outcomes (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032).
+What exists: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked and journaled generation requests (ADR-0030), a relay that records one attempt for each turn and derives known-good eligibility from terminal outcomes (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032).
 
-The main remaining gap is authenticated control transport. Nothing authenticates a principal yet, because the transport that carries a request from a browser or from the main facet remains open. Artifact production and long-term retention are also open. The Supervisor currently retains local module maps indefinitely.
+The local module-map store does not satisfy ADR-0034. It must move to an evictable R2 cache and rebuild cache misses through Computer before cf-stumble relies on bounded artifact storage. The main remaining gap is authenticated control transport. Nothing authenticates a principal yet, because the transport that carries a request from a browser or from the main facet remains open.
 
 Start with local workerd tests, then use the paid account for behavior that local tests cannot prove. Build one small end-to-end path before broadening the harness.
 
@@ -45,7 +45,7 @@ ADRs 0028 through 0032 settle the startup check, the artifact shape, the request
 - The model egress or gateway choice.
 - HTTP, SSE, or WebSocket for the UI transport.
 - Repair count and operation timeouts.
-- How executable Worker modules are produced, bounded in storage, and eventually deleted. ADR-0027 selects the labeled harness commit ID as the Worker Loader identity, and ADR-0028 retains local module maps under that identity.
+- How Computer rebuilds executable Worker modules, the R2 cache budget and eviction rule, and cold-request behavior after a cache miss. ADR-0027 selects the labeled harness commit ID as the Worker Loader identity, and ADR-0034 selects R2 as the cache.
 
 Do not settle these by implication in an implementation. The paid-account spike should produce evidence for each choice, and the resulting decision should be recorded before the dependent path grows.
 
