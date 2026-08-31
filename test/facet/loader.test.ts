@@ -3,8 +3,8 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { loadMainFacet } from "../../src/agent/loader.js";
-import type { MainHarnessArtifactInput } from "../../src/agent/loader.js";
+import { loadMainFacet } from "../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 
 function artifact(
   harnessCommit: string,

@@ -1,5 +1,5 @@
-import { fixtureMainHarnessArtifact, loadMainFacet, MainHarnessArtifact } from "../agent/loader.js";
-import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../agent/loader.js";
+import { fixtureMainHarnessArtifact, loadMainFacet, MainHarnessArtifact } from "../facet/index.js";
+import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../facet/index.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import { mainFacetName } from "./facet-name.js";
 import type { ActiveGeneration } from "./generations.js";

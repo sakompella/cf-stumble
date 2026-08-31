@@ -8,7 +8,7 @@ import type {
   GenerationRequest,
   Principal,
 } from "../../src/supervisor/control.js";
-import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
+import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
 

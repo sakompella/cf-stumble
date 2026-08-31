@@ -2,8 +2,8 @@
 
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
-import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/agent/loader.js";
-import type { MainHarnessArtifactInput } from "../../src/agent/loader.js";
+import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 
 export const commits = {

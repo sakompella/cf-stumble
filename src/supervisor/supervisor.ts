@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
-import { fixtureMainHarnessCommit, type MainHarnessArtifactInput } from "../agent/loader.js";
+import { fixtureMainHarnessCommit, type MainHarnessArtifactInput } from "../facet/index.js";
 import {
   GenerationControl,
   type GenerationControlResult,

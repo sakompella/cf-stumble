@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
+import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { RelayAttempt } from "../../src/supervisor/relay-types.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";

@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
+import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
 import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";

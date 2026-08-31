@@ -1,6 +1,6 @@
 import { Result, TaggedError } from "better-result";
-import { MainHarnessArtifact, loadMainFacet } from "../agent/loader.js";
-import type { MainHarnessArtifactInput } from "../agent/loader.js";
+import { MainHarnessArtifact, loadMainFacet } from "../facet/index.js";
+import type { MainHarnessArtifactInput } from "../facet/index.js";
 import { deadlineAfter } from "./startup-check-deadline.js";
 import { drainResponseBody } from "./startup-check-body.js";
 import { mainFacetName } from "./facet-name.js";
