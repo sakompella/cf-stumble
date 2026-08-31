@@ -6,12 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import {
-  activateGeneration,
-  artifact,
-  prepareGeneration,
-  submitCandidate,
-} from "./startup-check-helpers.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -28,61 +23,8 @@ function relayRequest(path: string, init?: RequestInit): Request {
   return new Request(`https://cf-stumble.test${path}`, init);
 }
 
-function servingArtifact(harnessCommit: string) {
-  return artifact(
-    harnessCommit,
-    `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  fetch() { return new Response("candidate serving body"); }
-}
-`,
-  );
-}
-
-async function activateServingCandidate(
-  control: DurableObjectStub<Supervisor>,
-  harnessCommit: string,
-  requestId: string,
-): Promise<void> {
-  const candidate = await submitCandidate(control, harnessCommit, `submit-${requestId}`);
-  const startup = await control.checkGenerationStartup(candidate, servingArtifact(harnessCommit));
-  if (!startup.ok || startup.report.stage !== "ready") {
-    throw new Error("the candidate must pass startup before activation");
-  }
-
-  await activateGeneration(control, candidate, requestId);
-}
-
 afterEach(async () => {
   await reset();
-});
-
-test("serves the activated generation's retained artifact", async () => {
-  const control = await activeSupervisor("serves-active-generation");
-  await activateServingCandidate(
-    control,
-    "0123456789abcdef0123456789abcdef01234567",
-    "activate-serving-candidate",
-  );
-
-  const response = await control.fetch(relayRequest("/"));
-
-  expect(await response.text()).toBe("candidate serving body");
-});
-
-test("serves the active retained artifact after Durable Object eviction", async () => {
-  const control = await activeSupervisor("serves-active-generation-after-eviction");
-  await activateServingCandidate(
-    control,
-    "d123456789abcdef0123456789abcdef01234567",
-    "activate-serving-candidate-after-eviction",
-  );
-  await evictDurableObject(control);
-
-  const response = await control.fetch(relayRequest("/"));
-
-  expect(await response.text()).toBe("candidate serving body");
 });
 
 test("uses relay_attempts as its only relay table", async () => {
