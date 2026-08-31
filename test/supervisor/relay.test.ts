@@ -28,31 +28,57 @@ function relayRequest(path: string, init?: RequestInit): Request {
   return new Request(`https://cf-stumble.test${path}`, init);
 }
 
+function servingArtifact(harnessCommit: string) {
+  return artifact(
+    harnessCommit,
+    `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  fetch() { return new Response("candidate serving body"); }
+}
+`,
+  );
+}
+
+async function activateServingCandidate(
+  control: DurableObjectStub<Supervisor>,
+  harnessCommit: string,
+  requestId: string,
+): Promise<void> {
+  const candidate = await submitCandidate(control, harnessCommit, `submit-${requestId}`);
+  const startup = await control.checkGenerationStartup(candidate, servingArtifact(harnessCommit));
+  if (!startup.ok || startup.report.stage !== "ready") {
+    throw new Error("the candidate must pass startup before activation");
+  }
+
+  await activateGeneration(control, candidate, requestId);
+}
+
 afterEach(async () => {
   await reset();
 });
 
 test("serves the activated generation's retained artifact", async () => {
   const control = await activeSupervisor("serves-active-generation");
-  const candidateCommit = "0123456789abcdef0123456789abcdef01234567";
-  const candidate = await submitCandidate(control, candidateCommit, "submit-serving-candidate");
-  const startup = await control.checkGenerationStartup(
-    candidate,
-    artifact(
-      candidateCommit,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  fetch() { return new Response("candidate serving body"); }
-}
-`,
-    ),
+  await activateServingCandidate(
+    control,
+    "0123456789abcdef0123456789abcdef01234567",
+    "activate-serving-candidate",
   );
-  if (!startup.ok || startup.report.stage !== "ready") {
-    throw new Error("the candidate must pass startup before activation");
-  }
 
-  await activateGeneration(control, candidate, "activate-serving-candidate");
+  const response = await control.fetch(relayRequest("/"));
+
+  expect(await response.text()).toBe("candidate serving body");
+});
+
+test("serves the active retained artifact after Durable Object eviction", async () => {
+  const control = await activeSupervisor("serves-active-generation-after-eviction");
+  await activateServingCandidate(
+    control,
+    "d123456789abcdef0123456789abcdef01234567",
+    "activate-serving-candidate-after-eviction",
+  );
+  await evictDurableObject(control);
 
   const response = await control.fetch(relayRequest("/"));
 
