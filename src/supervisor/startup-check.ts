@@ -201,16 +201,13 @@ export type StartupCheckOutcome =
     };
 
 class MainFacetMountFailed extends TaggedError("MainFacetMountFailed")<{
-  readonly harnessCommit: string;
   readonly reason: string;
   readonly message: string;
-  readonly cause: unknown;
 }> {}
 
 class StartupHeadersNotReceived extends TaggedError("StartupHeadersNotReceived")<{
   readonly reason: string;
   readonly message: string;
-  readonly cause: unknown;
 }> {}
 
 class StartupHeaderDeadlineExceeded extends TaggedError("StartupHeaderDeadlineExceeded")<{
@@ -232,10 +229,8 @@ function mountCandidateFacet(
       const reason = loadedFacet.problem.code;
       return Result.err(
         new MainFacetMountFailed({
-          harnessCommit,
           reason,
           message: `Candidate facet for ${harnessCommit} could not mount: ${reason}`,
-          cause: loadedFacet.problem,
         }),
       );
     }
@@ -243,9 +238,9 @@ function mountCandidateFacet(
     const name = mainFacetName(harnessCommit, "candidate");
     ctx.facets.abort(name, "discard prior startup-check candidate");
     return Result.ok(ctx.facets.get(name, () => ({ class: loadedFacet.facetClass })));
-  } catch (cause) {
+  } catch {
     const reason = "candidate facet could not mount";
-    return Result.err(new MainFacetMountFailed({ harnessCommit, reason, message: reason, cause }));
+    return Result.err(new MainFacetMountFailed({ reason, message: reason }));
   }
 }
 
@@ -256,13 +251,12 @@ function responseBeforeDeadline(
   return Promise.race([
     fetcher.fetch(new Request("https://main-facet.invalid/")).then(
       (response) => Result.ok<Response, HeaderFailure>(response),
-      (cause: ThrownValue) => {
-        const reason = errorReason(cause);
+      (error: ThrownValue) => {
+        const reason = errorReason(error);
         return Result.err<Response, HeaderFailure>(
           new StartupHeadersNotReceived({
             reason,
             message: `Startup-check response headers were not received: ${reason}`,
-            cause,
           }),
         );
       },

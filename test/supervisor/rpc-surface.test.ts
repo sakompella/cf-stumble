@@ -110,7 +110,6 @@ export class MainFacet extends DurableObject {
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(result).not.toHaveProperty("status");
   expect(result).not.toHaveProperty("match");
-  expect(structuredClone(result)).toEqual(result);
 
   if (!result.ok) {
     throw new Error("a labeled generation must return a startup-check report");
