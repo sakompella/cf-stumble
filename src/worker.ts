@@ -1,4 +1,4 @@
-import { Supervisor } from "./supervisor.js";
+import { Supervisor } from "./supervisor/supervisor.js";
 
 export { Supervisor };
 

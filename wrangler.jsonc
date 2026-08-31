@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cf-stumble",
-  "main": "src/supervisor/worker.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2025-01-01",
   "durable_objects": {
     "bindings": [
