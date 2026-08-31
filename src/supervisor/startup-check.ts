@@ -130,7 +130,7 @@ async function classifyCandidateResponse(
     return response;
   }
 
-  if (response.response.status >= 500) {
+  if (response.response.status >= 400) {
     return {
       stage: "response-rejected",
       reason: `response status was ${response.response.status}`,

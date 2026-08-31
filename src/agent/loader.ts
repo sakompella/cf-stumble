@@ -169,6 +169,10 @@ export class MainFacet extends DurableObject {
 
   async fetch(request) {
     const path = new URL(request.url).pathname;
+    if (path === "/") {
+      return new Response("main facet ready");
+    }
+
     if (path === "/facet/ping") {
       return pingResponse();
     }

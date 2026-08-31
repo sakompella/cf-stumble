@@ -2,9 +2,9 @@
 
 > **Review:** Agent-only
 
-Before a generation may be trusted to run, the Supervisor mounts it as a candidate facet of its own and sends one ordinary `fetch` request under a deadline. The generation passes when the response headers arrive in time and its body completes in time and within a byte bound, and when the status is not 5xx. Any other status passes, including 404, because answering an unknown path is what a started harness does.
+Before a generation may be trusted to run, the Supervisor mounts it as a candidate facet of its own and sends one ordinary `fetch` request under a deadline. The generation passes when the response headers arrive in time, its body completes in time and within a byte bound, and its status is below 400. The Supervisor is the client for this request. A 4xx means that the candidate rejected the required startup request, so it does not prove that the candidate can accept the Supervisor's request.
 
-The alternative was a health check the harness has to implement: a reserved path, a reserved method, or a required response body. An earlier prototype accepted only status 200 with the body `ready`. That turns the check into a permanent protocol every future generation must keep implementing, which is what `design/slices.md` warns against, and it stops proving startup the moment a harness answers the reserved path from a cache or a stub.
+The startup request is `GET /`. Every candidate must accept that request with a status below 400, so this is a minimum request contract. The contract does not require a health-specific path, a magic body, or one exact success status. An earlier prototype accepted only status 200 with the body `ready`. That would make the check a protocol that a candidate can satisfy with a cached or stubbed response rather than proving that its ordinary request handling started.
 
 The check records its result against the labeled generation and never changes the active generation. A candidate mounts under a facet name derived from the labeled harness commit and its role, so a failing candidate cannot disturb the facet serving traffic, and the previous candidate facet of that name is aborted first so a re-check gets a cold start rather than a warm instance.
 

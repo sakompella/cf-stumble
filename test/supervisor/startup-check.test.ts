@@ -39,8 +39,8 @@ export class MainFacet extends DurableObject {
   expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
 });
 
-test("accepts a 404 response because startup uses an ordinary request", async () => {
-  const control = await activeSupervisor("startup-check-not-found");
+test("records a 400 response as failed at the response stage", async () => {
+  const control = await activeSupervisor("startup-check-client-error-response");
   const label = await labelCandidate(control, commits.notFound);
 
   const result = await control.checkGenerationStartup(
@@ -50,16 +50,14 @@ test("accepts a 404 response because startup uses an ordinary request", async ()
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  fetch() { return new Response("Not found", { status: 404 }); }
+  fetch() { return new Response("invalid startup request", { status: 400 }); }
 }
 `,
     ),
   );
 
-  expect(result).toMatchObject({
-    ok: true,
-    report: { stage: "ready", status: 404, generation: { label, status: "ready" } },
-  });
+  expect(result).toMatchObject({ ok: true, report: { stage: "response-rejected", status: 400 } });
+  await expectFailedCandidate(control, label);
 });
 
 test("records a parse-invalid candidate as failed before headers", async () => {
@@ -268,7 +266,7 @@ export class MainFacet extends DurableObject {
   }
   fetch() {
     const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM constructions").one().count;
-    return new Response("construction " + count, { status: count === 1 ? 200 : 404 });
+    return new Response("construction " + count, { status: count === 1 ? 200 : 201 });
   }
 }
 `,
@@ -282,7 +280,7 @@ export class MainFacet extends DurableObject {
     ok: true,
     report: {
       stage: "ready",
-      status: 404,
+      status: 201,
       generation: { label, status: "ready" },
       effect: "no-op",
     },
