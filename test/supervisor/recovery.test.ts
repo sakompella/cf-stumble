@@ -107,7 +107,7 @@ test("never chooses the failed generation as its fallback", async () => {
   expect(episode.fallbackGenerationLabel).toBeUndefined();
 });
 
-test("selects a fallback from persisted relay facts after Durable Object eviction", async () => {
+test("selects a fallback from persisted relay attempts after Durable Object eviction", async () => {
   const control = await fallbackReady("recovery-fallback-after-eviction");
   await evictDurableObject(control);
 
