@@ -10,7 +10,7 @@ import {
   prepareGeneration,
   readyArtifact,
   submitCandidate,
-} from "./startup-check-helpers.js";
+} from "./helpers.js";
 
 const unrelatedHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 

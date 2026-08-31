@@ -7,7 +7,7 @@ import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { RecoveryPolicy } from "../../src/supervisor/recovery.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 const strictEligibility: EligibilityPolicy = {

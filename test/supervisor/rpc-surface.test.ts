@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { artifact, readyArtifact } from "./startup-check-helpers.js";
+import { artifact, readyArtifact } from "./helpers.js";
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 

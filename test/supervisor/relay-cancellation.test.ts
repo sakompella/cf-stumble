@@ -9,7 +9,7 @@ import {
   activeSupervisor,
   prepareGeneration,
   submitCandidate,
-} from "./startup-check-helpers.js";
+} from "./helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 

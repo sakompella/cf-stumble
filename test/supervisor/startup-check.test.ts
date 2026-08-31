@@ -9,7 +9,7 @@ import {
   commits,
   expectFailedCandidate,
   labelCandidate,
-} from "./startup-check-helpers.js";
+} from "./helpers.js";
 
 afterEach(async () => {
   await reset();

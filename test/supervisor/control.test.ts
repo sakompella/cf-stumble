@@ -10,7 +10,7 @@ import type {
 } from "../../src/supervisor/control.js";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
 
 const commits = {
   first: "0123456789abcdef0123456789abcdef01234567",

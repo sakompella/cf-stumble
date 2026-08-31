@@ -5,12 +5,7 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import {
-  activateGeneration,
-  artifact,
-  prepareGeneration,
-  submitCandidate,
-} from "./startup-check-helpers.js";
+import { activateGeneration, artifact, prepareGeneration, submitCandidate } from "./helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);

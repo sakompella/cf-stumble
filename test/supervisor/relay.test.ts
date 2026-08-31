@@ -6,7 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);

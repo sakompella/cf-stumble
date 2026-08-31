@@ -7,12 +7,7 @@ import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { RelayAttempt } from "../../src/supervisor/relay-types.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import {
-  activateGeneration,
-  artifact,
-  prepareGeneration,
-  submitCandidate,
-} from "./startup-check-helpers.js";
+import { activateGeneration, artifact, prepareGeneration, submitCandidate } from "./helpers.js";
 
 import {
   completedAttempt,
