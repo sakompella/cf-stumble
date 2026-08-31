@@ -1,7 +1,7 @@
-import { parseHarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel } from "./generations/index.js";
-import type { DecodedRecoveryRow } from "./recovery-row.js";
-import type { RecoveryEpisode, RecoveryEpisodeId } from "./recovery-types.js";
+import { parseHarnessCommit } from "../../../harness-commit.js";
+import { parseGenerationLabel } from "../../generations/index.js";
+import type { DecodedRecoveryRow } from "./row.js";
+import type { RecoveryEpisode, RecoveryEpisodeId } from "../episode.js";
 
 export function episodeForPhase(context: DecodedRecoveryRow): RecoveryEpisode {
   switch (context.row.phase) {

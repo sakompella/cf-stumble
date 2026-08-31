@@ -1,12 +1,12 @@
+import { episodeFromRow } from "./persistence/row.js";
 import {
-  episodeFromRow,
   episodeSelect,
   errorsToText,
   recoveryEpisodeId,
   recoverySchema,
   type EpisodeRow,
-} from "./recovery-model.js";
-import type { RecoveryEpisode, RecoveryEpisodeDraft, RecoveryEpisodeId } from "./recovery-types.js";
+} from "./persistence/model.js";
+import type { RecoveryEpisode, RecoveryEpisodeDraft, RecoveryEpisodeId } from "./episode.js";
 
 export class RecoveryEpisodeStore {
   private readonly sql: SqlStorage;

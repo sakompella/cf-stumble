@@ -3,11 +3,11 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
-import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
-import type { RecoveryEpisode, RecoveryPolicy } from "../../src/supervisor/recovery.js";
-import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
+import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
+import type { EligibilityPolicy } from "../../../src/supervisor/eligibility.js";
+import type { RecoveryEpisode, RecoveryPolicy } from "../../../src/supervisor/recovery/index.js";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 const strictEligibility: EligibilityPolicy = {

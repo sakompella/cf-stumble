@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { validateRecoveryPolicy } from "../../src/supervisor/recovery.js";
+import { validateRecoveryPolicy } from "../../../src/supervisor/recovery/index.js";
 
 test("rejects a zero repair-attempt budget", () => {
   expect(() => {

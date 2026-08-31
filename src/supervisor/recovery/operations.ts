@@ -1,4 +1,4 @@
-import type { GenerationLabel } from "./generations/index.js";
+import type { GenerationLabel } from "../generations/index.js";
 import type {
   CompletedRecoveryEpisode,
   NeedsReconciliationRecoveryEpisode,
@@ -7,7 +7,7 @@ import type {
   RecoveryOperationOutcome,
   RepairOpenRecoveryEpisode,
   StartupCheckOpenRecoveryEpisode,
-} from "./recovery-types.js";
+} from "./episode.js";
 
 export type VerifiedStartupCandidate = {
   readonly harnessCommit: StartupCheckOpenRecoveryEpisode["repairedHarnessCommit"];

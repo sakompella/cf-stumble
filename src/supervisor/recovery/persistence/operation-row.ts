@@ -1,5 +1,5 @@
-import type { EpisodeRow } from "./recovery-model.js";
-import type { RecoveryEpisodeId, RecoveryOperation } from "./recovery-types.js";
+import type { EpisodeRow } from "./model.js";
+import type { RecoveryEpisodeId, RecoveryOperation } from "../episode.js";
 
 export function operationFromRow(
   row: EpisodeRow,

@@ -1,4 +1,4 @@
-import type { RecoveryOperationErrorInput } from "./recovery-types.js";
+import type { RecoveryOperationErrorInput } from "../episode.js";
 
 export function isNonemptyWellFormedUnicode(value: RecoveryOperationErrorInput): value is string {
   if (typeof value !== "string" || value.length === 0) {

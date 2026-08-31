@@ -1,5 +1,5 @@
-import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel, type GenerationLabel } from "./generations/index.js";
+import { parseHarnessCommit, type HarnessCommit } from "../../../harness-commit.js";
+import { parseGenerationLabel, type GenerationLabel } from "../../generations/index.js";
 import {
   errorsFromText,
   recoveryEpisodeId,
@@ -8,10 +8,10 @@ import {
   validateRecoveryDeadline,
   validateRecoveryPolicy,
   type EpisodeRow,
-} from "./recovery-model.js";
-import { operationFromRow } from "./recovery-operation-row.js";
-import { episodeForPhase } from "./recovery-row-phase.js";
-import type { RecoveryEpisode, RecoveryEpisodeId, RecoveryOperation } from "./recovery-types.js";
+} from "./model.js";
+import { operationFromRow } from "./operation-row.js";
+import { episodeForPhase } from "./row-phase.js";
+import type { RecoveryEpisode, RecoveryEpisodeId, RecoveryOperation } from "../episode.js";
 
 export type DecodedRecoveryRow = {
   readonly row: EpisodeRow;

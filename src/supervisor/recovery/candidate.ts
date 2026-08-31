@@ -1,6 +1,6 @@
-import type { Generations } from "./generations/index.js";
-import type { VerifiedStartupCandidate } from "./recovery-operations.js";
-import type { RecoveryEpisode, RecoveryOperationOutcome } from "./recovery-types.js";
+import type { Generations } from "../generations/index.js";
+import type { VerifiedStartupCandidate } from "./operations.js";
+import type { RecoveryEpisode, RecoveryOperationOutcome } from "./episode.js";
 
 type StartupCheckSettlementEpisode = Extract<
   RecoveryEpisode,

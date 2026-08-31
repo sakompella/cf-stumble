@@ -1,6 +1,6 @@
-import { parseHarnessCommit } from "../harness-commit.js";
-import { isNonemptyWellFormedUnicode } from "./recovery-error.js";
-import { parseGenerationLabel, type GenerationLabel } from "./generations/index.js";
+import { parseHarnessCommit } from "../../../harness-commit.js";
+import { isNonemptyWellFormedUnicode } from "./error.js";
+import { parseGenerationLabel, type GenerationLabel } from "../../generations/index.js";
 import type {
   RecoveryEpisodeDraft,
   RecoveryEpisodeId,
@@ -9,7 +9,7 @@ import type {
   RecoveryOperationOutcome,
   RecoveryOperationOutcomeInput,
   RecoveryPolicy,
-} from "./recovery-types.js";
+} from "../episode.js";
 
 export type EpisodeRow = {
   readonly id: number;
@@ -141,8 +141,6 @@ export const episodeSelect = `SELECT id, failure_event_id, failed_generation_lab
   repaired_harness_commit, verified_harness_commit, verified_generation_label,
   verified_preparation_check_id, operation_kind, operation_key, operation_attempt,
   operation_deadline_at, operation_state, preparation_check_id_at_open FROM recovery_episodes`;
-
-export { episodeFromRow } from "./recovery-row.js";
 
 export function validateRecoveryPolicy(policy: RecoveryPolicy): void {
   for (const [name, value] of Object.entries(policy)) {

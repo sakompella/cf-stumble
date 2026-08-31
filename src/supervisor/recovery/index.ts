@@ -1,8 +1,8 @@
-import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "./eligibility.js";
-import type { EligibilityPolicy } from "./eligibility.js";
-import { verifiedStartupCandidate } from "./recovery-candidate.js";
-import type { GenerationLabel } from "./generations/index.js";
-import type { Generations } from "./generations/index.js";
+import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "../eligibility.js";
+import type { EligibilityPolicy } from "../eligibility.js";
+import { verifiedStartupCandidate } from "./candidate.js";
+import type { GenerationLabel } from "../generations/index.js";
+import type { Generations } from "../generations/index.js";
 import {
   blockedEpisode,
   parseRecoveryOperationOutcome,
@@ -13,16 +13,16 @@ import {
   validateRecoveryDeadline,
   validateRecoveryPolicy,
   withEpisodeId,
-} from "./recovery-model.js";
+} from "./persistence/model.js";
 import {
   completeForBudget,
   markNeedsReconciliation,
   openRepair,
   settleRepair,
   settleStartupCheck,
-} from "./recovery-operations.js";
-import type { RelayAttempts } from "./relay/index.js";
-import { RecoveryEpisodeStore } from "./recovery-store.js";
+} from "./operations.js";
+import type { RelayAttempts } from "../relay/index.js";
+import { RecoveryEpisodeStore } from "./store.js";
 import type {
   RecoveryEpisode,
   RecoveryFailureInput,
@@ -30,7 +30,7 @@ import type {
   RecoveryOperationOutcomeInput,
   RecoveryOperationReport,
   RecoveryPolicy,
-} from "./recovery-types.js";
+} from "./episode.js";
 
 type RepairSettlementEpisode = Extract<
   RecoveryEpisode,
@@ -50,8 +50,8 @@ export type {
   RecoveryOperationOutcomeInput,
   RecoveryOperationReport,
   RecoveryPolicy,
-} from "./recovery-types.js";
-export { validateRecoveryPolicy } from "./recovery-model.js";
+} from "./episode.js";
+export { validateRecoveryPolicy } from "./persistence/model.js";
 
 export class Recovery {
   private readonly storage: DurableObjectStorage;

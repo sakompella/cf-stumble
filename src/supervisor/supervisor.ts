@@ -28,7 +28,7 @@ import {
   type RecoveryOperationReport,
   type RecoveryOperationOutcomeInput,
   type RecoveryPolicy,
-} from "./recovery.js";
+} from "./recovery/index.js";
 import { FacetRelay } from "./relay/index.js";
 import { HarnessArtifacts } from "./artifacts/index.js";
 import {
