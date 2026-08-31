@@ -30,12 +30,12 @@ import {
   type RecoveryPolicy,
 } from "./recovery.js";
 import { FacetRelay } from "./relay/index.js";
-import { HarnessArtifacts } from "./harness-artifacts.js";
+import { HarnessArtifacts } from "./artifacts/index.js";
 import {
   checkGenerationStartup,
   type StartupCheckOptions,
   type StartupCheckResult,
-} from "./startup-check.js";
+} from "./startup-check/index.js";
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;

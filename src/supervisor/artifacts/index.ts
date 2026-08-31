@@ -1,8 +1,12 @@
-import { fixtureMainHarnessArtifact, loadMainFacet, MainHarnessArtifact } from "../facet/index.js";
-import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../facet/index.js";
-import type { HarnessCommit } from "../harness-commit.js";
+import {
+  fixtureMainHarnessArtifact,
+  loadMainFacet,
+  MainHarnessArtifact,
+} from "../../facet/index.js";
+import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../../facet/index.js";
+import type { HarnessCommit } from "../../harness-commit.js";
 import { mainFacetName } from "./facet-name.js";
-import type { ActiveGeneration } from "./generations/index.js";
+import type { ActiveGeneration } from "../generations/index.js";
 
 type ArtifactModuleRow = {
   readonly module_name: string;
@@ -165,3 +169,5 @@ function sameArtifact(left: MainHarnessArtifactInput, right: MainHarnessArtifact
   const sourcesByName = new Map(left.modules.map((module) => [module.name, module.source]));
   return right.modules.every((module) => sourcesByName.get(module.name) === module.source);
 }
+
+export { mainFacetName } from "./facet-name.js";

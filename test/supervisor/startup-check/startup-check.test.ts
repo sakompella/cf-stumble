@@ -2,14 +2,14 @@
 
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { STARTUP_CHECK_MAX_BODY_BYTES } from "../../src/supervisor/startup-check.js";
+import { STARTUP_CHECK_MAX_BODY_BYTES } from "../../../src/supervisor/startup-check/index.js";
 import {
   activeSupervisor,
   artifact,
   commits,
   expectFailedCandidate,
   labelCandidate,
-} from "./helpers.js";
+} from "../helpers.js";
 
 afterEach(async () => {
   await reset();

@@ -1,5 +1,19 @@
-import type { Deadline } from "./startup-check-deadline.js";
-import type { StartupCheckOutcome } from "./startup-check.js";
+import type { Deadline } from "./deadline.js";
+export type StartupCheckStage =
+  | "ready"
+  | "mount-failed"
+  | "headers-not-received"
+  | "response-rejected"
+  | "body-failed"
+  | "deadline-expired";
+
+export type StartupCheckOutcome =
+  | { readonly stage: "ready"; readonly reason: string; readonly status: number }
+  | { readonly stage: "response-rejected"; readonly reason: string; readonly status: number }
+  | {
+      readonly stage: Exclude<StartupCheckStage, "ready" | "response-rejected">;
+      readonly reason: string;
+    };
 
 type ThrownValue = Error | string | number | boolean | null | undefined;
 

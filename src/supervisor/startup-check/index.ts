@@ -1,14 +1,16 @@
 import { Result, TaggedError } from "better-result";
-import { MainHarnessArtifact, loadMainFacet } from "../facet/index.js";
-import type { MainHarnessArtifactInput } from "../facet/index.js";
-import { deadlineAfter } from "./startup-check-deadline.js";
-import { drainResponseBody } from "./startup-check-body.js";
-import { mainFacetName } from "./facet-name.js";
-import { parseGenerationLabel } from "./generations/index.js";
-import type { GenerationLabel } from "./generations/index.js";
-import type { HarnessArtifactResult, HarnessArtifacts } from "./harness-artifacts.js";
-import type { Deadline } from "./startup-check-deadline.js";
-import type { Generation, Generations, PreparationCheckResult } from "./generations/index.js";
+import { MainHarnessArtifact, loadMainFacet } from "../../facet/index.js";
+import type { MainHarnessArtifactInput } from "../../facet/index.js";
+import { deadlineAfter } from "./deadline.js";
+import type { StartupCheckOutcome } from "./body.js";
+import { drainResponseBody } from "./body.js";
+export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
+import { mainFacetName } from "../artifacts/index.js";
+import { parseGenerationLabel } from "../generations/index.js";
+import type { GenerationLabel } from "../generations/index.js";
+import type { HarnessArtifactResult, HarnessArtifacts } from "../artifacts/index.js";
+import type { Deadline } from "./deadline.js";
+import type { Generation, Generations, PreparationCheckResult } from "../generations/index.js";
 
 type ThrownValue = Error | string | number | boolean | null | undefined;
 
@@ -22,14 +24,6 @@ function errorReason(error: ThrownValue): string {
  */
 export const STARTUP_CHECK_DEADLINE_MS = 5_000;
 export const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
-
-export type StartupCheckStage =
-  | "ready"
-  | "mount-failed"
-  | "headers-not-received"
-  | "response-rejected"
-  | "body-failed"
-  | "deadline-expired";
 
 export type StartupCheckOptions = {
   readonly deadlineMs?: number;
@@ -191,14 +185,6 @@ async function classifyCandidateResponse(
 
   return drainResponseBody(response.value, deadline, maxBodyBytes);
 }
-
-export type StartupCheckOutcome =
-  | { readonly stage: "ready"; readonly reason: string; readonly status: number }
-  | { readonly stage: "response-rejected"; readonly reason: string; readonly status: number }
-  | {
-      readonly stage: Exclude<StartupCheckStage, "ready" | "response-rejected">;
-      readonly reason: string;
-    };
 
 class MainFacetMountFailed extends TaggedError("MainFacetMountFailed")<{
   readonly reason: string;
