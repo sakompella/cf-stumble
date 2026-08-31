@@ -25,6 +25,10 @@ function siblingPath(propertyTestPath: string): string {
 }
 
 describe("Node property-test coverage", () => {
+  it("discovers at least one property test", () => {
+    expect(Object.keys(propertyTests).length).toBeGreaterThan(0);
+  });
+
   it("keeps every property beside workerd coverage", () => {
     const workerdTests = new Set(
       Object.keys(allTests).filter((path) => !path.endsWith(".props.test.ts")),

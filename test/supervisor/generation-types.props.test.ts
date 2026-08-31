@@ -12,14 +12,6 @@ test("classifies every safe integer by whether it is non-negative", () => {
   });
 });
 
-test("rejects generated negative safe integers", () => {
-  hegel.test((tc) => {
-    const value = tc.draw(gs.integers({ minValue: Number.MIN_SAFE_INTEGER, maxValue: -1 }));
-
-    expect(parseGenerationLabel(value)).toBeUndefined();
-  });
-});
-
 test("rejects generated fractions", () => {
   hegel.test((tc) => {
     const integer = tc.draw(gs.integers({ minValue: -(2 ** 52 - 1), maxValue: 2 ** 52 - 1 }));

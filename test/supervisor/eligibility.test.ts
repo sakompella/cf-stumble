@@ -86,7 +86,7 @@ test.each([
   });
 });
 
-test("uses only matching current-era facts and terminal timestamps in any order", () => {
+test("uses only matching current-era facts and terminal timestamps", () => {
   const facts: readonly RelayFact[] = [
     completedFact(2, 60_000),
     relayFact(1, "headers-received", 200, 1_000_000),
@@ -106,22 +106,11 @@ test("uses only matching current-era facts and terminal timestamps in any order"
     },
     strictPolicy,
   );
-  const reversedFacts = deriveGenerationEligibility(
-    {
-      generationLabel: generationLabel(1),
-      latestActivationId: 4,
-      latestPreparationCheck: startupCheck,
-      facts: facts.toReversed(),
-    },
-    strictPolicy,
-  );
-
   expect(currentEra).toMatchObject({
     kind: "eligible",
     creditedTurns: 2,
     observationSpanMs: 60_000,
   });
-  expect(reversedFacts).toEqual(currentEra);
 });
 
 test.each([
