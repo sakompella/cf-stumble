@@ -1,5 +1,5 @@
 import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel, type GenerationLabel } from "./generations/index.js";
 import {
   errorsFromText,
   recoveryEpisodeId,

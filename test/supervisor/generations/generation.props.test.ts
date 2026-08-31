@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { parseGenerationLabel } from "../../src/supervisor/generation-types.js";
+import { parseGenerationLabel } from "../../../src/supervisor/generations/index.js";
 
 test("classifies every safe integer by whether it is non-negative", () => {
   hegel.test((tc) => {

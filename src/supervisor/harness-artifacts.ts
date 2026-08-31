@@ -2,7 +2,7 @@ import { fixtureMainHarnessArtifact, loadMainFacet, MainHarnessArtifact } from "
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../facet/index.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import { mainFacetName } from "./facet-name.js";
-import type { ActiveGeneration } from "./generations.js";
+import type { ActiveGeneration } from "./generations/index.js";
 
 type ArtifactModuleRow = {
   readonly module_name: string;

@@ -4,11 +4,11 @@ import type { MainHarnessArtifactInput } from "../facet/index.js";
 import { deadlineAfter } from "./startup-check-deadline.js";
 import { drainResponseBody } from "./startup-check-body.js";
 import { mainFacetName } from "./facet-name.js";
-import { parseGenerationLabel } from "./generation-types.js";
-import type { GenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel } from "./generations/index.js";
+import type { GenerationLabel } from "./generations/index.js";
 import type { HarnessArtifactResult, HarnessArtifacts } from "./harness-artifacts.js";
 import type { Deadline } from "./startup-check-deadline.js";
-import type { Generation, Generations, PreparationCheckResult } from "./generations.js";
+import type { Generation, Generations, PreparationCheckResult } from "./generations/index.js";
 
 type ThrownValue = Error | string | number | boolean | null | undefined;
 

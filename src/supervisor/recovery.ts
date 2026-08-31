@@ -1,8 +1,8 @@
 import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "./eligibility.js";
 import type { EligibilityPolicy } from "./eligibility.js";
 import { verifiedStartupCandidate } from "./recovery-candidate.js";
-import type { GenerationLabel } from "./generation-types.js";
-import type { Generations } from "./generations.js";
+import type { GenerationLabel } from "./generations/index.js";
+import type { Generations } from "./generations/index.js";
 import {
   blockedEpisode,
   parseRecoveryOperationOutcome,

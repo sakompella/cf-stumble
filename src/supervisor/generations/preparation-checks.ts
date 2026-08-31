@@ -1,4 +1,4 @@
-import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel, type GenerationLabel } from "./generation.js";
 
 export type PreparationCheck = {
   readonly id: number;

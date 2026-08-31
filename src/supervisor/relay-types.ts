@@ -1,4 +1,4 @@
-import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel, type GenerationLabel } from "./generations/index.js";
 
 export type RelayOutcome =
   | "pending"

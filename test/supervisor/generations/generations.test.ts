@@ -3,9 +3,9 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
-import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { artifact, prepareGeneration, submitCandidate } from "./helpers.js";
+import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { artifact, prepareGeneration, submitCandidate } from "../helpers.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 const thirdHarnessCommit = "1123456789abcdef0123456789abcdef01234567";

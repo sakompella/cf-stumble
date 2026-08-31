@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseGenerationLabel } from "../../src/supervisor/generation-types.js";
+import { parseGenerationLabel } from "../../../src/supervisor/generations/index.js";
 
 test("parses non-negative safe integer generation labels", () => {
   expect(parseGenerationLabel(0)).toBe(0);

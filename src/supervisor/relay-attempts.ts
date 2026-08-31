@@ -1,4 +1,4 @@
-import type { ActiveGeneration } from "./generations.js";
+import type { ActiveGeneration } from "./generations/index.js";
 import { attemptFromRow } from "./relay-types.js";
 import type { AttemptRow, RelayAttempt, RelayAttribution, RelayOutcome } from "./relay-types.js";
 

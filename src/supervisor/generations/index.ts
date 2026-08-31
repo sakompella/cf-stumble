@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
+import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
 import type { PreparationCheck } from "./preparation-checks.js";
@@ -12,11 +12,11 @@ import {
   type LabelGenerationResult,
   type PreparationCheckOutcome,
   type PreparationCheckResult,
-} from "./generation-types.js";
-import { generationFromRow, generationLabelFromPersistence } from "./generation-row.js";
-import type { GenerationRow } from "./generation-row.js";
+} from "./generation.js";
+import { generationFromRow, generationLabelFromPersistence } from "./row.js";
+import type { GenerationRow } from "./row.js";
 
-export { parseGenerationLabel } from "./generation-types.js";
+export { parseGenerationLabel } from "./generation.js";
 export type {
   ActivationResult,
   ActiveGeneration,
@@ -26,7 +26,7 @@ export type {
   LabelGenerationResult,
   PreparationCheckOutcome,
   PreparationCheckResult,
-} from "./generation-types.js";
+} from "./generation.js";
 export type { PreparationCheck } from "./preparation-checks.js";
 
 type StateRow = {

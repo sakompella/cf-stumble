@@ -19,7 +19,7 @@ import {
   type ActiveGeneration,
   type Generation,
   type PreparationCheck,
-} from "./generations.js";
+} from "./generations/index.js";
 import { RelayAttempts, type RelayAttempt } from "./relay-attempts.js";
 import {
   Recovery,

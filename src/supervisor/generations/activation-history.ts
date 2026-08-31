@@ -1,4 +1,4 @@
-import type { GenerationLabel } from "./generation-types.js";
+import type { GenerationLabel } from "./generation.js";
 
 type ActivationHistoryRow = {
   readonly activation_id: number;

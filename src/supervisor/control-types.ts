@@ -1,4 +1,4 @@
-import type { Generation } from "./generation-types.js";
+import type { Generation } from "./generations/index.js";
 
 export type Principal =
   | { readonly kind: "user" }

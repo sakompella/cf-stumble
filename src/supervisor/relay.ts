@@ -1,4 +1,4 @@
-import type { ActiveGeneration } from "./generations.js";
+import type { ActiveGeneration } from "./generations/index.js";
 import type { RelayAttempts } from "./relay-attempts.js";
 
 export const RELAY_ATTEMPT_DEADLINE_MS = 5 * 60 * 1_000;

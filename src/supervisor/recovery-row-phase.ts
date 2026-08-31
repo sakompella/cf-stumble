@@ -1,5 +1,5 @@
 import { parseHarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel } from "./generations/index.js";
 import type { DecodedRecoveryRow } from "./recovery-row.js";
 import type { RecoveryEpisode, RecoveryEpisodeId } from "./recovery-types.js";
 

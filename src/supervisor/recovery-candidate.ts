@@ -1,4 +1,4 @@
-import type { Generations } from "./generations.js";
+import type { Generations } from "./generations/index.js";
 import type { VerifiedStartupCandidate } from "./recovery-operations.js";
 import type { RecoveryEpisode, RecoveryOperationOutcome } from "./recovery-types.js";
 

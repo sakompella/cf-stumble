@@ -1,5 +1,5 @@
 import type { HarnessCommit } from "../harness-commit.js";
-import type { GenerationLabel } from "./generation-types.js";
+import type { GenerationLabel } from "./generations/index.js";
 
 export type RecoveryPolicy = {
   readonly maxRepairAttempts: number;

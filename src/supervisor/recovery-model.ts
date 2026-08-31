@@ -1,6 +1,6 @@
 import { parseHarnessCommit } from "../harness-commit.js";
 import { isNonemptyWellFormedUnicode } from "./recovery-error.js";
-import { parseGenerationLabel, type GenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel, type GenerationLabel } from "./generations/index.js";
 import type {
   RecoveryEpisodeDraft,
   RecoveryEpisodeId,

@@ -1,10 +1,6 @@
-import { parseHarnessCommit } from "../harness-commit.js";
-import {
-  parseGenerationLabel,
-  type GenerationLabel,
-  type GenerationStatus,
-} from "./generation-types.js";
-import type { Generation } from "./generation-types.js";
+import { parseHarnessCommit } from "../../harness-commit.js";
+import { parseGenerationLabel, type GenerationLabel, type GenerationStatus } from "./generation.js";
+import type { Generation } from "./generation.js";
 
 export type GenerationRow = {
   readonly label: number;

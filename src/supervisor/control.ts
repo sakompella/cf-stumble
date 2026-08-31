@@ -1,9 +1,9 @@
 import { parseHarnessCommit } from "../harness-commit.js";
-import { parseGenerationLabel } from "./generation-types.js";
+import { parseGenerationLabel } from "./generations/index.js";
 import { resultFromJournalRow } from "./control-journal.js";
 import type { JournalRow } from "./control-journal.js";
-import type { Generation } from "./generations.js";
-import type { Generations } from "./generations.js";
+import type { Generation } from "./generations/index.js";
+import type { Generations } from "./generations/index.js";
 import type {
   CommandEffect,
   ControlProblemCode,

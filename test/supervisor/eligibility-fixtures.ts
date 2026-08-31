@@ -1,7 +1,7 @@
-import { parseGenerationLabel } from "../../src/supervisor/generation-types.js";
+import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
-import type { PreparationCheck } from "../../src/supervisor/preparation-checks.js";
+import type { PreparationCheck } from "../../src/supervisor/generations/index.js";
 import type { RelayAttempt } from "../../src/supervisor/relay-types.js";
 
 export const policy: EligibilityPolicy = {

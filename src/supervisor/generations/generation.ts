@@ -1,4 +1,4 @@
-import type { HarnessCommit } from "../harness-commit.js";
+import type { HarnessCommit } from "../../harness-commit.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
 

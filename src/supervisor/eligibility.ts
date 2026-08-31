@@ -1,5 +1,5 @@
-import type { GenerationLabel } from "./generation-types.js";
-import type { PreparationCheck } from "./preparation-checks.js";
+import type { GenerationLabel } from "./generations/index.js";
+import type { PreparationCheck } from "./generations/index.js";
 import type { RelayAttempt } from "./relay-types.js";
 
 export type EligibilityPolicy = {
