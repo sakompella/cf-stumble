@@ -25,7 +25,7 @@ import {
   type Generation,
   type PreparationCheck,
 } from "./generations.js";
-import { RelayFacts, type RelayAttempt, type RelayFact } from "./relay-facts.js";
+import { RelayAttempts, type RelayAttempt } from "./relay-attempts.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -52,7 +52,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     | { readonly problem: MainHarnessArtifactProblem };
   private readonly control: GenerationControl;
   private readonly generations: Generations;
-  private readonly relayFacts: RelayFacts;
+  private readonly relayAttempts: RelayAttempts;
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
 
@@ -60,9 +60,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
     this.control = new GenerationControl(ctx.storage, this.generations);
-    this.relayFacts = new RelayFacts(ctx.storage);
-    this.recovery = new Recovery(ctx.storage, this.generations, this.relayFacts);
-    this.relay = new FacetRelay(this.relayFacts);
+    this.relayAttempts = new RelayAttempts(ctx.storage);
+    this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
+    this.relay = new FacetRelay(this.relayAttempts);
     const loadedFacet = loadFixtureMainFacet(env.LOADER);
 
     this.mainFacet = loadedFacet.ok
@@ -114,15 +114,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   getRelayAttempts(): readonly RelayAttempt[] {
-    return this.relayFacts.attempts();
-  }
-
-  getRelayFacts(): readonly RelayFact[] {
-    return this.relayFacts.facts();
+    return this.relayAttempts.all();
   }
 
   sweepExpiredRelayAttempts(now: number): readonly RelayAttempt[] {
-    return this.relayFacts.sweepExpired(now);
+    return this.relayAttempts.sweepExpired(now);
   }
 
   startRecovery(
@@ -179,7 +175,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         generationLabel,
         latestActivationId: this.generations.latestActivationId(generationLabel),
         latestPreparationCheck: this.generations.latestPreparationCheck(generationLabel),
-        facts: this.relayFacts.facts(),
+        attempts: this.relayAttempts.all(),
       },
       policy,
     );

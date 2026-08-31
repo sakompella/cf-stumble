@@ -21,7 +21,7 @@ import {
   settleRepair,
   settleStartupCheck,
 } from "./recovery-operations.js";
-import type { RelayFacts } from "./relay-facts.js";
+import type { RelayAttempts } from "./relay-attempts.js";
 import { RecoveryEpisodeStore } from "./recovery-store.js";
 import type {
   RecoveryEpisode,
@@ -56,13 +56,17 @@ export { validateRecoveryPolicy } from "./recovery-model.js";
 export class Recovery {
   private readonly storage: DurableObjectStorage;
   private readonly generations: Generations;
-  private readonly relayFacts: RelayFacts;
+  private readonly relayAttempts: RelayAttempts;
   private readonly episodeStore: RecoveryEpisodeStore;
 
-  constructor(storage: DurableObjectStorage, generations: Generations, relayFacts: RelayFacts) {
+  constructor(
+    storage: DurableObjectStorage,
+    generations: Generations,
+    relayAttempts: RelayAttempts,
+  ) {
     this.storage = storage;
     this.generations = generations;
-    this.relayFacts = relayFacts;
+    this.relayAttempts = relayAttempts;
     this.episodeStore = new RecoveryEpisodeStore(storage);
   }
 
@@ -250,7 +254,7 @@ export class Recovery {
     failedGenerationLabel: GenerationLabel,
     policy: EligibilityPolicy,
   ): GenerationLabel | undefined {
-    const facts = this.relayFacts.facts();
+    const attempts = this.relayAttempts.all();
     return this.generations
       .all()
       .toReversed()
@@ -262,7 +266,7 @@ export class Recovery {
               generationLabel: generation.label,
               latestActivationId: this.generations.latestActivationId(generation.label),
               latestPreparationCheck: this.generations.latestPreparationCheck(generation.label),
-              facts,
+              attempts,
             },
             policy,
           ).kind === "eligible",

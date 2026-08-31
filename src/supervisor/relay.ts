@@ -1,5 +1,5 @@
 import type { ActiveGeneration } from "./generations.js";
-import type { RelayFacts } from "./relay-facts.js";
+import type { RelayAttempts } from "./relay-attempts.js";
 
 export const RELAY_ATTEMPT_DEADLINE_MS = 5 * 60 * 1_000;
 
@@ -9,10 +9,10 @@ type RelayAttribution = {
 };
 
 export class FacetRelay {
-  private readonly facts: RelayFacts;
+  private readonly attempts: RelayAttempts;
 
-  constructor(facts: RelayFacts) {
-    this.facts = facts;
+  constructor(attempts: RelayAttempts) {
+    this.attempts = attempts;
   }
 
   async forward(
@@ -20,7 +20,7 @@ export class FacetRelay {
     fetcher: Fetcher,
     attribution: RelayAttribution,
   ): Promise<Response> {
-    const attempt = this.facts.start(
+    const attempt = this.attempts.start(
       attribution.active,
       attribution.preparationCheckId,
       Date.now(),
@@ -29,7 +29,7 @@ export class FacetRelay {
     request.signal.addEventListener(
       "abort",
       () => {
-        this.facts.settle(attempt.id, "relay-cancelled", Date.now());
+        this.attempts.settle(attempt.id, "relay-cancelled", Date.now());
       },
       { once: true },
     );
@@ -38,13 +38,13 @@ export class FacetRelay {
     try {
       upstream = await fetcher.fetch(request);
     } catch {
-      this.facts.settle(attempt.id, "pre-header-failure", Date.now());
+      this.attempts.settle(attempt.id, "pre-header-failure", Date.now());
       return new Response("Main facet failed before response headers", { status: 502 });
     }
 
-    this.facts.headersReceived(attempt.id, upstream.status, Date.now());
+    this.attempts.headersReceived(attempt.id, upstream.status);
     if (upstream.body === null) {
-      this.facts.settle(attempt.id, "body-completed", Date.now());
+      this.attempts.settle(attempt.id, "body-completed", Date.now());
       return responseWithBody(null, upstream);
     }
 
@@ -58,13 +58,13 @@ export class FacetRelay {
   }
 
   recordMountFailure(attribution: RelayAttribution): Response {
-    const attempt = this.facts.start(
+    const attempt = this.attempts.start(
       attribution.active,
       attribution.preparationCheckId,
       Date.now(),
       RELAY_ATTEMPT_DEADLINE_MS,
     );
-    this.facts.settle(attempt.id, "pre-header-failure", Date.now());
+    this.attempts.settle(attempt.id, "pre-header-failure", Date.now());
     return new Response("Cannot mount main facet", { status: 500 });
   }
 
@@ -73,7 +73,7 @@ export class FacetRelay {
     attemptId: number,
     expectedBytes: number | undefined,
   ): ReadableStream<Uint8Array> {
-    const facts = this.facts;
+    const attempts = this.attempts;
     let bodyBytes = 0;
     const release = releaseOnce(reader);
 
@@ -82,14 +82,14 @@ export class FacetRelay {
         return reader.read().then(
           (result) => {
             if (result.done) {
-              facts.settle(attemptId, bodyOutcome(expectedBytes, bodyBytes), Date.now());
+              attempts.settle(attemptId, bodyOutcome(expectedBytes, bodyBytes), Date.now());
               release();
               controller.close();
               return;
             }
 
             if (!(result.value instanceof Uint8Array)) {
-              facts.settle(attemptId, "body-failed", Date.now());
+              attempts.settle(attemptId, "body-failed", Date.now());
               release();
               controller.error(new TypeError("main facet returned a non-byte stream chunk"));
               return;
@@ -99,14 +99,14 @@ export class FacetRelay {
             controller.enqueue(result.value);
           },
           (error) => {
-            facts.settle(attemptId, "body-failed", Date.now());
+            attempts.settle(attemptId, "body-failed", Date.now());
             release();
             controller.error(error);
           },
         );
       },
       cancel: (reason): Promise<void> => {
-        facts.settle(attemptId, "relay-cancelled", Date.now());
+        attempts.settle(attemptId, "relay-cancelled", Date.now());
         release();
         return reader.cancel(reason).then(
           () => {},

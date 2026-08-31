@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
-import { RelayFacts } from "../../src/supervisor/relay-facts.js";
+import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
 
@@ -27,6 +27,21 @@ afterEach(async () => {
   await reset();
 });
 
+test("uses relay_attempts as its only relay table", async () => {
+  const control = supervisor("relay-attempt-schema");
+
+  const relayTables = await runInDurableObject(control, (_, state) =>
+    state.storage.sql
+      .exec<{ readonly name: string }>(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('relay_attempts', 'relay_facts')",
+      )
+      .toArray()
+      .map((row) => row.name),
+  );
+
+  expect(relayTables).toEqual(["relay_attempts"]);
+});
+
 test("relays an ordinary request and response without changing either side", async () => {
   const control = await activeSupervisor("relay-preserves-http");
   const response = await control.fetch(
@@ -43,9 +58,18 @@ test("relays an ordinary request and response without changing either side", asy
   expect(response.headers.get("x-facet-request-header")).toBe("request header");
   expect(response.headers.get("x-facet-response-header")).toBe("preserved");
   expect(await response.text()).toBe("request body");
-  expect(await control.getRelayFacts()).toMatchObject([
-    { kind: "headers-received", responseStatus: 201 },
-    { kind: "body-completed", responseStatus: 201 },
+});
+
+test("keeps a completed forwarded attempt after Supervisor eviction", async () => {
+  const control = await activeSupervisor("relay-attempt-survives-eviction");
+  const response = await control.fetch(relayRequest("/facet/relay/body-complete"));
+
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("complete body");
+  await evictDurableObject(control);
+
+  expect(await control.getRelayAttempts()).toMatchObject([
+    { outcome: "body-completed", responseStatus: 200 },
   ]);
 });
 
@@ -57,7 +81,6 @@ test("records a facet failure before headers and returns an error response", asy
   expect(await control.getRelayAttempts()).toMatchObject([
     { outcome: "pre-header-failure", responseStatus: undefined },
   ]);
-  expect(await control.getRelayFacts()).toMatchObject([{ kind: "pre-header-failure" }]);
 });
 
 test("records a body failure after 200 headers rather than crediting its status", async () => {
@@ -68,10 +91,6 @@ test("records a body failure after 200 headers rather than crediting its status"
   expect(await response.text()).toBe("partial");
   expect(await control.getRelayAttempts()).toMatchObject([
     { outcome: "body-failed", responseStatus: 200 },
-  ]);
-  expect(await control.getRelayFacts()).toMatchObject([
-    { kind: "headers-received", responseStatus: 200 },
-    { kind: "body-failed", responseStatus: 200 },
   ]);
 });
 
@@ -130,9 +149,9 @@ test("reloads a pre-header cancellation as neutral relay evidence", async () => 
       throw new Error("an active generation needs a preparation check");
     }
 
-    const facts = new RelayFacts(state.storage);
-    const attempt = facts.start(active, preparationCheck.id, 1_000, 100);
-    facts.settle(attempt.id, "relay-cancelled", 1_001);
+    const attempts = new RelayAttempts(state.storage);
+    const attempt = attempts.start(active, preparationCheck.id, 1_000, 100);
+    attempts.settle(attempt.id, "relay-cancelled", 1_001);
   });
   await evictDurableObject(control);
 

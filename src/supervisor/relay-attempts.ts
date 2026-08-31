@@ -1,18 +1,10 @@
 import type { ActiveGeneration } from "./generations.js";
-import { attemptFromRow, factFromRow } from "./relay-types.js";
-import type {
-  AttemptRow,
-  FactRow,
-  RelayAttempt,
-  RelayAttribution,
-  RelayFact,
-  RelayFactKind,
-  RelayOutcome,
-} from "./relay-types.js";
+import { attemptFromRow } from "./relay-types.js";
+import type { AttemptRow, RelayAttempt, RelayAttribution, RelayOutcome } from "./relay-types.js";
 
-export type { RelayAttempt, RelayFact } from "./relay-types.js";
+export type { RelayAttempt } from "./relay-types.js";
 
-export class RelayFacts {
+export class RelayAttempts {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
 
@@ -33,19 +25,6 @@ export class RelayFacts {
           'relay-cancelled', 'bounded-abandonment'
         )),
         finished_at INTEGER
-      );
-      CREATE TABLE IF NOT EXISTS relay_facts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        attempt_id INTEGER NOT NULL,
-        generation_label INTEGER,
-        activation_id INTEGER,
-        preparation_check_id INTEGER,
-        kind TEXT NOT NULL CHECK (kind IN (
-          'headers-received', 'pre-header-failure', 'body-completed', 'body-failed',
-          'relay-cancelled', 'bounded-abandonment'
-        )),
-        response_status INTEGER,
-        observed_at INTEGER NOT NULL
       );
     `);
   }
@@ -80,7 +59,7 @@ export class RelayFacts {
     return attemptFromRow(row);
   }
 
-  headersReceived(attemptId: number, responseStatus: number, observedAt: number): void {
+  headersReceived(attemptId: number, responseStatus: number): void {
     this.storage.transactionSync(() => {
       const attempt = this.byId(attemptId);
       if (attempt?.outcome !== "pending" || attempt.responseStatus !== undefined) {
@@ -92,7 +71,6 @@ export class RelayFacts {
         responseStatus,
         attemptId,
       );
-      this.recordFact(attempt, "headers-received", responseStatus, observedAt);
     });
   }
 
@@ -109,7 +87,6 @@ export class RelayFacts {
         observedAt,
         attemptId,
       );
-      this.recordFact(attempt, outcome, attempt.responseStatus, observedAt);
     });
   }
 
@@ -133,7 +110,6 @@ export class RelayFacts {
           now,
           attempt.id,
         );
-        this.recordFact(attempt, "bounded-abandonment", attempt.responseStatus, now);
       }
 
       return pending.map((attempt) => ({
@@ -144,7 +120,7 @@ export class RelayFacts {
     });
   }
 
-  attempts(): readonly RelayAttempt[] {
+  all(): readonly RelayAttempt[] {
     return this.sql
       .exec<AttemptRow>(
         `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
@@ -154,18 +130,6 @@ export class RelayFacts {
       )
       .toArray()
       .map((row) => attemptFromRow(row));
-  }
-
-  facts(): readonly RelayFact[] {
-    return this.sql
-      .exec<FactRow>(
-        `SELECT attempt_id, generation_label, activation_id, preparation_check_id, kind,
-                response_status, observed_at
-         FROM relay_facts
-         ORDER BY id ASC`,
-      )
-      .toArray()
-      .map((row) => factFromRow(row));
   }
 
   private byId(attemptId: number): RelayAttempt | undefined {
@@ -180,26 +144,5 @@ export class RelayFacts {
       .toArray()[0];
 
     return row === undefined ? undefined : attemptFromRow(row);
-  }
-
-  private recordFact(
-    attempt: RelayAttempt,
-    kind: RelayFactKind,
-    responseStatus: number | undefined,
-    observedAt: number,
-  ): void {
-    this.sql.exec(
-      `INSERT INTO relay_facts (
-         attempt_id, generation_label, activation_id, preparation_check_id, kind,
-         response_status, observed_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      attempt.id,
-      attempt.generationLabel ?? null,
-      attempt.activationId ?? null,
-      attempt.preparationCheckId ?? null,
-      kind,
-      responseStatus ?? null,
-      observedAt,
-    );
   }
 }

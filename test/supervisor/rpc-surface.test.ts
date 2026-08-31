@@ -26,12 +26,12 @@ afterEach(async () => {
 
 test("the real stub journals candidate submission and epoch-checked activation without unchecked mutation RPCs", async () => {
   const control = supervisor("control-only-generation-mutation");
-
+  expectTypeOf(control).toHaveProperty("getRelayAttempts");
+  expectTypeOf(control).not.toHaveProperty("getRelayFacts");
   expectTypeOf(control).not.toHaveProperty("labelGeneration");
   expectTypeOf(control).not.toHaveProperty("recordPreparationCheck");
   expectTypeOf(control).not.toHaveProperty("activateGeneration");
   expectTypeOf(control).toHaveProperty("controlGeneration");
-
   const submission = candidateSubmission();
   const firstSubmission = await control.controlGeneration(submission);
   const replayedSubmission = await control.controlGeneration(submission);

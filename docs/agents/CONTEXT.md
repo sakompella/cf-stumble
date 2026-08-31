@@ -42,6 +42,9 @@ A period in which a generation may run but has not yet gathered enough evidence 
 **Real turn**:
 A user interaction that may contribute evidence about a generation. A successful HTTP status alone does not prove that a streamed interaction completed.
 
+**Relay attempt**:
+The Supervisor's durable record of one forwarded request, including its generation attribution, response status, and terminal outcome. Eligibility derives from terminal relay attempts in the current evidence era.
+
 **Recovery report**:
 The supervisor's durable record of a recovery attempt, its error, and its result.
 

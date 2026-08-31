@@ -8,8 +8,6 @@ export type RelayOutcome =
   | "relay-cancelled"
   | "bounded-abandonment";
 
-export type RelayFactKind = Exclude<RelayOutcome, "pending"> | "headers-received";
-
 export type RelayAttribution = {
   readonly generationLabel: GenerationLabel | undefined;
   readonly activationId: number | undefined;
@@ -49,13 +47,6 @@ export type RelayAttempt =
       readonly finishedAt: number;
     });
 
-export type RelayFact = RelayAttribution & {
-  readonly attemptId: number;
-  readonly kind: RelayFactKind;
-  readonly responseStatus: number | undefined;
-  readonly observedAt: number;
-};
-
 export type AttemptRow = {
   readonly id: number;
   readonly generation_label: number | null;
@@ -66,16 +57,6 @@ export type AttemptRow = {
   readonly response_status: number | null;
   readonly outcome: string;
   readonly finished_at: number | null;
-};
-
-export type FactRow = {
-  readonly attempt_id: number;
-  readonly generation_label: number | null;
-  readonly activation_id: number | null;
-  readonly preparation_check_id: number | null;
-  readonly kind: string;
-  readonly response_status: number | null;
-  readonly observed_at: number;
 };
 
 export function attemptFromRow(row: AttemptRow): RelayAttempt {
@@ -118,23 +99,6 @@ export function attemptFromRow(row: AttemptRow): RelayAttempt {
   throw new Error(`invalid persisted relay attempt ${row.id}`);
 }
 
-export function factFromRow(row: FactRow): RelayFact {
-  const kind = relayFactKindFromRow(row.kind, row.attempt_id);
-  return {
-    attemptId: row.attempt_id,
-    generationLabel: nullableGenerationLabelFromRow(
-      row.generation_label,
-      "relay fact",
-      row.attempt_id,
-    ),
-    activationId: row.activation_id ?? undefined,
-    preparationCheckId: row.preparation_check_id ?? undefined,
-    kind,
-    responseStatus: row.response_status ?? undefined,
-    observedAt: row.observed_at,
-  };
-}
-
 function relayOutcomeFromRow(value: string, id: number): RelayOutcome {
   if (
     value === "pending" ||
@@ -148,21 +112,6 @@ function relayOutcomeFromRow(value: string, id: number): RelayOutcome {
   }
 
   throw new Error(`invalid persisted relay attempt outcome for ${id}`);
-}
-
-function relayFactKindFromRow(value: string, attemptId: number): RelayFactKind {
-  if (
-    value === "headers-received" ||
-    value === "pre-header-failure" ||
-    value === "body-completed" ||
-    value === "body-failed" ||
-    value === "relay-cancelled" ||
-    value === "bounded-abandonment"
-  ) {
-    return value;
-  }
-
-  throw new Error(`invalid persisted relay fact kind for ${attemptId}`);
 }
 
 function nullableGenerationLabelFromRow(

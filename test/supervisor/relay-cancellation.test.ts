@@ -2,7 +2,7 @@
 
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { RelayFacts } from "../../src/supervisor/relay-facts.js";
+import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
@@ -24,12 +24,12 @@ async function recordCancelledAttempt(
       throw new Error("an active generation needs a preparation check");
     }
 
-    const facts = new RelayFacts(state.storage);
-    const attempt = facts.start(active, preparationCheck.id, 1_000, 100);
+    const attempts = new RelayAttempts(state.storage);
+    const attempt = attempts.start(active, preparationCheck.id, 1_000, 100);
     if (responseStatus !== undefined) {
-      facts.headersReceived(attempt.id, responseStatus, 1_001);
+      attempts.headersReceived(attempt.id, responseStatus);
     }
-    facts.settle(attempt.id, "relay-cancelled", 1_002);
+    attempts.settle(attempt.id, "relay-cancelled", 1_002);
   });
 }
 

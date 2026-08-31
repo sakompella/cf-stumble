@@ -71,11 +71,6 @@ test("keeps the activation epoch stable while relaying a completed turn", async 
   expect(await control.getRelayAttempts()).toMatchObject([
     { generationLabel: 0, outcome: "body-completed", responseStatus: 200 },
   ]);
-  expect(await control.getRelayFacts()).toMatchObject([
-    { kind: "headers-received", responseStatus: 200 },
-    { kind: "body-completed", responseStatus: 200 },
-  ]);
-
   const activated = await activateReplacement(control, beforeRelay.epoch);
   expect(activated).toMatchObject({
     ok: true,

@@ -2,7 +2,7 @@ import { parseGenerationLabel } from "../../src/supervisor/generation-types.js";
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { PreparationCheck } from "../../src/supervisor/preparation-checks.js";
-import type { RelayFact } from "../../src/supervisor/relay-facts.js";
+import type { RelayAttempt } from "../../src/supervisor/relay-types.js";
 
 export const policy: EligibilityPolicy = {
   minimumCreditedTurns: 3,
@@ -24,40 +24,80 @@ const startupCheck: PreparationCheck = {
   outcome: "passed",
 };
 
-type FactAttribution = Partial<
-  Pick<RelayFact, "generationLabel" | "activationId" | "preparationCheckId">
+type AttemptAttribution = Partial<
+  Pick<RelayAttempt, "generationLabel" | "activationId" | "preparationCheckId">
 >;
 
-export function relayFact(
-  attemptId: number,
-  kind: RelayFact["kind"],
+type TerminalOutcome = Exclude<RelayAttempt["outcome"], "pending">;
+
+export function relayAttempt(
+  id: number,
+  outcome: TerminalOutcome,
   responseStatus: number | undefined,
-  observedAt: number,
-  attribution: FactAttribution = {},
-): RelayFact {
-  return {
-    attemptId,
+  finishedAt: number,
+  attribution: AttemptAttribution = {},
+): RelayAttempt {
+  const base = {
+    id,
     generationLabel: generationLabel(1),
     activationId: 4,
     preparationCheckId: 9,
-    kind,
-    responseStatus,
-    observedAt,
+    startedAt: 0,
+    deadlineAt: 100,
     ...attribution,
+  };
+
+  switch (outcome) {
+    case "pre-header-failure":
+      if (responseStatus !== undefined) {
+        throw new Error("pre-header attempt must not have a response status");
+      }
+      return { ...base, outcome, responseStatus: undefined, finishedAt };
+    case "body-completed":
+    case "body-failed":
+      if (responseStatus === undefined) {
+        throw new Error("body attempt must have a response status");
+      }
+      return { ...base, outcome, responseStatus, finishedAt };
+    case "relay-cancelled":
+    case "bounded-abandonment":
+      return { ...base, outcome, responseStatus, finishedAt };
+    default: {
+      const exhaustive: never = outcome;
+      return exhaustive;
+    }
+  }
+}
+
+export function completedAttempt(
+  attemptId: number,
+  finishedAt: number,
+  activationId = 4,
+): RelayAttempt {
+  return relayAttempt(attemptId, "body-completed", 200, finishedAt, { activationId });
+}
+
+export function pendingAttempt(attemptId: number): RelayAttempt {
+  return {
+    id: attemptId,
+    generationLabel: generationLabel(1),
+    activationId: 4,
+    preparationCheckId: 9,
+    startedAt: 0,
+    deadlineAt: 100,
+    outcome: "pending",
+    responseStatus: undefined,
+    finishedAt: undefined,
   };
 }
 
-export function completedFact(attemptId: number, observedAt: number, activationId = 4): RelayFact {
-  return relayFact(attemptId, "body-completed", 200, observedAt, { activationId });
-}
-
-export function eligibility(facts: readonly RelayFact[]) {
+export function eligibility(attempts: readonly RelayAttempt[]) {
   return deriveGenerationEligibility(
     {
       generationLabel: generationLabel(1),
       latestActivationId: 4,
       latestPreparationCheck: startupCheck,
-      facts,
+      attempts,
     },
     policy,
   );
