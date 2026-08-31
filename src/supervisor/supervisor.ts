@@ -49,7 +49,6 @@ type SupervisorEnv = {
 };
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
-  private readonly mainFacet: { readonly fetcher: Fetcher } | { readonly problem: string };
   private readonly control: GenerationControl;
   private readonly generations: Generations;
   private readonly artifacts: HarnessArtifacts;
@@ -65,31 +64,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
-
-    const activeGeneration = this.generations.active().generation;
-    const fixtureCommit = parseHarnessCommit(fixtureMainHarnessCommit);
-    const harnessCommit = activeGeneration?.harnessCommit ?? fixtureCommit;
-    if (harnessCommit === undefined) {
-      this.mainFacet = { problem: "fixture harness commit is invalid" };
-    } else {
-      const retainedArtifact = this.artifacts.get(harnessCommit);
-      if (!retainedArtifact.ok || retainedArtifact.artifact === undefined) {
-        this.mainFacet = {
-          problem: retainedArtifact.ok
-            ? "retained artifact was not found"
-            : retainedArtifact.problem.code,
-        };
-      } else {
-        const loadedFacet = loadMainFacet(env.LOADER, retainedArtifact.artifact);
-        this.mainFacet = loadedFacet.ok
-          ? {
-              fetcher: ctx.facets.get(mainFacetName(harnessCommit, "serving"), () => ({
-                class: loadedFacet.facetClass,
-              })),
-            }
-          : { problem: loadedFacet.problem.code };
-      }
-    }
   }
 
   checkGenerationStartup(
@@ -206,11 +180,42 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       ? this.generations.latestPreparationCheck(active.generation.label)?.id
       : undefined;
     const attribution = { active, preparationCheckId };
+    const mainFacet = this.mountActiveFacet(active);
 
-    if ("problem" in this.mainFacet) {
+    if ("problem" in mainFacet) {
       return Promise.resolve(this.relay.recordMountFailure(attribution));
     }
 
-    return this.relay.forward(request, this.mainFacet.fetcher, attribution);
+    return this.relay.forward(request, mainFacet.fetcher, attribution);
+  }
+
+  private mountActiveFacet(
+    active: ActiveGeneration,
+  ): { readonly fetcher: Fetcher } | { readonly problem: string } {
+    const fixtureCommit = parseHarnessCommit(fixtureMainHarnessCommit);
+    const harnessCommit = active.generation?.harnessCommit ?? fixtureCommit;
+    if (harnessCommit === undefined) {
+      return { problem: "fixture harness commit is invalid" };
+    }
+
+    const retainedArtifact = this.artifacts.get(harnessCommit);
+    if (!retainedArtifact.ok || retainedArtifact.artifact === undefined) {
+      return {
+        problem: retainedArtifact.ok
+          ? "retained artifact was not found"
+          : retainedArtifact.problem.code,
+      };
+    }
+
+    const loadedFacet = loadMainFacet(this.env.LOADER, retainedArtifact.artifact);
+    if (!loadedFacet.ok) {
+      return { problem: loadedFacet.problem.code };
+    }
+
+    return {
+      fetcher: this.ctx.facets.get(mainFacetName(harnessCommit, "serving"), () => ({
+        class: loadedFacet.facetClass,
+      })),
+    };
   }
 }

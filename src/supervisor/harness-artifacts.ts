@@ -26,9 +26,11 @@ export type RetainedHarnessArtifactResult =
   | { readonly ok: false; readonly problem: MainHarnessArtifactProblem };
 
 export class HarnessArtifacts {
+  private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
 
   constructor(storage: DurableObjectStorage, fixtureArtifact: MainHarnessArtifactInput) {
+    this.storage = storage;
     this.sql = storage.sql;
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS harness_artifact_modules (
@@ -56,35 +58,37 @@ export class HarnessArtifacts {
     }
 
     const canonicalInput = artifactInput(parsed.artifact);
-    const retained = this.get(parsed.artifact.harnessCommit);
-    if (!retained.ok) {
-      return retained;
-    }
+    return this.storage.transactionSync(() => {
+      const retained = this.get(parsed.artifact.harnessCommit);
+      if (!retained.ok) {
+        return retained;
+      }
 
-    if (retained.artifact !== undefined) {
-      return sameArtifact(retained.artifact, canonicalInput)
-        ? { ok: true, artifact: retained.artifact, effect: "verified" }
-        : {
-            ok: false,
-            problem: {
-              code: "retained-artifact-mismatch",
-              harnessCommit: parsed.artifact.harnessCommit,
-            },
-          };
-    }
+      if (retained.artifact !== undefined) {
+        return sameArtifact(retained.artifact, canonicalInput)
+          ? { ok: true, artifact: retained.artifact, effect: "verified" }
+          : {
+              ok: false,
+              problem: {
+                code: "retained-artifact-mismatch",
+                harnessCommit: parsed.artifact.harnessCommit,
+              },
+            };
+      }
 
-    for (const [index, module] of canonicalInput.modules.entries()) {
-      this.sql.exec(
-        `INSERT INTO harness_artifact_modules (harness_commit, module_name, source, is_entry)
-         VALUES (?, ?, ?, ?)`,
-        canonicalInput.harnessCommit,
-        module.name,
-        module.source,
-        index === 0 ? 1 : 0,
-      );
-    }
+      for (const [index, module] of canonicalInput.modules.entries()) {
+        this.sql.exec(
+          `INSERT INTO harness_artifact_modules (harness_commit, module_name, source, is_entry)
+           VALUES (?, ?, ?, ?)`,
+          canonicalInput.harnessCommit,
+          module.name,
+          module.source,
+          index === 0 ? 1 : 0,
+        );
+      }
 
-    return { ok: true, artifact: canonicalInput, effect: "retained" };
+      return { ok: true, artifact: canonicalInput, effect: "retained" };
+    });
   }
 
   get(harnessCommit: HarnessCommit): RetainedHarnessArtifactResult {
