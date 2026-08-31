@@ -80,7 +80,7 @@ test("records a parse-invalid candidate as failed before headers", async () => {
   await expectFailedCandidate(control, label);
 });
 
-test("records a candidate without MainFacet as failed at the mount stage", async () => {
+test("records a candidate without MainFacet as failed before headers", async () => {
   const control = await activeSupervisor("startup-check-missing-facet");
   const label = await labelCandidate(control, commits.missingFacet);
 
@@ -181,7 +181,10 @@ export class MainFacet extends DurableObject {
     { deadlineMs: 50 },
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "deadline-expired" } });
+  expect(result).toMatchObject({
+    ok: true,
+    report: { stage: "deadline-expired", reason: "response headers exceeded the deadline" },
+  });
   await expectFailedCandidate(control, label);
 });
 

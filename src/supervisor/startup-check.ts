@@ -1,3 +1,4 @@
+import { Result, TaggedError } from "better-result";
 import { MainHarnessArtifact, loadMainFacet } from "../agent/loader.js";
 import type { MainHarnessArtifactInput } from "../agent/loader.js";
 import { deadlineAfter } from "./startup-check-deadline.js";
@@ -146,11 +147,16 @@ async function runStartupCheck(
 
   try {
     const loadedFacet = mountCandidateFacet(ctx, loader, input, harnessCommit);
-    if (loadedFacet.ok) {
-      return await classifyCandidateResponse(loadedFacet.fetcher, deadline, maxBodyBytes);
+    if (loadedFacet.isErr()) {
+      return loadedFacet.error.match({
+        MainFacetMountFailed: (error): StartupCheckOutcome => ({
+          stage: "mount-failed",
+          reason: error.reason,
+        }),
+      });
     }
 
-    return loadedFacet;
+    return await classifyCandidateResponse(loadedFacet.value, deadline, maxBodyBytes);
   } finally {
     deadline.cancel();
   }
@@ -162,19 +168,28 @@ async function classifyCandidateResponse(
   maxBodyBytes: number,
 ): Promise<StartupCheckOutcome> {
   const response = await responseBeforeDeadline(fetcher, deadline);
-  if (!response.ok) {
-    return response;
+  if (response.isErr()) {
+    return response.error.match({
+      StartupHeadersNotReceived: (error): StartupCheckOutcome => ({
+        stage: "headers-not-received",
+        reason: error.reason,
+      }),
+      StartupHeaderDeadlineExceeded: (error): StartupCheckOutcome => ({
+        stage: "deadline-expired",
+        reason: error.reason,
+      }),
+    });
   }
 
-  if (response.response.status >= 400) {
+  if (response.value.status >= 400) {
     return {
       stage: "response-rejected",
-      reason: `response status was ${response.response.status}`,
-      status: response.response.status,
+      reason: `response status was ${response.value.status}`,
+      status: response.value.status,
     };
   }
 
-  return drainResponseBody(response.response, deadline, maxBodyBytes);
+  return drainResponseBody(response.value, deadline, maxBodyBytes);
 }
 
 export type StartupCheckOutcome =
@@ -185,63 +200,80 @@ export type StartupCheckOutcome =
       readonly reason: string;
     };
 
-type CandidateFacet =
-  | { readonly ok: true; readonly fetcher: Fetcher }
-  | { readonly ok: false; readonly stage: "mount-failed"; readonly reason: string };
+class MainFacetMountFailed extends TaggedError("MainFacetMountFailed")<{
+  readonly harnessCommit: string;
+  readonly reason: string;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
 
-type HeaderResult =
-  | { readonly ok: true; readonly response: Response }
-  | {
-      readonly ok: false;
-      readonly stage: Exclude<StartupCheckStage, "ready" | "response-rejected" | "body-failed">;
-      readonly reason: string;
-    };
+class StartupHeadersNotReceived extends TaggedError("StartupHeadersNotReceived")<{
+  readonly reason: string;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+class StartupHeaderDeadlineExceeded extends TaggedError("StartupHeaderDeadlineExceeded")<{
+  readonly reason: string;
+  readonly message: string;
+}> {}
+
+type HeaderFailure = StartupHeadersNotReceived | StartupHeaderDeadlineExceeded;
 
 function mountCandidateFacet(
   ctx: DurableObjectState,
   loader: WorkerLoader,
   input: MainHarnessArtifactInput,
   harnessCommit: string,
-): CandidateFacet {
+): Result<Fetcher, MainFacetMountFailed> {
   try {
     const loadedFacet = loadMainFacet(loader, input);
     if (!loadedFacet.ok) {
-      return { ok: false, stage: "mount-failed", reason: loadedFacet.problem.code };
+      const reason = loadedFacet.problem.code;
+      return Result.err(
+        new MainFacetMountFailed({
+          harnessCommit,
+          reason,
+          message: `Candidate facet for ${harnessCommit} could not mount: ${reason}`,
+          cause: loadedFacet.problem,
+        }),
+      );
     }
 
     const name = mainFacetName(harnessCommit, "candidate");
     ctx.facets.abort(name, "discard prior startup-check candidate");
-    return {
-      ok: true,
-      fetcher: ctx.facets.get(name, () => ({ class: loadedFacet.facetClass })),
-    };
-  } catch {
-    return { ok: false, stage: "mount-failed", reason: "candidate facet could not mount" };
+    return Result.ok(ctx.facets.get(name, () => ({ class: loadedFacet.facetClass })));
+  } catch (cause) {
+    const reason = "candidate facet could not mount";
+    return Result.err(new MainFacetMountFailed({ harnessCommit, reason, message: reason, cause }));
   }
 }
 
-async function responseBeforeDeadline(fetcher: Fetcher, deadline: Deadline): Promise<HeaderResult> {
-  const result = await Promise.race([
+function responseBeforeDeadline(
+  fetcher: Fetcher,
+  deadline: Deadline,
+): Promise<Result<Response, HeaderFailure>> {
+  return Promise.race([
     fetcher.fetch(new Request("https://main-facet.invalid/")).then(
-      (response) => ({ kind: "response" as const, response }),
-      (error: ThrownValue) => ({ kind: "failure" as const, error }),
+      (response) => Result.ok<Response, HeaderFailure>(response),
+      (cause: ThrownValue) => {
+        const reason = errorReason(cause);
+        return Result.err<Response, HeaderFailure>(
+          new StartupHeadersNotReceived({
+            reason,
+            message: `Startup-check response headers were not received: ${reason}`,
+            cause,
+          }),
+        );
+      },
     ),
-    deadline.elapsed.then(() => ({ kind: "deadline" as const })),
+    deadline.elapsed.then(() => {
+      const reason = "response headers exceeded the deadline";
+      return Result.err<Response, HeaderFailure>(
+        new StartupHeaderDeadlineExceeded({ reason, message: reason }),
+      );
+    }),
   ]);
-
-  if (result.kind === "deadline") {
-    return {
-      ok: false,
-      stage: "deadline-expired",
-      reason: "response headers exceeded the deadline",
-    };
-  }
-
-  if (result.kind === "failure") {
-    return { ok: false, stage: "headers-not-received", reason: errorReason(result.error) };
-  }
-
-  return { ok: true, response: result.response };
 }
 
 function startupCheckResult(
