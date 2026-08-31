@@ -1,13 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
-import { parseHarnessCommit } from "../harness-commit.js";
-import {
-  fixtureMainHarnessArtifact,
-  fixtureMainHarnessCommit,
-  loadMainFacet,
-  type MainHarnessArtifactInput,
-} from "../agent/loader.js";
+import { fixtureMainHarnessCommit, type MainHarnessArtifactInput } from "../agent/loader.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -36,7 +30,6 @@ import {
   type RecoveryPolicy,
 } from "./recovery.js";
 import { FacetRelay } from "./relay.js";
-import { mainFacetName } from "./facet-name.js";
 import { HarnessArtifacts } from "./harness-artifacts.js";
 import {
   checkGenerationStartup,
@@ -59,7 +52,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
-    this.artifacts = new HarnessArtifacts(ctx.storage, fixtureMainHarnessArtifact);
+    this.artifacts = new HarnessArtifacts(ctx.storage);
     this.control = new GenerationControl(ctx.storage, this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
@@ -180,42 +173,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       ? this.generations.latestPreparationCheck(active.generation.label)?.id
       : undefined;
     const attribution = { active, preparationCheckId };
-    const mainFacet = this.mountActiveFacet(active);
+    const mainFacet = this.artifacts.mount(active, this.env.LOADER, this.ctx.facets);
 
     if ("problem" in mainFacet) {
       return Promise.resolve(this.relay.recordMountFailure(attribution));
     }
 
     return this.relay.forward(request, mainFacet.fetcher, attribution);
-  }
-
-  private mountActiveFacet(
-    active: ActiveGeneration,
-  ): { readonly fetcher: Fetcher } | { readonly problem: string } {
-    const fixtureCommit = parseHarnessCommit(fixtureMainHarnessCommit);
-    const harnessCommit = active.generation?.harnessCommit ?? fixtureCommit;
-    if (harnessCommit === undefined) {
-      return { problem: "fixture harness commit is invalid" };
-    }
-
-    const retainedArtifact = this.artifacts.get(harnessCommit);
-    if (!retainedArtifact.ok || retainedArtifact.artifact === undefined) {
-      return {
-        problem: retainedArtifact.ok
-          ? "retained artifact was not found"
-          : retainedArtifact.problem.code,
-      };
-    }
-
-    const loadedFacet = loadMainFacet(this.env.LOADER, retainedArtifact.artifact);
-    if (!loadedFacet.ok) {
-      return { problem: loadedFacet.problem.code };
-    }
-
-    return {
-      fetcher: this.ctx.facets.get(mainFacetName(harnessCommit, "serving"), () => ({
-        class: loadedFacet.facetClass,
-      })),
-    };
   }
 }

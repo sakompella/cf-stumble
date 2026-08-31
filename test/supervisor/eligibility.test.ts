@@ -9,8 +9,8 @@ import type { RelayAttempt } from "../../src/supervisor/relay-types.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
+  artifact,
   prepareGeneration,
-  readyArtifact,
   submitCandidate,
 } from "./startup-check-helpers.js";
 
@@ -25,6 +25,27 @@ import {
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
+}
+
+function relayCandidateArtifact(harnessCommit: string) {
+  return artifact(
+    harnessCommit,
+    `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path === "/facet/relay/error-status") {
+      return new Response("failure body", { status: 500 });
+    }
+    if (path === "/facet/relay/body-complete") {
+      return new Response("complete body");
+    }
+    return new Response("ready");
+  }
+}
+`,
+  );
 }
 
 afterEach(async () => {
@@ -168,10 +189,11 @@ test("rejects a generation when its most recent era fails after an older era suc
 
 test("requires a fresh passing startup check after a failure observation", async () => {
   const control = supervisor("eligibility-fresh-startup-check");
-  const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
+  const harnessCommit = "c123456789abcdef0123456789abcdef01234567";
   const label = await submitCandidate(control, harnessCommit, "submit-candidate");
 
-  const firstStartup = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
+  const candidateArtifact = relayCandidateArtifact(harnessCommit);
+  const firstStartup = await control.checkGenerationStartup(label, candidateArtifact);
   if (!firstStartup.ok) {
     throw new Error("a valid candidate must produce a startup-check report");
   }
@@ -188,7 +210,7 @@ test("requires a fresh passing startup check after a failure observation", async
     reason: "failure-observed",
   });
 
-  const freshStartup = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
+  const freshStartup = await control.checkGenerationStartup(label, candidateArtifact);
   if (!freshStartup.ok) {
     throw new Error("a fresh startup check must produce a report");
   }

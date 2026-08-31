@@ -2,7 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
+import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import type { MainHarnessArtifactInput } from "../../src/agent/loader.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 
@@ -30,6 +30,10 @@ export function artifact(harnessCommit: string, source: string): MainHarnessArti
 }
 
 export function readyArtifact(harnessCommit: string): MainHarnessArtifactInput {
+  if (harnessCommit === fixtureMainHarnessCommit) {
+    return fixtureMainHarnessArtifact;
+  }
+
   return artifact(
     harnessCommit,
     `

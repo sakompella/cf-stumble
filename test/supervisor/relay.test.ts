@@ -6,7 +6,12 @@ import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/agent/loader.js";
 import { RelayAttempts } from "../../src/supervisor/relay-attempts.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "./startup-check-helpers.js";
+import {
+  activateGeneration,
+  artifact,
+  prepareGeneration,
+  submitCandidate,
+} from "./startup-check-helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -25,6 +30,33 @@ function relayRequest(path: string, init?: RequestInit): Request {
 
 afterEach(async () => {
   await reset();
+});
+
+test("serves the activated generation's retained artifact", async () => {
+  const control = await activeSupervisor("serves-active-generation");
+  const candidateCommit = "0123456789abcdef0123456789abcdef01234567";
+  const candidate = await submitCandidate(control, candidateCommit, "submit-serving-candidate");
+  const startup = await control.checkGenerationStartup(
+    candidate,
+    artifact(
+      candidateCommit,
+      `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  fetch() { return new Response("candidate serving body"); }
+}
+`,
+    ),
+  );
+  if (!startup.ok || startup.report.stage !== "ready") {
+    throw new Error("the candidate must pass startup before activation");
+  }
+
+  await activateGeneration(control, candidate, "activate-serving-candidate");
+
+  const response = await control.fetch(relayRequest("/"));
+
+  expect(await response.text()).toBe("candidate serving body");
 });
 
 test("uses relay_attempts as its only relay table", async () => {

@@ -1,6 +1,8 @@
-import { MainHarnessArtifact } from "../agent/loader.js";
+import { fixtureMainHarnessArtifact, loadMainFacet, MainHarnessArtifact } from "../agent/loader.js";
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../agent/loader.js";
 import type { HarnessCommit } from "../harness-commit.js";
+import { mainFacetName } from "./facet-name.js";
+import type { ActiveGeneration } from "./generations.js";
 
 type ArtifactModuleRow = {
   readonly module_name: string;
@@ -29,7 +31,7 @@ export class HarnessArtifacts {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
 
-  constructor(storage: DurableObjectStorage, fixtureArtifact: MainHarnessArtifactInput) {
+  constructor(storage: DurableObjectStorage) {
     this.storage = storage;
     this.sql = storage.sql;
     this.sql.exec(`
@@ -45,7 +47,7 @@ export class HarnessArtifacts {
         WHERE is_entry = 1;
     `);
 
-    const retainedFixture = this.retain(fixtureArtifact);
+    const retainedFixture = this.retain(fixtureMainHarnessArtifact);
     if (!retainedFixture.ok) {
       throw new Error(`invalid fixture harness artifact: ${retainedFixture.problem.code}`);
     }
@@ -89,6 +91,33 @@ export class HarnessArtifacts {
 
       return { ok: true, artifact: canonicalInput, effect: "retained" };
     });
+  }
+
+  mount(
+    active: ActiveGeneration,
+    loader: WorkerLoader,
+    facets: DurableObjectState["facets"],
+  ): { readonly fetcher: Fetcher } | { readonly problem: string } {
+    const retained =
+      active.generation === undefined
+        ? this.retain(fixtureMainHarnessArtifact)
+        : this.get(active.generation.harnessCommit);
+    if (!retained.ok || retained.artifact === undefined) {
+      return {
+        problem: retained.ok ? "retained artifact was not found" : retained.problem.code,
+      };
+    }
+
+    const loadedFacet = loadMainFacet(loader, retained.artifact);
+    if (!loadedFacet.ok) {
+      return { problem: loadedFacet.problem.code };
+    }
+
+    return {
+      fetcher: facets.get(mainFacetName(retained.artifact.harnessCommit, "serving"), () => ({
+        class: loadedFacet.facetClass,
+      })),
+    };
   }
 
   get(harnessCommit: HarnessCommit): RetainedHarnessArtifactResult {

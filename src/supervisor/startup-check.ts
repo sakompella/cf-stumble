@@ -4,6 +4,7 @@ import { deadlineAfter } from "./startup-check-deadline.js";
 import { drainResponseBody } from "./startup-check-body.js";
 import { mainFacetName } from "./facet-name.js";
 import { parseGenerationLabel } from "./generation-types.js";
+import type { GenerationLabel } from "./generation-types.js";
 import type { HarnessArtifactResult, HarnessArtifacts } from "./harness-artifacts.js";
 import type { Deadline } from "./startup-check-deadline.js";
 import type { Generation, Generations, PreparationCheckResult } from "./generations.js";
@@ -55,7 +56,7 @@ export type StartupCheckResult =
         | Extract<PreparationCheckResult, { readonly ok: false }>["problem"];
     };
 
-export async function checkGenerationStartup(
+export function checkGenerationStartup(
   ctx: DurableObjectState,
   loader: WorkerLoader,
   artifacts: HarnessArtifacts,
@@ -66,14 +67,36 @@ export async function checkGenerationStartup(
 ): Promise<StartupCheckResult> {
   const generationLabel = parseGenerationLabel(label);
   if (generationLabel === undefined) {
-    return { ok: false, problem: { code: "unknown-generation", label } };
+    return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label } });
   }
 
   const generation = generations.byLabel(generationLabel);
   if (generation === undefined) {
-    return { ok: false, problem: { code: "unknown-generation", label } };
+    return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label } });
   }
 
+  return checkKnownGenerationStartup(
+    ctx,
+    loader,
+    artifacts,
+    generations,
+    generationLabel,
+    generation,
+    input,
+    options,
+  );
+}
+
+async function checkKnownGenerationStartup(
+  ctx: DurableObjectState,
+  loader: WorkerLoader,
+  artifacts: HarnessArtifacts,
+  generations: Generations,
+  generationLabel: GenerationLabel,
+  generation: Generation,
+  input: MainHarnessArtifactInput,
+  options: StartupCheckOptions,
+): Promise<StartupCheckResult> {
   const parsedArtifact = MainHarnessArtifact.parse(input);
   if (!parsedArtifact.ok) {
     return parsedArtifact;
@@ -84,7 +107,7 @@ export async function checkGenerationStartup(
       ok: false,
       problem: {
         code: "artifact-harness-commit-mismatch",
-        label,
+        label: generationLabel,
         generationHarnessCommit: generation.harnessCommit,
         artifactHarnessCommit: parsedArtifact.artifact.harnessCommit,
       },
