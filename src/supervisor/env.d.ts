@@ -6,6 +6,7 @@ declare global {
   namespace Cloudflare {
     interface Env {
       readonly LOADER: WorkerLoader;
+      readonly MODULE_MAPS: R2Bucket;
       readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
     }
   }
