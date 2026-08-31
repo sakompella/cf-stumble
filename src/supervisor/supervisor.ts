@@ -1,11 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
+import { parseHarnessCommit } from "../harness-commit.js";
 import {
+  fixtureMainHarnessArtifact,
   fixtureMainHarnessCommit,
-  loadFixtureMainFacet,
+  loadMainFacet,
   type MainHarnessArtifactInput,
-  type MainHarnessArtifactProblem,
 } from "../agent/loader.js";
 import {
   GenerationControl,
@@ -36,6 +37,7 @@ import {
 } from "./recovery.js";
 import { FacetRelay } from "./relay.js";
 import { mainFacetName } from "./facet-name.js";
+import { HarnessArtifacts } from "./harness-artifacts.js";
 import {
   checkGenerationStartup,
   type StartupCheckOptions,
@@ -47,11 +49,10 @@ type SupervisorEnv = {
 };
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
-  private readonly mainFacet:
-    | { readonly fetcher: Fetcher }
-    | { readonly problem: MainHarnessArtifactProblem };
+  private readonly mainFacet: { readonly fetcher: Fetcher } | { readonly problem: string };
   private readonly control: GenerationControl;
   private readonly generations: Generations;
+  private readonly artifacts: HarnessArtifacts;
   private readonly relayAttempts: RelayAttempts;
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
@@ -59,19 +60,36 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
+    this.artifacts = new HarnessArtifacts(ctx.storage, fixtureMainHarnessArtifact);
     this.control = new GenerationControl(ctx.storage, this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
-    const loadedFacet = loadFixtureMainFacet(env.LOADER);
 
-    this.mainFacet = loadedFacet.ok
-      ? {
-          fetcher: ctx.facets.get(mainFacetName(fixtureMainHarnessCommit, "serving"), () => ({
-            class: loadedFacet.facetClass,
-          })),
-        }
-      : { problem: loadedFacet.problem };
+    const activeGeneration = this.generations.active().generation;
+    const fixtureCommit = parseHarnessCommit(fixtureMainHarnessCommit);
+    const harnessCommit = activeGeneration?.harnessCommit ?? fixtureCommit;
+    if (harnessCommit === undefined) {
+      this.mainFacet = { problem: "fixture harness commit is invalid" };
+    } else {
+      const retainedArtifact = this.artifacts.get(harnessCommit);
+      if (!retainedArtifact.ok || retainedArtifact.artifact === undefined) {
+        this.mainFacet = {
+          problem: retainedArtifact.ok
+            ? "retained artifact was not found"
+            : retainedArtifact.problem.code,
+        };
+      } else {
+        const loadedFacet = loadMainFacet(env.LOADER, retainedArtifact.artifact);
+        this.mainFacet = loadedFacet.ok
+          ? {
+              fetcher: ctx.facets.get(mainFacetName(harnessCommit, "serving"), () => ({
+                class: loadedFacet.facetClass,
+              })),
+            }
+          : { problem: loadedFacet.problem.code };
+      }
+    }
   }
 
   checkGenerationStartup(
@@ -82,6 +100,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return checkGenerationStartup(
       this.ctx,
       this.env.LOADER,
+      this.artifacts,
       this.generations,
       label,
       artifact,

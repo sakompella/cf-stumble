@@ -151,7 +151,7 @@ export type MainFacetLoadResult =
 
 export const fixtureMainHarnessCommit = "f53a0e1c1bdbe213ab700a84b1db23615cc24b00";
 
-const fixtureMainFacetArtifact: MainHarnessArtifactInput = {
+export const fixtureMainHarnessArtifact: MainHarnessArtifactInput = {
   harnessCommit: fixtureMainHarnessCommit,
   entryModule: "main-facet.js",
   modules: [
@@ -257,5 +257,5 @@ export function loadMainFacet(
 }
 
 export function loadFixtureMainFacet(loader: WorkerLoader): MainFacetLoadResult {
-  return loadMainFacet(loader, fixtureMainFacetArtifact);
+  return loadMainFacet(loader, fixtureMainHarnessArtifact);
 }

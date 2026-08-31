@@ -1,9 +1,10 @@
 import { MainHarnessArtifact, loadMainFacet } from "../agent/loader.js";
-import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../agent/loader.js";
+import type { MainHarnessArtifactInput } from "../agent/loader.js";
 import { deadlineAfter } from "./startup-check-deadline.js";
 import { drainResponseBody } from "./startup-check-body.js";
 import { mainFacetName } from "./facet-name.js";
 import { parseGenerationLabel } from "./generation-types.js";
+import type { HarnessArtifactResult, HarnessArtifacts } from "./harness-artifacts.js";
 import type { Deadline } from "./startup-check-deadline.js";
 import type { Generation, Generations, PreparationCheckResult } from "./generations.js";
 
@@ -50,13 +51,14 @@ export type StartupCheckResult =
             readonly generationHarnessCommit: string;
             readonly artifactHarnessCommit: string;
           }
-        | MainHarnessArtifactProblem
+        | Extract<HarnessArtifactResult, { readonly ok: false }>["problem"]
         | Extract<PreparationCheckResult, { readonly ok: false }>["problem"];
     };
 
 export async function checkGenerationStartup(
   ctx: DurableObjectState,
   loader: WorkerLoader,
+  artifacts: HarnessArtifacts,
   generations: Generations,
   label: number,
   input: MainHarnessArtifactInput,
@@ -89,7 +91,18 @@ export async function checkGenerationStartup(
     };
   }
 
-  const outcome = await runStartupCheck(ctx, loader, input, generation.harnessCommit, options);
+  const retained = artifacts.retain(input);
+  if (!retained.ok) {
+    return retained;
+  }
+
+  const outcome = await runStartupCheck(
+    ctx,
+    loader,
+    retained.artifact,
+    generation.harnessCommit,
+    options,
+  );
   const recorded = generations.recordPreparationCheck(
     generationLabel,
     outcome.stage === "ready" ? "passed" : "failed",
