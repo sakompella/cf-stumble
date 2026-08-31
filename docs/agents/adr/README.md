@@ -21,6 +21,7 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0030](0030-generation-requests-are-journaled-and-epoch-bound.md)**: generation requests are epoch-checked and journaled by request ID.
 - **[ADR-0031](0031-relay-facts-decide-known-good.md)**: the supervisor records relay attempts and derives known-good eligibility from their terminal outcomes.
 - **[ADR-0032](0032-recovery-bounds-an-episode-it-does-not-perform.md)**: recovery picks an evidence-backed fallback and bounds repair and startup checking it does not perform.
+- **[ADR-0035](0035-use-better-result-only-inside-process-boundaries.md)**: better-result represents recoverable failures only inside one Worker isolate; public and durable boundaries keep plain values.
 
 ## Adding a decision
 
