@@ -8,7 +8,7 @@ export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
 import { mainFacetName } from "../artifacts/index.js";
 import { parseGenerationLabel } from "../generations/index.js";
 import type { GenerationLabel } from "../generations/index.js";
-import type { HarnessArtifactResult, HarnessArtifacts } from "../artifacts/index.js";
+import type { HarnessArtifactProblem, HarnessArtifacts } from "../artifacts/index.js";
 import type { Deadline } from "./deadline.js";
 import type { Generation, Generations, PreparationCheckResult } from "../generations/index.js";
 
@@ -47,7 +47,7 @@ export type StartupCheckResult =
             readonly generationHarnessCommit: string;
             readonly artifactHarnessCommit: string;
           }
-        | Extract<HarnessArtifactResult, { readonly ok: false }>["problem"]
+        | HarnessArtifactProblem
         | Extract<PreparationCheckResult, { readonly ok: false }>["problem"];
     };
 
@@ -110,14 +110,14 @@ async function checkKnownGenerationStartup(
   }
 
   const retained = artifacts.retain(input);
-  if (!retained.ok) {
-    return retained;
+  if (retained.isErr()) {
+    return { ok: false, problem: retained.error };
   }
 
   const outcome = await runStartupCheck(
     ctx,
     loader,
-    retained.artifact,
+    retained.value.artifact,
     generation.harnessCommit,
     options,
   );

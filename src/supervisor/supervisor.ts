@@ -175,10 +175,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     const attribution = { active, preparationCheckId };
     const mainFacet = this.artifacts.mount(active, this.env.LOADER, this.ctx.facets);
 
-    if ("problem" in mainFacet) {
+    if (mainFacet.isErr()) {
       return Promise.resolve(this.relay.recordMountFailure(attribution));
     }
 
-    return this.relay.forward(request, mainFacet.fetcher, attribution);
+    return this.relay.forward(request, mainFacet.value.fetcher, attribution);
   }
 }

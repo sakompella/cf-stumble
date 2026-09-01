@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import {
   fixtureMainHarnessArtifact,
   loadMainFacet,
@@ -14,22 +15,19 @@ type ArtifactModuleRow = {
   readonly is_entry: number;
 };
 
-export type HarnessArtifactResult =
-  | {
-      readonly ok: true;
-      readonly artifact: MainHarnessArtifactInput;
-      readonly effect: "retained" | "verified";
-    }
-  | {
-      readonly ok: false;
-      readonly problem:
-        | MainHarnessArtifactProblem
-        | { readonly code: "retained-artifact-mismatch"; readonly harnessCommit: string };
-    };
+export type HarnessArtifactProblem =
+  | MainHarnessArtifactProblem
+  | { readonly code: "retained-artifact-mismatch"; readonly harnessCommit: string };
 
-export type RetainedHarnessArtifactResult =
-  | { readonly ok: true; readonly artifact: MainHarnessArtifactInput | undefined }
-  | { readonly ok: false; readonly problem: MainHarnessArtifactProblem };
+export type HarnessArtifactResult = Result<
+  { readonly artifact: MainHarnessArtifactInput; readonly effect: "retained" | "verified" },
+  HarnessArtifactProblem
+>;
+
+export type RetainedHarnessArtifactResult = Result<
+  MainHarnessArtifactInput | void,
+  MainHarnessArtifactProblem
+>;
 
 export class HarnessArtifacts {
   private readonly storage: DurableObjectStorage;
@@ -52,34 +50,31 @@ export class HarnessArtifacts {
     `);
 
     const retainedFixture = this.retain(fixtureMainHarnessArtifact);
-    if (!retainedFixture.ok) {
-      throw new Error(`invalid fixture harness artifact: ${retainedFixture.problem.code}`);
+    if (retainedFixture.isErr()) {
+      throw new Error(`invalid fixture harness artifact: ${retainedFixture.error.code}`);
     }
   }
 
   retain(input: MainHarnessArtifactInput): HarnessArtifactResult {
     const parsed = MainHarnessArtifact.parse(input);
     if (parsed.isErr()) {
-      return { ok: false, problem: parsed.error };
+      return Result.err(parsed.error);
     }
 
     const canonicalInput = artifactInput(parsed.value);
     return this.storage.transactionSync(() => {
       const retained = this.get(parsed.value.harnessCommit);
-      if (!retained.ok) {
-        return retained;
+      if (retained.isErr()) {
+        return Result.err(retained.error);
       }
 
-      if (retained.artifact !== undefined) {
-        return sameArtifact(retained.artifact, canonicalInput)
-          ? { ok: true, artifact: retained.artifact, effect: "verified" }
-          : {
-              ok: false,
-              problem: {
-                code: "retained-artifact-mismatch",
-                harnessCommit: parsed.value.harnessCommit,
-              },
-            };
+      if (retained.value !== undefined) {
+        return sameArtifact(retained.value, canonicalInput)
+          ? Result.ok({ artifact: retained.value, effect: "verified" })
+          : Result.err({
+              code: "retained-artifact-mismatch",
+              harnessCommit: parsed.value.harnessCommit,
+            });
       }
 
       for (const [index, module] of canonicalInput.modules.entries()) {
@@ -93,7 +88,7 @@ export class HarnessArtifacts {
         );
       }
 
-      return { ok: true, artifact: canonicalInput, effect: "retained" };
+      return Result.ok({ artifact: canonicalInput, effect: "retained" });
     });
   }
 
@@ -101,27 +96,30 @@ export class HarnessArtifacts {
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
-  ): { readonly fetcher: Fetcher } | { readonly problem: string } {
+  ): Result<{ readonly fetcher: Fetcher }, string> {
     const retained =
       active.generation === undefined
         ? this.retain(fixtureMainHarnessArtifact)
         : this.get(active.generation.harnessCommit);
-    if (!retained.ok || retained.artifact === undefined) {
-      return {
-        problem: retained.ok ? "retained artifact was not found" : retained.problem.code,
-      };
+    if (retained.isErr()) {
+      return Result.err(retained.error.code);
     }
 
-    const loadedFacet = loadMainFacet(loader, retained.artifact);
+    if (retained.value === undefined) {
+      return Result.err("retained artifact was not found");
+    }
+
+    const artifact = "artifact" in retained.value ? retained.value.artifact : retained.value;
+    const loadedFacet = loadMainFacet(loader, artifact);
     if (loadedFacet.isErr()) {
-      return { problem: loadedFacet.error.code };
+      return Result.err(loadedFacet.error.code);
     }
 
-    return {
-      fetcher: facets.get(mainFacetName(retained.artifact.harnessCommit, "serving"), () => ({
+    return Result.ok({
+      fetcher: facets.get(mainFacetName(artifact.harnessCommit, "serving"), () => ({
         class: loadedFacet.value.facetClass,
       })),
-    };
+    });
   }
 
   get(harnessCommit: HarnessCommit): RetainedHarnessArtifactResult {
@@ -136,7 +134,7 @@ export class HarnessArtifacts {
       .toArray();
 
     if (modules.length === 0) {
-      return { ok: true, artifact: undefined };
+      return Result.ok();
     }
 
     const entryModule = modules.find((module) => module.is_entry === 1)?.module_name;
@@ -146,10 +144,10 @@ export class HarnessArtifacts {
       modules: modules.map((module) => ({ name: module.module_name, source: module.source })),
     });
     if (parsed.isErr()) {
-      return { ok: false, problem: parsed.error };
+      return Result.err(parsed.error);
     }
 
-    return { ok: true, artifact: artifactInput(parsed.value) };
+    return Result.ok(artifactInput(parsed.value));
   }
 }
 
