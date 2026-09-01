@@ -43,6 +43,20 @@ type CreditedAttempt = RelayAttempt & {
   readonly finishedAt: number;
 };
 
+export function selectFallbackGeneration(
+  failedGenerationLabel: GenerationLabel,
+  candidates: readonly GenerationEligibilityEvidence[],
+  policy: EligibilityPolicy,
+): GenerationLabel | undefined {
+  return candidates
+    .toReversed()
+    .find(
+      (candidate) =>
+        candidate.generationLabel !== failedGenerationLabel &&
+        deriveGenerationEligibility(candidate, policy).kind === "eligible",
+    )?.generationLabel;
+}
+
 export function deriveGenerationEligibility(
   evidence: GenerationEligibilityEvidence,
   policy: EligibilityPolicy,

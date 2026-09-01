@@ -4,7 +4,11 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
-import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
+import {
+  deriveGenerationEligibility,
+  selectFallbackGeneration,
+} from "../../src/supervisor/eligibility.js";
+import type { GenerationEligibilityEvidence } from "../../src/supervisor/eligibility.js";
 import type { RelayAttempt } from "../../src/supervisor/relay/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateGeneration, artifact, prepareGeneration, submitCandidate } from "./helpers.js";
@@ -45,6 +49,68 @@ export class MainFacet extends DurableObject {
 
 afterEach(async () => {
   await reset();
+});
+
+const fallbackPolicy = { minimumCreditedTurns: 1, minimumObservationSpanMs: 0 };
+
+function fallbackCandidate(
+  label: number,
+  attempts: readonly RelayAttempt[] = [],
+): GenerationEligibilityEvidence {
+  const generation = generationLabel(label);
+  return {
+    generationLabel: generation,
+    latestActivationId: 4,
+    latestPreparationCheck: { ...startupCheck, generationLabel: generation },
+    attempts,
+  };
+}
+
+function eligibleFallbackCandidate(label: number): GenerationEligibilityEvidence {
+  const generation = generationLabel(label);
+  return fallbackCandidate(label, [
+    relayAttempt(1, "body-completed", 200, 0, { generationLabel: generation }),
+  ]);
+}
+
+test("selects the newest eligible fallback generation", () => {
+  expect(
+    selectFallbackGeneration(
+      generationLabel(3),
+      [eligibleFallbackCandidate(1), eligibleFallbackCandidate(2)],
+      fallbackPolicy,
+    ),
+  ).toBe(generationLabel(2));
+});
+
+test("skips the failed generation even when it is eligible", () => {
+  expect(
+    selectFallbackGeneration(
+      generationLabel(2),
+      [eligibleFallbackCandidate(1), eligibleFallbackCandidate(2)],
+      fallbackPolicy,
+    ),
+  ).toBe(generationLabel(1));
+});
+
+test("skips ineligible fallback generations", () => {
+  expect(
+    selectFallbackGeneration(
+      generationLabel(3),
+      [eligibleFallbackCandidate(1), fallbackCandidate(2)],
+      fallbackPolicy,
+    ),
+  ).toBe(generationLabel(1));
+});
+
+test("returns undefined when no fallback generation qualifies", () => {
+  expect(
+    selectFallbackGeneration(
+      generationLabel(3),
+      [fallbackCandidate(1), fallbackCandidate(2)],
+      fallbackPolicy,
+    ),
+  ).toBeUndefined();
 });
 
 test("requires credited turns to span time instead of arriving in one burst", () => {

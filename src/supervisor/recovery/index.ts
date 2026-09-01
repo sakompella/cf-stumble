@@ -1,4 +1,4 @@
-import { DEFAULT_ELIGIBILITY_POLICY, deriveGenerationEligibility } from "../eligibility.js";
+import { DEFAULT_ELIGIBILITY_POLICY, selectFallbackGeneration } from "../eligibility.js";
 import type { EligibilityPolicy } from "../eligibility.js";
 import { verifiedStartupCandidate } from "./candidate.js";
 import type { GenerationLabel } from "../generations/index.js";
@@ -255,22 +255,13 @@ export class Recovery {
     policy: EligibilityPolicy,
   ): GenerationLabel | undefined {
     const attempts = this.relayAttempts.all();
-    return this.generations
-      .all()
-      .toReversed()
-      .find(
-        (generation) =>
-          generation.label !== failedGenerationLabel &&
-          deriveGenerationEligibility(
-            {
-              generationLabel: generation.label,
-              latestActivationId: this.generations.latestActivationId(generation.label),
-              latestPreparationCheck: this.generations.latestPreparationCheck(generation.label),
-              attempts,
-            },
-            policy,
-          ).kind === "eligible",
-      )?.label;
+    const candidates = this.generations.all().map((generation) => ({
+      generationLabel: generation.label,
+      latestActivationId: this.generations.latestActivationId(generation.label),
+      latestPreparationCheck: this.generations.latestPreparationCheck(generation.label),
+      attempts,
+    }));
+    return selectFallbackGeneration(failedGenerationLabel, candidates, policy);
   }
 
   private requiredById(id: number): RecoveryEpisode {
