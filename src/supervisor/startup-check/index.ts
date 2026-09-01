@@ -93,18 +93,18 @@ async function checkKnownGenerationStartup(
   options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
   const parsedArtifact = MainHarnessArtifact.parse(input);
-  if (!parsedArtifact.ok) {
-    return parsedArtifact;
+  if (parsedArtifact.isErr()) {
+    return { ok: false, problem: parsedArtifact.error };
   }
 
-  if (parsedArtifact.artifact.harnessCommit !== generation.harnessCommit) {
+  if (parsedArtifact.value.harnessCommit !== generation.harnessCommit) {
     return {
       ok: false,
       problem: {
         code: "artifact-harness-commit-mismatch",
         label: generationLabel,
         generationHarnessCommit: generation.harnessCommit,
-        artifactHarnessCommit: parsedArtifact.artifact.harnessCommit,
+        artifactHarnessCommit: parsedArtifact.value.harnessCommit,
       },
     };
   }
@@ -211,8 +211,8 @@ function mountCandidateFacet(
 ): Result<Fetcher, MainFacetMountFailed> {
   try {
     const loadedFacet = loadMainFacet(loader, input);
-    if (!loadedFacet.ok) {
-      const reason = loadedFacet.problem.code;
+    if (loadedFacet.isErr()) {
+      const reason = loadedFacet.error.code;
       return Result.err(
         new MainFacetMountFailed({
           reason,
@@ -223,7 +223,7 @@ function mountCandidateFacet(
 
     const name = mainFacetName(harnessCommit, "candidate");
     ctx.facets.abort(name, "discard prior startup-check candidate");
-    return Result.ok(ctx.facets.get(name, () => ({ class: loadedFacet.facetClass })));
+    return Result.ok(ctx.facets.get(name, () => ({ class: loadedFacet.value.facetClass })));
   } catch {
     const reason = "candidate facet could not mount";
     return Result.err(new MainFacetMountFailed({ reason, message: reason }));

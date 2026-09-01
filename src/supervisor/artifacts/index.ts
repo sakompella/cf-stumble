@@ -59,13 +59,13 @@ export class HarnessArtifacts {
 
   retain(input: MainHarnessArtifactInput): HarnessArtifactResult {
     const parsed = MainHarnessArtifact.parse(input);
-    if (!parsed.ok) {
-      return parsed;
+    if (parsed.isErr()) {
+      return { ok: false, problem: parsed.error };
     }
 
-    const canonicalInput = artifactInput(parsed.artifact);
+    const canonicalInput = artifactInput(parsed.value);
     return this.storage.transactionSync(() => {
-      const retained = this.get(parsed.artifact.harnessCommit);
+      const retained = this.get(parsed.value.harnessCommit);
       if (!retained.ok) {
         return retained;
       }
@@ -77,7 +77,7 @@ export class HarnessArtifacts {
               ok: false,
               problem: {
                 code: "retained-artifact-mismatch",
-                harnessCommit: parsed.artifact.harnessCommit,
+                harnessCommit: parsed.value.harnessCommit,
               },
             };
       }
@@ -113,13 +113,13 @@ export class HarnessArtifacts {
     }
 
     const loadedFacet = loadMainFacet(loader, retained.artifact);
-    if (!loadedFacet.ok) {
-      return { problem: loadedFacet.problem.code };
+    if (loadedFacet.isErr()) {
+      return { problem: loadedFacet.error.code };
     }
 
     return {
       fetcher: facets.get(mainFacetName(retained.artifact.harnessCommit, "serving"), () => ({
-        class: loadedFacet.facetClass,
+        class: loadedFacet.value.facetClass,
       })),
     };
   }
@@ -145,11 +145,11 @@ export class HarnessArtifacts {
       entryModule: entryModule ?? "",
       modules: modules.map((module) => ({ name: module.module_name, source: module.source })),
     });
-    if (!parsed.ok) {
-      return parsed;
+    if (parsed.isErr()) {
+      return { ok: false, problem: parsed.error };
     }
 
-    return { ok: true, artifact: artifactInput(parsed.artifact) };
+    return { ok: true, artifact: artifactInput(parsed.value) };
   }
 }
 

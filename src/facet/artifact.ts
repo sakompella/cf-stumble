@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { Result } from "better-result";
 import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 
 export type HarnessModule = {
@@ -31,30 +32,10 @@ export type MainHarnessArtifactProblem =
       readonly moduleName: string;
     };
 
-export type MainHarnessArtifactValidation =
-  | {
-      readonly ok: true;
-      readonly artifact: MainHarnessArtifact;
-    }
-  | {
-      readonly ok: false;
-      readonly problem: MainHarnessArtifactProblem;
-    };
-
 type ModuleMapProblem = Exclude<
   MainHarnessArtifactProblem,
   { readonly code: "invalid-harness-commit" }
 >;
-
-type ModuleMapValidation =
-  | {
-      readonly ok: true;
-      readonly modules: readonly [entryModule: HarnessModule, ...otherModules: HarnessModule[]];
-    }
-  | {
-      readonly ok: false;
-      readonly problem: ModuleMapProblem;
-    };
 
 export class MainHarnessArtifact {
   readonly harnessCommit: HarnessCommit;
@@ -68,36 +49,35 @@ export class MainHarnessArtifact {
     this.modules = modules;
   }
 
-  static parse(input: MainHarnessArtifactInput): MainHarnessArtifactValidation {
+  static parse(
+    input: MainHarnessArtifactInput,
+  ): Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
     const moduleMap = parseModuleMap(input.entryModule, input.modules);
-    if (!moduleMap.ok) {
-      return moduleMap;
+    if (moduleMap.isErr()) {
+      return Result.err(moduleMap.error);
     }
 
     const harnessCommit = parseHarnessCommit(input.harnessCommit);
     if (harnessCommit === undefined) {
-      return {
-        ok: false,
-        problem: {
-          code: "invalid-harness-commit",
-          harnessCommit: input.harnessCommit,
-        },
-      };
+      return Result.err({
+        code: "invalid-harness-commit",
+        harnessCommit: input.harnessCommit,
+      });
     }
 
-    return {
-      ok: true,
-      artifact: new MainHarnessArtifact(harnessCommit, moduleMap.modules),
-    };
+    return Result.ok(new MainHarnessArtifact(harnessCommit, moduleMap.value));
   }
 }
 
 function parseModuleMap(
   entryModuleName: string,
   modules: MainHarnessArtifactInput["modules"],
-): ModuleMapValidation {
+): Result<
+  readonly [entryModule: HarnessModule, ...otherModules: HarnessModule[]],
+  ModuleMapProblem
+> {
   if (modules.length === 0) {
-    return { ok: false, problem: { code: "empty-module-map" } };
+    return Result.err({ code: "empty-module-map" });
   }
 
   const moduleNames = new Set<string>();
@@ -106,13 +86,10 @@ function parseModuleMap(
 
   for (const module of modules) {
     if (moduleNames.has(module.name)) {
-      return {
-        ok: false,
-        problem: {
-          code: "duplicate-module-name",
-          moduleName: module.name,
-        },
-      };
+      return Result.err({
+        code: "duplicate-module-name",
+        moduleName: module.name,
+      });
     }
 
     moduleNames.add(module.name);
@@ -126,14 +103,11 @@ function parseModuleMap(
   }
 
   if (entryModule === undefined) {
-    return {
-      ok: false,
-      problem: {
-        code: "entry-module-not-found",
-        entryModule: entryModuleName,
-      },
-    };
+    return Result.err({
+      code: "entry-module-not-found",
+      entryModule: entryModuleName,
+    });
   }
 
-  return { ok: true, modules: [entryModule, ...otherModules] };
+  return Result.ok([entryModule, ...otherModules]);
 }

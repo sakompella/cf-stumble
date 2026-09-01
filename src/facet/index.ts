@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { Result } from "better-result";
 import { MainHarnessArtifact } from "./artifact.js";
 import { fixtureMainHarnessArtifact } from "./fixture.js";
 import type {
@@ -9,23 +10,8 @@ import type {
 } from "./artifact.js";
 
 export { MainHarnessArtifact } from "./artifact.js";
-export type {
-  MainHarnessArtifactInput,
-  MainHarnessArtifactProblem,
-  MainHarnessArtifactValidation,
-} from "./artifact.js";
+export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
 export { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "./fixture.js";
-
-export type MainFacetLoadResult =
-  | {
-      readonly ok: true;
-      readonly worker: WorkerStub;
-      readonly facetClass: DurableObjectClass;
-    }
-  | {
-      readonly ok: false;
-      readonly problem: MainHarnessArtifactProblem;
-    };
 
 function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {
   return [module.name, { js: module.source }];
@@ -44,17 +30,25 @@ function loadArtifact(loader: WorkerLoader, artifact: MainHarnessArtifact): Work
 export function loadMainFacet(
   loader: WorkerLoader,
   input: MainHarnessArtifactInput,
-): MainFacetLoadResult {
+): Result<
+  { readonly worker: WorkerStub; readonly facetClass: DurableObjectClass },
+  MainHarnessArtifactProblem
+> {
   const artifact = MainHarnessArtifact.parse(input);
-  if (!artifact.ok) {
-    return artifact;
+  if (artifact.isErr()) {
+    return Result.err(artifact.error);
   }
 
-  const worker = loadArtifact(loader, artifact.artifact);
+  const worker = loadArtifact(loader, artifact.value);
 
-  return { ok: true, worker, facetClass: worker.getDurableObjectClass("MainFacet") };
+  return Result.ok({ worker, facetClass: worker.getDurableObjectClass("MainFacet") });
 }
 
-export function loadFixtureMainFacet(loader: WorkerLoader): MainFacetLoadResult {
+export function loadFixtureMainFacet(
+  loader: WorkerLoader,
+): Result<
+  { readonly worker: WorkerStub; readonly facetClass: DurableObjectClass },
+  MainHarnessArtifactProblem
+> {
   return loadMainFacet(loader, fixtureMainHarnessArtifact);
 }
