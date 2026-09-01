@@ -10,6 +10,7 @@ export default defineConfig({
     ".codex/**",
     "prototypes/**",
     "tools/oxlint/anti-slop/**",
+    "vendor/**",
   ],
   jsPlugins: [{ name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" }],
   plugins: ["typescript", "unicorn", "oxc", "import"],

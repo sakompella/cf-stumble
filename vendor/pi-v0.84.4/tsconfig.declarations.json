@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": false,
+    "noCheck": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "./dist",
+    "paths": {
+      "@earendil-works/pi-ai": ["./ai-facade.ts"],
+      "@earendil-works/pi-telemetry": ["./telemetry-facade.ts"]
+    }
+  },
+  "include": ["index.ts", "upstream-surface.ts", "ai-facade.ts", "telemetry-facade.ts", "third-party-shims.d.ts"]
+}

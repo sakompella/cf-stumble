@@ -1,5 +1,7 @@
 # esbuild and workerd ship prebuilt native binaries fetched by their postinstall.
 # koffi loads Hegel's native generation engine for the Node-only property project.
+packages:
+  - vendor/pi-v0.84.4
 allowBuilds:
   esbuild: true
   koffi: true

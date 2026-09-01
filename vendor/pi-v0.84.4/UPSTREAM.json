@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/earendil-works/pi.git",
+  "tag": "v0.84.4",
+  "commit": "b79e4cc834970cca69daebffab7df1da7d1e52c4",
+  "copiedPaths": [
+    "LICENSE",
+    "packages/agent/src",
+    "packages/agent/package.json",
+    "packages/agent/README.md",
+    "packages/ai/src",
+    "packages/ai/package.json",
+    "packages/ai/README.md",
+    "packages/telemetry/src",
+    "packages/telemetry/package.json",
+    "packages/telemetry/README.md"
+  ],
+  "command": "pnpm exec tsx tools/vendor-pi.mts --update --source /tmp/cf-stumble-pi-v0.84.4",
+  "localOverrides": [
+    {
+      "upstreamPath": "packages/ai/src/utils/pi-user-agent.ts",
+      "localPath": "pi-user-agent-shim.ts",
+      "purpose": "Replace node:os runtime detection with a fixed Worker-safe user agent during bundling."
+    }
+  ]
+}

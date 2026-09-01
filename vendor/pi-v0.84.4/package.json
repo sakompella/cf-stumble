@@ -1,0 +1,22 @@
+{
+  "name": "@cf-stumble/pi",
+  "private": true,
+  "version": "0.84.4",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsx build.mts"
+  },
+  "dependencies": {
+    "diff": "8.0.4",
+    "openai": "6.40.0",
+    "partial-json": "0.1.7",
+    "typebox": "1.3.7"
+  }
+}
