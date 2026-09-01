@@ -10,7 +10,12 @@ import { parseGenerationLabel } from "../generations/index.js";
 import type { GenerationLabel } from "../generations/index.js";
 import type { HarnessArtifactProblem, HarnessArtifacts } from "../artifacts/index.js";
 import type { Deadline } from "./deadline.js";
-import type { Generation, Generations, PreparationCheckResult } from "../generations/index.js";
+import type {
+  Generation,
+  Generations,
+  PreparationCheckProblem,
+  PreparationCheckResult,
+} from "../generations/index.js";
 
 type ThrownValue = Error | string | number | boolean | null | undefined;
 
@@ -48,7 +53,7 @@ export type StartupCheckResult =
             readonly artifactHarnessCommit: string;
           }
         | HarnessArtifactProblem
-        | Extract<PreparationCheckResult, { readonly ok: false }>["problem"];
+        | PreparationCheckProblem;
     };
 
 export function checkGenerationStartup(
@@ -260,16 +265,16 @@ function startupCheckResult(
   outcome: StartupCheckOutcome,
   recorded: PreparationCheckResult,
 ): StartupCheckResult {
-  if (!recorded.ok) {
-    return recorded;
+  if (recorded.isErr()) {
+    return { ok: false, problem: recorded.error };
   }
 
   return {
     ok: true,
     report: {
       ...outcome,
-      generation: recorded.generation,
-      effect: recorded.effect,
+      generation: recorded.value.generation,
+      effect: recorded.value.effect,
     },
   };
 }

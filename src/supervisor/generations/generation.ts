@@ -1,3 +1,4 @@
+import type { Result } from "better-result";
 import type { HarnessCommit } from "../../harness-commit.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
@@ -29,43 +30,35 @@ export type ActiveGeneration = {
   readonly activationId: number | undefined;
 };
 
-export type LabelGenerationResult = {
-  readonly ok: true;
-  readonly generation: Generation;
-  readonly epoch: number;
-};
-
 export type PreparationCheckOutcome = "passed" | "failed";
 
-export type PreparationCheckResult =
+export type PreparationCheckProblem =
+  | { readonly code: "unknown-generation"; readonly label: number }
+  | { readonly code: "invalid-preparation-check-outcome" }
   | {
-      readonly ok: true;
-      readonly generation: Generation;
-      readonly epoch: number;
-      readonly effect: "recorded" | "no-op";
-    }
-  | {
-      readonly ok: false;
-      readonly problem:
-        | { readonly code: "unknown-generation"; readonly label: number }
-        | { readonly code: "invalid-preparation-check-outcome" }
-        | {
-            readonly code: "contradicts-recorded-outcome";
-            readonly label: number;
-            readonly recorded: GenerationStatus;
-          };
+      readonly code: "contradicts-recorded-outcome";
+      readonly label: number;
+      readonly recorded: GenerationStatus;
     };
 
-export type ActivationResult =
-  | {
-      readonly ok: true;
-      readonly generation: Generation;
-      readonly epoch: number;
-      readonly effect: "activated" | "no-op";
-    }
-  | {
-      readonly ok: false;
-      readonly problem:
-        | { readonly code: "unknown-generation"; readonly label: number }
-        | { readonly code: "not-ready"; readonly label: number };
-    };
+export type PreparationCheckResult = Result<
+  {
+    readonly generation: Generation;
+    readonly epoch: number;
+    readonly effect: "recorded" | "no-op";
+  },
+  PreparationCheckProblem
+>;
+
+export type ActivationProblem =
+  | { readonly code: "unknown-generation"; readonly label: number }
+  | { readonly code: "not-ready"; readonly label: number };
+
+export type ActivationResult = Result<
+  {
+    readonly generation: Generation;
+    readonly epoch: number;
+    readonly effect: "activated" | "no-op";
+  },
+  ActivationProblem
+>;

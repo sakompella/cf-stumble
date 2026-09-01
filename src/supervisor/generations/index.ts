@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { Result } from "better-result";
 import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
@@ -9,7 +10,6 @@ import {
   type ActiveGeneration,
   type Generation,
   type GenerationLabel,
-  type LabelGenerationResult,
   type PreparationCheckOutcome,
   type PreparationCheckResult,
 } from "./generation.js";
@@ -23,7 +23,7 @@ export type {
   Generation,
   GenerationLabel,
   GenerationStatus,
-  LabelGenerationResult,
+  PreparationCheckProblem,
   PreparationCheckOutcome,
   PreparationCheckResult,
 } from "./generation.js";
@@ -82,10 +82,10 @@ export class Generations {
     );
   }
 
-  labelInTransaction(harnessCommit: HarnessCommit): LabelGenerationResult {
+  labelInTransaction(harnessCommit: HarnessCommit) {
     const existing = this.generationByCommit(harnessCommit);
     if (existing !== undefined) {
-      return { ok: true, generation: existing, epoch: this.state().epoch };
+      return { generation: existing, epoch: this.state().epoch };
     }
 
     const nextLabel = generationLabelFromPersistence(
@@ -103,11 +103,8 @@ export class Generations {
     );
     const epoch = this.incrementEpoch();
 
-    return {
-      ok: true,
-      generation: { label: nextLabel, harnessCommit, status: "candidate" },
-      epoch,
-    };
+    const generation: Generation = { label: nextLabel, harnessCommit, status: "candidate" };
+    return { generation, epoch };
   }
 
   recordPreparationCheck(
@@ -115,65 +112,60 @@ export class Generations {
     outcome: PreparationCheckOutcome,
   ): PreparationCheckResult {
     if (outcome !== "passed" && outcome !== "failed") {
-      return { ok: false, problem: { code: "invalid-preparation-check-outcome" } };
+      return Result.err({ code: "invalid-preparation-check-outcome" });
     }
 
     return this.transaction(() => {
       const generation = this.generationByLabel(label);
       if (generation === undefined) {
-        return { ok: false, problem: { code: "unknown-generation", label } };
+        return Result.err({ code: "unknown-generation", label });
       }
 
       const status = outcome === "passed" ? "ready" : "failed";
 
       if (generation.status !== "candidate") {
         if (generation.status !== status) {
-          return {
-            ok: false,
-            problem: {
-              code: "contradicts-recorded-outcome",
-              label,
-              recorded: generation.status,
-            },
-          };
+          return Result.err({
+            code: "contradicts-recorded-outcome",
+            label,
+            recorded: generation.status,
+          });
         }
 
         this.preparationChecks.record(label, outcome);
         const epoch = this.incrementEpoch();
-        return { ok: true, generation, epoch, effect: "no-op" };
+        return Result.ok({ generation, epoch, effect: "no-op" });
       }
 
       this.preparationChecks.record(label, outcome);
       this.sql.exec("UPDATE generations SET status = ? WHERE label = ?", status, label);
       const epoch = this.incrementEpoch();
 
-      return {
-        ok: true,
+      return Result.ok({
         generation: { ...generation, status },
         epoch,
         effect: "recorded",
-      };
+      });
     });
   }
 
   activateInTransaction(label: GenerationLabel): ActivationResult {
     const generation = this.generationByLabel(label);
     if (generation === undefined) {
-      return { ok: false, problem: { code: "unknown-generation", label } };
+      return Result.err({ code: "unknown-generation", label });
     }
 
     if (generation.status !== "ready") {
-      return { ok: false, problem: { code: "not-ready", label } };
+      return Result.err({ code: "not-ready", label });
     }
 
     const state = this.state();
     if (state.activeLabel === label) {
-      return {
-        ok: true,
+      return Result.ok({
         generation,
         epoch: state.epoch,
         effect: "no-op",
-      };
+      });
     }
 
     this.sql.exec("UPDATE generation_state SET active_label = ? WHERE singleton = 1", label);
@@ -182,7 +174,7 @@ export class Generations {
     this.activationHistory.recordActive(label);
     this.activationHistory.record(label, activationId);
 
-    return { ok: true, generation, epoch, effect: "activated" };
+    return Result.ok({ generation, epoch, effect: "activated" });
   }
 
   active(): ActiveGeneration {

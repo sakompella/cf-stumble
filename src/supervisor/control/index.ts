@@ -118,17 +118,18 @@ export class GenerationControl {
     }
 
     const result = this.generations.activateInTransaction(generationLabel);
-    return result.ok
-      ? {
-          ok: true,
-          outcome: {
-            kind: "activated",
-            generation: result.generation,
-            epoch: result.epoch,
-            effect: result.effect,
-          },
-        }
-      : rejected(result.problem.code);
+    return result.match({
+      ok: (activation) => ({
+        ok: true,
+        outcome: {
+          kind: "activated",
+          generation: activation.generation,
+          epoch: activation.epoch,
+          effect: activation.effect,
+        },
+      }),
+      err: (problem) => rejected(problem.code),
+    });
   }
 
   private rollback(label: number, observedEpoch: number): GenerationControlResult {
@@ -155,17 +156,18 @@ export class GenerationControl {
     }
 
     const result = this.generations.activateInTransaction(generationLabel);
-    return result.ok
-      ? {
-          ok: true,
-          outcome: {
-            kind: "rolled-back",
-            generation: result.generation,
-            epoch: result.epoch,
-            effect: result.effect,
-          },
-        }
-      : rejected(result.problem.code);
+    return result.match({
+      ok: (activation) => ({
+        ok: true,
+        outcome: {
+          kind: "rolled-back",
+          generation: activation.generation,
+          epoch: activation.epoch,
+          effect: activation.effect,
+        },
+      }),
+      err: (problem) => rejected(problem.code),
+    });
   }
 
   private journalEntry(requestId: string): JournalRow | undefined {
