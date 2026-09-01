@@ -29,7 +29,7 @@ If a feature does not help this demo work or make it safe to run, it is not vers
 ## Fixed limits
 
 - Version 0 deploys one tenant but allows several clients and saved sessions for that tenant.
-- Each tenant has one configured project repository and a separate harness repository.
+- The version 0 tenant has one configured project repository and a separate harness repository. Later tenants may share that harness or own one. Version 0 does not decide.
 - Cloudflare Access supplies identity. cf-stumble has no account, invitation, or provisioning service.
 - The main harness uses the vendored Pi core and one fixed model route.
 - The browser waits for a complete HTTP response. The facet may read a provider stream internally, but it saves the session before replying.
