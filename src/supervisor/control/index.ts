@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
 import { resultFromJournalRow } from "./journal.js";
@@ -18,6 +19,12 @@ export type {
   GenerationRequest,
   Principal,
 } from "./request.js";
+
+type ControlOutcome = Extract<GenerationControlResult, { readonly ok: true }>["outcome"];
+
+// Control runs on Result internally and converts to the plain GenerationControlResult union once,
+// in execute(), because that value crosses the Supervisor RPC boundary and is written to SQLite.
+type ControlDecision = Result<ControlOutcome, ControlProblemCode>;
 
 type JournalOutcomeKind = "candidate-submitted" | "activated" | "rolled-back" | "rejected";
 
@@ -63,13 +70,13 @@ export class GenerationControl {
           : { ok: false, problem: { code: "reused-request-id" } };
       }
 
-      const result = this.decide(request);
+      const result = decisionToResult(this.decide(request));
       this.record(request.requestId, fingerprint, result);
       return result;
     });
   }
 
-  private decide(request: GenerationRequest): GenerationControlResult {
+  private decide(request: GenerationRequest): ControlDecision {
     const active = this.generations.active();
     if (request.principal.kind === "harness") {
       const generationLabel = parseGenerationLabel(request.principal.generationLabel);
@@ -90,24 +97,22 @@ export class GenerationControl {
     }
   }
 
-  private submit(harnessCommit: string): GenerationControlResult {
+  private submit(harnessCommit: string): ControlDecision {
     const parsedHarnessCommit = parseHarnessCommit(harnessCommit);
     if (parsedHarnessCommit === undefined) {
       return rejected("invalid-harness-commit");
     }
 
     const result = this.generations.labelInTransaction(parsedHarnessCommit);
-    return {
-      ok: true,
-      outcome: {
-        kind: "candidate-submitted",
-        generation: result.generation,
-        epoch: result.epoch,
-      },
+    const outcome: ControlOutcome = {
+      kind: "candidate-submitted",
+      generation: result.generation,
+      epoch: result.epoch,
     };
+    return Result.ok(outcome);
   }
 
-  private activate(label: number, observedEpoch: number): GenerationControlResult {
+  private activate(label: number, observedEpoch: number): ControlDecision {
     if (observedEpoch !== this.generations.active().epoch) {
       return rejected("stale-epoch");
     }
@@ -117,22 +122,18 @@ export class GenerationControl {
       return rejected("invalid-generation-label");
     }
 
-    const result = this.generations.activateInTransaction(generationLabel);
-    return result.match({
-      ok: (activation) => ({
-        ok: true,
-        outcome: {
-          kind: "activated",
-          generation: activation.generation,
-          epoch: activation.epoch,
-          effect: activation.effect,
-        },
-      }),
-      err: (problem) => rejected(problem.code),
-    });
+    return this.generations
+      .activateInTransaction(generationLabel)
+      .map((activation): ControlOutcome => ({
+        kind: "activated",
+        generation: activation.generation,
+        epoch: activation.epoch,
+        effect: activation.effect,
+      }))
+      .mapError((problem) => problem.code);
   }
 
-  private rollback(label: number, observedEpoch: number): GenerationControlResult {
+  private rollback(label: number, observedEpoch: number): ControlDecision {
     if (observedEpoch !== this.generations.active().epoch) {
       return rejected("stale-epoch");
     }
@@ -155,19 +156,15 @@ export class GenerationControl {
       return rejected("not-previously-active");
     }
 
-    const result = this.generations.activateInTransaction(generationLabel);
-    return result.match({
-      ok: (activation) => ({
-        ok: true,
-        outcome: {
-          kind: "rolled-back",
-          generation: activation.generation,
-          epoch: activation.epoch,
-          effect: activation.effect,
-        },
-      }),
-      err: (problem) => rejected(problem.code),
-    });
+    return this.generations
+      .activateInTransaction(generationLabel)
+      .map((activation): ControlOutcome => ({
+        kind: "rolled-back",
+        generation: activation.generation,
+        epoch: activation.epoch,
+        effect: activation.effect,
+      }))
+      .mapError((problem) => problem.code);
   }
 
   private journalEntry(requestId: string): JournalRow | undefined {
@@ -202,8 +199,15 @@ export class GenerationControl {
   }
 }
 
-function rejected(code: ControlProblemCode): GenerationControlResult {
-  return { ok: false, problem: { code } };
+function rejected(code: ControlProblemCode): ControlDecision {
+  return Result.err(code);
+}
+
+function decisionToResult(decision: ControlDecision): GenerationControlResult {
+  return decision.match<GenerationControlResult>({
+    ok: (outcome) => ({ ok: true, outcome }),
+    err: (code) => ({ ok: false, problem: { code } }),
+  });
 }
 
 function commandFingerprint(command: GenerationCommand): string {
