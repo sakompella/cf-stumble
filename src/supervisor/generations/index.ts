@@ -7,6 +7,12 @@ import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
 import type { PreparationCheck } from "./preparation-checks.js";
 import {
+  assertNever,
+  decideActivation,
+  decidePreparationCheck,
+  type GenerationState,
+} from "./decisions.js";
+import {
   type ActivationResult,
   type ActiveGeneration,
   type Generation,
@@ -36,12 +42,13 @@ type StateRow = {
   readonly activation_id: number;
 };
 
-type State = {
-  readonly activeLabel: GenerationLabel | undefined;
-  readonly epoch: number;
-  readonly activationId: number;
-};
-
+/**
+ * Owns the generation registry and the singleton control state. Every mutating method is an
+ * imperative shell: it reads the plain values it needs, calls a pure decider in ./decisions.ts,
+ * and applies the effects that decision names. All three run inside one Durable Object transaction
+ * (labelInTransaction and activateInTransaction under the caller's; recordPreparationCheck opens
+ * its own), which is what makes the deciders' current-plus-one arithmetic safe.
+ */
 export class Generations {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
@@ -83,26 +90,21 @@ export class Generations {
 
   labelInTransaction(harnessCommit: HarnessCommit) {
     const existing = this.generationByCommit(harnessCommit);
+    const state = this.readState();
     if (existing !== undefined) {
-      return { generation: existing, epoch: this.state().epoch };
+      return { generation: existing, epoch: state.epoch };
     }
 
-    const nextLabel = generationLabelFromPersistence(
-      this.sql
-        .exec<{ readonly label: number }>(
-          "SELECT COALESCE(MAX(label), -1) + 1 AS label FROM generations",
-        )
-        .one().label,
-      "next generation label",
-    );
+    const label = this.nextLabel();
     this.sql.exec(
       "INSERT INTO generations (label, harness_commit, status) VALUES (?, ?, 'candidate')",
-      nextLabel,
+      label,
       harnessCommit,
     );
-    const epoch = this.incrementEpoch();
+    const epoch = state.epoch + 1;
+    this.writeEpoch(epoch);
 
-    const generation: Generation = { label: nextLabel, harnessCommit, status: "candidate" };
+    const generation: Generation = { label, harnessCommit, status: "candidate" };
     return { generation, epoch };
   }
 
@@ -110,74 +112,62 @@ export class Generations {
     label: GenerationLabel,
     outcome: PreparationCheckOutcome,
   ): PreparationCheckResult {
-    if (outcome !== "passed" && outcome !== "failed") {
-      return Result.err({ code: "invalid-preparation-check-outcome" });
-    }
-
     return this.transaction(() => {
-      const generation = this.generationByLabel(label);
-      if (generation === undefined) {
-        return Result.err({ code: "unknown-generation", label });
-      }
-
-      const status = outcome === "passed" ? "ready" : "failed";
-
-      if (generation.status !== "candidate") {
-        if (generation.status !== status) {
-          return Result.err({
-            code: "contradicts-recorded-outcome",
-            label,
-            recorded: generation.status,
+      const decision = decidePreparationCheck(
+        label,
+        outcome,
+        this.generationByLabel(label),
+        this.readState(),
+      );
+      switch (decision.kind) {
+        case "rejected":
+          return Result.err(decision.problem);
+        case "record":
+          this.preparationChecks.record(label, decision.outcome);
+          if (decision.statusUpdate !== undefined) {
+            this.sql.exec(
+              "UPDATE generations SET status = ? WHERE label = ?",
+              decision.statusUpdate,
+              label,
+            );
+          }
+          this.writeEpoch(decision.nextEpoch);
+          return Result.ok({
+            generation: decision.generation,
+            epoch: decision.nextEpoch,
+            effect: decision.effect,
           });
-        }
-
-        this.preparationChecks.record(label, outcome);
-        const epoch = this.incrementEpoch();
-        return Result.ok({ generation, epoch, effect: "no-op" });
+        default:
+          return assertNever(decision);
       }
-
-      this.preparationChecks.record(label, outcome);
-      this.sql.exec("UPDATE generations SET status = ? WHERE label = ?", status, label);
-      const epoch = this.incrementEpoch();
-
-      return Result.ok({
-        generation: { ...generation, status },
-        epoch,
-        effect: "recorded",
-      });
     });
   }
 
   activateInTransaction(label: GenerationLabel): ActivationResult {
-    const generation = this.generationByLabel(label);
-    if (generation === undefined) {
-      return Result.err({ code: "unknown-generation", label });
+    const decision = decideActivation(label, this.generationByLabel(label), this.readState());
+    switch (decision.kind) {
+      case "rejected":
+        return Result.err(decision.problem);
+      case "no-op":
+        return Result.ok({
+          generation: decision.generation,
+          epoch: decision.epoch,
+          effect: "no-op",
+        });
+      case "activate":
+        this.applyActivation(label, decision.nextEpoch, decision.nextActivationId);
+        return Result.ok({
+          generation: decision.generation,
+          epoch: decision.nextEpoch,
+          effect: "activated",
+        });
+      default:
+        return assertNever(decision);
     }
-
-    if (generation.status !== "ready") {
-      return Result.err({ code: "not-ready", label });
-    }
-
-    const state = this.state();
-    if (state.activeLabel === label) {
-      return Result.ok({
-        generation,
-        epoch: state.epoch,
-        effect: "no-op",
-      });
-    }
-
-    this.sql.exec("UPDATE generation_state SET active_label = ? WHERE singleton = 1", label);
-    const epoch = this.incrementEpoch();
-    const activationId = this.incrementActivationId();
-    this.activationHistory.recordActive(label);
-    this.activationHistory.record(label, activationId);
-
-    return Result.ok({ generation, epoch, effect: "activated" });
   }
 
   active(): ActiveGeneration {
-    const state = this.state();
+    const state = this.readState();
     return {
       generation:
         state.activeLabel === undefined ? undefined : this.generationByLabel(state.activeLabel),
@@ -245,7 +235,18 @@ export class Generations {
     return row === undefined ? undefined : generationFromRow(row);
   }
 
-  private state(): State {
+  private nextLabel(): GenerationLabel {
+    return generationLabelFromPersistence(
+      this.sql
+        .exec<{ readonly label: number }>(
+          "SELECT COALESCE(MAX(label), -1) + 1 AS label FROM generations",
+        )
+        .one().label,
+      "next generation label",
+    );
+  }
+
+  private readState(): GenerationState {
     const row = this.sql
       .exec<StateRow>(
         "SELECT active_label, epoch, activation_id FROM generation_state WHERE singleton = 1",
@@ -262,15 +263,18 @@ export class Generations {
     };
   }
 
-  private incrementEpoch(): number {
-    this.sql.exec("UPDATE generation_state SET epoch = epoch + 1 WHERE singleton = 1");
-    return this.state().epoch;
+  private writeEpoch(epoch: number): void {
+    this.sql.exec("UPDATE generation_state SET epoch = ? WHERE singleton = 1", epoch);
   }
 
-  private incrementActivationId(): number {
+  private applyActivation(label: GenerationLabel, epoch: number, activationId: number): void {
     this.sql.exec(
-      "UPDATE generation_state SET activation_id = activation_id + 1 WHERE singleton = 1",
+      "UPDATE generation_state SET active_label = ?, epoch = ?, activation_id = ? WHERE singleton = 1",
+      label,
+      epoch,
+      activationId,
     );
-    return this.state().activationId;
+    this.activationHistory.recordActive(label);
+    this.activationHistory.record(label, activationId);
   }
 }
