@@ -1,6 +1,6 @@
 # First implementation plan
 
-**Status: the locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed.** This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
+**Status: retained for implementation history and local evidence. `feature-map.md` now defines the version 0 completion scope and cut line.** The locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed. This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
 
 What exists: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked and journaled generation requests (ADR-0030), a relay that records one attempt for each turn and derives known-good eligibility from terminal outcomes (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032).
 
