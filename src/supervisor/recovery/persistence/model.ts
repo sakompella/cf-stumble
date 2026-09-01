@@ -1,4 +1,5 @@
 import { parseHarnessCommit } from "../../../harness-commit.js";
+import { invariant } from "../../../invariant.js";
 import { isNonemptyWellFormedUnicode } from "./error.js";
 import { parseGenerationLabel, type GenerationLabel } from "../../generations/index.js";
 import type {
@@ -144,13 +145,12 @@ export const episodeSelect = `SELECT id, failure_event_id, failed_generation_lab
 
 export function validateRecoveryPolicy(policy: RecoveryPolicy): void {
   for (const [name, value] of Object.entries(policy)) {
-    if (!Number.isSafeInteger(value) || value < 1) {
-      throw new Error(`${name} must be a positive safe integer`);
-    }
+    invariant(Number.isSafeInteger(value) && value >= 1, `${name} must be a positive safe integer`);
   }
-  if (policy.operationDeadlineMs > policy.recoveryBudgetMs) {
-    throw new Error("operationDeadlineMs cannot exceed recoveryBudgetMs");
-  }
+  invariant(
+    policy.operationDeadlineMs <= policy.recoveryBudgetMs,
+    "operationDeadlineMs cannot exceed recoveryBudgetMs",
+  );
 }
 
 export function blockedEpisode(
@@ -186,13 +186,12 @@ export function errorsFromText(encoded: string): readonly string[] {
 }
 
 export function validateFailure(failure: RecoveryFailureInput): RecoveryFailure {
-  if (failure.failureEventId.length === 0) {
-    throw new Error("failureEventId must not be empty");
-  }
+  invariant(failure.failureEventId.length > 0, "failureEventId must not be empty");
   const failedGenerationLabel = parseGenerationLabel(failure.failedGenerationLabel);
-  if (failedGenerationLabel === undefined) {
-    throw new TypeError("failedGenerationLabel must be a non-negative safe integer");
-  }
+  invariant(
+    failedGenerationLabel !== undefined,
+    "failedGenerationLabel must be a non-negative safe integer",
+  );
   return { failureEventId: failure.failureEventId, failedGenerationLabel };
 }
 
@@ -223,9 +222,10 @@ export function parseRecoveryOperationOutcome(
 }
 
 export function recoveryEpisodeId(value: number): RecoveryEpisodeId {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new TypeError("recovery id must be a positive safe integer");
-  }
+  invariant(
+    Number.isSafeInteger(value) && value >= 1,
+    "recovery id must be a positive safe integer",
+  );
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the guard accepts only positive safe integer recovery episode IDs.
   return value as RecoveryEpisodeId;
 }
@@ -235,15 +235,14 @@ export function validateEpisodeId(id: number): void {
 }
 
 export function validateNow(now: number): void {
-  if (!Number.isSafeInteger(now)) {
-    throw new TypeError("now must be a safe integer");
-  }
+  invariant(Number.isSafeInteger(now), "now must be a safe integer");
 }
 
 export function validateRecoveryDeadline(now: number, policy: RecoveryPolicy): void {
-  if (now > Number.MAX_SAFE_INTEGER - policy.recoveryBudgetMs) {
-    throw new RangeError("recovery deadline must be a safe integer");
-  }
+  invariant(
+    now <= Number.MAX_SAFE_INTEGER - policy.recoveryBudgetMs,
+    "recovery deadline must be a safe integer",
+  );
 }
 
 function episodeDraft(

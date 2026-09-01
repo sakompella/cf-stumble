@@ -1,3 +1,4 @@
+import { invariant } from "../invariant.js";
 import type { GenerationLabel } from "./generations/index.js";
 import type { PreparationCheck } from "./generations/index.js";
 import type { RelayAttempt } from "./relay/index.js";
@@ -115,14 +116,12 @@ function ineligible(
 }
 
 function validatePolicy(policy: EligibilityPolicy): void {
-  if (!Number.isSafeInteger(policy.minimumCreditedTurns) || policy.minimumCreditedTurns < 1) {
-    throw new Error("minimumCreditedTurns must be a positive safe integer");
-  }
-
-  if (
-    !Number.isSafeInteger(policy.minimumObservationSpanMs) ||
-    policy.minimumObservationSpanMs < 0
-  ) {
-    throw new Error("minimumObservationSpanMs must be a non-negative safe integer");
-  }
+  invariant(
+    Number.isSafeInteger(policy.minimumCreditedTurns) && policy.minimumCreditedTurns >= 1,
+    "minimumCreditedTurns must be a positive safe integer",
+  );
+  invariant(
+    Number.isSafeInteger(policy.minimumObservationSpanMs) && policy.minimumObservationSpanMs >= 0,
+    "minimumObservationSpanMs must be a non-negative safe integer",
+  );
 }

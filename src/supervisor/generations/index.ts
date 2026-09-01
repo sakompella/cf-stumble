@@ -2,6 +2,7 @@
 
 import { Result } from "better-result";
 import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
+import { invariant } from "../../invariant.js";
 import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
 import type { PreparationCheck } from "./preparation-checks.js";
@@ -49,9 +50,7 @@ export class Generations {
 
   constructor(storage: DurableObjectStorage, fixtureHarnessCommit: string) {
     const fixtureCommit = parseHarnessCommit(fixtureHarnessCommit);
-    if (fixtureCommit === undefined) {
-      throw new Error("invalid fixture harness commit");
-    }
+    invariant(fixtureCommit !== undefined, "invalid fixture harness commit");
 
     this.storage = storage;
     this.sql = storage.sql;
