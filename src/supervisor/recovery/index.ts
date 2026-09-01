@@ -14,13 +14,7 @@ import {
   validateRecoveryPolicy,
   withEpisodeId,
 } from "./persistence/model.js";
-import {
-  completeForBudget,
-  markNeedsReconciliation,
-  openRepair,
-  settleRepair,
-  settleStartupCheck,
-} from "./operations.js";
+import { advanceEpisode, settleRepair, settleStartupCheck } from "./operations.js";
 import type { RelayAttempts } from "../relay/index.js";
 import { RecoveryEpisodeStore } from "./store.js";
 import type {
@@ -215,28 +209,8 @@ export class Recovery {
 
   private advance(episode: RecoveryEpisode, now: number): RecoveryEpisode {
     this.validateEpisodeTime(episode, now);
-    if (episode.phase === "blocked" || episode.phase === "completed") {
-      return episode;
-    }
-    if (episode.phase === "repair-open" || episode.phase === "startup-check-open") {
-      return now >= episode.currentOperation.deadlineAt
-        ? this.storeAndReturn(markNeedsReconciliation(episode))
-        : episode;
-    }
-    if (episode.phase === "needs-reconciliation") {
-      return episode;
-    }
-    if (now >= episode.recoveryDeadlineAt) {
-      return this.storeAndReturn(
-        completeForBudget(episode, "fallback-retained:recovery-budget-exhausted"),
-      );
-    }
-    if (episode.attemptsUsed >= episode.policy.maxRepairAttempts) {
-      return this.storeAndReturn(
-        completeForBudget(episode, "fallback-retained:repair-attempt-budget-exhausted"),
-      );
-    }
-    return this.storeAndReturn(openRepair(episode, now));
+    const advanced = advanceEpisode(episode, now);
+    return advanced.changed ? this.storeAndReturn(advanced.episode) : advanced.episode;
   }
 
   private validateEpisodeTime(episode: RecoveryEpisode, now: number): void {

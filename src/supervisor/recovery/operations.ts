@@ -3,6 +3,7 @@ import type {
   CompletedRecoveryEpisode,
   NeedsReconciliationRecoveryEpisode,
   ReadyRecoveryEpisode,
+  RecoveryEpisode,
   RecoveryEpisodeId,
   RecoveryOperationOutcome,
   RepairOpenRecoveryEpisode,
@@ -16,6 +17,7 @@ export type VerifiedStartupCandidate = {
 };
 
 type Stored<T> = T & { readonly id: RecoveryEpisodeId };
+type AdvancedEpisode = { readonly episode: RecoveryEpisode; readonly changed: boolean };
 type RepairSettlementEpisode =
   | Stored<RepairOpenRecoveryEpisode>
   | Stored<
@@ -87,6 +89,34 @@ export function completeForBudget(
     result,
     currentOperation: undefined,
   };
+}
+
+export function advanceEpisode(episode: RecoveryEpisode, now: number): AdvancedEpisode {
+  // The caller verifies now is not before episode.startedAt.
+  if (episode.phase === "blocked" || episode.phase === "completed") {
+    return { episode, changed: false } satisfies AdvancedEpisode;
+  }
+  if (episode.phase === "repair-open" || episode.phase === "startup-check-open") {
+    return now >= episode.currentOperation.deadlineAt
+      ? ({ episode: markNeedsReconciliation(episode), changed: true } satisfies AdvancedEpisode)
+      : ({ episode, changed: false } satisfies AdvancedEpisode);
+  }
+  if (episode.phase === "needs-reconciliation") {
+    return { episode, changed: false } satisfies AdvancedEpisode;
+  }
+  if (now >= episode.recoveryDeadlineAt) {
+    return {
+      episode: completeForBudget(episode, "fallback-retained:recovery-budget-exhausted"),
+      changed: true,
+    } satisfies AdvancedEpisode;
+  }
+  if (episode.attemptsUsed >= episode.policy.maxRepairAttempts) {
+    return {
+      episode: completeForBudget(episode, "fallback-retained:repair-attempt-budget-exhausted"),
+      changed: true,
+    } satisfies AdvancedEpisode;
+  }
+  return { episode: openRepair(episode, now), changed: true } satisfies AdvancedEpisode;
 }
 
 export function settleRepair(
