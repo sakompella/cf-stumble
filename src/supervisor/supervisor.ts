@@ -21,6 +21,7 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { RelayAttempts, type RelayAttempt } from "./relay/index.js";
+import { SessionStore, type SessionRecord, type SessionResult } from "./sessions/index.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -48,6 +49,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly relayAttempts: RelayAttempts;
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
+  private readonly sessions: SessionStore;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
@@ -57,6 +59,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
+    this.sessions = new SessionStore(ctx.storage);
   }
 
   checkGenerationStartup(
@@ -165,6 +168,32 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       },
       policy,
     );
+  }
+
+  getSession(sessionId: string): SessionRecord | undefined {
+    return this.sessions.get(sessionId);
+  }
+
+  startSessionTurn(
+    sessionId: string,
+    expectedRevision: number,
+    now: number,
+    leaseMs: number,
+  ): SessionResult {
+    return this.sessions.startTurn(sessionId, expectedRevision, now, leaseMs);
+  }
+
+  finishSessionTurn(
+    sessionId: string,
+    expectedRevision: number,
+    document: string,
+    now: number,
+  ): SessionResult {
+    return this.sessions.finishTurn(sessionId, expectedRevision, document, now);
+  }
+
+  abandonSessionTurn(sessionId: string): SessionResult {
+    return this.sessions.abandonTurn(sessionId);
   }
 
   override fetch(request: Request): Promise<Response> {
