@@ -13,10 +13,15 @@ Cloudflare Worker Previews creates a separate Preview deployment from the curren
 - `probe1` started with `attemptCount` `0`, went to `1` on its own traffic, and `probe0` stayed at `7`. Both Previews address the same Durable Object name, `facet-spike` in `src/worker.ts:7`. So two Previews of this Worker did not share this Supervisor's storage, which is consistent with the documented per-Preview namespace. One counter in one class is the extent of the measurement. Production was never deployed, so nothing here tests the production namespace. (`.audit/evidence/previews/probe/isolation-probe0.txt`, `isolation-probe1.txt`, `cleanup.txt`)
 - Deleting `probe0` and `probe1` succeeded. Both URLs returned `404` afterward, and `wrangler containers list` found no containers. (`.audit/evidence/previews/probe/cleanup.txt`)
 - R2 was disabled on the account with error `10042`. The Preview still deployed because the Preview configuration omitted R2. Wrangler warned that `MODULE_MAPS` diverged. (`.audit/evidence/previews/baseline/r2.txt`, `.audit/evidence/previews/probe/deploy.txt`)
+- `wrangler deploy` refused to deploy the same tree at all, failing on `/r2/buckets/cf-stumble-module-maps` with code `10042`, while `wrangler preview` succeeded. A Preview is therefore deployable on an account where production is not, which is the practical value of Previews not inheriting production bindings. (`.audit/evidence/previews/container/prod-deploy-r2-failure.txt`)
+- A container ran inside a Preview and served its own body. `GET /probe/container` returned `container ok` on the first attempt, from a busybox `httpd` image, through the low-level `this.ctx.container` API and `getTcpPort(8080).fetch()`. Wrangler built the image, pushed it to `registry.cloudflare.com`, and created a per-Preview container app named `cf-stumble_probe-container_ProbeContainer` with its own Durable Object namespace `b95f4d3df034441b9695626b5ef2020b`. (`.audit/evidence/previews/container/preview-basic.txt`, `deploy.txt`)
+- The container and the Worker Loader path coexist. The same Preview answered `GET /` with `main facet ready` and `GET /probe/container` with `container ok`, so adding a container class and a second migration did not disturb the Supervisor. (`.audit/evidence/previews/container/preview-basic.txt`)
+- `instance_type` decides whether a container runs at all on this account. With `dev`, now renamed `lite`, the instance stayed `inactive` with `location -` and health `active: 0`, and the Durable Object saw `There is no container instance that can be provided to this Durable Object, try again later`. With `basic`, the same image served immediately. Production failed identically under `dev`, so this is an account-level scheduling limit and not a Previews fault. (`.audit/evidence/previews/container/diagnostic-2.json`, `state-after-fix.txt`, `prod-control.txt`)
 
 ### Not verified
 
-- The probe did not start or call a Computer container. That probe is designed but was not run, because a container app bills on a paid plan and this account's Workers plan is unconfirmed. (`.audit/worker-previews-adoption.md`, section C12)
+- The probe did not run the real Computer image. It ran a trivial busybox image to test the platform path only, so the pinned Computer pair in `computer-integration.md` is still untested in a Preview. (`.audit/evidence/previews/container/deploy.txt`)
+- Container isolation between two Previews was not measured. Production and the Preview did get separate container apps, `cf-stumble-probecontainer` and `cf-stumble_probe-container_ProbeContainer`, which is separation by construction rather than a measurement of two Previews against each other. (`.audit/evidence/previews/container/cleanup.txt`)
 - The probe did not run the candidate startup-check RPC. `GET /` mounts the fixture but cannot reach `checkGenerationStartup`. (`.audit/evidence/previews/repo-fit.md`)
 - The probe did not verify R2, the model route, or the complete P0 paid-runtime path. P0 still requires all of those checks. (`docs/agents/design/feature-map.md`)
 
@@ -88,7 +93,15 @@ Use a scratch worktree. Do not run these commands against a tenant Preview becau
    curl -s https://probe0-cf-stumble.adityakompella.workers.dev/probe/state
    ```
 
-6. Delete the disposable Preview and inspect for leftover container apps.
+6. Delete the disposable Preview, then delete the container app and its images. Preview deletion alone leaves both behind.
+
+   ```sh
+   pnpm exec wrangler preview delete --name probe0 --skip-confirmation
+   pnpm exec wrangler containers list
+   pnpm exec wrangler containers delete <APPLICATION_ID>
+   pnpm exec wrangler containers images list
+   pnpm exec wrangler containers images delete <REPOSITORY>:<TAG>
+   ```
 
    ```sh
    pnpm exec wrangler preview delete --name probe0 --skip-confirmation
@@ -100,7 +113,9 @@ The `previews` block supplies the `env.SUPERVISOR` and `env.LOADER` bindings tha
 ## Sharp edges
 
 - The R2 omission produces a `MODULE_MAPS` configuration-divergence warning. Add a separate Preview-safe bucket before code reads that binding. (`.audit/evidence/previews/probe/deploy.txt`, `.audit/evidence/previews/facts.md`)
-- A container app can remain after Preview deletion. List apps after deletion and delete the Preview-named app by application ID when one remains. (`.audit/evidence/previews/facts.md`)
+- A container app remains after Preview deletion. This was observed, not just read. After `wrangler preview delete --name probe-container` succeeded, `wrangler containers list` still showed `cf-stumble_probe-container_ProbeContainer` in state `provisioning` with one live instance, and it took an explicit `wrangler containers delete <APPLICATION_ID>` to remove it. (`.audit/evidence/previews/container/cleanup.txt`)
+- Registry images outlive both the Preview and the container app. Three image tags stayed in `wrangler containers images list` after the apps were gone, and each needed `wrangler containers images delete <REPOSITORY>:<TAG>`. Cleanup is three steps, not one. (`.audit/evidence/previews/container/cleanup.txt`)
+- Use `basic` or larger for a container instance type on this account. `dev` and its new name `lite` produced a container that never got placed, and the only symptom at the Durable Object was a fetch error telling you to try again later. Surface the error text before assuming provisioning delay. (`.audit/evidence/previews/container/diagnostic-2.json`)
 - A service binding in a Preview resolves to the production Worker, not a matching Preview. (`.audit/evidence/previews/facts.md`)
 - Previews cannot consume Queue messages. Cron triggers do not invoke Preview `scheduled()` handlers. (`.audit/evidence/previews/facts.md`)
 - Deleting a Preview deletes its Durable Object state. Treat every tenant-like Preview as throwaway. (`.audit/evidence/previews/facts.md`)
