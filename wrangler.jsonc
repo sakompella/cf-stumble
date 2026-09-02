@@ -18,6 +18,17 @@
     },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "SUPERVISOR",
+          "class_name": "Supervisor",
+        },
+      ],
+    },
+    "worker_loaders": [{ "binding": "LOADER" }],
+  },
   "r2_buckets": [
     {
       "binding": "MODULE_MAPS",

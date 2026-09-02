@@ -20,6 +20,7 @@ Everything in `docs/agents/` is agent-authored. `docs/` outside that directory i
 - `design/feature-map.md` defines the current version 0 completion scope and cut line.
 - `design/slices.md` records the earlier implementation sequence and local evidence.
 - `design/computer-integration.md` records the verified Computer pair and backend roles.
+- `design/worker-previews.md` records what the Worker Previews private beta proved on the account and why it stays test infrastructure.
 
 Add an ADR only when a decision will be expensive to reverse, has a meaningful alternative, and would surprise a future reader. Add every surviving ADR to `docs/agents/adr/README.md`; `test/docs/adr-index.test.ts` checks the index. Delete ADRs that no longer apply instead of preserving obsolete architecture as current guidance.
 
@@ -37,6 +38,7 @@ Add an ADR only when a decision will be expensive to reverse, has a meaningful a
 │       │   ├── overview.md
 │       │   ├── feature-map.md
 │       │   ├── computer-integration.md
+│       │   ├── worker-previews.md
 │       │   └── slices.md
 │       └── domain.md
 └── src/
