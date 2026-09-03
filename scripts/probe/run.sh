@@ -6,7 +6,7 @@
 # records redacted evidence, and tears down all created resources.
 #
 # Required environment variables:
-#   CLOUDFLARE_API_TOKEN    wrangler authentication
+#   CLOUDFLARE_API_TOKEN    wrangler authentication, or an existing wrangler login
 #   CLOUDFLARE_ACCOUNT_ID   target Cloudflare account
 #   PROBE_BEARER_SECRET     single-run bearer token for the probe endpoint
 #
@@ -19,7 +19,6 @@
 #   3. The disposable Worker
 #   4. Verify each manifest entry is gone; exit 1 if incomplete
 #
-# THIS SCRIPT HAS NEVER BEEN RUN.
 
 set -euo pipefail
 
@@ -27,7 +26,11 @@ set -euo pipefail
 # Fail fast: required environment
 ##############################################################################
 
-: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN must be set}"
+# Either an API token or an existing wrangler login authenticates this run.
+if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] && ! wrangler whoami >/dev/null 2>&1; then
+  printf 'No Cloudflare credential. Set CLOUDFLARE_API_TOKEN or run: wrangler login\n' >&2
+  exit 1
+fi
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID must be set}"
 : "${PROBE_BEARER_SECRET:?PROBE_BEARER_SECRET must be set}"
 
@@ -281,13 +284,22 @@ SECRET_FILE=""
 ##############################################################################
 
 printf 'Invoking probe…\n'
-HTTP_CODE="$(curl -sf -o "$EVIDENCE" -w '%{http_code}' \
-  -H "Authorization: Bearer ${PROBE_BEARER_SECRET}" \
-  "${WORKER_URL}/probe")"
+# A new deployment is not routable instantly, so a first non-200 is not a probe failure.
+HTTP_CODE=000
+for attempt in 1 2 3 4 5 6; do
+  HTTP_CODE="$(curl -s -o "$EVIDENCE" -w '%{http_code}' \
+    -H "Authorization: Bearer ${PROBE_BEARER_SECRET}" \
+    "${WORKER_URL}/probe" || printf '000')"
+  if [ "$HTTP_CODE" = "200" ]; then
+    break
+  fi
+  printf 'Attempt %s returned HTTP %s. Retrying.\n' "$attempt" "$HTTP_CODE"
+  sleep 5
+done
 
 if [ "$HTTP_CODE" != "200" ]; then
-  printf 'Probe returned HTTP %s.\n' "$HTTP_CODE" >&2
-  cat "$EVIDENCE" >&2
+  printf 'Probe returned HTTP %s after retries.\n' "$HTTP_CODE" >&2
+  head -c 2000 "$EVIDENCE" >&2 || true
   exit 1
 fi
 
