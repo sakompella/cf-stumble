@@ -25,7 +25,15 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { RelayAttempts, type RelayAttempt } from "./relay/index.js";
-import { SessionStore, type SessionRecord, type SessionResult } from "./sessions/index.js";
+import {
+  executeSessionTurn,
+  SessionStore,
+  type SessionRecord,
+  type SessionResult,
+  type SessionTurnOptions,
+  type SessionTurnResult,
+  type SessionFacetMount,
+} from "./sessions/index.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -46,6 +54,9 @@ type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly MODULE_MAPS: R2Bucket;
 };
+
+export const SESSION_TURN_LEASE_MS = 5 * 60 * 1_000;
+export const SESSION_TURN_TIMEOUT_MS = 5 * 60 * 1_000;
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
@@ -204,6 +215,34 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   abandonSessionTurn(sessionId: string): SessionResult {
     return this.sessions.abandonTurn(sessionId);
+  }
+
+  runSessionTurn(
+    sessionId: string,
+    prompt: string,
+    expectedRevision: number,
+    options: SessionTurnOptions = {},
+  ): Promise<SessionTurnResult> {
+    return executeSessionTurn(
+      this.sessions,
+      () => this.mountSessionFacet(),
+      sessionId,
+      prompt,
+      expectedRevision,
+      options,
+      options.leaseMs ?? SESSION_TURN_LEASE_MS,
+      options.timeoutMs ?? SESSION_TURN_TIMEOUT_MS,
+    );
+  }
+
+  private async mountSessionFacet(): Promise<SessionFacetMount> {
+    const mounted = await this.artifacts.mount(
+      this.generations.active(),
+      this.env.LOADER,
+      this.ctx.facets,
+      this.modelRoute(),
+    );
+    return mounted.isErr() ? { ok: false } : { ok: true, fetcher: mounted.value.fetcher };
   }
 
   override async fetch(request: Request): Promise<Response> {

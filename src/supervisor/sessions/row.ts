@@ -6,6 +6,7 @@ export type SessionRow = {
   readonly revision: number;
   readonly turn_active: number;
   readonly turn_deadline_at: number | null;
+  readonly turn_lease_id?: string | null;
 };
 
 export function sessionFromRow(row: SessionRow): SessionRecord {

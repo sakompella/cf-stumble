@@ -1,6 +1,6 @@
 import type { MainHarnessArtifactInput } from "./artifact.js";
 
-export const fixtureMainHarnessCommit = "f53a0e1c1bdbe213ab700a84b1db23615cc24b00";
+export const fixtureMainHarnessCommit = "f53a0e1c1bdbe213ab700a84b1db23615cc24b02";
 
 export const fixtureMainHarnessArtifact: MainHarnessArtifactInput = {
   harnessCommit: fixtureMainHarnessCommit,
@@ -35,6 +35,29 @@ export class MainFacet extends DurableObject {
 
     if (path === "/facet/model") {
       return Response.json(await this.model.run({ prompt: await request.text() }));
+    }
+
+    if (path === "/turn") {
+      const input = await request.json();
+      if (input.prompt === "fail") {
+        return new Response("deterministic facet failure", { status: 500 });
+      }
+      if (input.prompt === "malformed") {
+        return Response.json({ document: input.document });
+      }
+      if (input.prompt === "timeout") {
+        return new Response(new ReadableStream({ pull() { return new Promise(() => {}); } }));
+      }
+      const previous = input.document === null ? [] : JSON.parse(input.document).turns;
+      const document = JSON.stringify({ turns: [...previous, input.prompt] });
+      return Response.json({
+        document,
+        text: "reply:" + input.prompt,
+        commands:
+          input.prompt === "command"
+            ? [{ command: "echo fake", stdout: "fake\\n", stderr: "", exitCode: 0 }]
+            : [],
+      });
     }
 
     if (path === "/facet/outbound") {
