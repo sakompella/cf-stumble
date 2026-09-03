@@ -7,6 +7,7 @@ import {
   accessAudience as audience,
   accessIssuer as issuer,
   accessNow as now,
+  accessOwnerSubject,
   signAccessToken,
   signingKey,
   type SigningKey,
@@ -29,14 +30,18 @@ function request(tokenValue: string): Request {
 
 test("loads keys from the team certs URL and uses the cache", async () => {
   const key = await signingKey("cache-key");
-  const signed = await token(key, "cache-user");
+  const signed = await token(key, accessOwnerSubject);
   let fetches = 0;
   const fetcher: typeof fetch = (url) => {
     fetches += 1;
     expect(url).toBe("https://team.cloudflareaccess.com/cdn-cgi/access/certs");
     return Promise.resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
   };
-  const env = { CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", CF_ACCESS_AUD: audience };
+  const env = {
+    CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
+    CF_ACCESS_AUD: audience,
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+  };
 
   await expect(
     authenticateAccessRequest(request(signed), env, now, crypto, fetcher),
@@ -54,15 +59,19 @@ test("loads keys from the team certs URL and uses the cache", async () => {
 test("refreshes keys once when rotation introduces an unknown kid", async () => {
   const oldKey = await signingKey("old-key");
   const newKey = await signingKey("new-key");
-  const oldToken = await token(oldKey, "old-user");
-  const newToken = await token(newKey, "new-user");
+  const oldToken = await token(oldKey, accessOwnerSubject);
+  const newToken = await token(newKey, accessOwnerSubject);
   let fetches = 0;
   const fetcher: typeof fetch = () => {
     fetches += 1;
     const key = fetches === 1 ? oldKey.publicJwk : newKey.publicJwk;
     return Promise.resolve(new Response(JSON.stringify({ keys: [key] })));
   };
-  const env = { CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", CF_ACCESS_AUD: audience };
+  const env = {
+    CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
+    CF_ACCESS_AUD: audience,
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+  };
 
   await expect(
     authenticateAccessRequest(request(oldToken), env, now, crypto, fetcher),
@@ -83,7 +92,11 @@ test("rejects when fetching the JWKS fails without exposing token material", asy
   const fetcher: typeof fetch = () => Promise.reject(new Error(`JWKS unavailable for ${signed}`));
   const result = await authenticateAccessRequest(
     request(signed),
-    { CF_ACCESS_TEAM_DOMAIN: "failed.cloudflareaccess.com", CF_ACCESS_AUD: audience },
+    {
+      CF_ACCESS_TEAM_DOMAIN: "failed.cloudflareaccess.com",
+      CF_ACCESS_AUD: audience,
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
     now,
     crypto,
     fetcher,
@@ -102,7 +115,11 @@ test("rejects malformed JWKS without exposing token material", async () => {
     );
   const result = await authenticateAccessRequest(
     request(signed),
-    { CF_ACCESS_TEAM_DOMAIN: "malformed.cloudflareaccess.com", CF_ACCESS_AUD: audience },
+    {
+      CF_ACCESS_TEAM_DOMAIN: "malformed.cloudflareaccess.com",
+      CF_ACCESS_AUD: audience,
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
     now,
     crypto,
     fetcher,
@@ -121,7 +138,11 @@ test("does not refetch keys for repeated unknown key ids", async () => {
     fetches += 1;
     return Promise.resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
   };
-  const env = { CF_ACCESS_TEAM_DOMAIN: "cooldown.cloudflareaccess.com", CF_ACCESS_AUD: audience };
+  const env = {
+    CF_ACCESS_TEAM_DOMAIN: "cooldown.cloudflareaccess.com",
+    CF_ACCESS_AUD: audience,
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+  };
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await expect(
@@ -134,7 +155,7 @@ test("does not refetch keys for repeated unknown key ids", async () => {
 
 test("shares one key fetch across concurrent cold requests", async () => {
   const key = await signingKey("concurrent-key");
-  const signed = await token(key, "concurrent-user", "https://concurrent.cloudflareaccess.com");
+  const signed = await token(key, accessOwnerSubject, "https://concurrent.cloudflareaccess.com");
   let fetches = 0;
   const fetcher: typeof fetch = () => {
     fetches += 1;
@@ -147,6 +168,7 @@ test("shares one key fetch across concurrent cold requests", async () => {
   const env = {
     CF_ACCESS_TEAM_DOMAIN: "concurrent.cloudflareaccess.com",
     CF_ACCESS_AUD: audience,
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
   };
 
   const results = await Promise.all(

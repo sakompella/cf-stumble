@@ -18,6 +18,7 @@ declare global {
       readonly WORKSPACE_HOST: DurableObjectNamespace<WorkspaceHost>;
       readonly CF_ACCESS_TEAM_DOMAIN: string;
       readonly CF_ACCESS_AUD: string;
+      readonly CF_ACCESS_OWNER_SUB: string;
     }
   }
 }

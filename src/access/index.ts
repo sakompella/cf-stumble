@@ -32,11 +32,36 @@ export interface AccessWorkerEnvironment {
   readonly CF_ACCESS_TEAM_DOMAIN: string;
   readonly CF_ACCESS_AUD: string;
   readonly CF_ACCESS_PUBLIC_KEYS?: string;
+  readonly CF_ACCESS_OWNER_SUB: string;
 }
 
 export type AccessRequestResult =
   | { readonly ok: true; readonly supervisorName: string }
-  | { readonly ok: false; readonly reason: AccessVerificationReason | "invalid-configuration" };
+  | {
+      readonly ok: false;
+      readonly reason: AccessVerificationReason | "invalid-configuration" | "not-owner";
+    };
+
+// A missing, empty, or whitespace-only secret is indistinguishable from misconfiguration: this
+// Worker has exactly one owner, and there is no safe default identity to fall back to.
+function configuredOwnerSubject(env: AccessWorkerEnvironment): string | undefined {
+  return typeof env.CF_ACCESS_OWNER_SUB === "string" && env.CF_ACCESS_OWNER_SUB.trim().length > 0
+    ? env.CF_ACCESS_OWNER_SUB
+    : undefined;
+}
+
+// Runs on a verified identity, but strictly before a Supervisor name is ever derived for it, so a
+// non-owner request never causes a Durable Object to be named or created.
+function ownerVerificationFailure(
+  env: AccessWorkerEnvironment,
+  identity: string,
+): { readonly ok: false; readonly reason: "invalid-configuration" | "not-owner" } | undefined {
+  const ownerSubject = configuredOwnerSubject(env);
+  if (ownerSubject === undefined) {
+    return { ok: false, reason: "invalid-configuration" };
+  }
+  return identity === ownerSubject ? undefined : { ok: false, reason: "not-owner" };
+}
 
 function tokenKeyId(token: string): string | undefined {
   const encodedHeader = token.split(".")[0];
@@ -177,6 +202,11 @@ export async function authenticateAccessRequest(
   );
   if (!verified.ok) {
     return verified;
+  }
+
+  const ownerFailure = ownerVerificationFailure(env, verified.identity);
+  if (ownerFailure !== undefined) {
+    return ownerFailure;
   }
 
   return {

@@ -20,6 +20,7 @@ import worker from "../../src/worker.js";
 import {
   accessAudience,
   accessIssuer,
+  accessOwnerSubject,
   signAccessToken,
   signingKey,
   type SigningKey,
@@ -47,7 +48,7 @@ function ownerToken(key: SigningKey): Promise<string> {
     iss: accessIssuer,
     aud: [accessAudience],
     exp: Math.floor(Date.now() / 1000) + 600,
-    sub: "owner-1",
+    sub: accessOwnerSubject,
   });
 }
 
@@ -59,6 +60,7 @@ function workerEnvironment(key: SigningKey) {
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: accessAudience,
     CF_ACCESS_PUBLIC_KEYS: JSON.stringify({ keys: [key.publicJwk] }),
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
   };
 }
 

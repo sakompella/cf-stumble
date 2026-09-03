@@ -15,6 +15,7 @@ import {
   accessAudience as audience,
   accessIssuer as issuer,
   accessNow as now,
+  accessOwnerSubject,
   signAccessToken,
   signingKey,
   type SigningAlgorithm,
@@ -129,6 +130,7 @@ describe("Cloudflare Access JWT verification", () => {
         {
           CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
           CF_ACCESS_AUD: audience,
+          CF_ACCESS_OWNER_SUB: accessOwnerSubject,
         },
         now,
       ),

@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { authenticateAccessRequest, withoutAccessCredentials } from "../src/access/index.js";
+import { accessOwnerSubject } from "./access-tokens.js";
 
 test("removes the Access assertion and cookie before the Supervisor sees a request", () => {
   const stripped = withoutAccessCredentials(
@@ -60,6 +61,7 @@ test("rejects an http team domain as invalid configuration", async () => {
     {
       CF_ACCESS_TEAM_DOMAIN: "http://team.cloudflareaccess.com",
       CF_ACCESS_AUD: "audience",
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
     },
   );
 

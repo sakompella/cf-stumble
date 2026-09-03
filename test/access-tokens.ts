@@ -9,6 +9,8 @@
 export const accessIssuer = "https://team.cloudflareaccess.com";
 export const accessAudience = "access-application-id";
 export const accessNow = 1_700_000_000;
+/** The `sub` claim every Access test environment configures as `CF_ACCESS_OWNER_SUB`. */
+export const accessOwnerSubject = "owner-1";
 
 export type SigningAlgorithm = "RS256" | "ES256";
 

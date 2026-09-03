@@ -20,6 +20,7 @@ import {
   accessAudience,
   accessIssuer,
   accessNow,
+  accessOwnerSubject,
   signAccessToken,
   signingKey,
   type SigningKey,
@@ -30,6 +31,7 @@ function environment(keys: readonly JsonWebKey[]): AccessWorkerEnvironment {
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: accessAudience,
     CF_ACCESS_PUBLIC_KEYS: JSON.stringify({ keys }),
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
   };
 }
 
@@ -192,8 +194,10 @@ describe("Access cookie authentication", () => {
 
   test("prefers the assertion header when a request carries both", async () => {
     const key = await signingKey("cookie-preference-key");
-    const headerToken = await ownerToken(key, "header-owner");
-    const cookieToken = await ownerToken(key, "cookie-owner");
+    const headerToken = await ownerToken(key, accessOwnerSubject);
+    // A non-owner cookie value proves the cookie was never the one consulted: were it consulted
+    // instead of the header, the owner check would reject the request.
+    const cookieToken = await ownerToken(key, "cookie-non-owner");
 
     const result = await authenticate(
       {
@@ -206,7 +210,7 @@ describe("Access cookie authentication", () => {
     expect(result).toStrictEqual({
       ok: true,
       supervisorName: await deriveSupervisorName({
-        identity: "header-owner",
+        identity: accessOwnerSubject,
         audience: accessAudience,
       }),
     });
