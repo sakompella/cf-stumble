@@ -4,5 +4,5 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["build-generation-0.mts", "vendor-pi.mts"]
+  "include": ["access-session.mts", "build-generation-0.mts", "vendor-pi.mts"]
 }
