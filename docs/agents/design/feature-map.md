@@ -4,7 +4,7 @@ Version 0 has one job: deploy a coding agent that can move to another harness ge
 
 Older plans tried to prove much more. That is why the useful path is still unfinished. The smaller demo below is enough to prove the boundary that matters. `overview.md` and the human-approved ADRs remain the architecture authority. This file sets the version 0 cut line. `slices.md` keeps the earlier implementation sequence and local evidence; it is not the release plan.
 
-The scope here is provisional in one specific way. Five owner decisions in `.audit/design-questions.md` are still open, and two of them move the cut line. If the answer to Q2 is that versioned configuration counts as changing a generation, P1 and P2 both shrink. Until Q4 settles the model and payment path, P0 probes a route nobody has chosen yet.
+The scope here is provisional in one specific way. Four owner decisions in `.audit/design-questions.md` are still open, and one of them moves the cut line. If the answer to Q2 is that versioned configuration counts as changing a generation, P1 and P2 both shrink. The owner chose Workers AI for the first model route and prefers OpenAI. Codex and Pi support ChatGPT sign-in for local CLI harnesses through a localhost callback. The available prior art does not establish that their hard-coded client supports an arbitrary HTTPS callback for a Worker, so version 0 does not depend on that unconfirmed integration. The research records are `.audit/research/openai-chatgpt-login-workers-ai.md` and `.audit/research/codex-oauth-web-prior-art.md`.
 
 ## What version 0 is
 
