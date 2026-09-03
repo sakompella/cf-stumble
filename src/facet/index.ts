@@ -4,6 +4,7 @@ import { Result } from "better-result";
 import { MainHarnessArtifact } from "./artifact.js";
 import { fixtureMainHarnessArtifact } from "./fixture.js";
 import type { ModelRoute } from "../model-route.js";
+import type { WorkspaceCapability } from "./generation-0/index.js";
 import type {
   HarnessModule,
   MainHarnessArtifactInput,
@@ -13,12 +14,24 @@ import type {
 export { MainHarnessArtifact } from "./artifact.js";
 export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
 export { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "./fixture.js";
+export type { WorkspaceCapability } from "./generation-0/index.js";
 
 function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {
   return [module.name, { js: module.source }];
 }
 
-export type MainFacetCapabilities = Readonly<{ MODEL: Fetcher<ModelRoute> }>;
+/**
+ * What a main-facet generation receives. These are capabilities, not bindings: the model route
+ * keeps the model choice and the credential outside the facet, and the workspace capability
+ * returns plain results rather than a Computer workspace or its container API.
+ *
+ * `WORKSPACE` is optional while the concrete Computer adapter is wired separately. A generation
+ * that receives no workspace still starts and still answers `GET /`.
+ */
+export type MainFacetCapabilities = Readonly<{
+  MODEL: Fetcher<ModelRoute>;
+  WORKSPACE?: WorkspaceCapability;
+}>;
 
 function loadArtifact(
   loader: WorkerLoader,
