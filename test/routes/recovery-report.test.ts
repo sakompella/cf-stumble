@@ -1,15 +1,13 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { RecoveryReportSummary } from "../../src/routes/index.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { RecoveryPolicy } from "../../src/supervisor/recovery/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration } from "../supervisor/helpers.js";
+import { activeSupervisor } from "../supervisor/helpers.js";
 
 const policy: RecoveryPolicy = {
   maxRepairAttempts: 2,
@@ -30,13 +28,6 @@ type StatusResponse = {
   readonly activeGeneration: { readonly epoch: number };
   readonly latestRecoveryReport: RecoveryReportSummary | null;
 };
-
-async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
-  const stub = env.SUPERVISOR.getByName(name);
-  await prepareGeneration(stub, 0, fixtureMainHarnessCommit);
-  await activateGeneration(stub, 0, "activate-fixture");
-  return stub;
-}
 
 function latestRecovery(stub: DurableObjectStub<Supervisor>): Promise<Response> {
   return routeOwnerApiRequest(new Request("https://cf-stumble.test/api/recovery/latest"), stub);

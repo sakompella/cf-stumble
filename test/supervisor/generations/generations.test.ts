@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
+import { fixtureMainHarnessCommit } from "../../../src/facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { artifact, prepareGeneration, submitCandidate } from "../helpers.js";
 
@@ -70,7 +70,7 @@ test("submits the fixture harness commit as Generation 0 and the next commit as 
         harnessCommit: fixtureMainHarnessCommit,
         status: "candidate",
       },
-      epoch: 0,
+      epoch: 1,
     },
   });
   expect(second).toMatchObject({
@@ -94,7 +94,7 @@ test("submitting an existing harness commit preserves its label count and epoch"
   const repeated = await submit(control, "submit-repeated", secondHarnessCommit);
 
   expect(repeated).toEqual(first);
-  expect(await control.getGenerations()).toHaveLength(2);
+  expect(await control.getGenerations()).toHaveLength(1);
 });
 
 test("keeps the first preparation outcome and refuses a later contradicting one", async () => {
@@ -141,17 +141,18 @@ test("refuses a candidate submission that does not name a harness commit", async
     ok: false,
     problem: { code: "invalid-harness-commit" },
   });
-  expect(await control.getGenerations(), "only the seeded Generation 0 may exist").toHaveLength(1);
+  expect(await control.getGenerations(), "a refused submission labels nothing").toHaveLength(0);
 });
 
 test("rejects unknown and candidate generations without throwing during activation", async () => {
   const control = supervisor("rejects-unready-generations");
+  const candidate = await submitCandidate(control, secondHarnessCommit, "submit-candidate");
 
   expect(await activate(control, "activate-unknown", 99)).toEqual({
     ok: false,
     problem: { code: "unknown-generation" },
   });
-  expect(await activate(control, "activate-candidate", 0)).toEqual({
+  expect(await activate(control, "activate-candidate", candidate)).toEqual({
     ok: false,
     problem: { code: "not-ready" },
   });
@@ -200,7 +201,8 @@ test("keeps branded generation identities plain through structured clone and evi
   expect(await control.getGenerations()).toEqual(beforeEviction);
 });
 
-test("preserves generation state across eviction without reseeding Generation 0", async () => {
+/** A restarted Supervisor labels nothing of its own: only submitted commits survive eviction. */
+test("preserves generation state across eviction and labels nothing itself", async () => {
   const control = supervisor("persists-across-eviction");
   const label = await submitCandidate(control, thirdHarnessCommit, "submit-candidate");
   await prepareGeneration(control, label, thirdHarnessCommit);
@@ -208,8 +210,7 @@ test("preserves generation state across eviction without reseeding Generation 0"
   await evictDurableObject(control);
 
   expect(await control.getGenerations()).toEqual([
-    { label: 0, harnessCommit: fixtureMainHarnessCommit, status: "candidate" },
-    { label: 1, harnessCommit: thirdHarnessCommit, status: "ready" },
+    { label: 0, harnessCommit: thirdHarnessCommit, status: "ready" },
   ]);
   expect(await control.getActiveGeneration()).toEqual({
     generation: undefined,

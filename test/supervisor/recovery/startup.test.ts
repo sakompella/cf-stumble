@@ -3,11 +3,15 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
 import type { EligibilityPolicy } from "../../../src/supervisor/eligibility.js";
 import type { RecoveryPolicy } from "../../../src/supervisor/recovery/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
+import {
+  activateFixtureGeneration,
+  activateGeneration,
+  prepareGeneration,
+  submitCandidate,
+} from "../helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 const strictEligibility: EligibilityPolicy = {
@@ -26,8 +30,7 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 
 async function episodeWithFallback(name: string) {
   const control = supervisor(name);
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );

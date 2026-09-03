@@ -1,9 +1,5 @@
 import { Result } from "better-result";
-import {
-  fixtureMainHarnessArtifact,
-  loadMainFacet,
-  MainHarnessArtifact,
-} from "../../facet/index.js";
+import { loadMainFacet, MainHarnessArtifact } from "../../facet/index.js";
 import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { ModuleMapCache } from "./cache.js";
@@ -25,6 +21,13 @@ export type HarnessArtifactResult = Result<
   },
   HarnessArtifactProblem
 >;
+
+/**
+ * Why the main facet could not be mounted. `no-active-generation` is not a fault: no generation is
+ * labeled active, so there is no code to serve. Every other problem describes the active
+ * generation's module map, and none of them fall back to other code.
+ */
+export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;
 
 /**
  * The Supervisor's module-map access. R2 is an evictable cache and Durable Object SQLite stores no
@@ -87,7 +90,7 @@ export class HarnessArtifacts {
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
-  ): Promise<Result<{ readonly fetcher: Fetcher }, string>> {
+  ): Promise<Result<{ readonly fetcher: Fetcher }, MainFacetMountProblem>> {
     const moduleMap = await this.activeModuleMap(active);
     if (moduleMap.isErr()) {
       return Result.err(moduleMap.error);
@@ -96,7 +99,7 @@ export class HarnessArtifacts {
     const artifact = moduleMap.value;
     const loadedFacet = loadMainFacet(loader, artifact, { MODEL: modelRoute });
     if (loadedFacet.isErr()) {
-      return Result.err(loadedFacet.error.code);
+      return Result.err(loadedFacet.error);
     }
 
     return Result.ok({
@@ -107,21 +110,20 @@ export class HarnessArtifacts {
   }
 
   /**
-   * No active generation still serves the fixture seed. Real Generation 0 materialization replaces
-   * it; `docs/agents/design/feature-map.md` ties that cleanup to the Generation 0 facet.
+   * The module map of the generation that serves. There is no built-in alternative: a Supervisor
+   * with no active generation reports `no-active-generation` and serves nothing. Generation 0
+   * arrives as an ordinary owner submission of the deployed harness commit, so the code that
+   * serves is always a labeled commit the Supervisor prepared.
    */
   private async activeModuleMap(
     active: ActiveGeneration,
-  ): Promise<Result<MainHarnessArtifactInput, string>> {
+  ): Promise<Result<MainHarnessArtifactInput, MainFacetMountProblem>> {
     if (active.generation === undefined) {
-      const retained = await this.retain(fixtureMainHarnessArtifact);
-      return retained.isErr()
-        ? Result.err(retained.error.code)
-        : Result.ok(retained.value.artifact);
+      return Result.err({ code: "no-active-generation" });
     }
 
     const resolved = await this.resolve(active.generation.harnessCommit);
-    return resolved.isErr() ? Result.err(resolved.error.code) : Result.ok(resolved.value.moduleMap);
+    return resolved.isErr() ? Result.err(resolved.error) : Result.ok(resolved.value.moduleMap);
   }
 
   private async write(

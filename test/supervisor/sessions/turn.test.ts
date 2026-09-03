@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
+import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { activeSupervisor } from "../helpers.js";
@@ -8,6 +9,23 @@ const NOW = 1_700_000_000_000;
 
 afterEach(async () => {
   await reset();
+});
+
+/** No generation is active, so no main harness exists to run the turn and none is invented. */
+test("a turn with no active generation reports that and leaves the session untouched", async () => {
+  const control = env.SUPERVISOR.getByName("session-turn-no-active-generation");
+
+  const result = await control.runSessionTurn("session-a", "first", 0, { now: NOW });
+
+  expect(result).toEqual({
+    ok: false,
+    problem: { code: "no-active-generation", sessionId: "session-a" },
+  });
+  expect(await control.getSession("session-a")).toMatchObject({
+    document: undefined,
+    revision: 0,
+    turnActive: false,
+  });
 });
 
 test("the first turn saves a document and returns the facet reply", async () => {

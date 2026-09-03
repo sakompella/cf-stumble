@@ -2,7 +2,6 @@
 
 import { Result } from "better-result";
 import { MainHarnessArtifact } from "./artifact.js";
-import { fixtureMainHarnessArtifact } from "./fixture.js";
 import type { ModelRoute } from "../model-route.js";
 import type { WorkspaceCapability } from "./generation-0/index.js";
 import type {
@@ -13,7 +12,6 @@ import type {
 
 export { MainHarnessArtifact } from "./artifact.js";
 export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
-export { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "./fixture.js";
 export type { WorkspaceCapability } from "./generation-0/index.js";
 
 function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {
@@ -63,14 +61,4 @@ export function loadMainFacet(
   const worker = loadArtifact(loader, artifact.value, capabilities);
 
   return Result.ok({ worker, facetClass: worker.getDurableObjectClass("MainFacet") });
-}
-
-export function loadFixtureMainFacet(
-  loader: WorkerLoader,
-  capabilities: MainFacetCapabilities,
-): Result<
-  { readonly worker: WorkerStub; readonly facetClass: DurableObjectClass },
-  MainHarnessArtifactProblem
-> {
-  return loadMainFacet(loader, fixtureMainHarnessArtifact, capabilities);
 }

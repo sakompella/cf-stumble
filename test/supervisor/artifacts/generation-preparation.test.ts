@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
+import { fixtureMainHarnessCommit } from "../../../src/facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";

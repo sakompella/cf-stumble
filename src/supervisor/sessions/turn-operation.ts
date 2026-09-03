@@ -9,11 +9,25 @@ import type { SessionStore } from "./index.js";
 
 export type SessionFacetMount =
   | { readonly ok: true; readonly fetcher: Fetcher }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly reason: "no-active-generation" | "mount-failed" };
+
+/**
+ * Why a turn could not reach a facet. No active generation is not a fault: nothing failed, there
+ * was no main harness to run the turn. The caller passes the problem code rather than its type,
+ * because a session knows nothing about module maps.
+ */
+export function sessionMountReason(
+  problemCode: string,
+): Extract<SessionFacetMount, { readonly ok: false }>["reason"] {
+  return problemCode === "no-active-generation" ? "no-active-generation" : "mount-failed";
+}
 
 type FacetInvocation =
   | { readonly ok: true; readonly result: FacetTurnResult }
-  | { readonly ok: false; readonly kind: "failed" | "malformed" | "timeout" };
+  | {
+      readonly ok: false;
+      readonly kind: "no-active-generation" | "failed" | "malformed" | "timeout";
+    };
 
 export async function executeSessionTurn(
   sessions: SessionStore,
@@ -74,7 +88,10 @@ async function runFacetTurn(
   try {
     const mounted = await mount();
     if (!mounted.ok) {
-      return { ok: false, kind: "failed" };
+      return {
+        ok: false,
+        kind: mounted.reason === "no-active-generation" ? "no-active-generation" : "failed",
+      };
     }
     return await invokeFacetTurn(mounted.fetcher, prompt, document, timeoutMs);
   } catch {
@@ -82,14 +99,17 @@ async function runFacetTurn(
   }
 }
 
+const facetProblems = {
+  "no-active-generation": "no-active-generation",
+  malformed: "malformed-facet-result",
+  timeout: "facet-timeout",
+  failed: "facet-failed",
+} as const;
+
 function facetProblem(
   kind: Extract<FacetInvocation, { readonly ok: false }>["kind"],
-): "facet-failed" | "facet-timeout" | "malformed-facet-result" {
-  return kind === "malformed"
-    ? "malformed-facet-result"
-    : kind === "timeout"
-      ? "facet-timeout"
-      : "facet-failed";
+): (typeof facetProblems)[keyof typeof facetProblems] {
+  return facetProblems[kind];
 }
 
 async function invokeFacetTurn(

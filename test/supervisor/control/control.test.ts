@@ -8,9 +8,13 @@ import type {
   GenerationRequest,
   Principal,
 } from "../../../src/supervisor/control/index.js";
-import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
+import {
+  activateFixtureGeneration,
+  activateGeneration,
+  prepareGeneration,
+  submitCandidate,
+} from "../helpers.js";
 
 const commits = {
   first: "0123456789abcdef0123456789abcdef01234567",
@@ -30,11 +34,6 @@ function request(
   command: GenerationCommand,
 ): GenerationRequest {
   return { requestId, principal, command };
-}
-
-async function activateFixture(control: DurableObjectStub<Supervisor>): Promise<number> {
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  return activateGeneration(control, 0, "activate-fixture");
 }
 
 async function readyGeneration(
@@ -61,7 +60,7 @@ test("a user submission labels its harness commit as a generation candidate", as
     ok: true,
     outcome: {
       kind: "candidate-submitted",
-      generation: { label: 1, harnessCommit: commits.first, status: "candidate" },
+      generation: { label: 0, harnessCommit: commits.first, status: "candidate" },
     },
   });
 });
@@ -77,13 +76,13 @@ test("an invalid harness generation label cannot submit before activation", asyn
   const result = await control.controlGeneration(requestWithInvalidLabel);
 
   expect(result).toEqual({ ok: false, problem: { code: "revoked-capability" } });
-  expect(await control.getGenerations()).toHaveLength(1);
+  expect(await control.getGenerations(), "a revoked request must label nothing").toHaveLength(0);
   expect(await control.controlGeneration(requestWithInvalidLabel)).toEqual(result);
 });
 
 test("the active harness can submit a generation candidate", async () => {
   const control = supervisor("control-active-harness-submission");
-  await activateFixture(control);
+  await activateFixtureGeneration(control);
 
   const result = await control.controlGeneration(
     request(
@@ -104,7 +103,7 @@ test("the active harness can submit a generation candidate", async () => {
 
 test("a replaced harness cannot submit a candidate through its revoked capability", async () => {
   const control = supervisor("control-revoked-harness");
-  await activateFixture(control);
+  await activateFixtureGeneration(control);
   const replacement = await readyGeneration(control, commits.first);
   await activateGeneration(control, replacement, "activate-replacement");
 
@@ -133,7 +132,7 @@ test("a replaced harness cannot submit a candidate through its revoked capabilit
 
 test("a stale activation request leaves the active generation unchanged", async () => {
   const control = supervisor("control-stale-activation");
-  await activateFixture(control);
+  await activateFixtureGeneration(control);
   const target = await readyGeneration(control, commits.first);
   const active = await control.getActiveGeneration();
 
@@ -165,7 +164,7 @@ test("rejects an invalid generation-label RPC input with its existing error code
 
 test("activation rejects unknown and unchecked generation targets with distinct codes", async () => {
   const control = supervisor("control-invalid-activation-targets");
-  const epoch = await activateFixture(control);
+  const epoch = await activateFixtureGeneration(control);
   const candidate = await submitCandidate(control, commits.first, "unchecked-candidate");
 
   const unknown = await control.controlGeneration(
@@ -185,7 +184,7 @@ test("activation rejects unknown and unchecked generation targets with distinct 
 
 test("rollback requires a target generation that has been active before", async () => {
   const control = supervisor("control-rollback-history");
-  await activateFixture(control);
+  await activateFixtureGeneration(control);
   const replacement = await readyGeneration(control, commits.first);
   const beforeActivation = await control.getActiveGeneration();
 
@@ -224,7 +223,7 @@ test("rollback requires a target generation that has been active before", async 
 
 test("replaying an activation request preserves the recorded epoch", async () => {
   const control = supervisor("control-replayed-activation");
-  await activateFixture(control);
+  await activateFixtureGeneration(control);
   const target = await readyGeneration(control, commits.first);
   const active = await control.getActiveGeneration();
   const activation = request("replayed-activation", user, {
@@ -257,7 +256,10 @@ test("a request ID cannot be reused for a different command", async () => {
   );
 
   expect(result).toEqual({ ok: false, problem: { code: "reused-request-id" } });
-  expect(await control.getGenerations()).toHaveLength(2);
+  expect(
+    await control.getGenerations(),
+    "the reused ID must not label its second commit",
+  ).toHaveLength(1);
 });
 
 test("a rejected request replay returns its terminal rejection", async () => {
@@ -287,5 +289,8 @@ test("the durable journal returns a recorded outcome after Durable Object evicti
   const replayed = await control.controlGeneration(submission);
 
   expect(replayed).toEqual(first);
-  expect(await control.getGenerations()).toHaveLength(2);
+  expect(
+    await control.getGenerations(),
+    "the replayed submission must not label the commit twice",
+  ).toHaveLength(1);
 });

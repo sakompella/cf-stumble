@@ -3,11 +3,15 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
 import type { EligibilityPolicy } from "../../../src/supervisor/eligibility.js";
 import type { RecoveryEpisode, RecoveryPolicy } from "../../../src/supervisor/recovery/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
+import {
+  activateFixtureGeneration,
+  activateGeneration,
+  prepareGeneration,
+  submitCandidate,
+} from "../helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 const repairedCommit = "b123456789abcdef0123456789abcdef01234567";
@@ -34,8 +38,7 @@ function requiredOperation(episode: RecoveryEpisode) {
 
 async function fallbackReady(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = supervisor(name);
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
@@ -145,8 +148,7 @@ afterEach(async () => {
 
 test("reports every durable recovery state with a positive identifier and matching fields", async () => {
   const blockedControl = supervisor("recovery-state-blocked");
-  await prepareGeneration(blockedControl, 0, fixtureMainHarnessCommit);
-  await activateGeneration(blockedControl, 0, "activate-fixture");
+  await activateFixtureGeneration(blockedControl);
   const blocked = await blockedControl.startRecovery(
     { failureEventId: "blocked", failedGenerationLabel: 0 },
     policy,

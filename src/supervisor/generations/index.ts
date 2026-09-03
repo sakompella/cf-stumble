@@ -1,8 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { Result } from "better-result";
-import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
-import { invariant } from "../../invariant.js";
+import type { HarnessCommit } from "../../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
 import type { PreparationCheck } from "./preparation-checks.js";
@@ -55,10 +54,7 @@ export class Generations {
   private readonly preparationChecks: PreparationChecks;
   private readonly activationHistory: ActivationHistory;
 
-  constructor(storage: DurableObjectStorage, fixtureHarnessCommit: string) {
-    const fixtureCommit = parseHarnessCommit(fixtureHarnessCommit);
-    invariant(fixtureCommit !== undefined, "invalid fixture harness commit");
-
+  constructor(storage: DurableObjectStorage) {
     this.storage = storage;
     this.sql = storage.sql;
     this.preparationChecks = new PreparationChecks(storage);
@@ -79,13 +75,6 @@ export class Generations {
       ON CONFLICT (singleton) DO NOTHING;
     `);
     this.activationHistory = new ActivationHistory(storage);
-
-    this.sql.exec(
-      `INSERT INTO generations (label, harness_commit, status)
-       VALUES (0, ?, 'candidate')
-       ON CONFLICT DO NOTHING`,
-      fixtureCommit,
-    );
   }
 
   labelInTransaction(harnessCommit: HarnessCommit) {

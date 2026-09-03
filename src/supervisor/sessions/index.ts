@@ -271,5 +271,5 @@ function leaseRejected(problem: SessionProblem): SessionLeaseResult {
   return { ok: false, problem };
 }
 
-export { executeSessionTurn } from "./turn-operation.js";
+export { executeSessionTurn, sessionMountReason } from "./turn-operation.js";
 export type { SessionFacetMount } from "./turn-operation.js";

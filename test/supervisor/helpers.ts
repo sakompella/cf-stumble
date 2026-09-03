@@ -2,7 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
-import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/facet/index.js";
+import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 
@@ -47,9 +47,37 @@ export class MainFacet extends DurableObject {
 
 export async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = env.SUPERVISOR.getByName(name);
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
   return control;
+}
+
+/**
+ * Bring a Supervisor to a prepared Generation 0 built from the fixture module map.
+ *
+ * The Supervisor no longer seeds a generation, so Generation 0 is an ordinary owner submission
+ * here exactly as it is in the deploy procedure: the fixture commit is submitted, takes label 0
+ * because it is the first submission, and is then prepared. The check on the label keeps the
+ * tests that name generation 0 honest about why it is 0.
+ */
+export async function prepareFixtureGeneration(
+  control: DurableObjectStub<Supervisor>,
+): Promise<number> {
+  const label = await submitCandidate(control, fixtureMainHarnessCommit, "submit-fixture");
+  expect(label, "the first submitted commit must take generation label 0").toBe(0);
+  await prepareGeneration(control, label, fixtureMainHarnessCommit);
+  return label;
+}
+
+/**
+ * Submit, prepare, and activate the fixture commit as Generation 0. Returns the epoch the
+ * activation recorded, like `activateGeneration`, because that is the epoch a following control
+ * request must observe.
+ */
+export async function activateFixtureGeneration(
+  control: DurableObjectStub<Supervisor>,
+): Promise<number> {
+  const label = await prepareFixtureGeneration(control);
+  return activateGeneration(control, label, "activate-fixture");
 }
 
 export async function submitCandidate(

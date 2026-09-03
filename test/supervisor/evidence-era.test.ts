@@ -3,10 +3,10 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
+import { fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
-  activateGeneration,
+  activateFixtureGeneration,
   prepareGeneration,
   readyArtifact,
   submitCandidate,
@@ -27,8 +27,7 @@ afterEach(async () => {
 
 test("discards credited turns when a redundant preparation check starts a new era", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era-recheck");
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
 
   await completedTurn(control);
   const strictPolicy = { minimumCreditedTurns: 1, minimumObservationSpanMs: 0 };
@@ -59,8 +58,7 @@ test("a repeated passing check advances the epoch and rejects an activation from
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName(
     "evidence-era-recheck-stale-activation",
   );
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
   const targetLabel = await submitCandidate(
     control,
     unrelatedHarnessCommit,
@@ -99,8 +97,7 @@ test("a repeated passing check advances the epoch and rejects an activation from
 
 test("keeps a generation's credited turns when unrelated protected state changes", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName("evidence-era");
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
 
   await completedTurn(control);
   await submitCandidate(control, unrelatedHarnessCommit, "submit-unrelated");

@@ -1,11 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
-import {
-  fixtureMainHarnessCommit,
-  type MainFacetCapabilities,
-  type MainHarnessArtifactInput,
-} from "../facet/index.js";
+import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../facet/index.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -24,9 +20,10 @@ import {
   type Generation,
   type PreparationCheck,
 } from "./generations/index.js";
-import { RelayAttempts, type RelayAttempt } from "./relay/index.js";
+import { FacetRelay, RelayAttempts, type RelayAttempt } from "./relay/index.js";
 import {
   executeSessionTurn,
+  sessionMountReason,
   SessionStore,
   type SessionRecord,
   type SessionResult,
@@ -42,7 +39,6 @@ import {
   type RecoveryOperationOutcomeInput,
   type RecoveryPolicy,
 } from "./recovery/index.js";
-import { FacetRelay } from "./relay/index.js";
 import { HarnessArtifacts, WorkspaceHostModuleMapBuilder } from "./artifacts/index.js";
 import type { BuildWorkspaceNamespace } from "./artifacts/index.js";
 import {
@@ -74,7 +70,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
-    this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
+    this.generations = new Generations(ctx.storage);
     // A cache miss builds the labeled commit in the harness build workspace, which is a separate
     // Workspace Host from the project workspace and is named by a module constant.
     this.artifacts = new HarnessArtifacts(
@@ -273,9 +269,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.ctx.facets,
       this.modelRoute(),
     );
-    return mounted.isErr() ? { ok: false } : { ok: true, fetcher: mounted.value.fetcher };
+    return mounted.isErr()
+      ? { ok: false, reason: sessionMountReason(mounted.error.code) }
+      : { ok: true, fetcher: mounted.value.fetcher };
   }
 
+  /** Relay one request to the generation that serves, or serve nothing when none is active. */
   override async fetch(request: Request): Promise<Response> {
     const active = this.generations.active();
     const preparationCheckId = active.generation
@@ -290,7 +289,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
 
     if (mainFacet.isErr()) {
-      return this.relay.recordMountFailure(attribution);
+      return this.relay.recordMountFailure(mainFacet.error, attribution);
     }
 
     return this.relay.forward(request, mainFacet.value.fetcher, attribution);

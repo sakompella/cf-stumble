@@ -44,6 +44,8 @@ export type SessionTurnResponse = Readonly<{
 }>;
 
 export type SessionTurnProblem =
+  /** No generation is active, so there is no main harness to run the turn. */
+  | { readonly code: "no-active-generation"; readonly sessionId: string }
   | { readonly code: "facet-failed"; readonly sessionId: string }
   | { readonly code: "facet-timeout"; readonly sessionId: string }
   | { readonly code: "malformed-facet-result"; readonly sessionId: string }

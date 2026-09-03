@@ -3,10 +3,13 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { prepareGeneration, submitCandidate } from "../supervisor/helpers.js";
+import {
+  prepareFixtureGeneration,
+  prepareGeneration,
+  submitCandidate,
+} from "../supervisor/helpers.js";
 
 const commits = {
   second: "0123456789abcdef0123456789abcdef01234567",
@@ -51,11 +54,11 @@ async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number>
 
 async function readyFixture(name: string): Promise<DurableObjectStub<Supervisor>> {
   const stub = supervisor(name);
-  await prepareGeneration(stub, 0, fixtureMainHarnessCommit);
+  const label = await prepareFixtureGeneration(stub);
   await control(stub, "activate", {
     requestId: "activate-fixture",
     observedEpoch: await statusEpoch(stub),
-    label: 0,
+    label,
   });
   return stub;
 }

@@ -3,20 +3,17 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../../src/facet/index.js";
 import { RelayAttempts } from "../../../src/supervisor/relay/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
+import {
+  activateGeneration,
+  activeSupervisor,
+  prepareGeneration,
+  submitCandidate,
+} from "../helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
-}
-
-async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
-  const control = supervisor(name);
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
-  return control;
 }
 
 function relayRequest(path: string, init?: RequestInit): Request {

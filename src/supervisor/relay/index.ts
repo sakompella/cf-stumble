@@ -1,3 +1,4 @@
+import type { MainFacetMountProblem } from "../artifacts/index.js";
 import type { ActiveGeneration } from "../generations/index.js";
 import type { RelayAttempts } from "./attempts.js";
 
@@ -57,7 +58,18 @@ export class FacetRelay {
     );
   }
 
-  recordMountFailure(attribution: RelayAttribution): Response {
+  /**
+   * A mount failure with no active generation is not a fault: the Supervisor holds no built-in
+   * code, so there is nothing to serve until the owner submits a harness commit and activates the
+   * generation the Supervisor labels. It records no attempt, because ADR-0031 derives eligibility
+   * from attempts and an attempt attributed to no generation is evidence about none. Every other
+   * failure belongs to the active generation and is recorded against it.
+   */
+  recordMountFailure(problem: MainFacetMountProblem, attribution: RelayAttribution): Response {
+    if (problem.code === "no-active-generation") {
+      return Response.json({ ok: false, problem: { code: problem.code } }, { status: 503 });
+    }
+
     const attempt = this.attempts.start(
       attribution.active,
       attribution.preparationCheckId,

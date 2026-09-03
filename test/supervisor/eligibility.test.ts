@@ -3,7 +3,6 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/index.js";
 import {
   deriveGenerationEligibility,
   selectFallbackGeneration,
@@ -11,7 +10,13 @@ import {
 import type { GenerationEligibilityEvidence } from "../../src/supervisor/eligibility.js";
 import type { RelayAttempt } from "../../src/supervisor/relay/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, artifact, prepareGeneration, submitCandidate } from "./helpers.js";
+import {
+  activateFixtureGeneration,
+  activateGeneration,
+  artifact,
+  prepareGeneration,
+  submitCandidate,
+} from "./helpers.js";
 
 import {
   completedAttempt,
@@ -197,8 +202,7 @@ test("uses only matching current-era attempts and terminal finish times", () => 
 
 test("qualifies a no-longer-active generation from its retained most recent era", async () => {
   const control = supervisor("eligibility-inactive-generation");
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
@@ -221,8 +225,7 @@ test("qualifies a no-longer-active generation from its retained most recent era"
 
 test("rejects a generation when its most recent era fails after an older era succeeded", async () => {
   const control = supervisor("eligibility-latest-era-failure");
-  await prepareGeneration(control, 0, fixtureMainHarnessCommit);
-  await activateGeneration(control, 0, "activate-fixture");
+  await activateFixtureGeneration(control);
   const completion = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
