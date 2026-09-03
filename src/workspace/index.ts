@@ -21,3 +21,4 @@ export {
   type ParsedHarnessBuildRequest,
 } from "./harness-build.js";
 export { WorkspaceHost } from "./host.js";
+export * from "./project/index.js";
