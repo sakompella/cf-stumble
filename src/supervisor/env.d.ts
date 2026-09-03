@@ -14,6 +14,8 @@ declare global {
       readonly AI: Ai;
       readonly MODULE_MAPS: R2Bucket;
       readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
+      readonly CF_ACCESS_TEAM_DOMAIN: string;
+      readonly CF_ACCESS_AUD: string;
     }
   }
 }
