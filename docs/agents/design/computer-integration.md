@@ -14,13 +14,19 @@ The paired source and image ran on a paid Cloudflare account on 2026-08-29. Cont
 
 Computer issue [#114](https://github.com/cloudflare/computer/issues/114) reports a deployed WebSocket failure in 0.2.1. The exact 0.2.1 reproduction was not deployed, so the issue is neither disproved nor known to be fixed. Repeated warm and cold requests using the pinned 0.3.0 pair did not show the failure.
 
-## Workspace layout remains open
+## Workspace layout
 
-The deployed test proves that Computer can provide durable, isolated files. It does not decide how cf-stumble should arrange them.
+Each connected GitHub project has one durable Computer workspace. The page selects a project, and
+the main facet receives only that project's workspace capability. Harness builds run in a separate
+workspace, so build commands cannot reach project files.
 
-Possible layouts include one workspace per project, a separate harness project, a shared workspace with isolated roots, or a temporary combined view when the main harness needs both project and harness source. The design should grant the model access to the projects needed for the current work without requiring every repository to share one filesystem.
+Each project also has one current Pi thread stored outside the workspace and outside generation
+state. Starting a fresh thread replaces conversation and compacted context without changing project
+files. Both the project thread and workspace survive main-harness generation changes.
 
-Sessions and accumulated context must survive useful generation changes, but they do not have to live beside project files. The supervisor should not own or interpret project files or accumulated context.
+Project workspaces behave like ordinary development machines. They have unrestricted outbound
+internet access, `git`, `gh`, and repository toolchains. GitHub credentials live in the workspace's
+local configuration outside the project repository.
 
 ## Harness execution remains open
 

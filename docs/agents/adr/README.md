@@ -11,6 +11,9 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0027](0027-use-labeled-commit-as-loader-identity.md)**: the labeled harness commit ID is the Worker Loader identity.
 - **[ADR-0033](0033-epoch-versions-generation-control-state.md)**: the generation-control epoch changes only when generation-control state changes.
 - **[ADR-0034](0034-cache-rebuildable-module-maps-in-r2.md)**: R2 caches rebuildable module maps under the labeled harness commit, while Computer rebuilds cache misses.
+- **[ADR-0037](0037-stream-real-turns-to-the-browser.md)**: version 0 streams Pi turns to the browser and credits only terminal, saved success.
+- **[ADR-0038](0038-one-thread-and-workspace-per-project.md)**: each GitHub project has one current Pi thread and one isolated Computer workspace.
+- **[ADR-0039](0039-treat-project-workspaces-as-development-machines.md)**: project workspaces have unrestricted internet, normal development tools, and local GitHub credentials.
 
 ## Agent-only decisions
 

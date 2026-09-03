@@ -1,16 +1,30 @@
 # Version 0 feature map
 
-Version 0 has one job: deploy a coding agent that can move to another harness generation without abandoning its project or the conversation in progress.
+Version 0 has one job: deploy a coding agent that can move to another harness generation without
+abandoning its project or current thread.
 
 Older plans tried to prove much more. That is why the useful path is still unfinished. The smaller demo below is enough to prove the boundary that matters. `overview.md` and the human-approved ADRs remain the architecture authority. This file sets the version 0 cut line. `slices.md` keeps the earlier implementation sequence and local evidence; it is not the release plan.
 
-The scope here is provisional in one specific way. Four owner decisions in `.audit/design-questions.md` are still open, and one of them moves the cut line. If the answer to Q2 is that versioned configuration counts as changing a generation, P1 and P2 both shrink. The owner chose Workers AI for the first model route and prefers OpenAI. Codex and Pi support ChatGPT sign-in for local CLI harnesses through a localhost callback. The available prior art does not establish that their hard-coded client supports an arbitrary HTTPS callback for a Worker, so version 0 does not depend on that unconfirmed integration. The research records are `.audit/research/openai-chatgpt-login-workers-ai.md` and `.audit/research/codex-oauth-web-prior-art.md`.
+Some owner decisions in `.audit/design-questions.md` remain open. If the answer to Q2 is that
+versioned configuration counts as changing a generation, P1 and P2 both shrink. The owner chose
+Workers AI for the first model route and prefers OpenAI. Codex and Pi support ChatGPT sign-in for
+local CLI harnesses through a localhost callback. The available prior art does not establish that
+their hard-coded client supports an arbitrary HTTPS callback for a Worker, so version 0 does not
+depend on that unconfirmed integration. The research records are
+`.audit/research/openai-chatgpt-login-workers-ai.md` and
+`.audit/research/codex-oauth-web-prior-art.md`.
 
 ## What version 0 is
 
-cf-stumble is a personal coding agent on Cloudflare. It starts with one tenant, who may use several browsers or machines. The owner gives the agent a task in one configured project repository. The active main facet uses a durable Computer workspace to read and edit files, run a project command, then report the result.
+cf-stumble is a personal coding agent on Cloudflare. It starts with one tenant, who may use several
+browsers or machines. The user connects GitHub repositories as projects and selects one from a
+collapsible left sidebar. The active main facet uses that project's durable Computer workspace and
+Pi thread to complete the work.
 
-The owner may submit a harness commit as a generation candidate. The Supervisor builds and checks that commit while the active generation continues to run. Once the check passes, the owner may activate it and may later return to a generation that ran before. The project workspace and saved conversations survive either move.
+The owner may submit a harness commit as a generation candidate. The Supervisor builds and checks
+that commit while the active generation continues to run. Once the check passes, the owner may
+activate it and may later return to a generation that ran before. Project workspaces and current
+threads survive either move.
 
 Harness code is replaceable. Project files and conversation state are not. Version 0 proves that boundary. It does not claim the agent can decide how to improve itself safely.
 
@@ -19,8 +33,9 @@ Harness code is replaceable. Project files and conversation state are not. Versi
 The finished project should make sense in a two-minute recording:
 
 1. Open the Access-protected page and see the active generation.
-2. Ask the agent to make one small change in the configured project.
-3. It reads the project, edits a file, runs the configured check, then returns the diff and command output.
+2. Select a GitHub project and ask the agent to make one small change.
+3. It streams its response while it reads the project, edits a file, runs the configured check, then
+   shows the diff and command output.
 4. Submit a second harness commit. The Supervisor builds it, cold-starts a candidate main facet, and runs `GET /`.
 5. Activate the passing candidate, then continue the same conversation in the same workspace.
 6. Submit a deliberately broken candidate. Its startup check fails while the active generation keeps serving.
@@ -30,18 +45,26 @@ If a feature neither makes that recording work nor makes it safe to run, it is o
 
 ## Fixed limits
 
-- Version 0 launches with one tenant. Any number of authenticated clients may reach it, and it may keep several saved sessions.
-- That tenant has one configured project repository and a separate harness repository. Later tenants may share that harness repository or own one; version 0 does not choose between those models.
-- Each tenant has one Computer workspace. Harness code builds elsewhere, so the two Git histories stay separate.
-- Cloudflare Access supplies identity. The Worker derives the tenant from the verified token, and no request can choose it. cf-stumble has no account, invitation, or provisioning service.
-- Conversations are opaque session documents keyed by `sessionId`, stored outside every generation. Generation code owns their schema.
+- Version 0 launches with one tenant. The user signs in with GitHub through Cloudflare Access and
+  may use several browsers or machines.
+- The tenant may connect several GitHub project repositories and has a separate harness repository.
+  Later tenants may share that harness repository or own one; version 0 does not choose between
+  those models.
+- Each project has one isolated Computer workspace and one current Pi thread. Harness code builds
+  elsewhere, so project and harness Git histories stay separate.
+- Starting a fresh thread replaces the project's conversation and compacted context but preserves
+  its workspace. Thread state stays outside every generation, and Pi owns its schema.
 - The main harness runs the vendored Pi core and one fixed model route. That route's credential stays outside the mutable facet.
-- The agent has file access, a shell, and `git diff`. There is no domain tool catalogue.
-- The browser waits for a complete HTTP response. The facet may read a provider stream internally, but it saves the session before replying and allows one turn at a time per session.
+- The agent has a shell, unrestricted outbound internet access, and normal development tools,
+  including `git` and `gh`. GitHub credentials live in local tool configuration outside the project
+  repository.
+- The browser receives Pi text, tool calls, and tool results as a turn runs. Only terminal success
+  after saved thread state completes a real turn.
 - A labeled harness commit identifies executable code. R2 contains rebuildable module maps and nothing else.
 - Only an authenticated tenant owner may submit, activate, or roll back a generation. The model has no generation-control tool.
 - Recovery is manual rollback plus the reports current code records.
-- The Worker serves one plain page.
+- The Worker serves one application page with a collapsible left project sidebar, streaming
+  conversation, and generation controls.
 - The paid Cloudflare account covers Dynamic Worker facets and Computer.
 - `pnpm verify` stays the local gate. Paid-runtime checks remain separate because workerd cannot prove these integrations.
 
@@ -56,9 +79,15 @@ verified Access identity
        -> WORKSPACE_HOST.getByName(tenant key)
 ```
 
-Every client for one identity reaches one Supervisor and one workspace host. A request names a `sessionId` within that tenant. Two sessions can run at once. One session accepts only one active turn, and session writes carry revisions, so two clients cannot silently overwrite each other.
+Every client for one identity reaches one Supervisor. A request selects a project owned by that
+tenant, and the server derives the corresponding Workspace Host name; a request cannot choose
+another tenant's workspace. Each project accepts one active turn because it has one current Pi
+thread. Two projects may run turns independently.
 
-An invited user added later takes the same route and receives separate durable state on first use: a Supervisor, workspace host, generation history, and session collection. There is no tenant database. R2 may cache module maps across tenants because a map is addressed by harness commit and contains no credentials, conversations, or project files.
+An invited user added later takes the same route and receives separate durable state on first use: a
+Supervisor, project collection, Workspace Hosts, generation history, and threads. R2 may cache
+module maps across tenants because a map is addressed by harness commit and contains no credentials,
+conversations, or project files.
 
 The Access policy still admits only the owner's identity. Identity routing is in place now so admitting a second person later does not require a change to the Supervisor or main harness.
 
@@ -72,13 +101,13 @@ The project is lopsided. The Supervisor has deliberate generation, relay, eligib
 | Journaled candidate, activation, and rollback requests   | Implemented and tested locally                 | Put them behind an authenticated tenant route.                        |
 | Bounded startup check                                    | Implemented and tested locally                 | Run it against real candidate module maps.                            |
 | Active-generation facet serving                          | Works locally with `src/facet/fixture.ts`      | Load a real Pi-based main facet.                                      |
-| Relay attempts and eligibility                           | Implemented and tested locally                 | Freeze the policy. Credit only complete buffered turns.               |
+| Relay attempts and eligibility                           | Implemented and tested locally                 | Credit only terminal streamed turns whose thread state was saved.     |
 | Recovery episode bookkeeping                             | Implemented and tested locally                 | Show the latest report if useful. Do not add automatic repair.        |
 | R2 binding                                               | Configured and smoke-tested locally            | Add the cache and the Computer rebuild path.                          |
 | Pi 0.84.4 fork                                           | Vendored and checked                           | Run it in the main facet.                                             |
 | Computer source and image pair                           | Pinned and tested separately on a paid account | Add the workspace host and the runtime adapter to this repository.    |
 | Coding-agent loop                                        | Missing                                        | Complete one real edit-and-test turn.                                 |
-| Saved conversations                                      | Missing                                        | Store session documents outside generation state.                     |
+| Project threads                                          | Session documents use the old manual-ID model  | Persist one current Pi thread per project outside generation state.   |
 | Model access                                             | Missing                                        | Add one fixed route whose credential stays outside the mutable facet. |
 | Tenant page and HTTP routes                              | Missing                                        | Add identity routing, chat, status, candidate check, and rollback.    |
 | Paid deployment                                          | Missing                                        | Run the complete demo in the paid runtime.                            |
@@ -94,7 +123,7 @@ The paid-account probe must show all of the following:
 - The facet reads a durable file, writes another, and runs one container command.
 - The file survives a restart or eviction of the host and the facet.
 - A model probe returns through the route the main harness will use.
-- A request to every other outbound destination fails.
+- The project workspace reaches arbitrary internet destinations through ordinary development tools.
 - Computer builds a module map the Worker Loader accepts.
 - A cold facet from that map passes the existing `GET /` startup check.
 - Probe notes preserve timings and raw failures, rather than a summary written from memory.
@@ -103,22 +132,25 @@ Stop if the facet cannot receive the Computer or model capability, Computer cann
 
 ## P1: make one coding turn real
 
-One project and one model are enough. Clients may open several sessions, but each session runs one request at a time.
-
-Build the real Generation 0 main facet on the vendored Pi core. Keep opaque session documents outside generation state, keyed by `sessionId`. Add a Computer execution adapter for file reads, edits, writes, shell commands, and `git diff`. `POST /sessions/:sessionId/turn` runs the agent, saves the session, then returns one buffered response. Keep `GET /` cheap and deterministic because the Supervisor uses it for startup checks.
+Build the real Generation 0 main facet on the vendored Pi core. Keep each project's current Pi
+thread outside generation state. Add a Computer adapter that gives Pi ordinary project file and
+shell operations. The turn route streams Pi events to the browser, saves terminal thread state, and
+keeps `GET /` cheap and deterministic because the Supervisor uses it for startup checks.
 
 This phase is complete when the working path has these properties:
 
 - The owner can request a small change in the configured repository.
 - The agent finds the relevant file, edits it, runs the configured check, and returns the diff and command output.
-- The project edit and saved sessions survive facet replacement and workspace-host eviction.
-- Two clients can use separate sessions without sharing conversation state.
-- A second active turn for one session fails with a conflict.
-- A stale session revision fails rather than overwriting newer work.
+- The project edit and current thread survive facet replacement and Workspace Host eviction.
+- Two projects keep separate thread and workspace state.
+- A second active turn for one project fails with a conflict.
+- Starting a fresh thread clears conversation and compacted context but preserves project files.
 - A Computer failure becomes a tool error rather than crashing the facet.
 - A successful response records one completed relay attempt. Cancellation and failure earn no credit.
 
-Browser streaming, live shared sessions, steering, compaction, a project picker, and a model abstraction stay out. A buffered turn is easy to demonstrate and avoids a disconnect-and-resume problem unrelated to this proof.
+Pi owns streaming, tool execution, thread state, and compaction. Live collaboration, steering,
+background execution, and a model abstraction stay out. The implementation must state and test what
+happens when the browser disconnects from a running stream.
 
 ## P2: build each generation from its commit
 
@@ -143,13 +175,18 @@ Version 0 needs a simple R2 size or age limit. Miss coalescing, background clean
 
 Expose the behavior that exists. Do not turn this into an admin product.
 
-Cloudflare Access protects every tenant route. The Worker verifies identity, derives the tenant key, and sends chat and control requests to that tenant's Supervisor. Small JSON endpoints return status, sessions, generation history, candidate check results, activation and rollback results, and the latest recovery report. A no-framework page uses those endpoints for chat and generation controls.
+Cloudflare Access uses GitHub as the identity provider and protects every tenant route. The Worker
+derives the tenant key from the verified Access identity and sends project, chat, and control
+requests to that tenant's Supervisor. The application page lists connected projects in a
+collapsible left sidebar, streams the selected project's current Pi thread, and exposes generation
+controls.
 
 The page and routes are ready when:
 
-- An unauthenticated request cannot reach a chat or control endpoint.
+- An unauthenticated request cannot reach a project, chat, or control endpoint.
 - A request cannot choose another tenant by sending a tenant ID.
-- Two clients authenticated as the owner reach the same generation state and workspace.
+- Two clients authenticated as the owner reach the same projects, generation state, workspaces, and
+  current threads.
 - Test identities with different stable claims resolve to different Supervisor and workspace-host names.
 - The page shows the active generation and the epoch used for activation or rollback.
 - Repeating one request ID returns the journaled result.
@@ -165,7 +202,10 @@ Manual rollback is version 0 recovery. Existing recovery code may record and exp
 
 Write one repeatable deployment procedure for the Worker, Durable Objects, R2 bucket, Computer host, model binding or secret, and Access policy. Keep one small demo repository and one broken harness candidate ready for the recording.
 
-Run the complete demo in a fresh browser session. Then open the same tenant from a second client and continue through another session. Restart or evict runtime objects and confirm the active generation, saved conversations, and project files remain. After the last code change, run `pnpm verify` and retain paid probe output with the release notes.
+Run the complete demo in a fresh browser session. Then open the same tenant from a second client and
+continue the selected project's thread. Restart or evict runtime objects and confirm the active
+generation, project threads, and project files remain. After the last code change, run `pnpm verify`
+and retain paid probe output with the release notes.
 
 Version 0 is done when that passes. Publish the recording. Stop adding features.
 
@@ -179,11 +219,12 @@ These belong to cf-stumble, but not to this release:
 
 - Choosing a known-good threshold or activating a fallback automatically.
 - Letting the agent repair itself, submit generations, or approve changes through replay tests.
-- Token streaming, reconnect, resume, steering, and background turns.
-- More projects, combined project and harness views, or a workspace picker.
+- Reconnect, resume, steering, and background turns beyond the disconnect behavior required for a
+  correct streamed turn.
+- Combined project and harness views.
 - Public signup, teams, roles, invitations, tenant administration, or a custom account system.
 - Provider selection and subscription login.
-- Better cache policy, alarms, and session migrations.
+- Better cache policy, alarms, and thread migrations.
 
 ## Ideas that are not part of this release
 
@@ -192,7 +233,7 @@ The historical conversation produced many good side projects. They are side proj
 - `patch.md` profiles
 - code-server
 - Cloudflare OS Gadget or Blueprint compatibility
-- GitHub App installation, issue triage, CI webhooks, and pull requests
+- Issue triage, CI webhooks, and a product-level pull-request workflow
 - custom Git object storage, Artifacts compatibility, and a Git protocol server
 - skills, MCP, plugin, and tool marketplaces
 - a metrics dashboard, full admin console, canaries, quarantine, attestations, and garbage collection
@@ -214,5 +255,6 @@ Do cleanup as its replacement begins to work. Starting with cleanup would postpo
 2. Run every paid probe before writing code that assumes its result.
 3. When Cloudflare differs from the design, record the observed and expected behavior, then stop and decide. Do not add a fake or a second architecture from speculation.
 4. Do not expand recovery, eligibility, or generation policy while the main facet remains a fixture.
-5. Use a fixed value where version 0 has one project, one model, or one page. Tenant identity and `sessionId` are the only routing dimensions worth adding.
+5. Use Pi's existing thread, streaming, tool, and compaction logic. Add project identity as the only
+   new user-selected routing dimension; keep one model and one application page.
 6. Release the demo once it passes. Put later ideas in a later plan.

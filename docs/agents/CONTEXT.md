@@ -58,13 +58,21 @@ _Avoid_: generation
 A Git repository containing main-harness source. It is logically separate from repositories used for the user's other work.
 
 **Project repository**:
-A Git repository used for a piece of user work. GitHub is the first planned remote integration, not part of the definition.
+A Git repository used for a piece of user work. In version 0, each project is a GitHub repository
+that the user connected to cf-stumble.
+
+**Project thread**:
+The current Pi conversation for one project. Starting a fresh thread replaces its conversation and
+compacted context but preserves the project's Computer workspace. Version 0 presents one current
+thread per project.
 
 **Computer workspace**:
-A durable filesystem provided by `@cloudflare/computer`. A cf-stumble instance may use one or several Computer workspaces; the mapping between workspaces, projects, harness source, sessions, and accumulated context remains open.
+A durable filesystem and command environment provided by `@cloudflare/computer`. Each project has
+one isolated Computer workspace. Harness builds use a separate workspace.
 
 **Accumulated context**:
-Session history and other useful context that can survive a change of main-harness generation. Its storage layout remains open.
+Pi thread history, compacted context, and other useful context that can survive a change of
+main-harness generation. Its storage layout remains open.
 
 **Worker-shell**:
 Computer's text-oriented execution backend, including host-forwarded Git.

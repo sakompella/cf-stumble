@@ -26,17 +26,17 @@ The recovery harness has a narrower aim: keep a usable main harness available. I
 
 ## Projects and files
 
-The filesystem layout is open. A project may receive a limited filesystem containing only its own files. The harness source may appear as a separate project with its own repository and workspace. When the user asks for a harness change while working in another project, cf-stumble may temporarily expose both projects, mount one beside the other, or construct an overlay so the main harness can read both without merging their Git histories.
+In version 0, a project is a GitHub repository that the user connects to cf-stumble. Each project
+has one isolated Computer workspace and one current Pi thread. The page lists projects in a
+collapsible left sidebar.
 
-Computer provides durable files and execution, but it does not require one global workspace containing every repository. The design still needs to choose among one workspace per project, a shared workspace with isolated roots, temporary combined views, or another capability-based layout.
+Starting a fresh thread resets Pi's conversation and compacted context but preserves the project
+workspace. Changing the main-harness generation also preserves both. Harness source builds in a
+separate workspace, so project and harness Git histories do not share a filesystem.
 
-Whatever layout is chosen should preserve three properties:
-
-- project Git operations remain ordinary Git operations;
-- changing the main-harness generation does not discard useful sessions or user context; and
-- the supervisor does not own or interpret project files and accumulated context.
-
-GitHub is the first remote integration, not a restriction on what counts as a project repository.
+Project workspaces behave like normal development machines. They have unrestricted internet access
+and ordinary tools such as `git` and `gh`. GitHub credentials stay in local tool configuration
+outside the repository, and the supervisor does not own or interpret project files or thread state.
 
 ## Generations and self-improvement
 
@@ -58,7 +58,8 @@ The harness source is TypeScript. Dynamic Workers execute Worker-compatible modu
 
 The first version should provide:
 
-- a normal conversation with the main harness;
+- a streaming conversation with the Pi-based main harness;
+- a collapsible left sidebar for connected GitHub projects;
 - enough project access to complete a real coding task;
 - visible generation and recovery state;
 - generation candidate submission and checked activation requests; and
@@ -71,11 +72,10 @@ A broad administration console, configuration editor, metrics dashboard, and bro
 The main open questions are:
 
 - the supervisor-to-facet interface, including whether normal `fetch` is sufficient;
-- project, harness, session, and accumulated-context filesystem layout;
 - what the main harness can request and how the supervisor authenticates and checks it;
 - the cold-start check and what counts as success;
 - what makes a generation known good;
-- what completes a real turn, especially for streamed responses and disconnects;
+- what happens to a running turn when its browser disconnects;
 - model egress or gateway;
 - UI transport;
 - recovery limits and timeouts; and
