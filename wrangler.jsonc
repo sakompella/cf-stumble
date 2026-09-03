@@ -3,7 +3,10 @@
   "name": "cf-stumble",
   "main": "src/worker.ts",
   "compatibility_date": "2025-01-01",
-  "compatibility_flags": ["enable_ctx_exports"],
+  // @cloudflare/computer imports node:crypto and node:events, so the Worker does not start
+  // without nodejs_compat. Vitest resolves those itself, which is why the suite passed while
+  // `wrangler dev` failed to boot.
+  "compatibility_flags": ["enable_ctx_exports", "nodejs_compat"],
   "durable_objects": {
     "bindings": [
       {
