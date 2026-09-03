@@ -7,6 +7,7 @@
  */
 export type ApiErrorCode =
   | "invalid-turn-request"
+  | "invalid-submission-request"
   | "invalid-activation-request"
   | "invalid-rollback-request"
   | "not-found"

@@ -1,11 +1,17 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
 import type { SessionRecord, SessionTurnResult } from "../supervisor/sessions/index.js";
-import { handleGenerationControl, type GenerationControlSupervisor } from "./generations.js";
+import {
+  handleGenerationControl,
+  handleGenerationSubmission,
+  type GenerationControlSupervisor,
+  type GenerationSubmissionSupervisor,
+} from "./generations.js";
 import { hasExactKeys, isCount, isRecord, jsonError, readJson } from "./json.js";
 import { latestRecoveryReportSummary, type RecoveryReportSupervisor } from "./recovery.js";
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
+  GenerationSubmissionSupervisor &
   RecoveryReportSupervisor & {
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
     readonly getSession: (sessionId: string) => Promise<SessionRecord | undefined>;
@@ -126,6 +132,9 @@ export function routeOwnerApiRequest(
   }
   if (isGet && pathname === "/api/recovery/latest") {
     return recoveryResponse(supervisor);
+  }
+  if (isPost && pathname === "/api/generations/submit") {
+    return handleGenerationSubmission(request, supervisor);
   }
   if (isPost && pathname === "/api/generations/activate") {
     return handleGenerationControl(request, supervisor, "activate");

@@ -173,19 +173,31 @@ test("an unauthenticated request cannot reach a generation control route", async
     "/api/generations/rollback",
     JSON.stringify({ requestId: "unauthenticated", observedEpoch: 0, label: 0 }),
   );
+  const submit = controlRequest(
+    "/api/generations/submit",
+    JSON.stringify({
+      requestId: "unauthenticated",
+      harnessCommit: "f53a0e1c1bdbe213ab700a84b1db23615cc24b02",
+    }),
+  );
 
   // oxlint-disable-next-line typescript/no-deprecated
   const activateResponse = await SELF.fetch(activate);
   // oxlint-disable-next-line typescript/no-deprecated
   const rollbackResponse = await SELF.fetch(rollback);
   // oxlint-disable-next-line typescript/no-deprecated
+  const submitResponse = await SELF.fetch(submit);
+  // oxlint-disable-next-line typescript/no-deprecated
   const recoveryResponse = await SELF.fetch(
     new Request("https://cf-stumble.test/api/recovery/latest"),
   );
 
-  expect([activateResponse.status, rollbackResponse.status, recoveryResponse.status]).toEqual([
-    401, 401, 401,
-  ]);
+  expect([
+    activateResponse.status,
+    rollbackResponse.status,
+    submitResponse.status,
+    recoveryResponse.status,
+  ]).toEqual([401, 401, 401, 401]);
 });
 test("reports no recovery report before any recovery episode exists", async () => {
   const response = await routeOwnerApiRequest(
@@ -206,7 +218,12 @@ test("keeps a GET-only recovery route and a POST-only control route", async () =
     new Request("https://cf-stumble.test/api/generations/activate"),
     supervisor(),
   );
+  const getSubmit = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/generations/submit"),
+    supervisor(),
+  );
 
   expect(postRecovery.status).toBe(404);
   expect(getActivate.status).toBe(404);
+  expect(getSubmit.status).toBe(404);
 });
