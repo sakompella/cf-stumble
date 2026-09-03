@@ -32,6 +32,15 @@ function pageRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://cf-stumble.test/", { headers });
 }
 
+/** The script the browser actually receives, taken out of the one inline `<script>` element. */
+function inlinePageScript(html: string): string {
+  const found = /<script nonce="[^"]*">([\s\S]*?)<\/script>/u.exec(html);
+  if (found?.[1] === undefined) {
+    throw new Error("the owner page carries no inline script");
+  }
+  return found[1];
+}
+
 /** The Worker checks expiry against the real clock, so this token has to be valid right now. */
 function ownerToken(key: SigningKey): Promise<string> {
   return signAccessToken(key, {
@@ -140,6 +149,18 @@ test("the page builds an executed command row from the documented id pattern", (
   expect(html).toContain('base + "-exit-code"');
   expect(html).toContain('base + "-stdout"');
   expect(html).toContain('base + "-stderr"');
+});
+
+test("the inline script the browser receives parses as JavaScript", () => {
+  // Every other assertion in this file matches text, and text matching cannot see a syntax
+  // error: each id still appears in the markup while none of the script runs, so the page looks
+  // right and populates nothing. Parsing the delivered script is the only check that the page
+  // can fill itself in at all.
+  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+
+  expect(script).toContain("refreshStatus");
+  // oxlint-disable-next-line typescript/no-implied-eval -- Constructing the function is the check. It parses the script and is never called.
+  expect(() => new Function(script)).not.toThrow();
 });
 
 test("the page uses only the owner JSON endpoints, on this origin", () => {

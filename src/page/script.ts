@@ -34,5 +34,4 @@ export const OWNER_PAGE_SCRIPT = `
 
   void refreshStatus();
 })();
-})();
 `;
