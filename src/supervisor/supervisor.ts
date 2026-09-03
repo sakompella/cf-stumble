@@ -1,7 +1,11 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
-import { fixtureMainHarnessCommit, type MainHarnessArtifactInput } from "../facet/index.js";
+import {
+  fixtureMainHarnessCommit,
+  type MainFacetCapabilities,
+  type MainHarnessArtifactInput,
+} from "../facet/index.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -40,6 +44,7 @@ import {
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
+  readonly MODULE_MAPS: R2Bucket;
 };
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
@@ -54,12 +59,16 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
-    this.artifacts = new HarnessArtifacts(ctx.storage);
+    this.artifacts = new HarnessArtifacts(env.MODULE_MAPS);
     this.control = new GenerationControl(ctx.storage, this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
     this.sessions = new SessionStore(ctx.storage);
+  }
+
+  private modelRoute(): MainFacetCapabilities["MODEL"] {
+    return this.ctx.exports.ModelRoute({});
   }
 
   checkGenerationStartup(
@@ -74,6 +83,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.generations,
       label,
       artifact,
+      this.modelRoute(),
       options,
     );
   }
@@ -196,16 +206,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.sessions.abandonTurn(sessionId);
   }
 
-  override fetch(request: Request): Promise<Response> {
+  override async fetch(request: Request): Promise<Response> {
     const active = this.generations.active();
     const preparationCheckId = active.generation
       ? this.generations.latestPreparationCheck(active.generation.label)?.id
       : undefined;
     const attribution = { active, preparationCheckId };
-    const mainFacet = this.artifacts.mount(active, this.env.LOADER, this.ctx.facets);
+    const mainFacet = await this.artifacts.mount(
+      active,
+      this.env.LOADER,
+      this.ctx.facets,
+      this.modelRoute(),
+    );
 
     if (mainFacet.isErr()) {
-      return Promise.resolve(this.relay.recordMountFailure(attribution));
+      return this.relay.recordMountFailure(attribution);
     }
 
     return this.relay.forward(request, mainFacet.value.fetcher, attribution);

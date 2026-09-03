@@ -3,6 +3,7 @@
 import { Result } from "better-result";
 import { MainHarnessArtifact } from "./artifact.js";
 import { fixtureMainHarnessArtifact } from "./fixture.js";
+import type { ModelRoute } from "../model-route.js";
 import type {
   HarnessModule,
   MainHarnessArtifactInput,
@@ -17,12 +18,18 @@ function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] 
   return [module.name, { js: module.source }];
 }
 
-function loadArtifact(loader: WorkerLoader, artifact: MainHarnessArtifact): WorkerStub {
+export type MainFacetCapabilities = Readonly<{ MODEL: Fetcher<ModelRoute> }>;
+
+function loadArtifact(
+  loader: WorkerLoader,
+  artifact: MainHarnessArtifact,
+  capabilities: MainFacetCapabilities,
+): WorkerStub {
   return loader.get(artifact.harnessCommit, () => ({
     compatibilityDate: "2025-01-01",
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),
-    env: {},
+    env: capabilities,
     globalOutbound: null,
   }));
 }
@@ -30,6 +37,7 @@ function loadArtifact(loader: WorkerLoader, artifact: MainHarnessArtifact): Work
 export function loadMainFacet(
   loader: WorkerLoader,
   input: MainHarnessArtifactInput,
+  capabilities: MainFacetCapabilities,
 ): Result<
   { readonly worker: WorkerStub; readonly facetClass: DurableObjectClass },
   MainHarnessArtifactProblem
@@ -39,16 +47,17 @@ export function loadMainFacet(
     return Result.err(artifact.error);
   }
 
-  const worker = loadArtifact(loader, artifact.value);
+  const worker = loadArtifact(loader, artifact.value, capabilities);
 
   return Result.ok({ worker, facetClass: worker.getDurableObjectClass("MainFacet") });
 }
 
 export function loadFixtureMainFacet(
   loader: WorkerLoader,
+  capabilities: MainFacetCapabilities,
 ): Result<
   { readonly worker: WorkerStub; readonly facetClass: DurableObjectClass },
   MainHarnessArtifactProblem
 > {
-  return loadMainFacet(loader, fixtureMainHarnessArtifact);
+  return loadMainFacet(loader, fixtureMainHarnessArtifact, capabilities);
 }

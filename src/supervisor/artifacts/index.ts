@@ -4,103 +4,91 @@ import {
   loadMainFacet,
   MainHarnessArtifact,
 } from "../../facet/index.js";
-import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../../facet/index.js";
-import type { HarnessCommit } from "../../harness-commit.js";
+import type {
+  MainFacetCapabilities,
+  MainHarnessArtifactInput,
+  MainHarnessArtifactProblem,
+} from "../../facet/index.js";
+import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
 import { mainFacetName } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations/index.js";
 
-type ArtifactModuleRow = {
-  readonly module_name: string;
-  readonly source: string;
-  readonly is_entry: number;
-};
+type StoredArtifactProblem =
+  | {
+      readonly code: "corrupt-artifact";
+      readonly harnessCommit: string;
+    }
+  | {
+      readonly code: "artifact-read-failed" | "artifact-write-failed";
+      readonly harnessCommit: string;
+    };
 
 export type HarnessArtifactProblem =
   | MainHarnessArtifactProblem
+  | StoredArtifactProblem
   | { readonly code: "retained-artifact-mismatch"; readonly harnessCommit: string };
 
 export type HarnessArtifactResult = Result<
-  { readonly artifact: MainHarnessArtifactInput; readonly effect: "retained" | "verified" },
+  {
+    readonly artifact: MainHarnessArtifactInput;
+    readonly effect: "retained" | "verified" | "rebuilt";
+  },
   HarnessArtifactProblem
 >;
 
 export type RetainedHarnessArtifactResult = Result<
   MainHarnessArtifactInput | void,
-  MainHarnessArtifactProblem
+  HarnessArtifactProblem
 >;
 
+const MODULE_MAP_PREFIX = "module-maps/";
+
+/** R2 is an evictable cache. Durable Object SQLite stores no module source. */
 export class HarnessArtifacts {
-  private readonly storage: DurableObjectStorage;
-  private readonly sql: SqlStorage;
+  private readonly bucket: R2Bucket;
 
-  constructor(storage: DurableObjectStorage) {
-    this.storage = storage;
-    this.sql = storage.sql;
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS harness_artifact_modules (
-        harness_commit TEXT NOT NULL,
-        module_name TEXT NOT NULL,
-        source TEXT NOT NULL,
-        is_entry INTEGER NOT NULL CHECK (is_entry IN (0, 1)),
-        PRIMARY KEY (harness_commit, module_name)
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS harness_artifact_one_entry
-        ON harness_artifact_modules (harness_commit)
-        WHERE is_entry = 1;
-    `);
-
-    const retainedFixture = this.retain(fixtureMainHarnessArtifact);
-    if (retainedFixture.isErr()) {
-      throw new Error(`invalid fixture harness artifact: ${retainedFixture.error.code}`);
-    }
+  constructor(bucket: R2Bucket) {
+    this.bucket = bucket;
   }
 
-  retain(input: MainHarnessArtifactInput): HarnessArtifactResult {
+  async retain(input: MainHarnessArtifactInput): Promise<HarnessArtifactResult> {
     const parsed = MainHarnessArtifact.parse(input);
     if (parsed.isErr()) {
       return Result.err(parsed.error);
     }
 
     const canonicalInput = artifactInput(parsed.value);
-    return this.storage.transactionSync(() => {
-      const retained = this.get(parsed.value.harnessCommit);
-      if (retained.isErr()) {
+    const retained = await this.get(parsed.value.harnessCommit);
+    if (retained.isErr()) {
+      if (retained.error.code !== "corrupt-artifact") {
         return Result.err(retained.error);
       }
 
-      if (retained.value !== undefined) {
-        return sameArtifact(retained.value, canonicalInput)
-          ? Result.ok({ artifact: retained.value, effect: "verified" })
-          : Result.err({
-              code: "retained-artifact-mismatch",
-              harnessCommit: parsed.value.harnessCommit,
-            });
-      }
+      return this.write(canonicalInput, "rebuilt");
+    }
 
-      for (const [index, module] of canonicalInput.modules.entries()) {
-        this.sql.exec(
-          `INSERT INTO harness_artifact_modules (harness_commit, module_name, source, is_entry)
-           VALUES (?, ?, ?, ?)`,
-          canonicalInput.harnessCommit,
-          module.name,
-          module.source,
-          index === 0 ? 1 : 0,
-        );
-      }
+    if (retained.value !== undefined) {
+      return sameArtifact(retained.value, canonicalInput)
+        ? Result.ok({ artifact: retained.value, effect: "verified" })
+        : Result.err({
+            code: "retained-artifact-mismatch",
+            harnessCommit: parsed.value.harnessCommit,
+          });
+    }
 
-      return Result.ok({ artifact: canonicalInput, effect: "retained" });
-    });
+    return this.write(canonicalInput, "retained");
   }
 
-  mount(
+  async mount(
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
-  ): Result<{ readonly fetcher: Fetcher }, string> {
+    modelRoute: MainFacetCapabilities["MODEL"],
+  ): Promise<Result<{ readonly fetcher: Fetcher }, string>> {
     const retained =
       active.generation === undefined
-        ? this.retain(fixtureMainHarnessArtifact)
-        : this.get(active.generation.harnessCommit);
+        ? await this.retain(fixtureMainHarnessArtifact)
+        : await this.get(active.generation.harnessCommit);
     if (retained.isErr()) {
       return Result.err(retained.error.code);
     }
@@ -110,7 +98,7 @@ export class HarnessArtifacts {
     }
 
     const artifact = "artifact" in retained.value ? retained.value.artifact : retained.value;
-    const loadedFacet = loadMainFacet(loader, artifact);
+    const loadedFacet = loadMainFacet(loader, artifact, { MODEL: modelRoute });
     if (loadedFacet.isErr()) {
       return Result.err(loadedFacet.error.code);
     }
@@ -122,33 +110,61 @@ export class HarnessArtifacts {
     });
   }
 
-  get(harnessCommit: HarnessCommit): RetainedHarnessArtifactResult {
-    const modules = this.sql
-      .exec<ArtifactModuleRow>(
-        `SELECT module_name, source, is_entry
-         FROM harness_artifact_modules
-         WHERE harness_commit = ?
-         ORDER BY is_entry DESC, module_name ASC`,
-        harnessCommit,
-      )
-      .toArray();
+  async get(harnessCommit: HarnessCommit): Promise<RetainedHarnessArtifactResult> {
+    const validatedCommit = parseHarnessCommit(harnessCommit);
+    if (validatedCommit === undefined) {
+      return Result.err({ code: "invalid-harness-commit", harnessCommit });
+    }
 
-    if (modules.length === 0) {
+    let object: R2ObjectBody | null;
+    try {
+      object = await this.bucket.get(artifactKey(validatedCommit));
+    } catch {
+      return Result.err({ code: "artifact-read-failed", harnessCommit: validatedCommit });
+    }
+
+    if (object === null) {
       return Result.ok();
     }
 
-    const entryModule = modules.find((module) => module.is_entry === 1)?.module_name;
-    const parsed = MainHarnessArtifact.parse({
-      harnessCommit,
-      entryModule: entryModule ?? "",
-      modules: modules.map((module) => ({ name: module.module_name, source: module.source })),
-    });
-    if (parsed.isErr()) {
-      return Result.err(parsed.error);
+    let value: MainHarnessArtifactInput;
+    try {
+      value = await object.json<MainHarnessArtifactInput>();
+    } catch {
+      return Result.err({ code: "corrupt-artifact", harnessCommit: validatedCommit });
+    }
+
+    const parsed = MainHarnessArtifact.parse(value);
+    if (parsed.isErr() || parsed.value.harnessCommit !== validatedCommit) {
+      return Result.err({ code: "corrupt-artifact", harnessCommit: validatedCommit });
     }
 
     return Result.ok(artifactInput(parsed.value));
   }
+
+  private async write(
+    input: MainHarnessArtifactInput,
+    effect: "retained" | "rebuilt",
+  ): Promise<HarnessArtifactResult> {
+    const validatedCommit = parseHarnessCommit(input.harnessCommit);
+    if (validatedCommit === undefined) {
+      return Result.err({ code: "invalid-harness-commit", harnessCommit: input.harnessCommit });
+    }
+
+    try {
+      await this.bucket.put(artifactKey(validatedCommit), JSON.stringify(input), {
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch {
+      return Result.err({ code: "artifact-write-failed", harnessCommit: validatedCommit });
+    }
+
+    return Result.ok({ artifact: input, effect });
+  }
+}
+
+function artifactKey(harnessCommit: HarnessCommit): string {
+  return `${MODULE_MAP_PREFIX}${harnessCommit}`;
 }
 
 function artifactInput(artifact: MainHarnessArtifact): MainHarnessArtifactInput {

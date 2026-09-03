@@ -1,6 +1,6 @@
 import { Result, TaggedError } from "better-result";
 import { MainHarnessArtifact, loadMainFacet } from "../../facet/index.js";
-import type { MainHarnessArtifactInput } from "../../facet/index.js";
+import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 import { deadlineAfter } from "./deadline.js";
 import type { StartupCheckOutcome } from "./body.js";
 import { drainResponseBody } from "./body.js";
@@ -63,6 +63,7 @@ export function checkGenerationStartup(
   generations: Generations,
   label: number,
   input: MainHarnessArtifactInput,
+  modelRoute: MainFacetCapabilities["MODEL"],
   options: StartupCheckOptions = {},
 ): Promise<StartupCheckResult> {
   const generationLabel = parseGenerationLabel(label);
@@ -83,6 +84,7 @@ export function checkGenerationStartup(
     generationLabel,
     generation,
     input,
+    modelRoute,
     options,
   );
 }
@@ -95,6 +97,7 @@ async function checkKnownGenerationStartup(
   generationLabel: GenerationLabel,
   generation: Generation,
   input: MainHarnessArtifactInput,
+  modelRoute: MainFacetCapabilities["MODEL"],
   options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
   const parsedArtifact = MainHarnessArtifact.parse(input);
@@ -114,7 +117,7 @@ async function checkKnownGenerationStartup(
     };
   }
 
-  const retained = artifacts.retain(input);
+  const retained = await artifacts.retain(input);
   if (retained.isErr()) {
     return { ok: false, problem: retained.error };
   }
@@ -124,6 +127,7 @@ async function checkKnownGenerationStartup(
     loader,
     retained.value.artifact,
     generation.harnessCommit,
+    modelRoute,
     options,
   );
   const recorded = generations.recordPreparationCheck(
@@ -139,13 +143,14 @@ async function runStartupCheck(
   loader: WorkerLoader,
   input: MainHarnessArtifactInput,
   harnessCommit: string,
+  modelRoute: MainFacetCapabilities["MODEL"],
   options: StartupCheckOptions,
 ): Promise<StartupCheckOutcome> {
   const deadline = deadlineAfter(options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS);
   const maxBodyBytes = options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES;
 
   try {
-    const loadedFacet = mountCandidateFacet(ctx, loader, input, harnessCommit);
+    const loadedFacet = mountCandidateFacet(ctx, loader, input, harnessCommit, modelRoute);
     if (loadedFacet.isErr()) {
       return loadedFacet.error.match({
         MainFacetMountFailed: (error): StartupCheckOutcome => ({
@@ -213,9 +218,10 @@ function mountCandidateFacet(
   loader: WorkerLoader,
   input: MainHarnessArtifactInput,
   harnessCommit: string,
+  modelRoute: MainFacetCapabilities["MODEL"],
 ): Result<Fetcher, MainFacetMountFailed> {
   try {
-    const loadedFacet = loadMainFacet(loader, input);
+    const loadedFacet = loadMainFacet(loader, input, { MODEL: modelRoute });
     if (loadedFacet.isErr()) {
       const reason = loadedFacet.error.code;
       return Result.err(

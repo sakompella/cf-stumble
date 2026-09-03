@@ -22,6 +22,7 @@ export type MainHarnessArtifactProblem =
       readonly code: "invalid-harness-commit";
       readonly harnessCommit: string;
     }
+  | { readonly code: "invalid-artifact" }
   | { readonly code: "empty-module-map" }
   | {
       readonly code: "entry-module-not-found";
@@ -52,6 +53,31 @@ export class MainHarnessArtifact {
   static parse(
     input: MainHarnessArtifactInput,
   ): Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
+    // R2 JSON is untrusted at this boundary. The public type describes the decoded shape, but
+    // these checks keep malformed cache objects from becoming executable module maps.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof
+    if (
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof
+      typeof input !== "object" ||
+      input === null ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof
+      typeof input.harnessCommit !== "string" ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof
+      typeof input.entryModule !== "string" ||
+      !Array.isArray(input.modules) ||
+      input.modules.some(
+        (module) =>
+          module === null ||
+          module === undefined ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/no-unsafe-member-access
+          typeof module.name !== "string" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/no-unsafe-member-access
+          typeof module.source !== "string",
+      )
+    ) {
+      return Result.err({ code: "invalid-artifact" });
+    }
+
     const moduleMap = parseModuleMap(input.entryModule, input.modules);
     if (moduleMap.isErr()) {
       return Result.err(moduleMap.error);

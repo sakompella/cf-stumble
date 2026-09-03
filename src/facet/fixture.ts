@@ -16,6 +16,7 @@ export class MainFacet extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.bindingNames = Object.keys(env).sort();
+    this.model = env.MODEL;
   }
 
   async fetch(request) {
@@ -30,6 +31,19 @@ export class MainFacet extends DurableObject {
 
     if (path === "/facet/bindings") {
       return Response.json(this.bindingNames);
+    }
+
+    if (path === "/facet/model") {
+      return Response.json(await this.model.run({ prompt: await request.text() }));
+    }
+
+    if (path === "/facet/outbound") {
+      try {
+        await fetch("https://example.com/");
+        return Response.json({ ok: true });
+      } catch {
+        return Response.json({ ok: false, error: "outbound-blocked" });
+      }
     }
 
     if (path === "/facet/relay/echo") {

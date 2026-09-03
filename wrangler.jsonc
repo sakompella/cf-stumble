@@ -3,6 +3,7 @@
   "name": "cf-stumble",
   "main": "src/worker.ts",
   "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["enable_ctx_exports"],
   "durable_objects": {
     "bindings": [
       {
@@ -18,17 +19,7 @@
     },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
-  "previews": {
-    "durable_objects": {
-      "bindings": [
-        {
-          "name": "SUPERVISOR",
-          "class_name": "Supervisor",
-        },
-      ],
-    },
-    "worker_loaders": [{ "binding": "LOADER" }],
-  },
+  "ai": { "binding": "AI" },
   "r2_buckets": [
     {
       "binding": "MODULE_MAPS",

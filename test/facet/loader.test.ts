@@ -1,10 +1,12 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
+import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { loadMainFacet } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+
+const modelRoute = workerExports.ModelRoute({});
 
 function artifact(
   harnessCommit: string,
@@ -69,6 +71,7 @@ test("loads a multi-module main harness whose entry module uses an imported valu
         source: 'export const responseText = "from an imported module";',
       },
     ]),
+    { MODEL: modelRoute },
   );
 
   expect(loadedHarness.isOk()).toBe(true);
@@ -88,6 +91,7 @@ test("loads a one-module main harness through the artifact loader", async () => 
         source: facetModule('"from one module"'),
       },
     ]),
+    { MODEL: modelRoute },
   );
 
   expect(loadedHarness.isOk()).toBe(true);
@@ -109,6 +113,7 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
         source: facetModule('"first harness"'),
       },
     ]),
+    { MODEL: modelRoute },
   );
   const secondHarness = loadMainFacet(
     loader,
@@ -118,6 +123,7 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
         source: facetModule('"second harness"'),
       },
     ]),
+    { MODEL: modelRoute },
   );
 
   expect(firstHarness.isOk()).toBe(true);
@@ -141,12 +147,14 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     artifact(harnessCommit, "main.js", [
       { name: "main.js", source: facetModule('"code the commit was labeled with"') },
     ]),
+    { MODEL: modelRoute },
   );
   const rebuiltHarness = loadMainFacet(
     env.LOADER,
     artifact(harnessCommit, "main.js", [
       { name: "main.js", source: facetModule('"code the commit was not labeled with"') },
     ]),
+    { MODEL: modelRoute },
   );
 
   expect(firstHarness.isOk()).toBe(true);
@@ -168,6 +176,7 @@ test("returns the raw invalid harness commit in artifact input diagnostics", () 
   const loadedHarness = loadMainFacet(
     loaderWithRecordedNames(loaderNames),
     artifact("main", "main.js", [{ name: "main.js", source: facetModule('"ignored"') }]),
+    { MODEL: modelRoute },
   );
 
   expect(loadedHarness.isErr()).toBe(true);
@@ -189,6 +198,7 @@ test("rejects an artifact with no entry module before calling the Worker Loader"
         source: 'export default { fetch() { return new Response("other"); } };',
       },
     ]),
+    { MODEL: modelRoute },
   );
 
   expect(loadedHarness.isErr()).toBe(true);
