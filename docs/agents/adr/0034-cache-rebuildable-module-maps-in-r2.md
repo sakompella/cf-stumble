@@ -10,4 +10,4 @@ R2 stores derived build output to reduce Computer work. It does not decide which
 
 This decision does not add a digest, mount key, or second artifact identity. The cache key derives from the labeled harness commit, as ADR-0027 requires. Cache reads, writes, misses, and eviction do not advance the generation-control epoch because activation and rollback do not use them as decision inputs.
 
-The current local implementation still retains module maps in Supervisor SQLite. It is an interim implementation that must move to R2 plus Computer materialization before cf-stumble relies on bounded artifact storage. The cache budget, eviction rule, object encoding, Computer build command, cold-request behavior, and paid-runtime evidence remain open.
+Supervisor SQLite no longer stores module source, and a schema test checks that. One resolver reads the R2 cache and rebuilds the labeled commit on a miss or a corrupt object. The cache budget, eviction rule, Computer build command, cold-request behavior, and paid-runtime evidence remain open. Two local builds of one commit produce the same canonical map, but a real Computer build has not been measured yet.
