@@ -1,5 +1,5 @@
 import { authenticateAccessRequest, withoutAccessCredentials } from "./access/index.js";
-import { routeOwnerApiRequest } from "./routes/index.js";
+import { ownerPageResponse, routeOwnerApiRequest } from "./routes/index.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 import { WorkspaceHost } from "./workspace/index.js";
 
@@ -14,6 +14,13 @@ export default {
       return new Response("Unauthorized", {
         status: access.reason === "invalid-configuration" ? 500 : 401,
       });
+    }
+
+    // A browser navigation to `GET /` receives the owner page. Every other request for that path,
+    // including the Supervisor's own relayed startup check, keeps its current behavior.
+    const page = ownerPageResponse(request);
+    if (page !== undefined) {
+      return page;
     }
 
     const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
