@@ -1,7 +1,14 @@
 /// <reference types="@cloudflare/workers-types" />
 
-// This adapter parses untrusted key data before passing typed keys to the pure verifier.
+// This adapter turns a verified token into the one name the Supervisor is addressed by.
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof
+import {
+  certsUrl,
+  fetchPublicKeys,
+  issuerForTeamDomain,
+  parseSerializedPublicKeys,
+  type AccessFetch,
+} from "./keys.js";
 import {
   deriveSupervisorName,
   verifyAccessToken,
@@ -28,125 +35,6 @@ export interface AccessWorkerEnvironment {
 export type AccessRequestResult =
   | { readonly ok: true; readonly supervisorName: string }
   | { readonly ok: false; readonly reason: AccessVerificationReason | "invalid-configuration" };
-
-type AccessFetch = typeof fetch;
-
-interface CachedPublicKeys {
-  readonly fetcher: AccessFetch;
-  readonly url: string;
-  readonly expiresAt: number;
-  readonly keys: readonly JsonWebKey[];
-}
-
-const publicKeyCacheTtlMs = 5 * 60 * 1000;
-let publicKeyCache: CachedPublicKeys | undefined;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isPublicJwk(value: unknown): value is JsonWebKey {
-  if (!isRecord(value) || typeof value.kty !== "string") {
-    return false;
-  }
-  if (value.alg !== undefined && value.alg !== "RS256" && value.alg !== "ES256") {
-    return false;
-  }
-  if (value.use !== undefined && value.use !== "sig") {
-    return false;
-  }
-  if (value.kid !== undefined && (typeof value.kid !== "string" || value.kid.length === 0)) {
-    return false;
-  }
-
-  if (value.kty === "RSA") {
-    return (
-      typeof value.n === "string" &&
-      value.n.length > 0 &&
-      typeof value.e === "string" &&
-      value.e.length > 0
-    );
-  }
-  if (value.kty === "EC") {
-    return (
-      value.crv === "P-256" &&
-      typeof value.x === "string" &&
-      value.x.length > 0 &&
-      typeof value.y === "string" &&
-      value.y.length > 0
-    );
-  }
-  return false;
-}
-
-function parsePublicKeys(value: unknown): readonly JsonWebKey[] | undefined {
-  const keys = Array.isArray(value)
-    ? value
-    : isRecord(value) && Array.isArray(value.keys)
-      ? value.keys
-      : undefined;
-  return keys !== undefined && keys.length > 0 && keys.every((item) => isPublicJwk(item))
-    ? keys
-    : undefined;
-}
-
-function parseSerializedPublicKeys(serialized: string): readonly JsonWebKey[] | undefined {
-  try {
-    return parsePublicKeys(JSON.parse(serialized));
-  } catch {
-    return undefined;
-  }
-}
-
-function issuerForTeamDomain(teamDomain: string): string | undefined {
-  const domain = teamDomain.trim().replace(/\/+$/u, "");
-  if (domain.length === 0) {
-    return undefined;
-  }
-  return domain.startsWith("https://") || domain.startsWith("http://")
-    ? domain
-    : `https://${domain}`;
-}
-
-function certsUrl(issuer: string): string | undefined {
-  try {
-    return new URL("/cdn-cgi/access/certs", issuer).toString();
-  } catch {
-    return undefined;
-  }
-}
-
-async function fetchPublicKeys(
-  url: string,
-  fetcher: AccessFetch,
-  forceRefresh: boolean,
-): Promise<readonly JsonWebKey[] | undefined> {
-  const now = Date.now();
-  if (
-    !forceRefresh &&
-    publicKeyCache !== undefined &&
-    publicKeyCache.fetcher === fetcher &&
-    publicKeyCache.url === url &&
-    publicKeyCache.expiresAt > now
-  ) {
-    return publicKeyCache.keys;
-  }
-
-  try {
-    const response = await fetcher(url);
-    if (!response.ok) {
-      return undefined;
-    }
-    const keys = parsePublicKeys(await response.json());
-    if (keys === undefined) {
-      return undefined;
-    }
-    publicKeyCache = { fetcher, url, expiresAt: now + publicKeyCacheTtlMs, keys };
-    return keys;
-  } catch {
-    return undefined;
-  }
-}
 
 function tokenKeyId(token: string): string | undefined {
   const encodedHeader = token.split(".")[0];
@@ -209,7 +97,7 @@ async function verifyUsingAccessKeys(
 
 function hasMatchingKid(publicKeys: readonly JsonWebKey[], token: string): boolean {
   const kid = tokenKeyId(token);
-  return kid !== undefined && publicKeys.some((key) => isRecord(key) && key.kid === kid);
+  return kid !== undefined && publicKeys.some((key) => keyId(key) === kid);
 }
 
 interface AccessConfiguration {
@@ -244,6 +132,48 @@ function accessConfiguration(env: AccessWorkerEnvironment): AccessConfiguration 
     explicitKeys,
     certsUrl: certsUrl(issuer),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function keyId(key: JsonWebKey): string | undefined {
+  const record: unknown = key;
+  return isRecord(record) && typeof record.kid === "string" ? record.kid : undefined;
+}
+
+const ACCESS_ASSERTION_HEADER = "cf-access-jwt-assertion";
+const ACCESS_COOKIE_NAME = "CF_Authorization";
+
+function cookiesWithoutAccess(cookieHeader: string): string {
+  return cookieHeader
+    .split(";")
+    .filter((cookie) => cookie.trim().split("=")[0]?.trim() !== ACCESS_COOKIE_NAME)
+    .map((cookie) => cookie.trim())
+    .filter((cookie) => cookie.length > 0)
+    .join("; ");
+}
+
+/**
+ * Generation code is replaceable and may be broken, so it must never receive a credential it
+ * could log or replay. The verified identity is already reduced to the Supervisor name.
+ */
+export function withoutAccessCredentials(request: Request): Request {
+  const headers = new Headers(request.headers);
+  headers.delete(ACCESS_ASSERTION_HEADER);
+
+  const cookieHeader = headers.get("cookie");
+  if (cookieHeader !== null) {
+    const remaining = cookiesWithoutAccess(cookieHeader);
+    if (remaining.length === 0) {
+      headers.delete("cookie");
+    } else {
+      headers.set("cookie", remaining);
+    }
+  }
+
+  return new Request(request, { headers });
 }
 
 export async function authenticateAccessRequest(

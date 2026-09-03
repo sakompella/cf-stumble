@@ -45,10 +45,14 @@ async function signingKey(kid: string): Promise<SigningKey> {
   return { privateKey: generated.privateKey, publicJwk: Object.assign({}, exported, { kid }) };
 }
 
-async function token(key: SigningKey, identity: string): Promise<string> {
+async function token(
+  key: SigningKey,
+  identity: string,
+  tokenIssuer: string = issuer,
+): Promise<string> {
   const encodedHeader = encode(JSON.stringify({ alg: "RS256", kid: key.publicJwk.kid }));
   const encodedClaims = encode(
-    JSON.stringify({ iss: issuer, aud: audience, exp: now + 60, sub: identity }),
+    JSON.stringify({ iss: tokenIssuer, aud: audience, exp: now + 60, sub: identity }),
   );
   const signature = await crypto.subtle.sign(
     { name: "RSASSA-PKCS1-v1_5" },
@@ -147,4 +151,51 @@ test("rejects malformed JWKS without exposing token material", async () => {
 
   expect(result).toEqual({ ok: false, reason: "invalid-signature" });
   expect(JSON.stringify(result)).not.toContain(signed);
+});
+
+test("does not refetch keys for repeated unknown key ids", async () => {
+  const key = await signingKey("cooldown-known");
+  const unknown = await signingKey("cooldown-unknown");
+  const unknownToken = await token(unknown, "attacker");
+  let fetches = 0;
+  const fetcher: typeof fetch = () => {
+    fetches += 1;
+    return Promise.resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
+  };
+  const env = { CF_ACCESS_TEAM_DOMAIN: "cooldown.cloudflareaccess.com", CF_ACCESS_AUD: audience };
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await expect(
+      authenticateAccessRequest(request(unknownToken), env, now, crypto, fetcher),
+    ).resolves.toStrictEqual({ ok: false, reason: "invalid-signature" });
+  }
+
+  expect(fetches).toBeLessThanOrEqual(2);
+});
+
+test("shares one key fetch across concurrent cold requests", async () => {
+  const key = await signingKey("concurrent-key");
+  const signed = await token(key, "concurrent-user", "https://concurrent.cloudflareaccess.com");
+  let fetches = 0;
+  const fetcher: typeof fetch = () => {
+    fetches += 1;
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
+      }, 5);
+    });
+  };
+  const env = {
+    CF_ACCESS_TEAM_DOMAIN: "concurrent.cloudflareaccess.com",
+    CF_ACCESS_AUD: audience,
+  };
+
+  const results = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      authenticateAccessRequest(request(signed), env, now, crypto, fetcher),
+    ),
+  );
+
+  expect(results.every((result) => result.ok)).toBe(true);
+  expect(fetches).toBe(1);
 });

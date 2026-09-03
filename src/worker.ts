@@ -1,4 +1,4 @@
-import { authenticateAccessRequest } from "./access/index.js";
+import { authenticateAccessRequest, withoutAccessCredentials } from "./access/index.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 
 export { Supervisor };
@@ -13,6 +13,6 @@ export default {
       });
     }
 
-    return env.SUPERVISOR.getByName(access.supervisorName).fetch(request);
+    return env.SUPERVISOR.getByName(access.supervisorName).fetch(withoutAccessCredentials(request));
   },
 };
