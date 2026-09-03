@@ -1,0 +1,32 @@
+// Generated view of wrangler.jsonc without the AI binding.
+// Declaring Workers AI opens a remote connection for every Workers test, so one network
+// failure can fail unrelated tests. test/docs/test-config.test.ts proves this is the only
+// difference.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-stumble-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["enable_ctx_exports"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SUPERVISOR",
+        "class_name": "Supervisor",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Supervisor"],
+    },
+  ],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "r2_buckets": [
+    {
+      "binding": "MODULE_MAPS",
+      "bucket_name": "cf-stumble-module-maps",
+    },
+  ],
+}

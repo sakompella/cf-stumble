@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     projects: [
       {
-        plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.jsonc" } })],
+        plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.test.jsonc" } })],
         test: {
           name: "workers",
           include: ["test/**/*.test.ts", "test/**/*.workers.ts", "src/**/*.test.ts"],
