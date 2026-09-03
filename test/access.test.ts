@@ -136,7 +136,10 @@ describe("Cloudflare Access JWT verification", () => {
   test("rejects a bad signature", async () => {
     const signed = await validToken("RS256");
     const parts = signed.token.split(".");
-    const tampered = `${parts[0]}.${parts[1]}.${parts[2]?.replace(/^./u, "A")}`;
+    const signature = parts[2] ?? "";
+    // A fixed replacement character matches the original signature about one run in sixty-four.
+    const changedFirst = signature.startsWith("A") ? "B" : "A";
+    const tampered = `${parts[0]}.${parts[1]}.${changedFirst}${signature.slice(1)}`;
     await expect(verifyAccessToken(input(tampered, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "invalid-signature",
