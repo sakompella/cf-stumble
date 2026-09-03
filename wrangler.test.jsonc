@@ -35,7 +35,7 @@
       "class_name": "WorkspaceHost",
       "image": "ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f",
       "max_instances": 1,
-      "instance_type": "lite",
+      "instance_type": "basic",
     },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],

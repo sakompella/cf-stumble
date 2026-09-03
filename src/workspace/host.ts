@@ -12,9 +12,10 @@ import { executeWorkspaceRequest } from "./executor.js";
 
 const PROJECT_ROOT = "/project";
 
+// Version 0 has one project and one check command, so both are fixed here rather than configurable.
 const CONFIGURATION = {
   root: PROJECT_ROOT,
-  commands: { check: "pnpm verify" },
+  commands: { check: "./test.sh" },
 } as const satisfies WorkspaceConfiguration;
 
 interface WorkspaceHostEnv {}
