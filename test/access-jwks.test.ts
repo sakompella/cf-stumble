@@ -3,63 +3,22 @@
 import { expect, test } from "vitest";
 import { authenticateAccessRequest } from "../src/access/index.js";
 
-const issuer = "https://team.cloudflareaccess.com";
-const audience = "access-application-id";
-const now = 1_700_000_000;
+import {
+  accessAudience as audience,
+  accessIssuer as issuer,
+  accessNow as now,
+  signAccessToken,
+  signingKey,
+  type SigningKey,
+} from "./access-tokens.js";
 
-type SigningKey = {
-  readonly privateKey: CryptoKey;
-  readonly publicJwk: JsonWebKey & { readonly kid: string };
-};
-
-function encodeBytes(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCodePoint(byte);
-  }
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
-function encode(value: string): string {
-  return encodeBytes(new TextEncoder().encode(value));
-}
-
-async function signingKey(kid: string): Promise<SigningKey> {
-  const generated = await crypto.subtle.generateKey(
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: "SHA-256",
-    },
-    true,
-    ["sign", "verify"],
-  );
-  if (!("publicKey" in generated && "privateKey" in generated)) {
-    throw new Error("test key generation did not return a key pair");
-  }
-  const exported = await crypto.subtle.exportKey("jwk", generated.publicKey);
-  if (exported instanceof ArrayBuffer) {
-    throw new TypeError("test key export did not return a JWK");
-  }
-  return { privateKey: generated.privateKey, publicJwk: Object.assign({}, exported, { kid }) };
-}
-
-async function token(
-  key: SigningKey,
-  identity: string,
-  tokenIssuer: string = issuer,
-): Promise<string> {
-  const encodedHeader = encode(JSON.stringify({ alg: "RS256", kid: key.publicJwk.kid }));
-  const encodedClaims = encode(
-    JSON.stringify({ iss: tokenIssuer, aud: audience, exp: now + 60, sub: identity }),
-  );
-  const signature = await crypto.subtle.sign(
-    { name: "RSASSA-PKCS1-v1_5" },
-    key.privateKey,
-    new TextEncoder().encode(`${encodedHeader}.${encodedClaims}`),
-  );
-  return `${encodedHeader}.${encodedClaims}.${encodeBytes(new Uint8Array(signature))}`;
+function token(key: SigningKey, identity: string, tokenIssuer: string = issuer): Promise<string> {
+  return signAccessToken(key, {
+    iss: tokenIssuer,
+    aud: audience,
+    exp: now + 60,
+    sub: identity,
+  });
 }
 
 function request(tokenValue: string): Request {

@@ -18,6 +18,17 @@ test("removes the Access assertion and cookie before the Supervisor sees a reque
   expect(JSON.stringify([...stripped.headers])).not.toContain("signature");
 });
 
+test("strips the Access cookie wherever it sits among other cookies", () => {
+  const stripped = withoutAccessCredentials(
+    new Request("https://stumble.example/chat", {
+      headers: { cookie: "theme=dark; sessionId=abc; CF_Authorization=header.payload.signature" },
+    }),
+  );
+
+  expect(stripped.headers.get("cookie")).toBe("theme=dark; sessionId=abc");
+  expect(JSON.stringify([...stripped.headers])).not.toContain("signature");
+});
+
 test("drops the cookie header when only the Access cookie was present", () => {
   const stripped = withoutAccessCredentials(
     new Request("https://stumble.example/chat", {

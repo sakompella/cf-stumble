@@ -2,6 +2,7 @@
 
 // This adapter turns a verified token into the one name the Supervisor is addressed by.
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof
+import { presentedAccessToken } from "./credentials.js";
 import {
   certsUrl,
   fetchPublicKeys,
@@ -17,6 +18,7 @@ import {
   type VerifyAccessTokenInput,
 } from "./verification.js";
 
+export { presentedAccessToken, withoutAccessCredentials } from "./credentials.js";
 export { deriveSupervisorName, verifyAccessToken } from "./verification.js";
 export type {
   AccessIdentity,
@@ -143,39 +145,6 @@ function keyId(key: JsonWebKey): string | undefined {
   return isRecord(record) && typeof record.kid === "string" ? record.kid : undefined;
 }
 
-const ACCESS_ASSERTION_HEADER = "cf-access-jwt-assertion";
-const ACCESS_COOKIE_NAME = "CF_Authorization";
-
-function cookiesWithoutAccess(cookieHeader: string): string {
-  return cookieHeader
-    .split(";")
-    .filter((cookie) => cookie.trim().split("=")[0]?.trim() !== ACCESS_COOKIE_NAME)
-    .map((cookie) => cookie.trim())
-    .filter((cookie) => cookie.length > 0)
-    .join("; ");
-}
-
-/**
- * Generation code is replaceable and may be broken, so it must never receive a credential it
- * could log or replay. The verified identity is already reduced to the Supervisor name.
- */
-export function withoutAccessCredentials(request: Request): Request {
-  const headers = new Headers(request.headers);
-  headers.delete(ACCESS_ASSERTION_HEADER);
-
-  const cookieHeader = headers.get("cookie");
-  if (cookieHeader !== null) {
-    const remaining = cookiesWithoutAccess(cookieHeader);
-    if (remaining.length === 0) {
-      headers.delete("cookie");
-    } else {
-      headers.set("cookie", remaining);
-    }
-  }
-
-  return new Request(request, { headers });
-}
-
 export async function authenticateAccessRequest(
   request: Request,
   env: AccessWorkerEnvironment,
@@ -183,8 +152,9 @@ export async function authenticateAccessRequest(
   webCrypto: Crypto = crypto,
   fetcher: AccessFetch = fetch,
 ): Promise<AccessRequestResult> {
-  const token = request.headers.get("cf-access-jwt-assertion");
-  if (token === null) {
+  // An absent credential and an unusable one are the same failure: no verified identity.
+  const token = presentedAccessToken(request);
+  if (token === undefined) {
     return { ok: false, reason: "malformed-token" };
   }
   const configuration = accessConfiguration(env);
