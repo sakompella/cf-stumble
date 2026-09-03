@@ -231,7 +231,8 @@ cleanup() {
   if [ -f "$MANIFEST" ]; then
     while IFS= read -r key; do
       [ -z "$key" ] && continue
-      if wrangler r2 object get "${R2_BUCKET_NAME}/${key}" >/dev/null 2>&1; then
+      # --pipe keeps the check from writing the object into the working tree.
+      if wrangler r2 object get "${R2_BUCKET_NAME}/${key}" --pipe >/dev/null 2>&1; then
         printf 'STILL EXISTS: R2 %s/%s\n' "$R2_BUCKET_NAME" "$key" | tee -a "$CLEANUP_LOG"
         incomplete=true
       else

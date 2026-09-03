@@ -16,6 +16,7 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
+    "@cloudflare/computer": "file:vendor/cloudflare-computer-0.3.0.tgz",
     "better-result": "3.0.1"
   },
   "devDependencies": {
