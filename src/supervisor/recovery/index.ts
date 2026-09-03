@@ -145,6 +145,10 @@ export class Recovery {
     return Number.isSafeInteger(id) && id > 0 ? this.episodeStore.byId(id) : undefined;
   }
 
+  latest(): RecoveryEpisode | undefined {
+    return this.episodeStore.latest();
+  }
+
   private report(
     episode: RecoveryEpisode,
     key: string,

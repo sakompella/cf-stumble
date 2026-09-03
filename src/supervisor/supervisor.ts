@@ -166,6 +166,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.recovery.get(id);
   }
 
+  /** The latest recovery report, read only. Reading it starts, resumes, and repairs nothing. */
+  getLatestRecoveryEpisode(): RecoveryEpisode | undefined {
+    return this.recovery.latest();
+  }
+
   getGenerationEligibility(
     label: number,
     policy: EligibilityPolicy = DEFAULT_ELIGIBILITY_POLICY,

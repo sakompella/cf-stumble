@@ -4,27 +4,8 @@ import { SELF } from "cloudflare:test";
 import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
-import type { OwnerApiSupervisor } from "../../src/routes/index.js";
-import type { SessionRecord } from "../../src/supervisor/sessions/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
-
-function supervisor(overrides: Partial<OwnerApiSupervisor> = {}): OwnerApiSupervisor {
-  return {
-    getActiveGeneration() {
-      return Promise.resolve({ generation: undefined, epoch: 0, activationId: undefined });
-    },
-    getSession(_sessionId) {
-      return Promise.resolve<SessionRecord | undefined>(void 0);
-    },
-    runSessionTurn() {
-      return Promise.resolve({
-        ok: true,
-        response: { text: "reply", commands: [], sessionRevision: 1 },
-      });
-    },
-    ...overrides,
-  };
-}
+import { controlRequest, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 test("returns the active generation and no recovery report when none exists", async () => {
   const response = await routeOwnerApiRequest(
@@ -181,4 +162,51 @@ test("an unauthenticated request cannot reach an owner API route", async () => {
 
   expect(response.status).toBe(401);
   expect(await response.text()).toBe("Unauthorized");
+});
+
+test("an unauthenticated request cannot reach a generation control route", async () => {
+  const activate = controlRequest(
+    "/api/generations/activate",
+    JSON.stringify({ requestId: "unauthenticated", observedEpoch: 0, label: 0 }),
+  );
+  const rollback = controlRequest(
+    "/api/generations/rollback",
+    JSON.stringify({ requestId: "unauthenticated", observedEpoch: 0, label: 0 }),
+  );
+
+  // oxlint-disable-next-line typescript/no-deprecated
+  const activateResponse = await SELF.fetch(activate);
+  // oxlint-disable-next-line typescript/no-deprecated
+  const rollbackResponse = await SELF.fetch(rollback);
+  // oxlint-disable-next-line typescript/no-deprecated
+  const recoveryResponse = await SELF.fetch(
+    new Request("https://cf-stumble.test/api/recovery/latest"),
+  );
+
+  expect([activateResponse.status, rollbackResponse.status, recoveryResponse.status]).toEqual([
+    401, 401, 401,
+  ]);
+});
+test("reports no recovery report before any recovery episode exists", async () => {
+  const response = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/recovery/latest"),
+    supervisor(),
+  );
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toEqual({ ok: true, report: null });
+});
+
+test("keeps a GET-only recovery route and a POST-only control route", async () => {
+  const postRecovery = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/recovery/latest", { method: "POST" }),
+    supervisor(),
+  );
+  const getActivate = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/generations/activate"),
+    supervisor(),
+  );
+
+  expect(postRecovery.status).toBe(404);
+  expect(getActivate.status).toBe(404);
 });

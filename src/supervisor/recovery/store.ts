@@ -28,6 +28,12 @@ export class RecoveryEpisodeStore {
     return row === undefined ? undefined : episodeFromRow(row);
   }
 
+  /** The last episode this Supervisor opened. Episode IDs increase with each recorded failure. */
+  latest(): RecoveryEpisode | undefined {
+    const row = this.sql.exec<EpisodeRow>(`${episodeSelect} ORDER BY id DESC LIMIT 1`).toArray()[0];
+    return row === undefined ? undefined : episodeFromRow(row);
+  }
+
   insert(episode: RecoveryEpisodeDraft): RecoveryEpisodeId {
     const values = episodeValues(episode);
     const row = this.sql
