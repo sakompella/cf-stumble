@@ -1,8 +1,10 @@
 import { authenticateAccessRequest, withoutAccessCredentials } from "./access/index.js";
 import { routeOwnerApiRequest } from "./routes/index.js";
 import { Supervisor } from "./supervisor/supervisor.js";
+import { WorkspaceHost } from "./workspace/index.js";
 
-export { Supervisor };
+export { Supervisor, WorkspaceHost };
+export { WorkspaceProxy } from "@cloudflare/computer";
 export { ModelRoute } from "./model-route.js";
 
 export default {
