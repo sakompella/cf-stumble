@@ -2,33 +2,22 @@ import { Result } from "better-result";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
+import type { HarnessBuildStepName } from "../../harness-build.js";
 import { canonicalModuleMap } from "./module-map.js";
 
 /**
- * Where and how one labeled harness commit becomes a module map. Version 0 has one build path, so
- * these values are fixed by whoever wires the build workspace rather than chosen per request.
- * `buildRoot` must not be the project workspace root: a build must not see or touch project files.
+ * The build plan itself belongs to the workspace that runs it, so the Supervisor and the Workspace
+ * Host plan one labeled commit the same way. This module keeps only what the Supervisor adds:
+ * the build's output shape, its failures, and validation of what a build produced.
  */
-export type HarnessBuildConfiguration = Readonly<{
-  buildRoot: string;
-  harnessGitDir: string;
-  buildCommand: string;
-  moduleMapPath: string;
-}>;
-
-export type HarnessBuildStepName = "isolate" | "checkout" | "build";
-
-export type HarnessBuildStep = Readonly<{
-  name: HarnessBuildStepName;
-  source: string;
-  cwd: string;
-}>;
-
-export type HarnessBuildPlan = Readonly<{
-  directory: string;
-  steps: readonly [HarnessBuildStep, ...HarnessBuildStep[]];
-  moduleMapPath: string;
-}>;
+export {
+  HARNESS_BUILD_CONFIGURATION,
+  planHarnessBuild,
+  type HarnessBuildConfiguration,
+  type HarnessBuildPlan,
+  type HarnessBuildStep,
+  type HarnessBuildStepName,
+} from "../../harness-build.js";
 
 /** What a build writes to `moduleMapPath`. The build never states its own commit. */
 export type BuiltModuleMapFile = Readonly<{
@@ -50,32 +39,6 @@ export type HarnessBuildProblem =
       readonly harnessCommit: string;
       readonly reason: MainHarnessArtifactProblem["code"];
     };
-
-/**
- * Plan the whole build as plain command strings. `git archive` extracts the commit's tree into a
- * directory of its own, so no step mutates a shared working tree and a repeated build of one
- * commit starts from the same files. Interpolating the commit is safe because `HarnessCommit`
- * accepts only lower-case hexadecimal object IDs.
- */
-export function planHarnessBuild(
-  configuration: HarnessBuildConfiguration,
-  harnessCommit: HarnessCommit,
-): HarnessBuildPlan {
-  const directory = `${configuration.buildRoot}/${harnessCommit}`;
-  return {
-    directory,
-    steps: [
-      { name: "isolate", source: `rm -rf ${directory} && mkdir -p ${directory}`, cwd: "/" },
-      {
-        name: "checkout",
-        source: `git --git-dir=${configuration.harnessGitDir} archive ${harnessCommit} | tar -x -C ${directory}`,
-        cwd: "/",
-      },
-      { name: "build", source: configuration.buildCommand, cwd: directory },
-    ],
-    moduleMapPath: `${directory}/${configuration.moduleMapPath}`,
-  };
-}
 
 /**
  * Validate the build's own output and give it the commit identity the Supervisor asked to build.

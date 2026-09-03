@@ -171,6 +171,7 @@ test("returns plain cloneable values and exposes no raw Computer RPC method", as
   expect(structuredClone(result)).toEqual(result);
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted()).toEqual([
+    "build",
     "constructor",
     "execute",
     "fetch",

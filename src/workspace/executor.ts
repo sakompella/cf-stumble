@@ -5,6 +5,8 @@ import type {
   WorkspaceResult,
 } from "./decisions.js";
 import { parseWorkspaceRequest, planWorkspaceRequest } from "./decisions.js";
+import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
+import type { HarnessBuildConfiguration } from "../harness-build.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
@@ -105,6 +107,32 @@ export async function executeWorkspaceRequest(
 
   try {
     return await executePlan(input.operations, plan);
+  } catch {
+    return unavailable();
+  }
+}
+
+/**
+ * The build surface's effect shell. It is deliberately separate from the project shell above: it
+ * plans from the build configuration alone, so it can neither run a project command nor reach a
+ * project file, and the project shell can never run a build step.
+ */
+export async function executeHarnessBuildRequest(
+  input: Readonly<{
+    operations: WorkspaceOperations;
+    configuration: HarnessBuildConfiguration;
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public build request is parsed at this boundary.
+    request: unknown;
+  }>,
+): Promise<WorkspaceResult> {
+  const parsed = parseHarnessBuildRequest(input.request);
+  if ("ok" in parsed) return parsed;
+
+  try {
+    return await executePlan(
+      input.operations,
+      planHarnessBuildRequest(input.configuration, parsed),
+    );
   } catch {
     return unavailable();
   }

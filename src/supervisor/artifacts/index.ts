@@ -146,6 +146,13 @@ export {
   type HarnessModuleMapBuilder,
 } from "./builder.js";
 export {
+  CommitBuildWorkspace,
+  WorkspaceHostModuleMapBuilder,
+  type BuildWorkspaceHost,
+  type BuildWorkspaceNamespace,
+} from "./build-workspace.js";
+export {
+  HARNESS_BUILD_CONFIGURATION,
   moduleMapFromBuildOutput,
   planHarnessBuild,
   type BuiltModuleMapFile,

@@ -101,8 +101,10 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 }
 
 /**
- * The builder used while no build workspace is wired. A cache miss then reports a plain typed
- * failure, which leaves the active generation serving instead of pretending to build.
+ * The builder for a Supervisor with no build workspace. The Supervisor now wires
+ * `WorkspaceHostModuleMapBuilder` instead, so this remains for a caller that must resolve without
+ * building: a cache miss then reports a plain typed failure, which leaves the active generation
+ * serving instead of pretending to build.
  */
 export const absentModuleMapBuilder: HarnessModuleMapBuilder = {
   build(harnessCommit: HarnessCommit): Promise<HarnessBuildResult> {

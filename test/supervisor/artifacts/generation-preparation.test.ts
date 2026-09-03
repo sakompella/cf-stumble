@@ -75,6 +75,12 @@ test("prepares and serves a generation from its cached module map", async () => 
   expect(await response.text()).toBe("cached candidate serving");
 });
 
+/**
+ * The Supervisor now holds a real build workspace builder, and a Workspace Host cannot start its
+ * container in the test pool, so this exercises the wired build path and its failure. workerd logs
+ * that container failure as an uncaught exception; the failure still arrives as a plain typed
+ * problem, which is what the test asserts.
+ */
 test("leaves the active generation serving when the module map cannot be built", async () => {
   const control = await activeSupervisor("failed-build-keeps-active-generation");
   const label = await labelCandidate(control, commits.uncached);

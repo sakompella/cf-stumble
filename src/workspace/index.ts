@@ -9,9 +9,15 @@ export {
   type WorkspaceResult,
 } from "./decisions.js";
 export {
+  executeHarnessBuildRequest,
   executeWorkspaceRequest,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "./executor.js";
+export {
+  parseHarnessBuildRequest,
+  planHarnessBuildRequest,
+  type ParsedHarnessBuildRequest,
+} from "./harness-build.js";
 export { WorkspaceHost } from "./host.js";

@@ -8,7 +8,8 @@ import {
 import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceConfiguration, WorkspaceResult } from "./decisions.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
-import { executeWorkspaceRequest } from "./executor.js";
+import { executeHarnessBuildRequest, executeWorkspaceRequest } from "./executor.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../harness-build.js";
 
 const PROJECT_ROOT = "/project";
 
@@ -52,6 +53,21 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   execute(request: unknown): Promise<WorkspaceResult> {
     return executeWorkspaceRequest({
       configuration: CONFIGURATION,
+      operations: new ComputerWorkspaceOperations(this.#workspace),
+      request,
+    });
+  }
+
+  /**
+   * Build one labeled harness commit. This surface has its own root and only the planned build
+   * steps, so a caller names a commit and a step and never supplies command text. A build
+   * workspace is a separate Workspace Host instance, so a build reaches no project file even
+   * though one class serves both surfaces.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
+  build(request: unknown): Promise<WorkspaceResult> {
+    return executeHarnessBuildRequest({
+      configuration: HARNESS_BUILD_CONFIGURATION,
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });

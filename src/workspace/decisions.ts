@@ -1,3 +1,5 @@
+import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
+
 export type WorkspaceConfiguration = Readonly<{
   root: string;
   commands: Readonly<Record<string, string>>;
@@ -39,28 +41,8 @@ export type WorkspaceResult =
     }>
   | WorkspaceFailure;
 
-declare const untrustedBrand: unique symbol;
-type UntrustedObject = object & { readonly [untrustedBrand]: never };
-
-// oxlint-disable-next-line anti-slop/no-object-parameters -- Boundary: caller supplied RPC value after an object check.
-function asUntrusted(value: object): UntrustedObject {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: caller checked that value is a non-null object.
-  return value as UntrustedObject;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Boundary accessor returns an unvalidated field for its caller to narrow.
-function field(value: UntrustedObject, key: string): unknown {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: this is a branded untrusted object at the parsing boundary.
-  return (value as Record<string, unknown>)[key];
-}
-
 function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
-}
-
-function fieldsAreExactly(value: UntrustedObject, names: readonly string[]): boolean {
-  const keys = Object.keys(value);
-  return keys.length === names.length && keys.every((key) => names.includes(key));
 }
 
 function parsePathRequest(

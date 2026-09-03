@@ -43,7 +43,8 @@ import {
   type RecoveryPolicy,
 } from "./recovery/index.js";
 import { FacetRelay } from "./relay/index.js";
-import { absentModuleMapBuilder, HarnessArtifacts } from "./artifacts/index.js";
+import { HarnessArtifacts, WorkspaceHostModuleMapBuilder } from "./artifacts/index.js";
+import type { BuildWorkspaceNamespace } from "./artifacts/index.js";
 import {
   checkGenerationStartup,
   prepareGenerationStartup,
@@ -54,6 +55,9 @@ import {
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly MODULE_MAPS: R2Bucket;
+  // The Supervisor needs one operation from the Workspace Host binding: reach a workspace by the
+  // name it derives itself. Nothing here can run a project command or read a project file.
+  readonly WORKSPACE_HOST: BuildWorkspaceNamespace;
 };
 
 export const SESSION_TURN_LEASE_MS = 5 * 60 * 1_000;
@@ -71,9 +75,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
-    // No build workspace is wired yet, so a cache miss reports `build-workspace-unavailable`
-    // rather than building. Passing a `WorkspaceModuleMapBuilder` here turns the build path on.
-    this.artifacts = new HarnessArtifacts(env.MODULE_MAPS, absentModuleMapBuilder);
+    // A cache miss builds the labeled commit in the harness build workspace, which is a separate
+    // Workspace Host from the project workspace and is named by a module constant.
+    this.artifacts = new HarnessArtifacts(
+      env.MODULE_MAPS,
+      new WorkspaceHostModuleMapBuilder(env.WORKSPACE_HOST),
+    );
     this.control = new GenerationControl(ctx.storage, this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
