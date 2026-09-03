@@ -8,6 +8,7 @@ import type {
   ProjectStat,
   ProjectTransactions,
 } from "../../../src/workspace/project/index.js";
+import type { DeferredExec } from "./deferred-exec.js";
 
 class FakeFsError extends Error {
   readonly code: string;
@@ -250,15 +251,27 @@ export class ManualExecHandle implements ExecBackendHandle {
   }
 }
 
-/** Hands out one `ManualExecHandle` per `exec()` call, recording every request it received. */
+/**
+ * Hands out one `ManualExecHandle` per `exec()` call, recording every request it received. A test
+ * that needs to control exactly when handle creation settles calls `deferNextExec` first; the
+ * next `exec()` call then returns that deferred's promise instead of resolving immediately.
+ */
 export class FakeExecBackend implements ExecBackend {
   readonly handles: ManualExecHandle[] = [];
   readonly requests: ExecBackendInput[] = [];
   onExec: ((input: ExecBackendInput) => void) | undefined;
+  readonly #deferredQueue: Promise<ExecBackendHandle>[] = [];
+
+  /** The next call to `exec()` returns `deferred.promise` instead of resolving immediately. */
+  deferNextExec(deferred: DeferredExec): void {
+    this.#deferredQueue.push(deferred.promise);
+  }
 
   exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
     this.requests.push(input);
     this.onExec?.(input);
+    const deferred = this.#deferredQueue.shift();
+    if (deferred !== undefined) return deferred;
     const handle = new ManualExecHandle();
     this.handles.push(handle);
     return Promise.resolve(handle);

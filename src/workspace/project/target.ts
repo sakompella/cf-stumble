@@ -1,5 +1,5 @@
 import { RpcTarget } from "cloudflare:workers";
-import type { ExecBackend, ExecBackendHandle } from "./exec-backend.js";
+import type { ExecBackend } from "./exec-backend.js";
 import { startExecOperation, type ExecOperation } from "./exec-operation.js";
 import {
   mapProviderError,
@@ -79,42 +79,43 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     return Promise.resolve(this.#listFiles(path));
   }
 
-  async startExec(
+  startExec(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseStartExecInput` parses `input`.
     input: unknown,
   ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<ExecEvent> }>> {
     const parsed = parseStartExecInput(input);
-    if (!parsed.ok) return parsed;
+    if (!parsed.ok) return Promise.resolve(parsed);
 
     const cwdOutcome = resolveAddressedPath(this.#provider, parsed.value.cwdSegments, {
       followFinalSymlink: true,
       createMissingDirs: false,
     });
-    if (!cwdOutcome.ok) return cwdOutcome;
+    if (!cwdOutcome.ok) return Promise.resolve(cwdOutcome);
     if (cwdOutcome.value.kind === "missing") {
-      return fail("not-found", addressedPathOf(parsed.value.cwdSegments));
+      return Promise.resolve(fail("not-found", addressedPathOf(parsed.value.cwdSegments)));
     }
     if (!cwdOutcome.value.stat.isDirectory()) {
-      return fail("not-directory", addressedPathOf(parsed.value.cwdSegments));
+      return Promise.resolve(fail("not-directory", addressedPathOf(parsed.value.cwdSegments)));
     }
 
-    let handle: ExecBackendHandle;
-    try {
-      handle = await this.#execBackend.exec({
+    // The operation identity, its event stream, and its host timeout timer are all produced
+    // synchronously here, before `execBackend.exec()` is ever awaited: see `startExecOperation`
+    // for why a slow or never-settling backend handle must not leave this call, or the operation
+    // it starts, unbounded.
+    const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
+    const operation = startExecOperation(
+      this.#execBackend,
+      {
         command: parsed.value.command,
         cwd: cwdOutcome.value.path,
         timeoutMs: parsed.value.timeoutMs,
-      });
-    } catch {
-      return fail("backend-unavailable");
-    }
-
-    const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
-    const operation = startExecOperation(handle, parsed.value.timeoutMs, () => {
-      this.#operations.delete(operationId);
-    });
+      },
+      () => {
+        this.#operations.delete(operationId);
+      },
+    );
     this.#operations.set(operationId, operation);
-    return ok({ operationId, events: operation.events });
+    return Promise.resolve(ok({ operationId, events: operation.events }));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `operationId` is validated below.
