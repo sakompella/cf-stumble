@@ -198,9 +198,9 @@ test("a machine request for GET / still reaches the Supervisor relay", async () 
   const response = await worker.fetch(request, workerEnvironment(key));
   const body = await response.text();
 
-  // The test Worker serves the fixture facet, so this is the startup-check response ADR-0029
-  // relies on. What matters is that the request reached the relay rather than the owner page.
-  expect(response.status).toBe(200);
-  expect(body).toBe("main facet ready");
+  // No generation is active in this test, so the relay reports its typed 503. What matters is
+  // that the machine request reached the relay rather than receiving the owner page.
+  expect(response.status).toBe(503);
+  expect(body).toBe('{"ok":false,"problem":{"code":"no-active-generation"}}');
   expect(body).not.toContain(OWNER_PAGE_IDS.root);
 });
