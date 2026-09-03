@@ -43,9 +43,10 @@ import {
   type RecoveryPolicy,
 } from "./recovery/index.js";
 import { FacetRelay } from "./relay/index.js";
-import { HarnessArtifacts } from "./artifacts/index.js";
+import { absentModuleMapBuilder, HarnessArtifacts } from "./artifacts/index.js";
 import {
   checkGenerationStartup,
+  prepareGenerationStartup,
   type StartupCheckOptions,
   type StartupCheckResult,
 } from "./startup-check/index.js";
@@ -70,7 +71,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage, fixtureMainHarnessCommit);
-    this.artifacts = new HarnessArtifacts(env.MODULE_MAPS);
+    // No build workspace is wired yet, so a cache miss reports `build-workspace-unavailable`
+    // rather than building. Passing a `WorkspaceModuleMapBuilder` here turns the build path on.
+    this.artifacts = new HarnessArtifacts(env.MODULE_MAPS, absentModuleMapBuilder);
     this.control = new GenerationControl(ctx.storage, this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
@@ -94,6 +97,22 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.generations,
       label,
       artifact,
+      this.modelRoute(),
+      options,
+    );
+  }
+
+  /**
+   * Prepare a labeled generation from its harness commit: read the cached module map or build the
+   * commit, then run the bounded startup check. This never changes the active generation.
+   */
+  prepareGeneration(label: number, options?: StartupCheckOptions): Promise<StartupCheckResult> {
+    return prepareGenerationStartup(
+      this.ctx,
+      this.env.LOADER,
+      this.artifacts,
+      this.generations,
+      label,
       this.modelRoute(),
       options,
     );

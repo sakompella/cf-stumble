@@ -1,27 +1,19 @@
-import { Result, TaggedError } from "better-result";
-import { MainHarnessArtifact, loadMainFacet } from "../../facet/index.js";
 import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
-import { deadlineAfter } from "./deadline.js";
 import type { StartupCheckOutcome } from "./body.js";
-import { drainResponseBody } from "./body.js";
 export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
-import { mainFacetName } from "../artifacts/index.js";
 import { parseGenerationLabel } from "../generations/index.js";
 import type { GenerationLabel } from "../generations/index.js";
-import type { HarnessArtifactProblem, HarnessArtifacts } from "../artifacts/index.js";
-import type { Deadline } from "./deadline.js";
+import type { HarnessArtifacts } from "../artifacts/index.js";
+import { runStartupCheck } from "./candidate.js";
+import { startupModuleMap } from "./module-map.js";
+import type { StartupModuleMapProblem, StartupModuleMapSource } from "./module-map.js";
+export type { StartupModuleMapSource } from "./module-map.js";
 import type {
   Generation,
   Generations,
   PreparationCheckProblem,
   PreparationCheckResult,
 } from "../generations/index.js";
-
-type ThrownValue = Error | string | number | boolean | null | undefined;
-
-function errorReason(error: ThrownValue): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * A generous bound, because the check has to cover a Dynamic Worker load and a cold Durable
@@ -46,16 +38,11 @@ export type StartupCheckResult =
       readonly ok: false;
       readonly problem:
         | { readonly code: "unknown-generation"; readonly label: number }
-        | {
-            readonly code: "artifact-harness-commit-mismatch";
-            readonly label: number;
-            readonly generationHarnessCommit: string;
-            readonly artifactHarnessCommit: string;
-          }
-        | HarnessArtifactProblem
+        | StartupModuleMapProblem
         | PreparationCheckProblem;
     };
 
+/** Check a module map the caller already holds against its labeled generation. */
 export function checkGenerationStartup(
   ctx: DurableObjectState,
   loader: WorkerLoader,
@@ -65,6 +52,53 @@ export function checkGenerationStartup(
   input: MainHarnessArtifactInput,
   modelRoute: MainFacetCapabilities["MODEL"],
   options: StartupCheckOptions = {},
+): Promise<StartupCheckResult> {
+  return checkGenerationStartupFrom(
+    ctx,
+    loader,
+    artifacts,
+    generations,
+    label,
+    { kind: "submitted", input },
+    modelRoute,
+    options,
+  );
+}
+
+/**
+ * Check a labeled generation from its harness commit alone. The module map comes from the R2 cache
+ * or from a build of that commit, so startup checking and normal serving share one resolver.
+ */
+export function prepareGenerationStartup(
+  ctx: DurableObjectState,
+  loader: WorkerLoader,
+  artifacts: HarnessArtifacts,
+  generations: Generations,
+  label: number,
+  modelRoute: MainFacetCapabilities["MODEL"],
+  options: StartupCheckOptions = {},
+): Promise<StartupCheckResult> {
+  return checkGenerationStartupFrom(
+    ctx,
+    loader,
+    artifacts,
+    generations,
+    label,
+    { kind: "resolved" },
+    modelRoute,
+    options,
+  );
+}
+
+function checkGenerationStartupFrom(
+  ctx: DurableObjectState,
+  loader: WorkerLoader,
+  artifacts: HarnessArtifacts,
+  generations: Generations,
+  label: number,
+  source: StartupModuleMapSource,
+  modelRoute: MainFacetCapabilities["MODEL"],
+  options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
   const generationLabel = parseGenerationLabel(label);
   if (generationLabel === undefined) {
@@ -83,12 +117,16 @@ export function checkGenerationStartup(
     generations,
     generationLabel,
     generation,
-    input,
+    source,
     modelRoute,
     options,
   );
 }
 
+/**
+ * A module map that cannot be obtained records no preparation check. A missing build workspace or
+ * an unreadable cache is not evidence about the candidate, and the active generation keeps serving.
+ */
 async function checkKnownGenerationStartup(
   ctx: DurableObjectState,
   loader: WorkerLoader,
@@ -96,39 +134,25 @@ async function checkKnownGenerationStartup(
   generations: Generations,
   generationLabel: GenerationLabel,
   generation: Generation,
-  input: MainHarnessArtifactInput,
+  source: StartupModuleMapSource,
   modelRoute: MainFacetCapabilities["MODEL"],
   options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
-  const parsedArtifact = MainHarnessArtifact.parse(input);
-  if (parsedArtifact.isErr()) {
-    return { ok: false, problem: parsedArtifact.error };
-  }
-
-  if (parsedArtifact.value.harnessCommit !== generation.harnessCommit) {
-    return {
-      ok: false,
-      problem: {
-        code: "artifact-harness-commit-mismatch",
-        label: generationLabel,
-        generationHarnessCommit: generation.harnessCommit,
-        artifactHarnessCommit: parsedArtifact.value.harnessCommit,
-      },
-    };
-  }
-
-  const retained = await artifacts.retain(input);
-  if (retained.isErr()) {
-    return { ok: false, problem: retained.error };
+  const moduleMap = await startupModuleMap(artifacts, generation, generationLabel, source);
+  if (moduleMap.isErr()) {
+    return { ok: false, problem: moduleMap.error };
   }
 
   const outcome = await runStartupCheck(
     ctx,
     loader,
-    retained.value.artifact,
+    moduleMap.value,
     generation.harnessCommit,
     modelRoute,
-    options,
+    {
+      deadlineMs: options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
+      maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
+    },
   );
   const recorded = generations.recordPreparationCheck(
     generationLabel,
@@ -136,135 +160,6 @@ async function checkKnownGenerationStartup(
   );
 
   return startupCheckResult(outcome, recorded);
-}
-
-async function runStartupCheck(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  input: MainHarnessArtifactInput,
-  harnessCommit: string,
-  modelRoute: MainFacetCapabilities["MODEL"],
-  options: StartupCheckOptions,
-): Promise<StartupCheckOutcome> {
-  const deadline = deadlineAfter(options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS);
-  const maxBodyBytes = options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES;
-
-  try {
-    const loadedFacet = mountCandidateFacet(ctx, loader, input, harnessCommit, modelRoute);
-    if (loadedFacet.isErr()) {
-      return loadedFacet.error.match({
-        MainFacetMountFailed: (error): StartupCheckOutcome => ({
-          stage: "mount-failed",
-          reason: error.reason,
-        }),
-      });
-    }
-
-    return await classifyCandidateResponse(loadedFacet.value, deadline, maxBodyBytes);
-  } finally {
-    deadline.cancel();
-  }
-}
-
-async function classifyCandidateResponse(
-  fetcher: Fetcher,
-  deadline: Deadline,
-  maxBodyBytes: number,
-): Promise<StartupCheckOutcome> {
-  const response = await responseBeforeDeadline(fetcher, deadline);
-  if (response.isErr()) {
-    return response.error.match({
-      StartupHeadersNotReceived: (error): StartupCheckOutcome => ({
-        stage: "headers-not-received",
-        reason: error.reason,
-      }),
-      StartupHeaderDeadlineExceeded: (error): StartupCheckOutcome => ({
-        stage: "deadline-expired",
-        reason: error.reason,
-      }),
-    });
-  }
-
-  if (response.value.status >= 400) {
-    return {
-      stage: "response-rejected",
-      reason: `response status was ${response.value.status}`,
-      status: response.value.status,
-    };
-  }
-
-  return drainResponseBody(response.value, deadline, maxBodyBytes);
-}
-
-class MainFacetMountFailed extends TaggedError("MainFacetMountFailed")<{
-  readonly reason: string;
-  readonly message: string;
-}> {}
-
-class StartupHeadersNotReceived extends TaggedError("StartupHeadersNotReceived")<{
-  readonly reason: string;
-  readonly message: string;
-}> {}
-
-class StartupHeaderDeadlineExceeded extends TaggedError("StartupHeaderDeadlineExceeded")<{
-  readonly reason: string;
-  readonly message: string;
-}> {}
-
-type HeaderFailure = StartupHeadersNotReceived | StartupHeaderDeadlineExceeded;
-
-function mountCandidateFacet(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  input: MainHarnessArtifactInput,
-  harnessCommit: string,
-  modelRoute: MainFacetCapabilities["MODEL"],
-): Result<Fetcher, MainFacetMountFailed> {
-  try {
-    const loadedFacet = loadMainFacet(loader, input, { MODEL: modelRoute });
-    if (loadedFacet.isErr()) {
-      const reason = loadedFacet.error.code;
-      return Result.err(
-        new MainFacetMountFailed({
-          reason,
-          message: `Candidate facet for ${harnessCommit} could not mount: ${reason}`,
-        }),
-      );
-    }
-
-    const name = mainFacetName(harnessCommit, "candidate");
-    ctx.facets.abort(name, "discard prior startup-check candidate");
-    return Result.ok(ctx.facets.get(name, () => ({ class: loadedFacet.value.facetClass })));
-  } catch {
-    const reason = "candidate facet could not mount";
-    return Result.err(new MainFacetMountFailed({ reason, message: reason }));
-  }
-}
-
-function responseBeforeDeadline(
-  fetcher: Fetcher,
-  deadline: Deadline,
-): Promise<Result<Response, HeaderFailure>> {
-  return Promise.race([
-    fetcher.fetch(new Request("https://main-facet.invalid/")).then(
-      (response) => Result.ok<Response, HeaderFailure>(response),
-      (error: ThrownValue) => {
-        const reason = errorReason(error);
-        return Result.err<Response, HeaderFailure>(
-          new StartupHeadersNotReceived({
-            reason,
-            message: `Startup-check response headers were not received: ${reason}`,
-          }),
-        );
-      },
-    ),
-    deadline.elapsed.then(() => {
-      const reason = "response headers exceeded the deadline";
-      return Result.err<Response, HeaderFailure>(
-        new StartupHeaderDeadlineExceeded({ reason, message: reason }),
-      );
-    }),
-  ]);
 }
 
 function startupCheckResult(

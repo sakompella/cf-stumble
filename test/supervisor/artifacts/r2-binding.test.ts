@@ -75,3 +75,32 @@ export class MainFacet extends DurableObject { fetch() { return new Response("re
   }
   expect(JSON.parse(await object.text())).toEqual(input);
 });
+
+test("keeps every module map out of Supervisor SQLite", async () => {
+  const control = supervisor("no-module-source-tables");
+  const label = await labelCandidate(control, commit);
+  await control.checkGenerationStartup(
+    label,
+    artifact(
+      commit,
+      `import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject { fetch() { return new Response("stored"); } }`,
+    ),
+  );
+
+  const tables = await runInDurableObject(control, (_instance, state) =>
+    state.storage.sql
+      .exec<{ readonly name: string; readonly sql: string }>(
+        "SELECT name, sql FROM sqlite_schema WHERE type = 'table'",
+      )
+      .toArray(),
+  );
+
+  const holdingModuleSource = tables.filter(
+    (table) => /artifact|module/iu.test(table.name) || /\bsource\b/iu.test(table.sql),
+  );
+  expect(
+    holdingModuleSource.map((table) => table.name),
+    "R2 holds module maps, so no Supervisor table may store module source",
+  ).toEqual([]);
+});
