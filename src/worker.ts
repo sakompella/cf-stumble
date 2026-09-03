@@ -1,4 +1,5 @@
 import { authenticateAccessRequest, withoutAccessCredentials } from "./access/index.js";
+import { routeOwnerApiRequest } from "./routes/index.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 
 export { Supervisor };
@@ -13,6 +14,11 @@ export default {
       });
     }
 
-    return env.SUPERVISOR.getByName(access.supervisorName).fetch(withoutAccessCredentials(request));
+    const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
+    if (new URL(request.url).pathname.startsWith("/api/")) {
+      return routeOwnerApiRequest(request, supervisor);
+    }
+
+    return supervisor.fetch(withoutAccessCredentials(request));
   },
 };
