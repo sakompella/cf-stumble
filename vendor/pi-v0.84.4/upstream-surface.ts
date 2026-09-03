@@ -4,12 +4,12 @@ export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
 export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
 export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
 export { createBashTool } from "./packages/agent/src/harness/tools/bash.ts";
+export { FileError, ExecutionError } from "./packages/agent/src/harness/types.ts";
 export type {
+  AgentHarnessTool,
   ExecutionEnv,
   FileSystem,
   Shell,
-  FileError,
-  ExecutionError,
   FileInfo,
   ShellExecOptions,
   Result,
@@ -25,4 +25,15 @@ export type {
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
-export type { Api, Model } from "./packages/ai/src/types.ts";
+export {
+  AssistantMessageEventStream,
+  createAssistantMessageEventStream,
+} from "./packages/ai/src/utils/event-stream.ts";
+export type {
+  Api,
+  AssistantMessage,
+  AssistantMessageEvent,
+  Model,
+  ToolCall,
+  ToolResultMessage,
+} from "./packages/ai/src/types.ts";

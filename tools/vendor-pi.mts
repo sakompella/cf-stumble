@@ -69,6 +69,50 @@ const pin: UpstreamPin = {
   ],
 };
 
+// Shared by `index.ts` and `upstream-surface.ts`: the former is the package's public surface,
+// the latter is the same surface built against the untouched upstream sources so the
+// declaration-conformance check can compare them structurally.
+const piFacadeSurfaceSource = `export { Agent } from "./packages/agent/src/agent.ts";
+export type { AgentOptions } from "./packages/agent/src/agent.ts";
+export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
+export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
+export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
+export { createBashTool } from "./packages/agent/src/harness/tools/bash.ts";
+export { FileError, ExecutionError } from "./packages/agent/src/harness/types.ts";
+export type {
+  AgentHarnessTool,
+  ExecutionEnv,
+  FileSystem,
+  Shell,
+  FileInfo,
+  ShellExecOptions,
+  Result,
+} from "./packages/agent/src/harness/types.ts";
+export type { ExecutionToolContext } from "./packages/agent/src/harness/tools/tool-context.ts";
+export type {
+  AgentEvent,
+  AgentMessage,
+  AgentTool,
+  AgentState,
+  StreamFn,
+} from "./packages/agent/src/types.ts";
+export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
+export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
+export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
+export {
+  AssistantMessageEventStream,
+  createAssistantMessageEventStream,
+} from "./packages/ai/src/utils/event-stream.ts";
+export type {
+  Api,
+  AssistantMessage,
+  AssistantMessageEvent,
+  Model,
+  ToolCall,
+  ToolResultMessage,
+} from "./packages/ai/src/types.ts";
+`;
+
 const generatedFiles = new Map<string, string>([
   [
     "package.json",
@@ -94,70 +138,8 @@ const generatedFiles = new Map<string, string>([
       2,
     )}\n`,
   ],
-  [
-    "index.ts",
-    `export { Agent } from "./packages/agent/src/agent.ts";
-export type { AgentOptions } from "./packages/agent/src/agent.ts";
-export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
-export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
-export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
-export { createBashTool } from "./packages/agent/src/harness/tools/bash.ts";
-export type {
-  ExecutionEnv,
-  FileSystem,
-  Shell,
-  FileError,
-  ExecutionError,
-  FileInfo,
-  ShellExecOptions,
-  Result,
-} from "./packages/agent/src/harness/types.ts";
-export type { ExecutionToolContext } from "./packages/agent/src/harness/tools/tool-context.ts";
-export type {
-  AgentEvent,
-  AgentMessage,
-  AgentTool,
-  AgentState,
-  StreamFn,
-} from "./packages/agent/src/types.ts";
-export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
-export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
-export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
-export type { Api, Model } from "./packages/ai/src/types.ts";
-`,
-  ],
-  [
-    "upstream-surface.ts",
-    `export { Agent } from "./packages/agent/src/agent.ts";
-export type { AgentOptions } from "./packages/agent/src/agent.ts";
-export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
-export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
-export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
-export { createBashTool } from "./packages/agent/src/harness/tools/bash.ts";
-export type {
-  ExecutionEnv,
-  FileSystem,
-  Shell,
-  FileError,
-  ExecutionError,
-  FileInfo,
-  ShellExecOptions,
-  Result,
-} from "./packages/agent/src/harness/types.ts";
-export type { ExecutionToolContext } from "./packages/agent/src/harness/tools/tool-context.ts";
-export type {
-  AgentEvent,
-  AgentMessage,
-  AgentTool,
-  AgentState,
-  StreamFn,
-} from "./packages/agent/src/types.ts";
-export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
-export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
-export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
-export type { Api, Model } from "./packages/ai/src/types.ts";
-`,
-  ],
+  ["index.ts", piFacadeSurfaceSource],
+  ["upstream-surface.ts", piFacadeSurfaceSource],
   [
     "ai-facade.ts",
     `export { EventStream } from "./packages/ai/src/utils/event-stream.ts";
@@ -272,6 +254,15 @@ type StreamFnShape<Stream> = Stream extends (...arguments_: infer Arguments) => 
 type AgentOptionsShape<Options> = Options extends { streamFn: infer Stream }
   ? { other: Omit<Options, "streamFn">; stream: StreamFnShape<Stream> }
   : never;
+// AssistantMessageEventStream carries private fields, so two separately-compiled declaration
+// emits of it are never nominally assignable to each other even when structurally identical.
+// Compare the public async-iterable-plus-result shape instead, the same way StreamFnShape does
+// for the class instances stream functions return.
+type EventStreamShape<Stream> = Stream extends AsyncIterable<infer Event> & {
+  result(): Promise<infer Final>;
+}
+  ? { event: Event; final: Final }
+  : never;
 
 export type ExportedTypesConformToVendoredPi = [
   Assert<Equivalent<AgentOptionsShape<Exported.AgentOptions>, AgentOptionsShape<Upstream.AgentOptions>>>,
@@ -284,13 +275,21 @@ export type ExportedTypesConformToVendoredPi = [
   Assert<Equivalent<Exported.Model<Exported.Api>, Upstream.Model<Upstream.Api>>>,
   Assert<Equivalent<Exported.ExecutionEnv, Upstream.ExecutionEnv>>,
   Assert<Equivalent<Exported.ExecutionError, Upstream.ExecutionError>>,
+  Assert<Equivalent<typeof Exported.ExecutionError, typeof Upstream.ExecutionError>>,
   Assert<Equivalent<Exported.FileError, Upstream.FileError>>,
+  Assert<Equivalent<typeof Exported.FileError, typeof Upstream.FileError>>,
   Assert<Equivalent<Exported.FileInfo, Upstream.FileInfo>>,
   Assert<Equivalent<Exported.FileSystem, Upstream.FileSystem>>,
   Assert<Equivalent<Exported.Result<unknown, unknown>, Upstream.Result<unknown, unknown>>>,
   Assert<Equivalent<Exported.Shell, Upstream.Shell>>,
   Assert<Equivalent<Exported.ShellExecOptions, Upstream.ShellExecOptions>>,
   Assert<Equivalent<Exported.ExecutionToolContext, Upstream.ExecutionToolContext>>,
+  Assert<
+    Equivalent<
+      Exported.AgentHarnessTool<Exported.ExecutionToolContext>,
+      Upstream.AgentHarnessTool<Upstream.ExecutionToolContext>
+    >
+  >,
   Assert<Equivalent<typeof Exported.createBashTool, typeof Upstream.createBashTool>>,
   Assert<Equivalent<typeof Exported.createEditTool, typeof Upstream.createEditTool>>,
   Assert<Equivalent<typeof Exported.createReadTool, typeof Upstream.createReadTool>>,
@@ -298,6 +297,22 @@ export type ExportedTypesConformToVendoredPi = [
   Assert<Equivalent<StreamFnShape<typeof Exported.streamSimple>, StreamFnShape<typeof Upstream.streamSimple>>>,
   Assert<Equivalent<Exported.AiGatewayBinding, Upstream.AiGatewayBinding>>,
   Assert<Equivalent<typeof Exported.createGatewayBindingFetch, typeof Upstream.createGatewayBindingFetch>>,
+  Assert<Equivalent<Exported.AssistantMessage, Upstream.AssistantMessage>>,
+  Assert<Equivalent<Exported.AssistantMessageEvent, Upstream.AssistantMessageEvent>>,
+  Assert<Equivalent<Exported.ToolCall, Upstream.ToolCall>>,
+  Assert<Equivalent<Exported.ToolResultMessage, Upstream.ToolResultMessage>>,
+  Assert<
+    Equivalent<
+      EventStreamShape<Exported.AssistantMessageEventStream>,
+      EventStreamShape<Upstream.AssistantMessageEventStream>
+    >
+  >,
+  Assert<
+    Equivalent<
+      StreamFnShape<typeof Exported.createAssistantMessageEventStream>,
+      StreamFnShape<typeof Upstream.createAssistantMessageEventStream>
+    >
+  >,
 ];
 `,
   ],
@@ -504,6 +519,13 @@ async function copyUpstreamPath(sourceRoot: string, copiedPath: string): Promise
 }
 
 async function checkVendorTree(): Promise<void> {
+  // SHA256SUMS is itself a generated, mutable file: a template edit that regenerates checksums
+  // without regenerating the files it hashes (or a hand-edit of a generated file plus its
+  // checksum) would pass the checksum comparison below undetected. Comparing every templated
+  // file against its exact expected contents first closes that gap; the checksum pass afterwards
+  // still catches drift in copied (non-templated) upstream files.
+  await verifyGeneratedFilesMatchTemplates();
+
   const manifest = await readChecksums();
   const managedPaths = (await filesUnder(vendorRoot))
     .map((file) => relative(vendorRoot, file))
@@ -538,6 +560,24 @@ async function checkVendorTree(): Promise<void> {
   const output = await readFile(resolve(vendorRoot, "dist/index.js"), "utf8");
   if (/\b(?:from|import)\s*["']node:/u.test(output) || /\brequire\s*\(\s*["']node:/u.test(output)) {
     throw new Error("Pi bundle contains a static node: import");
+  }
+}
+
+async function verifyGeneratedFilesMatchTemplates(): Promise<void> {
+  const expectedFiles = new Map([
+    ...generatedFiles,
+    ["UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`],
+  ]);
+  for (const [path, expected] of expectedFiles) {
+    const destination = resolve(vendorRoot, path);
+    const actual = await readFile(destination, "utf8").catch((cause: unknown) => {
+      throw new Error(`Generated file is missing: ${path}`, { cause });
+    });
+    if (actual !== expected) {
+      throw new Error(
+        `Generated file ${path} does not match its template. Run \`pnpm exec tsx tools/vendor-pi.mts --refresh-generated\` and inspect the diff.`,
+      );
+    }
   }
 }
 
