@@ -106,12 +106,18 @@ test("builds a labeled commit through the named build workspace", async () => {
   expect(namespace.names).toEqual([HARNESS_BUILD_WORKSPACE_NAME]);
 });
 
-test("names the planned steps instead of sending command text", async () => {
+test("offline fake workspace schedules missing repository provisioning before a labeled checkout", async () => {
   const host = new FakeBuildHost();
 
   await builderFor(host).builder.build(commit);
 
+  expect(plan.steps[0]?.source).toContain('while ! mkdir "$lock" 2>/dev/null; do');
+  expect(plan.steps[0]?.source).toContain('rm -rf "$repository"');
+  expect(plan.steps[0]?.source).toContain(
+    'git clone --no-checkout "$expected_remote" "$repository"',
+  );
   expect(host.requests).toEqual([
+    { kind: "build-step", harnessCommit: commit, step: "provision" },
     { kind: "build-step", harnessCommit: commit, step: "isolate" },
     { kind: "build-step", harnessCommit: commit, step: "checkout" },
     { kind: "build-step", harnessCommit: commit, step: "build" },
@@ -121,6 +127,73 @@ test("names the planned steps instead of sending command text", async () => {
     host.requests.every((request) => !JSON.stringify(request).includes("git ")),
     "a build request carries a commit and a step name, never a command",
   ).toBe(true);
+});
+
+test("offline fake workspace rechecks an already provisioned repository before every labeled checkout", async () => {
+  const host = new FakeBuildHost();
+  const { builder } = builderFor(host);
+
+  await builder.build(commit);
+  await builder.build(commit);
+
+  expect(
+    host.requests.filter(
+      (request) => request.kind === "build-step" && request.step === "provision",
+    ),
+  ).toEqual([
+    { kind: "build-step", harnessCommit: commit, step: "provision" },
+    { kind: "build-step", harnessCommit: commit, step: "provision" },
+  ]);
+});
+
+test("offline fake workspace retries provisioning after an interrupted labeled checkout", async () => {
+  const host = new FakeBuildHost();
+  const { builder } = builderFor(host);
+  host.failingStep = "checkout";
+
+  const interrupted = await builder.build(commit);
+  host.failingStep = undefined;
+  const resumed = await builder.build(commit);
+
+  if (interrupted.isOk() || resumed.isErr()) {
+    throw new Error("the fake checkout interruption must recover on the next build request");
+  }
+  expect(interrupted.error).toEqual({
+    code: "build-step-failed",
+    harnessCommit: commit,
+    step: "checkout",
+    exitCode: 3,
+  });
+  expect(
+    host.requests.filter(
+      (request) => request.kind === "build-step" && request.step === "provision",
+    ),
+  ).toEqual([
+    { kind: "build-step", harnessCommit: commit, step: "provision" },
+    { kind: "build-step", harnessCommit: commit, step: "provision" },
+  ]);
+});
+
+test("offline fake workspace refuses an unexpected origin before the labeled checkout", async () => {
+  const host = new FakeBuildHost();
+  host.failingStep = "provision";
+
+  const built = await builderFor(host).builder.build(commit);
+
+  if (built.isOk()) {
+    throw new Error("a refused provision must not reach checkout");
+  }
+  expect(plan.steps[0]?.source).toContain(
+    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
+  );
+  expect(plan.steps[0]?.source).toContain('test "$actual_remote" = "$expected_remote"');
+  expect(built.error).toEqual({
+    code: "build-step-failed",
+    harnessCommit: commit,
+    step: "provision",
+    exitCode: 3,
+  });
+  expect(host.requests).toEqual([{ kind: "build-step", harnessCommit: commit, step: "provision" }]);
 });
 
 test("reports the failing build step with its exit code", async () => {

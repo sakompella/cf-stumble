@@ -17,7 +17,9 @@ const PROJECT_ROOT = "/project";
 
 const configuration: HarnessBuildConfiguration = {
   buildRoot: "/harness-builds",
+  harnessRepositoryRoot: "/harness",
   harnessGitDir: "/harness/.git",
+  harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
   buildCommand: "pnpm run build:module-map",
   moduleMapPath: "build/module-map.json",
 };
@@ -96,7 +98,12 @@ test("plans an isolated build directory outside the project workspace", () => {
 
   expect(plan.directory).toBe(`/harness-builds/${commit}`);
   expect(plan.moduleMapPath).toBe(`/harness-builds/${commit}/build/module-map.json`);
-  expect(plan.steps.map((step) => step.name)).toEqual(["isolate", "checkout", "build"]);
+  expect(plan.steps.map((step) => step.name)).toEqual([
+    "provision",
+    "isolate",
+    "checkout",
+    "build",
+  ]);
   expect(plan.steps.at(-1)).toEqual({
     name: "build",
     source: configuration.buildCommand,
@@ -133,10 +140,10 @@ test("checks out the commit before it runs the build command", async () => {
 
   await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
 
-  expect(workspace.commands[1]?.source).toBe(
+  expect(workspace.commands[2]?.source).toBe(
     `git --git-dir=/harness/.git archive ${commit} | tar -x -C /harness-builds/${commit}`,
   );
-  expect(workspace.commands[2]).toEqual({
+  expect(workspace.commands[3]).toEqual({
     source: configuration.buildCommand,
     cwd: `/harness-builds/${commit}`,
   });
