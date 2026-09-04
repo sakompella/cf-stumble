@@ -70,6 +70,7 @@ test("the built package's runtime namespace has exactly the expected keys", () =
       "createReadTool",
       "createWriteTool",
       "streamSimple",
+      "truncateTail",
     ].toSorted(),
   );
   expect(Pi.FileError).toBeTypeOf("function");

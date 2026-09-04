@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { MAX_EXEC_TIMEOUT_MS, ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import { withDecodedEvents } from "./decoded-events.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -9,7 +10,9 @@ import {
 function makeTarget() {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
-  const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
+  const target = withDecodedEvents(
+    new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend),
+  );
   return { execBackend, target };
 }
 

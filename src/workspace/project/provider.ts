@@ -1,4 +1,4 @@
-import type { ProjectErrorCode } from "./types.js";
+import type { ProjectErrorCode } from "./protocol.js";
 
 /** The metadata this target needs about one filesystem node. Mirrors `VirtualStatsLike`. */
 export interface ProjectStat {

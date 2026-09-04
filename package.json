@@ -12,9 +12,11 @@
     "format:check": "oxfmt --check",
     "build:pi": "pnpm --filter @cf-stumble/pi build",
     "build:module-map": "pnpm exec tsx tools/build-generation-0.mts",
+    "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
+    "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
     "local:access-session": "pnpm exec tsx tools/access-session.mts",
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
-    "verify": "pnpm build:pi && pnpm verify:vendor && pnpm typecheck && pnpm format:check && pnpm lint && pnpm build:module-map && pnpm test",
+    "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {

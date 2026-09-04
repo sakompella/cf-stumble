@@ -5,6 +5,7 @@ export { createWriteTool } from "./packages/agent/src/index.ts";
 export { createEditTool } from "./packages/agent/src/index.ts";
 export { createBashTool } from "./packages/agent/src/index.ts";
 export { FileError, ExecutionError } from "./packages/agent/src/index.ts";
+export { truncateTail } from "./packages/agent/src/harness/utils/truncate.ts";
 export type {
   AgentHarnessTool,
   ExecutionEnv,
