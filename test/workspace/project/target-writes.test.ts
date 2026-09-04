@@ -60,6 +60,33 @@ function throwingProvider(code: string): FakeProjectFilesystemProvider {
   return provider;
 }
 
+test("writeFile returns a provider failure when creating a missing parent throws", async () => {
+  const { provider, target } = makeTarget();
+  provider.mkdirSync = () => {
+    throw Object.assign(new Error("read-only"), { code: "EROFS" });
+  };
+
+  expect(() => target.writeFile("/missing/file.txt", encode("x"), "overwrite")).not.toThrow();
+  await expect(target.writeFile("/missing/file.txt", encode("x"), "overwrite")).resolves.toEqual({
+    ok: false,
+    error: { code: "permission-denied" },
+  });
+});
+
+test("lstat returns a provider failure when symlink metadata cannot be read", async () => {
+  const { provider, target } = makeTarget();
+  provider.addSymlink("/project/link", "target");
+  provider.readlinkSync = () => {
+    throw new Error("metadata unavailable");
+  };
+
+  expect(() => target.lstat("/link")).not.toThrow();
+  await expect(target.lstat("/link")).resolves.toEqual({
+    ok: false,
+    error: { code: "backend-unavailable" },
+  });
+});
+
 test.each<readonly [string, string]>([
   ["ENOENT", "not-found"],
   ["ENOTDIR", "not-directory"],
