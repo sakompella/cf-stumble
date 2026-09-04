@@ -6,7 +6,9 @@ import type {
 } from "./decisions.js";
 import { parseWorkspaceRequest, planWorkspaceRequest } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
+import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
+import type { ProjectProvisionConfiguration } from "../project-provision.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
@@ -132,6 +134,33 @@ export async function executeHarnessBuildRequest(
     return await executePlan(
       input.operations,
       planHarnessBuildRequest(input.configuration, parsed),
+    );
+  } catch {
+    return unavailable();
+  }
+}
+
+/**
+ * The provisioning surface's effect shell. It is separate from the project shell for the reason
+ * the project shell cannot host it: `planWorkspaceRequest` runs only commands that are keys of
+ * `configuration.commands`, and the project's one command is the check the user's repository
+ * defines. Provisioning is a capability alongside that check, not another entry in it.
+ */
+export async function executeProjectProvisionRequest(
+  input: Readonly<{
+    operations: WorkspaceOperations;
+    configuration: ProjectProvisionConfiguration;
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public provision request is parsed at this boundary.
+    request: unknown;
+  }>,
+): Promise<WorkspaceResult> {
+  const parsed = parseProjectProvisionRequest(input.request);
+  if ("ok" in parsed) return parsed;
+
+  try {
+    return await executePlan(
+      input.operations,
+      planProjectProvisionRequest(input.configuration, parsed),
     );
   } catch {
     return unavailable();

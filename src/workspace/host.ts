@@ -9,7 +9,11 @@ import {
 import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceConfiguration, WorkspaceResult } from "./decisions.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
-import { executeHarnessBuildRequest, executeWorkspaceRequest } from "./executor.js";
+import {
+  executeHarnessBuildRequest,
+  executeProjectProvisionRequest,
+  executeWorkspaceRequest,
+} from "./executor.js";
 import {
   computerExecBackend,
   computerFilesystemProvider,
@@ -17,12 +21,13 @@ import {
   ProjectRpcTarget,
 } from "./project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../harness-build.js";
+import { PROJECT_PROVISION_CONFIGURATION } from "../project-provision.js";
 
-const PROJECT_ROOT = "/project";
-
-// Version 0 has one project and one check command, so both are fixed here rather than configurable.
+// Version 0 has one check command, so it is fixed here rather than configurable. The root comes
+// from the provisioning configuration because the clone lands there: two constants would let the
+// surface Pi reads and the directory the repository is cloned into drift apart.
 const CONFIGURATION = {
-  root: PROJECT_ROOT,
+  root: PROJECT_PROVISION_CONFIGURATION.projectRoot,
   commands: { check: "./test.sh" },
 } as const satisfies WorkspaceConfiguration;
 
@@ -84,6 +89,27 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   build(request: unknown): Promise<WorkspaceResult> {
     return executeHarnessBuildRequest({
       configuration: HARNESS_BUILD_CONFIGURATION,
+      operations: new ComputerWorkspaceOperations(this.#workspace),
+      request,
+    });
+  }
+
+  /**
+   * Reconcile this workspace against the repository the catalog names for a project, and rewrite
+   * the managed agent instructions.
+   *
+   * This is a surface of its own rather than another `execute` command. `planWorkspaceRequest`
+   * refuses any `run-command` whose name is not a key of the project configuration's `commands`,
+   * and that map holds exactly the check the user's repository defines. Adding provisioning there
+   * would put a clone within reach of whatever asks for a check.
+   *
+   * A caller names a project and a planned step. The repository URL is resolved from the catalog
+   * on this side, so no caller can point a clone at a URL of its own.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
+  provision(request: unknown): Promise<WorkspaceResult> {
+    return executeProjectProvisionRequest({
+      configuration: PROJECT_PROVISION_CONFIGURATION,
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });

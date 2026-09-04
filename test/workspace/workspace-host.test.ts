@@ -178,7 +178,7 @@ test("returns plain cloneable values and exposes no raw Computer RPC method", as
   expect(
     Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted(),
     "`project` hands out the narrow project capability; anything else added here is a new surface",
-  ).toEqual(["build", "constructor", "execute", "fetch", "project"]);
+  ).toEqual(["build", "constructor", "execute", "fetch", "project", "provision"]);
 });
 
 test("keeps request parsing and planning as pure decisions", () => {
