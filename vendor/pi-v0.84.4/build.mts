@@ -11,10 +11,11 @@ const userAgentShim = resolve(vendorRoot, "pi-user-agent-shim.ts");
 await rm(distRoot, { recursive: true, force: true });
 await runTypeScript("tsconfig.declarations.json");
 await copyThirdPartyShims(distRoot, "index.d.ts");
-await rewriteInternalDeclarationImports(distRoot);
-await runTypeScript("tsconfig.declarations.json", ["--outDir", resolve(distRoot, "upstream")]);
-await copyThirdPartyShims(resolve(distRoot, "upstream"), "upstream-surface.d.ts");
-await rewriteInternalDeclarationImports(resolve(distRoot, "upstream"));
+await rewriteInternalDeclarationImports(distRoot, "facade");
+const upstreamDistRoot = resolve(distRoot, "upstream");
+await runTypeScript("tsconfig.upstream-declarations.json", ["--outDir", upstreamDistRoot]);
+await copyThirdPartyShims(upstreamDistRoot, "upstream-surface.d.ts");
+await rewriteInternalDeclarationImports(upstreamDistRoot, "upstream");
 await build({
   entryPoints: [resolve(vendorRoot, "index.ts")],
   bundle: true,
@@ -67,14 +68,23 @@ async function copyThirdPartyShims(declarationRoot: string, entryDeclaration: st
   await writeFile(entry, `/// <reference path="./third-party-shims.d.ts" />\n${contents}`);
 }
 
-async function rewriteInternalDeclarationImports(declarationRoot: string): Promise<void> {
-  const aiFacade = resolve(declarationRoot, "ai-facade.d.ts");
-  const telemetryFacade = resolve(declarationRoot, "telemetry-facade.d.ts");
+async function rewriteInternalDeclarationImports(
+  declarationRoot: string,
+  declarationSource: "facade" | "upstream",
+): Promise<void> {
+  const aiDeclaration = resolve(
+    declarationRoot,
+    declarationSource === "facade" ? "ai-facade.d.ts" : "packages/ai/src/index.d.ts",
+  );
+  const telemetryDeclaration = resolve(
+    declarationRoot,
+    declarationSource === "facade" ? "telemetry-facade.d.ts" : "packages/telemetry/src/index.d.ts",
+  );
   for (const declaration of await declarationFiles(declarationRoot)) {
     const contents = await readFile(declaration, "utf8");
     const rewritten = contents
-      .replaceAll("@earendil-works/pi-ai", declarationImport(declaration, aiFacade))
-      .replaceAll("@earendil-works/pi-telemetry", declarationImport(declaration, telemetryFacade));
+      .replaceAll("@earendil-works/pi-ai", declarationImport(declaration, aiDeclaration))
+      .replaceAll("@earendil-works/pi-telemetry", declarationImport(declaration, telemetryDeclaration));
     if (rewritten !== contents) await writeFile(declaration, rewritten);
   }
 }
