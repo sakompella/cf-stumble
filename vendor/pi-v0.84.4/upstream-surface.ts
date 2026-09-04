@@ -22,6 +22,12 @@ export type {
   AgentState,
   StreamFn,
 } from "./packages/agent/src/index.ts";
+export type {
+  BashExecutionMessage,
+  CustomMessage,
+  BranchSummaryMessage,
+  CompactionSummaryMessage,
+} from "./packages/agent/src/index.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";

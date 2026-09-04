@@ -72,7 +72,7 @@ const pin: UpstreamPin = {
 // These are separate generated sources. The facade selects the Worker-safe package surface,
 // while the check imports the corresponding exports from the vendored upstream entrypoints.
 const piFacadeSurfaceSource = `export { Agent } from "./packages/agent/src/agent.ts";
-export type { AgentOptions } from "./packages/agent/src/index.ts";
+export type { AgentOptions } from "./packages/agent/src/agent.ts";
 export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
 export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
 export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
@@ -87,14 +87,20 @@ export type {
   ShellExecOptions,
   Result,
 } from "./packages/agent/src/harness/types.ts";
-export type { ExecutionToolContext } from "./packages/agent/src/index.ts";
+export type { ExecutionToolContext } from "./packages/agent/src/harness/tools/tool-context.ts";
 export type {
   AgentEvent,
   AgentMessage,
   AgentTool,
   AgentState,
   StreamFn,
-} from "./packages/agent/src/index.ts";
+} from "./packages/agent/src/types.ts";
+export type {
+  BashExecutionMessage,
+  CustomMessage,
+  BranchSummaryMessage,
+  CompactionSummaryMessage,
+} from "./packages/agent/src/harness/messages.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
@@ -136,6 +142,12 @@ export type {
   AgentState,
   StreamFn,
 } from "./packages/agent/src/index.ts";
+export type {
+  BashExecutionMessage,
+  CustomMessage,
+  BranchSummaryMessage,
+  CompactionSummaryMessage,
+} from "./packages/agent/src/index.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
@@ -152,6 +164,9 @@ export type {
   ToolResultMessage,
 } from "./packages/ai/src/index.ts";
 `;
+
+// The vendored AI barrel does not export streamSimple, createGatewayBindingFetch, or
+// AiGatewayBinding, so those three checks cannot compare against an independent barrel source.
 
 const generatedFiles = new Map<string, string>([
   [
@@ -325,6 +340,10 @@ export type ExportedTypesConformToVendoredPi = [
   Assert<Equivalent<Exported.AgentState, Upstream.AgentState>>,
   Assert<Equivalent<Exported.AgentTool, Upstream.AgentTool>>,
   Assert<Equivalent<StreamFnShape<Exported.StreamFn>, StreamFnShape<Upstream.StreamFn>>>,
+  Assert<Equivalent<Exported.BashExecutionMessage, Upstream.BashExecutionMessage>>,
+  Assert<Equivalent<Exported.CustomMessage, Upstream.CustomMessage>>,
+  Assert<Equivalent<Exported.BranchSummaryMessage, Upstream.BranchSummaryMessage>>,
+  Assert<Equivalent<Exported.CompactionSummaryMessage, Upstream.CompactionSummaryMessage>>,
   Assert<Equivalent<Exported.Api, Upstream.Api>>,
   Assert<Equivalent<Exported.Model<Exported.Api>, Upstream.Model<Upstream.Api>>>,
   Assert<Equivalent<Exported.ExecutionEnv, Upstream.ExecutionEnv>>,
