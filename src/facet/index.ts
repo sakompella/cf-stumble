@@ -3,7 +3,7 @@
 import { Result } from "better-result";
 import { MainHarnessArtifact } from "./artifact.js";
 import type { ModelRoute } from "../model-route.js";
-import type { WorkspaceCapability } from "./generation-0/index.js";
+import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
 import type {
   HarnessModule,
   MainHarnessArtifactInput,
@@ -14,21 +14,42 @@ export { MainHarnessArtifact } from "./artifact.js";
 export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
 export type { WorkspaceCapability } from "./generation-0/index.js";
 
+/**
+ * What every main-harness generation must expose, whatever else it adds. The Supervisor holds a
+ * stub of this shape and nothing wider, so a generation cannot widen the surface the host talks
+ * to by adding methods.
+ *
+ * `startTurn` takes the project capability as an argument. That is the whole reason this contract
+ * has a method rather than only `fetch`: a capability belonging to one project must not reach
+ * loader environment, which is cached per harness commit and shared by every project the
+ * generation serves.
+ */
+export interface MainFacetTarget extends Rpc.DurableObjectBranded {
+  fetch(request: Request): Promise<Response>;
+  startTurn(
+    projectTarget: ProjectRpcTargetContract,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request crosses an RPC hop into generated code, so the host proves nothing about its shape and the generation parses it.
+    request: unknown,
+  ): ReadableStream<Uint8Array>;
+}
+
 function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {
   return [module.name, { js: module.source }];
 }
 
 /**
- * What a main-facet generation receives. These are capabilities, not bindings: the model route
- * keeps the model choice and the credential outside the facet, and the workspace capability
- * returns plain results rather than a Computer workspace or its container API.
+ * What a main-facet generation receives in its loader environment. These are capabilities, not
+ * bindings: the model route keeps the model choice, the reasoning effort, the endpoint, and the
+ * credential outside the facet.
  *
- * `WORKSPACE` is optional while the concrete Computer adapter is wired separately. A generation
- * that receives no workspace still starts and still answers `GET /`.
+ * Only generation-invariant capabilities belong here. The Worker Loader caches an entry under the
+ * harness commit, so anything placed here outlives the request that installed it and is shared by
+ * every request that generation serves; a capability scoped to one project would be whichever
+ * project warmed the cache. Those arrive as arguments of {@link MainFacetTarget.startTurn}
+ * instead.
  */
 export type MainFacetCapabilities = Readonly<{
   MODEL: Fetcher<ModelRoute>;
-  WORKSPACE?: WorkspaceCapability;
 }>;
 
 function loadArtifact(
@@ -50,7 +71,10 @@ export function loadMainFacet(
   input: MainHarnessArtifactInput,
   capabilities: MainFacetCapabilities,
 ): Result<
-  { readonly worker: WorkerStub; readonly facetClass: DurableObjectClass },
+  {
+    readonly worker: WorkerStub;
+    readonly facetClass: DurableObjectClass<MainFacetTarget>;
+  },
   MainHarnessArtifactProblem
 > {
   const artifact = MainHarnessArtifact.parse(input);
@@ -60,5 +84,8 @@ export function loadMainFacet(
 
   const worker = loadArtifact(loader, artifact.value, capabilities);
 
-  return Result.ok({ worker, facetClass: worker.getDurableObjectClass("MainFacet") });
+  return Result.ok({
+    worker,
+    facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet"),
+  });
 }

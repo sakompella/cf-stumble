@@ -1,6 +1,10 @@
 import { Result } from "better-result";
 import { loadMainFacet, MainHarnessArtifact } from "../../facet/index.js";
-import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
+import type {
+  MainFacetCapabilities,
+  MainFacetTarget,
+  MainHarnessArtifactInput,
+} from "../../facet/index.js";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { ModuleMapCache } from "./cache.js";
 import { canonicalModuleMap, sameModuleMap } from "./module-map.js";
@@ -90,7 +94,7 @@ export class HarnessArtifacts {
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
-  ): Promise<Result<{ readonly fetcher: Fetcher }, MainFacetMountProblem>> {
+  ): Promise<Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem>> {
     const moduleMap = await this.activeModuleMap(active);
     if (moduleMap.isErr()) {
       return Result.err(moduleMap.error);
@@ -103,9 +107,12 @@ export class HarnessArtifacts {
     }
 
     return Result.ok({
-      fetcher: facets.get(mainFacetName(artifact.harnessCommit, "serving"), () => ({
-        class: loadedFacet.value.facetClass,
-      })),
+      fetcher: facets.get<MainFacetTarget>(
+        mainFacetName(artifact.harnessCommit, "serving"),
+        () => ({
+          class: loadedFacet.value.facetClass,
+        }),
+      ),
     });
   }
 
