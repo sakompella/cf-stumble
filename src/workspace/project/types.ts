@@ -11,6 +11,12 @@ export const MAX_FILE_BYTES = 1_000_000;
 /** Largest timeout a caller may request for `startExec`; also the default when omitted. */
 export const MAX_EXEC_TIMEOUT_MS = 10 * 60 * 1_000;
 
+/** Largest command accepted by `startExec`, measured after UTF-8 encoding. */
+export const MAX_EXEC_COMMAND_BYTES = 65_536;
+
+/** Number of commands that may run concurrently in one project workspace. */
+export const MAX_CONCURRENT_EXECS = 8;
+
 export type ProjectErrorCode =
   | "not-found"
   | "not-directory"
@@ -21,7 +27,8 @@ export type ProjectErrorCode =
   | "path-outside-root"
   | "content-too-large"
   | "symlink-loop"
-  | "backend-unavailable";
+  | "backend-unavailable"
+  | "too-many-operations";
 
 export type ProjectFailure = { ok: false; error: { code: ProjectErrorCode; path?: string } };
 export type ProjectResult<T> = { ok: true; value: T } | ProjectFailure;

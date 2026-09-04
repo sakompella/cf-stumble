@@ -16,6 +16,7 @@ import {
 } from "./resolve.js";
 import {
   fail,
+  MAX_CONCURRENT_EXECS,
   MAX_FILE_BYTES,
   ok,
   type ExecEvent,
@@ -45,8 +46,9 @@ function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectRes
 /**
  * The narrow, project-only RPC surface for one Computer workspace: exactly `lstat`, `readFile`,
  * `writeFile`, `listFiles`, `startExec`, and `kill`. It never exposes a build, fetch, raw
- * Computer, container, or other generic capability, so a caller across an RPC boundary cannot
- * reach anything beyond these six operations against paths beneath the fixed `/project` root.
+ * Computer, container, or other generic capability. Its four filesystem methods confine addressed
+ * paths beneath the fixed `/project` root, and `startExec` confines its working directory there
+ * while accepting an arbitrary shell command.
  */
 export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContract {
   readonly #provider: ProjectFilesystemProvider;
@@ -105,6 +107,8 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
+    if (this.#operations.size >= MAX_CONCURRENT_EXECS) return fail("too-many-operations");
+
     const cwdOutcome = resolveAddressedPath(this.#provider, input.cwdSegments, {
       followFinalSymlink: true,
       createMissingDirs: false,
