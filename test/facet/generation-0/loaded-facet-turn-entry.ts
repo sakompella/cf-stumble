@@ -39,7 +39,7 @@ function scriptedRoute(script: string): ModelCapability {
  * reach: `MainFacet` is a Durable Object class, and only a Durable Object's own `facets.get` can
  * instantiate one, so this entrypoint stands in for it and calls the same `startFacetTurn`.
  *
- * `runTurn` receives a live `ProjectRpcTargetContract` as an RPC method argument, which is the
+ * `startTurn` receives a live `ProjectRpcTargetContract` as an RPC method argument, which is the
  * only way Workers RPC can hand this isolate a capability that calls back into a target
  * constructed in the caller's isolate.
  */
@@ -49,7 +49,7 @@ export default class LoadedFacetTurnEntry extends WorkerEntrypoint<LoadedFacetTu
     return Object.keys(this.env).toSorted();
   }
 
-  runTurn(
+  startTurn(
     projectTarget: ProjectRpcTargetContract,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: mirrors `MainFacet.startTurn`, whose request arrives over RPC unproven.
     request: unknown,

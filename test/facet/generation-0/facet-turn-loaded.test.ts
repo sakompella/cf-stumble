@@ -107,7 +107,7 @@ test("a loaded isolate runs a turn against a capability passed as an RPC argumen
     says("The file says hello world."),
   ]);
 
-  const frames = await readFrames(await facet.runTurn(workspace.target, OPENING));
+  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING));
 
   expect(frames.map((frame) => frame.kind)).toEqual(["tool-result", "text", "completed"]);
   expect(
@@ -124,7 +124,7 @@ test("the turn's tool writes reach the originating workspace across the RPC hop"
     says("Wrote it."),
   ]);
 
-  const frames = await readFrames(await facet.runTurn(workspace.target, OPENING));
+  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING));
 
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
   expect(
@@ -137,7 +137,7 @@ test("the turn runs a command through the capability and reads its byte-framed o
   const workspace = makeWorkspace();
   const facet = await loadFacet([calls("bash", { command: "echo hi" }), says("It printed hi.")]);
 
-  const framesPromise = readFrames(await facet.runTurn(workspace.target, OPENING));
+  const framesPromise = readFrames(await facet.startTurn(workspace.target, OPENING));
   await vi.waitFor(() => {
     expect(workspace.execBackend.requests.length).toBeGreaterThan(0);
   });
@@ -172,7 +172,7 @@ test("no stub for the workspace outlives a finished turn", async () => {
     says("Wrote it."),
   ]);
 
-  const frames = await readFrames(await facet.runTurn(workspace.target, OPENING));
+  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING));
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
 
   await vi.waitFor(() => {

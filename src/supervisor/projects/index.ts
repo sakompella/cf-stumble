@@ -2,6 +2,7 @@ export { startProjectTurn } from "./project-turn.js";
 export type {
   MountServingGeneration,
   ProjectTenantScope,
+  ProjectTurnFacet,
   ProjectTurnInput,
   ProjectTurnRefusal,
   ProjectTurnRequest,

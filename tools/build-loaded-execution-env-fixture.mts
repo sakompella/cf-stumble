@@ -31,6 +31,11 @@ const FIXTURES: readonly Fixture[] = [
     entryModule: "loaded-facet-turn-entry.js",
     outputPath: "build/loaded-facet-turn-fixture.json",
   },
+  {
+    entryPoint: "test/supervisor/projects/loaded-project-workspaces-entry.ts",
+    entryModule: "loaded-project-workspaces-entry.js",
+    outputPath: "build/loaded-project-workspaces-fixture.json",
+  },
 ];
 
 type BuiltModuleMapFile = {

@@ -1,7 +1,6 @@
 import { resolveProjectWorkspaceName } from "../../workspace-names.js";
 import type { Result } from "better-result";
 import type { AccessIdentity } from "../../access/index.js";
-import type { MainFacetTarget } from "../../facet/index.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { MainFacetMountProblem } from "../artifacts/index.js";
 import type { ProjectWorkspaceNamespace } from "./project-workspace.js";
@@ -12,9 +11,22 @@ export type ProjectTenantScope = Readonly<{
   audience: string;
 }>;
 
+/**
+ * The one thing this path calls on a mounted generation. It is narrower than `MainFacetTarget` on
+ * purpose: starting a project turn needs `startTurn` and nothing else, so a generation's request
+ * surface is not reachable from here.
+ */
+export type ProjectTurnFacet = Readonly<{
+  startTurn(
+    projectTarget: ProjectRpcTargetContract,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the generation parses the turn request; nothing on this side proves its shape.
+    request: unknown,
+  ): Promise<ReadableStream<Uint8Array>>;
+}>;
+
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
 export type MountServingGeneration = () => Promise<
-  Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem>
+  Result<{ readonly fetcher: ProjectTurnFacet }, MainFacetMountProblem>
 >;
 
 /** What a caller asks for. Both untrusted fields are named here so no shell has to declare one. */
