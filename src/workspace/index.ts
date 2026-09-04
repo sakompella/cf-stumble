@@ -27,5 +27,13 @@ export {
   type ParsedProjectProvisionRequest,
   type ProjectProvisionRequest,
 } from "./project-provision.js";
+export {
+  provisionProjectWorkspace,
+  type ProjectProvisionProblem,
+  type ProvisionedProjectWorkspace,
+  type ProvisionProjectWorkspaceInput,
+  type ProvisionWorkspaceHost,
+  type ProvisionWorkspaceNamespace,
+} from "./provisioning.js";
 export { WorkspaceHost } from "./host.js";
 export * from "./project/index.js";
