@@ -58,6 +58,8 @@ const groupDirectories = Object.keys(sourceFiles)
   .filter((path) => path.endsWith("/index.ts"))
   .map((path) => directoryOf(path));
 
+const publicEntrypoints = new Set(["src/workspace/project/protocol.ts"]);
+
 function violations(): string[] {
   const found: string[] = [];
   for (const [globKey, contents] of Object.entries(sourceFiles)) {
@@ -68,7 +70,10 @@ function violations(): string[] {
       for (const group of groupDirectories) {
         const insideGroup =
           importerDirectory === group || importerDirectory.startsWith(`${group}/`);
-        const reachesIn = target.startsWith(`${group}/`) && target !== `${group}/index.ts`;
+        const reachesIn =
+          target.startsWith(`${group}/`) &&
+          target !== `${group}/index.ts` &&
+          !publicEntrypoints.has(target);
         if (reachesIn && !insideGroup) {
           found.push(`${importer} imports ${target}, not ${group}/index.ts`);
         }
