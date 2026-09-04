@@ -21,6 +21,12 @@ interface SettleState {
   resumePump: (() => void) | undefined;
 }
 
+function resumePump(state: SettleState): void {
+  const resume = state.resumePump;
+  state.resumePump = undefined;
+  resume?.();
+}
+
 /**
  * Publishes exactly one terminal event and closes the stream. Every later call, from any trigger,
  * is a no-op: whichever cause settles first wins the race. If the backend handle has arrived by
@@ -28,12 +34,6 @@ interface SettleState {
  * rejecting backend kill can never block or reject this operation. If the handle has not arrived
  * yet, there is nothing to kill here; `disposeLateHandle` kills it once it shows up instead.
  */
-function resumePump(state: SettleState): void {
-  const resume = state.resumePump;
-  state.resumePump = undefined;
-  resume?.();
-}
-
 function settle(
   state: SettleState,
   controller: ReadableStreamDefaultController<ExecEvent>,
