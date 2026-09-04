@@ -129,6 +129,30 @@ function parseThreadMessage(value: unknown): Result<AgentMessage, ThreadMessages
 }
 
 /**
+ * Recognize a decoded list of Pi messages. Both a stored row and a conversation arriving over RPC
+ * come through here, so a thread is proved the same way whichever side produced it.
+ */
+export function parseAgentMessages(
+  value: unknown,
+): Result<readonly AgentMessage[], ThreadMessagesUnreadable> {
+  if (!Array.isArray(value)) {
+    return unreadable("a thread is not a list of messages");
+  }
+
+  const entries: readonly unknown[] = value;
+  const messages: AgentMessage[] = [];
+  for (const entry of entries) {
+    const message = parseThreadMessage(entry);
+    if (message.isErr()) {
+      return Result.err(message.error);
+    }
+    messages.push(message.value);
+  }
+
+  return Result.ok(messages);
+}
+
+/**
  * Decode a stored thread. An absent or empty column is a thread nobody has written to yet, which
  * is an empty conversation rather than a fault: every catalog project has a thread from the moment
  * it exists.
@@ -146,19 +170,6 @@ export function parseThreadMessages(
   } catch {
     return unreadable("the stored thread is not JSON");
   }
-  if (!Array.isArray(decoded)) {
-    return unreadable("the stored thread is not a list of messages");
-  }
 
-  const entries: readonly unknown[] = decoded;
-  const messages: AgentMessage[] = [];
-  for (const entry of entries) {
-    const message = parseThreadMessage(entry);
-    if (message.isErr()) {
-      return Result.err(message.error);
-    }
-    messages.push(message.value);
-  }
-
-  return Result.ok(messages);
+  return parseAgentMessages(decoded);
 }

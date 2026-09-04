@@ -21,16 +21,7 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { FacetRelay, RelayAttempts, type RelayAttempt } from "./relay/index.js";
-import {
-  executeSessionTurn,
-  sessionMountReason,
-  SessionStore,
-  type SessionRecord,
-  type SessionResult,
-  type SessionTurnOptions,
-  type SessionTurnResult,
-  type SessionFacetMount,
-} from "./sessions/index.js";
+import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -56,8 +47,8 @@ type SupervisorEnv = {
   readonly WORKSPACE_HOST: BuildWorkspaceNamespace;
 };
 
-export const SESSION_TURN_LEASE_MS = 5 * 60 * 1_000;
-export const SESSION_TURN_TIMEOUT_MS = 5 * 60 * 1_000;
+/** How long one turn may hold a project's thread before another caller may take the slot over. */
+export const PROJECT_TURN_LEASE_MS = 5 * 60 * 1_000;
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
@@ -66,7 +57,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly relayAttempts: RelayAttempts;
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
-  private readonly sessions: SessionStore;
+  private readonly threads: ProjectThreads;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
@@ -81,7 +72,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
-    this.sessions = new SessionStore(ctx.storage);
+    this.threads = new ProjectThreads(ctx.storage);
   }
 
   private modelRoute(): MainFacetCapabilities["MODEL"] {
@@ -218,60 +209,45 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
   }
 
-  getSession(sessionId: string): SessionRecord | undefined {
-    return this.sessions.get(sessionId);
+  /**
+   * The project thread surface. Each method takes the project id a client sent and resolves it
+   * against the catalog before any row is touched (ADR-0038), so the thread a request reaches is
+   * named by the server.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted; `ProjectThreads` resolves it.
+  getProjectThread(projectId: unknown): ProjectThreadResult {
+    return this.threads.read(projectId);
   }
 
-  startSessionTurn(
-    sessionId: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+  startFreshProjectThread(projectId: unknown): ProjectThreadResult {
+    return this.threads.startFreshThread(projectId);
+  }
+
+  startProjectTurn(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+    projectId: unknown,
     expectedRevision: number,
     now: number,
     leaseMs: number,
-  ): SessionResult {
-    return this.sessions.startTurn(sessionId, expectedRevision, now, leaseMs);
+  ): ProjectThreadResult {
+    return this.threads.startTurn(projectId, expectedRevision, now, leaseMs);
   }
 
-  finishSessionTurn(
-    sessionId: string,
+  finishProjectTurn(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+    projectId: unknown,
     expectedRevision: number,
-    document: string,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a conversation arriving over RPC is parsed before it is stored.
+    messages: unknown,
     now: number,
-  ): SessionResult {
-    return this.sessions.finishTurn(sessionId, expectedRevision, document, now);
+  ): ProjectThreadResult {
+    return this.threads.finishTurn(projectId, expectedRevision, messages, now);
   }
 
-  abandonSessionTurn(sessionId: string): SessionResult {
-    return this.sessions.abandonTurn(sessionId);
-  }
-
-  runSessionTurn(
-    sessionId: string,
-    prompt: string,
-    expectedRevision: number,
-    options: SessionTurnOptions = {},
-  ): Promise<SessionTurnResult> {
-    return executeSessionTurn(
-      this.sessions,
-      () => this.mountSessionFacet(),
-      sessionId,
-      prompt,
-      expectedRevision,
-      options,
-      options.leaseMs ?? SESSION_TURN_LEASE_MS,
-      options.timeoutMs ?? SESSION_TURN_TIMEOUT_MS,
-    );
-  }
-
-  private async mountSessionFacet(): Promise<SessionFacetMount> {
-    const mounted = await this.artifacts.mount(
-      this.generations.active(),
-      this.env.LOADER,
-      this.ctx.facets,
-      this.modelRoute(),
-    );
-    return mounted.isErr()
-      ? { ok: false, reason: sessionMountReason(mounted.error.code) }
-      : { ok: true, fetcher: mounted.value.fetcher };
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+  abandonProjectTurn(projectId: unknown): ProjectThreadResult {
+    return this.threads.abandonTurn(projectId);
   }
 
   /** Relay one request to the generation that serves, or serve nothing when none is active. */

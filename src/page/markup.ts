@@ -22,32 +22,25 @@ const statusSection = `
       ${block("status response", ID.statusRaw)}
     </section>`;
 
-const chatSection = `
+const threadSection = `
     <section>
-      <h2>Chat</h2>
+      <h2>Project thread</h2>
       <div class="row">
-        <label class="field-label" for="${ID.sessionIdInput}">session id</label>
-        <input id="${ID.sessionIdInput}" type="text" value="owner-session" autocomplete="off" />
-        <button id="${ID.loadSessionButton}" type="button">Load session</button>
+        <label class="field-label" for="${ID.projectIdInput}">project id</label>
+        <input id="${ID.projectIdInput}" type="text" value="project-one" autocomplete="off" />
+        <button id="${ID.loadThreadButton}" type="button">Load thread</button>
+        <button id="${ID.freshThreadButton}" type="button">Start fresh thread</button>
       </div>
-      ${value("session read", ID.sessionStatus)}
-      ${value("session revision", ID.sessionRevision)}
-      ${value("turn active", ID.sessionTurnActive)}
-      ${block("saved session document", ID.sessionDocument)}
-      <div class="row">
-        <label class="field-label" for="${ID.chatPromptInput}">message</label>
-      </div>
-      <textarea id="${ID.chatPromptInput}" autocomplete="off"></textarea>
-      <div class="row"><button id="${ID.chatSendButton}" type="button">Send message</button></div>
-      ${value("turn result", ID.turnStatus)}
-      ${block("assistant reply", ID.chatReply)}
-      ${block("diff", ID.turnDiff)}
-      <div>
-        <span class="field-label">executed commands</span>
-        <p class="note" id="${ID.commandsEmpty}">No command ran in the last turn.</p>
-        <ol id="${ID.commandList}"></ol>
-      </div>
-      ${block("turn response", ID.turnRaw)}
+      <p class="note">
+        A fresh thread replaces this project's conversation. It leaves the project's workspace and
+        its files exactly as they are.
+      </p>
+      ${value("thread read", ID.threadStatus)}
+      ${value("project", ID.threadProject)}
+      ${value("thread revision", ID.threadRevision)}
+      ${value("turn active", ID.threadTurnActive)}
+      ${value("messages", ID.threadMessageCount)}
+      ${block("thread response", ID.threadRaw)}
     </section>`;
 
 const submissionSection = `
@@ -148,5 +141,5 @@ export const OWNER_PAGE_BODY = `  <main id="${ID.root}">
       Cloudflare Access already signed you in. This page asks for no credential, stores none, and
       calls only this origin.
     </p>
-    <p id="${ID.pageError}"></p>${statusSection}${chatSection}${submissionSection}${activateSection}${rollbackSection}${recoverySection}
+    <p id="${ID.pageError}"></p>${statusSection}${threadSection}${submissionSection}${activateSection}${rollbackSection}${recoverySection}
   </main>`;

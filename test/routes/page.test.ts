@@ -9,12 +9,7 @@
 
 import { SELF, env } from "cloudflare:test";
 import { expect, test } from "vitest";
-import {
-  commandElementIds,
-  ownerPageHtml,
-  OWNER_PAGE_ELEMENT_IDS,
-  OWNER_PAGE_IDS,
-} from "../../src/page/index.js";
+import { ownerPageHtml, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "../../src/page/index.js";
 import { isOwnerPageRequest, ownerPageResponse } from "../../src/routes/index.js";
 import worker from "../../src/worker.js";
 import {
@@ -135,24 +130,6 @@ test("the page markup carries every stable element id", () => {
   expect(OWNER_PAGE_ELEMENT_IDS.length).toBe(new Set(OWNER_PAGE_ELEMENT_IDS).size);
 });
 
-test("the page builds an executed command row from the documented id pattern", () => {
-  const html = ownerPageHtml("test-nonce");
-  const first = commandElementIds(0);
-
-  expect(first).toStrictEqual({
-    row: "command-0",
-    command: "command-0-command",
-    exitCode: "command-0-exit-code",
-    stdout: "command-0-stdout",
-    stderr: "command-0-stderr",
-  });
-  expect(html).toContain('var base = "command-" + index;');
-  expect(html).toContain('base + "-command"');
-  expect(html).toContain('base + "-exit-code"');
-  expect(html).toContain('base + "-stdout"');
-  expect(html).toContain('base + "-stderr"');
-});
-
 test("the inline script the browser receives parses as JavaScript", () => {
   // Every other assertion in this file matches text, and text matching cannot see a syntax
   // error: each id still appears in the markup while none of the script runs, so the page looks
@@ -170,7 +147,7 @@ test("the page uses only the owner JSON endpoints, on this origin", () => {
 
   expect(html).toContain('"/api/status"');
   expect(html).toContain('"/api/recovery/latest"');
-  expect(html).toContain('"/api/sessions/"');
+  expect(html).toContain('"/api/projects/"');
   expect(html).toContain('"/api/generations/submit"');
   expect(html).toContain('"/api/generations/" + kind');
   expect(html).not.toMatch(/https?:\/\/(?!cf-stumble\.test)/u);

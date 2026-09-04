@@ -2,7 +2,7 @@ import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
 import { OWNER_PAGE_SCRIPT_GENERATIONS } from "./script-generations.js";
 import { OWNER_PAGE_SCRIPT_HELPERS } from "./script-helpers.js";
 import { OWNER_PAGE_SCRIPT_STATUS } from "./script-status.js";
-import { OWNER_PAGE_SCRIPT_TURN } from "./script-turn.js";
+import { OWNER_PAGE_SCRIPT_THREAD } from "./script-thread.js";
 
 /**
  * The whole inline script: one immediately invoked function, so the page defines no global. The
@@ -10,7 +10,7 @@ import { OWNER_PAGE_SCRIPT_TURN } from "./script-turn.js";
  */
 export const OWNER_PAGE_SCRIPT = `
 "use strict";
-(function () {${OWNER_PAGE_SCRIPT_HELPERS}${OWNER_PAGE_SCRIPT_STATUS}${OWNER_PAGE_SCRIPT_TURN}${OWNER_PAGE_SCRIPT_GENERATIONS}
+(function () {${OWNER_PAGE_SCRIPT_HELPERS}${OWNER_PAGE_SCRIPT_STATUS}${OWNER_PAGE_SCRIPT_THREAD}${OWNER_PAGE_SCRIPT_GENERATIONS}
   function onClick(id, handler) {
     var target = node(id);
     if (target !== null) {
@@ -22,8 +22,8 @@ export const OWNER_PAGE_SCRIPT = `
 
   onClick("${ID.refreshStatusButton}", refreshStatus);
   onClick("${ID.refreshRecoveryButton}", refreshRecovery);
-  onClick("${ID.loadSessionButton}", loadSession);
-  onClick("${ID.chatSendButton}", sendTurn);
+  onClick("${ID.loadThreadButton}", loadThread);
+  onClick("${ID.freshThreadButton}", startFreshThread);
   onClick("${ID.submitCandidateButton}", submitCandidate);
   onClick("${ID.activateButton}", function () {
     return runControl("activate");

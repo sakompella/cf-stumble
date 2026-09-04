@@ -17,21 +17,15 @@ export const OWNER_PAGE_IDS = {
   statusStatus: "status-status",
   statusRaw: "status-raw",
 
-  sessionIdInput: "session-id-input",
-  loadSessionButton: "load-session-button",
-  sessionStatus: "session-status",
-  sessionRevision: "session-revision",
-  sessionTurnActive: "session-turn-active",
-  sessionDocument: "session-document",
-
-  chatPromptInput: "chat-prompt-input",
-  chatSendButton: "chat-send-button",
-  turnStatus: "turn-status",
-  chatReply: "chat-reply",
-  turnDiff: "turn-diff",
-  commandList: "command-list",
-  commandsEmpty: "commands-empty",
-  turnRaw: "turn-raw",
+  projectIdInput: "project-id-input",
+  loadThreadButton: "load-thread-button",
+  freshThreadButton: "fresh-thread-button",
+  threadStatus: "thread-status",
+  threadProject: "thread-project",
+  threadRevision: "thread-revision",
+  threadTurnActive: "thread-turn-active",
+  threadMessageCount: "thread-message-count",
+  threadRaw: "thread-raw",
 
   candidateCommitInput: "candidate-commit-input",
   submitCandidateButton: "submit-candidate-button",
@@ -79,36 +73,3 @@ export type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];
 
 /** Every identifier the static markup must contain. */
 export const OWNER_PAGE_ELEMENT_IDS: readonly OwnerPageId[] = Object.values(OWNER_PAGE_IDS);
-
-/**
- * One executed command is a repeated row, so its identifiers carry the row index. The script
- * builds them from these same parts, and a browser test reads `command-0-exit-code` for the first
- * command of the last turn.
- */
-export const COMMAND_ID_PREFIX = "command-";
-
-export const COMMAND_ID_SUFFIXES = {
-  command: "-command",
-  exitCode: "-exit-code",
-  stdout: "-stdout",
-  stderr: "-stderr",
-} as const;
-
-export type CommandElementIds = {
-  readonly row: string;
-  readonly command: string;
-  readonly exitCode: string;
-  readonly stdout: string;
-  readonly stderr: string;
-};
-
-export function commandElementIds(index: number): CommandElementIds {
-  const row = `${COMMAND_ID_PREFIX}${index}`;
-  return {
-    row,
-    command: `${row}${COMMAND_ID_SUFFIXES.command}`,
-    exitCode: `${row}${COMMAND_ID_SUFFIXES.exitCode}`,
-    stdout: `${row}${COMMAND_ID_SUFFIXES.stdout}`,
-    stderr: `${row}${COMMAND_ID_SUFFIXES.stderr}`,
-  };
-}

@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
 import { handleGeneration0Request } from "../../../src/facet/generation-0/index.js";
-import { parseFacetTurnResult } from "../../../src/supervisor/sessions/index.js";
 import {
   FakeModelRoute,
   FakeWorkspace,
@@ -40,7 +39,7 @@ test("GET / answers cheaply and deterministically without using a capability", a
   expect(workspace.requests, "the startup check must not call the workspace").toEqual([]);
 });
 
-test("POST /turn returns the turn result the Supervisor session store parses", async () => {
+test("POST /turn returns the saved document, the reply, and the commands it ran", async () => {
   const route = new FakeModelRoute([
     toolCallReply([{ id: "c1", name: "run_command", arguments: { command: "check" } }]),
     textReply("The check passed."),
@@ -52,12 +51,16 @@ test("POST /turn returns the turn result the Supervisor session store parses", a
     { MODEL: route, WORKSPACE: workspace },
   );
 
+  const result = await response.json<{
+    readonly document: string;
+    readonly text: string;
+    readonly commands: readonly unknown[];
+  }>();
+
   expect(response.status).toBe(200);
-  const parsed = parseFacetTurnResult(await response.json());
-  expect(parsed, "the response must match the shape the Supervisor already parses").toBeDefined();
-  expect(parsed?.text).toBe("The check passed.");
-  expect(parsed?.commands).toEqual([{ command: "check", ...CHECK_OUTPUT }]);
-  expect(parsed?.document).toContain("cf-stumble-generation-0");
+  expect(result.text).toBe("The check passed.");
+  expect(result.commands).toEqual([{ command: "check", ...CHECK_OUTPUT }]);
+  expect(result.document).toContain("cf-stumble-generation-0");
 });
 
 test("rejects a malformed turn request and a document from another generation", async () => {
