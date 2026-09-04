@@ -193,11 +193,13 @@ export class ManualExecHandle implements ExecBackendHandle {
   #queue: QueueItem[] = [];
   #waiters: Waiter[] = [];
   #ended = false;
+  readCalls = 0;
   killCalls = 0;
   killBehavior: () => Promise<void> = () => Promise.resolve();
 
   readonly reader = {
     read: (): Promise<ReadResult> => {
+      this.readCalls += 1;
       const next = this.#queue.shift();
       if (next !== undefined) return this.#settle(next);
       if (this.#ended) return Promise.resolve({ done: true });

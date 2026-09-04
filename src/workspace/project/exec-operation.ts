@@ -18,6 +18,7 @@ interface SettleState {
   timer: ReturnType<typeof setTimeout> | undefined;
   /** Set once `execBackend.exec()` resolves and this operation is still unsettled. */
   handle: ExecBackendHandle | undefined;
+  resumePump: (() => void) | undefined;
 }
 
 /**
@@ -27,6 +28,12 @@ interface SettleState {
  * rejecting backend kill can never block or reject this operation. If the handle has not arrived
  * yet, there is nothing to kill here; `disposeLateHandle` kills it once it shows up instead.
  */
+function resumePump(state: SettleState): void {
+  const resume = state.resumePump;
+  state.resumePump = undefined;
+  resume?.();
+}
+
 function settle(
   state: SettleState,
   controller: ReadableStreamDefaultController<ExecEvent>,
@@ -37,6 +44,7 @@ function settle(
   if (state.settled) return;
   state.settled = true;
   if (state.timer !== undefined) clearTimeout(state.timer);
+  resumePump(state);
   try {
     controller.enqueue(outcome);
     controller.close();
@@ -111,6 +119,17 @@ function applyBackendRead(
   return true;
 }
 
+function waitForDemand(
+  state: SettleState,
+  controller: ReadableStreamDefaultController<ExecEvent>,
+): Promise<void> {
+  const desiredSize = controller.desiredSize;
+  if (desiredSize !== null && desiredSize > 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    state.resumePump = resolve;
+  });
+}
+
 /** Pumps backend events onto the stream until a terminal outcome settles it or it is cancelled. */
 async function pumpBackendEvents(
   state: SettleState,
@@ -126,6 +145,9 @@ async function pumpBackendEvents(
   try {
     // oxlint-disable-next-line eslint/no-unmodified-loop-condition -- `state.settled` is set inside `settle`, called from this same loop and from the timeout/kill triggers below.
     while (!state.settled) {
+      // oxlint-disable-next-line no-await-in-loop -- The stream's pull handler resumes each output read.
+      await waitForDemand(state, controller);
+      if (state.settled) return;
       // oxlint-disable-next-line no-await-in-loop -- Each read must observe `state.settled` before the next.
       const read = await handle.reader.read();
       if (state.settled) return;
@@ -222,27 +244,39 @@ export function startExecOperation(
   input: ExecBackendInput,
   onSettle: () => void,
 ): ExecOperation {
-  const state: SettleState = { settled: false, seq: 0, timer: undefined, handle: undefined };
+  const state: SettleState = {
+    settled: false,
+    seq: 0,
+    timer: undefined,
+    handle: undefined,
+    resumePump: undefined,
+  };
   let requestKillImpl: (() => void) | undefined;
 
-  const events = new ReadableStream<ExecEvent>({
-    start(controller) {
-      armTimeout(state, controller, onSettle, input.timeoutMs);
-      requestKillImpl = () => {
-        settle(
-          state,
-          controller,
-          onSettle,
-          { kind: "terminal", seq: state.seq++, outcome: "killed" },
-          true,
-        );
-      };
-      watchBackendExec(state, controller, execBackend, input, onSettle);
+  const events = new ReadableStream<ExecEvent>(
+    {
+      start(controller) {
+        armTimeout(state, controller, onSettle, input.timeoutMs);
+        requestKillImpl = () => {
+          settle(
+            state,
+            controller,
+            onSettle,
+            { kind: "terminal", seq: state.seq++, outcome: "killed" },
+            true,
+          );
+        };
+        watchBackendExec(state, controller, execBackend, input, onSettle);
+      },
+      pull() {
+        resumePump(state);
+      },
+      cancel() {
+        requestKillImpl?.();
+      },
     },
-    cancel() {
-      requestKillImpl?.();
-    },
-  });
+    { highWaterMark: 1 },
+  );
 
   return {
     events,
