@@ -154,6 +154,43 @@ test("a manual kill before the deadline suppresses the later timeout", async () 
   expect(execBackend.handles[0]?.killCalls).toBe(1);
 });
 
+test("stops reading backend output while one event is buffered", async () => {
+  const { execBackend, target } = makeTarget();
+  const started = await target.startExec({ command: "x" });
+  if (!started.ok) throw new Error("expected startExec to succeed");
+  const handle = execBackend.handles[0]!;
+
+  handle.push({ name: "stdout", data: new TextEncoder().encode("first") });
+  // oxlint-disable-next-line unicorn/prefer-single-call -- Each call models one backend event.
+  handle.push({ name: "stdout", data: new TextEncoder().encode("second") });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(handle.readCalls).toBe(1);
+
+  const reader = started.value.events.getReader();
+  await expect(reader.read()).resolves.toEqual({
+    done: false,
+    value: { kind: "stdout", seq: 0, data: "first" },
+  });
+  await expect(reader.read()).resolves.toEqual({
+    done: false,
+    value: { kind: "stdout", seq: 1, data: "second" },
+  });
+});
+
+test("cancelling the consumer stream kills the running command", async () => {
+  const { execBackend, target } = makeTarget();
+  const started = await target.startExec({ command: "x" });
+  if (!started.ok) throw new Error("expected startExec to succeed");
+  const handle = execBackend.handles[0]!;
+  const reader = started.value.events.getReader();
+
+  await reader.cancel();
+
+  expect(handle.killCalls).toBe(1);
+});
+
 test("EOF without an exit event is a failed terminal outcome", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
@@ -166,6 +203,7 @@ test("EOF without an exit event is a failed terminal outcome", async () => {
     done: false,
     value: { kind: "terminal", seq: 0, outcome: "failed", error: { code: "backend-unavailable" } },
   });
+  expect(handle.killCalls).toBe(1);
 });
 
 test("a backend read failure is a failed terminal outcome", async () => {
@@ -180,6 +218,7 @@ test("a backend read failure is a failed terminal outcome", async () => {
     done: false,
     value: { kind: "terminal", seq: 0, outcome: "failed", error: { code: "backend-unavailable" } },
   });
+  expect(handle.killCalls).toBe(1);
 });
 
 test("kill on a stale, already-settled operation id is a successful no-op", async () => {

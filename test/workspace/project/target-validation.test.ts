@@ -53,6 +53,38 @@ test.each<readonly [string, unknown, unknown]>([
   expect(provider.calls).toEqual([]);
 });
 
+test("startExec limits commands by UTF-8 byte length", async () => {
+  const { execBackend, target } = makeTarget();
+  const command = "é".repeat(Math.floor(65_536 / 2) + 1);
+
+  await expect(target.startExec({ command })).resolves.toEqual({
+    ok: false,
+    error: { code: "invalid-request" },
+  });
+  expect(execBackend.requests).toEqual([]);
+});
+
+test("startExec limits concurrent operations and releases a settled slot", async () => {
+  const { execBackend, target } = makeTarget();
+  const started = await Promise.all(
+    Array.from({ length: 8 }, () => target.startExec({ command: "x" })),
+  );
+  expect(started.every((result) => result.ok)).toBe(true);
+
+  await expect(target.startExec({ command: "x" })).resolves.toEqual({
+    ok: false,
+    error: { code: "too-many-operations" },
+  });
+  expect(execBackend.requests).toHaveLength(8);
+
+  const first = started[0]!;
+  if (!first.ok) throw new Error("expected startExec to succeed");
+  await first.value.events.cancel();
+
+  await expect(target.startExec({ command: "x" })).resolves.toMatchObject({ ok: true });
+  expect(execBackend.requests).toHaveLength(9);
+});
+
 test.each<readonly [string, unknown]>([
   ["null", null],
   ["missing command", {}],

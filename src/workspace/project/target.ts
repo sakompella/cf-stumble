@@ -16,6 +16,7 @@ import {
 } from "./resolve.js";
 import {
   fail,
+  MAX_CONCURRENT_EXECS,
   MAX_FILE_BYTES,
   ok,
   type ExecEvent,
@@ -25,13 +26,29 @@ import {
   type ProjectRpcTargetContract,
   type WriteMode,
 } from "./types.js";
-import { isWriteMode, OPERATION_ID_PATTERN, parseStartExecInput } from "./start-exec-input.js";
+import {
+  isWriteMode,
+  OPERATION_ID_PATTERN,
+  parseStartExecInput,
+  type ParsedStartExecInput,
+} from "./start-exec-input.js";
+
+type StartedExec = { operationId: string; events: ReadableStream<ExecEvent> };
+
+function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
+  try {
+    return Promise.resolve(operation());
+  } catch (error) {
+    return Promise.resolve(fail(mapProviderError(error)));
+  }
+}
 
 /**
  * The narrow, project-only RPC surface for one Computer workspace: exactly `lstat`, `readFile`,
  * `writeFile`, `listFiles`, `startExec`, and `kill`. It never exposes a build, fetch, raw
- * Computer, container, or other generic capability, so a caller across an RPC boundary cannot
- * reach anything beyond these six operations against paths beneath the fixed `/project` root.
+ * Computer, container, or other generic capability. Its four filesystem methods confine addressed
+ * paths beneath the fixed `/project` root, and `startExec` confines its working directory there
+ * while accepting an arbitrary shell command.
  */
 export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContract {
   readonly #provider: ProjectFilesystemProvider;
@@ -55,12 +72,12 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#lstat` parses `path`.
   lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>> {
-    return Promise.resolve(this.#lstat(path));
+    return projectResult(() => this.#lstat(path));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#readFile` parses `path`.
   readFile(path: unknown): Promise<ProjectResult<Uint8Array>> {
-    return Promise.resolve(this.#readFile(path));
+    return projectResult(() => this.#readFile(path));
   }
 
   writeFile(
@@ -71,31 +88,37 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#writeFile` parses every argument.
     mode: unknown,
   ): Promise<ProjectResult<null>> {
-    return Promise.resolve(this.#writeFile(path, bytes, mode));
+    return projectResult(() => this.#writeFile(path, bytes, mode));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#listFiles` parses `path`.
   listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>> {
-    return Promise.resolve(this.#listFiles(path));
+    return projectResult(() => this.#listFiles(path));
   }
 
   startExec(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseStartExecInput` parses `input`.
     input: unknown,
-  ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<ExecEvent> }>> {
-    const parsed = parseStartExecInput(input);
-    if (!parsed.ok) return Promise.resolve(parsed);
+  ): Promise<ProjectResult<StartedExec>> {
+    return projectResult<StartedExec>(() => {
+      const parsed = parseStartExecInput(input);
+      return parsed.ok ? this.#startExec(parsed.value) : parsed;
+    });
+  }
 
-    const cwdOutcome = resolveAddressedPath(this.#provider, parsed.value.cwdSegments, {
+  #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
+    if (this.#operations.size >= MAX_CONCURRENT_EXECS) return fail("too-many-operations");
+
+    const cwdOutcome = resolveAddressedPath(this.#provider, input.cwdSegments, {
       followFinalSymlink: true,
       createMissingDirs: false,
     });
-    if (!cwdOutcome.ok) return Promise.resolve(cwdOutcome);
+    if (!cwdOutcome.ok) return cwdOutcome;
     if (cwdOutcome.value.kind === "missing") {
-      return Promise.resolve(fail("not-found", addressedPathOf(parsed.value.cwdSegments)));
+      return fail("not-found", addressedPathOf(input.cwdSegments));
     }
     if (!cwdOutcome.value.stat.isDirectory()) {
-      return Promise.resolve(fail("not-directory", addressedPathOf(parsed.value.cwdSegments)));
+      return fail("not-directory", addressedPathOf(input.cwdSegments));
     }
 
     // The operation identity, its event stream, and its host timeout timer are all produced
@@ -106,26 +129,32 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     const operation = startExecOperation(
       this.#execBackend,
       {
-        command: parsed.value.command,
+        command: input.command,
         cwd: cwdOutcome.value.path,
-        timeoutMs: parsed.value.timeoutMs,
+        timeoutMs: input.timeoutMs,
       },
       () => {
         this.#operations.delete(operationId);
       },
     );
     this.#operations.set(operationId, operation);
-    return Promise.resolve(ok({ operationId, events: operation.events }));
+    return ok({ operationId, events: operation.events });
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `operationId` is validated below.
   kill(operationId: unknown): Promise<ProjectResult<null>> {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC operation id is untrusted.
-    if (typeof operationId !== "string" || !OPERATION_ID_PATTERN.test(operationId)) {
-      return Promise.resolve(fail("invalid-request"));
-    }
+    return projectResult(() => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC operation id is untrusted.
+      if (typeof operationId !== "string" || !OPERATION_ID_PATTERN.test(operationId)) {
+        return fail("invalid-request");
+      }
+      return this.#kill(operationId);
+    });
+  }
+
+  #kill(operationId: string): ProjectResult<null> {
     this.#operations.get(operationId)?.requestKill();
-    return Promise.resolve(ok(null));
+    return ok(null);
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.

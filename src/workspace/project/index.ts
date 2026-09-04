@@ -20,6 +20,8 @@ export { mapProviderError } from "./provider.js";
 export { PROJECT_ROOT, parseAddressedPath } from "./resolve.js";
 export { ProjectRpcTarget } from "./target.js";
 export {
+  MAX_CONCURRENT_EXECS,
+  MAX_EXEC_COMMAND_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   MAX_FILE_BYTES,
   type ExecEvent,

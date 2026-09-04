@@ -1,5 +1,12 @@
 import { parseAddressedPath } from "./resolve.js";
-import { fail, MAX_EXEC_TIMEOUT_MS, ok, type ProjectResult, type WriteMode } from "./types.js";
+import {
+  fail,
+  MAX_EXEC_COMMAND_BYTES,
+  MAX_EXEC_TIMEOUT_MS,
+  ok,
+  type ProjectResult,
+  type WriteMode,
+} from "./types.js";
 
 export const OPERATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9]+$/u;
@@ -40,7 +47,13 @@ export function parseStartExecInput(input: unknown): ProjectResult<ParsedStartEx
 
   const { command } = input;
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `command` field is untrusted.
-  if (typeof command !== "string" || command.length === 0) return fail("invalid-request");
+  if (typeof command !== "string") return fail("invalid-request");
+  if (
+    command.length === 0 ||
+    new TextEncoder().encode(command).byteLength > MAX_EXEC_COMMAND_BYTES
+  ) {
+    return fail("invalid-request");
+  }
 
   const cwd = "cwd" in input ? input.cwd : undefined;
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `cwd` field is untrusted.
