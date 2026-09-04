@@ -42,99 +42,70 @@ test("returns the active generation and no recovery report when none exists", as
   });
 });
 
-test("returns a saved session record", async () => {
+test("returns a project's thread", async () => {
   const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/sessions/session-a"),
-    supervisor({
-      getSession(sessionId) {
-        return Promise.resolve({
-          sessionId,
-          document: '{"turns":["first"]}',
-          revision: 1,
-          turnActive: false,
-          turnDeadlineAt: undefined,
-        });
-      },
-    }),
+    new Request("https://cf-stumble.test/api/projects/project-one/thread"),
+    supervisor(),
   );
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual({
     ok: true,
-    session: {
-      sessionId: "session-a",
-      document: '{"turns":["first"]}',
-      revision: 1,
+    thread: {
+      projectId: "project-one",
+      conversation: "[]",
+      messageCount: 0,
+      revision: 0,
       turnActive: false,
     },
   });
 });
 
-test("returns a JSON not-found result for a missing session", async () => {
+test("reports a project the catalog does not have without inventing a thread", async () => {
   const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/sessions/missing"),
+    new Request("https://cf-stumble.test/api/projects/project-nine/thread"),
     supervisor(),
   );
 
   expect(response.status).toBe(404);
   await expect(response.json()).resolves.toEqual({
     ok: false,
-    error: { code: "session-not-found" },
+    problem: { code: "unknown-project-id" },
   });
 });
 
-test("returns the Supervisor turn result without changing a stale revision conflict", async () => {
-  let called: readonly [string, string, number] | undefined;
-  const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/sessions/session-a/turn", {
+test("starts a fresh thread only on POST, and passes the id the client named", async () => {
+  let reset: string | undefined;
+  const fresh = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/projects/project-one/thread/fresh", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt: "stale", expectedRevision: 0 }),
     }),
     supervisor({
-      runSessionTurn(sessionId, prompt, expectedRevision) {
-        called = [sessionId, prompt, expectedRevision];
-        return Promise.resolve({
-          ok: false,
-          problem: { code: "stale-revision", sessionId, currentRevision: 1 },
-        });
-      },
-    }),
-  );
-
-  expect(called).toEqual(["session-a", "stale", 0]);
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    problem: { code: "stale-revision", sessionId: "session-a", currentRevision: 1 },
-  });
-});
-
-test("returns JSON 400 without invoking a turn for a malformed body", async () => {
-  let invoked = false;
-  const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/sessions/session-a/turn", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: '{"prompt":',
-    }),
-    supervisor({
-      runSessionTurn() {
-        invoked = true;
+      startFreshProjectThread(projectId) {
+        reset = projectId;
         return Promise.resolve({
           ok: true,
-          response: { text: "unexpected", commands: [], sessionRevision: 1 },
+          thread: {
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the route never inspects the branded id, and this stands in for the catalog's own value.
+            projectId: projectId as never,
+            conversation: "[]",
+            messageCount: 0,
+            revision: 0,
+            turnActive: false,
+            turnDeadlineAt: undefined,
+          },
         });
       },
     }),
   );
+  const wrongMethod = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/projects/project-one/thread/fresh"),
+    supervisor(),
+  );
 
-  expect(invoked).toBe(false);
-  expect(response.status).toBe(400);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "invalid-turn-request" },
-  });
+  expect(reset).toBe("project-one");
+  expect(fresh.status).toBe(200);
+  expect(wrongMethod.status).toBe(404);
 });
 
 test("returns JSON 404 for unknown route and method pairs", async () => {

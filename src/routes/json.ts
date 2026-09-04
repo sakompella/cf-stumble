@@ -6,12 +6,10 @@
  * error text or credential can reach the client.
  */
 export type ApiErrorCode =
-  | "invalid-turn-request"
   | "invalid-submission-request"
   | "invalid-activation-request"
   | "invalid-rollback-request"
   | "not-found"
-  | "session-not-found"
   | "internal-error";
 
 export function jsonError(status: number, code: ApiErrorCode): Response {

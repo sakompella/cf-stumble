@@ -1,57 +1,39 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
-import type { SessionRecord, SessionTurnResult } from "../supervisor/sessions/index.js";
+import type { ProjectThreadResult } from "../supervisor/threads/index.js";
 import {
   handleGenerationControl,
   handleGenerationSubmission,
   type GenerationControlSupervisor,
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
-import { hasExactKeys, isCount, isRecord, jsonError, readJson } from "./json.js";
+import { jsonError } from "./json.js";
 import { latestRecoveryReportSummary, type RecoveryReportSupervisor } from "./recovery.js";
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
   RecoveryReportSupervisor & {
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
-    readonly getSession: (sessionId: string) => Promise<SessionRecord | undefined>;
-    readonly runSessionTurn: (
-      sessionId: string,
-      prompt: string,
-      expectedRevision: number,
-    ) => Promise<SessionTurnResult>;
+    readonly getProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
+    readonly startFreshProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
   };
 
-type TurnRequest = {
-  readonly prompt: string;
-  readonly expectedRevision: number;
-};
-
-function parseTurnRequest(value: unknown): TurnRequest | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["expectedRevision", "prompt"])) {
-    return undefined;
-  }
-  const { prompt, expectedRevision } = value;
-  if (typeof prompt !== "string" || !isCount(expectedRevision)) {
-    return undefined;
-  }
-  return { prompt, expectedRevision };
-}
-
-function sessionRoute(
+/**
+ * The project id a client named, still a plain string. The Supervisor resolves it against the
+ * catalog; this route only takes it out of the path, so an id the catalog does not know reaches
+ * the Supervisor and comes back as `unknown-project-id` rather than being guessed at here.
+ */
+function threadRoute(
   pathname: string,
-): { readonly sessionId: string; readonly isTurn: boolean } | undefined {
-  const matched = /^\/api\/sessions\/([^/]+)(\/turn)?$/u.exec(pathname);
-  if (matched === null) {
-    return undefined;
-  }
-  const encodedSessionId = matched[1];
-  if (encodedSessionId === undefined) {
+): { readonly projectId: string; readonly isReset: boolean } | undefined {
+  const matched = /^\/api\/projects\/([^/]+)\/thread(\/fresh)?$/u.exec(pathname);
+  const encodedProjectId = matched?.[1];
+  if (encodedProjectId === undefined) {
     return undefined;
   }
   try {
-    const sessionId = decodeURIComponent(encodedSessionId);
-    return sessionId.length === 0 ? undefined : { sessionId, isTurn: matched[2] === "/turn" };
+    const projectId = decodeURIComponent(encodedProjectId);
+    return projectId.length === 0 ? undefined : { projectId, isReset: matched?.[2] === "/fresh" };
   } catch {
     return undefined;
   }
@@ -82,33 +64,18 @@ async function recoveryResponse(supervisor: OwnerApiSupervisor): Promise<Respons
   }
 }
 
-async function sessionResponse(
-  supervisor: OwnerApiSupervisor,
-  sessionId: string,
+async function threadResponse(
+  read: () => Promise<ProjectThreadResult>,
+  // Naming a project the catalog does not have is a 404, because the client asked for something
+  // that does not exist. Anything else is a fault about the thread it did name.
 ): Promise<Response> {
   try {
-    const record = await supervisor.getSession(sessionId);
-    return record === undefined
-      ? jsonError(404, "session-not-found")
-      : Response.json({ ok: true, session: record });
-  } catch {
-    return jsonError(500, "internal-error");
-  }
-}
-
-async function turnResponse(
-  request: Request,
-  supervisor: OwnerApiSupervisor,
-  sessionId: string,
-): Promise<Response> {
-  const body = parseTurnRequest(await readJson(request));
-  if (body === undefined) {
-    return jsonError(400, "invalid-turn-request");
-  }
-  try {
-    return Response.json(
-      await supervisor.runSessionTurn(sessionId, body.prompt, body.expectedRevision),
-    );
+    const result = await read();
+    if (result.ok) {
+      return Response.json({ ok: true, thread: result.thread });
+    }
+    const status = result.problem.code === "unreadable-thread" ? 500 : 404;
+    return Response.json({ ok: false, problem: result.problem }, { status });
   } catch {
     return jsonError(500, "internal-error");
   }
@@ -116,8 +83,8 @@ async function turnResponse(
 
 /**
  * The Worker calls this only after it verifies Cloudflare Access and derives the Supervisor name.
- * Request data selects only an opaque session, a generation label, and an epoch within that
- * already-selected Supervisor. It never names a tenant, an identity, or a Durable Object.
+ * Request data selects only one of the tenant's projects, a generation label, and an epoch within
+ * that already-selected Supervisor. It never names a tenant, an identity, or a Durable Object.
  */
 export function routeOwnerApiRequest(
   request: Request,
@@ -143,15 +110,15 @@ export function routeOwnerApiRequest(
     return handleGenerationControl(request, supervisor, "rollback");
   }
 
-  const session = sessionRoute(pathname);
-  if (session === undefined) {
+  const thread = threadRoute(pathname);
+  if (thread === undefined) {
     return notFound();
   }
-  if (isGet && !session.isTurn) {
-    return sessionResponse(supervisor, session.sessionId);
+  if (isGet && !thread.isReset) {
+    return threadResponse(() => supervisor.getProjectThread(thread.projectId));
   }
-  if (isPost && session.isTurn) {
-    return turnResponse(request, supervisor, session.sessionId);
+  if (isPost && thread.isReset) {
+    return threadResponse(() => supervisor.startFreshProjectThread(thread.projectId));
   }
 
   return notFound();

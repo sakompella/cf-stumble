@@ -1,7 +1,12 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
-import type { SessionRecord } from "../../src/supervisor/sessions/index.js";
+import {
+  emptyThread,
+  serializedThread,
+  type ProjectThreadResult,
+} from "../../src/supervisor/threads/index.js";
+import { PROJECT_CATALOG } from "../../src/project-catalog.js";
 
 /** A stand-in Supervisor for boundary tests. Each test overrides only the call it exercises. */
 export function ownerApiSupervisor(
@@ -11,14 +16,11 @@ export function ownerApiSupervisor(
     getActiveGeneration() {
       return Promise.resolve({ generation: undefined, epoch: 0, activationId: undefined });
     },
-    getSession(_sessionId) {
-      return Promise.resolve<SessionRecord | undefined>(void 0);
+    getProjectThread(projectId) {
+      return Promise.resolve(unknownProjectOr(projectId));
     },
-    runSessionTurn() {
-      return Promise.resolve({
-        ok: true,
-        response: { text: "reply", commands: [], sessionRevision: 1 },
-      });
+    startFreshProjectThread(projectId) {
+      return Promise.resolve(unknownProjectOr(projectId));
     },
     controlGeneration() {
       return Promise.reject(new Error("this test must not reach generation control"));
@@ -31,6 +33,14 @@ export function ownerApiSupervisor(
     },
     ...overrides,
   };
+}
+
+/** Stands in for the catalog: the first catalog project has a thread, and nothing else does. */
+function unknownProjectOr(projectId: string): ProjectThreadResult {
+  const [firstProject] = PROJECT_CATALOG;
+  return projectId === firstProject.id
+    ? { ok: true, thread: serializedThread(emptyThread(firstProject.id)) }
+    : { ok: false, problem: { code: "unknown-project-id" } };
 }
 
 /** The body stays raw text so a malformed request reaches the route exactly as it was sent. */

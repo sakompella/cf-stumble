@@ -14,7 +14,7 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 /**
  * The real Supervisor Durable Object, its real Workspace Host binding, and no capability supplied
- * by this test. `startProjectTurn` takes a tenant, a project id, and a turn request; there is no
+ * by this test. `streamProjectTurn` takes a tenant, a project id, and a turn request; there is no
  * parameter through which a capability could arrive, so whatever reaches the generation the
  * Supervisor obtained itself.
  */
@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 test("the turn surface accepts a project id and a request, and never a capability", () => {
-  expectTypeOf<Parameters<Supervisor["startProjectTurn"]>>().toEqualTypeOf<[ProjectTurnRequest]>();
+  expectTypeOf<Parameters<Supervisor["streamProjectTurn"]>>().toEqualTypeOf<[ProjectTurnRequest]>();
   expectTypeOf<ProjectTurnRequest>().toEqualTypeOf<{
     readonly tenant: ProjectTurnRequest["tenant"];
     readonly projectId: unknown;
@@ -45,7 +45,7 @@ test("the turn surface accepts a project id and a request, and never a capabilit
 test("a Supervisor with nothing serving refuses the turn", async () => {
   const control = supervisor("project-turn-without-a-generation");
 
-  const refused: ProjectTurnStart = await control.startProjectTurn(request);
+  const refused: ProjectTurnStart = await control.streamProjectTurn(request);
 
   expect(refused).toEqual({ ok: false, reason: "no-active-generation" });
 });
@@ -61,7 +61,7 @@ test("a serving Supervisor goes on to obtain the capability from its own binding
   const control = supervisor("project-turn-reaches-the-workspace-binding");
   await activateFixtureGeneration(control);
 
-  const refused: ProjectTurnStart = await control.startProjectTurn(request);
+  const refused: ProjectTurnStart = await control.streamProjectTurn(request);
 
   expect(refused).toEqual({ ok: false, reason: "workspace-unavailable" });
 });

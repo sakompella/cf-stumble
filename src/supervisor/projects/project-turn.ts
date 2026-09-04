@@ -81,7 +81,7 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
  * turn off from the files it is working in. Releasing the lease at the turn's end, which
  * `facet/generation-0/project-capability.ts` does, is what ends the whole chain.
  */
-export async function startProjectTurn(input: ProjectTurnInput): Promise<ProjectTurnStart> {
+export async function streamProjectTurn(input: ProjectTurnInput): Promise<ProjectTurnStart> {
   const resolved = await resolveProjectWorkspaceName({
     identity: input.tenant.identity,
     audience: input.tenant.audience,

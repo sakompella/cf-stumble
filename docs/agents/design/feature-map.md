@@ -95,22 +95,22 @@ The Access policy still admits only the owner's identity. Identity routing is in
 
 The project is lopsided. The Supervisor has deliberate generation, relay, eligibility, and recovery code. The code it supervises is still a test fixture. That imbalance is why the project feels late: `pnpm verify` has 33 passing test files and 168 passing tests for the half a user cannot yet use.
 
-| Capability                                               | What exists now                                | What version 0 needs                                                  |
-| -------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------- |
-| Generation labels, status, epoch, and activation history | Implemented and tested locally                 | Keep it. Do not redesign it.                                          |
-| Journaled candidate, activation, and rollback requests   | Implemented and tested locally                 | Put them behind an authenticated tenant route.                        |
-| Bounded startup check                                    | Implemented and tested locally                 | Run it against real candidate module maps.                            |
-| Active-generation facet serving                          | Works locally with `src/facet/fixture.ts`      | Load a real Pi-based main facet.                                      |
-| Relay attempts and eligibility                           | Implemented and tested locally                 | Credit only terminal streamed turns whose thread state was saved.     |
-| Recovery episode bookkeeping                             | Implemented and tested locally                 | Show the latest report if useful. Do not add automatic repair.        |
-| R2 binding                                               | Configured and smoke-tested locally            | Add the cache and the Computer rebuild path.                          |
-| Pi 0.84.4 fork                                           | Vendored and checked                           | Run it in the main facet.                                             |
-| Computer source and image pair                           | Pinned and tested separately on a paid account | Add the workspace host and the runtime adapter to this repository.    |
-| Coding-agent loop                                        | Missing                                        | Complete one real edit-and-test turn.                                 |
-| Project threads                                          | Session documents use the old manual-ID model  | Persist one current Pi thread per project outside generation state.   |
-| Model access                                             | Missing                                        | Add one fixed route whose credential stays outside the mutable facet. |
-| Tenant page and HTTP routes                              | Missing                                        | Add identity routing, chat, status, candidate check, and rollback.    |
-| Paid deployment                                          | Missing                                        | Run the complete demo in the paid runtime.                            |
+| Capability                                               | What exists now                                   | What version 0 needs                                                  |
+| -------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
+| Generation labels, status, epoch, and activation history | Implemented and tested locally                    | Keep it. Do not redesign it.                                          |
+| Journaled candidate, activation, and rollback requests   | Implemented and tested locally                    | Put them behind an authenticated tenant route.                        |
+| Bounded startup check                                    | Implemented and tested locally                    | Run it against real candidate module maps.                            |
+| Active-generation facet serving                          | Works locally with `src/facet/fixture.ts`         | Load a real Pi-based main facet.                                      |
+| Relay attempts and eligibility                           | Implemented and tested locally                    | Credit only terminal streamed turns whose thread state was saved.     |
+| Recovery episode bookkeeping                             | Implemented and tested locally                    | Show the latest report if useful. Do not add automatic repair.        |
+| R2 binding                                               | Configured and smoke-tested locally               | Add the cache and the Computer rebuild path.                          |
+| Pi 0.84.4 fork                                           | Vendored and checked                              | Run it in the main facet.                                             |
+| Computer source and image pair                           | Pinned and tested separately on a paid account    | Add the workspace host and the runtime adapter to this repository.    |
+| Coding-agent loop                                        | Missing                                           | Complete one real edit-and-test turn.                                 |
+| Project threads                                          | One thread per catalog project, keyed server-side | Drive a turn through the thread lease and stream it to the browser.   |
+| Model access                                             | Missing                                           | Add one fixed route whose credential stays outside the mutable facet. |
+| Tenant page and HTTP routes                              | Missing                                           | Add identity routing, chat, status, candidate check, and rollback.    |
+| Paid deployment                                          | Missing                                           | Run the complete demo in the paid runtime.                            |
 
 ## P0: prove the paid Cloudflare path
 

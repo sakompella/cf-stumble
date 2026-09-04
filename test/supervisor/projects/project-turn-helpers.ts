@@ -1,5 +1,5 @@
 import { Result } from "better-result";
-import { startProjectTurn } from "../../../src/supervisor/projects/index.js";
+import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { resolveProjectWorkspaceName } from "../../../src/workspace-names.js";
 import { readFrames } from "../../facet/generation-0/facet-turn-helpers.js";
 import { loadFixtureEntrypoint } from "../../loaded-fixture.js";
@@ -62,7 +62,7 @@ export function turnFor(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the boundary: a project id arrives from a client with no proven shape.
   projectId: unknown,
 ): Promise<ProjectTurnStart> {
-  return startProjectTurn({
+  return streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
     tenant,
@@ -73,7 +73,7 @@ export function turnFor(
 
 /** A turn asked for while no generation serves, so nothing is mounted to run it. */
 export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<ProjectTurnStart> {
-  return startProjectTurn({
+  return streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.err({ code: "no-active-generation" })),
     tenant,

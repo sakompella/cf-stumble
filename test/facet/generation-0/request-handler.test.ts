@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
 import { handleGeneration0Request } from "../../../src/facet/generation-0/index.js";
-import { parseFacetTurnResult } from "../../../src/supervisor/sessions/index.js";
 import { FakeModelRoute, modelUnavailableReply, textReply, toolCallReply } from "./fakes.js";
 
 function turnRequest(body: string): Request {
@@ -32,12 +31,12 @@ test("GET / answers cheaply and deterministically without using a capability", a
 
 /**
  * This surface has no workspace to give a turn, so a tool that needs files reports a tool error
- * the model can read and the turn still finishes with a document the session store parses. A
+ * the model can read and the turn still finishes with a document it can be continued from. A
  * workspace belongs to one project and this facet's environment is shared by every project the
  * generation serves, which is why the streamed `MainFacet.startTurn` takes a project capability as
  * an argument instead. `turn.test.ts` covers the tool loop with a workspace supplied directly.
  */
-test("POST /turn returns the turn result the Supervisor session store parses", async () => {
+test("POST /turn returns the saved document and the reply, having run no command", async () => {
   const route = new FakeModelRoute([
     toolCallReply([{ id: "c1", name: "run_command", arguments: { command: "check" } }]),
     textReply("I could not reach the workspace."),
@@ -48,13 +47,17 @@ test("POST /turn returns the turn result the Supervisor session store parses", a
     { MODEL: route },
   );
 
+  const result = await response.json<{
+    readonly document: string;
+    readonly text: string;
+    readonly commands: readonly unknown[];
+  }>();
+
   expect(response.status).toBe(200);
-  const parsed = parseFacetTurnResult(await response.json());
-  expect(parsed, "the response must match the shape the Supervisor already parses").toBeDefined();
-  expect(parsed?.text).toBe("I could not reach the workspace.");
-  expect(parsed?.commands, "no command can have run without a workspace").toEqual([]);
-  expect(parsed?.document).toContain("cf-stumble-generation-0");
-  expect(parsed?.document).toContain("workspace-unavailable");
+  expect(result.text).toBe("I could not reach the workspace.");
+  expect(result.commands, "no command can have run without a workspace").toEqual([]);
+  expect(result.document).toContain("cf-stumble-generation-0");
+  expect(result.document).toContain("workspace-unavailable");
 });
 
 test("rejects a malformed turn request and a document from another generation", async () => {
