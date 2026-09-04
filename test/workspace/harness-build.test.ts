@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
-import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../src/harness-build.js";
+import {
+  HARNESS_BUILD_CONFIGURATION,
+  planHarnessBuild,
+  shellQuote,
+} from "../../src/harness-build.js";
 import {
   executeHarnessBuildRequest,
   executeWorkspaceRequest,
@@ -221,4 +225,16 @@ test("keeps the project surface free of build requests", async () => {
     }),
   ).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
   expect(operations.calls).toEqual([]);
+});
+
+test("shellQuote emits POSIX single-quote escaping the shell can parse", () => {
+  expect(shellQuote("plain")).toBe("'plain'");
+  expect(shellQuote("/harness/.git")).toBe("'/harness/.git'");
+  expect(shellQuote("$(rm -rf /)")).toBe("'$(rm -rf /)'");
+
+  // A single quote closes the literal, emits an escaped quote, then reopens it. An extra backslash
+  // here yields a string no shell can parse, which is how a quoting helper turns into an injection
+  // the first time a caller passes something other than a constant.
+  expect(shellQuote("a'b")).toBe("'a'\\''b'");
+  expect(shellQuote("'")).toBe("''\\'''");
 });

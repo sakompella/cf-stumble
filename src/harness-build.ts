@@ -57,8 +57,8 @@ export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "build",
 ];
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\\\''")}'`;
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function provisionHarnessRepository(configuration: HarnessBuildConfiguration): string {
