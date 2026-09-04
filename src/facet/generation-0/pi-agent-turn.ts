@@ -59,16 +59,7 @@ function executionTools(context: ExecutionToolContext): AgentTool[] {
     bindExecutionTool(createReadTool(), context),
     bindExecutionTool(createWriteTool(), context),
     bindExecutionTool(createEditTool(), context),
-    bindExecutionTool(
-      createBashTool({
-        prepare: async (execution, { env }, signal) => {
-          const cwd = await env.canonicalPath(execution.cwd, signal);
-          if (!cwd.ok) throw cwd.error;
-          execution.cwd = cwd.value;
-        },
-      }),
-      context,
-    ),
+    bindExecutionTool(createBashTool(), context),
   ];
 }
 

@@ -1,70 +1,8 @@
 import { expect, test, vi } from "vitest";
 import { createPiAgentTurnState, runPiAgentTurn } from "../../../src/facet/generation-0/index.js";
-import { createAssistantMessageEventStream } from "@cf-stumble/pi";
-import type {
-  AgentMessage,
-  Api,
-  AssistantMessage,
-  ExecutionEnv,
-  Model,
-  StreamFn,
-} from "@cf-stumble/pi";
+import type { ExecutionEnv } from "@cf-stumble/pi";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
-
-const model = {
-  id: "test-model",
-  name: "Test model",
-  api: "openai-completions",
-  provider: "test-provider",
-  baseUrl: "https://example.test/v1",
-  reasoning: false,
-  input: ["text"],
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 8_192,
-  maxTokens: 1_024,
-} satisfies Model<Api>;
-
-const usage = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-} as const;
-
-function assistant(
-  content: AssistantMessage["content"],
-  stopReason: "stop" | "toolUse",
-): AssistantMessage {
-  return {
-    role: "assistant",
-    content,
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage,
-    stopReason,
-    timestamp: 0,
-  };
-}
-
-function scriptedStream(messages: readonly AssistantMessage[]) {
-  const remaining = [...messages];
-  const contexts: Array<Readonly<{ messages: readonly AgentMessage[] }>> = [];
-  const streamFn: StreamFn = (_model, context) => {
-    contexts.push(context);
-    const message = remaining.shift() ?? assistant([], "stop");
-    const stream = createAssistantMessageEventStream();
-    stream.push({
-      type: "done",
-      reason: message.stopReason === "toolUse" ? "toolUse" : "stop",
-      message,
-    });
-    return stream;
-  };
-  return { contexts, streamFn };
-}
+import { assistant, scriptedModel as model, scriptedStream, tick } from "./scripted-model.js";
 
 function deferred() {
   let resolve!: () => void;
@@ -95,12 +33,6 @@ function pausedWriteEnvironment(base: ExecutionEnv) {
     },
   } satisfies ExecutionEnv;
   return { env, log, writeStarted, writeReleased };
-}
-
-function tick(): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
 }
 
 function completeLargeBashOutput(
@@ -240,6 +172,41 @@ test("reaches every supported execution operation through the four stock tools",
 
   await expect(turn).resolves.toMatchObject({ ok: true });
   for (const spy of operationSpies) expect(spy).toHaveBeenCalled();
+});
+
+test("reaches canonicalPath through the write tool alone, with no bash call", async () => {
+  const { env: base, execBackend } = makeFacetExecutionEnv();
+  const canonicalPath = vi.spyOn(base, "canonicalPath");
+  const script = scriptedStream([
+    assistant(
+      [
+        {
+          type: "toolCall",
+          id: "write",
+          name: "write",
+          arguments: { path: "queued.txt", content: "queued" },
+        },
+      ],
+      "toolUse",
+    ),
+    assistant([{ type: "text", text: "Done." }], "stop"),
+  ]);
+
+  const outcome = await runPiAgentTurn({
+    prompt: "Write one file.",
+    state: createPiAgentTurnState(model),
+    env: base,
+    streamFn: script.streamFn,
+  });
+
+  expect(outcome.ok).toBe(true);
+  expect(
+    canonicalPath,
+    "Pi's write tool canonicalizes the path itself through its file mutation queue",
+  ).toHaveBeenCalledWith("/project/queued.txt");
+  expect(execBackend.requests, "no command runs, so no bash prepare hook could have run").toEqual(
+    [],
+  );
 });
 
 test("preserves a tool error as a Pi result instead of rejecting the turn", async () => {
