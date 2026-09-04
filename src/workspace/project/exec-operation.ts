@@ -4,7 +4,7 @@ import type {
   ExecBackendHandle,
   ExecBackendInput,
 } from "./exec-backend.js";
-import type { ExecEvent } from "./types.js";
+import type { ExecEvent } from "./protocol.js";
 
 export interface ExecOperation {
   readonly events: ReadableStream<ExecEvent>;

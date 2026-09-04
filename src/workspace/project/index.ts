@@ -34,4 +34,4 @@ export {
   type ProjectRpcTargetContract,
   type StartExecInput,
   type WriteMode,
-} from "./types.js";
+} from "./protocol.js";

@@ -25,7 +25,7 @@ import {
   type ProjectResult,
   type ProjectRpcTargetContract,
   type WriteMode,
-} from "./types.js";
+} from "./protocol.js";
 import {
   isWriteMode,
   OPERATION_ID_PATTERN,

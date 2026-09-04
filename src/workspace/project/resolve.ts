@@ -5,7 +5,7 @@ import {
   type ProjectFileInfo,
   type ProjectFileKind,
   type ProjectResult,
-} from "./types.js";
+} from "./protocol.js";
 
 /** Every addressed path lives beneath this fixed provider-space root. */
 export const PROJECT_ROOT = "/project";

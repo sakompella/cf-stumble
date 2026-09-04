@@ -6,7 +6,7 @@ import {
   ok,
   type ProjectResult,
   type WriteMode,
-} from "./types.js";
+} from "./protocol.js";
 
 export const OPERATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9]+$/u;
