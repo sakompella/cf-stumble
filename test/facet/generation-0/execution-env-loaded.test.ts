@@ -176,7 +176,7 @@ test("a loaded isolate can pause and cancel a remote exec byte stream", async ()
   await Promise.resolve();
   await Promise.resolve();
 
-  expect(handle.readCalls).toBeGreaterThan(0);
+  expect(handle.readCalls).toBe(2);
   await paused;
   expect(handle.killCalls).toBe(1);
 });
