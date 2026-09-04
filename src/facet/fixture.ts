@@ -46,29 +46,6 @@ export class MainFacet extends DurableObject {
       return Response.json(await this.model.run({ prompt: await request.text() }));
     }
 
-    if (path === "/turn") {
-      const input = await request.json();
-      if (input.prompt === "fail") {
-        return new Response("deterministic facet failure", { status: 500 });
-      }
-      if (input.prompt === "malformed") {
-        return Response.json({ document: input.document });
-      }
-      if (input.prompt === "timeout") {
-        return new Response(new ReadableStream({ pull() { return new Promise(() => {}); } }));
-      }
-      const previous = input.document === null ? [] : JSON.parse(input.document).turns;
-      const document = JSON.stringify({ turns: [...previous, input.prompt] });
-      return Response.json({
-        document,
-        text: "reply:" + input.prompt,
-        commands:
-          input.prompt === "command"
-            ? [{ command: "echo fake", stdout: "fake\\n", stderr: "", exitCode: 0 }]
-            : [],
-      });
-    }
-
     if (path === "/facet/outbound") {
       try {
         await fetch("https://example.com/");
