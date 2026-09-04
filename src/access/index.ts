@@ -45,9 +45,11 @@ export type AccessRequestResult =
 // A missing, empty, or whitespace-only secret is indistinguishable from misconfiguration: this
 // Worker has exactly one owner, and there is no safe default identity to fall back to.
 function configuredOwnerSubject(env: AccessWorkerEnvironment): string | undefined {
-  return typeof env.CF_ACCESS_OWNER_SUB === "string" && env.CF_ACCESS_OWNER_SUB.trim().length > 0
-    ? env.CF_ACCESS_OWNER_SUB
-    : undefined;
+  if (typeof env.CF_ACCESS_OWNER_SUB !== "string") {
+    return undefined;
+  }
+  const subject = env.CF_ACCESS_OWNER_SUB.trim();
+  return subject.length > 0 ? subject : undefined;
 }
 
 // Runs on a verified identity, but strictly before a Supervisor name is ever derived for it, so a

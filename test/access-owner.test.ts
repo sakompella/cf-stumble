@@ -69,6 +69,15 @@ describe("the owner allowlist", () => {
     ).resolves.toMatchObject({ ok: true });
   });
 
+  test("authorizes the configured owner when the secret has a trailing newline", async () => {
+    const key = await signingKey("owner-newline-key");
+    const token = await tokenFor(key, accessOwnerSubject);
+
+    await expect(
+      authenticateAccessRequest(requestWith(token), environment(key, `${accessOwnerSubject}\n`)),
+    ).resolves.toMatchObject({ ok: true });
+  });
+
   test("rejects a correctly signed token for a different sub, deriving no Supervisor name", async () => {
     const key = await signingKey("owner-reject-key");
     const token = await tokenFor(key, "some-other-verified-user");
