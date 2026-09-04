@@ -75,15 +75,15 @@ function isOptional(rule: StoredFieldRule): boolean {
   return rule.startsWith("optional-");
 }
 
+interface RestoredMessage {
+  readonly role: ThreadMessageRole;
+}
+
 /**
  * Rebuild one message from its stored fields. This is the only place that claims a decoded value
  * is an `AgentMessage`, and it claims it after checking the role and every field the role
  * declares, so nothing reaches the rest of the Supervisor as a message until it is one.
  */
-interface RestoredMessage {
-  readonly role: ThreadMessageRole;
-}
-
 function restoredMessage(
   role: ThreadMessageRole,
   fields: readonly (readonly [string, unknown])[],

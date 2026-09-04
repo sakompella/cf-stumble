@@ -39,7 +39,7 @@ export function ownerApiSupervisor(
 function unknownProjectOr(projectId: string): ProjectThreadResult {
   const [firstProject] = PROJECT_CATALOG;
   return projectId === firstProject.id
-    ? { ok: true, thread: serializedThread(emptyThread(firstProject.id), "[]") }
+    ? { ok: true, thread: serializedThread(emptyThread(firstProject.id)) }
     : { ok: false, problem: { code: "unknown-project-id" } };
 }
 

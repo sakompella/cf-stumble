@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@cf-stumble/pi";
+import { serializeThreadMessages } from "./messages.js";
 import type { ProjectId } from "../../project-catalog.js";
 
 /**
@@ -68,10 +69,10 @@ export function emptyThread(projectId: ProjectId): ProjectThread {
   return { projectId, messages: [], revision: 0, turnActive: false, turnDeadlineAt: undefined };
 }
 
-export function serializedThread(thread: ProjectThread, conversation: string): SerializedThread {
+export function serializedThread(thread: ProjectThread): SerializedThread {
   return {
     projectId: thread.projectId,
-    conversation,
+    conversation: serializeThreadMessages(thread.messages),
     messageCount: thread.messages.length,
     revision: thread.revision,
     turnActive: thread.turnActive,

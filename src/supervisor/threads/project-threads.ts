@@ -1,7 +1,7 @@
 // oxlint-disable anti-slop/no-unknown-parameters -- Every project id here arrives from a client through Durable Object RPC, so it is a string with no proven meaning until the catalog resolves it.
 /// <reference types="@cloudflare/workers-types" />
 
-import { parseAgentMessages, serializeThreadMessages } from "./messages.js";
+import { parseAgentMessages } from "./messages.js";
 import { ThreadStore } from "./store.js";
 import { serializedThread, type ProjectThreadResult, type ThreadResult } from "./thread.js";
 import { resolveProject, type Project, type ProjectCatalog } from "../../project-catalog.js";
@@ -92,10 +92,5 @@ export class ProjectThreads {
 }
 
 function serialized(result: ThreadResult): ProjectThreadResult {
-  return result.ok
-    ? {
-        ok: true,
-        thread: serializedThread(result.thread, serializeThreadMessages(result.thread.messages)),
-      }
-    : result;
+  return result.ok ? { ok: true, thread: serializedThread(result.thread) } : result;
 }
