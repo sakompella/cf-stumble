@@ -4,6 +4,7 @@ export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_EXEC_TIMEOUT_MS = 10 * 60 * 1_000;
 export const MAX_EXEC_COMMAND_BYTES = 65_536;
 export const MAX_CONCURRENT_EXECS = 8;
+export const MAX_EXEC_FRAME_BYTES = 65_536;
 
 export type ProjectErrorCode =
   | "not-found"
@@ -51,7 +52,7 @@ export interface ProjectRpcTargetContract {
   listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>>;
   startExec(
     input: unknown,
-  ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<ExecEvent> }>>;
+  ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<Uint8Array> }>>;
   kill(operationId: unknown): Promise<ProjectResult<null>>;
 }
 

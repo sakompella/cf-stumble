@@ -19,7 +19,6 @@ import {
   MAX_CONCURRENT_EXECS,
   MAX_FILE_BYTES,
   ok,
-  type ExecEvent,
   type ProjectFileInfo,
   type ProjectLstatInfo,
   type ProjectResult,
@@ -33,7 +32,7 @@ import {
   type ParsedStartExecInput,
 } from "./start-exec-input.js";
 
-type StartedExec = { operationId: string; events: ReadableStream<ExecEvent> };
+type StartedExec = { operationId: string; events: ReadableStream<Uint8Array> };
 
 function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
   try {

@@ -22,6 +22,7 @@ export { ProjectRpcTarget } from "./target.js";
 export {
   MAX_CONCURRENT_EXECS,
   MAX_EXEC_COMMAND_BYTES,
+  MAX_EXEC_FRAME_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   MAX_FILE_BYTES,
   type ExecEvent,

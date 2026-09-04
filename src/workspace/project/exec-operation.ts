@@ -1,13 +1,15 @@
+// oxlint-disable max-lines
+
 import type {
   BackendExecEvent,
   ExecBackend,
   ExecBackendHandle,
   ExecBackendInput,
 } from "./exec-backend.js";
-import type { ExecEvent } from "./protocol.js";
+import { MAX_EXEC_FRAME_BYTES, type ExecEvent } from "./protocol.js";
 
 export interface ExecOperation {
-  readonly events: ReadableStream<ExecEvent>;
+  readonly events: ReadableStream<Uint8Array>;
   /** Requests a manual kill. A no-op once the operation has already reached a terminal outcome. */
   requestKill(): void;
 }
@@ -19,6 +21,75 @@ interface SettleState {
   /** Set once `execBackend.exec()` resolves and this operation is still unsettled. */
   handle: ExecBackendHandle | undefined;
   resumePump: (() => void) | undefined;
+}
+
+const encoder = new TextEncoder();
+
+function encodeEvent(event: ExecEvent): Uint8Array {
+  return encoder.encode(`${JSON.stringify(event)}\n`);
+}
+
+function enqueueEvent(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  event: ExecEvent,
+): void {
+  const frame = encodeEvent(event);
+  if (frame.byteLength > MAX_EXEC_FRAME_BYTES) {
+    throw new Error("exec event exceeds the protocol frame limit");
+  }
+  controller.enqueue(frame);
+}
+
+function largestFrameEnd(
+  kind: "stdout" | "stderr",
+  data: string,
+  start: number,
+  seq: number,
+): number {
+  let low = start + 1;
+  let high = data.length;
+  let result = start;
+
+  while (low <= high) {
+    let middle = Math.floor((low + high) / 2);
+    if (middle > start && isHighSurrogate(data.codePointAt(middle - 1) ?? 0)) middle -= 1;
+    if (middle <= start) {
+      low = start + 1;
+      continue;
+    }
+    const frame = encodeEvent({ kind, seq, data: data.slice(start, middle) });
+    if (frame.byteLength <= MAX_EXEC_FRAME_BYTES) {
+      result = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  if (result === start) throw new Error("exec frame limit cannot encode one character");
+  return result;
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+function enqueueOutput(
+  state: SettleState,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  kind: "stdout" | "stderr",
+  data: string,
+): void {
+  if (data === "") {
+    enqueueEvent(controller, { kind, seq: state.seq++, data });
+    return;
+  }
+
+  for (let start = 0; start < data.length;) {
+    const end = largestFrameEnd(kind, data, start, state.seq);
+    enqueueEvent(controller, { kind, seq: state.seq++, data: data.slice(start, end) });
+    start = end;
+  }
 }
 
 function resumePump(state: SettleState): void {
@@ -36,7 +107,7 @@ function resumePump(state: SettleState): void {
  */
 function settle(
   state: SettleState,
-  controller: ReadableStreamDefaultController<ExecEvent>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   onSettle: () => void,
   outcome: ExecEvent,
   killBackend: boolean,
@@ -46,7 +117,7 @@ function settle(
   if (state.timer !== undefined) clearTimeout(state.timer);
   resumePump(state);
   try {
-    controller.enqueue(outcome);
+    enqueueEvent(controller, outcome);
     controller.close();
   } catch {
     // The consumer already cancelled the stream; the terminal outcome still counts as sent.
@@ -86,7 +157,7 @@ interface Decoders {
 /** Applies one backend read result. Returns `true` once the operation has reached a terminal outcome. */
 function applyBackendRead(
   state: SettleState,
-  controller: ReadableStreamDefaultController<ExecEvent>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   settleWith: (outcome: ExecEvent, killBackend: boolean) => void,
   decoders: Decoders,
   read: { done: false; value: BackendExecEvent } | { done: true },
@@ -97,19 +168,21 @@ function applyBackendRead(
   }
   const { value } = read;
   if (value.name === "stdout") {
-    controller.enqueue({
-      kind: "stdout",
-      seq: state.seq++,
-      data: decoders.stdout.decode(value.data, { stream: true }),
-    });
+    enqueueOutput(
+      state,
+      controller,
+      "stdout",
+      decoders.stdout.decode(value.data, { stream: true }),
+    );
     return false;
   }
   if (value.name === "stderr") {
-    controller.enqueue({
-      kind: "stderr",
-      seq: state.seq++,
-      data: decoders.stderr.decode(value.data, { stream: true }),
-    });
+    enqueueOutput(
+      state,
+      controller,
+      "stderr",
+      decoders.stderr.decode(value.data, { stream: true }),
+    );
     return false;
   }
   settleWith(
@@ -121,7 +194,7 @@ function applyBackendRead(
 
 function waitForDemand(
   state: SettleState,
-  controller: ReadableStreamDefaultController<ExecEvent>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
 ): Promise<void> {
   const desiredSize = controller.desiredSize;
   if (desiredSize !== null && desiredSize > 0) return Promise.resolve();
@@ -133,7 +206,7 @@ function waitForDemand(
 /** Pumps backend events onto the stream until a terminal outcome settles it or it is cancelled. */
 async function pumpBackendEvents(
   state: SettleState,
-  controller: ReadableStreamDefaultController<ExecEvent>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   handle: ExecBackendHandle,
   onSettle: () => void,
 ): Promise<void> {
@@ -177,7 +250,7 @@ function startBackendExec(
 /** Arms the host timeout: whichever of timeout, manual kill, or backend settlement fires first wins. */
 function armTimeout(
   state: SettleState,
-  controller: ReadableStreamDefaultController<ExecEvent>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   onSettle: () => void,
   timeoutMs: number,
 ): void {
@@ -199,7 +272,7 @@ function armTimeout(
  */
 function watchBackendExec(
   state: SettleState,
-  controller: ReadableStreamDefaultController<ExecEvent>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   execBackend: ExecBackend,
   input: ExecBackendInput,
   onSettle: () => void,
@@ -253,7 +326,7 @@ export function startExecOperation(
   };
   let requestKillImpl: (() => void) | undefined;
 
-  const events = new ReadableStream<ExecEvent>(
+  const events = new ReadableStream<Uint8Array>(
     {
       start(controller) {
         armTimeout(state, controller, onSettle, input.timeoutMs);
@@ -275,7 +348,7 @@ export function startExecOperation(
         requestKillImpl?.();
       },
     },
-    { highWaterMark: 1 },
+    { highWaterMark: 1, size: () => 1 },
   );
 
   return {
