@@ -1,15 +1,7 @@
 import { expect, test } from "vitest";
 import { handleGeneration0Request } from "../../../src/facet/generation-0/index.js";
 import { parseFacetTurnResult } from "../../../src/supervisor/sessions/index.js";
-import {
-  FakeModelRoute,
-  FakeWorkspace,
-  modelUnavailableReply,
-  textReply,
-  toolCallReply,
-} from "./fakes.js";
-
-const CHECK_OUTPUT = { stdout: "ok\n", stderr: "", exitCode: 0 } as const;
+import { FakeModelRoute, modelUnavailableReply, textReply, toolCallReply } from "./fakes.js";
 
 function turnRequest(body: string): Request {
   return new Request("https://main-facet.invalid/turn", {
@@ -25,8 +17,7 @@ function startupRequest(): Request {
 
 test("GET / answers cheaply and deterministically without using a capability", async () => {
   const route = new FakeModelRoute([]);
-  const workspace = new FakeWorkspace();
-  const capabilities = { MODEL: route, WORKSPACE: workspace };
+  const capabilities = { MODEL: route };
 
   const first = await handleGeneration0Request(startupRequest(), capabilities);
   const second = await handleGeneration0Request(startupRequest(), capabilities);
@@ -37,27 +28,33 @@ test("GET / answers cheaply and deterministically without using a capability", a
   expect(body.length, "the startup check bounds the body at 1024 bytes").toBeLessThan(1_024);
   expect(await second.text()).toBe(body);
   expect(route.requests, "the startup check must not call the model").toEqual([]);
-  expect(workspace.requests, "the startup check must not call the workspace").toEqual([]);
 });
 
+/**
+ * This surface has no workspace to give a turn, so a tool that needs files reports a tool error
+ * the model can read and the turn still finishes with a document the session store parses. A
+ * workspace belongs to one project and this facet's environment is shared by every project the
+ * generation serves, which is why the streamed `MainFacet.startTurn` takes a project capability as
+ * an argument instead. `turn.test.ts` covers the tool loop with a workspace supplied directly.
+ */
 test("POST /turn returns the turn result the Supervisor session store parses", async () => {
   const route = new FakeModelRoute([
     toolCallReply([{ id: "c1", name: "run_command", arguments: { command: "check" } }]),
-    textReply("The check passed."),
+    textReply("I could not reach the workspace."),
   ]);
-  const workspace = new FakeWorkspace({ commands: { check: CHECK_OUTPUT } });
 
   const response = await handleGeneration0Request(
     turnRequest(JSON.stringify({ prompt: "Run the check.", document: null })),
-    { MODEL: route, WORKSPACE: workspace },
+    { MODEL: route },
   );
 
   expect(response.status).toBe(200);
   const parsed = parseFacetTurnResult(await response.json());
   expect(parsed, "the response must match the shape the Supervisor already parses").toBeDefined();
-  expect(parsed?.text).toBe("The check passed.");
-  expect(parsed?.commands).toEqual([{ command: "check", ...CHECK_OUTPUT }]);
+  expect(parsed?.text).toBe("I could not reach the workspace.");
+  expect(parsed?.commands, "no command can have run without a workspace").toEqual([]);
   expect(parsed?.document).toContain("cf-stumble-generation-0");
+  expect(parsed?.document).toContain("workspace-unavailable");
 });
 
 test("rejects a malformed turn request and a document from another generation", async () => {

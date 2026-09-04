@@ -12,7 +12,11 @@ import {
   routeResponseToPiAssistant,
 } from "./workers-ai-adapter.js";
 import type { ExecutedCommand } from "./tool-execution.js";
-import type { Generation0Capabilities, ModelCapability } from "./capabilities.js";
+import type {
+  Generation0Capabilities,
+  ModelCapability,
+  WorkspaceCapability,
+} from "./capabilities.js";
 import type { TranscriptEntry, TranscriptToolCall } from "./session-transcript.js";
 import type {
   ModelRouteRequest,
@@ -104,13 +108,13 @@ type TurnStep =
   | Readonly<{ kind: "failed"; problem: TurnProblem }>;
 
 async function runToolCalls(
-  capabilities: Generation0Capabilities,
+  workspace: WorkspaceCapability | undefined,
   state: TurnState,
   toolCalls: readonly TranscriptToolCall[],
 ): Promise<void> {
   for (const toolCall of toolCalls) {
     const outcome = await executeToolPlan(
-      capabilities.WORKSPACE,
+      workspace,
       planToolCall(toolCall.name, toolCall.arguments),
     );
     state.commands.push(...outcome.commands);
@@ -127,6 +131,7 @@ async function runToolCalls(
 /** One model call: send the conversation and the tools, then run whatever the model asked for. */
 async function advanceTurn(
   capabilities: Generation0Capabilities,
+  workspace: WorkspaceCapability | undefined,
   state: TurnState,
 ): Promise<TurnStep> {
   const response = await callModel(
@@ -155,7 +160,7 @@ async function advanceTurn(
     return { kind: "answered" };
   }
 
-  await runToolCalls(capabilities, state, entry.toolCalls);
+  await runToolCalls(workspace, state, entry.toolCalls);
   return { kind: "called-tools" };
 }
 
@@ -164,12 +169,18 @@ async function advanceTurn(
  * the tool calls it asks for against the workspace capability, and repeat until the model answers
  * without a tool call.
  *
+ * The workspace is an argument rather than one of `capabilities`, because a workspace belongs to
+ * one project and this generation's environment is shared by every project it serves. No caller in
+ * `src/` supplies one, so every tool that needs files reports a tool error on this path; the
+ * streamed `MainFacet.startTurn` is where a turn reaches a project.
+ *
  * The saved document arrives with the request and leaves with the result, so the facet keeps no
  * conversation of its own and a replaced generation loses nothing.
  */
 export async function runGeneration0Turn(
   capabilities: Generation0Capabilities,
   request: TurnRequest,
+  workspace?: WorkspaceCapability,
 ): Promise<TurnOutcome> {
   const saved = parseSessionDocument(request.document);
   if (saved === undefined) {
@@ -183,7 +194,7 @@ export async function runGeneration0Turn(
   };
 
   for (let modelCall = 0; modelCall < MAX_MODEL_CALLS; modelCall += 1) {
-    const step = await advanceTurn(capabilities, state);
+    const step = await advanceTurn(capabilities, workspace, state);
     if (step.kind === "failed") {
       return { ok: false, problem: step.problem };
     }

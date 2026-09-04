@@ -10,7 +10,7 @@ import {
   FakeProjectTransactions,
 } from "../workspace/project/fakes.js";
 import type { MainFacetCapabilities } from "../../src/facet/index.js";
-import type { MainFacet } from "../../src/facet/generation-0/index.js";
+import type { Generation0Capabilities, MainFacet } from "../../src/facet/generation-0/index.js";
 import type { MainFacetTarget } from "../../src/facet/index.js";
 
 /**
@@ -72,6 +72,9 @@ test("the loader environment type has no project slot and the turn surface takes
     readonly MODEL: MainFacetCapabilities["MODEL"];
   }>();
   expectTypeOf<keyof MainFacetCapabilities>().toEqualTypeOf<"MODEL">();
+  // The generation declares its own environment separately from what the host installs. Holding
+  // the two to the same keys is what stops a project-scoped slot being declared on one side only.
+  expectTypeOf<keyof Generation0Capabilities>().toEqualTypeOf<keyof MainFacetCapabilities>();
   expectTypeOf<MainFacet>().toExtend<MainFacetTarget>();
   expectTypeOf<Parameters<MainFacetTarget["startTurn"]>>().toExtend<[unknown, unknown]>();
 });

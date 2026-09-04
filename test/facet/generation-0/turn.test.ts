@@ -44,8 +44,9 @@ test("reads a file, edits it, runs the configured command, then answers", async 
   });
 
   const outcome = await runGeneration0Turn(
-    { MODEL: route, WORKSPACE: workspace },
+    { MODEL: route },
     { prompt: "Set value to 2 and run the check.", document: null },
+    workspace,
   );
 
   expect(outcome.ok).toBe(true);
@@ -125,8 +126,9 @@ test("a refused workspace request becomes a tool error, not a facet failure", as
   });
 
   const outcome = await runGeneration0Turn(
-    { MODEL: route, WORKSPACE: workspace },
+    { MODEL: route },
     { prompt: "Read ../secret.", document: null },
+    workspace,
   );
 
   expect(outcome.ok).toBe(true);
@@ -146,8 +148,9 @@ test("a thrown workspace call becomes a tool error, not a facet failure", async 
   const workspace = new FakeWorkspace({ commands: { check: CHECK_OUTPUT }, reject: "run-command" });
 
   const outcome = await runGeneration0Turn(
-    { MODEL: route, WORKSPACE: workspace },
+    { MODEL: route },
     { prompt: "Run the check.", document: null },
+    workspace,
   );
 
   expect(outcome.ok).toBe(true);
@@ -189,8 +192,9 @@ test("records a git diff as an executed command", async () => {
   const workspace = new FakeWorkspace();
 
   const outcome = await runGeneration0Turn(
-    { MODEL: route, WORKSPACE: workspace },
+    { MODEL: route },
     { prompt: "What changed?", document: null },
+    workspace,
   );
 
   expect(outcome.ok).toBe(true);
@@ -213,8 +217,9 @@ test("stops at the model call limit instead of looping", async () => {
   );
 
   const outcome = await runGeneration0Turn(
-    { MODEL: route, WORKSPACE: new FakeWorkspace() },
+    { MODEL: route },
     { prompt: "Keep going.", document: null },
+    new FakeWorkspace(),
   );
 
   expect(outcome.ok).toBe(true);
