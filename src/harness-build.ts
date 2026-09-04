@@ -1,5 +1,8 @@
 import { invariant } from "./invariant.js";
+import { shellQuote } from "./shell-quote.js";
 import type { HarnessCommit } from "./harness-commit.js";
+
+export { shellQuote };
 
 /**
  * Where and how one labeled harness commit becomes a module map. Version 0 has one build path, so
@@ -56,10 +59,6 @@ export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "checkout",
   "build",
 ];
-
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
 
 function provisionHarnessRepository(configuration: HarnessBuildConfiguration): string {
   const lock = `${configuration.harnessRepositoryRoot}.provision-lock`;
