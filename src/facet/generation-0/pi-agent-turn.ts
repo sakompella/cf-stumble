@@ -6,6 +6,7 @@ import {
   createWriteTool,
 } from "@cf-stumble/pi";
 import type {
+  AgentEvent,
   AgentHarnessTool,
   AgentState,
   AgentTool,
@@ -32,6 +33,10 @@ export type PiAgentTurnRequest = Readonly<{
   state: PiAgentTurnState;
   env: ExecutionEnv;
   streamFn: StreamFn;
+  /** Called for every Pi lifecycle event, so a caller can publish the turn while it runs. */
+  onEvent?: (event: AgentEvent) => void;
+  /** Aborts the run in progress. A turn already past its last model call ignores it. */
+  signal?: AbortSignal;
 }>;
 
 export function createPiAgentTurnState(model: AgentState["model"]): PiAgentTurnState {
@@ -91,7 +96,17 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
     },
   });
 
-  await agent.prompt(request.prompt);
+  const unsubscribe = request.onEvent === undefined ? undefined : agent.subscribe(request.onEvent);
+  const abort = () => {
+    agent.abort();
+  };
+  request.signal?.addEventListener("abort", abort);
+  try {
+    await agent.prompt(request.prompt);
+  } finally {
+    request.signal?.removeEventListener("abort", abort);
+    unsubscribe?.();
+  }
 
   const state = handoffState(agent);
   if (reachedCallLimit) {
