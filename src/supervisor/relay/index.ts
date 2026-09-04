@@ -9,6 +9,10 @@ type RelayAttribution = {
   readonly preparationCheckId: number | undefined;
 };
 
+type BodyTermination =
+  | { readonly kind: "clean" }
+  | { readonly error: unknown; readonly kind: "failed" };
+
 export class FacetRelay {
   private readonly attempts: RelayAttempts;
 
@@ -18,7 +22,7 @@ export class FacetRelay {
 
   async forward(
     request: Request,
-    fetcher: Fetcher,
+    fetcher: Pick<Fetcher, "fetch">,
     attribution: RelayAttribution,
   ): Promise<Response> {
     const attempt = this.attempts.start(
@@ -51,7 +55,6 @@ export class FacetRelay {
 
     const body: ReadableStream<unknown> = upstream.body;
     const reader = body.getReader();
-    void reader.closed.catch(() => {});
     return responseWithBody(
       this.relayBody(reader, attempt.id, expectedBodyBytes(upstream.headers)),
       upstream,
@@ -85,40 +88,30 @@ export class FacetRelay {
     attemptId: number,
     expectedBytes: number | undefined,
   ): ReadableStream<Uint8Array> {
-    const attempts = this.attempts;
-    let bodyBytes = 0;
+    const state = { bodyBytes: 0 };
     const release = releaseOnce(reader);
+    const termination = reader.closed.then(
+      () => ({ kind: "clean" as const }),
+      (error) => ({
+        error: error instanceof Error ? error : new Error(String(error)),
+        kind: "failed" as const,
+      }),
+    );
 
     return new ReadableStream({
-      pull(controller): Promise<void> {
-        return reader.read().then(
-          (result) => {
-            if (result.done) {
-              attempts.settle(attemptId, bodyOutcome(expectedBytes, bodyBytes), Date.now());
-              release();
-              controller.close();
-              return;
-            }
-
-            if (!(result.value instanceof Uint8Array)) {
-              attempts.settle(attemptId, "body-failed", Date.now());
-              release();
-              controller.error(new TypeError("main facet returned a non-byte stream chunk"));
-              return;
-            }
-
-            bodyBytes += result.value.byteLength;
-            controller.enqueue(result.value);
-          },
-          (error) => {
-            attempts.settle(attemptId, "body-failed", Date.now());
-            release();
-            controller.error(error);
-          },
-        );
-      },
+      pull: (controller) =>
+        pullRelayBody(
+          reader,
+          controller,
+          termination,
+          this.attempts,
+          attemptId,
+          expectedBytes,
+          state,
+          release,
+        ),
       cancel: (reason): Promise<void> => {
-        attempts.settle(attemptId, "relay-cancelled", Date.now());
+        this.attempts.settle(attemptId, "relay-cancelled", Date.now());
         release();
         return reader.cancel(reason).then(
           () => {},
@@ -127,6 +120,70 @@ export class FacetRelay {
       },
     });
   }
+}
+
+function pullRelayBody(
+  reader: ReadableStreamDefaultReader<unknown>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  termination: Promise<BodyTermination>,
+  attempts: RelayAttempts,
+  attemptId: number,
+  expectedBytes: number | undefined,
+  state: { bodyBytes: number },
+  release: () => void,
+): Promise<void> {
+  return reader.read().then(
+    async (result) => {
+      if (result.done) {
+        await finishRelayBody(
+          controller,
+          termination,
+          attempts,
+          attemptId,
+          expectedBytes,
+          state.bodyBytes,
+          release,
+        );
+      } else if (result.value instanceof Uint8Array) {
+        state.bodyBytes += result.value.byteLength;
+        controller.enqueue(result.value);
+      } else {
+        attempts.settle(
+          attemptId,
+          bodyOutcome("failed", expectedBytes, state.bodyBytes),
+          Date.now(),
+        );
+        release();
+        controller.error(new TypeError("main facet returned a non-byte stream chunk"));
+      }
+    },
+    (error) => {
+      attempts.settle(attemptId, bodyOutcome("failed", expectedBytes, state.bodyBytes), Date.now());
+      release();
+      controller.error(error);
+    },
+  );
+}
+
+function finishRelayBody(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  termination: Promise<BodyTermination>,
+  attempts: RelayAttempts,
+  attemptId: number,
+  expectedBytes: number | undefined,
+  bodyBytes: number,
+  release: () => void,
+): Promise<void> {
+  return termination.then((result) => {
+    attempts.settle(attemptId, bodyOutcome(result.kind, expectedBytes, bodyBytes), Date.now());
+    release();
+    if (result.kind === "failed") {
+      controller.error(result.error);
+      return;
+    }
+
+    controller.close();
+  });
 }
 
 function releaseOnce(reader: ReadableStreamDefaultReader<unknown>): () => void {
@@ -140,10 +197,11 @@ function releaseOnce(reader: ReadableStreamDefaultReader<unknown>): () => void {
 }
 
 function bodyOutcome(
+  termination: BodyTermination["kind"],
   expectedBytes: number | undefined,
   bodyBytes: number,
 ): "body-completed" | "body-failed" {
-  return expectedBytes === undefined || expectedBytes === bodyBytes
+  return termination === "clean" && (expectedBytes === undefined || expectedBytes === bodyBytes)
     ? "body-completed"
     : "body-failed";
 }
