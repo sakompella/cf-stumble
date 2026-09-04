@@ -6,6 +6,7 @@ export {
   transcriptToPiMessages,
 } from "./session-transcript.js";
 export { executeToolPlan } from "./tool-execution.js";
+export { createPiAgentTurnState, runPiAgentTurn } from "./pi-agent-turn.js";
 export { applyUniqueEdit, GENERATION_0_TOOLS, planToolCall } from "./tools.js";
 export {
   GENERATION_0_SYSTEM_PROMPT,
@@ -21,4 +22,5 @@ export type {
 export type { AssistantEntry, TranscriptEntry, TranscriptToolCall } from "./session-transcript.js";
 export type { ExecutedCommand, ToolOutcome } from "./tool-execution.js";
 export type { EditOutcome, ToolPlan } from "./tools.js";
+export type { PiAgentTurnOutcome, PiAgentTurnProblem, PiAgentTurnState } from "./pi-agent-turn.js";
 export type { TurnOutcome, TurnProblem, TurnRequest, TurnResult } from "./turn.js";
