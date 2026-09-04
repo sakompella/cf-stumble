@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
 import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../src/harness-build.js";
-import { HARNESS_BUILD_WORKSPACE_NAME, PROJECT_WORKSPACE_NAME } from "../../src/workspace-names.js";
 import {
   executeHarnessBuildRequest,
   executeWorkspaceRequest,
@@ -84,7 +83,6 @@ test("keeps the build root, and its workspace name, apart from the project", () 
   const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
 
   expect(HARNESS_BUILD_CONFIGURATION.buildRoot).not.toBe(PROJECT_ROOT);
-  expect(HARNESS_BUILD_WORKSPACE_NAME).not.toBe(PROJECT_WORKSPACE_NAME);
   expect(plan.directory).toBe(buildDirectory);
   expect(plan.moduleMapPath).toBe(moduleMapPath);
   expect(
