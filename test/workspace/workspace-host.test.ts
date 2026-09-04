@@ -8,6 +8,7 @@ import {
   type WorkspaceConfiguration,
   type WorkspaceOperations,
 } from "../../src/workspace/index.js";
+import { workspaceContainerBackendConfiguration } from "../../src/workspace/host.js";
 
 const configuration = {
   root: "/project",
@@ -70,6 +71,10 @@ class FakeWorkspace implements WorkspaceOperations {
 function execute(fake: FakeWorkspace, request: unknown) {
   return executeWorkspaceRequest({ configuration, operations: fake, request });
 }
+
+test("configures the container backend for direct egress", () => {
+  expect(workspaceContainerBackendConfiguration("workspace-id").egress).toEqual({ mode: "direct" });
+});
 
 test("reads, writes, and lists only below the configured project root", async () => {
   const fake = new FakeWorkspace();
