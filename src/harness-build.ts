@@ -11,7 +11,9 @@ import type { HarnessCommit } from "./harness-commit.js";
  */
 export type HarnessBuildConfiguration = Readonly<{
   buildRoot: string;
+  harnessRepositoryRoot: string;
   harnessGitDir: string;
+  harnessGitRemote: string;
   buildCommand: string;
   moduleMapPath: string;
 }>;
@@ -19,12 +21,14 @@ export type HarnessBuildConfiguration = Readonly<{
 /** The one build configuration the Workspace Host offers and the Supervisor plans against. */
 export const HARNESS_BUILD_CONFIGURATION = {
   buildRoot: "/harness-builds",
+  harnessRepositoryRoot: "/harness",
   harnessGitDir: "/harness/.git",
+  harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
   buildCommand: "pnpm run build:module-map",
   moduleMapPath: "build/module-map.json",
 } as const satisfies HarnessBuildConfiguration;
 
-export type HarnessBuildStepName = "isolate" | "checkout" | "build";
+export type HarnessBuildStepName = "provision" | "isolate" | "checkout" | "build";
 
 export type HarnessBuildStep = Readonly<{
   name: HarnessBuildStepName;
@@ -47,16 +51,52 @@ export type HarnessBuildRequest =
   | Readonly<{ kind: "build-output"; harnessCommit: string }>;
 
 export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
+  "provision",
   "isolate",
   "checkout",
   "build",
 ];
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\\\''")}'`;
+}
+
+function provisionHarnessRepository(configuration: HarnessBuildConfiguration): string {
+  const lock = `${configuration.harnessRepositoryRoot}.provision-lock`;
+  return [
+    "set -eu",
+    `lock=${shellQuote(lock)}`,
+    `repository=${shellQuote(configuration.harnessRepositoryRoot)}`,
+    `git_dir=${shellQuote(configuration.harnessGitDir)}`,
+    `expected_remote=${shellQuote(configuration.harnessGitRemote)}`,
+    'while ! mkdir "$lock" 2>/dev/null; do',
+    '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
+    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
+    '    stale_lock="${lock}.stale.$$"',
+    '    if mv "$lock" "$stale_lock" 2>/dev/null; then',
+    '      rm -rf "$stale_lock"',
+    "    fi",
+    "  else",
+    "    sleep 1",
+    "  fi",
+    "done",
+    'printf "%s\\n" "$$" > "$lock/pid"',
+    "trap 'rm -rf \"$lock\"' EXIT",
+    'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
+    '  rm -rf "$repository"',
+    '  git clone --no-checkout "$expected_remote" "$repository"',
+    "fi",
+    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
+    'test "$actual_remote" = "$expected_remote"',
+  ].join("\n");
+}
+
 /**
- * Plan the whole build as plain command strings. `git archive` extracts the commit's tree into a
- * directory of its own, so no step mutates a shared working tree and a repeated build of one
- * commit starts from the same files. Interpolating the commit is safe because `HarnessCommit`
- * accepts only lower-case hexadecimal object IDs.
+ * Plan the whole build as plain command strings. Provisioning reconciles the dedicated harness
+ * repository before `git archive` extracts the labeled commit into a directory of its own, so no
+ * step mutates a shared working tree and a repeated build of one commit starts from the same
+ * files. Interpolating the commit is safe because `HarnessCommit` accepts only lower-case
+ * hexadecimal object IDs.
  */
 export function planHarnessBuild(
   configuration: HarnessBuildConfiguration,
@@ -66,6 +106,7 @@ export function planHarnessBuild(
   return {
     directory,
     steps: [
+      { name: "provision", source: provisionHarnessRepository(configuration), cwd: "/" },
       { name: "isolate", source: `rm -rf ${directory} && mkdir -p ${directory}`, cwd: "/" },
       {
         name: "checkout",
