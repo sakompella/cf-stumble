@@ -103,14 +103,18 @@ function assistantShell(stopReason: AssistantMessage["stopReason"]): AssistantMe
   };
 }
 
-function failedStream(detail: string): AssistantMessageEventStream {
+function endedStream(reason: "error" | "aborted", detail: string): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
   stream.push({
     type: "error",
-    reason: "error",
-    error: { ...assistantShell("error"), errorMessage: detail },
+    reason,
+    error: { ...assistantShell(reason), errorMessage: detail },
   });
   return stream;
+}
+
+function failedStream(detail: string): AssistantMessageEventStream {
+  return endedStream("error", detail);
 }
 
 async function streamOnce(
@@ -163,7 +167,14 @@ async function streamOnce(
  * Every failure — a route that rejects, reports a model problem, or answers with content this
  * generation cannot represent — becomes an `error` event. Pi records that on the agent's state,
  * which is what turns it into one reported turn problem rather than a thrown turn.
+ *
+ * An aborted `signal` stops the route being called at all. Pi's own abort unwinds the agent loop
+ * at its own checkpoints, which still leaves room for one more model call after a caller has
+ * walked away; refusing here is what makes a cancelled turn stop spending.
  */
-export function createRouteStreamFn(model: ModelCapability): StreamFn {
-  return (_model, context) => streamOnce(model, context);
+export function createRouteStreamFn(model: ModelCapability, signal?: AbortSignal): StreamFn {
+  return (_model, context) =>
+    signal?.aborted === true
+      ? endedStream("aborted", "the turn was cancelled")
+      : streamOnce(model, context);
 }

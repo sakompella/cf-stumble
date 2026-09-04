@@ -73,10 +73,18 @@ test("releases the duplicate when the caller cancels the frame stream", async ()
   const reader = stream.getReader();
   await waitFor(() => received.execBackend.requests.length > 0, "the turn's first command");
   expect(received.ledger.disposals, "the turn is still running").toBe(0);
+  expect(route.requests).toHaveLength(1);
 
   await reader.cancel();
 
   expect(received.ledger).toEqual({ dups: 1, disposals: 1, live: 1 });
+  await new Promise((resolve) => {
+    setTimeout(resolve, 50);
+  });
+  expect(
+    route.requests,
+    "cancelling aborts the run, so the turn must not go on to its next model call",
+  ).toHaveLength(1);
 });
 
 test("releases nothing it never duplicated when the request is rejected", async () => {

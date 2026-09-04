@@ -65,7 +65,7 @@ async function pumpTurn(
     prompt: request.prompt,
     state: request.state ?? createPiAgentTurnState(ROUTE_MODEL),
     env: createFacetExecutionEnv({ cwd: PROJECT_ROOT, projectTarget: lease.capability }),
-    streamFn: createRouteStreamFn(capabilities.MODEL),
+    streamFn: createRouteStreamFn(capabilities.MODEL, signal),
     onEvent: (event) => {
       for (const frame of eventFrames(event)) publish(frame);
     },
