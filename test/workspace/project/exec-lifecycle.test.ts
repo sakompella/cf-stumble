@@ -154,6 +154,18 @@ test("a manual kill before the deadline suppresses the later timeout", async () 
   expect(execBackend.handles[0]?.killCalls).toBe(1);
 });
 
+test("cancelling the consumer stream kills the running command", async () => {
+  const { execBackend, target } = makeTarget();
+  const started = await target.startExec({ command: "x" });
+  if (!started.ok) throw new Error("expected startExec to succeed");
+  const handle = execBackend.handles[0]!;
+  const reader = started.value.events.getReader();
+
+  await reader.cancel();
+
+  expect(handle.killCalls).toBe(1);
+});
+
 test("EOF without an exit event is a failed terminal outcome", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });

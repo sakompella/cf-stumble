@@ -239,6 +239,9 @@ export function startExecOperation(
       };
       watchBackendExec(state, controller, execBackend, input, onSettle);
     },
+    cancel() {
+      requestKillImpl?.();
+    },
   });
 
   return {
