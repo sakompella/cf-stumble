@@ -166,6 +166,7 @@ test("EOF without an exit event is a failed terminal outcome", async () => {
     done: false,
     value: { kind: "terminal", seq: 0, outcome: "failed", error: { code: "backend-unavailable" } },
   });
+  expect(handle.killCalls).toBe(1);
 });
 
 test("a backend read failure is a failed terminal outcome", async () => {
@@ -180,6 +181,7 @@ test("a backend read failure is a failed terminal outcome", async () => {
     done: false,
     value: { kind: "terminal", seq: 0, outcome: "failed", error: { code: "backend-unavailable" } },
   });
+  expect(handle.killCalls).toBe(1);
 });
 
 test("kill on a stale, already-settled operation id is a successful no-op", async () => {

@@ -84,7 +84,7 @@ function applyBackendRead(
   read: { done: false; value: BackendExecEvent } | { done: true },
 ): boolean {
   if (read.done) {
-    settleWith(failed(state), false);
+    settleWith(failed(state), true);
     return true;
   }
   const { value } = read;
@@ -132,7 +132,7 @@ async function pumpBackendEvents(
       if (applyBackendRead(state, controller, settleWith, decoders, read)) return;
     }
   } catch {
-    settleWith(failed(state), false);
+    settleWith(failed(state), true);
   }
 }
 
