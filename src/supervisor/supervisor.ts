@@ -1,7 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from "cloudflare:workers";
-import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../facet/index.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -9,10 +8,16 @@ import {
 } from "./control/index.js";
 import {
   DEFAULT_ELIGIBILITY_POLICY,
-  deriveGenerationEligibility,
+  generationEligibility,
   type EligibilityPolicy,
   type GenerationEligibility,
 } from "./eligibility.js";
+import {
+  startProjectTurn,
+  type ProjectTurnRequest,
+  type ProjectTurnStart,
+  type ProjectWorkspaceNamespace,
+} from "./projects/index.js";
 import {
   Generations,
   parseGenerationLabel,
@@ -39,8 +44,13 @@ import {
   type RecoveryOperationOutcomeInput,
   type RecoveryPolicy,
 } from "./recovery/index.js";
-import { HarnessArtifacts, WorkspaceHostModuleMapBuilder } from "./artifacts/index.js";
-import type { BuildWorkspaceNamespace } from "./artifacts/index.js";
+import {
+  HarnessArtifacts,
+  WorkspaceHostModuleMapBuilder,
+  type BuildWorkspaceNamespace,
+  type MainFacetCapabilities,
+  type MainHarnessArtifactInput,
+} from "./artifacts/index.js";
 import {
   checkGenerationStartup,
   prepareGenerationStartup,
@@ -48,12 +58,14 @@ import {
   type StartupCheckResult,
 } from "./startup-check/index.js";
 
+// `WORKSPACE_HOST` is one Durable Object namespace named through the two narrow views used here.
+// The build view names the harness build workspace from a module constant; the project view
+// obtains one project's capability from a workspace named after a catalog-resolved project.
+// Neither view can perform the other's operations, and no request can name either workspace.
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly MODULE_MAPS: R2Bucket;
-  // The Supervisor needs one operation from the Workspace Host binding: reach a workspace by the
-  // name it derives itself. Nothing here can run a project command or read a project file.
-  readonly WORKSPACE_HOST: BuildWorkspaceNamespace;
+  readonly WORKSPACE_HOST: BuildWorkspaceNamespace & ProjectWorkspaceNamespace;
 };
 
 export const SESSION_TURN_LEASE_MS = 5 * 60 * 1_000;
@@ -86,6 +98,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   private modelRoute(): MainFacetCapabilities["MODEL"] {
     return this.ctx.exports.ModelRoute({});
+  }
+
+  /** Mount one generation as a facet. Relaying, a session turn, and a project turn all use this. */
+  private mountServing(active: ActiveGeneration) {
+    return this.artifacts.mount(active, this.env.LOADER, this.ctx.facets, this.modelRoute());
   }
 
   checkGenerationStartup(
@@ -197,25 +214,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     label: number,
     policy: EligibilityPolicy = DEFAULT_ELIGIBILITY_POLICY,
   ): GenerationEligibility {
-    const generationLabel = parseGenerationLabel(label);
-    if (generationLabel === undefined) {
-      return {
-        kind: "ineligible",
-        reason: "startup-check-required",
-        creditedTurns: 0,
-        observationSpanMs: 0,
-      };
-    }
+    return generationEligibility(label, this.generations, this.relayAttempts.all(), policy);
+  }
 
-    return deriveGenerationEligibility(
-      {
-        generationLabel,
-        latestActivationId: this.generations.latestActivationId(generationLabel),
-        latestPreparationCheck: this.generations.latestPreparationCheck(generationLabel),
-        attempts: this.relayAttempts.all(),
-      },
-      policy,
-    );
+  /**
+   * Start one streamed turn against a project's own Computer workspace. The capability travels to
+   * the generation as an argument of its `startTurn`, and this method receives none of its own:
+   * `startProjectTurn` explains the order its steps run in and why that order matters.
+   */
+  startProjectTurn(input: ProjectTurnRequest): Promise<ProjectTurnStart> {
+    return startProjectTurn({
+      ...input,
+      namespace: this.env.WORKSPACE_HOST,
+      mount: () => this.mountServing(this.generations.active()),
+    });
   }
 
   getSession(sessionId: string): SessionRecord | undefined {
@@ -263,12 +275,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   private async mountSessionFacet(): Promise<SessionFacetMount> {
-    const mounted = await this.artifacts.mount(
-      this.generations.active(),
-      this.env.LOADER,
-      this.ctx.facets,
-      this.modelRoute(),
-    );
+    const mounted = await this.mountServing(this.generations.active());
     return mounted.isErr()
       ? { ok: false, reason: sessionMountReason(mounted.error.code) }
       : { ok: true, fetcher: mounted.value.fetcher };
@@ -281,12 +288,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       ? this.generations.latestPreparationCheck(active.generation.label)?.id
       : undefined;
     const attribution = { active, preparationCheckId };
-    const mainFacet = await this.artifacts.mount(
-      active,
-      this.env.LOADER,
-      this.ctx.facets,
-      this.modelRoute(),
-    );
+    const mainFacet = await this.mountServing(active);
 
     if (mainFacet.isErr()) {
       return this.relay.recordMountFailure(mainFacet.error, attribution);

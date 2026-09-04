@@ -144,6 +144,12 @@ export class HarnessArtifacts {
   }
 }
 
+/**
+ * `retain`, `mount`, and this group's builders all take these two as arguments, so every caller of
+ * the group needs their types. Re-exporting them here means a caller does not reach into
+ * `facet/index.js` for the parameter types of a method it is calling here.
+ */
+export type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 export { mainFacetName } from "./facet-name.js";
 export { ModuleMapCache } from "./cache.js";
 export type { CachedModuleMap, StoredModuleMapProblem } from "./cache.js";

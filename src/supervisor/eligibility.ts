@@ -1,4 +1,5 @@
 import { invariant } from "../invariant.js";
+import { parseGenerationLabel } from "./generations/index.js";
 import type { GenerationLabel } from "./generations/index.js";
 import type { PreparationCheck } from "./generations/index.js";
 import type { RelayAttempt } from "./relay/index.js";
@@ -55,6 +56,39 @@ export function selectFallbackGeneration(
         candidate.generationLabel !== failedGenerationLabel &&
         deriveGenerationEligibility(candidate, policy).kind === "eligible",
     )?.generationLabel;
+}
+
+/** The generation history this derivation reads. `Generations` satisfies it. */
+export interface GenerationEvidenceHistory {
+  latestActivationId(label: GenerationLabel): number | undefined;
+  latestPreparationCheck(label: GenerationLabel): PreparationCheck | undefined;
+}
+
+/**
+ * Collect one generation's evidence and derive its verdict. A label that is not a generation label
+ * has no evidence at all, so it reports the same `startup-check-required` an unchecked generation
+ * reports rather than failing the call.
+ */
+export function generationEligibility(
+  label: number,
+  history: GenerationEvidenceHistory,
+  attempts: readonly RelayAttempt[],
+  policy: EligibilityPolicy,
+): GenerationEligibility {
+  const generationLabel = parseGenerationLabel(label);
+  if (generationLabel === undefined) {
+    return ineligible("startup-check-required", 0, 0);
+  }
+
+  return deriveGenerationEligibility(
+    {
+      generationLabel,
+      latestActivationId: history.latestActivationId(generationLabel),
+      latestPreparationCheck: history.latestPreparationCheck(generationLabel),
+      attempts,
+    },
+    policy,
+  );
 }
 
 export function deriveGenerationEligibility(
