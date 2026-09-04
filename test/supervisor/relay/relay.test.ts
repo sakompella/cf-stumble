@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { RelayAttempts } from "../../../src/supervisor/relay/index.js";
+import { FacetRelay, RelayAttempts } from "../../../src/supervisor/relay/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
@@ -18,6 +18,60 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 
 function relayRequest(path: string, init?: RequestInit): Request {
   return new Request(`https://cf-stumble.test${path}`, init);
+}
+
+function erroredUpstreamResponse(): Response {
+  let firstRead = true;
+  const streamError = new Error("upstream body failed");
+  let rejectClosed!: (reason: Error) => void;
+  const closed = new Promise<void>((_, reject) => {
+    rejectClosed = reject;
+  });
+  const upstreamReader: ReadableStreamDefaultReader<unknown> = {
+    closed,
+    read(): Promise<ReadableStreamReadResult<unknown>> {
+      if (firstRead) {
+        firstRead = false;
+        return Promise.resolve({ done: false, value: new TextEncoder().encode("partial") });
+      }
+
+      rejectClosed(streamError);
+      return Promise.resolve({ done: true, value: undefined });
+    },
+    releaseLock() {},
+    cancel() {
+      return Promise.resolve();
+    },
+  };
+  const upstream = new Response(null, { status: 200 });
+  Object.defineProperty(upstream, "body", {
+    value: { getReader: () => upstreamReader },
+  });
+  return upstream;
+}
+
+async function readErroredRelay(
+  response: Response,
+  attempts: RelayAttempts,
+): Promise<{ readonly errorMessage: string | undefined; readonly attempts: readonly unknown[] }> {
+  const outputReader = response.body?.getReader();
+  if (outputReader === undefined) {
+    throw new Error("an errored upstream body must produce a response body");
+  }
+
+  const first = await outputReader.read();
+  if (first.done) {
+    throw new Error("an errored upstream body must produce a partial chunk");
+  }
+
+  let errorMessage: string | undefined;
+  try {
+    await outputReader.read();
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : String(error);
+  }
+
+  return { errorMessage, attempts: attempts.all() };
 }
 
 afterEach(async () => {
@@ -91,11 +145,38 @@ test("records a body failure after 200 headers rather than crediting its status"
   ]);
 });
 
+test("records an errored body without content-length as failed", async () => {
+  const control = await activeSupervisor("relay-errored-body-without-length");
+  const result = await runInDurableObject(control, async (instance, state) => {
+    const active = instance.getActiveGeneration();
+    const preparationCheck = instance.getPreparationCheckHistory(0).at(-1);
+    if (active.generation === undefined || preparationCheck === undefined) {
+      throw new Error("an active generation needs a preparation check");
+    }
+
+    const attempts = new RelayAttempts(state.storage);
+    const relay = new FacetRelay(attempts);
+    const response = await relay.forward(
+      relayRequest("/direct-relay"),
+      { fetch: () => Promise.resolve(erroredUpstreamResponse()) },
+      { active, preparationCheckId: preparationCheck.id },
+    );
+
+    return readErroredRelay(response, attempts);
+  });
+
+  expect(result).toMatchObject({
+    errorMessage: "upstream body failed",
+    attempts: [{ outcome: "body-failed", responseStatus: 200 }],
+  });
+});
+
 test("records a complete streamed body", async () => {
   const control = await activeSupervisor("relay-complete-body");
   const response = await control.fetch(relayRequest("/facet/relay/body-complete"));
 
   expect(await response.text()).toBe("complete body");
+  expect(response.headers.get("content-length")).toBeNull();
   expect(await control.getRelayAttempts()).toMatchObject([
     { outcome: "body-completed", responseStatus: 200 },
   ]);
