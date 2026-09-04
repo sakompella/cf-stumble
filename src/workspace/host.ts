@@ -10,6 +10,12 @@ import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceConfiguration, WorkspaceResult } from "./decisions.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
 import { executeHarnessBuildRequest, executeWorkspaceRequest } from "./executor.js";
+import {
+  computerExecBackend,
+  computerFilesystemProvider,
+  computerTransactions,
+  ProjectRpcTarget,
+} from "./project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../harness-build.js";
 
 const PROJECT_ROOT = "/project";
@@ -37,8 +43,9 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
 }
 
 /**
- * Durable, tenant-scoped Computer host. Its RPC surface returns values only; it never returns the
- * workspace, its container API, or a credential-bearing binding.
+ * Durable, tenant-scoped Computer host. Its RPC surface returns plain values and one narrow
+ * project capability; it never returns the workspace, its container API, or a credential-bearing
+ * binding.
  */
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #workspace: Workspace;
@@ -80,6 +87,25 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });
+  }
+
+  /**
+   * Hand out this workspace's project capability. `execute` and `build` each answer one request
+   * and return plain values, which suits a caller that asks for one thing; a turn instead makes
+   * many calls spread over its own lifetime, so this returns the narrow six-method surface once
+   * and the caller holds it for the turn.
+   *
+   * The capability is a `ProjectRpcTarget`, which the runtime serializes only for an RPC call. It
+   * can therefore only ever travel as a call argument or a return value, and never as a Worker
+   * Loader environment entry, which is cached per harness commit and shared by every project the
+   * generation serves.
+   */
+  project(): ProjectRpcTarget {
+    return new ProjectRpcTarget(
+      computerFilesystemProvider(this.#workspace),
+      computerTransactions(this.#workspace),
+      computerExecBackend(this.#workspace),
+    );
   }
 
   override fetch(request: Request): Promise<Response> {
