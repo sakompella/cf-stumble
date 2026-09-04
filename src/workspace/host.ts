@@ -3,6 +3,7 @@
 import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
 import {
   CloudflareContainerBackend,
+  type CloudflareContainerBackendOptions,
   WorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
@@ -20,6 +21,15 @@ const CONFIGURATION = {
 } as const satisfies WorkspaceConfiguration;
 
 interface WorkspaceHostEnv {}
+
+export function workspaceContainerBackendConfiguration(
+  workspaceId: string,
+): Pick<CloudflareContainerBackendOptions, "egress" | "workspace"> {
+  return {
+    workspace: { binding: "WORKSPACE_HOST", id: workspaceId },
+    egress: { mode: "direct" },
+  };
+}
 
 function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLike {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: Computer 0.3.0 accepts the same Durable Object SQLite API; its generic cursor declaration is narrower than @cloudflare/workers-types.
@@ -39,8 +49,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     const container = new WorkspaceContainerAPI(ctx);
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => container }),
-      workspace: { binding: "WORKSPACE_HOST", id: ctx.id.toString() },
-      egress: { mode: "none" },
+      ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
     this.#workspace = new Workspace({
       storage: computerStorage(ctx.storage),
