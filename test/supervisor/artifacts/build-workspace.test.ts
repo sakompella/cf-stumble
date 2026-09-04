@@ -11,10 +11,7 @@ import type {
   BuildWorkspaceNamespace,
 } from "../../../src/supervisor/artifacts/index.js";
 import { planHarnessBuild, type HarnessBuildRequest } from "../../../src/harness-build.js";
-import {
-  HARNESS_BUILD_WORKSPACE_NAME,
-  PROJECT_WORKSPACE_NAME,
-} from "../../../src/workspace-names.js";
+import { HARNESS_BUILD_WORKSPACE_NAME } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
 const commit = harnessCommit("6000000000000000000000000000000000000001");
@@ -107,7 +104,6 @@ test("builds a labeled commit through the named build workspace", async () => {
     }),
   );
   expect(namespace.names).toEqual([HARNESS_BUILD_WORKSPACE_NAME]);
-  expect(namespace.names).not.toContain(PROJECT_WORKSPACE_NAME);
 });
 
 test("names the planned steps instead of sending command text", async () => {
