@@ -1,5 +1,5 @@
 export { Agent } from "./packages/agent/src/agent.ts";
-export type { AgentOptions } from "./packages/agent/src/agent.ts";
+export type { AgentOptions } from "./packages/agent/src/index.ts";
 export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
 export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
 export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
@@ -14,14 +14,14 @@ export type {
   ShellExecOptions,
   Result,
 } from "./packages/agent/src/harness/types.ts";
-export type { ExecutionToolContext } from "./packages/agent/src/harness/tools/tool-context.ts";
+export type { ExecutionToolContext } from "./packages/agent/src/index.ts";
 export type {
   AgentEvent,
   AgentMessage,
   AgentTool,
   AgentState,
   StreamFn,
-} from "./packages/agent/src/types.ts";
+} from "./packages/agent/src/index.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";

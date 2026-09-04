@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.declarations.json",
+  "compilerOptions": {
+    "paths": {
+      "@earendil-works/pi-ai": ["./packages/ai/src/index.ts"],
+      "@earendil-works/pi-telemetry": ["./packages/telemetry/src/index.ts"]
+    }
+  },
+  "include": ["upstream-surface.ts", "third-party-shims.d.ts"]
+}

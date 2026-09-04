@@ -69,11 +69,10 @@ const pin: UpstreamPin = {
   ],
 };
 
-// Shared by `index.ts` and `upstream-surface.ts`: the former is the package's public surface,
-// the latter is the same surface built against the untouched upstream sources so the
-// declaration-conformance check can compare them structurally.
+// These are separate generated sources. The facade selects the Worker-safe package surface,
+// while the check imports the corresponding exports from the vendored upstream entrypoints.
 const piFacadeSurfaceSource = `export { Agent } from "./packages/agent/src/agent.ts";
-export type { AgentOptions } from "./packages/agent/src/agent.ts";
+export type { AgentOptions } from "./packages/agent/src/index.ts";
 export { createReadTool } from "./packages/agent/src/harness/tools/read.ts";
 export { createWriteTool } from "./packages/agent/src/harness/tools/write.ts";
 export { createEditTool } from "./packages/agent/src/harness/tools/edit.ts";
@@ -88,14 +87,14 @@ export type {
   ShellExecOptions,
   Result,
 } from "./packages/agent/src/harness/types.ts";
-export type { ExecutionToolContext } from "./packages/agent/src/harness/tools/tool-context.ts";
+export type { ExecutionToolContext } from "./packages/agent/src/index.ts";
 export type {
   AgentEvent,
   AgentMessage,
   AgentTool,
   AgentState,
   StreamFn,
-} from "./packages/agent/src/types.ts";
+} from "./packages/agent/src/index.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
@@ -111,6 +110,47 @@ export type {
   ToolCall,
   ToolResultMessage,
 } from "./packages/ai/src/types.ts";
+`;
+
+const piUpstreamSurfaceSource = `export { Agent } from "./packages/agent/src/index.ts";
+export type { AgentOptions } from "./packages/agent/src/index.ts";
+export { createReadTool } from "./packages/agent/src/index.ts";
+export { createWriteTool } from "./packages/agent/src/index.ts";
+export { createEditTool } from "./packages/agent/src/index.ts";
+export { createBashTool } from "./packages/agent/src/index.ts";
+export { FileError, ExecutionError } from "./packages/agent/src/index.ts";
+export type {
+  AgentHarnessTool,
+  ExecutionEnv,
+  FileSystem,
+  Shell,
+  FileInfo,
+  ShellExecOptions,
+  Result,
+} from "./packages/agent/src/index.ts";
+export type { ExecutionToolContext } from "./packages/agent/src/index.ts";
+export type {
+  AgentEvent,
+  AgentMessage,
+  AgentTool,
+  AgentState,
+  StreamFn,
+} from "./packages/agent/src/index.ts";
+export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
+export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
+export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
+export {
+  AssistantMessageEventStream,
+  createAssistantMessageEventStream,
+} from "./packages/ai/src/index.ts";
+export type {
+  Api,
+  AssistantMessage,
+  AssistantMessageEvent,
+  Model,
+  ToolCall,
+  ToolResultMessage,
+} from "./packages/ai/src/index.ts";
 `;
 
 const generatedFiles = new Map<string, string>([
@@ -139,7 +179,7 @@ const generatedFiles = new Map<string, string>([
     )}\n`,
   ],
   ["index.ts", piFacadeSurfaceSource],
-  ["upstream-surface.ts", piFacadeSurfaceSource],
+  ["upstream-surface.ts", piUpstreamSurfaceSource],
   [
     "ai-facade.ts",
     `export { EventStream } from "./packages/ai/src/utils/event-stream.ts";
@@ -165,7 +205,7 @@ export type {
   ],
   [
     "telemetry-facade.ts",
-    `export type { TelemetryContext } from "./packages/telemetry/src/index.upstream.ts";
+    `export type { TelemetryContext } from "./packages/telemetry/src/index.ts";
 `,
   ],
   [
@@ -212,6 +252,20 @@ declare module "https-proxy-agent";
     }
   },
   "include": ["index.ts", "upstream-surface.ts", "ai-facade.ts", "telemetry-facade.ts", "third-party-shims.d.ts"]
+}
+`,
+  ],
+  [
+    "tsconfig.upstream-declarations.json",
+    `{
+  "extends": "./tsconfig.declarations.json",
+  "compilerOptions": {
+    "paths": {
+      "@earendil-works/pi-ai": ["./packages/ai/src/index.ts"],
+      "@earendil-works/pi-telemetry": ["./packages/telemetry/src/index.ts"]
+    }
+  },
+  "include": ["upstream-surface.ts", "third-party-shims.d.ts"]
 }
 `,
   ],
@@ -331,10 +385,11 @@ const userAgentShim = resolve(vendorRoot, "pi-user-agent-shim.ts");
 await rm(distRoot, { recursive: true, force: true });
 await runTypeScript("tsconfig.declarations.json");
 await copyThirdPartyShims(distRoot, "index.d.ts");
-await rewriteInternalDeclarationImports(distRoot);
-await runTypeScript("tsconfig.declarations.json", ["--outDir", resolve(distRoot, "upstream")]);
-await copyThirdPartyShims(resolve(distRoot, "upstream"), "upstream-surface.d.ts");
-await rewriteInternalDeclarationImports(resolve(distRoot, "upstream"));
+await rewriteInternalDeclarationImports(distRoot, "facade");
+const upstreamDistRoot = resolve(distRoot, "upstream");
+await runTypeScript("tsconfig.upstream-declarations.json", ["--outDir", upstreamDistRoot]);
+await copyThirdPartyShims(upstreamDistRoot, "upstream-surface.d.ts");
+await rewriteInternalDeclarationImports(upstreamDistRoot, "upstream");
 await build({
   entryPoints: [resolve(vendorRoot, "index.ts")],
   bundle: true,
@@ -387,14 +442,23 @@ async function copyThirdPartyShims(declarationRoot: string, entryDeclaration: st
   await writeFile(entry, \`/// <reference path="./third-party-shims.d.ts" />\\n\${contents}\`);
 }
 
-async function rewriteInternalDeclarationImports(declarationRoot: string): Promise<void> {
-  const aiFacade = resolve(declarationRoot, "ai-facade.d.ts");
-  const telemetryFacade = resolve(declarationRoot, "telemetry-facade.d.ts");
+async function rewriteInternalDeclarationImports(
+  declarationRoot: string,
+  declarationSource: "facade" | "upstream",
+): Promise<void> {
+  const aiDeclaration = resolve(
+    declarationRoot,
+    declarationSource === "facade" ? "ai-facade.d.ts" : "packages/ai/src/index.d.ts",
+  );
+  const telemetryDeclaration = resolve(
+    declarationRoot,
+    declarationSource === "facade" ? "telemetry-facade.d.ts" : "packages/telemetry/src/index.d.ts",
+  );
   for (const declaration of await declarationFiles(declarationRoot)) {
     const contents = await readFile(declaration, "utf8");
     const rewritten = contents
-      .replaceAll("@earendil-works/pi-ai", declarationImport(declaration, aiFacade))
-      .replaceAll("@earendil-works/pi-telemetry", declarationImport(declaration, telemetryFacade));
+      .replaceAll("@earendil-works/pi-ai", declarationImport(declaration, aiDeclaration))
+      .replaceAll("@earendil-works/pi-telemetry", declarationImport(declaration, telemetryDeclaration));
     if (rewritten !== contents) await writeFile(declaration, rewritten);
   }
 }
@@ -510,12 +574,6 @@ async function copyUpstreamPath(sourceRoot: string, copiedPath: string): Promise
   }
 
   await cp(sourcePath, destinationPath, { recursive: true, force: true });
-  for (const file of await filesUnder(destinationPath)) {
-    if (file.endsWith("/index.ts")) {
-      await cp(file, file.replace(/index\.ts$/u, "index.upstream.ts"), { force: true });
-      await rm(file);
-    }
-  }
 }
 
 async function checkVendorTree(): Promise<void> {
