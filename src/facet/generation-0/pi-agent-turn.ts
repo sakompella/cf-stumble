@@ -88,7 +88,6 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
       tools: executionTools(context),
     },
     streamFn: request.streamFn,
-    toolExecution: "sequential",
     shouldStopAfterTurn: ({ toolResults }) => {
       modelCalls += 1;
       reachedCallLimit = modelCalls === MAX_MODEL_CALLS && toolResults.length > 0;

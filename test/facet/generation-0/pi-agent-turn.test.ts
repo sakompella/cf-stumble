@@ -1,39 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createPiAgentTurnState, runPiAgentTurn } from "../../../src/facet/generation-0/index.js";
-import type { ExecutionEnv } from "@cf-stumble/pi";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
 import { assistant, scriptedModel as model, scriptedStream, tick } from "./scripted-model.js";
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
-}
-
-function pausedWriteEnvironment(base: ExecutionEnv) {
-  const log: string[] = [];
-  const writeStarted = deferred();
-  const writeReleased = deferred();
-  const env = {
-    ...base,
-    fileInfo: (...args: Parameters<ExecutionEnv["fileInfo"]>) => {
-      log.push("edit:start");
-      return base.fileInfo(...args);
-    },
-    writeFile: async (...args: Parameters<ExecutionEnv["writeFile"]>) => {
-      if (args[0] !== "/project/first.txt") return base.writeFile(...args);
-      log.push("write:start");
-      writeStarted.resolve();
-      await writeReleased.promise;
-      const result = await base.writeFile(...args);
-      log.push("write:end");
-      return result;
-    },
-  } satisfies ExecutionEnv;
-  return { env, log, writeStarted, writeReleased };
-}
 
 function completeLargeBashOutput(
   handle:
@@ -81,46 +49,6 @@ test("hands Pi state to the next turn", async () => {
     "assistant",
     "user",
   ]);
-});
-
-test("executes stock tools sequentially through one shared execution environment", async () => {
-  const { env: base } = makeFacetExecutionEnv();
-  await base.writeFile("/project/target.txt", "before");
-  const paused = pausedWriteEnvironment(base);
-  const script = scriptedStream([
-    assistant(
-      [
-        {
-          type: "toolCall",
-          id: "write",
-          name: "write",
-          arguments: { path: "first.txt", content: "1" },
-        },
-        {
-          type: "toolCall",
-          id: "edit",
-          name: "edit",
-          arguments: { path: "target.txt", edits: [{ oldText: "before", newText: "after" }] },
-        },
-      ],
-      "toolUse",
-    ),
-    assistant([{ type: "text", text: "Done." }], "stop"),
-  ]);
-
-  const turn = runPiAgentTurn({
-    prompt: "Write then edit.",
-    state: createPiAgentTurnState(model),
-    env: paused.env,
-    streamFn: script.streamFn,
-  });
-  await paused.writeStarted.promise;
-  await tick();
-  expect(paused.log).toEqual(["write:start"]);
-
-  paused.writeReleased.resolve();
-  await expect(turn).resolves.toMatchObject({ ok: true });
-  expect(paused.log).toEqual(["write:start", "write:end", "edit:start"]);
 });
 
 test("reaches every supported execution operation through the four stock tools", async () => {
