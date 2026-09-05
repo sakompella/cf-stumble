@@ -9,6 +9,7 @@
     "build-loaded-execution-env-fixture.mts",
     "build-generation-0.mts",
     "vendor-pi.mts",
-    "verify-project-protocol.mts"
+    "verify-project-protocol.mts",
+    "browser-harness/**/*.mts"
   ]
 }
