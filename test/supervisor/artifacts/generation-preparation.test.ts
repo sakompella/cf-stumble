@@ -39,14 +39,9 @@ async function seedCache(harnessCommit: string): Promise<void> {
   );
 }
 
-async function activate(
-  control: DurableObjectStub<Supervisor>,
-  label: number,
-  requestId: string,
-): Promise<void> {
+async function activate(control: DurableObjectStub<Supervisor>, label: number): Promise<void> {
   const active = await control.getActiveGeneration();
   const activation = await control.controlGeneration({
-    requestId,
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: active.epoch },
   });
@@ -69,7 +64,7 @@ test("prepares and serves a generation from its cached module map", async () => 
   expect(prepared).toMatchObject({ ok: true, report: { stage: "ready" } });
   expect(await control.getGeneration(label)).toMatchObject({ label, status: "ready" });
 
-  await activate(control, label, "activate-cached-candidate");
+  await activate(control, label);
   const response = await control.fetch(new Request("https://cf-stumble.test/"));
 
   expect(await response.text()).toBe("cached candidate serving");

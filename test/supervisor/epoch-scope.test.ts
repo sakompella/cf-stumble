@@ -26,7 +26,7 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 async function readyReplacement(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = supervisor(name);
   await activateFixtureGeneration(control);
-  const label = await submitCandidate(control, replacementCommit, "submit-replacement");
+  const label = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, label, replacementCommit);
   return control;
 }
@@ -38,7 +38,6 @@ async function activateReplacement(control: DurableObjectStub<Supervisor>, obser
   }
 
   return control.controlGeneration({
-    requestId: "activate-replacement",
     principal: { kind: "user" },
     command: { kind: "activate", label: generation.label, observedEpoch },
   });
@@ -76,12 +75,11 @@ test("keeps the activation epoch stable while relaying a completed turn", async 
   });
 });
 
-test("keeps the activation epoch stable when a rejected request is journaled", async () => {
+test("keeps the activation epoch stable when an activation is rejected", async () => {
   const control = await readyReplacement("epoch-scope-rejected-request");
   const beforeRejection = await control.getActiveGeneration();
 
   const rejected = await control.controlGeneration({
-    requestId: "rejected-unknown-generation",
     principal: { kind: "user" },
     command: { kind: "activate", label: 99, observedEpoch: beforeRejection.epoch },
   });

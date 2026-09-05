@@ -80,7 +80,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       env.MODULE_MAPS,
       new WorkspaceHostModuleMapBuilder(env.WORKSPACE_HOST),
     );
-    this.control = new GenerationControl(ctx.storage, this.generations);
+    this.control = new GenerationControl(this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);

@@ -37,9 +37,9 @@ async function startupCheckOpen(name: string, reportRepairStageMismatch = false)
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const replacement = await submitCandidate(control, replacementCommit, "submit-replacement");
+  const replacement = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, replacement, replacementCommit);
-  await activateGeneration(control, replacement, "activate-replacement");
+  await activateGeneration(control, replacement);
   const episode = await control.startRecovery(
     { failureEventId: "failure-1", failedGenerationLabel: replacement },
     policy,
@@ -118,7 +118,7 @@ test("does not replay reports or reconciliation after completion", async () => {
   const { control, episode, operation } = await startupCheckOpen(
     "recovery-completed-report-replay",
   );
-  const label = await submitCandidate(control, repairedCommit, "submit-repaired-generation");
+  const label = await submitCandidate(control, repairedCommit);
   await prepareGeneration(control, label, repairedCommit);
   const completed = await control.reportRecoveryOperation(
     episode.id,
@@ -148,7 +148,7 @@ test("rejects startup passes for the wrong repaired commit or generation label",
   const { control, episode, operation, startup } = await startupCheckOpen(
     "recovery-rejects-wrong-candidate",
   );
-  const otherLabel = await submitCandidate(control, otherCommit, "submit-other-generation");
+  const otherLabel = await submitCandidate(control, otherCommit);
   await prepareGeneration(control, otherLabel, otherCommit);
 
   const wrongCommit = await control.reportRecoveryOperation(
@@ -157,11 +157,7 @@ test("rejects startup passes for the wrong repaired commit or generation label",
     { kind: "startup-check-passed", generationLabel: otherLabel },
     1_002,
   );
-  const repairedLabel = await submitCandidate(
-    control,
-    repairedCommit,
-    "submit-repaired-generation",
-  );
+  const repairedLabel = await submitCandidate(control, repairedCommit);
   await prepareGeneration(control, repairedLabel, repairedCommit);
   const wrongGeneration = await control.reportRecoveryOperation(
     episode.id,

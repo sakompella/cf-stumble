@@ -10,7 +10,6 @@ export type GenerationCommand =
   | { readonly kind: "rollback"; readonly label: number; readonly observedEpoch: number };
 
 export type GenerationRequest = {
-  readonly requestId: string;
   readonly principal: Principal;
   readonly command: GenerationCommand;
 };
@@ -22,8 +21,7 @@ export type ControlProblemCode =
   | "not-ready"
   | "not-previously-active"
   | "revoked-capability"
-  | "stale-epoch"
-  | "reused-request-id";
+  | "stale-epoch";
 
 export type CommandEffect = "activated" | "no-op";
 

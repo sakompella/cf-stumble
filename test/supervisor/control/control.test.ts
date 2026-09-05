@@ -28,19 +28,15 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
 }
 
-function request(
-  requestId: string,
-  principal: Principal,
-  command: GenerationCommand,
-): GenerationRequest {
-  return { requestId, principal, command };
+function request(principal: Principal, command: GenerationCommand): GenerationRequest {
+  return { principal, command };
 }
 
 async function readyGeneration(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
 ): Promise<number> {
-  const label = await submitCandidate(control, harnessCommit, `submit-${harnessCommit}`);
+  const label = await submitCandidate(control, harnessCommit);
   await prepareGeneration(control, label, harnessCommit);
   return label;
 }
@@ -53,7 +49,7 @@ test("a user submission labels its harness commit as a generation candidate", as
   const control = supervisor("control-user-submission");
 
   const result = await control.controlGeneration(
-    request("user-submission", user, { kind: "submit-candidate", harnessCommit: commits.first }),
+    request(user, { kind: "submit-candidate", harnessCommit: commits.first }),
   );
 
   expect(result).toMatchObject({
@@ -65,10 +61,23 @@ test("a user submission labels its harness commit as a generation candidate", as
   });
 });
 
+test("resubmitting the same harness commit returns the existing generation", async () => {
+  const control = supervisor("control-resubmit-existing");
+  const submission = request(user, { kind: "submit-candidate", harnessCommit: commits.first });
+
+  const first = await control.controlGeneration(submission);
+  const resubmitted = await control.controlGeneration(submission);
+
+  expect(resubmitted).toEqual(first);
+  expect(
+    await control.getGenerations(),
+    "labeling an already-labeled commit again must not add a second row (ADR-0030)",
+  ).toHaveLength(1);
+});
+
 test("an invalid harness generation label cannot submit before activation", async () => {
   const control = supervisor("control-invalid-harness-label-before-activation");
   const requestWithInvalidLabel = request(
-    "invalid-harness-label-before-activation",
     { kind: "harness", generationLabel: -1 },
     { kind: "submit-candidate", harnessCommit: commits.first },
   );
@@ -86,7 +95,6 @@ test("the active harness can submit a generation candidate", async () => {
 
   const result = await control.controlGeneration(
     request(
-      "harness-submission",
       { kind: "harness", generationLabel: 0 },
       {
         kind: "submit-candidate",
@@ -105,12 +113,11 @@ test("a replaced harness cannot submit a candidate through its revoked capabilit
   const control = supervisor("control-revoked-harness");
   await activateFixtureGeneration(control);
   const replacement = await readyGeneration(control, commits.first);
-  await activateGeneration(control, replacement, "activate-replacement");
+  await activateGeneration(control, replacement);
 
   const before = await control.getActiveGeneration();
   const result = await control.controlGeneration(
     request(
-      "revoked-harness",
       { kind: "harness", generationLabel: 0 },
       {
         kind: "submit-candidate",
@@ -137,7 +144,7 @@ test("a stale activation request leaves the active generation unchanged", async 
   const active = await control.getActiveGeneration();
 
   const result = await control.controlGeneration(
-    request("stale-activation", user, {
+    request(user, {
       kind: "activate",
       label: target,
       observedEpoch: active.epoch - 1,
@@ -153,7 +160,7 @@ test("rejects an invalid generation-label RPC input with its existing error code
 
   expect(
     await control.controlGeneration(
-      request("invalid-generation-label", user, {
+      request(user, {
         kind: "activate",
         label: -1,
         observedEpoch: 0,
@@ -165,13 +172,13 @@ test("rejects an invalid generation-label RPC input with its existing error code
 test("activation rejects unknown and unchecked generation targets with distinct codes", async () => {
   const control = supervisor("control-invalid-activation-targets");
   const epoch = await activateFixtureGeneration(control);
-  const candidate = await submitCandidate(control, commits.first, "unchecked-candidate");
+  const candidate = await submitCandidate(control, commits.first);
 
   const unknown = await control.controlGeneration(
-    request("unknown-activation", user, { kind: "activate", label: 99, observedEpoch: epoch + 1 }),
+    request(user, { kind: "activate", label: 99, observedEpoch: epoch + 1 }),
   );
   const unchecked = await control.controlGeneration(
-    request("candidate-activation", user, {
+    request(user, {
       kind: "activate",
       label: candidate,
       observedEpoch: epoch + 1,
@@ -189,14 +196,14 @@ test("rollback requires a target generation that has been active before", async 
   const beforeActivation = await control.getActiveGeneration();
 
   const neverActive = await control.controlGeneration(
-    request("never-active-rollback", user, {
+    request(user, {
       kind: "rollback",
       label: replacement,
       observedEpoch: beforeActivation.epoch,
     }),
   );
   const activated = await control.controlGeneration(
-    request("activate-replacement", user, {
+    request(user, {
       kind: "activate",
       label: replacement,
       observedEpoch: beforeActivation.epoch,
@@ -207,7 +214,7 @@ test("rollback requires a target generation that has been active before", async 
   }
 
   const rolledBack = await control.controlGeneration(
-    request("rollback-fixture", user, {
+    request(user, {
       kind: "rollback",
       label: 0,
       observedEpoch: activated.outcome.epoch,
@@ -221,76 +228,73 @@ test("rollback requires a target generation that has been active before", async 
   });
 });
 
-test("replaying an activation request preserves the recorded epoch", async () => {
-  const control = supervisor("control-replayed-activation");
+test("activating the active generation with its current epoch is a no-op, but a stale epoch rejects", async () => {
+  const control = supervisor("control-activate-no-op");
   await activateFixtureGeneration(control);
   const target = await readyGeneration(control, commits.first);
   const active = await control.getActiveGeneration();
-  const activation = request("replayed-activation", user, {
+  const activation = request(user, {
     kind: "activate",
     label: target,
     observedEpoch: active.epoch,
   });
 
   const first = await control.controlGeneration(activation);
-  const second = await control.controlGeneration(activation);
+  if (!first.ok) {
+    throw new Error("a ready generation must accept its first activation");
+  }
+  const staleRepeat = await control.controlGeneration(activation);
+  const currentRepeat = await control.controlGeneration(
+    request(user, { kind: "activate", label: target, observedEpoch: first.outcome.epoch }),
+  );
 
-  expect(second).toEqual(first);
+  expect(first.outcome).toMatchObject({ kind: "activated", effect: "activated" });
+  expect(staleRepeat, "the epoch the first activation observed is stale once committed").toEqual({
+    ok: false,
+    problem: { code: "stale-epoch" },
+  });
+  expect(
+    currentRepeat,
+    "activating the active label with its current epoch is a no-op",
+  ).toMatchObject({
+    ok: true,
+    outcome: { kind: "activated", generation: { label: target }, effect: "no-op" },
+  });
   expect(
     await control.getActiveGeneration(),
-    "a replayed request must not increment the epoch a second time",
-  ).toMatchObject({
-    generation: { label: target },
-    epoch: first.ok ? first.outcome.epoch : undefined,
-  });
+    "a no-op activation does not advance the epoch a second time",
+  ).toMatchObject({ generation: { label: target }, epoch: first.outcome.epoch });
 });
 
-test("a request ID cannot be reused for a different command", async () => {
-  const control = supervisor("control-reused-request-id");
-
-  await control.controlGeneration(
-    request("reused-request-id", user, { kind: "submit-candidate", harnessCommit: commits.first }),
-  );
-  const result = await control.controlGeneration(
-    request("reused-request-id", user, { kind: "submit-candidate", harnessCommit: commits.second }),
-  );
-
-  expect(result).toEqual({ ok: false, problem: { code: "reused-request-id" } });
-  expect(
-    await control.getGenerations(),
-    "the reused ID must not label its second commit",
-  ).toHaveLength(1);
-});
-
-test("a rejected request replay returns its terminal rejection", async () => {
-  const control = supervisor("control-replayed-rejection");
-  const rejectedRequest = request("replayed-rejection", user, {
+test("repeating a rejected command against unchanged state returns the same rejection", async () => {
+  const control = supervisor("control-repeat-rejection");
+  const rejectedRequest = request(user, {
     kind: "activate",
     label: 99,
     observedEpoch: 0,
   });
 
   const first = await control.controlGeneration(rejectedRequest);
-  const second = await control.controlGeneration(rejectedRequest);
+  const repeated = await control.controlGeneration(rejectedRequest);
 
   expect(first).toEqual({ ok: false, problem: { code: "unknown-generation" } });
-  expect(second).toEqual(first);
+  expect(repeated).toEqual(first);
 });
 
-test("the durable journal returns a recorded outcome after Durable Object eviction", async () => {
-  const control = supervisor("control-journal-after-eviction");
-  const submission = request("evicted-submission", user, {
+test("resubmitting the same harness commit still returns the existing generation after Durable Object eviction", async () => {
+  const control = supervisor("control-resubmit-after-eviction");
+  const submission = request(user, {
     kind: "submit-candidate",
     harnessCommit: commits.third,
   });
 
   const first = await control.controlGeneration(submission);
   await evictDurableObject(control);
-  const replayed = await control.controlGeneration(submission);
+  const resubmitted = await control.controlGeneration(submission);
 
-  expect(replayed).toEqual(first);
+  expect(resubmitted).toEqual(first);
   expect(
     await control.getGenerations(),
-    "the replayed submission must not label the commit twice",
+    "the generation table, not a request journal, is what survives eviction (ADR-0030)",
   ).toHaveLength(1);
 });

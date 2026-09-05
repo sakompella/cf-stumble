@@ -138,16 +138,15 @@ test("an unauthenticated request cannot reach an owner API route", async () => {
 test("an unauthenticated request cannot reach a generation control route", async () => {
   const activate = controlRequest(
     "/api/generations/activate",
-    JSON.stringify({ requestId: "unauthenticated", observedEpoch: 0, label: 0 }),
+    JSON.stringify({ observedEpoch: 0, label: 0 }),
   );
   const rollback = controlRequest(
     "/api/generations/rollback",
-    JSON.stringify({ requestId: "unauthenticated", observedEpoch: 0, label: 0 }),
+    JSON.stringify({ observedEpoch: 0, label: 0 }),
   );
   const submit = controlRequest(
     "/api/generations/submit",
     JSON.stringify({
-      requestId: "unauthenticated",
       harnessCommit: "f53a0e1c1bdbe213ab700a84b1db23615cc24b02",
     }),
   );

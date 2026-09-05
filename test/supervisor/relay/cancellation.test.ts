@@ -59,9 +59,9 @@ test("keeps cancellations from either side of headers neutral after an eviction"
     }),
   ).toMatchObject({ kind: "eligible", creditedTurns: 1 });
 
-  const replacementLabel = await submitCandidate(control, replacementCommit, "submit-replacement");
+  const replacementLabel = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, replacementLabel, replacementCommit);
-  await activateGeneration(control, replacementLabel, "activate-replacement");
+  await activateGeneration(control, replacementLabel);
 
   expect(
     await control.startRecovery(

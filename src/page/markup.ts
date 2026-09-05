@@ -52,7 +52,6 @@ const submissionSection = `
         <button id="${ID.submitCandidateButton}" type="button">Submit candidate</button>
       </div>
       ${value("submission result", ID.submitStatus)}
-      ${value("request id", ID.submitRequestId)}
       ${value("labeled generation", ID.submitGenerationLabel)}
       ${value("epoch after labeling", ID.submitEpoch)}
       ${value("preparation check", ID.submitPreparation)}
@@ -66,7 +65,6 @@ type ControlSection = {
   readonly labelInput: string;
   readonly button: string;
   readonly status: string;
-  readonly requestId: string;
   readonly sentEpoch: string;
   readonly effect: string;
   readonly raw: string;
@@ -82,7 +80,6 @@ function controlSection(section: ControlSection): string {
         <button id="${section.button}" type="button">${section.buttonText}</button>
       </div>
       ${value("result", section.status)}
-      ${value("request id", section.requestId)}
       ${value("epoch sent", section.sentEpoch)}
       ${value("effect", section.effect)}
       ${block("response", section.raw)}
@@ -95,7 +92,6 @@ const activateSection = controlSection({
   labelInput: ID.activateLabelInput,
   button: ID.activateButton,
   status: ID.activateStatus,
-  requestId: ID.activateRequestId,
   sentEpoch: ID.activateSentEpoch,
   effect: ID.activateEffect,
   raw: ID.activateRaw,
@@ -107,7 +103,6 @@ const rollbackSection = controlSection({
   labelInput: ID.rollbackLabelInput,
   button: ID.rollbackButton,
   status: ID.rollbackStatus,
-  requestId: ID.rollbackRequestId,
   sentEpoch: ID.rollbackSentEpoch,
   effect: ID.rollbackEffect,
   raw: ID.rollbackRaw,

@@ -15,9 +15,8 @@ const commits = {
   passing: "5100000000000000000000000000000000000001",
   unbuildable: "5100000000000000000000000000000000000002",
   rejecting: "5100000000000000000000000000000000000003",
-  replayed: "5100000000000000000000000000000000000004",
-  reusedId: "5100000000000000000000000000000000000005",
-  replayedUnbuildable: "5100000000000000000000000000000000000006",
+  resubmitted: "5100000000000000000000000000000000000004",
+  resubmittedUnbuildable: "5100000000000000000000000000000000000006",
 } as const;
 
 function moduleMap(harnessCommit: string, body: string, status: number): MainHarnessArtifactInput {
@@ -50,16 +49,12 @@ async function seedCache(
   );
 }
 
-function submit(
-  control: DurableObjectStub<Supervisor>,
-  requestId: string,
-  harnessCommit: string,
-): Promise<Response> {
+function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): Promise<Response> {
   return routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/generations/submit", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ requestId, harnessCommit }),
+      body: JSON.stringify({ harnessCommit }),
     }),
     control,
   );
@@ -67,10 +62,9 @@ function submit(
 
 async function submission(
   control: DurableObjectStub<Supervisor>,
-  requestId: string,
   harnessCommit: string,
 ): Promise<GenerationSubmissionResult> {
-  const response = await submit(control, requestId, harnessCommit);
+  const response = await submit(control, harnessCommit);
   expect(response.status).toBe(200);
   return response.json<GenerationSubmissionResult>();
 }
@@ -104,7 +98,7 @@ test("submits a passing candidate and leaves the active generation serving", asy
   const control = await activeSupervisor("submit-passing-candidate");
   await seedCache(commits.passing);
 
-  const result = await submission(control, "submit-passing", commits.passing);
+  const result = await submission(control, commits.passing);
 
   expect(result).toMatchObject({
     ok: true,
@@ -124,7 +118,7 @@ test("submits a passing candidate and leaves the active generation serving", asy
 test("returns a recorded failing preparation when the candidate module map cannot be built", async () => {
   const control = await activeSupervisor("submit-unbuildable-candidate");
 
-  const result = await submission(control, "submit-unbuildable", commits.unbuildable);
+  const result = await submission(control, commits.unbuildable);
 
   expect(result).toMatchObject({
     ok: true,
@@ -144,7 +138,7 @@ test("records a candidate that fails its startup check and keeps the active gene
   const control = await activeSupervisor("submit-failing-candidate");
   await seedCache(commits.rejecting, "candidate refused the startup request", 500);
 
-  const result = await submission(control, "submit-failing", commits.rejecting);
+  const result = await submission(control, commits.rejecting);
   const label = submittedLabel(result);
 
   expect(result).toMatchObject({
@@ -156,57 +150,48 @@ test("records a candidate that fails its startup check and keeps the active gene
   await expectActiveFixtureStillServing(control);
 });
 
-test("replaying one submission request ID returns the journaled labeling", async () => {
-  const control = await activeSupervisor("submit-replay");
-  await seedCache(commits.replayed);
+test("resubmitting the same passing commit returns the existing generation without labeling it twice", async () => {
+  const control = await activeSupervisor("submit-resubmit-passing");
+  await seedCache(commits.resubmitted);
 
-  const first = await submission(control, "submit-replay", commits.replayed);
-  const replay = await submission(control, "submit-replay", commits.replayed);
+  const first = await submission(control, commits.resubmitted);
+  const resubmitted = await submission(control, commits.resubmitted);
 
-  expect(replay).toMatchObject({ ok: true, outcome: first.ok ? first.outcome : {} });
+  expect(resubmitted).toMatchObject({
+    ok: true,
+    outcome: {
+      // The commit keeps its label from the first submission. Its status has since moved on to
+      // "ready", because the first submission's own preparation step already checked it.
+      generation: first.ok ? { ...first.outcome.generation, status: "ready" } : undefined,
+    },
+  });
   expect(
     (await control.getGenerations()).filter(
-      (generation) => generation.harnessCommit === commits.replayed,
+      (generation) => generation.harnessCommit === commits.resubmitted,
     ),
-    "a replayed request ID must not label the commit twice",
+    "resubmitting an already-labeled commit must not label it twice (ADR-0030)",
   ).toHaveLength(1);
-  expect(replay).toMatchObject({ preparation: { ok: true, report: { stage: "ready" } } });
-  await expectActiveFixtureStillServing(control);
-});
-
-test("replaying an unbuildable submission returns an identical result", async () => {
-  const control = await activeSupervisor("submit-replay-unbuildable");
-  const commit = commits.replayedUnbuildable;
-
-  const first = await submission(control, "submit-replay-unbuildable", commit);
-  const replay = await submission(control, "submit-replay-unbuildable", commit);
-
-  expect(replay, "a replay reports the journaled label and the same build failure").toEqual(first);
-  await expectActiveFixtureStillServing(control);
-});
-
-test("reusing a submission request ID for an activation fails", async () => {
-  const control = await activeSupervisor("submit-reused-request-id");
-  await seedCache(commits.reusedId);
-  const result = await submission(control, "shared-id", commits.reusedId);
-  const active = await control.getActiveGeneration();
-
-  const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/generations/activate", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        requestId: "shared-id",
-        observedEpoch: active.epoch,
-        label: submittedLabel(result),
-      }),
-    }),
-    control,
-  );
-
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    problem: { code: "reused-request-id" },
+  // The already-ready candidate's second preparation check confirms the recorded outcome rather
+  // than recording it again: decidePreparationCheck reports a no-op, not a fresh recording.
+  expect(resubmitted).toMatchObject({
+    preparation: { ok: true, report: { stage: "ready", effect: "no-op" } },
   });
+  await expectActiveFixtureStillServing(control);
+});
+
+test("resubmitting an unbuildable commit returns the same build failure, not a duplicate label", async () => {
+  const control = await activeSupervisor("submit-resubmit-unbuildable");
+  const commit = commits.resubmittedUnbuildable;
+
+  const first = await submission(control, commit);
+  const resubmitted = await submission(control, commit);
+
+  expect(resubmitted, "an unbuildable commit reports the same failure on resubmission").toEqual(
+    first,
+  );
+  expect(
+    (await control.getGenerations()).filter((generation) => generation.harnessCommit === commit),
+    "resubmitting an unbuildable commit must not label it twice",
+  ).toHaveLength(1);
   await expectActiveFixtureStillServing(control);
 });

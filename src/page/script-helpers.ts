@@ -53,13 +53,6 @@ export const OWNER_PAGE_SCRIPT_HELPERS = `
     return "error: HTTP " + status;
   }
 
-  function newRequestId() {
-    if (window.crypto && typeof window.crypto.randomUUID === "function") {
-      return window.crypto.randomUUID();
-    }
-    return "request-" + Date.now() + "-" + Math.floor(Math.random() * 1000000000);
-  }
-
   // Relative paths keep every call on this origin, and the Content Security Policy refuses others.
   async function call(method, path, body) {
     var init = {

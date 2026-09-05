@@ -21,7 +21,3 @@ An ordered event log would be a different design. It would record every generati
 including labels, preparation checks, activation, and rollback, then derive current state from those
 events. Version 0 instead keeps current state in the generation tables and retains only the
 preparation and activation history that its behavior uses.
-
-The implementation still has `requestId`, command fingerprints, and
-`generation_control_journal`. It must remove them from the page, routes, RPC types, Supervisor, and
-tests before the code matches this decision.

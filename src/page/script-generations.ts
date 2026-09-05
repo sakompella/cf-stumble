@@ -2,8 +2,11 @@ import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
 
 /**
  * Generation controls: submit a harness commit as a candidate, activate a generation, and roll
- * back. Activation and rollback send the epoch the status endpoint reported and the page rendered,
- * and each records its request id and its result where a reader can see them.
+ * back. Activation and rollback send the epoch the status endpoint reported and the page
+ * rendered, and each records its result where a reader can see it. There is no request id: the
+ * Supervisor applies each command directly (ADR-0030), so a repeated submission returns the
+ * existing generation, and activating the already-active generation with the current epoch is a
+ * no-op.
  */
 export const OWNER_PAGE_SCRIPT_GENERATIONS = `
   function renderSubmission(result) {
@@ -36,11 +39,9 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       setText("${ID.submitStatus}", "enter a harness commit first");
       return;
     }
-    var requestId = newRequestId();
-    setText("${ID.submitRequestId}", requestId);
     setText("${ID.submitStatus}", "running");
     try {
-      var body = { requestId: requestId, harnessCommit: harnessCommit };
+      var body = { harnessCommit: harnessCommit };
       renderSubmission(await call("POST", "/api/generations/submit", body));
       await refreshStatus();
     } catch (error) {
@@ -61,7 +62,6 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       ? {
           labelInput: "${ID.activateLabelInput}",
           status: "${ID.activateStatus}",
-          requestId: "${ID.activateRequestId}",
           sentEpoch: "${ID.activateSentEpoch}",
           effect: "${ID.activateEffect}",
           raw: "${ID.activateRaw}",
@@ -69,7 +69,6 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       : {
           labelInput: "${ID.rollbackLabelInput}",
           status: "${ID.rollbackStatus}",
-          requestId: "${ID.rollbackRequestId}",
           sentEpoch: "${ID.rollbackSentEpoch}",
           effect: "${ID.rollbackEffect}",
           raw: "${ID.rollbackRaw}",
@@ -88,6 +87,8 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
     setText(ids.effect, text(payload.outcome.effect));
   }
 
+  // After a request whose transport outcome is uncertain, refresh status before sending another
+  // activation or rollback rather than guessing what happened from here.
   async function runControl(kind) {
     clearError();
     var ids = controlIds(kind);
@@ -101,12 +102,10 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       setText(ids.status, "enter a generation label");
       return;
     }
-    var requestId = newRequestId();
-    setText(ids.requestId, requestId);
     setText(ids.sentEpoch, String(epoch));
     setText(ids.status, "running");
     try {
-      var body = { requestId: requestId, observedEpoch: epoch, label: label };
+      var body = { observedEpoch: epoch, label: label };
       renderControl(ids, await call("POST", "/api/generations/" + kind, body));
       await refreshStatus();
     } catch (error) {

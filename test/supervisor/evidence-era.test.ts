@@ -59,11 +59,7 @@ test("a repeated passing check advances the epoch and rejects an activation from
     "evidence-era-recheck-stale-activation",
   );
   await activateFixtureGeneration(control);
-  const targetLabel = await submitCandidate(
-    control,
-    unrelatedHarnessCommit,
-    "submit-activation-target",
-  );
+  const targetLabel = await submitCandidate(control, unrelatedHarnessCommit);
   await prepareGeneration(control, targetLabel, unrelatedHarnessCommit);
 
   const beforeRecheck = await control.getActiveGeneration();
@@ -75,7 +71,6 @@ test("a repeated passing check advances the epoch and rejects an activation from
   const checksAfter = await control.getPreparationCheckHistory(0);
   const afterRecheck = await control.getActiveGeneration();
   const result = await control.controlGeneration({
-    requestId: "recheck-stale-activation",
     principal: { kind: "user" },
     command: {
       kind: "activate",
@@ -100,7 +95,7 @@ test("keeps a generation's credited turns when unrelated protected state changes
   await activateFixtureGeneration(control);
 
   await completedTurn(control);
-  await submitCandidate(control, unrelatedHarnessCommit, "submit-unrelated");
+  await submitCandidate(control, unrelatedHarnessCommit);
 
   await completedTurn(control);
   await completedTurn(control);

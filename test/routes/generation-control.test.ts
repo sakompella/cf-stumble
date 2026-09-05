@@ -18,7 +18,6 @@ const commits = {
 } as const;
 
 type ControlBody = {
-  readonly requestId: string;
   readonly observedEpoch: number;
   readonly label: number;
 };
@@ -55,16 +54,12 @@ async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number>
 async function readyFixture(name: string): Promise<DurableObjectStub<Supervisor>> {
   const stub = supervisor(name);
   const label = await prepareFixtureGeneration(stub);
-  await control(stub, "activate", {
-    requestId: "activate-fixture",
-    observedEpoch: await statusEpoch(stub),
-    label,
-  });
+  await control(stub, "activate", { observedEpoch: await statusEpoch(stub), label });
   return stub;
 }
 
 async function readySecond(stub: DurableObjectStub<Supervisor>, commit: string): Promise<number> {
-  const label = await submitCandidate(stub, commit, `submit-${commit}`);
+  const label = await submitCandidate(stub, commit);
   await prepareGeneration(stub, label, commit);
   return label;
 }
@@ -78,11 +73,7 @@ test("activates a ready generation against the epoch the status route reports", 
   const label = await readySecond(stub, commits.second);
   const observedEpoch = await statusEpoch(stub);
 
-  const response = await control(stub, "activate", {
-    requestId: "activate-1",
-    observedEpoch,
-    label,
-  });
+  const response = await control(stub, "activate", { observedEpoch, label });
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
@@ -94,38 +85,40 @@ test("activates a ready generation against the epoch the status route reports", 
   expect(await statusEpoch(stub)).toBeGreaterThan(observedEpoch);
 });
 
-test("replaying one request ID returns the journaled result and applies nothing", async () => {
-  const stub = await readyFixture("routes-activate-replay");
+test("activating the already-active generation with the current epoch is a no-op", async () => {
+  const stub = await readyFixture("routes-activate-no-op");
   const label = await readySecond(stub, commits.second);
   const observedEpoch = await statusEpoch(stub);
-  const body = { requestId: "activate-replay", observedEpoch, label };
 
-  const first = await (await control(stub, "activate", body)).json();
+  const first = await (await control(stub, "activate", { observedEpoch, label })).json();
   const epochAfterFirst = await statusEpoch(stub);
-  const replay = await control(stub, "activate", body);
+  const repeated = await control(stub, "activate", { observedEpoch: epochAfterFirst, label });
 
-  expect(replay.status).toBe(200);
-  await expect(replay.json()).resolves.toEqual(first);
-  expect(await statusEpoch(stub)).toBe(epochAfterFirst);
+  expect(repeated.status).toBe(200);
+  await expect(repeated.json()).resolves.toMatchObject({
+    ok: true,
+    outcome: { kind: "activated", generation: { label }, effect: "no-op" },
+  });
+  expect(first).toMatchObject({ ok: true, outcome: { effect: "activated" } });
+  expect(await statusEpoch(stub), "a no-op activation does not advance the epoch again").toBe(
+    epochAfterFirst,
+  );
 });
 
-test("reusing an activation request ID for a rollback fails", async () => {
-  const stub = await readyFixture("routes-reused-request-id");
+test("repeating an activation with the epoch it already used is rejected as stale", async () => {
+  const stub = await readyFixture("routes-activate-repeat-stale");
   const label = await readySecond(stub, commits.second);
   const observedEpoch = await statusEpoch(stub);
-  await control(stub, "activate", { requestId: "shared-id", observedEpoch, label });
+  const body = { observedEpoch, label };
 
-  const response = await control(stub, "rollback", {
-    requestId: "shared-id",
-    observedEpoch: await statusEpoch(stub),
-    label: 0,
-  });
+  await control(stub, "activate", body);
+  const repeated = await control(stub, "activate", body);
 
-  await expect(response.json()).resolves.toEqual({
+  expect(repeated.status).toBe(200);
+  await expect(repeated.json()).resolves.toEqual({
     ok: false,
-    problem: { code: "reused-request-id" },
+    problem: { code: "stale-epoch" },
   });
-  expect((await stub.getActiveGeneration()).generation?.label).toBe(label);
 });
 
 test("rejects an activation that carries a stale epoch", async () => {
@@ -133,11 +126,7 @@ test("rejects an activation that carries a stale epoch", async () => {
   const label = await readySecond(stub, commits.second);
   const stale = (await statusEpoch(stub)) - 1;
 
-  const response = await control(stub, "activate", {
-    requestId: "stale",
-    observedEpoch: stale,
-    label,
-  });
+  const response = await control(stub, "activate", { observedEpoch: stale, label });
 
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code: "stale-epoch" } });
   expect((await stub.getActiveGeneration()).generation?.label).toBe(0);
@@ -146,14 +135,9 @@ test("rejects an activation that carries a stale epoch", async () => {
 test("rolls back to a ready generation that ran before", async () => {
   const stub = await readyFixture("routes-rollback");
   const label = await readySecond(stub, commits.second);
-  await control(stub, "activate", {
-    requestId: "activate-second",
-    observedEpoch: await statusEpoch(stub),
-    label,
-  });
+  await control(stub, "activate", { observedEpoch: await statusEpoch(stub), label });
 
   const response = await control(stub, "rollback", {
-    requestId: "rollback-1",
     observedEpoch: await statusEpoch(stub),
     label: 0,
   });
@@ -168,15 +152,13 @@ test("rolls back to a ready generation that ran before", async () => {
 test("refuses to roll back to a generation that never ran or is not ready", async () => {
   const stub = await readyFixture("routes-rollback-refusals");
   const neverActive = await readySecond(stub, commits.never);
-  const candidate = await submitCandidate(stub, commits.candidate, "submit-candidate");
+  const candidate = await submitCandidate(stub, commits.candidate);
 
   const untried = await control(stub, "rollback", {
-    requestId: "rollback-never-active",
     observedEpoch: await statusEpoch(stub),
     label: neverActive,
   });
   const notReady = await control(stub, "rollback", {
-    requestId: "rollback-candidate",
     observedEpoch: await statusEpoch(stub),
     label: candidate,
   });

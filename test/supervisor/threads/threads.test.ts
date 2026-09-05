@@ -194,9 +194,9 @@ test("a thread survives a generation change and names no generation in its store
     throw new Error("the first finish must succeed");
   }
 
-  const label = await submitCandidate(control, secondHarnessCommit, "submit-next-generation");
+  const label = await submitCandidate(control, secondHarnessCommit);
   await prepareGeneration(control, label, secondHarnessCommit);
-  await activateGeneration(control, label, "activate-next-generation");
+  await activateGeneration(control, label);
 
   const afterChange = await control.getProjectThread("project-one");
   if (!afterChange.ok) {

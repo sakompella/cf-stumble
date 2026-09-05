@@ -34,7 +34,7 @@ Run these two steps as the owner, through Cloudflare Access, against the deploye
    ```sh
    curl -sS "https://$CF_STUMBLE_HOSTNAME/api/generations/submit" \
        -H 'content-type: application/json' \
-       -d "{\"requestId\":\"generation-0-$CF_STUMBLE_HARNESS_COMMIT\",\"harnessCommit\":\"$CF_STUMBLE_HARNESS_COMMIT\"}"
+       -d "{\"harnessCommit\":\"$CF_STUMBLE_HARNESS_COMMIT\"}"
    ```
 
    Read `outcome.generation.label` and `preparation.report.stage` from the response. Continue only when the stage is `ready`. A failed check is recorded against that label and changes nothing else.
@@ -44,7 +44,10 @@ Run these two steps as the owner, through Cloudflare Access, against the deploye
    ```sh
    curl -sS "https://$CF_STUMBLE_HOSTNAME/api/generations/activate" \
        -H 'content-type: application/json' \
-       -d "{\"requestId\":\"activate-generation-0\",\"observedEpoch\":$EPOCH,\"label\":$LABEL}"
+       -d "{\"observedEpoch\":$EPOCH,\"label\":$LABEL}"
    ```
 
-Both request IDs are journaled, so repeating a step returns the recorded result instead of acting twice. The Supervisor decides both steps; naming a target does not perform it (ADR-0003).
+There is no request journal (ADR-0030). Repeating the submission returns the existing generation
+instead of labeling the commit twice, and repeating the activation once it observes the current
+epoch is a no-op instead of acting twice. Repeating a step with a stale observed epoch still fails.
+The Supervisor decides both steps; naming a target does not perform it (ADR-0003).
