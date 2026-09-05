@@ -3,6 +3,7 @@ import {
   decideAbandonTurn,
   decideFinishTurn,
   decideStartTurn,
+  type TurnLeaseClaim,
 } from "../../../src/supervisor/threads/decisions.js";
 import { emptyThread, type ProjectThread } from "../../../src/supervisor/threads/index.js";
 import { PROJECT_CATALOG } from "../../../src/project-catalog.js";
@@ -15,6 +16,9 @@ const [firstProject] = PROJECT_CATALOG;
 const projectId = firstProject.id;
 
 const conversation = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
+
+const ADMITTED_LEASE = "lease-a";
+const REPLACEMENT_LEASE = "lease-b";
 
 function thread(overrides: Partial<ProjectThread> = {}): ProjectThread {
   return {
@@ -30,6 +34,13 @@ function thread(overrides: Partial<ProjectThread> = {}): ProjectThread {
 function held(overrides: Partial<ProjectThread> = {}): ProjectThread {
   return thread({ turnActive: true, turnDeadlineAt: NOW + LEASE_MS, ...overrides });
 }
+
+/** What the row holds against what the caller returned. */
+function claim(heldLease: string | undefined, presented: string): TurnLeaseClaim {
+  return { held: heldLease, presented };
+}
+
+const ownClaim = claim(ADMITTED_LEASE, ADMITTED_LEASE);
 
 test("starting a turn on a thread nobody has written to accepts revision zero", () => {
   expect(decideStartTurn(projectId, emptyThread(projectId), 0, NOW)).toEqual({
@@ -57,35 +68,59 @@ test("a matching revision starts the turn", () => {
 });
 
 test("finishing a turn on a thread with no active turn is rejected", () => {
-  expect(decideFinishTurn(projectId, thread({ turnActive: false }), 3, NOW)).toEqual({
+  expect(decideFinishTurn(projectId, thread({ turnActive: false }), ownClaim, NOW)).toEqual({
     kind: "rejected",
     problem: { code: "turn-not-active", projectId },
   });
 });
 
-test("finishing an active turn with a stale revision is rejected and leaves the write undone", () => {
-  expect(decideFinishTurn(projectId, held(), 9, NOW)).toEqual({
+test("finishing an active turn with another turn's lease is rejected", () => {
+  const late = claim(REPLACEMENT_LEASE, ADMITTED_LEASE);
+
+  expect(decideFinishTurn(projectId, held(), late, NOW)).toEqual({
     kind: "rejected",
-    problem: { code: "stale-revision", projectId, currentRevision: 3 },
+    problem: { code: "turn-lease-lost", projectId },
   });
 });
 
-test("finishing an active turn with the current revision advances it by one", () => {
-  expect(decideFinishTurn(projectId, held(), 3, NOW)).toEqual({
+test("a row holding no lease owns no turn, whatever the caller presents", () => {
+  expect(decideFinishTurn(projectId, held(), claim(undefined, ADMITTED_LEASE), NOW)).toEqual({
+    kind: "rejected",
+    problem: { code: "turn-lease-lost", projectId },
+  });
+});
+
+test("finishing an active turn with the lease that admitted it advances the revision by one", () => {
+  expect(decideFinishTurn(projectId, held(), ownClaim, NOW)).toEqual({
     kind: "finished",
     nextRevision: 4,
   });
 });
 
 test("abandoning a turn on a thread with no active turn is rejected", () => {
-  expect(decideAbandonTurn(projectId, thread({ turnActive: false }))).toEqual({
+  expect(decideAbandonTurn(projectId, thread({ turnActive: false }), ownClaim)).toEqual({
     kind: "rejected",
     problem: { code: "turn-not-active", projectId },
   });
 });
 
-test("abandoning an active turn frees the slot", () => {
-  expect(decideAbandonTurn(projectId, held())).toEqual({ kind: "abandoned" });
+test("abandoning an active turn with another turn's lease is rejected", () => {
+  const late = claim(REPLACEMENT_LEASE, ADMITTED_LEASE);
+
+  expect(decideAbandonTurn(projectId, held(), late)).toEqual({
+    kind: "rejected",
+    problem: { code: "turn-lease-lost", projectId },
+  });
+});
+
+test("abandoning an active turn with the lease that admitted it frees the slot", () => {
+  expect(decideAbandonTurn(projectId, held(), ownClaim)).toEqual({ kind: "abandoned" });
+});
+
+test("the lease that ran past its deadline may still release the slot it holds", () => {
+  expect(decideAbandonTurn(projectId, held({ turnDeadlineAt: NOW - 1 }), ownClaim)).toEqual({
+    kind: "abandoned",
+  });
 });
 
 test("a turn whose deadline has passed no longer holds the thread", () => {
@@ -96,7 +131,7 @@ test("a turn whose deadline has passed no longer holds the thread", () => {
 });
 
 test("finishing after the deadline is expired, not merely stale", () => {
-  expect(decideFinishTurn(projectId, held(), 3, NOW + LEASE_MS)).toEqual({
+  expect(decideFinishTurn(projectId, held(), ownClaim, NOW + LEASE_MS)).toEqual({
     kind: "rejected",
     problem: { code: "turn-expired", projectId, deadlineAt: NOW + LEASE_MS },
   });

@@ -2,8 +2,13 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { parseAgentMessages } from "./messages.js";
-import { ThreadStore } from "./store.js";
-import { serializedThread, type ProjectThreadResult, type ThreadResult } from "./thread.js";
+import { ThreadStore, type ThreadLeaseResult } from "./store.js";
+import {
+  serializedThread,
+  type ProjectThreadResult,
+  type ProjectTurnLeaseResult,
+  type ThreadResult,
+} from "./thread.js";
 import { resolveProject, type Project, type ProjectCatalog } from "../../project-catalog.js";
 
 type ResolvedProject =
@@ -40,21 +45,25 @@ export class ProjectThreads {
     return resolved.ok ? serialized(this.store.startFreshThread(resolved.project)) : resolved;
   }
 
+  /**
+   * Admit one turn on the project's thread. The caller presents the revision it read; the store
+   * mints the lease id and this is where it reaches the caller.
+   */
   startTurn(
     projectId: unknown,
     expectedRevision: number,
     now: number,
     leaseMs: number,
-  ): ProjectThreadResult {
+  ): ProjectTurnLeaseResult {
     const resolved = this.resolve(projectId);
     return resolved.ok
-      ? serialized(this.store.startTurn(resolved.project, expectedRevision, now, leaseMs))
+      ? serializedLease(this.store.startTurn(resolved.project, expectedRevision, now, leaseMs))
       : resolved;
   }
 
   finishTurn(
     projectId: unknown,
-    expectedRevision: number,
+    leaseId: string,
     messages: unknown,
     now: number,
   ): ProjectThreadResult {
@@ -75,12 +84,12 @@ export class ProjectThreads {
       };
     }
 
-    return serialized(this.store.finishTurn(resolved.project, expectedRevision, parsed.value, now));
+    return serialized(this.store.finishTurn(resolved.project, parsed.value, now, leaseId));
   }
 
-  abandonTurn(projectId: unknown): ProjectThreadResult {
+  abandonTurn(projectId: unknown, leaseId: string): ProjectThreadResult {
     const resolved = this.resolve(projectId);
-    return resolved.ok ? serialized(this.store.abandonTurn(resolved.project)) : resolved;
+    return resolved.ok ? serialized(this.store.abandonTurn(resolved.project, leaseId)) : resolved;
   }
 
   private resolve(projectId: unknown): ResolvedProject {
@@ -93,4 +102,10 @@ export class ProjectThreads {
 
 function serialized(result: ThreadResult): ProjectThreadResult {
   return result.ok ? { ok: true, thread: serializedThread(result.thread) } : result;
+}
+
+function serializedLease(result: ThreadLeaseResult): ProjectTurnLeaseResult {
+  return result.ok
+    ? { ok: true, thread: serializedThread(result.lease.thread), leaseId: result.lease.leaseId }
+    : result;
 }

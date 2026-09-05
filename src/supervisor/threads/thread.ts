@@ -3,11 +3,17 @@ import { serializeThreadMessages } from "./messages.js";
 import type { ProjectId } from "../../project-catalog.js";
 
 /**
- * A project's one current Pi thread (ADR-0038). `messages` is the whole conversation in order;
- * `revision` counts the turns committed into it and is what a caller must present to write.
+ * A project's one current Pi thread (ADR-0038). `messages` is the whole conversation in order.
+ *
+ * `revision` is the thread's monotonic concurrency version, and what a caller must present to be
+ * admitted to a turn. It advances on every committed turn and on every fresh thread, and never
+ * repeats for a project. Counting only committed turns would restart at zero after a fresh
+ * thread, and a caller that read the replaced conversation could then be admitted into its
+ * replacement because its stale number happened to match again.
  *
  * `turnActive` and `turnDeadlineAt` describe the turn lease, which is a separate concern from the
- * conversation: it decides who may write next, not what has been said.
+ * conversation: it decides who may write next, not what has been said. The lease id itself stays
+ * in storage and goes only to the caller admitted to that turn.
  */
 export type ProjectThread = Readonly<{
   projectId: ProjectId;
@@ -63,6 +69,16 @@ export type SerializedThread = Readonly<{
 
 export type ProjectThreadResult =
   | { readonly ok: true; readonly thread: SerializedThread }
+  | { readonly ok: false; readonly problem: ProjectThreadProblem };
+
+/**
+ * What admission to a turn returns: the thread the turn holds, and the lease id that may finish
+ * or abandon it. This is the only place a lease id leaves the Supervisor, and it goes to the
+ * caller that was just admitted. The read and fresh-thread surfaces return a thread without one,
+ * so a client that never started a turn cannot learn the lease of one that is running.
+ */
+export type ProjectTurnLeaseResult =
+  | { readonly ok: true; readonly thread: SerializedThread; readonly leaseId: string }
   | { readonly ok: false; readonly problem: ProjectThreadProblem };
 
 export function emptyThread(projectId: ProjectId): ProjectThread {
