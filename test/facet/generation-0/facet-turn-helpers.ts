@@ -7,7 +7,13 @@ import type {
   Generation0Capabilities,
   ModelCapability,
 } from "../../../src/facet/generation-0/index.js";
-import type { ModelRouteRequest, ModelRouteResponse, ToolCall } from "../../../src/model-route.js";
+import { encodeModelRouteResponseAsStream } from "../../../src/model-route.js";
+import type {
+  ModelRouteRequest,
+  ModelRouteResponse,
+  ToolCall,
+  ValidationFailure,
+} from "../../../src/model-route.js";
 import type { FakeProjectCapability } from "./fake-project-capability.js";
 
 /** Tool arguments a scripted assistant message asks for. Every stock tool takes strings. */
@@ -17,6 +23,11 @@ type ScriptedToolArguments = Readonly<Record<string, string>>;
  * A model route that answers from a script. The facet's own route-backed stream function runs
  * unchanged on top of it, so these turns exercise the same request conversion a real route would
  * receive while the test still chooses every assistant message.
+ *
+ * `runStream` is what `route-stream.ts` actually calls; it encodes the same scripted answer as the
+ * single-event NDJSON stream a provider that answers in one chunk would produce, so these turns
+ * exercise the real streaming seam (parsing, assembly, `done`/`error` termination) rather than a
+ * second, parallel fake protocol.
  */
 export class ScriptedRoute implements ModelCapability {
   readonly requests: ModelRouteRequest[] = [];
@@ -29,6 +40,10 @@ export class ScriptedRoute implements ModelCapability {
   run(request: ModelRouteRequest): Promise<ModelRouteResponse> {
     this.requests.push(request);
     return Promise.resolve(this.#answers.shift() ?? says(""));
+  }
+
+  runStream(request: ModelRouteRequest): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
+    return this.run(request).then((response) => encodeModelRouteResponseAsStream(response));
   }
 }
 

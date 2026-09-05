@@ -3,6 +3,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { startFacetTurn } from "../../../src/facet/generation-0/facet-turn.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
+import { encodeModelRouteResponseAsStream } from "../../../src/model-route.js";
 import type { ModelRouteRequest, ModelRouteResponse } from "../../../src/model-route.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
 
@@ -27,9 +28,15 @@ function scriptedRoute(script: string): ModelCapability {
   // this array, and nothing else can set a loaded worker's environment.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const answers = JSON.parse(script) as ModelRouteResponse[];
+  function next(): ModelRouteResponse {
+    return answers.shift() ?? NOTHING_MORE;
+  }
   return {
     run(_request: ModelRouteRequest): Promise<ModelRouteResponse> {
-      return Promise.resolve(answers.shift() ?? NOTHING_MORE);
+      return Promise.resolve(next());
+    },
+    runStream(_request: ModelRouteRequest) {
+      return Promise.resolve(encodeModelRouteResponseAsStream(next()));
     },
   };
 }

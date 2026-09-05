@@ -1,11 +1,23 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { streamModelEvents, streamingBindingCall } from "./model-route-stream.js";
+
+export { streamModelEvents, encodeModelRouteResponseAsStream } from "./model-route-stream.js";
+export type {
+  ModelStreamEvent,
+  ModelStreamInference,
+  ModelUsage,
+  StreamingProviderPayload,
+  ToolCallDelta,
+} from "./model-route-events.js";
 
 /** The only model selected by the immutable host. */
 export const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
 const REASONING_EFFORT = "low" as const;
 const MAX_REQUEST_BYTES = 1_048_576;
+/** Shared encoder for the byte-size checks below; UTF-8 byte length, not `string.length`. */
+const REQUEST_BYTES = new TextEncoder();
 const FORBIDDEN_FIELDS: readonly string[] = [
   "model",
   "reasoning_effort",
@@ -67,25 +79,28 @@ export type ModelInference = {
   run(model: string, input: ProviderPayload): Promise<ProviderResult>;
 };
 
-// -- Untrusted boundary accessor --------------------------------------------
+// -- Untrusted boundary accessor ---------------------------------------------
+//
+// Shared with `model-route-stream.ts`, which parses the provider's own untrusted stream chunks
+// with the same accessors rather than a second copy of this narrowing.
 
 declare const untrustedBrand: unique symbol;
 /** Parsed JSON object whose fields have not been validated yet. */
 export type UntrustedObject = object & { readonly [untrustedBrand]: never };
 
 // oxlint-disable-next-line anti-slop/no-object-parameters -- Boundary: accepts the narrowed object from a typeof guard.
-function asUntrusted(value: object): UntrustedObject {
+export function asUntrusted(value: object): UntrustedObject {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: caller confirmed object and non-null.
   return value as UntrustedObject;
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-returns -- Boundary accessor: returns the raw value for the caller to narrow.
-function field(obj: UntrustedObject, key: string): unknown {
+export function field(obj: UntrustedObject, key: string): unknown {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: branded untrusted object; Record<string, unknown> is the correct representation for an unvalidated JSON object whose fields the caller will narrow.
   return (obj as Record<string, unknown>)[key];
 }
 
-function hasOwn(obj: UntrustedObject, key: string): boolean {
+export function hasOwn(obj: UntrustedObject, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
@@ -198,7 +213,11 @@ export function validateRequest(raw: unknown): Readonly<{ ok: true }> | Validati
   }
   const msgs = field(obj, "messages");
   if (!Array.isArray(msgs) || msgs.length === 0) return fail("messages must be a non-empty array");
-  if (JSON.stringify(raw).length > MAX_REQUEST_BYTES)
+  // Bound the request by its actual wire size. `JSON.stringify(...).length` counts UTF-16 code
+  // units, which under-counts every non-ASCII character once it crosses the wire as UTF-8 (most
+  // are 2-3 bytes in UTF-8 but 1 code unit each here), so a payload that looked within budget by
+  // string length could still exceed it in bytes.
+  if (REQUEST_BYTES.encode(JSON.stringify(raw)).length > MAX_REQUEST_BYTES)
     return fail("request exceeds 1 MiB size limit");
   return validateMessages(msgs) ?? { ok: true };
 }
@@ -249,16 +268,27 @@ export async function invokeModel(
 type ModelRouteEnv = Readonly<{ AI: Ai }>;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv> {
+  /** @deprecated Buffered path for the legacy `runGeneration0Turn` (T7 deletes it); delete this with {@link ModelInference} and {@link invokeModel} once that caller is gone. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
   run(request: unknown): Promise<ModelRouteResponse | ValidationFailure> {
     const validation = validateRequest(request);
     if (!validation.ok) return Promise.resolve(validation);
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: validateRequest checked every field of the closed message union.
     const validated = request as ModelRouteRequest;
-    return invokeModel(
-      {
-        run: (model, input) => this.env.AI.run(model, input),
-      },
+    return invokeModel({ run: (model, input) => this.env.AI.run(model, input) }, validated);
+  }
+
+  /** The streaming path (E5, E7): incremental events instead of one buffered message. Every
+   * failure after validation becomes an event on the returned stream, which is what lets this
+   * cross the RPC boundary as a plain byte stream (ADR-0035), like `MainFacetTarget.startTurn`. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
+  runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
+    const validation = validateRequest(request);
+    if (!validation.ok) return validation;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: validateRequest checked every field of the closed message union.
+    const validated = request as ModelRouteRequest;
+    return streamModelEvents(
+      { run: (model, input) => streamingBindingCall(this.env.AI, model, input) },
       validated,
     );
   }

@@ -2,6 +2,7 @@ import type {
   ModelCapability,
   WorkspaceCapability,
 } from "../../../src/facet/generation-0/index.js";
+import { encodeModelRouteResponseAsStream } from "../../../src/model-route.js";
 import type {
   ModelRouteRequest,
   ModelRouteResponse,
@@ -11,7 +12,19 @@ import type { WorkspaceRequest, WorkspaceResult } from "../../../src/workspace/i
 
 export type FakeModelReply = ModelRouteResponse | ValidationFailure;
 
-/** A model route that answers from a fixed script and records exactly what the facet sent it. */
+function isValidationFailure(reply: FakeModelReply): reply is ValidationFailure {
+  return !reply.ok && reply.error.code === "invalid-request";
+}
+
+/**
+ * A model route that answers from a fixed script and records exactly what the facet sent it.
+ *
+ * `runStream` encodes each scripted reply as the single-event NDJSON stream a provider that
+ * answers in one chunk would produce, so a caller reaching this fake through the real streaming
+ * seam (`route-stream.ts`) still gets a well-formed stream. A scripted `ValidationFailure` passes
+ * through unchanged, matching what `ModelRoute.runStream` itself returns for a request this route
+ * rejects before ever calling the provider.
+ */
 export class FakeModelRoute implements ModelCapability {
   readonly requests: ModelRouteRequest[] = [];
   private readonly replies: FakeModelReply[];
@@ -26,6 +39,13 @@ export class FakeModelRoute implements ModelCapability {
     return reply === undefined
       ? Promise.reject(new Error("the fake model route ran out of scripted replies"))
       : Promise.resolve(reply);
+  }
+
+  async runStream(
+    request: ModelRouteRequest,
+  ): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
+    const reply = await this.run(request);
+    return isValidationFailure(reply) ? reply : encodeModelRouteResponseAsStream(reply);
   }
 }
 

@@ -1,11 +1,5 @@
 import { createAssistantMessageEventStream } from "@cf-stumble/pi";
-import type {
-  Api,
-  AssistantMessage,
-  AssistantMessageEventStream,
-  Model,
-  StreamFn,
-} from "@cf-stumble/pi";
+import type { AssistantMessageEventStream, StreamFn } from "@cf-stumble/pi";
 
 /**
  * `@cf-stumble/pi` exports `StreamFn` but not the `Context` it receives, so derive both that and
@@ -13,6 +7,7 @@ import type {
  */
 type Context = Parameters<StreamFn>[1];
 type Message = Context["messages"][number];
+import { assistantShell, TurnAssembler } from "./stream-assembler.js";
 import {
   isResponseError,
   piContextToRouteRequest,
@@ -20,35 +15,10 @@ import {
 } from "./workers-ai-adapter.js";
 import type { PiMessage, PiTool, PiToolParameters } from "./workers-ai-adapter.js";
 import type { ModelCapability } from "./capabilities.js";
+import type { ModelStreamEvent, ValidationFailure } from "../../model-route.js";
+import { toPiUsage } from "./stream-assembler.js";
 
-/**
- * The model descriptor Pi's `Agent` needs in its state. Every field the host actually decides —
- * which model, which reasoning effort, which endpoint, which credential — lives behind the model
- * route in the immutable `src/model-route.ts`, so nothing here selects anything. This describes
- * the route, not a model, which is why its costs and its context window are zero: Generation 0 has
- * no way to learn the real values and must not invent them.
- */
-export const ROUTE_MODEL = {
-  id: "host-model-route",
-  name: "Host model route",
-  api: "workers-ai",
-  provider: "cloudflare-workers-ai",
-  baseUrl: "",
-  reasoning: false,
-  input: ["text"],
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 0,
-  maxTokens: 0,
-} satisfies Model<Api>;
-
-const ZERO_USAGE = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-} as const;
+export { ROUTE_MODEL } from "./stream-assembler.js";
 
 /**
  * Narrows one Pi message to the text-only shape the model route's closed message union can carry,
@@ -90,19 +60,6 @@ function routableTools(tools: Context["tools"]): readonly PiTool[] {
   }));
 }
 
-function assistantShell(stopReason: AssistantMessage["stopReason"]): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [],
-    api: ROUTE_MODEL.api,
-    provider: ROUTE_MODEL.provider,
-    model: ROUTE_MODEL.id,
-    usage: ZERO_USAGE,
-    stopReason,
-    timestamp: Date.now(),
-  };
-}
-
 function endedStream(reason: "error" | "aborted", detail: string): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
   stream.push({
@@ -113,68 +70,197 @@ function endedStream(reason: "error" | "aborted", detail: string): AssistantMess
   return stream;
 }
 
-function failedStream(detail: string): AssistantMessageEventStream {
-  return endedStream("error", detail);
+/** Indirection so TypeScript does not (wrongly) assume `signal.aborted` cannot flip true across
+ * an `await` just because nothing in this function's own body reassigns it. */
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }
 
-async function streamOnce(
+/**
+ * Read one line of NDJSON the model route emits and narrow it to {@link ModelStreamEvent}. This
+ * hop is internal (both ends live in this generation's own code, one Worker RPC apart), so this is
+ * a shape check against a closed union rather than the untrusted-provider parsing `model-route.ts`
+ * already did; an unrecognized `type` still degrades to a terminal error instead of throwing.
+ */
+function parseStreamEventLine(line: string): ModelStreamEvent | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: one decoded NDJSON line from the model route's own stream.
+  if (parsed === null || typeof parsed !== "object" || !("type" in parsed)) return undefined;
+  const { type } = parsed;
+  if (type === "text-delta" || type === "tool-call-delta" || type === "done" || type === "error") {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `type` narrowed to every member of the closed ModelStreamEvent union above.
+    return parsed as ModelStreamEvent;
+  }
+  return undefined;
+}
+
+function applyModelStreamEvent(
+  event: ModelStreamEvent,
+  assembler: TurnAssembler,
+  stream: AssistantMessageEventStream,
+): void {
+  switch (event.type) {
+    case "text-delta":
+      assembler.textDelta(event.delta, stream);
+      return;
+    case "tool-call-delta":
+      assembler.toolCallDelta(event.delta, stream);
+      return;
+    case "done": {
+      const assistant = routeResponseToPiAssistant({ ok: true, message: event.message });
+      if (isResponseError(assistant)) {
+        assembler.fail(stream, "error", assistant.detail);
+        return;
+      }
+      assembler.finish(stream, {
+        ...assistantShell(
+          assistant.stopReason === "toolUse" ? "toolUse" : "stop",
+          [...assistant.content],
+          toPiUsage(event.usage),
+        ),
+        timestamp: assistant.timestamp,
+      });
+      return;
+    }
+    case "error":
+      assembler.fail(stream, "error", event.error.code);
+      return;
+    default: {
+      // oxlint-disable-next-line eslint/no-underscore-dangle -- Exhaustiveness guard: underscore signals the value is never reached.
+      const _exhaustive: never = event;
+      void _exhaustive;
+    }
+  }
+}
+
+/**
+ * Read one decoded NDJSON line at a time from the model route's stream, translate each into
+ * `assembler`'s Pi events, and stop at the first `done`/`error` event or when `signal` aborts.
+ */
+async function pumpModelStream(
+  modelStream: ReadableStream<Uint8Array>,
+  assembler: TurnAssembler,
+  stream: AssistantMessageEventStream,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const reader = modelStream.getReader();
+  const abort = () => {
+    reader.cancel().catch(() => {
+      /* the stream already ended or failed; nothing more to release */
+    });
+  };
+  signal?.addEventListener("abort", abort, { once: true });
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      if (isAborted(signal)) {
+        assembler.fail(stream, "aborted", "the turn was cancelled");
+        return;
+      }
+      const next = await reader.read();
+      if (next.done) {
+        if (isAborted(signal)) {
+          assembler.fail(stream, "aborted", "the turn was cancelled");
+          return;
+        }
+        break;
+      }
+      buffer += decoder.decode(next.value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim() === "") continue;
+        const event = parseStreamEventLine(line);
+        if (event === undefined) continue;
+        applyModelStreamEvent(event, assembler, stream);
+        if (event.type === "done" || event.type === "error") return;
+      }
+    }
+    // The provider stream closed without a terminal event: nothing more will arrive.
+    assembler.fail(stream, "error", "the model route ended its stream without a result");
+  } catch {
+    assembler.fail(stream, "error", "the model route did not answer");
+  } finally {
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
+async function driveModelStream(
+  model: ModelCapability,
+  request: Parameters<ModelCapability["runStream"]>[0],
+  assembler: TurnAssembler,
+  stream: AssistantMessageEventStream,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  let outcome: ReadableStream<Uint8Array> | ValidationFailure;
+  try {
+    outcome = await model.runStream(request);
+  } catch {
+    assembler.fail(stream, "error", "the model route did not answer");
+    return;
+  }
+  if (!(outcome instanceof ReadableStream)) {
+    assembler.fail(stream, "error", outcome.error.reason);
+    return;
+  }
+  await pumpModelStream(outcome, assembler, stream, signal);
+}
+
+function streamOnce(
   model: ModelCapability,
   context: Context,
-): Promise<AssistantMessageEventStream> {
+  signal: AbortSignal | undefined,
+): AssistantMessageEventStream {
+  const stream = createAssistantMessageEventStream();
   const messages = routableMessages(context.messages);
-  if (messages === undefined) return failedStream("the conversation holds non-text content");
+  if (messages === undefined) {
+    stream.push({
+      type: "error",
+      reason: "error",
+      error: {
+        ...assistantShell("error"),
+        errorMessage: "the conversation holds non-text content",
+      },
+    });
+    return stream;
+  }
 
   const request = piContextToRouteRequest(
     context.systemPrompt === undefined
       ? { messages, tools: routableTools(context.tools) }
-      : {
-          systemPrompt: context.systemPrompt,
-          messages,
-          tools: routableTools(context.tools),
-        },
+      : { systemPrompt: context.systemPrompt, messages, tools: routableTools(context.tools) },
   );
 
-  let response;
-  try {
-    response = await model.run(request);
-  } catch {
-    return failedStream("the model route did not answer");
-  }
-  if (!response.ok) return failedStream(response.error.code);
-
-  const assistant = routeResponseToPiAssistant(response);
-  if (isResponseError(assistant)) return failedStream(assistant.detail);
-
-  const message: AssistantMessage = {
-    ...assistantShell(assistant.stopReason === "toolUse" ? "toolUse" : "stop"),
-    content: [...assistant.content],
-    timestamp: assistant.timestamp,
-  };
-  const stream = createAssistantMessageEventStream();
-  stream.push({
-    type: "done",
-    reason: message.stopReason === "toolUse" ? "toolUse" : "stop",
-    message,
-  });
+  const assembler = new TurnAssembler();
+  void driveModelStream(model, request, assembler, stream, signal);
   return stream;
 }
 
 /**
- * Drives Pi's `Agent` from the host model route. The route answers one buffered assistant message
- * per call, so each stream this returns carries exactly one terminal event; nothing here fakes
- * token-by-token deltas the route never produced.
+ * Drives Pi's `Agent` from the host model route. `model.runStream` answers with incremental
+ * events as the provider produces them (E5, E7); this pushes each into Pi's own
+ * `AssistantMessageEvent` protocol as it arrives instead of buffering the whole reply first.
  *
  * Every failure — a route that rejects, reports a model problem, or answers with content this
  * generation cannot represent — becomes an `error` event. Pi records that on the agent's state,
  * which is what turns it into one reported turn problem rather than a thrown turn.
  *
- * An aborted `signal` stops the route being called at all. Pi's own abort unwinds the agent loop
- * at its own checkpoints, which still leaves room for one more model call after a caller has
- * walked away; refusing here is what makes a cancelled turn stop spending.
+ * An aborted `signal` stops the route being called at all when the abort happens before the model
+ * call starts, and stops this route from reading any further chunks when the abort happens
+ * mid-stream: the reader is cancelled and no further model calls are made. It does not prove the
+ * provider itself stops producing tokens for an already-issued inference — Workers AI's binding
+ * exposes no cancellation signal for a call already in flight — so cancellation here bounds what
+ * this route spends afterward, not what the provider does upstream.
  */
 export function createRouteStreamFn(model: ModelCapability, signal?: AbortSignal): StreamFn {
   return (_model, context) =>
     signal?.aborted === true
       ? endedStream("aborted", "the turn was cancelled")
-      : streamOnce(model, context);
+      : streamOnce(model, context, signal);
 }
