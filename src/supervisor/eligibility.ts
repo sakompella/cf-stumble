@@ -1,3 +1,13 @@
+/**
+ * Two questions, two predicates, one file so a later reader sees that they are different.
+ *
+ * `servedSuccessfulResponse` asks whether a generation served a good response, which is ADR-0031's
+ * relay fact and decides whether a generation is known good. `earnsCompletedRealTurnCredit` asks
+ * whether one project turn completed and was saved, which is goal criterion 6's durability fact.
+ * Only the first feeds {@link deriveGenerationEligibility}: a thread-save failure must never make
+ * a healthy harness generation ineligible.
+ */
+
 import { invariant } from "../invariant.js";
 import { parseGenerationLabel } from "./generations/index.js";
 import type { GenerationLabel } from "./generations/index.js";
@@ -38,11 +48,27 @@ export type GenerationEligibilityEvidence = {
   readonly attempts: readonly RelayAttempt[];
 };
 
-type CreditedAttempt = RelayAttempt & {
+type SuccessfulResponseAttempt = RelayAttempt & {
   readonly outcome: "body-completed";
   readonly responseStatus: number;
   readonly finishedAt: number;
 };
+
+/**
+ * The facts one project turn ends with, for the second of the two questions this module answers.
+ *
+ * Read {@link earnsCompletedRealTurnCredit} for what separates them. This record is assembled by
+ * the turn shell (`projects/turn-run.ts`) at the moment the thread commit returns, which is the
+ * only moment at which all three facts are known.
+ */
+export type CompletedRealTurnEvidence = Readonly<{
+  /** The relay attempt this turn was recorded as, with the transport facts it has so far. */
+  attempt: RelayAttempt;
+  /** Pi's terminal frame said `completed`. On its own this is provisional (ADR-0037). */
+  piTerminalSuccess: boolean;
+  /** The thread save for this turn's lease returned committed. Nothing else proves durability. */
+  threadSaveCommitted: boolean;
+}>;
 
 export function selectFallbackGeneration(
   failedGenerationLabel: GenerationLabel,
@@ -105,7 +131,7 @@ export function deriveGenerationEligibility(
   const attempts = evidence.attempts.filter((attempt) =>
     belongsToMostRecentEra(attempt, evidence.generationLabel, activationId, preparationCheck),
   );
-  const credited = attempts.filter((attempt) => isCreditedTurn(attempt));
+  const credited = attempts.filter((attempt) => servedSuccessfulResponse(attempt));
   const observationSpanMs = creditedSpan(credited);
 
   if (attempts.some((attempt) => isFailureObservation(attempt))) {
@@ -136,8 +162,43 @@ function belongsToMostRecentEra(
   );
 }
 
-function isCreditedTurn(attempt: RelayAttempt): attempt is CreditedAttempt {
+/**
+ * Question one: did this generation serve a successful response? This is a transport fact and
+ * ADR-0031's evidence for whether a generation is known good, so it stays exactly what that
+ * decision defines: a completed body under 400 and nothing else. It says nothing about whether a
+ * conversation was saved, and it must not: a thread-save failure is the Supervisor's storage
+ * fault and would make a healthy harness look broken if it were folded in here.
+ */
+function servedSuccessfulResponse(attempt: RelayAttempt): attempt is SuccessfulResponseAttempt {
   return attempt.outcome === "body-completed" && attempt.responseStatus < 400;
+}
+
+/**
+ * Question two: did one real turn complete? This is a durability fact, and it is goal criterion
+ * 6's: "Success requires Pi terminal success and a committed thread save. A rejected, failed,
+ * truncated, cancelled, or unsaved turn earns no completed-real-turn credit."
+ *
+ * The two questions are deliberately not one predicate. {@link servedSuccessfulResponse} decides
+ * whether a generation is trustworthy from what the relay observed; this decides whether the user
+ * got a turn that survived. A turn can serve a flawless 200 and save nothing, and the harness is
+ * still healthy while the turn earned nothing. Merging them would either credit unsaved turns
+ * against goal criterion 6 or make a storage failure count as harness evidence against ADR-0031.
+ *
+ * Transport still has a veto: a stream the browser cancelled, or one that failed after its
+ * headers, did not deliver the turn it saved, so it earns nothing even when the save committed.
+ */
+export function earnsCompletedRealTurnCredit(evidence: CompletedRealTurnEvidence): boolean {
+  return (
+    evidence.piTerminalSuccess &&
+    evidence.threadSaveCommitted &&
+    isDeliveringSuccessfully(evidence.attempt)
+  );
+}
+
+/** The transport half of {@link earnsCompletedRealTurnCredit}, at the moment of the commit. */
+function isDeliveringSuccessfully(attempt: RelayAttempt): boolean {
+  const delivering = attempt.outcome === "pending" || attempt.outcome === "body-completed";
+  return delivering && (attempt.responseStatus === undefined || attempt.responseStatus < 400);
 }
 
 function isFailureObservation(attempt: RelayAttempt): boolean {
@@ -148,7 +209,7 @@ function isFailureObservation(attempt: RelayAttempt): boolean {
   );
 }
 
-function creditedSpan(attempts: readonly CreditedAttempt[]): number {
+function creditedSpan(attempts: readonly SuccessfulResponseAttempt[]): number {
   return attempts.length < 2
     ? 0
     : Math.max(...attempts.map((attempt) => attempt.finishedAt)) -

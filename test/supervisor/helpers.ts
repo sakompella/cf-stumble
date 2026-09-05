@@ -68,6 +68,16 @@ export function connectSampleProjects(control: DurableObjectStub<Supervisor>): P
   });
 }
 
+/**
+ * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
+ * that names a project has to connect it first, exactly as the owner does.
+ */
+export async function connectedSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
+  const control = env.SUPERVISOR.getByName(name);
+  await connectSampleProjects(control);
+  return control;
+}
+
 export async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = env.SUPERVISOR.getByName(name);
   await activateFixtureGeneration(control);

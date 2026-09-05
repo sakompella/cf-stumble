@@ -70,7 +70,7 @@ export function capabilities(route: ModelCapability): Generation0Capabilities {
   return { MODEL: route };
 }
 
-export const OPENING_TURN: FacetTurnRequest = { prompt: "go", state: null };
+export const OPENING_TURN: FacetTurnRequest = { prompt: "go", messages: [] };
 
 export function turnStream(
   route: ModelCapability,

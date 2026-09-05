@@ -32,6 +32,9 @@ export function ownerApiSupervisor(
     startFreshProjectThread(projectId) {
       return Promise.resolve(unknownProjectOr(projectId));
     },
+    runProjectTurn() {
+      return Promise.reject(new Error("this test must not run a project turn"));
+    },
     controlGeneration() {
       return Promise.reject(new Error("this test must not reach generation control"));
     },

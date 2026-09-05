@@ -98,22 +98,22 @@ The project is lopsided. The Supervisor has deliberate generation, relay, eligib
 code. The code it supervises is still incomplete. Most of the passing tests exercise control
 machinery rather than the coding path a user needs.
 
-| Capability                                               | What exists now                                   | What version 0 needs                                                  |
-| -------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
-| Generation labels, status, epoch, and activation history | Implemented and tested locally                    | Keep it. Do not redesign it.                                          |
-| Candidate, activation, and rollback requests             | A journaled implementation is authenticated       | Remove request IDs and the request journal; keep epoch checks.        |
-| Bounded startup check                                    | Implemented and tested locally                    | Run it against real candidate module maps.                            |
-| Active-generation facet serving                          | Works locally with `src/facet/fixture.ts`         | Load a real Pi-based main facet.                                      |
-| Relay attempts and eligibility                           | Implemented and tested locally                    | Credit only terminal streamed turns whose thread state was saved.     |
-| Recovery episode bookkeeping                             | Implemented and tested locally                    | Show the latest report if useful. Do not add automatic repair.        |
-| R2 binding                                               | Configured and smoke-tested locally               | Add the cache and the Computer rebuild path.                          |
-| Pi 0.84.4 fork                                           | Vendored and checked                              | Run it in the main facet.                                             |
-| Computer source and image pair                           | Pinned and tested separately on a paid account    | Add the workspace host and the runtime adapter to this repository.    |
-| Coding-agent loop                                        | Missing                                           | Complete one real edit-and-test turn.                                 |
-| Project threads                                          | One thread per catalog project, keyed server-side | Drive a turn through the thread lease and stream it to the browser.   |
-| Model access                                             | Missing                                           | Add one fixed route whose credential stays outside the mutable facet. |
-| Tenant page and HTTP routes                              | Missing                                           | Add identity routing, chat, status, candidate check, and rollback.    |
-| Paid deployment                                          | Missing                                           | Run the complete demo in the paid runtime.                            |
+| Capability                                               | What exists now                                                              | What version 0 needs                                                                                      |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Generation labels, status, epoch, and activation history | Implemented and tested locally                                               | Keep it. Do not redesign it.                                                                              |
+| Candidate, activation, and rollback requests             | A journaled implementation is authenticated                                  | Remove request IDs and the request journal; keep epoch checks.                                            |
+| Bounded startup check                                    | Implemented and tested locally                                               | Run it against real candidate module maps.                                                                |
+| Active-generation facet serving                          | Serves the active generation's retained module map; the fixture is test-only | Prove it in the paid runtime.                                                                             |
+| Relay attempts and eligibility                           | Implemented and tested locally                                               | Done: a turn earns completed-real-turn credit only after Pi terminal success and a committed thread save. |
+| Recovery episode bookkeeping                             | Implemented and tested locally                                               | Show the latest report if useful. Do not add automatic repair.                                            |
+| R2 binding                                               | Configured and smoke-tested locally                                          | Add the cache and the Computer rebuild path.                                                              |
+| Pi 0.84.4 fork                                           | Vendored and checked                                                         | Run it in the main facet.                                                                                 |
+| Computer source and image pair                           | Pinned and tested separately on a paid account                               | Add the workspace host and the runtime adapter to this repository.                                        |
+| Coding-agent loop                                        | One Pi turn with tools, streamed and saved, tested locally                   | Complete one real edit-and-test turn in the paid runtime.                                                 |
+| Project threads                                          | One thread per catalog project, keyed server-side                            | Done: one turn entry admits the lease, streams the turn, and saves it server-side.                        |
+| Model access                                             | Missing                                                                      | Add one fixed route whose credential stays outside the mutable facet.                                     |
+| Tenant page and HTTP routes                              | Identity routing, status, generation control, project and turn routes        | Add the page that reads the turn stream.                                                                  |
+| Paid deployment                                          | Missing                                                                      | Run the complete demo in the paid runtime.                                                                |
 
 ## P0: prove the paid Cloudflare path
 
@@ -259,6 +259,8 @@ Do cleanup as its replacement begins to work. Starting with cleanup would postpo
 2. Run every paid probe before writing code that assumes its result.
 3. When Cloudflare differs from the design, record the observed and expected behavior, then stop and decide. Do not add a fake or a second architecture from speculation.
 4. Do not expand recovery, eligibility, or generation policy while the main facet remains a fixture.
+   Recording that a turn was saved is not such an expansion: it is a separate durable fact that
+   eligibility does not read, and the known-good thresholds stay where ADR-0031 left them.
 5. Use Pi's existing thread, streaming, tool, and compaction logic. Add project identity as the only
    new user-selected routing dimension; keep one model and one application page.
 6. Release the demo once it passes. Put later ideas in a later plan.

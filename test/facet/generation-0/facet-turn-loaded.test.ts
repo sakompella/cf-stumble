@@ -93,7 +93,7 @@ function makeWorkspace() {
   return { provider, execBackend, target };
 }
 
-const OPENING: FacetTurnRequest = { prompt: "Change the file.", state: null };
+const OPENING: FacetTurnRequest = { prompt: "Change the file.", messages: [] };
 
 afterEach(async () => {
   await reset();

@@ -132,7 +132,8 @@ export class RelayAttempts {
       .map((row) => attemptFromRow(row));
   }
 
-  private byId(attemptId: number): RelayAttempt | undefined {
+  /** One attempt as it currently stands. The turn path reads its own attempt at the commit. */
+  byId(attemptId: number): RelayAttempt | undefined {
     const row = this.sql
       .exec<AttemptRow>(
         `SELECT id, generation_label, activation_id, preparation_check_id, started_at,

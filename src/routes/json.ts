@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "invalid-activation-request"
   | "invalid-rollback-request"
   | "invalid-connect-request"
+  | "invalid-turn-request"
   | "cross-origin-request"
   | "not-found"
   | "internal-error";

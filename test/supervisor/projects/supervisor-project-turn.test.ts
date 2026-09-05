@@ -1,56 +1,66 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
-import { sampleProjectOne } from "../../project-fixtures.js";
-import { activateFixtureGeneration, connectSampleProjects } from "../helpers.js";
-import type {
-  ProjectTurnRequest,
-  ProjectTurnStart,
-} from "../../../src/supervisor/projects/index.js";
+import { activateFixtureGeneration, connectedSupervisor as supervisor } from "../helpers.js";
+import type { ProjectTurnRun } from "../../../src/supervisor/projects/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 /**
  * The real Supervisor Durable Object, its real Workspace Host binding, and no capability supplied
- * by this test. `streamProjectTurn` takes a project id and a turn request and nothing else: there
- * is no parameter through which a capability, a tenant, or a workspace name could arrive, so
- * whatever reaches the generation the Supervisor named and obtained itself.
+ * by this test. `runProjectTurn` takes a project id and a prompt and nothing else: there is no
+ * parameter through which a capability, a tenant, a workspace name, a conversation, or a lease
+ * could arrive, so whatever reaches the generation the Supervisor named and obtained itself.
  */
-
-const request: ProjectTurnRequest = {
-  projectId: sampleProjectOne.id,
-  request: { prompt: "do the work", state: null },
-};
-
-/**
- * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
- * that names a project has to connect it first, exactly as the owner does.
- */
-async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
-  const control = env.SUPERVISOR.getByName(name);
-  await connectSampleProjects(control);
-  return control;
-}
 
 afterEach(async () => {
   await reset();
 });
 
-test("the turn surface accepts a project id and a request, and never a tenant or capability", () => {
-  expectTypeOf<Parameters<Supervisor["streamProjectTurn"]>>().toEqualTypeOf<[ProjectTurnRequest]>();
-  expectTypeOf<ProjectTurnRequest>().toEqualTypeOf<{
-    readonly projectId: unknown;
-    readonly request: unknown;
-  }>();
+test("the turn surface accepts a project id and a prompt, and never a tenant or capability", () => {
+  expectTypeOf<Parameters<Supervisor["runProjectTurn"]>>().toEqualTypeOf<[unknown, unknown]>();
 });
 
-test("a Supervisor with nothing serving refuses the turn", async () => {
+test("a Supervisor with nothing serving refuses the turn and records no evidence", async () => {
   const control = await supervisor("project-turn-without-a-generation");
 
-  const refused: ProjectTurnStart = await control.streamProjectTurn(request);
+  const refused: ProjectTurnRun = await control.runProjectTurn("sample-project-one", "do the work");
 
-  expect(refused).toEqual({ ok: false, reason: "no-active-generation" });
+  expect(refused).toEqual({ ok: false, problem: { code: "no-active-generation" } });
+  // ADR-0031: an attempt attributed to no generation is evidence about none, so none is written.
+  expect(await control.getRelayAttempts()).toEqual([]);
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { turnActive: false, revision: 0 },
+  });
+});
+
+test("a prompt that is not a turn takes no lease and reaches no generation", async () => {
+  const control = await supervisor("project-turn-empty-prompt");
+  await activateFixtureGeneration(control);
+
+  const refused = await control.runProjectTurn("sample-project-one", "   ");
+
+  expect(refused).toEqual({ ok: false, problem: { code: "invalid-prompt" } });
+  expect(await control.getRelayAttempts()).toEqual([]);
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { turnActive: false },
+  });
+});
+
+test("a project the catalog does not have reaches no thread and no workspace", async () => {
+  const control = await supervisor("project-turn-unknown-project");
+  await activateFixtureGeneration(control);
+
+  expect(await control.runProjectTurn("project-nine", "do the work")).toEqual({
+    ok: false,
+    problem: { code: "unknown-project-id" },
+  });
+  expect(await control.runProjectTurn({ id: "sample-project-one" }, "do the work")).toEqual({
+    ok: false,
+    problem: { code: "invalid-project-id" },
+  });
 });
 
 /**
@@ -60,11 +70,23 @@ test("a Supervisor with nothing serving refuses the turn", async () => {
  * and this runtime has none. A test-supplied capability could not produce this outcome; only the
  * Supervisor reaching for its own binding can.
  */
-test("a serving Supervisor goes on to obtain the capability from its own binding", async () => {
+test("a serving Supervisor obtains the capability itself, and releases the lease when it cannot", async () => {
   const control = await supervisor("project-turn-reaches-the-workspace-binding");
   await activateFixtureGeneration(control);
 
-  const refused: ProjectTurnStart = await control.streamProjectTurn(request);
+  const refused = await control.runProjectTurn("sample-project-one", "do the work");
 
-  expect(refused).toEqual({ ok: false, reason: "workspace-unavailable" });
+  expect(refused).toEqual({ ok: false, problem: { code: "workspace-unavailable" } });
+  // The turn slot is free again: a turn that never started must not hold the thread until its
+  // lease expires, and the next admission must not have to wait for it.
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { turnActive: false, revision: 0 },
+  });
+  // A generation was serving when the turn could not start, so the failure is recorded against it
+  // exactly as a mount failure is (ADR-0031), and it earned no completed-real-turn credit.
+  expect(await control.getRelayAttempts()).toMatchObject([
+    { generationLabel: 0, outcome: "pre-header-failure" },
+  ]);
+  expect(await control.getCompletedRealTurns()).toEqual([]);
 });

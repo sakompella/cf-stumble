@@ -1,11 +1,11 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { connectSampleProjects } from "../helpers.js";
+import { connectedSupervisor as supervisor } from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
+import { abandonProjectTurn, finishProjectTurn, startProjectTurn } from "./turn-slot.js";
 
 /**
  * Turn completion is keyed by the lease that admitted the turn.
@@ -23,23 +23,14 @@ const AFTER_LEASE = NOW + LEASE_MS;
 const turnA = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
 const turnB = [...turnA, THREAD_MESSAGE_SAMPLES.bashExecution];
 
-/**
- * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
- * that names a project has to connect it first, exactly as the owner does.
- */
-async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
-  const control = env.SUPERVISOR.getByName(name);
-  await connectSampleProjects(control);
-  return control;
-}
-
 /** Admit a turn and keep the lease it returns, which is the only key its completion accepts. */
 async function admit(
   control: DurableObjectStub<Supervisor>,
   expectedRevision: number,
   now: number,
 ): Promise<string> {
-  const started = await control.startProjectTurn(
+  const started = await startProjectTurn(
+    control,
     "sample-project-one",
     expectedRevision,
     now,
@@ -68,13 +59,14 @@ test("a finish presenting a lease the store never issued is refused", async () =
   const control = await supervisor("turn-lease-invented");
   const lease = await admit(control, 0, NOW);
 
-  const invented = await control.finishProjectTurn(
+  const invented = await finishProjectTurn(
+    control,
     "sample-project-one",
     "lease-of-my-own",
     turnA,
     NOW,
   );
-  const admitted = await control.finishProjectTurn("sample-project-one", lease, turnA, NOW);
+  const admitted = await finishProjectTurn(control, "sample-project-one", lease, turnA, NOW);
 
   expect(invented).toEqual({
     ok: false,
@@ -87,8 +79,8 @@ test("an abandon presenting a lease the store never issued is refused", async ()
   const control = await supervisor("turn-lease-invented-abandon");
   const lease = await admit(control, 0, NOW);
 
-  const invented = await control.abandonProjectTurn("sample-project-one", "lease-of-my-own");
-  const admitted = await control.abandonProjectTurn("sample-project-one", lease);
+  const invented = await abandonProjectTurn(control, "sample-project-one", "lease-of-my-own");
+  const admitted = await abandonProjectTurn(control, "sample-project-one", lease);
 
   expect(invented).toEqual({
     ok: false,
@@ -101,13 +93,15 @@ test("a late finish from the replaced turn cannot save into the turn that took o
   const control = await supervisor("turn-lease-late-finish");
   const { leaseA, leaseB } = await takenOver(control);
 
-  const lateFinish = await control.finishProjectTurn(
+  const lateFinish = await finishProjectTurn(
+    control,
     "sample-project-one",
     leaseA,
     turnA,
     AFTER_LEASE,
   );
-  const ownFinish = await control.finishProjectTurn(
+  const ownFinish = await finishProjectTurn(
+    control,
     "sample-project-one",
     leaseB,
     turnB,
@@ -128,9 +122,10 @@ test("a late abandon from the replaced turn cannot free the slot the takeover ho
   const control = await supervisor("turn-lease-late-abandon");
   const { leaseA, leaseB } = await takenOver(control);
 
-  const lateAbandon = await control.abandonProjectTurn("sample-project-one", leaseA);
+  const lateAbandon = await abandonProjectTurn(control, "sample-project-one", leaseA);
   const stillHeld = await control.getProjectThread("sample-project-one");
-  const ownFinish = await control.finishProjectTurn(
+  const ownFinish = await finishProjectTurn(
+    control,
     "sample-project-one",
     leaseB,
     turnB,
@@ -151,10 +146,10 @@ test("a late abandon from the replaced turn cannot free the slot the takeover ho
 test("a lease dies with the turn it admitted and cannot be presented twice", async () => {
   const control = await supervisor("turn-lease-spent");
   const lease = await admit(control, 0, NOW);
-  await control.finishProjectTurn("sample-project-one", lease, turnA, NOW);
+  await finishProjectTurn(control, "sample-project-one", lease, turnA, NOW);
 
-  const replayedFinish = await control.finishProjectTurn("sample-project-one", lease, turnB, NOW);
-  const replayedAbandon = await control.abandonProjectTurn("sample-project-one", lease);
+  const replayedFinish = await finishProjectTurn(control, "sample-project-one", lease, turnB, NOW);
+  const replayedAbandon = await abandonProjectTurn(control, "sample-project-one", lease);
 
   expect(replayedFinish).toEqual({
     ok: false,
@@ -174,7 +169,7 @@ test("the turn that owns an expired lease may still release the slot nobody took
   const control = await supervisor("turn-lease-expired-abandon");
   const lease = await admit(control, 0, NOW);
 
-  const released = await control.abandonProjectTurn("sample-project-one", lease);
+  const released = await abandonProjectTurn(control, "sample-project-one", lease);
 
   expect(released).toMatchObject({ ok: true, thread: { turnActive: false, revision: 0 } });
 });
@@ -182,10 +177,10 @@ test("the turn that owns an expired lease may still release the slot nobody took
 test("a finish holding a completed turn's lease is rejected and leaves the conversation untouched", async () => {
   const control = await supervisor("turn-lease-completed-turn");
   const leaseA = await admit(control, 0, NOW);
-  await control.finishProjectTurn("sample-project-one", leaseA, turnA, NOW);
+  await finishProjectTurn(control, "sample-project-one", leaseA, turnA, NOW);
   await admit(control, 1, NOW);
 
-  const staleFinish = await control.finishProjectTurn("sample-project-one", leaseA, turnB, NOW);
+  const staleFinish = await finishProjectTurn(control, "sample-project-one", leaseA, turnB, NOW);
 
   expect(staleFinish).toEqual({
     ok: false,

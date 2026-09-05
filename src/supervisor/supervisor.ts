@@ -19,8 +19,12 @@ import {
 } from "./eligibility.js";
 import {
   ProjectConnections,
+  runProjectTurn,
   streamProjectTurn,
   tenantWorkspaceName,
+  TurnCredits,
+  type CompletedRealTurnCredit,
+  type FacetTurnHandoff,
   type ConnectRepositoryResult,
   type CredentialWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
@@ -28,9 +32,10 @@ import {
   type GitHubAuthorizationOutcome,
   type GitHubConnectionStatus,
   type ProjectListView,
-  type ProjectTurnRequest,
+  type ProjectTurnRun,
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
+  type TurnAttribution,
 } from "./projects/index.js";
 import {
   Generations,
@@ -40,11 +45,7 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { FacetRelay, RelayAttempts, type RelayAttempt } from "./relay/index.js";
-import {
-  ProjectThreads,
-  type ProjectThreadResult,
-  type ProjectTurnLeaseResult,
-} from "./threads/index.js";
+import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -84,11 +85,37 @@ type SupervisorEnv = {
 /** How long one turn may hold a project's thread before another caller may take the slot over. */
 export const PROJECT_TURN_LEASE_MS = 5 * 60 * 1_000;
 
+/**
+ * How long the Supervisor waits for a generation to start and then finish one turn.
+ *
+ * The bound exists because a disconnect signal may never arrive and a facet or its host may be
+ * lost mid-turn: without it, a turn holds its lease until the lease expires and the browser waits
+ * on a stream nobody will write to. It sits below {@link PROJECT_TURN_LEASE_MS} so the deadline
+ * fires while the turn still owns the lease it must release, rather than after a later admission
+ * has taken the slot over.
+ *
+ * The number is four minutes, and it is a choice made from the timings that exist rather than a
+ * measurement of a turn. A turn does not build a harness: it mounts the active generation's
+ * cached module map, so the cold-build figures apply to preparing a generation and not to this
+ * bound. What applies is the workspace cold start, which paid evidence E8 recorded at 2.6-2.9 s
+ * on the pinned Computer pair, plus the turn's own work, which is bounded by `MAX_MODEL_CALLS`
+ * model calls with tool execution between them. Four minutes leaves room for that and still fails
+ * fast enough to give the project back while a person is waiting.
+ *
+ * T1a measured the harness build chain locally at 12-15 s with an empty store and recommends 900 s
+ * as its container ceiling until measured; T1b is the paid probe that would replace both that
+ * ceiling and this bound with observed numbers, and T1b has not run. So this stands as a stated
+ * choice, and the disconnect and deadline measurement remains open (T9 criterion 10).
+ */
+export const PROJECT_TURN_DEADLINE_MS = 4 * 60 * 1_000;
+
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
   private readonly generations: Generations;
   private readonly artifacts: HarnessArtifacts;
   private readonly relayAttempts: RelayAttempts;
+  /** The durable ledger of completed real turns, which is a different fact from relay evidence. */
+  private readonly credits: TurnCredits;
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
   private readonly threads: ProjectThreads;
@@ -108,6 +135,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
     this.control = new GenerationControl(this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
+    this.credits = new TurnCredits(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
     this.connections = new ProjectConnections({
@@ -311,53 +339,56 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * Take the project's turn slot and receive the lease that may complete it. The lease id is
-   * minted in storage and returned once, here: a caller cannot name a turn, only return the id it
-   * was admitted with.
+   * Run one authenticated project turn and stream it: admit the turn, run it on the generation
+   * that serves, save what Pi ended with, and decide whether it earned a completed-real-turn
+   * credit — all on this side of the boundary.
+   *
+   * A client sends a project id and a prompt. It cannot send a tenant, a conversation, a model,
+   * or a lease: the tenant is this object, the conversation is the thread this object saved, the
+   * model is the route the generation was mounted with, and the lease id is minted at admission
+   * and never leaves. That is why the three lease methods and the bare streaming method this
+   * replaced are gone; a browser that could hold a lease could also finish a turn it did not run.
    */
-  startProjectTurn(
+  runProjectTurn(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
     projectId: unknown,
-    expectedRevision: number,
-    now: number,
-    leaseMs: number,
-  ): ProjectTurnLeaseResult {
-    return this.threads.startTurn(projectId, expectedRevision, now, leaseMs);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the prompt is client text; `runProjectTurn` validates it.
+    prompt: unknown,
+  ): Promise<ProjectTurnRun> {
+    return runProjectTurn({
+      projectId,
+      prompt,
+      threads: this.threads,
+      attempts: this.relayAttempts,
+      credits: this.credits,
+      attribution: () => this.servingAttribution(),
+      start: (project, request) => this.startTurnStream(project, request),
+      now: () => Date.now(),
+      leaseMs: PROJECT_TURN_LEASE_MS,
+      deadlineMs: PROJECT_TURN_DEADLINE_MS,
+    });
   }
 
-  /** Save a turn's conversation. Only the lease that admitted the turn may commit it. */
-  finishProjectTurn(
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
-    projectId: unknown,
-    leaseId: string,
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a conversation arriving over RPC is parsed before it is stored.
-    messages: unknown,
-    now: number,
-  ): ProjectThreadResult {
-    return this.threads.finishTurn(projectId, leaseId, messages, now);
-  }
-
-  /** Give the turn slot back without saving. Only the lease that admitted the turn may do so. */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
-  abandonProjectTurn(projectId: unknown, leaseId: string): ProjectThreadResult {
-    return this.threads.abandonTurn(projectId, leaseId);
+  /**
+   * Every completed real turn this Supervisor has recorded: Pi terminal success with a committed
+   * thread save (goal criterion 6). This is a durability record and not relay evidence, so
+   * `getGenerationEligibility` does not read it and a save failure cannot make a generation
+   * ineligible.
+   */
+  getCompletedRealTurns(): readonly CompletedRealTurnCredit[] {
+    return this.credits.all();
   }
 
   /**
    * Run one turn in the tenant's workspace, in the selected project's directory, and stream it.
    *
-   * This is the other half of a turn from the three lease methods above: they decide who may write
-   * a project's thread, while this one does the work and writes no thread. A caller drives both —
-   * take the lease, stream the turn, then present that lease id with the `state.messages` the
-   * terminal frame carries. Joining them is the next unit's work, because it has to settle what a
-   * disconnected browser leaves behind (ADR-0037) and keep the lease id server-side.
-   *
    * The capability and the selected project's working directory both travel to the generation as
-   * arguments of its `startTurn`; this method receives neither of its own.
+   * arguments of its `startTurn`; nothing here is reachable from a request.
    */
-  streamProjectTurn(input: ProjectTurnRequest): Promise<ProjectTurnStart> {
+  private startTurnStream(projectId: string, request: FacetTurnHandoff): Promise<ProjectTurnStart> {
     return streamProjectTurn({
-      ...input,
+      projectId,
+      request,
       catalog: this.connections.catalog(),
       workspaceName: this.workspaceName,
       namespace: this.env.WORKSPACE_HOST,
@@ -368,14 +399,22 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
-  /** Relay one request to the generation that serves, or serve nothing when none is active. */
-  override async fetch(request: Request): Promise<Response> {
+  /**
+   * The generation a relay attempt is recorded against, read at the moment the work is admitted.
+   * A turn snapshots this once, so an activation while it runs cannot relabel its evidence.
+   */
+  private servingAttribution(): TurnAttribution {
     const active = this.generations.active();
     const preparationCheckId = active.generation
       ? this.generations.latestPreparationCheck(active.generation.label)?.id
       : undefined;
-    const attribution = { active, preparationCheckId };
-    const mainFacet = await this.mountServing(active);
+    return { active, preparationCheckId };
+  }
+
+  /** Relay one request to the generation that serves, or serve nothing when none is active. */
+  override async fetch(request: Request): Promise<Response> {
+    const attribution = this.servingAttribution();
+    const mainFacet = await this.mountServing(attribution.active);
 
     if (mainFacet.isErr()) {
       return this.relay.recordMountFailure(mainFacet.error, attribution);
