@@ -5,10 +5,10 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
-  FakeExecBackend,
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "../../workspace/project/fakes.js";
+import { GitDiffExecBackend } from "./git-diff-exec-backend.js";
 import { calls, encode, readFrames, says } from "./facet-turn-helpers.js";
 import type { FacetTurnRequest } from "../../../src/facet/generation-0/facet-turn.js";
 import type { ModelRouteResponse } from "../../../src/model-route.js";
@@ -88,7 +88,9 @@ class DisposableProjectTarget extends ProjectRpcTarget {
 
 function makeWorkspace() {
   const provider = new FakeProjectFilesystemProvider();
-  const execBackend = new FakeExecBackend();
+  // The turn ends by asking this workspace what it changed, so its exec backend answers that one
+  // command itself; every other command still waits for the test to drive it.
+  const execBackend = new GitDiffExecBackend(provider);
   const target = new DisposableProjectTarget(provider, new FakeProjectTransactions(), execBackend);
   return { provider, execBackend, target };
 }
@@ -156,7 +158,7 @@ test("the turn runs a command through the capability and reads its byte-framed o
     command: "echo hi",
     cwd: "/workspace",
   });
-  const handle = workspace.execBackend.handles[0]!;
+  const handle = workspace.execBackend.commands.handles[0]!;
   handle.push({ name: "stdout", data: encode("hi\n") });
   // oxlint-disable-next-line unicorn/prefer-single-call -- `push` queues one exec event per call, not array elements to merge.
   handle.push({ name: "exit", exitCode: 0 });

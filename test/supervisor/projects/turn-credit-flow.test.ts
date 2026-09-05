@@ -92,6 +92,25 @@ test("a completed turn is saved first, then reported, and earns exactly one cred
   ]);
 });
 
+test("the turn's own diff reaches the browser, and an unavailable one says why", async () => {
+  const control = await supervisor("turn-diff-forwarded");
+  await activateFixtureGeneration(control);
+
+  const observed = await runScriptedTurn(control, {
+    frames: [
+      { kind: "diff", content: "diff --git a/notes.md b/notes.md\n+a line", truncated: false },
+      { kind: "diff-unavailable", detail: "fatal: not a git repository" },
+      { kind: "completed", state: { messages: conversation } },
+    ],
+  });
+
+  expect(observed.frames.slice(0, 2)).toEqual([
+    { kind: "diff", content: "diff --git a/notes.md b/notes.md\n+a line", truncated: false },
+    { kind: "diff-unavailable", detail: "fatal: not a git repository" },
+  ]);
+  expect(observed.frames.at(-1)).toMatchObject({ kind: "saved", credited: true });
+});
+
 test("a turn whose save fails reports no success and earns no credit", async () => {
   const control = await supervisor("turn-save-fails");
   await activateFixtureGeneration(control);

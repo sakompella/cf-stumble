@@ -9,8 +9,13 @@ import type { PiAgentTurnState } from "./pi-agent-turn.js";
  *
  * `text` is incremental: one frame per delta the route produced, so a reader renders a reply as it
  * arrives. `tool-start` carries the arguments the model chose, and `tool-result` carries the
- * bounded text the tool answered with, which is what shows a command's output and a repository
- * diff (goal criterion 4).
+ * bounded text the tool answered with, which is what shows a command's output.
+ *
+ * `diff` is the turn's own statement about what it changed (goal criterion 4). It is not a tool
+ * result: the harness runs the diff itself after the model has stopped, so a turn that touched
+ * files shows its work whether or not the model asked for it. `diff-unavailable` carries the
+ * reason the repository could not answer, because "the diff is missing" and "the diff is empty"
+ * are different facts.
  *
  * Exactly one terminal frame ends a stream, and the three kinds are different facts. `rejected`
  * means no turn ran, so there is no conversation to keep. `completed` and `failed` both carry the
@@ -35,6 +40,8 @@ export type FacetTurnFrame =
       content: string;
       truncated: boolean;
     }>
+  | Readonly<{ kind: "diff"; content: string; truncated: boolean }>
+  | Readonly<{ kind: "diff-unavailable"; detail: string }>
   | Readonly<{ kind: "completed"; state: PiAgentTurnState }>
   | Readonly<{ kind: "failed"; code: "model-call-limit" | "model-error"; state: PiAgentTurnState }>
   | Readonly<{ kind: "rejected"; code: "invalid-project-capability" | "invalid-turn-request" }>;

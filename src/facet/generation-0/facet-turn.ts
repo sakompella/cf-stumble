@@ -4,10 +4,12 @@ import { createPiAgentTurnState, runPiAgentTurn } from "./pi-agent-turn.js";
 import { leaseProjectCapability, type ProjectCapabilityLease } from "./project-capability.js";
 import { createRouteStreamFn, ROUTE_MODEL } from "./route-stream.js";
 import { TurnFrames } from "./turn-frames.js";
+import { mutatesWorkspace, readWorkspaceDiff } from "./workspace-diff.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { Generation0Capabilities } from "./capabilities.js";
 import type { PiAgentTurnOutcome } from "./pi-agent-turn.js";
 import type { FacetTurnFrame } from "./turn-frames.js";
+import type { WorkspaceDiff } from "./workspace-diff.js";
 
 export type { FacetTurnRequest } from "./facet-turn-request.js";
 export type { FacetTurnFrame } from "./turn-frames.js";
@@ -24,6 +26,12 @@ function outcomeFrame(outcome: PiAgentTurnOutcome): FacetTurnFrame {
     : { kind: "failed", code: outcome.problem.code, state: outcome.state };
 }
 
+function diffFrame(diff: WorkspaceDiff): FacetTurnFrame {
+  return diff.available
+    ? { kind: "diff", content: diff.content, truncated: diff.truncated }
+    : { kind: "diff-unavailable", detail: diff.detail };
+}
+
 async function pumpTurn(
   capabilities: Generation0Capabilities,
   lease: ProjectCapabilityLease,
@@ -33,18 +41,31 @@ async function pumpTurn(
   publish: (frame: FacetTurnFrame) => void,
 ): Promise<void> {
   const frames = new TurnFrames();
+  const env = createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability });
+  let touchedFiles = false;
   const outcome = await runPiAgentTurn({
     prompt: request.prompt,
     // The conversation arrives from the host's saved thread; everything else about the state is
     // this generation's own, so it is built here rather than accepted from a request.
     state: { ...createPiAgentTurnState(ROUTE_MODEL), messages: [...request.messages] },
-    env: createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability }),
+    env,
     streamFn: createRouteStreamFn(capabilities.MODEL, signal),
     onEvent: (event) => {
-      for (const frame of frames.frames(event)) publish(frame);
+      for (const frame of frames.frames(event)) {
+        if (frame.kind === "tool-start" && mutatesWorkspace(frame.toolName)) touchedFiles = true;
+        publish(frame);
+      }
     },
     signal,
   });
+
+  // The turn's own diff, asked for here rather than in the system prompt (goal criterion 4). It
+  // runs after the model has stopped and before the terminal frame, so a turn that used a tool
+  // which can change a file ends by showing what changed even when the model never mentioned it.
+  // A failed turn gets one too: it may have changed files before it failed.
+  if (touchedFiles && !signal.aborted) {
+    publish(diffFrame(await readWorkspaceDiff(env, signal)));
+  }
   publish(outcomeFrame(outcome));
 }
 

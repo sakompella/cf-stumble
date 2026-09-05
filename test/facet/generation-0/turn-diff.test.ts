@@ -4,66 +4,117 @@ import {
   TOOL_RESULT_DISPLAY_MAX_LINES,
 } from "../../../src/facet/generation-0/index.js";
 import { FakeProjectCapability } from "./fake-project-capability.js";
-import { calls, readFrames, says, ScriptedRoute, turnStream } from "./facet-turn-helpers.js";
-import { tick } from "./scripted-model.js";
+import {
+  calls,
+  encode,
+  readFrames,
+  says,
+  ScriptedRoute,
+  turnStream,
+} from "./facet-turn-helpers.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/index.js";
+import type { FakeProjectFilesystemProvider } from "../../workspace/project/fakes.js";
 
-/** A diff of the shape `git diff` prints, at whatever size a test asks for. */
-function diffText(hunkLines: number): string {
-  const lines = [
-    "diff --git a/src/app.ts b/src/app.ts",
-    "index 1a2b3c4..5d6e7f8 100644",
-    "--- a/src/app.ts",
-    "+++ b/src/app.ts",
-    `@@ -1,${hunkLines} +1,${hunkLines} @@`,
-  ];
-  for (let line = 0; line < hunkLines; line++) {
-    lines.push(
-      line % 4 === 0 ? `-  const before${line} = ${line};` : `+  const after${line} = ${line};`,
-    );
-  }
-  return `${lines.join("\n")}\n`;
+/**
+ * The diff is a property of the turn, not a hope about the model.
+ *
+ * Round 2 of the review overturned the earlier claim here: the old test scripted the model to run
+ * `git diff` and then hand-fed the stdout it asserted, so it "would still pass with `git diff`
+ * renamed to `cat`". Nothing in these tests tells the model to ask for a diff, and nothing tells
+ * the exec backend what to print. The harness runs the diff itself after the model stops, and
+ * `GitDiffExecBackend` computes it from the provider's real file bytes.
+ */
+
+const APP_BEFORE = ["export function answer() {", "  return 41;", "}", ""].join("\n");
+
+/** A committed workspace: files on disk, and a backend that treats them as the state at HEAD. */
+function workspace(seed: (provider: FakeProjectFilesystemProvider) => void): FakeProjectCapability {
+  const received = FakeProjectCapability.create();
+  seed(received.provider);
+  received.execBackend.commit();
+  return received;
+}
+
+function diffFrame(frames: readonly FacetTurnFrame[]): Extract<FacetTurnFrame, { kind: "diff" }> {
+  const frame = frames.find((candidate) => candidate.kind === "diff");
+  if (frame?.kind !== "diff") throw new Error("the turn must publish its diff");
+  return frame;
 }
 
 function byteLength(text: string): number {
   return new TextEncoder().encode(text).byteLength;
 }
 
-/**
- * Runs a turn whose model asks `bash` for a diff, answers the command with `stdout`, and returns
- * the frames. Nothing here shortcuts the tool: the command reaches the project RPC target's exec
- * backend and its output comes back through the same NDJSON frame reader a real workspace uses.
- */
-async function diffTurn(stdout: string, exitCode = 0): Promise<FacetTurnFrame[]> {
-  const received = FakeProjectCapability.create();
-  const route = new ScriptedRoute([
-    calls("bash", { command: "git diff" }),
-    says("That is what changed."),
-  ]);
-  const frames = readFrames(turnStream(route, received));
-
-  await tick();
-  const handle = received.execBackend.handles[0];
-  if (handle === undefined) throw new Error("the bash tool must have started a command");
-  for (const event of [
-    { name: "stdout" as const, data: new TextEncoder().encode(stdout) },
-    { name: "exit" as const, exitCode },
-  ]) {
-    handle.push(event);
+/** A file of numbered lines, and the same file with every fourth line changed. */
+function numberedLines(count: number, changed: boolean): string {
+  const lines: string[] = [];
+  for (let line = 0; line < count; line++) {
+    lines.push(
+      changed && line % 4 === 0
+        ? `  const after${line} = ${line};`
+        : `  const before${line} = ${line};`,
+    );
   }
-
-  return frames;
+  return `${lines.join("\n")}\n`;
 }
 
-function toolResult(frames: readonly FacetTurnFrame[]) {
-  const frame = frames.find((candidate) => candidate.kind === "tool-result");
-  if (frame?.kind !== "tool-result") throw new Error("the turn must publish a tool result");
-  return frame;
-}
+test("a turn that edits a file shows the diff even though the model never asks for one", async () => {
+  const received = workspace((provider) => {
+    provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
+  });
+  const route = new ScriptedRoute([
+    calls("edit", {
+      path: "app.ts",
+      edits: JSON.stringify([{ oldText: "return 41;", newText: "return 42;" }]),
+    }),
+    says("I changed the answer."),
+  ]);
 
-test("the Pi path produces a repository diff through bash, in one tool-result frame", async () => {
-  const diff = diffText(40);
-  const frames = await diffTurn(diff);
+  const frames = await readFrames(turnStream(route, received));
+
+  expect(frames.map((frame) => frame.kind)).toEqual([
+    "tool-start",
+    "tool-result",
+    "text",
+    "diff",
+    "completed",
+  ]);
+  const asked = frames.some((frame) => frame.kind === "tool-start" && frame.toolName === "bash");
+  expect(asked, "the model ran no command at all").toBe(false);
+
+  const diff = diffFrame(frames);
+  expect(diff.truncated).toBe(false);
+  expect(diff.content).toContain("diff --git a/app.ts b/app.ts");
+  expect(diff.content).toContain("-  return 41;");
+  expect(diff.content).toContain("+  return 42;");
+  // The diff describes the file the turn actually left behind, not a string this test supplied.
+  const written = new TextDecoder().decode(received.provider.readFileSync("/workspace/app.ts"));
+  expect(written).toContain("return 42;");
+});
+
+test("a command that changes nothing produces an empty diff", async () => {
+  const received = workspace((provider) => {
+    provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
+  });
+  received.execBackend.effects.set("./check", () => {});
+  const route = new ScriptedRoute([
+    calls("bash", { command: "./check" }),
+    says("The check passed."),
+  ]);
+
+  const diff = diffFrame(await readFrames(turnStream(route, received)));
+
+  expect(diff.content, "nothing changed, so the repository has nothing to print").toBe("");
+  expect(diff.truncated).toBe(false);
+});
+
+test("a turn that only reads publishes no diff at all", async () => {
+  const received = workspace((provider) => {
+    provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
+  });
+  const route = new ScriptedRoute([calls("read", { path: "app.ts" }), says("That is the file.")]);
+
+  const frames = await readFrames(turnStream(route, received));
 
   expect(frames.map((frame) => frame.kind)).toEqual([
     "tool-start",
@@ -71,48 +122,65 @@ test("the Pi path produces a repository diff through bash, in one tool-result fr
     "text",
     "completed",
   ]);
-  expect(frames[0]).toEqual({
-    kind: "tool-start",
-    toolCallId: "bash-1",
-    toolName: "bash",
-    arguments: { command: "git diff" },
-  });
-
-  const result = toolResult(frames);
-  expect(result.isError).toBe(false);
-  expect(result.truncated).toBe(false);
-  expect(result.content, "a forty-line diff arrives whole").toContain(diff.trimEnd());
 });
 
 /**
- * The stated budget. `turn-policy.ts` bounds a tool-result frame at the same two limits Pi's own
- * tools apply to their output, so a frame never truncates a result Pi already bounded. A diff of a
- * few thousand bytes is nowhere near it; a diff that reaches it is cut and says so.
+ * The stated budget. `turn-policy.ts` bounds the diff frame at the same two limits Pi's own tools
+ * apply to their output, so one frame is never unbounded and a diff that reaches the limit says it
+ * was cut. Both diffs here are computed over real file contents a command rewrote.
  */
-test("a diff just under the frame budget arrives whole, and one over it is bounded and marked", async () => {
+test("a diff under the frame budget arrives whole, and one over it is bounded and marked", async () => {
   expect(TOOL_RESULT_DISPLAY_MAX_BYTES).toBe(51_200);
   expect(TOOL_RESULT_DISPLAY_MAX_LINES).toBe(2_000);
-  expect(byteLength(diffText(40))).toBeLessThan(TOOL_RESULT_DISPLAY_MAX_BYTES / 10);
 
-  const nearBudget = diffText(1_800);
-  expect(byteLength(nearBudget)).toBeLessThan(TOOL_RESULT_DISPLAY_MAX_BYTES);
-  const under = toolResult(await diffTurn(nearBudget));
+  const under = await rewriteTurn(200);
+  expect(byteLength(under.content)).toBeLessThan(TOOL_RESULT_DISPLAY_MAX_BYTES);
   expect(under.truncated).toBe(false);
-  expect(under.content).toContain(nearBudget.trimEnd());
+  expect(under.content).toContain("-  const before0 = 0;");
+  expect(under.content).toContain("+  const after196 = 196;");
 
-  const overBudget = diffText(4_000);
-  expect(byteLength(overBudget)).toBeGreaterThan(TOOL_RESULT_DISPLAY_MAX_BYTES);
-  const over = toolResult(await diffTurn(overBudget));
+  const over = await rewriteTurn(4_000);
   expect(over.truncated).toBe(true);
   expect(byteLength(over.content)).toBeLessThanOrEqual(TOOL_RESULT_DISPLAY_MAX_BYTES);
-  expect(over.content, "the end of a diff is what a reader needs").toContain("const after3999");
+  expect(over.content.split("\n").length).toBeLessThanOrEqual(TOOL_RESULT_DISPLAY_MAX_LINES + 1);
+  expect(over.content, "the end of a diff is what a reader needs").toContain(
+    "+  const after3996 = 3996;",
+  );
 });
 
-test("a failed command is a tool error frame carrying what the command printed", async () => {
-  const frames = await diffTurn("fatal: not a git repository\n", 128);
-  const result = toolResult(frames);
+/** One turn whose `./rewrite` command really rewrites a file of `count` lines in the workspace. */
+async function rewriteTurn(count: number): Promise<Extract<FacetTurnFrame, { kind: "diff" }>> {
+  const received = workspace((provider) => {
+    provider.addFile("/workspace/lines.ts", encode(numberedLines(count, false)));
+  });
+  received.execBackend.effects.set("./rewrite", (provider) => {
+    provider.addFile("/workspace/lines.ts", encode(numberedLines(count, true)));
+  });
+  const route = new ScriptedRoute([
+    calls("bash", { command: "./rewrite" }),
+    says("Rewrote the file."),
+  ]);
+  return diffFrame(await readFrames(turnStream(route, received)));
+}
 
-  expect(result.isError).toBe(true);
-  expect(result.content).toContain("not a git repository");
+test("a workspace that cannot answer says so instead of pretending the turn changed nothing", async () => {
+  const received = workspace((provider) => {
+    provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
+  });
+  received.execBackend.failure = {
+    stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
+    exitCode: 128,
+  };
+  const route = new ScriptedRoute([
+    calls("write", { path: "app.ts", content: "changed" }),
+    says("Wrote it."),
+  ]);
+
+  const frames = await readFrames(turnStream(route, received));
+
+  expect(frames.at(-2)).toEqual({
+    kind: "diff-unavailable",
+    detail: "fatal: not a git repository (or any of the parent directories): .git",
+  });
   expect(frames.at(-1)?.kind).toBe("completed");
 });

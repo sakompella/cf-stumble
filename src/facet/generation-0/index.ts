@@ -13,10 +13,14 @@ export {
   MAX_MODEL_CALLS,
   TOOL_RESULT_DISPLAY_MAX_BYTES,
   TOOL_RESULT_DISPLAY_MAX_LINES,
+  TURN_DIFF_COMMAND,
+  TURN_DIFF_TIMEOUT_SECONDS,
 } from "./turn-policy.js";
+export { mutatesWorkspace, readWorkspaceDiff } from "./workspace-diff.js";
 export type { Generation0Capabilities, ModelCapability } from "./capabilities.js";
 export type { CompactionPolicy } from "./compaction.js";
 export type { TurnInstructions } from "./instructions.js";
 export type { FacetTurnFrame, FacetTurnRequest } from "./facet-turn.js";
 export type { ProjectCapabilityLease } from "./project-capability.js";
+export type { WorkspaceDiff } from "./workspace-diff.js";
 export type { PiAgentTurnOutcome, PiAgentTurnProblem, PiAgentTurnState } from "./pi-agent-turn.js";
