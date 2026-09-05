@@ -15,6 +15,10 @@ import {
   executeWorkspaceRequest,
 } from "./executor.js";
 import {
+  executeGitHubCredentialRequest,
+  type GitHubCredentialResult,
+} from "./github-credential.js";
+import {
   computerExecBackend,
   computerFilesystemProvider,
   computerTransactions,
@@ -113,6 +117,26 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
     return executeProjectProvisionRequest({
+      operations: new ComputerWorkspaceOperations(this.#workspace),
+      request,
+    });
+  }
+
+  /**
+   * Install, inspect, or exercise this workspace's GitHub credential.
+   *
+   * This is where a token enters the workspace and stops. The install writes it to a private
+   * staging file outside every repository, `gh` reads it from there, and the command deletes it;
+   * from then on the credential lives in the ordinary local `gh` configuration and Git's helper
+   * reads it (ADR-0039). Nothing this surface returns carries a token: an install answers with a
+   * word, a status with a state and at most a login name, and a failure with redacted text.
+   *
+   * It is separate from `execute` because `planWorkspaceRequest` runs only the commands the
+   * project configuration names, and a credential install is not one of the repository's checks.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
+  credential(request: unknown): Promise<GitHubCredentialResult> {
+    return executeGitHubCredentialRequest({
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });

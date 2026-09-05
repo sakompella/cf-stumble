@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { deriveSupervisorName } from "../src/access/index.js";
 import { tenantWorkspaceName } from "../src/workspace-names.js";
-import { PROJECT_CATALOG } from "../src/project-catalog.js";
+import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "./project-fixtures.js";
 import { projectDirectory } from "../src/workspace-layout.js";
 
 /**
@@ -21,11 +21,11 @@ test("harness builds and every project of one tenant select the same workspace",
 
   expect(tenantWorkspaceName(await nameFor("owner-1"))).toBe(workspace);
   expect(
-    PROJECT_CATALOG.map((project) => projectDirectory(project.id)),
+    sampleCatalog.map((project) => projectDirectory(project.id)),
     "a project selects a directory inside that one workspace, not a workspace of its own",
   ).toEqual([
-    `/workspace/projects/${PROJECT_CATALOG[0].id}`,
-    `/workspace/projects/${PROJECT_CATALOG[1].id}`,
+    `/workspace/projects/${sampleProjectOne.id}`,
+    `/workspace/projects/${sampleProjectTwo.id}`,
   ]);
 });
 
@@ -46,7 +46,7 @@ test("one identity in two audiences selects two workspaces", async () => {
 test("carries no project id, so no project can name a workspace of its own", async () => {
   const workspace = tenantWorkspaceName(await nameFor("owner-1"));
 
-  for (const project of PROJECT_CATALOG) {
+  for (const project of sampleCatalog) {
     expect(workspace).not.toContain(project.id);
   }
 });

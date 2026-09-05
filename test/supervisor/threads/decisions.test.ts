@@ -6,13 +6,13 @@ import {
   type TurnLeaseClaim,
 } from "../../../src/supervisor/threads/decisions.js";
 import { emptyThread, type ProjectThread } from "../../../src/supervisor/threads/index.js";
-import { PROJECT_CATALOG } from "../../../src/project-catalog.js";
+import { sampleProjectOne } from "../../project-fixtures.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 
 const NOW = 1_000_000;
 const LEASE_MS = 30_000;
 
-const [firstProject] = PROJECT_CATALOG;
+const firstProject = sampleProjectOne;
 const projectId = firstProject.id;
 
 const conversation = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];

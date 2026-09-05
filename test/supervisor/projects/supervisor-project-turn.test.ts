@@ -3,8 +3,8 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
-import { PROJECT_CATALOG } from "../../../src/project-catalog.js";
-import { activateFixtureGeneration } from "../helpers.js";
+import { sampleProjectOne } from "../../project-fixtures.js";
+import { activateFixtureGeneration, connectSampleProjects } from "../helpers.js";
 import type {
   ProjectTurnRequest,
   ProjectTurnStart,
@@ -19,12 +19,18 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
  */
 
 const request: ProjectTurnRequest = {
-  projectId: PROJECT_CATALOG[0].id,
+  projectId: sampleProjectOne.id,
   request: { prompt: "do the work", state: null },
 };
 
-function supervisor(name: string): DurableObjectStub<Supervisor> {
-  return env.SUPERVISOR.getByName(name);
+/**
+ * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
+ * that names a project has to connect it first, exactly as the owner does.
+ */
+async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
+  const control = env.SUPERVISOR.getByName(name);
+  await connectSampleProjects(control);
+  return control;
 }
 
 afterEach(async () => {
@@ -40,7 +46,7 @@ test("the turn surface accepts a project id and a request, and never a tenant or
 });
 
 test("a Supervisor with nothing serving refuses the turn", async () => {
-  const control = supervisor("project-turn-without-a-generation");
+  const control = await supervisor("project-turn-without-a-generation");
 
   const refused: ProjectTurnStart = await control.streamProjectTurn(request);
 
@@ -55,7 +61,7 @@ test("a Supervisor with nothing serving refuses the turn", async () => {
  * Supervisor reaching for its own binding can.
  */
 test("a serving Supervisor goes on to obtain the capability from its own binding", async () => {
-  const control = supervisor("project-turn-reaches-the-workspace-binding");
+  const control = await supervisor("project-turn-reaches-the-workspace-binding");
   await activateFixtureGeneration(control);
 
   const refused: ProjectTurnStart = await control.streamProjectTurn(request);

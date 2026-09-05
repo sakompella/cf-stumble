@@ -9,7 +9,22 @@ import {
   type ProjectTurnLeaseResult,
   type ThreadResult,
 } from "./thread.js";
-import { resolveProject, type Project, type ProjectCatalog } from "../../project-catalog.js";
+import {
+  resolveProject,
+  EMPTY_PROJECT_CATALOG,
+  type Project,
+  type ProjectCatalog,
+} from "../../project-catalog.js";
+
+/**
+ * Where the tenant's catalog comes from, read at each call rather than captured once.
+ *
+ * A Supervisor outlives the list of connected projects: the owner connects a repository while the
+ * object is already running, and the thread surface has to resolve that project on the next
+ * request. A catalog captured in the constructor would answer `unknown-project-id` for it until
+ * the object was evicted.
+ */
+export type ProjectCatalogSource = () => ProjectCatalog;
 
 type ResolvedProject =
   | Readonly<{ ok: true; project: Project }>
@@ -28,9 +43,9 @@ type ResolvedProject =
  */
 export class ProjectThreads {
   private readonly store: ThreadStore;
-  private readonly catalog: ProjectCatalog | undefined;
+  private readonly catalog: ProjectCatalogSource;
 
-  constructor(storage: DurableObjectStorage, catalog?: ProjectCatalog) {
+  constructor(storage: DurableObjectStorage, catalog: ProjectCatalogSource = emptyCatalog) {
     this.store = new ThreadStore(storage);
     this.catalog = catalog;
   }
@@ -93,11 +108,16 @@ export class ProjectThreads {
   }
 
   private resolve(projectId: unknown): ResolvedProject {
-    const resolution = resolveProject(projectId, this.catalog);
+    const resolution = resolveProject(projectId, this.catalog());
     return resolution.ok
       ? { ok: true, project: resolution.project }
       : { ok: false, problem: { code: resolution.reason } };
   }
+}
+
+/** A Supervisor built without a catalog has no projects, so every id is unknown rather than a guess. */
+function emptyCatalog(): ProjectCatalog {
+  return EMPTY_PROJECT_CATALOG;
 }
 
 function serialized(result: ThreadResult): ProjectThreadResult {

@@ -1,5 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
+import type { VerifiedAccessScope } from "../supervisor/projects/index.js";
 import type { ProjectThreadResult } from "../supervisor/threads/index.js";
 import {
   handleGenerationControl,
@@ -8,11 +9,13 @@ import {
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
 import { jsonError } from "./json.js";
+import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { latestRecoveryReportSummary, type RecoveryReportSupervisor } from "./recovery.js";
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
-  RecoveryReportSupervisor & {
+  RecoveryReportSupervisor &
+  ProjectApiSupervisor & {
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
     readonly getProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
     readonly startFreshProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
@@ -85,12 +88,22 @@ async function threadResponse(
  * The Worker calls this only after it verifies Cloudflare Access and derives the Supervisor name.
  * Request data selects only one of the tenant's projects, a generation label, and an epoch within
  * that already-selected Supervisor. It never names a tenant, an identity, or a Durable Object.
+ *
+ * The verified scope arrives as an argument, from the boundary that proved it. It is the same
+ * scope the Supervisor's name was derived from (`access/index.ts`), so the project routes bind an
+ * authorization to an owner without deriving a second opinion of who that owner is.
  */
 export function routeOwnerApiRequest(
   request: Request,
   supervisor: OwnerApiSupervisor,
+  scope: VerifiedAccessScope,
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  const projectRoute = routeProjectApiRequest(request, supervisor, scope);
+  if (projectRoute !== undefined) {
+    return projectRoute;
+  }
+
   const isGet = request.method === "GET";
   const isPost = request.method === "POST";
 

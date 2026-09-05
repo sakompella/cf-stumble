@@ -4,15 +4,18 @@ import {
   planProjectProvision,
   projectProvisionConfiguration,
   projectProvisionStep,
+  type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
+import type { Project } from "../../src/project-catalog.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
-import { PROJECT_CATALOG } from "../../src/project-catalog.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   executeProjectProvisionRequest,
   executeWorkspaceRequest,
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   type CommandOutput,
+  type ProjectProvisionRequest,
   type WorkspaceConfiguration,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -24,7 +27,21 @@ import {
  * which requests are refused, which paths are reachable, and what text the accepted ones produce.
  */
 
-const [projectOne, projectTwo] = PROJECT_CATALOG;
+const projectOne = sampleProjectOne;
+const projectTwo = sampleProjectTwo;
+
+/** One provision request, as the Supervisor sends it: the project it resolved, and a step. */
+function provisionRequest(
+  project: Project,
+  step: ProjectProvisionStepName,
+): ProjectProvisionRequest {
+  return {
+    kind: "provision-project",
+    projectId: project.id,
+    repositoryUrl: project.repositoryUrl,
+    step,
+  };
+}
 
 /** The prefixes the executor stats before it writes, which is one per path component. */
 function pathParts(path: string): string[] {
@@ -92,19 +109,18 @@ function provision(operations: FakeProjectOperations, request: unknown) {
   return executeProjectProvisionRequest({ operations, request });
 }
 
-test("resolves the repository from the catalog, not from the request", () => {
-  const parsed = parseProjectProvisionRequest({
-    kind: "provision-project",
-    projectId: projectOne.id,
-    step: "clone",
-  });
+test("plans the clone from the resolved project the caller sent, and its directory from the id", () => {
+  const parsed = parseProjectProvisionRequest(provisionRequest(projectOne, "clone"));
   if ("ok" in parsed) {
     throw new Error("a catalog project and a planned step must parse");
   }
 
   const planned = planProjectProvisionRequest(parsed);
 
-  expect(parsed.project).toEqual(projectOne);
+  expect(parsed.project).toMatchObject({
+    id: projectOne.id,
+    repositoryUrl: projectOne.repositoryUrl,
+  });
   expect(planned).toEqual({ kind: "run-command", source: cloneSource(), cwd: "/" });
   expect(
     planned,
@@ -113,11 +129,7 @@ test("resolves the repository from the catalog, not from the request", () => {
 });
 
 test("plans the managed instructions as a file the server decides", () => {
-  const parsed = parseProjectProvisionRequest({
-    kind: "provision-project",
-    projectId: projectTwo.id,
-    step: "instructions",
-  });
+  const parsed = parseProjectProvisionRequest(provisionRequest(projectTwo, "instructions"));
   if ("ok" in parsed) {
     throw new Error("a catalog project and a planned step must parse");
   }
@@ -132,18 +144,12 @@ test("plans the managed instructions as a file the server decides", () => {
 test("runs the clone above the project root and writes the instructions beside it", async () => {
   const operations = new FakeProjectOperations();
 
-  await expect(
-    provision(operations, { kind: "provision-project", projectId: projectOne.id, step: "clone" }),
-  ).resolves.toEqual({
+  await expect(provision(operations, provisionRequest(projectOne, "clone"))).resolves.toEqual({
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
   });
   await expect(
-    provision(operations, {
-      kind: "provision-project",
-      projectId: projectOne.id,
-      step: "instructions",
-    }),
+    provision(operations, provisionRequest(projectOne, "instructions")),
   ).resolves.toEqual({ ok: true, result: { kind: "written" } });
 
   expect(operations.calls).toEqual([
@@ -158,9 +164,7 @@ test("reports a failing clone with its exit code instead of continuing", async (
   const operations = new FakeProjectOperations();
   operations.exitCode = 128;
 
-  await expect(
-    provision(operations, { kind: "provision-project", projectId: projectOne.id, step: "clone" }),
-  ).resolves.toEqual({
+  await expect(provision(operations, provisionRequest(projectOne, "clone"))).resolves.toEqual({
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 128 },
   });
@@ -174,23 +178,21 @@ test("refuses a caller supplied repository URL, command, or project", async () =
     [{ kind: "provision-project", projectId: projectOne.id }, "invalid-request"],
     [
       {
-        kind: "provision-project",
-        projectId: projectOne.id,
-        step: "clone",
+        ...provisionRequest(projectOne, "clone"),
         repositoryUrl: "https://example.invalid/attacker/repo.git",
       },
       "invalid-request",
     ],
+    [{ ...provisionRequest(projectOne, "clone"), source: "whoami" }, "invalid-request"],
     [
-      { kind: "provision-project", projectId: projectOne.id, step: "clone", source: "whoami" },
+      { ...provisionRequest(projectOne, "clone"), repositoryUrl: "git@github.com:a/b.git" },
       "invalid-request",
     ],
-    [{ kind: "provision-project", projectId: "no-such-project", step: "clone" }, "invalid-request"],
-    [{ kind: "provision-project", projectId: "../../etc", step: "clone" }, "invalid-request"],
-    [{ kind: "provision-project", projectId: 7, step: "clone" }, "invalid-request"],
+    [{ ...provisionRequest(projectOne, "clone"), projectId: "../../etc" }, "invalid-request"],
+    [{ ...provisionRequest(projectOne, "clone"), projectId: 7 }, "invalid-request"],
     [{ kind: "run-command", command: "check" }, "invalid-request"],
     [{ kind: "read-file", path: "readme.md" }, "invalid-request"],
-    [{ kind: "provision-project", projectId: projectOne.id, step: "whoami" }, "unknown-command"],
+    [{ ...provisionRequest(projectOne, "clone"), step: "whoami" }, "unknown-command"],
   ] as const) {
     await expect(provision(operations, request)).resolves.toEqual({ ok: false, error: { code } });
   }
@@ -203,11 +205,7 @@ test("refuses managed instructions reached through a symbolic link", async () =>
   operations.symlinks.add(MANAGED_AGENT_INSTRUCTIONS_PATH);
 
   await expect(
-    provision(operations, {
-      kind: "provision-project",
-      projectId: projectOne.id,
-      step: "instructions",
-    }),
+    provision(operations, provisionRequest(projectOne, "instructions")),
   ).resolves.toEqual({ ok: false, error: { code: "path-outside-root" } });
   expect(operations.calls.every((call) => call.startsWith("lstat:"))).toBe(true);
 });
@@ -219,7 +217,7 @@ test("keeps provisioning out of the project surface and its check command", asyn
     executeWorkspaceRequest({
       configuration: projectConfiguration,
       operations,
-      request: { kind: "provision-project", projectId: projectOne.id, step: "clone" },
+      request: provisionRequest(projectOne, "clone"),
     }),
   ).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
   await expect(

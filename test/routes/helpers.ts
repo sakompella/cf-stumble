@@ -6,7 +6,17 @@ import {
   serializedThread,
   type ProjectThreadResult,
 } from "../../src/supervisor/threads/index.js";
-import { PROJECT_CATALOG } from "../../src/project-catalog.js";
+import { sampleProjectOne } from "../project-fixtures.js";
+import type { VerifiedAccessScope } from "../../src/supervisor/projects/index.js";
+
+/**
+ * The verified scope the Worker hands the owner API. Boundary tests pass it explicitly, because
+ * the routes take the tenant from the boundary and never from request data.
+ */
+export const ownerScope: VerifiedAccessScope = {
+  identity: "owner-subject",
+  audience: "owner-api-audience",
+};
 
 /** A stand-in Supervisor for boundary tests. Each test overrides only the call it exercises. */
 export function ownerApiSupervisor(
@@ -31,13 +41,28 @@ export function ownerApiSupervisor(
     getLatestRecoveryEpisode() {
       return Promise.resolve(void 0);
     },
+    listProjects() {
+      return Promise.resolve({ projects: [], github: { state: "disconnected" } });
+    },
+    connectProject() {
+      return Promise.reject(new Error("this test must not connect a repository"));
+    },
+    getGitHubConnection() {
+      return Promise.resolve({ state: "disconnected" });
+    },
+    startGitHubAuthorization() {
+      return Promise.reject(new Error("this test must not start a GitHub authorization"));
+    },
+    completeGitHubAuthorization() {
+      return Promise.reject(new Error("this test must not complete a GitHub authorization"));
+    },
     ...overrides,
   };
 }
 
 /** Stands in for the catalog: the first catalog project has a thread, and nothing else does. */
 function unknownProjectOr(projectId: string): ProjectThreadResult {
-  const [firstProject] = PROJECT_CATALOG;
+  const firstProject = sampleProjectOne;
   return projectId === firstProject.id
     ? { ok: true, thread: serializedThread(emptyThread(firstProject.id)) }
     : { ok: false, problem: { code: "unknown-project-id" } };

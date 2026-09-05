@@ -1,5 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
+// oxlint-disable max-lines -- One Durable Object class is one RPC surface: the runtime exposes the
+// methods declared here, so moving a group of them into another file would either hide them from
+// the binding or add a second object to route through. Each method below delegates to the module
+// that owns the work.
+
 import { DurableObject } from "cloudflare:workers";
 import {
   GenerationControl,
@@ -13,8 +18,16 @@ import {
   type GenerationEligibility,
 } from "./eligibility.js";
 import {
+  ProjectConnections,
   streamProjectTurn,
   tenantWorkspaceName,
+  type ConnectRepositoryResult,
+  type CredentialWorkspaceNamespace,
+  type ProvisionWorkspaceNamespace,
+  type VerifiedAccessScope,
+  type GitHubAuthorizationOutcome,
+  type GitHubConnectionStatus,
+  type ProjectListView,
   type ProjectTurnRequest,
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
@@ -53,12 +66,19 @@ import {
   type StartupCheckResult,
 } from "./startup-check/index.js";
 
-// `WORKSPACE_HOST` is one namespace, seen through two narrow views of the tenant's one shared
-// workspace (ADR-0038). Neither view can perform the other's operations.
+// `WORKSPACE_HOST` is one namespace, seen through narrow views of the tenant's one shared
+// workspace (ADR-0038). No view can perform another's operations.
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly MODULE_MAPS: R2Bucket;
-  readonly WORKSPACE_HOST: BuildWorkspaceNamespace & ProjectWorkspaceNamespace;
+  readonly WORKSPACE_HOST: BuildWorkspaceNamespace &
+    ProjectWorkspaceNamespace &
+    CredentialWorkspaceNamespace &
+    ProvisionWorkspaceNamespace;
+  /** The GitHub OAuth app the device flow belongs to. Public configuration, not a secret. */
+  readonly GITHUB_OAUTH_CLIENT_ID?: string;
+  /** The documented test and development credential source. See `docs/agents/design/github-connection.md`. */
+  readonly GH_TOKEN?: string;
 };
 
 /** How long one turn may hold a project's thread before another caller may take the slot over. */
@@ -72,6 +92,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
   private readonly threads: ProjectThreads;
+  /** The tenant's connected repositories, their GitHub authorization, and their provisioning. */
+  private readonly connections: ProjectConnections;
   /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
   private readonly workspaceName: string;
 
@@ -88,8 +110,19 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
-    // T6a's seam: `new ProjectThreads(ctx.storage, catalog)`; a placeholder catalog resolves ids.
-    this.threads = new ProjectThreads(ctx.storage);
+    this.connections = new ProjectConnections({
+      storage: ctx.storage,
+      workspaceName: this.workspaceName,
+      namespace: env.WORKSPACE_HOST,
+      environment: {
+        clientId: env.GITHUB_OAUTH_CLIENT_ID,
+        fallbackToken: env.GH_TOKEN,
+        fetcher: (url, init) => fetch(url, init),
+      },
+    });
+    // One catalog reaches the thread surface and the turn path, read at each call so a repository
+    // connected a moment ago resolves without restarting this object.
+    this.threads = new ProjectThreads(ctx.storage, () => this.connections.catalog());
   }
 
   private modelRoute(): MainFacetCapabilities["MODEL"] {
@@ -214,6 +247,55 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
+   * The tenant's connected repositories, with a GitHub connection status that carries no
+   * credential. This is what the page's project sidebar reads.
+   */
+  listProjects(now: number = Date.now()): Promise<ProjectListView> {
+    return this.connections.list(now);
+  }
+
+  getGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionStatus> {
+    return this.connections.connectionStatus(now);
+  }
+
+  /**
+   * Connect one GitHub repository to this tenant: make the workspace's credential usable, check
+   * that the repository is readable through ordinary Git, then store and provision it.
+   *
+   * Neither argument names a tenant, a workspace, or a path. The repository URL is canonicalized
+   * and the project id derived from it, so connecting the same repository twice converges on the
+   * project that is already there.
+   */
+  connectProject(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+    repositoryUrl: unknown,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see above.
+    displayName: unknown,
+    now: number = Date.now(),
+  ): Promise<ConnectRepositoryResult> {
+    return this.connections.connect(repositoryUrl, displayName, now);
+  }
+
+  /**
+   * Start and finish the GitHub device authorization (ADR-0039, Q2). The scope is the one T3a
+   * verified at the boundary, and the authorization is bound to it: a redemption presented by a
+   * different verified owner, or a second redemption of a consumed code, is refused.
+   */
+  startGitHubAuthorization(
+    scope: VerifiedAccessScope,
+    now: number = Date.now(),
+  ): Promise<GitHubAuthorizationOutcome> {
+    return this.connections.startAuthorization(scope, now);
+  }
+
+  completeGitHubAuthorization(
+    scope: VerifiedAccessScope,
+    now: number = Date.now(),
+  ): Promise<GitHubAuthorizationOutcome> {
+    return this.connections.completeAuthorization(scope, now);
+  }
+
+  /**
    * The project thread surface. Each method takes the project id a client sent and resolves it
    * against the catalog before any row is touched (ADR-0038), so the thread a request reaches is
    * named by the server.
@@ -276,9 +358,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   streamProjectTurn(input: ProjectTurnRequest): Promise<ProjectTurnStart> {
     return streamProjectTurn({
       ...input,
+      catalog: this.connections.catalog(),
       workspaceName: this.workspaceName,
       namespace: this.env.WORKSPACE_HOST,
       mount: () => this.mountServing(this.generations.active()),
+      // Provisioning runs on use as well as on connection: the workspace can be recreated between
+      // two turns, and every step converges rather than remembering a previous run.
+      provision: async (project) => (await this.connections.ensureProvisioned(project.id)).ok,
     });
   }
 

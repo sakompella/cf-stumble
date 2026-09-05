@@ -10,6 +10,7 @@ import type { GenerationSubmissionResult } from "../../src/routes/index.js";
 import { encodeModuleMap } from "../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activeSupervisor } from "../supervisor/helpers.js";
+import { ownerScope } from "./helpers.js";
 
 const commits = {
   passing: "5100000000000000000000000000000000000001",
@@ -57,6 +58,7 @@ function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): 
       body: JSON.stringify({ harnessCommit }),
     }),
     control,
+    ownerScope,
   );
 }
 

@@ -10,6 +10,7 @@ import {
   prepareGeneration,
   submitCandidate,
 } from "../supervisor/helpers.js";
+import { ownerScope } from "./helpers.js";
 
 const commits = {
   second: "0123456789abcdef0123456789abcdef01234567",
@@ -38,6 +39,7 @@ function control(
       body: JSON.stringify(body),
     }),
     stub,
+    ownerScope,
   );
 }
 
@@ -46,6 +48,7 @@ async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number>
   const response = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/status"),
     stub,
+    ownerScope,
   );
   const body = await response.json<{ readonly activeGeneration: { readonly epoch: number } }>();
   return body.activeGeneration.epoch;

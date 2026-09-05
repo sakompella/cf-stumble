@@ -20,6 +20,8 @@ Everything in `docs/agents/` is agent-authored. `docs/` outside that directory i
 - `design/feature-map.md` defines the current version 0 completion scope and cut line.
 - `design/slices.md` records the earlier implementation sequence and local evidence.
 - `design/computer-integration.md` records the verified Computer pair and backend roles.
+- `design/github-connection.md` records how a repository is connected, where the GitHub credential
+  lives, and which credential source an automated run uses.
 
 Add an ADR only when a decision will be expensive to reverse, has a meaningful alternative, and would surprise a future reader. Add every surviving ADR to `docs/agents/adr/README.md`; `test/docs/adr-index.test.ts` checks the index. Delete ADRs that no longer apply instead of preserving obsolete architecture as current guidance.
 

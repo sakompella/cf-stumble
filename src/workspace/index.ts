@@ -28,6 +28,24 @@ export {
   type ProjectProvisionRequest,
 } from "./project-provision.js";
 export {
+  checkRepositoryAccess,
+  installWorkspaceCredential,
+  readWorkspaceCredentialStatus,
+  type CredentialInstallation,
+  type CredentialWorkspaceHost,
+  type CredentialWorkspaceNamespace,
+  type InstallWorkspaceCredentialInput,
+  type RepositoryAccessInput,
+  type WorkspaceCredentialInput,
+  type WorkspaceCredentialProblem,
+} from "./credential-access.js";
+export {
+  executeGitHubCredentialRequest,
+  parseGitHubCredentialRequest,
+  type GitHubCredentialRequest,
+  type GitHubCredentialResult,
+} from "./github-credential.js";
+export {
   provisionProjectWorkspace,
   type ProjectProvisionProblem,
   type ProvisionedProjectWorkspace,

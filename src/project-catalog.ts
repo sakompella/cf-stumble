@@ -19,26 +19,25 @@ export type Project = Readonly<{
   repositoryUrl: PublicRepositoryUrl;
 }>;
 
-export type ProjectCatalog = readonly [Project, Project];
+/**
+ * Every repository this tenant has connected, in the order the tenant connected them.
+ *
+ * This is a variable-length collection rather than the fixed pair it used to be, because a
+ * connected project is now runtime state: the tenant connects a first repository, a second, a
+ * third, and disconnects one, and none of those is a type change. Nothing here depends on the
+ * order or the length. {@link resolveProject} is the one way a client string becomes a project,
+ * so a consumer that holds a catalog holds a set of projects it may address and nothing else.
+ */
+export type ProjectCatalog = readonly Project[];
+
+/** The catalog of a tenant that has connected nothing yet. Resolving anything against it fails. */
+export const EMPTY_PROJECT_CATALOG: ProjectCatalog = Object.freeze([]);
 
 export type ProjectConfiguration = Readonly<{
   id: string;
   displayName: string;
   repositoryUrl: string;
 }>;
-
-export const PROJECT_CATALOG_CONFIGURATION = Object.freeze([
-  Object.freeze({
-    id: "project-one",
-    displayName: "Project one",
-    repositoryUrl: "https://example.invalid/placeholder/project-one.git",
-  }),
-  Object.freeze({
-    id: "project-two",
-    displayName: "Project two",
-    repositoryUrl: "https://example.invalid/placeholder/project-two.git",
-  }),
-] as const satisfies readonly [ProjectConfiguration, ProjectConfiguration]);
 
 export function parseProjectId(value: unknown): ProjectId | undefined {
   if (typeof value !== "string" || !projectIdPattern.test(value)) {
@@ -78,11 +77,77 @@ export function parsePublicRepositoryUrl(value: unknown): PublicRepositoryUrl | 
   return value as PublicRepositoryUrl;
 }
 
+/**
+ * The one spelling of a repository URL cf-stumble keeps.
+ *
+ * A user pastes `https://GitHub.com/Owner/Repo.git`, `.../Owner/Repo`, or either with a trailing
+ * slash, and means one repository every time. Provisioning compares the stored URL against
+ * `remote.origin.url` verbatim, and project identity is derived from this spelling, so the same
+ * repository has to reduce to the same string before either is decided. The path case is kept,
+ * because GitHub path segments are case-preserving and a clone URL has to stay usable.
+ */
+export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | undefined {
+  const parsed = parsePublicRepositoryUrl(value);
+  if (parsed === undefined) {
+    return undefined;
+  }
+
+  const url = new URL(parsed);
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const last = segments.at(-1);
+  if (last !== undefined && last.endsWith(".git")) {
+    segments[segments.length - 1] = last.slice(0, -".git".length);
+  }
+  if (segments.some((segment) => segment.length === 0)) {
+    return undefined;
+  }
+
+  return parsePublicRepositoryUrl(`https://${url.host}/${segments.join("/")}`);
+}
+
+/**
+ * The stable identity of a connected repository: derived from its canonical URL and from nothing
+ * else.
+ *
+ * Identity has to survive a rename of the display name and a change in list position, and
+ * connecting the same repository twice has to converge on the project that is already there. A
+ * counter or an insertion index would give the same repository two identities when it is
+ * connected twice, and a display name would give it a new one when the user renames it. The owner
+ * and repository segments are the part of the URL a person recognizes, so the id reads as the
+ * repository it names rather than as an opaque key.
+ *
+ * Two different repositories can reduce to one id — `owner/my-repo` and `owner/my.repo` both give
+ * `owner-my-repo`. The caller settles that collision by comparing the stored URL, because this
+ * function decides identity and not membership.
+ */
+export function projectIdForRepository(repositoryUrl: unknown): ProjectId | undefined {
+  const canonical = canonicalRepositoryUrl(repositoryUrl);
+  if (canonical === undefined) {
+    return undefined;
+  }
+
+  const segments = new URL(canonical).pathname.split("/").filter((segment) => segment.length > 0);
+  const slug = segments
+    .slice(-2)
+    .join("-")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+/u, "")
+    .replace(/-+$/u, "");
+  return parseProjectId(slug);
+}
+
+/** The name a project is shown under when the person connecting it does not choose one. */
+export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): string {
+  const segments = new URL(repositoryUrl).pathname.split("/").filter((part) => part.length > 0);
+  return segments.slice(-2).join("/");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseProject(value: unknown): Project | undefined {
+export function parseProject(value: unknown): Project | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -105,34 +170,43 @@ function parseProject(value: unknown): Project | undefined {
   return { id, displayName: value.displayName, repositoryUrl };
 }
 
+/**
+ * Parse a whole catalog. Any length is a catalog, including none: a tenant that has connected
+ * nothing is an ordinary state and not a configuration fault. Ids stay unique, because two rows
+ * with one id would make `resolveProject` depend on position.
+ */
 export function parseProjectCatalog(value: unknown): ProjectCatalog | undefined {
-  if (!Array.isArray(value) || value.length !== 2) {
+  if (!Array.isArray(value)) {
     return undefined;
   }
 
-  const first = parseProject(value[0]);
-  const second = parseProject(value[1]);
-  if (first === undefined || second === undefined || first.id === second.id) {
-    return undefined;
+  const projects: Project[] = [];
+  for (const entry of value) {
+    const project = parseProject(entry);
+    if (project === undefined || projects.some((existing) => existing.id === project.id)) {
+      return undefined;
+    }
+    projects.push(Object.freeze(project));
   }
 
-  return Object.freeze([Object.freeze(first), Object.freeze(second)]);
+  return Object.freeze(projects);
 }
-
-const parsedProjectCatalog = parseProjectCatalog(PROJECT_CATALOG_CONFIGURATION);
-if (parsedProjectCatalog === undefined) {
-  throw new Error("the project catalog configuration is invalid");
-}
-
-export const PROJECT_CATALOG: ProjectCatalog = parsedProjectCatalog;
 
 export type ProjectResolution =
   | Readonly<{ ok: true; project: Project }>
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
+/**
+ * Turn a client-supplied project id into one of the tenant's projects.
+ *
+ * This is the single choke point every consumer goes through, and it takes the catalog it should
+ * resolve against. The default is the empty catalog rather than a built-in project list: there is
+ * no such thing as a project the server knows about before a tenant connects one, so a caller
+ * that forgets to supply the tenant's catalog resolves nothing instead of resolving a placeholder.
+ */
 export function resolveProject(
   projectId: unknown,
-  catalog: ProjectCatalog = PROJECT_CATALOG,
+  catalog: ProjectCatalog = EMPTY_PROJECT_CATALOG,
 ): ProjectResolution {
   const parsedProjectId = parseProjectId(projectId);
   if (parsedProjectId === undefined) {
