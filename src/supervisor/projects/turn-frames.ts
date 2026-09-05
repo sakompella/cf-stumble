@@ -37,6 +37,10 @@ export type FacetTerminalFrame =
  * proven fields so an extra field a generation invented cannot travel further; the rest are the
  * Supervisor's, and exactly one of them ends every stream.
  *
+ * The `diff` pair is the generation's own answer to what the turn changed, produced by the harness
+ * rather than by the model (`facet/generation-0/workspace-diff.ts`), and forwarded here on the
+ * same terms as a tool result: proven fields only, and bounded by the frame limit above.
+ *
  * `saved` is the only authoritative success, and it exists only after the thread commit returned.
  * `credited` says whether that turn earned the one completed-real-turn credit
  * (`supervisor/eligibility.ts`), which is a durability fact and not an HTTP one.
@@ -57,6 +61,8 @@ export type ProjectTurnFrame =
       content: string;
       truncated: boolean;
     }>
+  | Readonly<{ kind: "diff"; content: string; truncated: boolean }>
+  | Readonly<{ kind: "diff-unavailable"; detail: string }>
   | Readonly<{ kind: "saved"; revision: number; messageCount: number; credited: boolean }>
   | Readonly<{
       kind: "turn-failed";
@@ -148,6 +154,19 @@ function parseToolResult(frame: Record<string, unknown>): ParsedFacetFrame {
   });
 }
 
+function parseDiff(frame: Record<string, unknown>): ParsedFacetFrame {
+  if (!isString(frame.content) || typeof frame.truncated !== "boolean") {
+    return malformed;
+  }
+  return forwarded({ kind: "diff", content: frame.content, truncated: frame.truncated });
+}
+
+function parseDiffUnavailable(frame: Record<string, unknown>): ParsedFacetFrame {
+  return isString(frame.detail)
+    ? forwarded({ kind: "diff-unavailable", detail: frame.detail })
+    : malformed;
+}
+
 function parseCompleted(frame: Record<string, unknown>): ParsedFacetFrame {
   const messages = terminalMessages(frame.state);
   return messages === undefined ? malformed : terminal({ kind: "completed", messages });
@@ -196,6 +215,10 @@ export function parseFacetFrameLine(line: string): ParsedFacetFrame {
       return parseToolStart(decoded);
     case "tool-result":
       return parseToolResult(decoded);
+    case "diff":
+      return parseDiff(decoded);
+    case "diff-unavailable":
+      return parseDiffUnavailable(decoded);
     case "completed":
       return parseCompleted(decoded);
     case "failed":

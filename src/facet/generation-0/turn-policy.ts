@@ -10,7 +10,8 @@ export const GENERATION_0_SYSTEM_PROMPT = [
   "You are cf-stumble, a personal coding agent working in one project workspace.",
   "Use the tools to read and change files and to run the project's own commands.",
   "Prefer the edit tool over the write tool when you change part of a file.",
-  "Run `git diff` with the bash tool when the user asks what changed.",
+  "This harness shows the user the repository's own diff after a turn that changed files, so do",
+  "not spend a tool call on `git diff` yourself.",
   "Finish by telling the user what you changed and what the commands reported.",
 ].join(" ");
 
@@ -28,12 +29,30 @@ export const MAX_MODEL_CALLS = 8;
  * Repeating those numbers here means a frame never truncates a result Pi already bounded, and it
  * bounds a result from any future tool that does not bound its own.
  *
- * The demo turn's `git diff` is the case this exists for (goal criterion 4): a forty-line diff is
- * roughly two kilobytes, so it arrives whole, and a diff of a whole repository still cannot make
- * one frame unbounded.
+ * The turn's own diff frame is bounded by the same two limits (goal criterion 4): a forty-line
+ * diff is roughly two kilobytes, so it arrives whole, and a diff of a whole repository still
+ * cannot make one frame unbounded.
  */
 export const TOOL_RESULT_DISPLAY_MAX_LINES = 2_000;
 export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
+
+/**
+ * The command this generation runs itself at the end of a turn that could have changed a file, and
+ * the seconds it may take.
+ *
+ * Goal criterion 4 wants a turn that shows what changed. Asking the model to run `git diff` made
+ * that a hope about the model: the route is a flash model at low reasoning effort, and skipping
+ * one clause of a system prompt is an ordinary event there. So the diff is a property of the turn
+ * instead. The harness runs this command through the same project capability the `bash` tool uses,
+ * after the model has stopped, and publishes the result as the turn's own frame.
+ *
+ * `HEAD` rather than the working tree alone, because a turn that staged or ran the project's own
+ * check should still show its work. A file the turn created and never added to the index is not in
+ * this diff; `git status` would be a second command and a second frame, which is more than
+ * criterion 4 asks for.
+ */
+export const TURN_DIFF_COMMAND = "git --no-pager diff HEAD";
+export const TURN_DIFF_TIMEOUT_SECONDS = 30;
 
 /**
  * When this generation compacts one thread, and how much of it survives.

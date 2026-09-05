@@ -3,10 +3,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
-  FakeExecBackend,
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "../../workspace/project/fakes.js";
+import { GitDiffExecBackend } from "../../facet/generation-0/git-diff-exec-backend.js";
 
 /**
  * Test-only stand-in for the Workspace Host namespace, living in its own Worker Loader isolate.
@@ -40,10 +40,13 @@ function workspaceFor(name: string): FakeProjectFilesystemProvider {
 export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
   /** The project capability for one workspace name, as `WorkspaceHost.project()` hands it out. */
   project(name: string): ProjectRpcTarget {
+    const provider = workspaceFor(name);
+    // A turn asks its workspace for a diff when it ends, and this backend answers that command by
+    // diffing the files the turn wrote here rather than by replaying a scripted string.
     return new ProjectRpcTarget(
-      workspaceFor(name),
+      provider,
       new FakeProjectTransactions(),
-      new FakeExecBackend(),
+      new GitDiffExecBackend(provider),
     );
   }
 

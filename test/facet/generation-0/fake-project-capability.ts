@@ -1,6 +1,6 @@
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import { GitDiffExecBackend } from "./git-diff-exec-backend.js";
 import {
-  FakeExecBackend,
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "../../workspace/project/fakes.js";
@@ -24,14 +24,14 @@ import type {
 export class FakeProjectCapability implements ProjectRpcTargetContract, Disposable {
   readonly ledger: { dups: number; disposals: number; live: number };
   readonly provider: FakeProjectFilesystemProvider;
-  readonly execBackend: FakeExecBackend;
+  readonly execBackend: GitDiffExecBackend;
   readonly #target: ProjectRpcTarget;
   #disposed = false;
 
   private constructor(
     target: ProjectRpcTarget,
     provider: FakeProjectFilesystemProvider,
-    execBackend: FakeExecBackend,
+    execBackend: GitDiffExecBackend,
     ledger: { dups: number; disposals: number; live: number },
   ) {
     this.#target = target;
@@ -41,9 +41,15 @@ export class FakeProjectCapability implements ProjectRpcTargetContract, Disposab
     ledger.live += 1;
   }
 
+  /**
+   * A workspace whose `git diff HEAD` really diffs the files this capability holds, and whose
+   * other commands wait to be driven by hand through `execBackend.commands`. A turn ends by
+   * asking this workspace what changed, so a fake that could not answer would leave every turn
+   * that touched a file waiting for a command that never finishes.
+   */
   static create(): FakeProjectCapability {
     const provider = new FakeProjectFilesystemProvider();
-    const execBackend = new FakeExecBackend();
+    const execBackend = new GitDiffExecBackend(provider);
     const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
     return new FakeProjectCapability(target, provider, execBackend, {
       dups: 0,

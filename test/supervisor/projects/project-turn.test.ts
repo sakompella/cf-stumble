@@ -44,6 +44,13 @@ function toolResultFrame(frames: readonly FacetTurnFrame[]): FacetTurnFrame | un
   return frames.find((frame) => frame.kind === "tool-result");
 }
 
+/** The turn's own diff of what it changed, which no model asked for. */
+function diffFrame(frames: readonly FacetTurnFrame[]): Extract<FacetTurnFrame, { kind: "diff" }> {
+  const frame = frames.find((candidate) => candidate.kind === "diff");
+  if (frame?.kind !== "diff") throw new Error("a turn that wrote a file must publish its diff");
+  return frame;
+}
+
 afterEach(async () => {
   await reset();
 });
@@ -62,6 +69,29 @@ test("a turn writes into the selected project's own directory in the tenant's wo
     await workspaces.fileText(workspaceName, `${projectDirectory(projectOne.id)}/notes.txt`),
     "no capability was passed in, so these bytes prove the path obtained a working one itself",
   ).toBe("written by the turn");
+});
+
+test("a turn shows what it changed without the model asking for a diff", async () => {
+  const workspaces = await projectWorkspaces();
+  const facet = await facetRunning([
+    calls("write", { path: "notes.txt", content: "written by the turn" }),
+    says("Wrote it."),
+  ]);
+
+  const frames = await completedTurn(workspaces, facet, projectOne.id);
+
+  // Goal criterion 4, and the round-2 review's objection to how it was proved before: the script
+  // above contains no `git diff`, and this workspace's exec backend answers that command by
+  // diffing the bytes the turn wrote across the RPC hop rather than by replaying a fixed string.
+  expect(
+    frames.some((frame) => frame.kind === "tool-start" && frame.toolName === "bash"),
+    "the model ran no command in this turn",
+  ).toBe(false);
+  const diff = diffFrame(frames);
+  expect(diff.content).toContain("+++ b/notes.txt");
+  expect(diff.content).toContain("+written by the turn");
+  expect(diff.truncated).toBe(false);
+  expect(frames.at(-1)).toMatchObject({ kind: "completed" });
 });
 
 test("selecting another project selects another directory, not another workspace", async () => {

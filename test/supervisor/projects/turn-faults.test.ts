@@ -117,6 +117,18 @@ test("a frame missing a field its kind declares reaches no browser", async () =>
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
 });
 
+test("a diff frame that does not say whether it was cut reaches no browser", async () => {
+  const control = await supervisor("turn-incomplete-diff");
+  await activateFixtureGeneration(control);
+
+  const observed = await runScriptedTurn(control, {
+    lines: [JSON.stringify({ kind: "diff", content: "diff --git a/a b/a" })],
+  });
+
+  expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
+  expect(observed.credits).toEqual([]);
+});
+
 test("an oversized frame ends the turn rather than being buffered", async () => {
   const control = await supervisor("turn-oversized");
   await activateFixtureGeneration(control);

@@ -26,6 +26,7 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0032](0032-recovery-bounds-an-episode-it-does-not-perform.md)**: recovery picks an evidence-backed fallback and bounds repair and startup checking it does not perform.
 - **[ADR-0035](0035-use-better-result-only-inside-process-boundaries.md)**: better-result represents recoverable failures only inside one Worker isolate; public and durable boundaries keep plain values.
 - **[ADR-0036](0036-pure-decisions-imperative-shells.md)**: decision logic is pure functions over plain values, and effects live in thin Durable Object shells that read, decide, and write.
+- **[ADR-0040](0040-harness-produces-the-turn-diff.md)**: the harness runs the repository's diff at the end of a turn that changed files, instead of asking the model to run one.
 
 ## Adding a decision
 
