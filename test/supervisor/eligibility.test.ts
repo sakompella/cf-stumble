@@ -207,13 +207,9 @@ test("qualifies a no-longer-active generation from its retained most recent era"
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const label = await submitCandidate(
-    control,
-    "0123456789abcdef0123456789abcdef01234567",
-    "submit-replacement",
-  );
+  const label = await submitCandidate(control, "0123456789abcdef0123456789abcdef01234567");
   await prepareGeneration(control, label, "0123456789abcdef0123456789abcdef01234567");
-  await activateGeneration(control, label, "activate-replacement");
+  await activateGeneration(control, label);
 
   expect(
     await control.getGenerationEligibility(0, {
@@ -230,14 +226,10 @@ test("rejects a generation when its most recent era fails after an older era suc
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await completion.text();
-  const label = await submitCandidate(
-    control,
-    "0123456789abcdef0123456789abcdef01234567",
-    "submit-replacement",
-  );
+  const label = await submitCandidate(control, "0123456789abcdef0123456789abcdef01234567");
   await prepareGeneration(control, label, "0123456789abcdef0123456789abcdef01234567");
-  await activateGeneration(control, label, "activate-replacement");
-  await activateGeneration(control, 0, "reactivate-fixture");
+  await activateGeneration(control, label);
+  await activateGeneration(control, 0);
   const failure = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/error-status"),
   );
@@ -254,14 +246,14 @@ test("rejects a generation when its most recent era fails after an older era suc
 test("requires a fresh passing startup check after a failure observation", async () => {
   const control = supervisor("eligibility-fresh-startup-check");
   const harnessCommit = "c123456789abcdef0123456789abcdef01234567";
-  const label = await submitCandidate(control, harnessCommit, "submit-candidate");
+  const label = await submitCandidate(control, harnessCommit);
 
   const candidateArtifact = relayCandidateArtifact(harnessCommit);
   const firstStartup = await control.checkGenerationStartup(label, candidateArtifact);
   if (!firstStartup.ok) {
     throw new Error("a valid candidate must produce a startup-check report");
   }
-  await activateGeneration(control, label, "activate-candidate");
+  await activateGeneration(control, label);
 
   const failure = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/error-status"),

@@ -77,7 +77,7 @@ test("a cold facet from the built module map passes the GET / startup check", as
     throw new Error(`the built module map must validate: ${validated.error.code}`);
 
   const control = env.SUPERVISOR.getByName("generation-0-module-map");
-  const label = await submitCandidate(control, GENERATION_0_COMMIT, "submit-generation-0");
+  const label = await submitCandidate(control, GENERATION_0_COMMIT);
   const checked = await control.checkGenerationStartup(label, validated.value);
 
   expect(checked.ok).toBe(true);

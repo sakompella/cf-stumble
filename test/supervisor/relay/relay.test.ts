@@ -277,10 +277,10 @@ test("retains an earlier activation's facts without crediting a reactivated gene
   }
 
   const secondCommit = "0123456789abcdef0123456789abcdef01234567";
-  const label = await submitCandidate(control, secondCommit, "submit-replacement");
+  const label = await submitCandidate(control, secondCommit);
   await prepareGeneration(control, label, secondCommit);
-  await activateGeneration(control, label, "activate-replacement");
-  await activateGeneration(control, 0, "reactivate-fixture");
+  await activateGeneration(control, label);
+  await activateGeneration(control, 0);
 
   expect(await control.getRelayAttempts()).toMatchObject([
     { generationLabel: 0, activationId: firstAttempt.activationId },

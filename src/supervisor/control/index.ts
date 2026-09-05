@@ -1,17 +1,8 @@
 import { Result } from "better-result";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
-import { resultFromJournalRow } from "./journal.js";
-import type { JournalRow } from "./journal.js";
-import type { Generation } from "../generations/index.js";
 import type { Generations } from "../generations/index.js";
-import type {
-  CommandEffect,
-  ControlProblemCode,
-  GenerationCommand,
-  GenerationControlResult,
-  GenerationRequest,
-} from "./request.js";
+import type { ControlProblemCode, GenerationControlResult, GenerationRequest } from "./request.js";
 
 export type {
   GenerationCommand,
@@ -26,54 +17,23 @@ type ControlOutcome = Extract<GenerationControlResult, { readonly ok: true }>["o
 // in execute(), because that value crosses the Supervisor RPC boundary and is written to SQLite.
 type ControlDecision = Result<ControlOutcome, ControlProblemCode>;
 
-type JournalOutcomeKind = "candidate-submitted" | "activated" | "rolled-back" | "rejected";
-
-type JournalValues = {
-  readonly outcomeKind: JournalOutcomeKind;
-  readonly generation: Generation | undefined;
-  readonly epoch: number | undefined;
-  readonly effect: CommandEffect | undefined;
-  readonly problemCode: ControlProblemCode | undefined;
-};
-
+/**
+ * Applies a generation request directly to the generation tables in one Durable Object
+ * transaction (ADR-0030). There is no request journal: a candidate resubmission is safe because
+ * labeling an already-labeled harness commit returns the existing generation (Generations
+ * .labelInTransaction), and activating the generation that is already active is a no-op
+ * (Generations.activateInTransaction). Activation and rollback still carry the epoch the requester
+ * observed, and a request built on stale generation-control state is rejected (ADR-0033).
+ */
 export class GenerationControl {
   private readonly generations: Generations;
-  private readonly sql: SqlStorage;
 
-  constructor(storage: DurableObjectStorage, generations: Generations) {
+  constructor(generations: Generations) {
     this.generations = generations;
-    this.sql = storage.sql;
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS generation_control_journal (
-        request_id TEXT PRIMARY KEY,
-        fingerprint TEXT NOT NULL,
-        outcome_kind TEXT NOT NULL CHECK (
-          outcome_kind IN ('candidate-submitted', 'activated', 'rolled-back', 'rejected')
-        ),
-        generation_label INTEGER,
-        generation_harness_commit TEXT,
-        generation_status TEXT CHECK (generation_status IN ('candidate', 'ready', 'failed')),
-        epoch INTEGER,
-        effect TEXT CHECK (effect IN ('activated', 'no-op')),
-        problem_code TEXT
-      );
-    `);
   }
 
   execute(request: GenerationRequest): GenerationControlResult {
-    return this.generations.transaction(() => {
-      const fingerprint = commandFingerprint(request.command);
-      const recorded = this.journalEntry(request.requestId);
-      if (recorded !== undefined) {
-        return recorded.fingerprint === fingerprint
-          ? resultFromJournalRow(recorded)
-          : { ok: false, problem: { code: "reused-request-id" } };
-      }
-
-      const result = decisionToResult(this.decide(request));
-      this.record(request.requestId, fingerprint, result);
-      return result;
-    });
+    return this.generations.transaction(() => decisionToResult(this.decide(request)));
   }
 
   private decide(request: GenerationRequest): ControlDecision {
@@ -166,37 +126,6 @@ export class GenerationControl {
       }))
       .mapError((problem) => problem.code);
   }
-
-  private journalEntry(requestId: string): JournalRow | undefined {
-    return this.sql
-      .exec<JournalRow>(
-        `SELECT fingerprint, outcome_kind, generation_label, generation_harness_commit,
-                generation_status, epoch, effect, problem_code
-         FROM generation_control_journal
-         WHERE request_id = ?`,
-        requestId,
-      )
-      .toArray()[0];
-  }
-
-  private record(requestId: string, fingerprint: string, result: GenerationControlResult): void {
-    const entry = journalValues(result);
-    this.sql.exec(
-      `INSERT INTO generation_control_journal (
-         request_id, fingerprint, outcome_kind, generation_label, generation_harness_commit,
-         generation_status, epoch, effect, problem_code
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      requestId,
-      fingerprint,
-      entry.outcomeKind,
-      entry.generation?.label ?? null,
-      entry.generation?.harnessCommit ?? null,
-      entry.generation?.status ?? null,
-      entry.epoch ?? null,
-      entry.effect ?? null,
-      entry.problemCode ?? null,
-    );
-  }
 }
 
 function rejected(code: ControlProblemCode): ControlDecision {
@@ -208,47 +137,6 @@ function decisionToResult(decision: ControlDecision): GenerationControlResult {
     ok: (outcome) => ({ ok: true, outcome }),
     err: (code) => ({ ok: false, problem: { code } }),
   });
-}
-
-function commandFingerprint(command: GenerationCommand): string {
-  switch (command.kind) {
-    case "submit-candidate":
-      return `submit-candidate|${encodeText(command.harnessCommit)}`;
-    case "activate":
-      return `activate|${encodeNumber(command.label)}|${encodeNumber(command.observedEpoch)}`;
-    case "rollback":
-      return `rollback|${encodeNumber(command.label)}|${encodeNumber(command.observedEpoch)}`;
-    default:
-      return impossible(command);
-  }
-}
-
-function encodeText(value: string): string {
-  return `${value.length}:${value}`;
-}
-
-function encodeNumber(value: number): string {
-  return `${Number.isSafeInteger(value) ? "integer" : "number"}:${String(value)}`;
-}
-
-function journalValues(result: GenerationControlResult): JournalValues {
-  if (!result.ok) {
-    return {
-      outcomeKind: "rejected",
-      generation: undefined,
-      epoch: undefined,
-      effect: undefined,
-      problemCode: result.problem.code,
-    };
-  }
-
-  return {
-    outcomeKind: result.outcome.kind,
-    generation: result.outcome.generation,
-    epoch: result.outcome.epoch,
-    effect: "effect" in result.outcome ? result.outcome.effect : undefined,
-    problemCode: undefined,
-  };
 }
 
 function impossible(value: never): never {

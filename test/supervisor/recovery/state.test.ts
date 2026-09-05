@@ -43,9 +43,9 @@ async function fallbackReady(name: string): Promise<DurableObjectStub<Supervisor
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const replacement = await submitCandidate(control, replacementCommit, "submit-replacement");
+  const replacement = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, replacement, replacementCommit);
-  await activateGeneration(control, replacement, "activate-replacement");
+  await activateGeneration(control, replacement);
   return control;
 }
 
@@ -159,7 +159,7 @@ test("reports every durable recovery state with a positive identifier and matchi
   const startup = await startupState(control);
   const repairNeedsReconciliation = await repairReconciliationState(control);
   const boundCompleted = await completedAtAttemptBound(control);
-  const label = await submitCandidate(control, repairedCommit, "submit-repaired-generation");
+  const label = await submitCandidate(control, repairedCommit);
   await prepareGeneration(control, label, repairedCommit);
   const completed = await control.reconcileRecoveryOperation(
     startup.ready.id,

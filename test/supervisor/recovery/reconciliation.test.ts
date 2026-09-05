@@ -36,9 +36,9 @@ async function episodeWithFallback(name: string) {
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const replacement = await submitCandidate(control, replacementCommit, "submit-replacement");
+  const replacement = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, replacement, replacementCommit);
-  await activateGeneration(control, replacement, "activate-replacement");
+  await activateGeneration(control, replacement);
   const episode = await control.startRecovery(
     { failureEventId: "failure-1", failedGenerationLabel: replacement },
     policy,
@@ -151,7 +151,7 @@ test("reconciles a verified startup-check pass into completion", async () => {
   const { control, episode, operation } = await expiredStartupCheck(
     "recovery-reconcile-startup-check-success",
   );
-  const label = await submitCandidate(control, repairedCommit, "submit-reconciled-generation");
+  const label = await submitCandidate(control, repairedCommit);
   await prepareGeneration(control, label, repairedCommit);
 
   const reconciled = await control.reconcileRecoveryOperation(

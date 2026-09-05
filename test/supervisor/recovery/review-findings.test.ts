@@ -39,9 +39,9 @@ async function episodeWithFallback(name: string): Promise<{
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
   await response.text();
-  const replacement = await submitCandidate(control, replacementCommit, "submit-replacement");
+  const replacement = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, replacement, replacementCommit);
-  await activateGeneration(control, replacement, "activate-replacement");
+  await activateGeneration(control, replacement);
   const episode = await control.startRecovery(
     { failureEventId: "failure-1", failedGenerationLabel: 1 },
     policy,

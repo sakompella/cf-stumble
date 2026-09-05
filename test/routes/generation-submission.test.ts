@@ -24,8 +24,8 @@ function submitRequest(body: string): Request {
   return controlRequest("/api/generations/submit", body);
 }
 
-function submissionBody(requestId: string, commit: string = harnessCommit): string {
-  return JSON.stringify({ requestId, harnessCommit: commit });
+function submissionBody(commit: string = harnessCommit): string {
+  return JSON.stringify({ harnessCommit: commit });
 }
 
 const labeled = {
@@ -84,17 +84,16 @@ function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
   });
 }
 
-test("labels the commit through the journaled control operation, then prepares that label", async () => {
+test("labels the commit directly, then prepares that label", async () => {
   const record: RecordedSubmission = { steps: [], received: [], preparedLabels: [] };
 
   const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody("submit-1")),
+    submitRequest(submissionBody()),
     recordingSupervisor(record),
   );
 
   expect(record.received, "the principal is derived here, never taken from the request").toEqual([
     {
-      requestId: "submit-1",
       principal: { kind: "user" },
       command: { kind: "submit-candidate", harnessCommit },
     },
@@ -110,7 +109,7 @@ test("labels the commit through the journaled control operation, then prepares t
 
 test("returns a failed startup check as the recorded preparation result", async () => {
   const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody("submit-failed-startup")),
+    submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
         return Promise.resolve(labeled);
@@ -139,7 +138,7 @@ test("returns a failed startup check as the recorded preparation result", async 
 
 test("returns a build failure as a preparation problem rather than a transport error", async () => {
   const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody("submit-unbuildable")),
+    submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
         return Promise.resolve(labeled);
@@ -163,10 +162,10 @@ test("returns a build failure as a preparation problem rather than a transport e
 test("prepares nothing when the control operation rejects the submission", async () => {
   let prepared = false;
   const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody("already-used")),
+    submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
-        return Promise.resolve({ ok: false, problem: { code: "reused-request-id" } });
+        return Promise.resolve({ ok: false, problem: { code: "invalid-harness-commit" } });
       },
       prepareGeneration() {
         prepared = true;
@@ -179,35 +178,47 @@ test("prepares nothing when the control operation rejects the submission", async
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual({
     ok: false,
-    problem: { code: "reused-request-id" },
+    problem: { code: "invalid-harness-commit" },
   });
 });
 
+test("resubmitting the same harness commit returns the existing generation, not a new label", async () => {
+  let submissions = 0;
+  const response = await routeOwnerApiRequest(
+    submitRequest(submissionBody()),
+    supervisor({
+      controlGeneration() {
+        submissions += 1;
+        // Generations.labelInTransaction returns the existing generation for a commit that is
+        // already labeled (ADR-0030): the control layer never sees a second submission as new.
+        return Promise.resolve(labeled);
+      },
+      prepareGeneration() {
+        return Promise.resolve(readyCheck);
+      },
+    }),
+  );
+
+  await expect(response.json()).resolves.toMatchObject({
+    ok: true,
+    outcome: { generation: { label: 1, harnessCommit, status: "candidate" } },
+  });
+  expect(submissions).toBe(1);
+});
+
 const malformedBodies: readonly (readonly [string, string])[] = [
-  ["unparsable JSON", '{"requestId":'],
+  ["unparsable JSON", '{"harnessCommit":'],
   ["a JSON string", '"submit"'],
-  ["a missing harness commit", '{"requestId":"r"}'],
-  ["a missing request ID", `{"harnessCommit":"${harnessCommit}"}`],
-  ["an observed epoch", `{"requestId":"r","harnessCommit":"${harnessCommit}","observedEpoch":0}`],
-  ["an unknown key", `{"requestId":"r","harnessCommit":"${harnessCommit}","tenant":"other"}`],
-  [
-    "a supervisor name",
-    `{"requestId":"r","harnessCommit":"${harnessCommit}","supervisorName":"other"}`,
-  ],
-  ["an empty request ID", `{"requestId":"","harnessCommit":"${harnessCommit}"}`],
-  ["a request ID that is not a string", `{"requestId":7,"harnessCommit":"${harnessCommit}"}`],
-  [
-    "a control character in the request ID",
-    `{"requestId":"a\\u0000b","harnessCommit":"${harnessCommit}"}`,
-  ],
-  ["a truncated harness commit", '{"requestId":"r","harnessCommit":"0123456789abcdef"}'],
-  [
-    "an uppercase harness commit",
-    `{"requestId":"r","harnessCommit":"${harnessCommit.toUpperCase()}"}`,
-  ],
-  ["a branch name instead of a commit", '{"requestId":"r","harnessCommit":"refs/heads/main"}'],
-  ["a harness commit that is not a string", '{"requestId":"r","harnessCommit":7}'],
-  ["an array body", `[{"requestId":"r","harnessCommit":"${harnessCommit}"}]`],
+  ["a missing harness commit", "{}"],
+  ["a request ID", `{"harnessCommit":"${harnessCommit}","requestId":"r"}`],
+  ["an observed epoch", `{"harnessCommit":"${harnessCommit}","observedEpoch":0}`],
+  ["an unknown key", `{"harnessCommit":"${harnessCommit}","tenant":"other"}`],
+  ["a supervisor name", `{"harnessCommit":"${harnessCommit}","supervisorName":"other"}`],
+  ["a truncated harness commit", '{"harnessCommit":"0123456789abcdef"}'],
+  ["an uppercase harness commit", `{"harnessCommit":"${harnessCommit.toUpperCase()}"}`],
+  ["a branch name instead of a commit", '{"harnessCommit":"refs/heads/main"}'],
+  ["a harness commit that is not a string", '{"harnessCommit":7}'],
+  ["an array body", `[{"harnessCommit":"${harnessCommit}"}]`],
 ];
 
 test.each(malformedBodies)(
@@ -239,7 +250,7 @@ test.each(malformedBodies)(
 
 test("reports a labeling failure without echoing the internal error", async () => {
   const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody("submit-control-throws")),
+    submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
         return Promise.reject(new Error("Bearer token-abc leaked from SQLite"));
@@ -255,7 +266,7 @@ test("reports a labeling failure without echoing the internal error", async () =
 
 test("reports a preparation failure without echoing the internal error", async () => {
   const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody("submit-prepare-throws")),
+    submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
         return Promise.resolve(labeled);

@@ -62,7 +62,7 @@ export async function activeSupervisor(name: string): Promise<DurableObjectStub<
 export async function prepareFixtureGeneration(
   control: DurableObjectStub<Supervisor>,
 ): Promise<number> {
-  const label = await submitCandidate(control, fixtureMainHarnessCommit, "submit-fixture");
+  const label = await submitCandidate(control, fixtureMainHarnessCommit);
   expect(label, "the first submitted commit must take generation label 0").toBe(0);
   await prepareGeneration(control, label, fixtureMainHarnessCommit);
   return label;
@@ -77,16 +77,14 @@ export async function activateFixtureGeneration(
   control: DurableObjectStub<Supervisor>,
 ): Promise<number> {
   const label = await prepareFixtureGeneration(control);
-  return activateGeneration(control, label, "activate-fixture");
+  return activateGeneration(control, label);
 }
 
 export async function submitCandidate(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
-  requestId: string,
 ): Promise<number> {
   const result = await control.controlGeneration({
-    requestId,
     principal: { kind: "user" },
     command: { kind: "submit-candidate", harnessCommit },
   });
@@ -101,7 +99,7 @@ export function labelCandidate(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
 ): Promise<number> {
-  return submitCandidate(control, harnessCommit, `submit-${harnessCommit}`);
+  return submitCandidate(control, harnessCommit);
 }
 
 export async function prepareGeneration(
@@ -118,11 +116,9 @@ export async function prepareGeneration(
 export async function activateGeneration(
   control: DurableObjectStub<Supervisor>,
   label: number,
-  requestId: string,
 ): Promise<number> {
   const active = await control.getActiveGeneration();
   const result = await control.controlGeneration({
-    requestId,
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: active.epoch },
   });

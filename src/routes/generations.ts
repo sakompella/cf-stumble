@@ -9,9 +9,10 @@ export type GenerationControlSupervisor = {
 };
 
 /**
- * Submission needs the journaled control operation and the preparation the Supervisor runs for the
- * label that operation returns. `prepareGeneration` resolves the module map for the labeled harness
- * commit and runs the bounded startup check of ADR-0029; it never changes the active generation.
+ * Submission needs the directly-applied control operation (ADR-0030) and the preparation the
+ * Supervisor runs for the label that operation returns. `prepareGeneration` resolves the module map
+ * for the labeled harness commit and runs the bounded startup check of ADR-0029; it never changes
+ * the active generation.
  */
 export type GenerationSubmissionSupervisor = GenerationControlSupervisor & {
   readonly prepareGeneration: (label: number) => Promise<StartupCheckResult>;
@@ -34,60 +35,42 @@ export type GenerationSubmissionResult =
 
 /** Activation and rollback take the same request. Only the command differs. */
 type GenerationControlBody = {
-  readonly requestId: string;
   readonly observedEpoch: number;
   readonly label: number;
 };
 
 type ControlCommandKind = "activate" | "rollback";
 
-const MAX_REQUEST_ID_LENGTH = 200;
-
-/** A journal key must survive SQLite TEXT, so it carries no control character and no lone surrogate. */
-const REQUEST_ID_PATTERN = /^[^\p{Cc}\p{Cs}]+$/u;
-
-function isRequestId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= MAX_REQUEST_ID_LENGTH &&
-    REQUEST_ID_PATTERN.test(value)
-  );
-}
-
 function parseGenerationControlBody(value: unknown): GenerationControlBody | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["label", "observedEpoch", "requestId"])) {
+  if (!isRecord(value) || !hasExactKeys(value, ["label", "observedEpoch"])) {
     return undefined;
   }
-  const { requestId, observedEpoch, label } = value;
-  if (!isRequestId(requestId) || !isCount(observedEpoch) || !isCount(label)) {
+  const { observedEpoch, label } = value;
+  if (!isCount(observedEpoch) || !isCount(label)) {
     return undefined;
   }
-  return { requestId, observedEpoch, label };
+  return { observedEpoch, label };
 }
 
 /**
- * A submission carries only a request ID and a harness commit. ADR-0030 gives the observed epoch to
- * activation and rollback alone, because labeling a commit and checking it decide nothing about
- * what serves, so a body that carries one is malformed rather than stale.
+ * A submission carries only a harness commit. ADR-0030 gives the observed epoch to activation and
+ * rollback alone, because labeling a commit and checking it decide nothing about what serves, so a
+ * body that carries one is malformed rather than stale.
  */
 type GenerationSubmissionBody = {
-  readonly requestId: string;
   readonly harnessCommit: HarnessCommit;
 };
 
 function parseGenerationSubmissionBody(value: unknown): GenerationSubmissionBody | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["harnessCommit", "requestId"])) {
+  if (!isRecord(value) || !hasExactKeys(value, ["harnessCommit"])) {
     return undefined;
   }
-  const { requestId, harnessCommit } = value;
-  if (!isRequestId(requestId) || typeof harnessCommit !== "string") {
+  const { harnessCommit } = value;
+  if (typeof harnessCommit !== "string") {
     return undefined;
   }
   const parsedHarnessCommit = parseHarnessCommit(harnessCommit);
-  return parsedHarnessCommit === undefined
-    ? undefined
-    : { requestId, harnessCommit: parsedHarnessCommit };
+  return parsedHarnessCommit === undefined ? undefined : { harnessCommit: parsedHarnessCommit };
 }
 
 function command(
@@ -100,12 +83,10 @@ function command(
 }
 
 /**
- * The Supervisor decides activation and rollback, journals the outcome, and returns it. A rejected
- * request is a recorded decision rather than a transport fault, so it keeps HTTP 200 and carries its
- * problem code: replaying the request ID must return the journaled answer with the same status.
- *
- * The principal is fixed here. Cloudflare Access already proved the owner, and the caller never
- * names a tenant, an identity, or a Durable Object.
+ * The Supervisor applies activation and rollback directly to the generation tables and returns the
+ * outcome (ADR-0030): there is no request journal, so a rejected request is a fresh decision from
+ * current state rather than a replayed one. The principal is fixed here. Cloudflare Access already
+ * proved the owner, and the caller never names a tenant, an identity, or a Durable Object.
  */
 export async function handleGenerationControl(
   request: Request,
@@ -123,7 +104,6 @@ export async function handleGenerationControl(
   try {
     return Response.json(
       await supervisor.controlGeneration({
-        requestId: body.requestId,
         principal: { kind: "user" },
         command: command(kind, body),
       }),
@@ -134,21 +114,22 @@ export async function handleGenerationControl(
 }
 
 /**
- * Submit a harness commit as a generation candidate. The Supervisor labels the commit through the
- * same journaled control operation that activation uses, then prepares that label: it resolves the
- * module map from the R2 cache or a build of the commit and runs the bounded startup check. Both
- * steps record evidence against the candidate and neither touches the active generation, so the
- * owner learns whether the candidate passed while the generation that serves keeps serving.
+ * Submit a harness commit as a generation candidate. The Supervisor labels the commit directly
+ * (ADR-0030: labeling a commit that already has a generation returns the existing generation
+ * rather than labeling it twice), then prepares that label: it resolves the module map from the R2
+ * cache or a build of the commit and runs the bounded startup check. Both steps record evidence
+ * against the candidate and neither touches the active generation, so the owner learns whether the
+ * candidate passed while the generation that serves keeps serving.
  *
  * A build failure and a failed startup check are recorded outcomes, so they keep HTTP 200 and
  * arrive as the preparation result. A 4xx here means the request was malformed, and a 5xx means the
  * route could not reach a decision at all. Neither carries Supervisor error text.
  *
- * One limit. ADR-0030 journals the labeling, so replaying a request ID returns the recorded
- * labeling and never labels the commit twice. The preparation check is a separate recorded
- * operation, so a replay checks the same commit again and returns the evidence that check produced.
- * That repeats work but cannot contradict the earlier answer: the commit fixes the module map, and
- * the Supervisor rejects an outcome that disagrees with the one already recorded.
+ * Resubmitting an already-labeled commit runs the same preparation step again rather than
+ * replaying an earlier response. That check is itself idempotent: recording a preparation outcome
+ * that agrees with what is already recorded is a no-op, and a genuinely different outcome for the
+ * same commit is refused as a contradiction (`contradicts-recorded-outcome`) instead of silently
+ * overwriting the first result.
  */
 export async function handleGenerationSubmission(
   request: Request,
@@ -161,7 +142,6 @@ export async function handleGenerationSubmission(
 
   try {
     const submitted = await supervisor.controlGeneration({
-      requestId: body.requestId,
       principal: { kind: "user" },
       command: { kind: "submit-candidate", harnessCommit: body.harnessCommit },
     });

@@ -17,17 +17,34 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 
 function candidateSubmission() {
   return {
-    requestId: "controlled-candidate",
     principal: { kind: "user" } as const,
     command: { kind: "submit-candidate" as const, harnessCommit },
   };
+}
+
+/** Label and pass startup checking for `harnessCommit`, returning its generation label. */
+async function readyCandidateLabel(control: DurableObjectStub<Supervisor>): Promise<number> {
+  const submission = await control.controlGeneration(candidateSubmission());
+  if (!submission.ok) {
+    throw new Error("a valid candidate submission must succeed");
+  }
+
+  const startup = await control.checkGenerationStartup(
+    submission.outcome.generation.label,
+    readyArtifact(harnessCommit),
+  );
+  if (!startup.ok) {
+    throw new Error("a valid candidate must complete startup checking");
+  }
+
+  return submission.outcome.generation.label;
 }
 
 afterEach(async () => {
   await reset();
 });
 
-test("the real stub journals candidate submission and epoch-checked activation without unchecked mutation RPCs", async () => {
+test("the real stub exposes only controlGeneration for generation mutation", async () => {
   const control = supervisor("control-only-generation-mutation");
   expectTypeOf(control).toHaveProperty("getRelayAttempts");
   expectTypeOf(control).not.toHaveProperty("getRelayFacts");
@@ -35,53 +52,49 @@ test("the real stub journals candidate submission and epoch-checked activation w
   expectTypeOf(control).not.toHaveProperty("recordPreparationCheck");
   expectTypeOf(control).not.toHaveProperty("activateGeneration");
   expectTypeOf(control).toHaveProperty("controlGeneration");
+
   const submission = candidateSubmission();
   const firstSubmission = await control.controlGeneration(submission);
-  const replayedSubmission = await control.controlGeneration(submission);
-  if (!firstSubmission.ok) {
-    throw new Error("a valid candidate submission must succeed");
-  }
+  const resubmission = await control.controlGeneration(submission);
 
-  const startup = await control.checkGenerationStartup(
-    firstSubmission.outcome.generation.label,
-    readyArtifact(harnessCommit),
-  );
-  if (!startup.ok) {
-    throw new Error("a valid candidate must complete startup checking");
-  }
+  expect(
+    resubmission,
+    "resubmitting an already-labeled commit returns the existing generation",
+  ).toEqual(firstSubmission);
+});
 
+test("the real stub applies epoch-checked activation directly: stale epochs reject, the active label is a no-op", async () => {
+  const control = supervisor("control-epoch-checked-activation");
+  const label = await readyCandidateLabel(control);
   const active = await control.getActiveGeneration();
-  const stale = await control.controlGeneration({
-    requestId: "stale-controlled-activation",
-    principal: { kind: "user" },
-    command: {
-      kind: "activate",
-      label: firstSubmission.outcome.generation.label,
-      observedEpoch: active.epoch - 1,
-    },
-  });
-  const activation = {
-    requestId: "controlled-activation",
-    principal: { kind: "user" } as const,
-    command: {
-      kind: "activate" as const,
-      label: firstSubmission.outcome.generation.label,
-      observedEpoch: active.epoch,
-    },
-  };
-  const firstActivation = await control.controlGeneration(activation);
-  const replayedActivation = await control.controlGeneration(activation);
 
-  expect(replayedSubmission).toEqual(firstSubmission);
+  const stale = await control.controlGeneration({
+    principal: { kind: "user" },
+    command: { kind: "activate", label, observedEpoch: active.epoch - 1 },
+  });
+  const firstActivation = await control.controlGeneration({
+    principal: { kind: "user" },
+    command: { kind: "activate", label, observedEpoch: active.epoch },
+  });
+  if (!firstActivation.ok) {
+    throw new Error("a checked candidate must accept activation");
+  }
+  const noOpActivation = await control.controlGeneration({
+    principal: { kind: "user" },
+    command: { kind: "activate", label, observedEpoch: firstActivation.outcome.epoch },
+  });
+
   expect(stale).toEqual({ ok: false, problem: { code: "stale-epoch" } });
   expect(firstActivation).toMatchObject({ ok: true, outcome: { kind: "activated" } });
-  expect(replayedActivation).toEqual(firstActivation);
+  expect(noOpActivation, "activating the already-active generation is a no-op").toMatchObject({
+    ok: true,
+    outcome: { kind: "activated", effect: "no-op", epoch: firstActivation.outcome.epoch },
+  });
 });
 
 test("startup checking maps TaggedErrors to plain RPC values", async () => {
   const control = supervisor("plain-startup-check-result");
   const submission = await control.controlGeneration({
-    requestId: "deadline-candidate",
     principal: { kind: "user" },
     command: { kind: "submit-candidate", harnessCommit: deadlineCommit },
   });
