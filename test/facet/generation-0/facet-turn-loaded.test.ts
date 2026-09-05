@@ -109,12 +109,22 @@ test("a loaded isolate runs a turn against a capability passed as an RPC argumen
 
   const frames = await readFrames(await facet.startTurn(workspace.target, OPENING, "/workspace"));
 
-  expect(frames.map((frame) => frame.kind)).toEqual(["tool-result", "text", "completed"]);
+  expect(frames.map((frame) => frame.kind)).toEqual([
+    "tool-start",
+    "tool-result",
+    "text",
+    "completed",
+  ]);
   expect(
-    frames[0],
+    frames[1],
     "the read only succeeds if it reached the file this test created in its own isolate",
-  ).toMatchObject({ kind: "tool-result", toolName: "read", isError: false });
-  expect(frames[1]).toEqual({ kind: "text", text: "The file says hello world." });
+  ).toMatchObject({
+    kind: "tool-result",
+    toolName: "read",
+    isError: false,
+    content: "hello world",
+  });
+  expect(frames[2]).toEqual({ kind: "text", text: "The file says hello world." });
 });
 
 test("the turn's tool writes reach the originating workspace across the RPC hop", async () => {
@@ -152,7 +162,7 @@ test("the turn runs a command through the capability and reads its byte-framed o
   handle.push({ name: "exit", exitCode: 0 });
 
   const frames = await framesPromise;
-  expect(frames[0]).toMatchObject({ kind: "tool-result", toolName: "bash", isError: false });
+  expect(frames[1]).toMatchObject({ kind: "tool-result", toolName: "bash", isError: false });
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
 });
 

@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { FakeWorkspace } from "../../facet/generation-0/fakes.js";
+import { FakeWorkspace } from "./fake-workspace.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 
 const NOW = 1_700_000_000_000;

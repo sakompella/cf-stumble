@@ -3,24 +3,14 @@ import { parseFacetTurnRequest, type FacetTurnRequest } from "./facet-turn-reque
 import { createPiAgentTurnState, runPiAgentTurn } from "./pi-agent-turn.js";
 import { leaseProjectCapability, type ProjectCapabilityLease } from "./project-capability.js";
 import { createRouteStreamFn, ROUTE_MODEL } from "./route-stream.js";
-import type { AgentEvent } from "@cf-stumble/pi";
+import { TurnFrames } from "./turn-frames.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { Generation0Capabilities } from "./capabilities.js";
-import type { PiAgentTurnOutcome, PiAgentTurnState } from "./pi-agent-turn.js";
+import type { PiAgentTurnOutcome } from "./pi-agent-turn.js";
+import type { FacetTurnFrame } from "./turn-frames.js";
 
 export type { FacetTurnRequest } from "./facet-turn-request.js";
-
-/**
- * One frame of a turn's byte stream. `completed` and `failed` both carry the Pi state the next
- * turn continues from, because a turn that hit its model-call limit or a model error still
- * produced conversation the thread must keep. `rejected` carries none: no turn ran.
- */
-export type FacetTurnFrame =
-  | Readonly<{ kind: "text"; text: string }>
-  | Readonly<{ kind: "tool-result"; toolCallId: string; toolName: string; isError: boolean }>
-  | Readonly<{ kind: "completed"; state: PiAgentTurnState }>
-  | Readonly<{ kind: "failed"; code: "model-call-limit" | "model-error"; state: PiAgentTurnState }>
-  | Readonly<{ kind: "rejected"; code: "invalid-project-capability" | "invalid-turn-request" }>;
+export type { FacetTurnFrame } from "./turn-frames.js";
 
 const encoder = new TextEncoder();
 
@@ -34,26 +24,6 @@ function outcomeFrame(outcome: PiAgentTurnOutcome): FacetTurnFrame {
     : { kind: "failed", code: outcome.problem.code, state: outcome.state };
 }
 
-/** The frames one Pi lifecycle event publishes, if any. Only whole messages are published. */
-function eventFrames(event: AgentEvent): readonly FacetTurnFrame[] {
-  if (event.type !== "message_end") return [];
-  const { message } = event;
-  if (message.role === "toolResult") {
-    return [
-      {
-        kind: "tool-result",
-        toolCallId: message.toolCallId,
-        toolName: message.toolName,
-        isError: message.isError,
-      },
-    ];
-  }
-  if (message.role !== "assistant") return [];
-  return message.content
-    .filter((block) => block.type === "text")
-    .map((block) => ({ kind: "text", text: block.text }));
-}
-
 async function pumpTurn(
   capabilities: Generation0Capabilities,
   lease: ProjectCapabilityLease,
@@ -62,13 +32,14 @@ async function pumpTurn(
   signal: AbortSignal,
   publish: (frame: FacetTurnFrame) => void,
 ): Promise<void> {
+  const frames = new TurnFrames();
   const outcome = await runPiAgentTurn({
     prompt: request.prompt,
     state: request.state ?? createPiAgentTurnState(ROUTE_MODEL),
     env: createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability }),
     streamFn: createRouteStreamFn(capabilities.MODEL, signal),
     onEvent: (event) => {
-      for (const frame of eventFrames(event)) publish(frame);
+      for (const frame of frames.frames(event)) publish(frame);
     },
     signal,
   });

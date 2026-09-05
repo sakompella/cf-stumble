@@ -22,14 +22,27 @@ test("streams the turn's text, tool results, and terminal state as byte frames",
 
   const frames = await readFrames(turnStream(route, received));
 
-  expect(frames.map((frame) => frame.kind)).toEqual(["tool-result", "text", "completed"]);
+  expect(frames.map((frame) => frame.kind)).toEqual([
+    "tool-start",
+    "tool-result",
+    "text",
+    "completed",
+  ]);
   expect(frames[0]).toEqual({
+    kind: "tool-start",
+    toolCallId: "read-1",
+    toolName: "read",
+    arguments: { path: "readme.md" },
+  });
+  expect(frames[1]).toEqual({
     kind: "tool-result",
     toolCallId: "read-1",
     toolName: "read",
     isError: false,
+    content: "first line",
+    truncated: false,
   });
-  expect(frames[1]).toEqual({ kind: "text", text: "The file says: first line" });
+  expect(frames[2]).toEqual({ kind: "text", text: "The file says: first line" });
 });
 
 test("carries the Pi state the next turn continues from in the terminal frame", async () => {
@@ -56,7 +69,8 @@ test("reports a tool error as a frame rather than ending the turn", async () => 
 
   const frames = await readFrames(turnStream(route, received));
 
-  expect(frames[0]).toMatchObject({ kind: "tool-result", toolName: "read", isError: true });
+  expect(frames[0]).toMatchObject({ kind: "tool-start", toolName: "read" });
+  expect(frames[1]).toMatchObject({ kind: "tool-result", toolName: "read", isError: true });
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
 });
 

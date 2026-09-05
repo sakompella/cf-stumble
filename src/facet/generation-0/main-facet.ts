@@ -15,7 +15,7 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
  */
 export class MainFacet extends DurableObject<Generation0Capabilities> {
   override fetch(request: Request): Promise<Response> {
-    return handleGeneration0Request(request, this.env);
+    return handleGeneration0Request(request);
   }
 
   /**

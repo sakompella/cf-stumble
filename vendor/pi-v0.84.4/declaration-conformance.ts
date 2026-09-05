@@ -38,6 +38,21 @@ export type ExportedTypesConformToVendoredPi = [
   Assert<Equivalent<Exported.CustomMessage, Upstream.CustomMessage>>,
   Assert<Equivalent<Exported.BranchSummaryMessage, Upstream.BranchSummaryMessage>>,
   Assert<Equivalent<Exported.CompactionSummaryMessage, Upstream.CompactionSummaryMessage>>,
+  Assert<Equivalent<typeof Exported.convertToLlm, typeof Upstream.convertToLlm>>,
+  Assert<Equivalent<typeof Exported.createCompactionSummaryMessage, typeof Upstream.createCompactionSummaryMessage>>,
+  Assert<Equivalent<Exported.CompactionPreparation, Upstream.CompactionPreparation>>,
+  Assert<Equivalent<Exported.CompactionSettings, Upstream.CompactionSettings>>,
+  Assert<Equivalent<Exported.CompactResult, Upstream.CompactResult>>,
+  Assert<Equivalent<Exported.Entry, Upstream.Entry>>,
+  Assert<Equivalent<Exported.MessageEntry, Upstream.MessageEntry>>,
+  Assert<Equivalent<typeof Exported.DEFAULT_COMPACTION_SETTINGS, typeof Upstream.DEFAULT_COMPACTION_SETTINGS>>,
+  Assert<Equivalent<typeof Exported.estimateContextTokens, typeof Upstream.estimateContextTokens>>,
+  Assert<Equivalent<typeof Exported.prepareCompaction, typeof Upstream.prepareCompaction>>,
+  Assert<Equivalent<typeof Exported.shouldCompact, typeof Upstream.shouldCompact>>,
+  // Models and compact are exported but not asserted here. Models.stream returns
+  // AssistantMessageEventStream, whose private fields make two separately-compiled declaration
+  // emits nominally distinct, for exactly the reason EventStreamShape above records; compact takes
+  // a Models parameter and inherits that. Comparing them yields false against an identical type.
   Assert<Equivalent<Exported.Api, Upstream.Api>>,
   Assert<Equivalent<Exported.Model<Exported.Api>, Upstream.Model<Upstream.Api>>>,
   Assert<Equivalent<Exported.ExecutionEnv, Upstream.ExecutionEnv>>,

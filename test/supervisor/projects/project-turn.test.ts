@@ -14,6 +14,7 @@ import {
   turnWithNothingServing,
   workspaceName,
 } from "./project-turn-helpers.js";
+import type { FacetTurnFrame } from "../../../src/facet/generation-0/index.js";
 
 /**
  * The production path from a client-supplied project id to a turn running in that project's
@@ -33,6 +34,14 @@ import {
  */
 
 const [projectOne, projectTwo] = PROJECT_CATALOG;
+
+/**
+ * The tool-result frame of a turn. A turn publishes the tool call before its result, so these
+ * tests name the frame they mean rather than counting positions in the stream.
+ */
+function toolResultFrame(frames: readonly FacetTurnFrame[]): FacetTurnFrame | undefined {
+  return frames.find((frame) => frame.kind === "tool-result");
+}
 
 afterEach(async () => {
   await reset();
@@ -99,7 +108,7 @@ test("a turn may read a sibling repository, because the workspace is one machine
   const read = await completedTurn(workspaces, reader, projectTwo.id);
 
   expect(
-    read[0],
+    toolResultFrame(read),
     "ADR-0038 permits reaching a sibling repository; it is not a security boundary",
   ).toMatchObject({ kind: "tool-result", toolName: "read", isError: false });
 });
@@ -114,7 +123,7 @@ test("a turn cannot address anything outside the workspace root", async () => {
   const frames = await completedTurn(workspaces, facet, projectOne.id);
 
   expect(
-    frames[0],
+    toolResultFrame(frames),
     "the path guard is the workspace root, not the project directory",
   ).toMatchObject({ kind: "tool-result", toolName: "read", isError: true });
 });
@@ -131,7 +140,7 @@ test("another tenant's workspace is a different name that no request can reach",
   const read = await completedTurn(workspaces, other, projectOne.id, otherTenantWorkspaceName);
 
   expect(
-    read[0],
+    toolResultFrame(read),
     "the second tenant's Supervisor names its own workspace, which holds no such file",
   ).toMatchObject({ kind: "tool-result", toolName: "read", isError: true });
   expect(
