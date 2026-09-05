@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { mapProviderError, type ProjectFilesystemProvider, type ProjectStat } from "./provider.js";
 import {
   fail,
@@ -7,8 +8,16 @@ import {
   type ProjectResult,
 } from "./protocol.js";
 
-/** Every addressed path lives beneath this fixed provider-space root. */
-export const PROJECT_ROOT = "/project";
+/**
+ * Every addressed path lives beneath the tenant's workspace root. `workspace-layout.ts` owns that
+ * root and the facet's path-escape guard reads the same constant, so address translation here and
+ * the guard there cannot come to disagree about what is inside it.
+ *
+ * The root is the whole workspace rather than one repository. The harness checkout, every project
+ * clone, and the managed instructions are directories inside it (ADR-0038), so an agent can read a
+ * sibling repository when the work needs it, exactly as it could on a development machine: project
+ * selection chooses a working directory, not a boundary.
+ */
 
 /** Linux's own symlink-follow cap (`MAXSYMLINKS`). Applies across one whole resolve call. */
 const MAX_SYMLINK_FOLLOWS = 40;
@@ -35,7 +44,7 @@ export function parseAddressedPath(input: unknown): ProjectResult<readonly strin
 }
 
 export function providerPathOf(segments: readonly string[]): string {
-  return segments.length === 0 ? PROJECT_ROOT : `${PROJECT_ROOT}/${segments.join("/")}`;
+  return segments.length === 0 ? WORKSPACE_ROOT : `${WORKSPACE_ROOT}/${segments.join("/")}`;
 }
 
 export function addressedPathOf(segments: readonly string[]): string {
@@ -43,7 +52,7 @@ export function addressedPathOf(segments: readonly string[]): string {
 }
 
 function addressedFromProviderPath(path: string): string {
-  return path === PROJECT_ROOT ? "/" : path.slice(PROJECT_ROOT.length);
+  return path === WORKSPACE_ROOT ? "/" : path.slice(WORKSPACE_ROOT.length);
 }
 
 function joinOne(base: string, name: string): string {
@@ -51,7 +60,7 @@ function joinOne(base: string, name: string): string {
 }
 
 function isWithinRoot(path: string): boolean {
-  return path === PROJECT_ROOT || path.startsWith(`${PROJECT_ROOT}/`);
+  return path === WORKSPACE_ROOT || path.startsWith(`${WORKSPACE_ROOT}/`);
 }
 
 /** Splits a symlink target into components, dropping empty parts but keeping `.`/`..`. */
@@ -163,10 +172,10 @@ export function resolveAddressedPath(
   segments: readonly string[],
   options: ResolveOptions,
 ): ProjectResult<ResolveOutcome> {
-  if (segments.length === 0) return statAt(provider, PROJECT_ROOT, "/");
+  if (segments.length === 0) return statAt(provider, WORKSPACE_ROOT, "/");
 
   const addressed = addressedPathOf(segments);
-  let resolved = PROJECT_ROOT;
+  let resolved = WORKSPACE_ROOT;
   const queue: string[] = [...segments];
   let linkFollows = 0;
 

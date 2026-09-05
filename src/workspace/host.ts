@@ -21,13 +21,13 @@ import {
   ProjectRpcTarget,
 } from "./project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../harness-build.js";
-import { PROJECT_PROVISION_CONFIGURATION } from "../project-provision.js";
+import { WORKSPACE_ROOT } from "../workspace-layout.js";
 
-// Version 0 has one check command, so it is fixed here rather than configurable. The root comes
-// from the provisioning configuration because the clone lands there: two constants would let the
-// surface Pi reads and the directory the repository is cloned into drift apart.
+// Version 0 has one check command, so it is fixed here rather than configurable. The root is the
+// workspace root that `workspace-layout.ts` owns, the same one the project capability addresses
+// paths beneath, so this surface and that one cannot disagree about where the repositories are.
 const CONFIGURATION = {
-  root: PROJECT_PROVISION_CONFIGURATION.projectRoot,
+  root: WORKSPACE_ROOT,
   commands: { check: "./test.sh" },
 } as const satisfies WorkspaceConfiguration;
 
@@ -48,9 +48,12 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
 }
 
 /**
- * Durable, tenant-scoped Computer host. Its RPC surface returns plain values and one narrow
- * project capability; it never returns the workspace, its container API, or a credential-bearing
- * binding.
+ * The one durable Computer workspace a tenant owns (ADR-0038). It holds the harness repository,
+ * every connected project repository, and the build scratch subtree as separate directories, and
+ * the Supervisor names it from its own server-derived tenant key.
+ *
+ * Its RPC surface returns plain values and one narrow project capability; it never returns the
+ * workspace, its container API, or a credential-bearing binding.
  */
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #workspace: Workspace;
@@ -80,10 +83,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /**
-   * Build one labeled harness commit. This surface has its own root and only the planned build
-   * steps, so a caller names a commit and a step and never supplies command text. A build
-   * workspace is a separate Workspace Host instance, so a build reaches no project file even
-   * though one class serves both surfaces.
+   * Build one labeled harness commit. This surface carries only the planned build steps, so a
+   * caller names a commit and a step and never supplies command text. A build extracts into the
+   * scratch subtree `workspace-layout.ts` reserves for it, which holds no repository, so a build
+   * writes inside no project clone and never inside the editable harness checkout.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
@@ -103,13 +106,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * and that map holds exactly the check the user's repository defines. Adding provisioning there
    * would put a clone within reach of whatever asks for a check.
    *
-   * A caller names a project and a planned step. The repository URL is resolved from the catalog
-   * on this side, so no caller can point a clone at a URL of its own.
+   * A caller names a project and a planned step. The repository URL and the directory are both
+   * resolved from the catalog on this side, so no caller can point a clone at a URL or a place of
+   * its own.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
     return executeProjectProvisionRequest({
-      configuration: PROJECT_PROVISION_CONFIGURATION,
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });

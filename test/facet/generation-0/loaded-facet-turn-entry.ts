@@ -53,8 +53,14 @@ export default class LoadedFacetTurnEntry extends WorkerEntrypoint<LoadedFacetTu
     projectTarget: ProjectRpcTargetContract,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: mirrors `MainFacet.startTurn`, whose request arrives over RPC unproven.
     request: unknown,
+    workingDirectory: string,
   ): ReadableStream<Uint8Array> {
-    return startFacetTurn({ MODEL: scriptedRoute(this.env.MODEL_SCRIPT) }, projectTarget, request);
+    return startFacetTurn(
+      { MODEL: scriptedRoute(this.env.MODEL_SCRIPT) },
+      projectTarget,
+      request,
+      workingDirectory,
+    );
   }
 
   /**

@@ -25,7 +25,7 @@ test("a single JSON frame split across two physical byte chunks still decodes as
     kill: () => Promise.resolve(),
   };
   const seen: string[] = [];
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: (chunk) => {
       seen.push(chunk);
     },
@@ -44,7 +44,7 @@ test("two frames concatenated into a single physical byte chunk both decode in o
     kill: () => Promise.resolve(),
   };
   const seen: string[] = [];
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: (chunk) => {
       seen.push(chunk);
     },
@@ -66,7 +66,7 @@ test("a multibyte UTF-8 character split across two physical byte chunks decodes 
     kill: () => Promise.resolve(),
   };
   const seen: string[] = [];
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: (chunk) => {
       seen.push(chunk);
     },
@@ -81,7 +81,7 @@ test("a byte chunk that is not valid JSON resolves ExecutionError('unknown')", a
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -92,6 +92,6 @@ test("a truncated final frame with no closing newline resolves ExecutionError('u
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });

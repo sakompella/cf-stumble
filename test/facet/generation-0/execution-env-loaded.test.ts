@@ -106,7 +106,7 @@ test("a loaded isolate runs Pi's stock tools against a ProjectRpcTarget passed a
 
   // The entrypoint's raw wire-format probe runs first, before any of the four stock tools.
   await waitUntil(() => execBackend.requests.length > 0);
-  expect(execBackend.requests[0]).toMatchObject({ command: "probe", cwd: "/project" });
+  expect(execBackend.requests[0]).toMatchObject({ command: "probe", cwd: "/workspace" });
   const probeHandle = execBackend.handles[0]!;
   probeHandle.push({ name: "stdout", data: encode("probe\n") });
   // oxlint-disable-next-line unicorn/prefer-single-call -- `push` here queues one exec event per call, not array elements to merge.
@@ -117,14 +117,14 @@ test("a loaded isolate runs Pi's stock tools against a ProjectRpcTarget passed a
   // host-side provider's bytes at a point in time when they can only reflect the write, not the
   // edit that has not run yet.
   await waitUntil(() => execBackend.requests.length >= 2);
-  expect(execBackend.requests[1]).toMatchObject({ command: "checkpoint", cwd: "/project" });
-  expect(provider.readFileSync("/project/notes.txt")).toEqual(encode("hello world"));
+  expect(execBackend.requests[1]).toMatchObject({ command: "checkpoint", cwd: "/workspace" });
+  expect(provider.readFileSync("/workspace/notes.txt")).toEqual(encode("hello world"));
   const checkpointHandle = execBackend.handles[1]!;
   checkpointHandle.push({ name: "exit", exitCode: 0 });
 
   // createBashTool's own exec call arrives once the checkpoint and the edit have resolved.
   await waitUntil(() => execBackend.requests.length >= 3);
-  expect(execBackend.requests[2]).toMatchObject({ command: "echo hi", cwd: "/project" });
+  expect(execBackend.requests[2]).toMatchObject({ command: "echo hi", cwd: "/workspace" });
   const bashHandle = execBackend.handles[2]!;
   bashHandle.push({ name: "stdout", data: encode("bash stdout\n") });
   // oxlint-disable-next-line unicorn/prefer-single-call -- `push` here queues one exec event per call, not array elements to merge.
@@ -147,9 +147,9 @@ test("a loaded isolate runs Pi's stock tools against a ProjectRpcTarget passed a
   expect(evidence.rereadAfterEdit.text).toBe("hello there");
 
   // The edit tool changed the file; the host-side provider holds the bytes it changed it to.
-  expect(provider.readFileSync("/project/notes.txt")).toEqual(encode("hello there"));
+  expect(provider.readFileSync("/workspace/notes.txt")).toEqual(encode("hello there"));
 
-  // The bash tool's command reached the same originating fake backend, with the facet's /project
+  // The bash tool's command reached the same originating fake backend, with the facet's /workspace
   // cwd, and returned the stock combined stdout/stderr output in the order the events arrived.
   expect(evidence.bash.text).toBe("bash stdout\nbash stderr\n");
 

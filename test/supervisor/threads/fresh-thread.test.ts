@@ -30,10 +30,10 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
  * no workspace call at all" rather than as "no call happened to break anything".
  */
 async function workspaceWithTurnOutput(): Promise<FakeWorkspace> {
-  const workspace = new FakeWorkspace({ files: { "/project/notes.md": "written before" } });
+  const workspace = new FakeWorkspace({ files: { "/workspace/notes.md": "written before" } });
   await workspace.execute({
     kind: "write-file",
-    path: "/project/plan.md",
+    path: "/workspace/plan.md",
     content: "the agent wrote this during a turn",
   });
   return workspace;

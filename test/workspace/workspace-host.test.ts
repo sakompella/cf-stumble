@@ -11,7 +11,7 @@ import {
 import { workspaceContainerBackendConfiguration } from "../../src/workspace/host.js";
 
 const configuration = {
-  root: "/project",
+  root: "/workspace",
   commands: { check: "pnpm verify" },
 } as const satisfies WorkspaceConfiguration;
 
@@ -19,8 +19,8 @@ type FailurePoint = keyof WorkspaceOperations;
 
 class FakeWorkspace implements WorkspaceOperations {
   readonly calls: string[] = [];
-  readonly files = new Map<string, string>([["/project/readme.md", "before"]]);
-  readonly directories = new Set(["/project", "/project/src"]);
+  readonly files = new Map<string, string>([["/workspace/readme.md", "before"]]);
+  readonly directories = new Set(["/workspace", "/workspace/src"]);
   readonly symlinks = new Set<string>();
   private readonly failAt: FailurePoint | undefined;
 
@@ -91,9 +91,9 @@ test("reads, writes, and lists only below the configured project root", async ()
     result: { kind: "files", entries: ["src", "readme.md"] },
   });
 
-  expect(fake.calls).toContain("read:/project/readme.md");
-  expect(fake.calls).toContain("write:/project/src/new.ts:export {};");
-  expect(fake.calls).toContain("list:/project");
+  expect(fake.calls).toContain("read:/workspace/readme.md");
+  expect(fake.calls).toContain("write:/workspace/src/new.ts:export {};");
+  expect(fake.calls).toContain("list:/workspace");
 });
 
 test("runs only configured commands and provides a fixed git diff", async () => {
@@ -114,8 +114,8 @@ test("runs only configured commands and provides a fixed git diff", async () => 
   });
 
   expect(fake.calls).toEqual([
-    "command:pnpm verify:/project",
-    "command:git diff --no-ext-diff:/project",
+    "command:pnpm verify:/workspace",
+    "command:git diff --no-ext-diff:/workspace",
   ]);
 });
 
@@ -142,7 +142,7 @@ test("rejects malformed requests, path escapes, and caller supplied commands", a
 
 test("rejects paths containing a symbolic link before file operations", async () => {
   const fake = new FakeWorkspace();
-  fake.symlinks.add("/project/src");
+  fake.symlinks.add("/workspace/src");
 
   for (const request of [
     { kind: "read-file", path: "src/readme.md" },
@@ -188,6 +188,6 @@ test("keeps request parsing and planning as pure decisions", () => {
   expect(planWorkspaceRequest(configuration, request)).toEqual({
     kind: "run-command",
     source: "pnpm verify",
-    cwd: "/project",
+    cwd: "/workspace",
   });
 });

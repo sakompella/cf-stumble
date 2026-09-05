@@ -35,7 +35,7 @@ interface FdState {
  * existing content to satisfy an append.
  */
 export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider {
-  readonly nodes = new Map<string, FakeNode>([["/project", { type: "dir", mtimeMs: 0 }]]);
+  readonly nodes = new Map<string, FakeNode>([["/workspace", { type: "dir", mtimeMs: 0 }]]);
   readonly calls: string[] = [];
   readonly fds = new Map<number, FdState>();
   #nextFd = 3;

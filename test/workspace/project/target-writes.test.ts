@@ -75,7 +75,7 @@ test("writeFile returns a provider failure when creating a missing parent throws
 
 test("lstat returns a provider failure when symlink metadata cannot be read", async () => {
   const { provider, target } = makeTarget();
-  provider.addSymlink("/project/link", "target");
+  provider.addSymlink("/workspace/link", "target");
   provider.readlinkSync = () => {
     throw new Error("metadata unavailable");
   };

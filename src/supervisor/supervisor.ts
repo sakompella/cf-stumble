@@ -14,6 +14,7 @@ import {
 } from "./eligibility.js";
 import {
   streamProjectTurn,
+  tenantWorkspaceName,
   type ProjectTurnRequest,
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
@@ -41,7 +42,6 @@ import {
 } from "./recovery/index.js";
 import {
   HarnessArtifacts,
-  WorkspaceHostModuleMapBuilder,
   type BuildWorkspaceNamespace,
   type MainFacetCapabilities,
   type MainHarnessArtifactInput,
@@ -53,10 +53,8 @@ import {
   type StartupCheckResult,
 } from "./startup-check/index.js";
 
-// `WORKSPACE_HOST` is one Durable Object namespace named through the two narrow views used here.
-// The build view names the harness build workspace from a module constant; the project view
-// obtains one project's capability from a workspace named after a catalog-resolved project.
-// Neither view can perform the other's operations, and no request can name either workspace.
+// `WORKSPACE_HOST` is one namespace, seen through two narrow views of the tenant's one shared
+// workspace (ADR-0038). Neither view can perform the other's operations.
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly MODULE_MAPS: R2Bucket;
@@ -74,20 +72,23 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
   private readonly threads: ProjectThreads;
+  /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
+  private readonly workspaceName: string;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage);
-    // A cache miss builds the labeled commit in the harness build workspace, which is a separate
-    // Workspace Host from the project workspace and is named by a module constant.
-    this.artifacts = new HarnessArtifacts(
+    this.workspaceName = tenantWorkspaceName(ctx.id.name ?? ctx.id.toString());
+    this.artifacts = HarnessArtifacts.forWorkspace(
       env.MODULE_MAPS,
-      new WorkspaceHostModuleMapBuilder(env.WORKSPACE_HOST),
+      env.WORKSPACE_HOST,
+      this.workspaceName,
     );
     this.control = new GenerationControl(this.generations);
     this.relayAttempts = new RelayAttempts(ctx.storage);
     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
     this.relay = new FacetRelay(this.relayAttempts);
+    // T6a's seam: `new ProjectThreads(ctx.storage, catalog)`; a placeholder catalog resolves ids.
     this.threads = new ProjectThreads(ctx.storage);
   }
 
@@ -261,22 +262,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * Run one turn against a project's own Computer workspace and stream the frames it produces.
+   * Run one turn in the tenant's workspace, in the selected project's directory, and stream it.
    *
    * This is the other half of a turn from the three lease methods above: they decide who may write
-   * a project's thread and store the conversation it ends with, while this one does the work. It
-   * reads and writes no thread, so a caller drives both halves — take the lease, stream the turn,
-   * then present that lease id with the `state.messages` the terminal frame carries, which is the
-   * `AgentMessage[]` `finishProjectTurn` parses. Joining them is the next unit's work, because it
-   * has to settle what a disconnected browser leaves behind (ADR-0037), not merely call the two in
-   * order; whatever joins them holds the lease id server-side and never hands it to the page.
+   * a project's thread, while this one does the work and writes no thread. A caller drives both —
+   * take the lease, stream the turn, then present that lease id with the `state.messages` the
+   * terminal frame carries. Joining them is the next unit's work, because it has to settle what a
+   * disconnected browser leaves behind (ADR-0037) and keep the lease id server-side.
    *
-   * The workspace capability travels to the generation as an argument of its `startTurn`, and this
-   * method receives none of its own: `streamProjectTurn` explains the order its steps run in.
+   * The capability and the selected project's working directory both travel to the generation as
+   * arguments of its `startTurn`; this method receives neither of its own.
    */
   streamProjectTurn(input: ProjectTurnRequest): Promise<ProjectTurnStart> {
     return streamProjectTurn({
       ...input,
+      workspaceName: this.workspaceName,
       namespace: this.env.WORKSPACE_HOST,
       mount: () => this.mountServing(this.generations.active()),
     });

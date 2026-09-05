@@ -1,8 +1,8 @@
 import {
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
+  projectProvisionConfiguration,
   projectProvisionStep,
-  type ProjectProvisionConfiguration,
   type ProjectProvisionStepName,
 } from "../project-provision.js";
 import { resolveProject, type Project, type ProjectCatalog } from "../project-catalog.js";
@@ -10,13 +10,13 @@ import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
 
 /**
- * What a caller may ask a project workspace to provision. It names a catalog project and one
- * planned step, so neither command text nor a repository URL has a field to arrive in.
+ * What a caller may ask the workspace to provision. It names a catalog project and one planned
+ * step, so neither command text nor a repository URL has a field to arrive in.
  *
- * The project id has to travel even though the workspace belongs to one project already: the
- * workspace name is an opaque `access:<sha256>` of the tenant and the project (see
- * `workspace-names.ts`), and a hash cannot be inverted back into the project it stands for. So the
- * host receives the id and checks it against the catalog itself.
+ * The project id has to travel because one workspace holds every repository (ADR-0038): the
+ * workspace is named after the tenant alone, so its name says nothing about which project a
+ * request means. The host receives the id and checks it against the catalog itself, and the
+ * directory that id provisions comes from `workspace-layout.ts` rather than from the request.
  */
 export type ProjectProvisionRequest = Readonly<{
   kind: "provision-project";
@@ -72,15 +72,13 @@ export function parseProjectProvisionRequest(
 }
 
 /**
- * Decide the one operation a parsed provision request performs. The repository URL comes from the
- * resolved catalog project, so the shell text is derived entirely from server-side configuration.
+ * Decide the one operation a parsed provision request performs. Both the repository URL and the
+ * directory come from the resolved catalog project, so the shell text is derived entirely from
+ * server-side configuration.
  */
-export function planProjectProvisionRequest(
-  configuration: ProjectProvisionConfiguration,
-  request: ParsedProjectProvisionRequest,
-): WorkspacePlan {
+export function planProjectProvisionRequest(request: ParsedProjectProvisionRequest): WorkspacePlan {
   const step = projectProvisionStep(
-    planProjectProvision(configuration, request.project),
+    planProjectProvision(projectProvisionConfiguration(request.project.id), request.project),
     request.step,
   );
   switch (step.name) {

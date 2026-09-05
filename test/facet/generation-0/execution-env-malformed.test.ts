@@ -24,7 +24,7 @@ test("a malformed startExec envelope resolves ExecutionError('unknown')", async 
     startExec: () => Promise.resolve({ nonsense: true }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -34,7 +34,7 @@ test("a rejected startExec RPC call resolves ExecutionError('unknown')", async (
     startExec: () => Promise.reject(new Error("rpc down")),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -44,7 +44,7 @@ test("a malformed exec event resolves ExecutionError('unknown')", async () => {
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -54,7 +54,7 @@ test("the stream ending without a terminal event resolves ExecutionError('unknow
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -64,7 +64,7 @@ test("a rejecting exec event stream resolves ExecutionError('unknown')", async (
       Promise.resolve({ ok: true, value: { operationId: "op-1", events: rejectingReadable() } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -74,7 +74,7 @@ test("an unexplained 'killed' event, with no abort requested, resolves Execution
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
@@ -90,7 +90,7 @@ test("a non-empty env override is rejected before startExec is ever called", asy
     },
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     env: { FOO: "bar" },
   });
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
@@ -109,7 +109,7 @@ test("inheritEnv: false is rejected before startExec is ever called", async () =
     },
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     inheritEnv: false,
   });
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
@@ -130,7 +130,7 @@ test("an already-aborted signal resolves ExecutionError('aborted') without calli
   };
   const controller = new AbortController();
   controller.abort();
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     abortSignal: controller.signal,
   });
   expect(result).toMatchObject({ ok: false, error: { code: "aborted" } });
@@ -150,7 +150,7 @@ test("a throwing onStdout callback kills the operation and resolves ExecutionErr
       return Promise.resolve();
     },
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x", {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: () => {
       throw new Error("callback exploded");
     },
@@ -164,7 +164,7 @@ test("startExec failing outright is a spawn_error, and never rejects", async () 
     startExec: () => Promise.resolve({ ok: false, error: { code: "not-directory", path: "/bad" } }),
     kill: () => Promise.resolve(),
   };
-  const result = await execViaProjectTarget("/project", asExecTarget(target), "x");
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- `expect.objectContaining` is vitest's untyped asymmetric matcher.
   expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: "spawn_error" }) });
 });
@@ -178,7 +178,10 @@ test("a malformed lstat envelope from the filesystem side resolves a local FileE
     startExec: () => Promise.resolve({ ok: false, error: { code: "backend-unavailable" } }),
     kill: () => Promise.resolve(),
   };
-  const env = createFacetExecutionEnv({ cwd: "/project", projectTarget: asProjectTarget(target) });
+  const env = createFacetExecutionEnv({
+    cwd: "/workspace",
+    projectTarget: asProjectTarget(target),
+  });
   await expect(env.fileInfo("anything.txt")).resolves.toMatchObject({
     ok: false,
     error: { code: "unknown" },

@@ -1,10 +1,11 @@
 import { expect, test } from "vitest";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
-  PROJECT_PROVISION_CONFIGURATION,
   planProjectProvision,
+  projectProvisionConfiguration,
   projectProvisionStep,
 } from "../../src/project-provision.js";
+import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { PROJECT_CATALOG } from "../../src/project-catalog.js";
 import {
   executeProjectProvisionRequest,
@@ -25,9 +26,20 @@ import {
 
 const [projectOne, projectTwo] = PROJECT_CATALOG;
 
+/** The prefixes the executor stats before it writes, which is one per path component. */
+function pathParts(path: string): string[] {
+  const prefixes: string[] = [];
+  let current = "";
+  for (const part of path.split("/").filter((segment) => segment.length > 0)) {
+    current += `/${part}`;
+    prefixes.push(current);
+  }
+  return prefixes;
+}
+
 function cloneSource(): string {
   const step = projectProvisionStep(
-    planProjectProvision(PROJECT_PROVISION_CONFIGURATION, projectOne),
+    planProjectProvision(projectProvisionConfiguration(projectOne.id), projectOne),
     "clone",
   );
   if (step.name !== "clone") {
@@ -38,7 +50,7 @@ function cloneSource(): string {
 }
 
 const projectConfiguration = {
-  root: PROJECT_PROVISION_CONFIGURATION.projectRoot,
+  root: WORKSPACE_ROOT,
   commands: { check: "./test.sh" },
 } as const satisfies WorkspaceConfiguration;
 
@@ -77,11 +89,7 @@ class FakeProjectOperations implements WorkspaceOperations {
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
 function provision(operations: FakeProjectOperations, request: unknown) {
-  return executeProjectProvisionRequest({
-    configuration: PROJECT_PROVISION_CONFIGURATION,
-    operations,
-    request,
-  });
+  return executeProjectProvisionRequest({ operations, request });
 }
 
 test("resolves the repository from the catalog, not from the request", () => {
@@ -94,16 +102,14 @@ test("resolves the repository from the catalog, not from the request", () => {
     throw new Error("a catalog project and a planned step must parse");
   }
 
-  const planned = planProjectProvisionRequest(PROJECT_PROVISION_CONFIGURATION, parsed);
+  const planned = planProjectProvisionRequest(parsed);
 
   expect(parsed.project).toEqual(projectOne);
   expect(planned).toEqual({ kind: "run-command", source: cloneSource(), cwd: "/" });
-  expect(planned).not.toEqual(
-    planProjectProvisionRequest(PROJECT_PROVISION_CONFIGURATION, {
-      ...parsed,
-      project: projectTwo,
-    }),
-  );
+  expect(
+    planned,
+    "the directory as well as the repository comes from the resolved project",
+  ).not.toEqual(planProjectProvisionRequest({ ...parsed, project: projectTwo }));
 });
 
 test("plans the managed instructions as a file the server decides", () => {
@@ -116,9 +122,9 @@ test("plans the managed instructions as a file the server decides", () => {
     throw new Error("a catalog project and a planned step must parse");
   }
 
-  expect(planProjectProvisionRequest(PROJECT_PROVISION_CONFIGURATION, parsed)).toEqual({
+  expect(planProjectProvisionRequest(parsed)).toEqual({
     kind: "write-file",
-    path: PROJECT_PROVISION_CONFIGURATION.agentInstructionsPath,
+    path: MANAGED_AGENT_INSTRUCTIONS_PATH,
     content: MANAGED_AGENT_INSTRUCTIONS,
   });
 });
@@ -142,8 +148,8 @@ test("runs the clone above the project root and writes the instructions beside i
 
   expect(operations.calls).toEqual([
     "command:/",
-    "lstat:/AGENTS.md",
-    `write:/AGENTS.md:${MANAGED_AGENT_INSTRUCTIONS.length}`,
+    ...pathParts(MANAGED_AGENT_INSTRUCTIONS_PATH).map((prefix) => `lstat:${prefix}`),
+    `write:${MANAGED_AGENT_INSTRUCTIONS_PATH}:${MANAGED_AGENT_INSTRUCTIONS.length}`,
   ]);
   expect(operations.sources).toEqual([cloneSource()]);
 });
@@ -194,7 +200,7 @@ test("refuses a caller supplied repository URL, command, or project", async () =
 
 test("refuses managed instructions reached through a symbolic link", async () => {
   const operations = new FakeProjectOperations();
-  operations.symlinks.add(PROJECT_PROVISION_CONFIGURATION.agentInstructionsPath);
+  operations.symlinks.add(MANAGED_AGENT_INSTRUCTIONS_PATH);
 
   await expect(
     provision(operations, {

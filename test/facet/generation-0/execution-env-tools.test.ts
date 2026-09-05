@@ -79,7 +79,7 @@ test("createBashTool output over 50KiB is captured whole to a create-exclusive t
 
   const result = await execPromise;
   const fullOutputPath = fullOutputPathOf(result.details);
-  expect(fullOutputPath.startsWith("/project/.cf-stumble/tmp/")).toBe(true);
+  expect(fullOutputPath.startsWith("/workspace/.cf-stumble/tmp/")).toBe(true);
   await expect(env.readTextFile(fullOutputPath)).resolves.toEqual({ ok: true, value: fullOutput });
 });
 

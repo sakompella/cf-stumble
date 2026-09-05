@@ -130,7 +130,7 @@ async function editRereadBash(env: ReturnType<typeof createFacetExecutionEnv>) {
  * has no other way to yield that control back except through another exec round trip.
  */
 async function runStockTools(projectTarget: ProjectRpcTargetContract): Promise<StockToolRun> {
-  const env = createFacetExecutionEnv({ cwd: "/project", projectTarget });
+  const env = createFacetExecutionEnv({ cwd: "/workspace", projectTarget });
   const { write, read, checkpointFramesAreBytes } = await writeReadCheckpoint(env, projectTarget);
   const { edit, rereadAfterEdit, bash } = await editRereadBash(env);
 

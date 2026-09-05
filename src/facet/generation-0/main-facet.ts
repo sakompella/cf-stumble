@@ -19,7 +19,7 @@ export class MainFacet extends DurableObject<Generation0Capabilities> {
   }
 
   /**
-   * Run one turn against one project workspace and stream the frames it produces.
+   * Run one turn in the tenant's workspace and stream the frames it produces.
    *
    * The project capability is an argument rather than an environment entry, and it has to be. A
    * Worker Loader entry is cached under the harness commit, so a project capability placed in
@@ -27,12 +27,17 @@ export class MainFacet extends DurableObject<Generation0Capabilities> {
    * every other project from the same generation. Passing it per turn is also the only thing the
    * platform permits: an `RpcTarget` cannot be serialized into a Worker Loader's environment at
    * all, only handed across an RPC call.
+   *
+   * `workingDirectory` is where the turn starts, which is the selected project's directory inside
+   * that workspace. The host derives it from its own catalog, so it arrives beside the untrusted
+   * request rather than inside it.
    */
   startTurn(
     projectTarget: ProjectRpcTargetContract,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted; `startFacetTurn` parses it.
     request: unknown,
+    workingDirectory: string,
   ): ReadableStream<Uint8Array> {
-    return startFacetTurn(this.env, projectTarget, request);
+    return startFacetTurn(this.env, projectTarget, request, workingDirectory);
   }
 }

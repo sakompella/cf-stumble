@@ -7,6 +7,7 @@ import type {
 } from "../../facet/index.js";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { ModuleMapCache } from "./cache.js";
+import { WorkspaceHostModuleMapBuilder, type BuildWorkspaceNamespace } from "./build-workspace.js";
 import { canonicalModuleMap, sameModuleMap } from "./module-map.js";
 import { resolveModuleMap } from "./resolver.js";
 import type { HarnessModuleMapBuilder } from "./builder.js";
@@ -45,6 +46,22 @@ export class HarnessArtifacts {
   constructor(bucket: R2Bucket, builder: HarnessModuleMapBuilder) {
     this.cache = new ModuleMapCache(bucket);
     this.builder = builder;
+  }
+
+  /**
+   * The artifacts of a tenant that builds in its own workspace. A cache miss builds the labeled
+   * commit there, in the scratch subtree that holds no repository, so a build neither reads nor
+   * replaces a checkout, and one build per commit runs at a time.
+   */
+  static forWorkspace(
+    bucket: R2Bucket,
+    namespace: BuildWorkspaceNamespace,
+    workspaceName: string,
+  ): HarnessArtifacts {
+    return new HarnessArtifacts(
+      bucket,
+      new WorkspaceHostModuleMapBuilder(namespace, workspaceName),
+    );
   }
 
   /** Build or read the module map for a labeled harness commit. See `resolveModuleMap`. */

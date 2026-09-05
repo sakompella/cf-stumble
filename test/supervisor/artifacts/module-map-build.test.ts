@@ -12,8 +12,7 @@ import type {
   HarnessBuildConfiguration,
 } from "../../../src/supervisor/artifacts/index.js";
 import type { CommandOutput } from "../../../src/workspace/index.js";
-
-const PROJECT_ROOT = "/project";
+import { PROJECTS_DIRECTORY } from "../../../src/workspace-layout.js";
 
 const configuration: HarnessBuildConfiguration = {
   buildRoot: "/harness-builds",
@@ -110,8 +109,8 @@ test("plans an isolated build directory outside the project workspace", () => {
     cwd: plan.directory,
   });
   expect(
-    plan.steps.every((step) => !step.source.includes(PROJECT_ROOT)),
-    "a harness build must not touch the project workspace",
+    plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
+    "a harness build must not name a project directory",
   ).toBe(true);
 });
 

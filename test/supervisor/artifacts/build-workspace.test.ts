@@ -11,7 +11,7 @@ import type {
   BuildWorkspaceNamespace,
 } from "../../../src/supervisor/artifacts/index.js";
 import { planHarnessBuild, type HarnessBuildRequest } from "../../../src/harness-build.js";
-import { HARNESS_BUILD_WORKSPACE_NAME } from "../../../src/workspace-names.js";
+import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
 const commit = harnessCommit("6000000000000000000000000000000000000001");
@@ -67,9 +67,9 @@ class FakeBuildHost implements BuildWorkspaceHost {
 
 class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
   readonly names: string[] = [];
-  readonly host: FakeBuildHost;
+  readonly host: BuildWorkspaceHost;
 
-  constructor(host: FakeBuildHost) {
+  constructor(host: BuildWorkspaceHost) {
     this.host = host;
   }
 
@@ -79,9 +79,11 @@ class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
   }
 }
 
+const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
+
 function builderFor(host: FakeBuildHost) {
   const namespace = new FakeWorkspaceNamespace(host);
-  return { builder: new WorkspaceHostModuleMapBuilder(namespace), namespace };
+  return { builder: new WorkspaceHostModuleMapBuilder(namespace, workspaceName), namespace };
 }
 
 test("builds a labeled commit through the named build workspace", async () => {
@@ -103,7 +105,10 @@ test("builds a labeled commit through the named build workspace", async () => {
       ),
     }),
   );
-  expect(namespace.names).toEqual([HARNESS_BUILD_WORKSPACE_NAME]);
+  expect(
+    namespace.names,
+    "a build runs in the tenant's own workspace, not a global build container",
+  ).toEqual([workspaceName]);
 });
 
 test("offline fake workspace schedules missing repository provisioning before a labeled checkout", async () => {
@@ -112,8 +117,7 @@ test("offline fake workspace schedules missing repository provisioning before a 
   await builderFor(host).builder.build(commit);
 
   expect(plan.steps[0]?.source).toContain('while ! mkdir "$lock" 2>/dev/null; do');
-  expect(plan.steps[0]?.source).toContain('rm -rf "$repository"');
-  expect(plan.steps[0]?.source).toContain('git clone --no-checkout "$expected_remote" "$incoming"');
+  expect(plan.steps[0]?.source).toContain('git clone "$expected_remote" "$incoming"');
   expect(host.requests).toEqual([
     { kind: "build-step", harnessCommit: commit, step: "provision" },
     { kind: "build-step", harnessCommit: commit, step: "isolate" },
@@ -263,7 +267,7 @@ test("refuses a command the build plan does not contain", async () => {
   const workspace = new CommitBuildWorkspace(host, HARNESS_BUILD_CONFIGURATION, commit);
 
   await expect(workspace.runCommand("whoami", "/")).rejects.toThrow(/planned steps/u);
-  await expect(workspace.runCommand(plan.steps[0].source, "/project")).rejects.toThrow(
+  await expect(workspace.runCommand(plan.steps[0].source, "/workspace")).rejects.toThrow(
     /planned steps/u,
   );
   await expect(
@@ -277,7 +281,7 @@ test("refuses a read that escapes the commit's build directory", async () => {
   const workspace = new CommitBuildWorkspace(host, HARNESS_BUILD_CONFIGURATION, commit);
 
   for (const path of [
-    "/project/readme.md",
+    "/workspace/readme.md",
     `${plan.directory}/../../project/readme.md`,
     `${HARNESS_BUILD_CONFIGURATION.buildRoot}/other/build/module-map.json`,
     plan.moduleMapPath.replace("module-map.json", "secret.json"),

@@ -16,11 +16,10 @@ import {
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
-
-const PROJECT_ROOT = "/project";
+import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 
 const projectConfiguration = {
-  root: PROJECT_ROOT,
+  root: WORKSPACE_ROOT,
   commands: { check: "./test.sh" },
 } as const satisfies WorkspaceConfiguration;
 
@@ -84,20 +83,6 @@ function build(operations: FakeBuildOperations, request: unknown) {
   });
 }
 
-test("keeps the build root, and its workspace name, apart from the project", () => {
-  const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
-
-  expect(HARNESS_BUILD_CONFIGURATION.buildRoot).not.toBe(PROJECT_ROOT);
-  expect(plan.directory).toBe(buildDirectory);
-  expect(plan.moduleMapPath).toBe(moduleMapPath);
-  expect(
-    plan.steps.every(
-      (step) => !step.source.includes(PROJECT_ROOT) && !step.cwd.startsWith(PROJECT_ROOT),
-    ),
-    "a harness build must not touch the project workspace",
-  ).toBe(true);
-});
-
 test("plans one planned step, or the build output, from a validated commit", () => {
   const step = parseHarnessBuildRequest({
     kind: "build-step",
@@ -114,7 +99,7 @@ test("plans one planned step, or the build output, from a validated commit", () 
     source: [
       "set -eu",
       `archive=${buildDirectory}/.harness-archive.tar`,
-      `git --git-dir=/harness/.git archive --format=tar -o "$archive" ${commit}`,
+      `git --git-dir=${HARNESS_DIRECTORY}/.git archive --format=tar -o "$archive" ${commit}`,
       `tar -x -C ${buildDirectory} -f "$archive"`,
       'rm -f "$archive"',
     ].join("\n"),
@@ -261,23 +246,9 @@ test("the provision step obtains the requested commit before the build reads it"
   );
 });
 
-test("an interrupted provision leaves an existing harness checkout in place", () => {
-  const provision = harnessBuildStep(
-    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
-    "provision",
-  );
-  const clone = provision.source.indexOf('git clone --no-checkout "$expected_remote" "$incoming"');
-  const removal = provision.source.indexOf('rm -rf "$repository"');
-
-  expect(clone, "the replacement clone must land beside the repository").toBeGreaterThan(0);
-  expect(removal, "the existing checkout must survive a clone that never finishes").toBeGreaterThan(
-    clone,
-  );
-});
-
 test("shellQuote emits POSIX single-quote escaping the shell can parse", () => {
   expect(shellQuote("plain")).toBe("'plain'");
-  expect(shellQuote("/harness/.git")).toBe("'/harness/.git'");
+  expect(shellQuote("/workspace/harness/.git")).toBe("'/workspace/harness/.git'");
   expect(shellQuote("$(rm -rf /)")).toBe("'$(rm -rf /)'");
 
   // A single quote closes the literal, emits an escaped quote, then reopens it. An extra backslash

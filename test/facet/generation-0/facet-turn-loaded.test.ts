@@ -101,13 +101,13 @@ afterEach(async () => {
 
 test("a loaded isolate runs a turn against a capability passed as an RPC argument", async () => {
   const workspace = makeWorkspace();
-  workspace.provider.addFile("/project/notes.txt", encode("hello world"));
+  workspace.provider.addFile("/workspace/notes.txt", encode("hello world"));
   const facet = await loadFacet([
     calls("read", { path: "notes.txt" }),
     says("The file says hello world."),
   ]);
 
-  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING));
+  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING, "/workspace"));
 
   expect(frames.map((frame) => frame.kind)).toEqual(["tool-result", "text", "completed"]);
   expect(
@@ -124,11 +124,11 @@ test("the turn's tool writes reach the originating workspace across the RPC hop"
     says("Wrote it."),
   ]);
 
-  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING));
+  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING, "/workspace"));
 
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
   expect(
-    workspace.provider.readFileSync("/project/made-by-the-turn.txt"),
+    workspace.provider.readFileSync("/workspace/made-by-the-turn.txt"),
     "the loaded isolate had no filesystem of its own; these bytes can only have arrived over RPC",
   ).toEqual(encode("across the hop"));
 });
@@ -137,12 +137,15 @@ test("the turn runs a command through the capability and reads its byte-framed o
   const workspace = makeWorkspace();
   const facet = await loadFacet([calls("bash", { command: "echo hi" }), says("It printed hi.")]);
 
-  const framesPromise = readFrames(await facet.startTurn(workspace.target, OPENING));
+  const framesPromise = readFrames(await facet.startTurn(workspace.target, OPENING, "/workspace"));
   await vi.waitFor(() => {
     expect(workspace.execBackend.requests.length).toBeGreaterThan(0);
   });
 
-  expect(workspace.execBackend.requests[0]).toMatchObject({ command: "echo hi", cwd: "/project" });
+  expect(workspace.execBackend.requests[0]).toMatchObject({
+    command: "echo hi",
+    cwd: "/workspace",
+  });
   const handle = workspace.execBackend.handles[0]!;
   handle.push({ name: "stdout", data: encode("hi\n") });
   // oxlint-disable-next-line unicorn/prefer-single-call -- `push` queues one exec event per call, not array elements to merge.
@@ -172,7 +175,7 @@ test("no stub for the workspace outlives a finished turn", async () => {
     says("Wrote it."),
   ]);
 
-  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING));
+  const frames = await readFrames(await facet.startTurn(workspace.target, OPENING, "/workspace"));
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
 
   await vi.waitFor(() => {

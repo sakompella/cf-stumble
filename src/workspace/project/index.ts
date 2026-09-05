@@ -17,7 +17,7 @@ export type {
   ProjectTransactions,
 } from "./provider.js";
 export { mapProviderError } from "./provider.js";
-export { PROJECT_ROOT, parseAddressedPath } from "./resolve.js";
+export { parseAddressedPath } from "./resolve.js";
 export { ProjectRpcTarget } from "./target.js";
 export {
   MAX_CONCURRENT_EXECS,
