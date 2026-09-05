@@ -38,11 +38,7 @@ async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> 
  */
 async function workspaceWithTurnOutput(): Promise<FakeWorkspace> {
   const workspace = new FakeWorkspace({ files: { "/workspace/notes.md": "written before" } });
-  await workspace.execute({
-    kind: "write-file",
-    path: "/workspace/plan.md",
-    content: "the agent wrote this during a turn",
-  });
+  await workspace.project().writeFile("/workspace/plan.md", "the agent wrote this during a turn");
   return workspace;
 }
 

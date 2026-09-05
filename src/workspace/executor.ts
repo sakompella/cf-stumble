@@ -1,10 +1,4 @@
-import type {
-  WorkspaceConfiguration,
-  WorkspaceFailure,
-  WorkspacePlan,
-  WorkspaceResult,
-} from "./decisions.js";
-import { parseWorkspaceRequest, planWorkspaceRequest } from "./decisions.js";
+import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
@@ -16,7 +10,6 @@ export type WorkspaceOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
-  listFiles(path: string): Promise<readonly string[]>;
   runCommand(source: string, cwd: string): Promise<Readonly<CommandOutput>>;
 }>;
 
@@ -63,20 +56,9 @@ async function executePlan(
       await operations.writeFile(plan.path, plan.content);
       return { ok: true, result: { kind: "written" } };
     }
-    case "list-files": {
-      if (!(await isSymlinkFree(operations, plan.path))) {
-        return { ok: false, error: { code: "path-outside-root" } };
-      }
-      const entries = await operations.listFiles(plan.path);
-      return { ok: true, result: { kind: "files", entries: [...entries] } };
-    }
     case "run-command": {
       const output = await operations.runCommand(plan.source, plan.cwd);
       return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } };
-    }
-    case "git-diff": {
-      const output = await operations.runCommand("git diff --no-ext-diff", plan.cwd);
-      return { ok: true, result: { kind: "git-diff", ...cloneCommandOutput(output) } };
     }
     default: {
       const exhaustive: never = plan;
@@ -90,33 +72,9 @@ function cloneCommandOutput(output: CommandOutput): CommandOutput {
 }
 
 /**
- * Thin effect shell around the pure parse and planning functions. It redacts Computer failures,
- * preserves command exit codes, and returns only plain structured-cloneable values.
- */
-export async function executeWorkspaceRequest(
-  input: Readonly<{
-    operations: WorkspaceOperations;
-    configuration: WorkspaceConfiguration;
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public request is parsed at this boundary.
-    request: unknown;
-  }>,
-): Promise<WorkspaceResult> {
-  const parsed = parseWorkspaceRequest(input.request);
-  if ("ok" in parsed) return parsed;
-  const plan = planWorkspaceRequest(input.configuration, parsed);
-  if (!("kind" in plan)) return plan;
-
-  try {
-    return await executePlan(input.operations, plan);
-  } catch {
-    return unavailable();
-  }
-}
-
-/**
- * The build surface's effect shell. It is deliberately separate from the project shell above: it
- * plans from the build configuration alone, so it can neither run a project command nor reach a
- * project file, and the project shell can never run a build step.
+ * The build surface's effect shell. It redacts Computer failures, preserves command exit codes,
+ * and returns only plain structured-cloneable values. It plans from the build configuration
+ * alone, so it can neither run a project command nor reach a project file.
  */
 export async function executeHarnessBuildRequest(
   input: Readonly<{
@@ -140,10 +98,10 @@ export async function executeHarnessBuildRequest(
 }
 
 /**
- * The provisioning surface's effect shell. It is separate from the project shell for the reason
- * the project shell cannot host it: `planWorkspaceRequest` runs only commands that are keys of
- * `configuration.commands`, and the project's one command is the check the user's repository
- * defines. Provisioning is a capability alongside that check, not another entry in it.
+ * The provisioning surface's effect shell. It is separate from the build shell above because it
+ * plans from a catalog project rather than from a harness commit: a provision clones the
+ * repository the catalog names and writes the managed instructions beside it, and a build can
+ * reach neither. Everything a turn does afterwards goes through the project capability instead.
  */
 export async function executeProjectProvisionRequest(
   input: Readonly<{

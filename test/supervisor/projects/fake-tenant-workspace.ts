@@ -46,10 +46,6 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Promise.resolve();
   }
 
-  listFiles(): Promise<readonly string[]> {
-    return Promise.reject(new Error("nothing in these tests lists a workspace directory"));
-  }
-
   runCommand(source: string): Promise<CommandOutput> {
     this.commands.push(source);
     if (source.includes("gh auth login")) {

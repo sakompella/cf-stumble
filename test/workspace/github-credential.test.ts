@@ -44,10 +44,6 @@ class FakeCredentialOperations implements WorkspaceOperations {
     return Promise.resolve();
   }
 
-  listFiles(): Promise<readonly string[]> {
-    return Promise.reject(new Error("the credential surface never lists a directory"));
-  }
-
   runCommand(source: string): Promise<CommandOutput> {
     this.sources.push(source);
     return Promise.resolve({ stdout: this.stdout, stderr: this.stderr, exitCode: this.exitCode });

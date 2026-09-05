@@ -7,16 +7,14 @@ import {
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
 import type { Project } from "../../src/project-catalog.js";
-import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
+import { MANAGED_AGENT_INSTRUCTIONS_PATH } from "../../src/workspace-layout.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   executeProjectProvisionRequest,
-  executeWorkspaceRequest,
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   type CommandOutput,
   type ProjectProvisionRequest,
-  type WorkspaceConfiguration,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
@@ -66,11 +64,6 @@ function cloneSource(): string {
   return step.source;
 }
 
-const projectConfiguration = {
-  root: WORKSPACE_ROOT,
-  commands: { check: "./test.sh" },
-} as const satisfies WorkspaceConfiguration;
-
 class FakeProjectOperations implements WorkspaceOperations {
   readonly calls: string[] = [];
   readonly sources: string[] = [];
@@ -90,11 +83,6 @@ class FakeProjectOperations implements WorkspaceOperations {
   writeFile(path: string, content: string): Promise<void> {
     this.calls.push(`write:${path}:${content.length}`);
     return Promise.resolve();
-  }
-
-  listFiles(path: string): Promise<readonly string[]> {
-    this.calls.push(`list:${path}`);
-    return Promise.reject(new Error("provisioning never lists through the workspace surface"));
   }
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
@@ -208,27 +196,4 @@ test("refuses managed instructions reached through a symbolic link", async () =>
     provision(operations, provisionRequest(projectOne, "instructions")),
   ).resolves.toEqual({ ok: false, error: { code: "path-outside-root" } });
   expect(operations.calls.every((call) => call.startsWith("lstat:"))).toBe(true);
-});
-
-test("keeps provisioning out of the project surface and its check command", async () => {
-  const operations = new FakeProjectOperations();
-
-  await expect(
-    executeWorkspaceRequest({
-      configuration: projectConfiguration,
-      operations,
-      request: provisionRequest(projectOne, "clone"),
-    }),
-  ).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
-  await expect(
-    executeWorkspaceRequest({
-      configuration: projectConfiguration,
-      operations,
-      request: { kind: "run-command", command: "clone" },
-    }),
-  ).resolves.toEqual({ ok: false, error: { code: "unknown-command" } });
-
-  expect(Object.keys(projectConfiguration.commands)).toEqual(["check"]);
-  expect(projectConfiguration.commands.check).toBe("./test.sh");
-  expect(operations.calls).toEqual([]);
 });

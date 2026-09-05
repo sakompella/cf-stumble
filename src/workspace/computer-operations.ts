@@ -35,10 +35,6 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
     return this.workspace.fs.writeFile(path, content);
   }
 
-  async listFiles(path: string): Promise<readonly string[]> {
-    return (await this.workspace.fs.readdir(path)).map((entry) => entry.name);
-  }
-
   async runCommand(source: string, cwd: string): Promise<CommandOutput> {
     const execution = await this.workspace.runtime.exec(source, {
       backend: "container-shell",

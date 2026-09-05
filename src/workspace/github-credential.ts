@@ -17,11 +17,11 @@ import { asUntrusted, field, fieldsAreExactly } from "./untrusted.js";
  * The Workspace Host's credential surface: install the workspace's GitHub credential, report what
  * it can do, and ask GitHub whether one repository is reachable.
  *
- * It is a surface of its own for the reason provisioning is: `planWorkspaceRequest` runs only the
- * commands named in the project configuration, and a credential install is not one of the
- * repository's checks. Keeping it separate also keeps the token out of every other path — this is
- * the only place in cf-stumble where a token value exists inside the workspace boundary, and it
- * exists there for one call.
+ * It is a surface of its own for the reason provisioning is: each Workspace Host surface parses
+ * only its own request and plans its own commands, and a credential install is neither a build
+ * step nor a provisioning step. Keeping it separate also keeps the token out of every other
+ * path — this is the only place in cf-stumble where a token value exists inside the workspace
+ * boundary, and it exists there for one call.
  *
  * No result carries a token. The install answers with a word, the status with a state and at most
  * a login name, and a failure with text this module redacts before returning it.
