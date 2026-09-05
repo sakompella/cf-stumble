@@ -8,6 +8,7 @@ import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { RecoveryPolicy } from "../../src/supervisor/recovery/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activeSupervisor } from "../supervisor/helpers.js";
+import { ownerScope } from "./helpers.js";
 
 const policy: RecoveryPolicy = {
   maxRepairAttempts: 2,
@@ -30,11 +31,15 @@ type StatusResponse = {
 };
 
 function latestRecovery(stub: DurableObjectStub<Supervisor>): Promise<Response> {
-  return routeOwnerApiRequest(new Request("https://cf-stumble.test/api/recovery/latest"), stub);
+  return routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/recovery/latest"),
+    stub,
+    ownerScope,
+  );
 }
 
 function status(stub: DurableObjectStub<Supervisor>): Promise<Response> {
-  return routeOwnerApiRequest(new Request("https://cf-stumble.test/api/status"), stub);
+  return routeOwnerApiRequest(new Request("https://cf-stumble.test/api/status"), stub, ownerScope);
 }
 
 afterEach(async () => {

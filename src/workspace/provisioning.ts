@@ -3,7 +3,12 @@ import {
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
 } from "../project-provision.js";
-import { resolveProject, type ProjectCatalog, type ProjectId } from "../project-catalog.js";
+import {
+  resolveProject,
+  type Project,
+  type ProjectCatalog,
+  type ProjectId,
+} from "../project-catalog.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
 
@@ -67,9 +72,10 @@ const STEP_RESULT_KIND = {
 
 async function runStep(
   host: ProvisionWorkspaceHost,
-  projectId: ProjectId,
+  project: Project,
   step: ProjectProvisionStepName,
 ): Promise<Result<ProjectProvisionStepName, ProjectProvisionProblem>> {
+  const projectId = project.id;
   const unavailable: Result<ProjectProvisionStepName, ProjectProvisionProblem> = Result.err({
     code: "provision-workspace-unavailable",
     projectId,
@@ -78,7 +84,12 @@ async function runStep(
 
   let result: WorkspaceResult;
   try {
-    result = await host.provision({ kind: "provision-project", projectId, step });
+    result = await host.provision({
+      kind: "provision-project",
+      projectId,
+      repositoryUrl: project.repositoryUrl,
+      step,
+    });
   } catch {
     return unavailable;
   }
@@ -120,20 +131,20 @@ export function provisionProjectWorkspace(
     return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
   }
 
-  return provisionResolvedProject(input, resolved.project.id);
+  return provisionResolvedProject(input, resolved.project);
 }
 
 async function provisionResolvedProject(
   input: ProvisionProjectWorkspaceInput,
-  projectId: ProjectId,
+  project: Project,
 ): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
   const host = input.namespace.getByName(input.workspaceName);
   for (const step of PROJECT_PROVISION_STEP_NAMES) {
-    const ran = await runStep(host, projectId, step);
+    const ran = await runStep(host, project, step);
     if (ran.isErr()) {
       return Result.err(ran.error);
     }
   }
 
-  return Result.ok({ projectId, workspaceName: input.workspaceName });
+  return Result.ok({ projectId: project.id, workspaceName: input.workspaceName });
 }

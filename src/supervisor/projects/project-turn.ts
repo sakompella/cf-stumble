@@ -1,4 +1,4 @@
-import { resolveProject, type ProjectCatalog } from "../../project-catalog.js";
+import { resolveProject, type Project, type ProjectCatalog } from "../../project-catalog.js";
 import { projectDirectory } from "../../workspace-layout.js";
 import type { Result } from "better-result";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
@@ -18,6 +18,13 @@ export type ProjectTurnFacet = Readonly<{
     workingDirectory: string,
   ): Promise<ReadableStream<Uint8Array>>;
 }>;
+
+/**
+ * Reconcile the selected project's clone before the turn runs, answering whether the workspace is
+ * ready. Provisioning is idempotent (`workspace/provisioning.ts`), so this runs on every turn and
+ * is also what repairs a workspace the platform recreated between two turns.
+ */
+export type ProvisionSelectedProject = (project: Project) => Promise<boolean>;
 
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
 export type MountServingGeneration = () => Promise<
@@ -42,6 +49,7 @@ export interface ProjectTurnInput extends ProjectTurnRequest {
   readonly catalog?: ProjectCatalog;
   readonly namespace: ProjectWorkspaceNamespace;
   readonly mount: MountServingGeneration;
+  readonly provision: ProvisionSelectedProject;
 }
 
 /**
@@ -69,10 +77,11 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
 /**
  * Start one streamed turn in the tenant's workspace, against the selected project's directory.
  *
- * The order of the three steps is deliberate. The project id is resolved against the catalog
- * first, so a working directory exists only for a project the server recognizes and a client
- * string never becomes a path. The generation is mounted second, so a Supervisor with nothing
- * serving refuses before obtaining any capability. The capability is obtained last and reaches the
+ * The order of the steps is deliberate. The project id is resolved against the catalog first, so a
+ * working directory exists only for a project the server recognizes and a client string never
+ * becomes a path. The generation is mounted second, so a Supervisor with nothing serving refuses
+ * before touching a workspace at all. The project's clone is reconciled third, because a turn that
+ * is about to edit files needs them to be there. The capability is obtained last and reaches the
  * generation as an argument of `startTurn`, never as a loader environment entry: the Worker Loader
  * caches its entry under the harness commit, so a capability placed there would be whichever
  * project warmed the cache and would then serve every other project.
@@ -97,6 +106,10 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
   const mounted = await input.mount();
   if (mounted.isErr()) {
     return { ok: false, reason: mountRefusal(mounted.error.code) };
+  }
+
+  if (!(await input.provision(resolved.project))) {
+    return { ok: false, reason: "workspace-unavailable" };
   }
 
   let capability: ProjectRpcTargetContract;

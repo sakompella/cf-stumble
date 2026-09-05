@@ -1,7 +1,10 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { env } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
+import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
+import { sampleCatalog } from "../project-fixtures.js";
 import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
@@ -43,6 +46,26 @@ export class MainFacet extends DurableObject {
 }
 `,
   );
+}
+
+/**
+ * Give a Supervisor the two projects of `test/project-fixtures.ts`.
+ *
+ * A real connection verifies repository access and clones through the Workspace Host, and this
+ * runtime has no container to do either, so these tests write the rows a connection writes and
+ * nothing else. The Supervisor then resolves project ids exactly as it does in a deployment: from
+ * its own `connected_projects` table.
+ */
+export function connectSampleProjects(control: DurableObjectStub<Supervisor>): Promise<void> {
+  return runInDurableObject(control, (_instance, state) => {
+    const projects = new ConnectedProjects(state.storage);
+    for (const project of sampleCatalog) {
+      projects.connect(
+        { repositoryUrl: project.repositoryUrl, displayName: project.displayName },
+        0,
+      );
+    }
+  });
 }
 
 export async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {

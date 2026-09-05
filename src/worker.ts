@@ -37,7 +37,7 @@ export default {
 
     const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
     if (new URL(request.url).pathname.startsWith("/api/")) {
-      return routeOwnerApiRequest(request, supervisor);
+      return routeOwnerApiRequest(request, supervisor, access.scope);
     }
 
     return supervisor.fetch(withoutAccessCredentials(request));

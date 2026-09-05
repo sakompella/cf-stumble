@@ -4,7 +4,7 @@ import {
   projectProvisionConfiguration,
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
-import { PROJECT_CATALOG } from "../../src/project-catalog.js";
+import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
@@ -36,7 +36,7 @@ import {
  */
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-1");
-const [projectOne] = PROJECT_CATALOG;
+const projectOne = sampleProjectOne;
 
 /**
  * Answers only the requests the real provision surface accepts, and plans them the way the real
@@ -102,7 +102,7 @@ function provisionerFor(host: FakeProvisionHost) {
     namespace,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
     provision: (projectId: unknown = projectOne.id) =>
-      provisionProjectWorkspace({ workspaceName, projectId, namespace }),
+      provisionProjectWorkspace({ workspaceName, projectId, catalog: sampleCatalog, namespace }),
   };
 }
 
@@ -121,23 +121,48 @@ test("clones and then writes the managed instructions into the tenant's workspac
   }
   expect(provisioned.value).toEqual({ projectId: projectOne.id, workspaceName });
   expect(host.requests).toEqual([
-    { kind: "provision-project", projectId: projectOne.id, step: "clone" },
-    { kind: "provision-project", projectId: projectOne.id, step: "instructions" },
+    {
+      kind: "provision-project",
+      projectId: projectOne.id,
+      repositoryUrl: projectOne.repositoryUrl,
+      step: "clone",
+    },
+    {
+      kind: "provision-project",
+      projectId: projectOne.id,
+      repositoryUrl: projectOne.repositoryUrl,
+      step: "instructions",
+    },
   ]);
   expect(namespace.names, "one project reaches the tenant's one workspace").toEqual([
     workspaceName,
   ]);
 });
 
-test("carries a project id and a step name, never a repository URL or command text", async () => {
+/**
+ * The Workspace Host is a different Durable Object from the Supervisor and cannot read the
+ * tenant's catalog, so the caller sends the repository it already resolved there. What still
+ * cannot travel is command text, and the host re-derives the id from the URL, so the pair cannot
+ * name one repository and another project's directory.
+ */
+test("carries a resolved project and a step name, never command text", async () => {
   const host = new FakeProvisionHost();
 
   await provisionerFor(host).provision();
 
   const sent = JSON.stringify(host.requests);
-  expect(sent).not.toContain("http");
+  expect(sent).toContain(projectOne.repositoryUrl);
   expect(sent).not.toContain("git ");
-  expect(sent).not.toContain(projectOne.repositoryUrl);
+  expect(sent).not.toContain('clone "');
+  expect(
+    parseProjectProvisionRequest({
+      kind: "provision-project",
+      projectId: projectOne.id,
+      repositoryUrl: sampleProjectTwo.repositoryUrl,
+      step: "clone",
+    }),
+    "an id that is not the one the URL derives is refused",
+  ).toEqual({ ok: false, error: { code: "invalid-request" } });
 });
 
 test("an interrupted provision and its resumption ask for the same state", async () => {

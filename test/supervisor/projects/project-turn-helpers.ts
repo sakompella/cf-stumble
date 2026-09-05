@@ -1,6 +1,7 @@
 import { Result } from "better-result";
 import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
+import { sampleCatalog, sampleProjectOne } from "../../project-fixtures.js";
 import { readFrames } from "../../facet/generation-0/facet-turn-helpers.js";
 import { loadFixtureEntrypoint } from "../../loaded-fixture.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/facet-turn.js";
@@ -22,6 +23,12 @@ export const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-one"
 export const otherTenantWorkspaceName = tenantWorkspaceName("supervisor-name-of-tenant-two");
 
 const OPENING = { prompt: "do the work", state: null };
+
+/**
+ * These tests drive their own Workspace Host stand-in, which holds the files the turn works on
+ * already. Provisioning is exercised by the provisioning tests; here it only has to not refuse.
+ */
+const provisioned = (): Promise<boolean> => Promise.resolve(true);
 
 /**
  * The Workspace Host stand-in in its own isolate, plus the namespace view the Supervisor's project
@@ -63,6 +70,8 @@ export function turnFor(
   return streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
+    provision: provisioned,
+    catalog: sampleCatalog,
     workspaceName: tenantWorkspace,
     projectId,
     request: OPENING,
@@ -74,8 +83,10 @@ export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<P
   return streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.err({ code: "no-active-generation" })),
+    provision: provisioned,
+    catalog: sampleCatalog,
     workspaceName,
-    projectId: "project-one",
+    projectId: sampleProjectOne.id,
     request: OPENING,
   });
 }

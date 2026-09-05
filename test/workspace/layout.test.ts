@@ -6,7 +6,7 @@ import {
 import { parseAddressedPath } from "../../src/workspace/project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { projectProvisionConfiguration } from "../../src/project-provision.js";
-import { PROJECT_CATALOG } from "../../src/project-catalog.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   BUILD_SCRATCH_ROOT,
   HARNESS_DIRECTORY,
@@ -26,7 +26,8 @@ import {
  * what is inside the workspace, which is a security divergence rather than untidiness.
  */
 
-const [projectOne, projectTwo] = PROJECT_CATALOG;
+const projectOne = sampleProjectOne;
+const projectTwo = sampleProjectTwo;
 
 test("gives the harness, each project, and build scratch separate directories", () => {
   const directories = [

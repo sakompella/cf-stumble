@@ -6,7 +6,8 @@ import {
   projectProvisionConfiguration,
   projectProvisionStep,
 } from "../../src/project-provision.js";
-import { PROJECT_CATALOG, parsePublicRepositoryUrl } from "../../src/project-catalog.js";
+import { parsePublicRepositoryUrl } from "../../src/project-catalog.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import type { Project } from "../../src/project-catalog.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import {
@@ -23,7 +24,8 @@ import {
  * that a clone succeeds, or that the container can reach the remote at all.
  */
 
-const [projectOne, projectTwo] = PROJECT_CATALOG;
+const projectOne = sampleProjectOne;
+const projectTwo = sampleProjectTwo;
 
 function planFor(project: Project) {
   return planProjectProvision(projectProvisionConfiguration(project.id), project);

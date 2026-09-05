@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
-import { controlRequest, ownerApiSupervisor as supervisor } from "./helpers.js";
+import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
 test("returns the active generation and no recovery report when none exists", async () => {
   const response = await routeOwnerApiRequest(
@@ -24,6 +24,7 @@ test("returns the active generation and no recovery report when none exists", as
         });
       },
     }),
+    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -44,15 +45,16 @@ test("returns the active generation and no recovery report when none exists", as
 
 test("returns a project's thread", async () => {
   const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/projects/project-one/thread"),
+    new Request("https://cf-stumble.test/api/projects/sample-project-one/thread"),
     supervisor(),
+    ownerScope,
   );
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual({
     ok: true,
     thread: {
-      projectId: "project-one",
+      projectId: "sample-project-one",
       conversation: "[]",
       messageCount: 0,
       revision: 0,
@@ -65,6 +67,7 @@ test("reports a project the catalog does not have without inventing a thread", a
   const response = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/projects/project-nine/thread"),
     supervisor(),
+    ownerScope,
   );
 
   expect(response.status).toBe(404);
@@ -77,7 +80,7 @@ test("reports a project the catalog does not have without inventing a thread", a
 test("starts a fresh thread only on POST, and passes the id the client named", async () => {
   let reset: string | undefined;
   const fresh = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/projects/project-one/thread/fresh", {
+    new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh", {
       method: "POST",
     }),
     supervisor({
@@ -97,13 +100,15 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
         });
       },
     }),
+    ownerScope,
   );
   const wrongMethod = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/projects/project-one/thread/fresh"),
+    new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh"),
     supervisor(),
+    ownerScope,
   );
 
-  expect(reset).toBe("project-one");
+  expect(reset).toBe("sample-project-one");
   expect(fresh.status).toBe(200);
   expect(wrongMethod.status).toBe(404);
 });
@@ -112,10 +117,12 @@ test("returns JSON 404 for unknown route and method pairs", async () => {
   const unknownPath = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/unknown"),
     supervisor(),
+    ownerScope,
   );
   const unknownMethod = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/status", { method: "POST" }),
     supervisor(),
+    ownerScope,
   );
 
   expect(unknownPath.status).toBe(404);
@@ -173,6 +180,7 @@ test("reports no recovery report before any recovery episode exists", async () =
   const response = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/recovery/latest"),
     supervisor(),
+    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -183,14 +191,17 @@ test("keeps a GET-only recovery route and a POST-only control route", async () =
   const postRecovery = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/recovery/latest", { method: "POST" }),
     supervisor(),
+    ownerScope,
   );
   const getActivate = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/generations/activate"),
     supervisor(),
+    ownerScope,
   );
   const getSubmit = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/generations/submit"),
     supervisor(),
+    ownerScope,
   );
 
   expect(postRecovery.status).toBe(404);

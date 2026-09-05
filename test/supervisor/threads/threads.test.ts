@@ -6,7 +6,12 @@ import { afterEach, expect, test } from "vitest";
 import type { AgentMessage } from "@cf-stumble/pi";
 import { parseThreadMessages } from "../../../src/supervisor/threads/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
+import {
+  activateGeneration,
+  prepareGeneration,
+  submitCandidate,
+  connectSampleProjects,
+} from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 
 const NOW = 1_700_000_000_000;
@@ -17,8 +22,14 @@ const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 const firstTurn = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
 const secondTurn = [...firstTurn, THREAD_MESSAGE_SAMPLES.bashExecution];
 
-function supervisor(name: string): DurableObjectStub<Supervisor> {
-  return env.SUPERVISOR.getByName(name);
+/**
+ * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
+ * that names a project has to connect it first, exactly as the owner does.
+ */
+async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
+  const control = env.SUPERVISOR.getByName(name);
+  await connectSampleProjects(control);
+  return control;
 }
 
 /**
@@ -59,11 +70,11 @@ afterEach(async () => {
 });
 
 test("a project the catalog does not have reaches no thread at all", async () => {
-  const control = supervisor("thread-unknown-project");
+  const control = await supervisor("thread-unknown-project");
 
   const unknown = await control.getProjectThread("project-nine");
   const malformed = await control.getProjectThread("Project One");
-  const notAString = await control.getProjectThread({ id: "project-one" });
+  const notAString = await control.getProjectThread({ id: "sample-project-one" });
   const started = await control.startProjectTurn("project-nine", 0, NOW, LEASE_MS);
 
   expect(unknown).toEqual({ ok: false, problem: { code: "unknown-project-id" } });
@@ -73,12 +84,12 @@ test("a project the catalog does not have reaches no thread at all", async () =>
 });
 
 test("a catalog project has an empty thread before anything is written to it", async () => {
-  const control = supervisor("thread-empty");
+  const control = await supervisor("thread-empty");
 
-  expect(await control.getProjectThread("project-one")).toEqual({
+  expect(await control.getProjectThread("sample-project-one")).toEqual({
     ok: true,
     thread: {
-      projectId: "project-one",
+      projectId: "sample-project-one",
       conversation: "[]",
       messageCount: 0,
       revision: 0,
@@ -89,24 +100,24 @@ test("a catalog project has an empty thread before anything is written to it", a
 });
 
 test("a committed turn stores the conversation and advances the revision", async () => {
-  const control = supervisor("thread-commit");
-  const lease = await admit(control, "project-one", 0);
+  const control = await supervisor("thread-commit");
+  const lease = await admit(control, "sample-project-one", 0);
 
-  const finished = await control.finishProjectTurn("project-one", lease, firstTurn, NOW);
+  const finished = await control.finishProjectTurn("sample-project-one", lease, firstTurn, NOW);
 
   expect(finished).toMatchObject({
     ok: true,
     thread: { revision: 1, turnActive: false, messageCount: firstTurn.length },
   });
-  expect(await conversationOf(control, "project-one")).toEqual(firstTurn);
+  expect(await conversationOf(control, "sample-project-one")).toEqual(firstTurn);
 });
 
 test("a conversation that is not a list of Pi messages is refused and stores nothing", async () => {
-  const control = supervisor("thread-invalid-messages");
-  const lease = await admit(control, "project-one", 0);
+  const control = await supervisor("thread-invalid-messages");
+  const lease = await admit(control, "sample-project-one", 0);
 
   const finished = await control.finishProjectTurn(
-    "project-one",
+    "sample-project-one",
     lease,
     [{ role: "telepathy", timestamp: 1 }],
     NOW,
@@ -114,61 +125,61 @@ test("a conversation that is not a list of Pi messages is refused and stores not
 
   expect(finished).toMatchObject({
     ok: false,
-    problem: { code: "invalid-messages", projectId: "project-one" },
+    problem: { code: "invalid-messages", projectId: "sample-project-one" },
   });
-  expect(await control.getProjectThread("project-one")).toMatchObject({
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { messageCount: 0, revision: 0 },
   });
 });
 
 test("a write with a stale expected revision fails and leaves the conversation untouched", async () => {
-  const control = supervisor("thread-stale-write");
-  const lease = await admit(control, "project-one", 0);
-  await control.finishProjectTurn("project-one", lease, firstTurn, NOW);
+  const control = await supervisor("thread-stale-write");
+  const lease = await admit(control, "sample-project-one", 0);
+  await control.finishProjectTurn("sample-project-one", lease, firstTurn, NOW);
 
-  const staleWrite = await control.startProjectTurn("project-one", 0, NOW, LEASE_MS);
+  const staleWrite = await control.startProjectTurn("sample-project-one", 0, NOW, LEASE_MS);
 
   expect(staleWrite).toEqual({
     ok: false,
-    problem: { code: "stale-revision", projectId: "project-one", currentRevision: 1 },
+    problem: { code: "stale-revision", projectId: "sample-project-one", currentRevision: 1 },
   });
   expect(Object.getPrototypeOf(staleWrite)).toBe(Object.prototype);
-  expect(await control.getProjectThread("project-one")).toMatchObject({
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { messageCount: firstTurn.length, revision: 1 },
   });
-  expect(await conversationOf(control, "project-one")).toEqual(firstTurn);
+  expect(await conversationOf(control, "sample-project-one")).toEqual(firstTurn);
 });
 
 test("a second start for a project with an active turn is a conflict, not a stale revision", async () => {
-  const control = supervisor("thread-conflicting-turn");
-  await control.startProjectTurn("project-one", 0, NOW, LEASE_MS);
+  const control = await supervisor("thread-conflicting-turn");
+  await control.startProjectTurn("sample-project-one", 0, NOW, LEASE_MS);
 
-  const second = await control.startProjectTurn("project-one", 0, NOW, LEASE_MS);
+  const second = await control.startProjectTurn("sample-project-one", 0, NOW, LEASE_MS);
 
   expect(second).toEqual({
     ok: false,
-    problem: { code: "turn-conflict", projectId: "project-one", deadlineAt: NOW + LEASE_MS },
+    problem: { code: "turn-conflict", projectId: "sample-project-one", deadlineAt: NOW + LEASE_MS },
   });
-  expect(await control.getProjectThread("project-one")).toMatchObject({
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { turnActive: true },
   });
 });
 
 test("finishing or abandoning a turn frees the slot for a later start", async () => {
-  const control = supervisor("thread-turn-release");
-  const firstLease = await admit(control, "project-one", 0);
-  await control.finishProjectTurn("project-one", firstLease, firstTurn, NOW);
-  const secondLease = await admit(control, "project-one", 1);
+  const control = await supervisor("thread-turn-release");
+  const firstLease = await admit(control, "sample-project-one", 0);
+  await control.finishProjectTurn("sample-project-one", firstLease, firstTurn, NOW);
+  const secondLease = await admit(control, "sample-project-one", 1);
 
-  const abandoned = await control.abandonProjectTurn("project-one", secondLease);
+  const abandoned = await control.abandonProjectTurn("sample-project-one", secondLease);
 
   expect(abandoned).toEqual({
     ok: true,
     thread: {
-      projectId: "project-one",
+      projectId: "sample-project-one",
       conversation: JSON.stringify(firstTurn),
       messageCount: firstTurn.length,
       revision: 1,
@@ -176,38 +187,38 @@ test("finishing or abandoning a turn frees the slot for a later start", async ()
       turnDeadlineAt: undefined,
     },
   });
-  expect(await control.startProjectTurn("project-one", 1, NOW, LEASE_MS)).toMatchObject({
+  expect(await control.startProjectTurn("sample-project-one", 1, NOW, LEASE_MS)).toMatchObject({
     ok: true,
     thread: { turnActive: true },
   });
 });
 
 test("the two catalog projects run their turns at the same time without interference", async () => {
-  const control = supervisor("thread-two-projects");
+  const control = await supervisor("thread-two-projects");
 
   const [startedOne, startedTwo] = await Promise.all([
-    control.startProjectTurn("project-one", 0, NOW, LEASE_MS),
-    control.startProjectTurn("project-two", 0, NOW, LEASE_MS),
+    control.startProjectTurn("sample-project-one", 0, NOW, LEASE_MS),
+    control.startProjectTurn("sample-project-two", 0, NOW, LEASE_MS),
   ]);
   if (!startedOne.ok || !startedTwo.ok) {
     throw new Error("both projects must be admitted to a turn of their own");
   }
   await Promise.all([
-    control.finishProjectTurn("project-one", startedOne.leaseId, firstTurn, NOW),
-    control.finishProjectTurn("project-two", startedTwo.leaseId, secondTurn, NOW),
+    control.finishProjectTurn("sample-project-one", startedOne.leaseId, firstTurn, NOW),
+    control.finishProjectTurn("sample-project-two", startedTwo.leaseId, secondTurn, NOW),
   ]);
 
-  expect(startedOne).toMatchObject({ ok: true, thread: { projectId: "project-one" } });
-  expect(startedTwo).toMatchObject({ ok: true, thread: { projectId: "project-two" } });
+  expect(startedOne).toMatchObject({ ok: true, thread: { projectId: "sample-project-one" } });
+  expect(startedTwo).toMatchObject({ ok: true, thread: { projectId: "sample-project-two" } });
   expect(startedOne.leaseId).not.toEqual(startedTwo.leaseId);
-  expect(await conversationOf(control, "project-one")).toEqual(firstTurn);
-  expect(await conversationOf(control, "project-two")).toEqual(secondTurn);
+  expect(await conversationOf(control, "sample-project-one")).toEqual(firstTurn);
+  expect(await conversationOf(control, "sample-project-two")).toEqual(secondTurn);
 });
 
 test("a thread survives a generation change and names no generation in its stored shape", async () => {
-  const control = supervisor("thread-survives-generation-change");
-  const lease = await admit(control, "project-one", 0);
-  const beforeChange = await control.finishProjectTurn("project-one", lease, firstTurn, NOW);
+  const control = await supervisor("thread-survives-generation-change");
+  const lease = await admit(control, "sample-project-one", 0);
+  const beforeChange = await control.finishProjectTurn("sample-project-one", lease, firstTurn, NOW);
   if (!beforeChange.ok) {
     throw new Error("the first finish must succeed");
   }
@@ -216,7 +227,7 @@ test("a thread survives a generation change and names no generation in its store
   await prepareGeneration(control, label, secondHarnessCommit);
   await activateGeneration(control, label);
 
-  const afterChange = await control.getProjectThread("project-one");
+  const afterChange = await control.getProjectThread("sample-project-one");
   if (!afterChange.ok) {
     throw new Error("the thread must survive the generation change");
   }
@@ -233,20 +244,25 @@ test("a thread survives a generation change and names no generation in its store
 });
 
 test("a turn whose deadline has passed is taken over by the next start", async () => {
-  const control = supervisor("thread-turn-lease");
-  await control.startProjectTurn("project-one", 0, NOW, LEASE_MS);
+  const control = await supervisor("thread-turn-lease");
+  await control.startProjectTurn("sample-project-one", 0, NOW, LEASE_MS);
 
   const duringLease = await control.startProjectTurn(
-    "project-one",
+    "sample-project-one",
     0,
     NOW + LEASE_MS - 1,
     LEASE_MS,
   );
-  const afterLease = await control.startProjectTurn("project-one", 0, NOW + LEASE_MS, LEASE_MS);
+  const afterLease = await control.startProjectTurn(
+    "sample-project-one",
+    0,
+    NOW + LEASE_MS,
+    LEASE_MS,
+  );
 
   expect(duringLease).toEqual({
     ok: false,
-    problem: { code: "turn-conflict", projectId: "project-one", deadlineAt: NOW + LEASE_MS },
+    problem: { code: "turn-conflict", projectId: "sample-project-one", deadlineAt: NOW + LEASE_MS },
   });
   expect(afterLease).toMatchObject({
     ok: true,
@@ -255,11 +271,11 @@ test("a turn whose deadline has passed is taken over by the next start", async (
 });
 
 test("finishing a turn after its deadline is rejected and stores nothing", async () => {
-  const control = supervisor("thread-turn-expired");
-  const lease = await admit(control, "project-one", 0);
+  const control = await supervisor("thread-turn-expired");
+  const lease = await admit(control, "sample-project-one", 0);
 
   const lateFinish = await control.finishProjectTurn(
-    "project-one",
+    "sample-project-one",
     lease,
     firstTurn,
     NOW + LEASE_MS,
@@ -267,9 +283,9 @@ test("finishing a turn after its deadline is rejected and stores nothing", async
 
   expect(lateFinish).toEqual({
     ok: false,
-    problem: { code: "turn-expired", projectId: "project-one", deadlineAt: NOW + LEASE_MS },
+    problem: { code: "turn-expired", projectId: "sample-project-one", deadlineAt: NOW + LEASE_MS },
   });
-  expect(await control.getProjectThread("project-one")).toMatchObject({
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { messageCount: 0, revision: 0, turnActive: true },
   });

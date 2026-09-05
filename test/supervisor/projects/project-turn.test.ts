@@ -2,7 +2,7 @@
 
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { PROJECT_CATALOG } from "../../../src/project-catalog.js";
+import { sampleProjectOne, sampleProjectTwo } from "../../project-fixtures.js";
 import { projectDirectory } from "../../../src/workspace-layout.js";
 import { calls, says } from "../../facet/generation-0/facet-turn-helpers.js";
 import {
@@ -32,7 +32,8 @@ import {
  * holds every repository, and the project id chooses the directory the turn starts in.
  */
 
-const [projectOne, projectTwo] = PROJECT_CATALOG;
+const projectOne = sampleProjectOne;
+const projectTwo = sampleProjectTwo;
 
 afterEach(async () => {
   await reset();
