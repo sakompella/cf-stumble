@@ -7,13 +7,9 @@ import {
   WorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
-import type { WorkspaceConfiguration, WorkspaceResult } from "./decisions.js";
+import type { WorkspaceResult } from "./decisions.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
-import {
-  executeHarnessBuildRequest,
-  executeProjectProvisionRequest,
-  executeWorkspaceRequest,
-} from "./executor.js";
+import { executeHarnessBuildRequest, executeProjectProvisionRequest } from "./executor.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialResult,
@@ -25,15 +21,6 @@ import {
   ProjectRpcTarget,
 } from "./project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../harness-build.js";
-import { WORKSPACE_ROOT } from "../workspace-layout.js";
-
-// Version 0 has one check command, so it is fixed here rather than configurable. The root is the
-// workspace root that `workspace-layout.ts` owns, the same one the project capability addresses
-// paths beneath, so this surface and that one cannot disagree about where the repositories are.
-const CONFIGURATION = {
-  root: WORKSPACE_ROOT,
-  commands: { check: "./test.sh" },
-} as const satisfies WorkspaceConfiguration;
 
 interface WorkspaceHostEnv {}
 
@@ -77,15 +64,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
-  execute(request: unknown): Promise<WorkspaceResult> {
-    return executeWorkspaceRequest({
-      configuration: CONFIGURATION,
-      operations: new ComputerWorkspaceOperations(this.#workspace),
-      request,
-    });
-  }
-
   /**
    * Build one labeled harness commit. This surface carries only the planned build steps, so a
    * caller names a commit and a step and never supplies command text. A build extracts into the
@@ -105,10 +83,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * Reconcile this workspace against the repository the catalog names for a project, and rewrite
    * the managed agent instructions.
    *
-   * This is a surface of its own rather than another `execute` command. `planWorkspaceRequest`
-   * refuses any `run-command` whose name is not a key of the project configuration's `commands`,
-   * and that map holds exactly the check the user's repository defines. Adding provisioning there
-   * would put a clone within reach of whatever asks for a check.
+   * This is a surface of its own rather than a step of the build surface. Each surface parses
+   * only its own request and plans from its own configuration, so a build can never reach a
+   * project clone and a provision can never reach the harness build root.
    *
    * A caller names a project and a planned step. The repository URL and the directory are both
    * resolved from the catalog on this side, so no caller can point a clone at a URL or a place of
@@ -131,8 +108,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * reads it (ADR-0039). Nothing this surface returns carries a token: an install answers with a
    * word, a status with a state and at most a login name, and a failure with redacted text.
    *
-   * It is separate from `execute` because `planWorkspaceRequest` runs only the commands the
-   * project configuration names, and a credential install is not one of the repository's checks.
+   * It is a surface of its own for the same reason provisioning is: a credential install is
+   * neither a build step nor a provisioning step, and each surface parses only its own request,
+   * so neither of the others can be asked to install, read, or exercise a token.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown): Promise<GitHubCredentialResult> {
@@ -143,7 +121,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /**
-   * Hand out this workspace's project capability. `execute` and `build` each answer one request
+   * Hand out this workspace's project capability. `build` and `provision` each answer one request
    * and return plain values, which suits a caller that asks for one thing; a turn instead makes
    * many calls spread over its own lifetime, so this returns the narrow six-method surface once
    * and the caller holds it for the turn.

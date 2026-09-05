@@ -1,17 +1,8 @@
 export { ComputerWorkspaceOperations } from "./computer-operations.js";
-export {
-  parseWorkspaceRequest,
-  planWorkspaceRequest,
-  type WorkspaceConfiguration,
-  type WorkspaceFailure,
-  type WorkspacePlan,
-  type WorkspaceRequest,
-  type WorkspaceResult,
-} from "./decisions.js";
+export { type WorkspaceFailure, type WorkspacePlan, type WorkspaceResult } from "./decisions.js";
 export {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
-  executeWorkspaceRequest,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,

@@ -1,12 +1,12 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { connectSampleProjects } from "../helpers.js";
+import { connectedSupervisor as supervisor } from "../helpers.js";
 import { FakeWorkspace } from "./fake-workspace.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
+import { abandonProjectTurn, finishProjectTurn, startProjectTurn } from "./turn-slot.js";
 
 const NOW = 1_700_000_000_000;
 const LEASE_MS = 30_000;
@@ -19,16 +19,6 @@ const savedConversation = [
 ];
 
 /**
- * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
- * that names a project has to connect it first, exactly as the owner does.
- */
-async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
-  const control = env.SUPERVISOR.getByName(name);
-  await connectSampleProjects(control);
-  return control;
-}
-
-/**
  * A project workspace holding what a turn wrote into it.
  *
  * The workspace is a fake because a Computer container cannot run under `workerd`, but the thing
@@ -38,11 +28,7 @@ async function supervisor(name: string): Promise<DurableObjectStub<Supervisor>> 
  */
 async function workspaceWithTurnOutput(): Promise<FakeWorkspace> {
   const workspace = new FakeWorkspace({ files: { "/workspace/notes.md": "written before" } });
-  await workspace.execute({
-    kind: "write-file",
-    path: "/workspace/plan.md",
-    content: "the agent wrote this during a turn",
-  });
+  await workspace.project().writeFile("/workspace/plan.md", "the agent wrote this during a turn");
   return workspace;
 }
 
@@ -56,7 +42,7 @@ async function admit(
   projectId: string,
   expectedRevision: number,
 ): Promise<string> {
-  const started = await control.startProjectTurn(projectId, expectedRevision, NOW, LEASE_MS);
+  const started = await startProjectTurn(control, projectId, expectedRevision, NOW, LEASE_MS);
   if (!started.ok) {
     throw new Error(`the ${projectId} turn must be admitted: ${started.problem.code}`);
   }
@@ -68,7 +54,7 @@ async function threadWithConversation(
   projectId: string,
 ): Promise<void> {
   const lease = await admit(control, projectId, 0);
-  const finished = await control.finishProjectTurn(projectId, lease, savedConversation, NOW);
+  const finished = await finishProjectTurn(control, projectId, lease, savedConversation, NOW);
   if (!finished.ok) {
     throw new Error(`the ${projectId} thread must accept a first turn`);
   }
@@ -115,13 +101,14 @@ test("a fresh thread frees the turn slot the replaced conversation held", async 
 
   // The turn that was running cannot commit into the thread it no longer holds, and the next turn
   // starts from the fresh thread's revision rather than waiting for the old lease to expire.
-  const lateFinish = await control.finishProjectTurn(
+  const lateFinish = await finishProjectTurn(
+    control,
     "sample-project-one",
     heldLease,
     savedConversation,
     NOW,
   );
-  const restarted = await control.startProjectTurn("sample-project-one", 2, NOW, LEASE_MS);
+  const restarted = await startProjectTurn(control, "sample-project-one", 2, NOW, LEASE_MS);
 
   expect(lateFinish).toEqual({
     ok: false,
@@ -138,14 +125,15 @@ test("a delayed start cannot enter a replaced thread by presenting its old revis
 
   await control.startFreshProjectThread("sample-project-one");
 
-  const delayedStart = await control.startProjectTurn("sample-project-one", 0, NOW + 1, LEASE_MS);
-  const lateFinish = await control.finishProjectTurn(
+  const delayedStart = await startProjectTurn(control, "sample-project-one", 0, NOW + 1, LEASE_MS);
+  const lateFinish = await finishProjectTurn(
+    control,
     "sample-project-one",
     staleLease,
     savedConversation,
     NOW + 1,
   );
-  const lateAbandon = await control.abandonProjectTurn("sample-project-one", staleLease);
+  const lateAbandon = await abandonProjectTurn(control, "sample-project-one", staleLease);
 
   expect(delayedStart).toEqual({
     ok: false,
@@ -173,13 +161,15 @@ test("the replaced thread's lease cannot save into the turn that replaced it", a
   // The coordinator of the later turn holds a lease of its own on a thread the replaced turn
   // cannot name: its predecessor's save is refused while its own succeeds.
   const freshLease = await admit(control, "sample-project-one", 1);
-  const staleSave = await control.finishProjectTurn(
+  const staleSave = await finishProjectTurn(
+    control,
     "sample-project-one",
     staleLease,
     savedConversation,
     NOW,
   );
-  const freshSave = await control.finishProjectTurn(
+  const freshSave = await finishProjectTurn(
+    control,
     "sample-project-one",
     freshLease,
     savedConversation,

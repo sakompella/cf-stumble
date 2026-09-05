@@ -10,12 +10,14 @@ import {
 } from "./generations.js";
 import { jsonError } from "./json.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
+import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
 import { latestRecoveryReportSummary, type RecoveryReportSupervisor } from "./recovery.js";
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
   RecoveryReportSupervisor &
-  ProjectApiSupervisor & {
+  ProjectApiSupervisor &
+  TurnApiSupervisor & {
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
     readonly getProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
     readonly startFreshProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
@@ -102,6 +104,10 @@ export function routeOwnerApiRequest(
   const projectRoute = routeProjectApiRequest(request, supervisor, scope);
   if (projectRoute !== undefined) {
     return projectRoute;
+  }
+  const turnRoute = routeProjectTurnRequest(request, supervisor);
+  if (turnRoute !== undefined) {
+    return turnRoute;
   }
 
   const isGet = request.method === "GET";

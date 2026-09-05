@@ -1,193 +1,58 @@
 import { expect, test } from "vitest";
 import {
-  executeWorkspaceRequest,
-  parseWorkspaceRequest,
-  planWorkspaceRequest,
+  executeHarnessBuildRequest,
   WorkspaceHost,
   type CommandOutput,
-  type WorkspaceConfiguration,
   type WorkspaceOperations,
+  type WorkspacePathKind,
 } from "../../src/workspace/index.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { workspaceContainerBackendConfiguration } from "../../src/workspace/host.js";
 
-const configuration = {
-  root: "/workspace",
-  commands: { check: "pnpm verify" },
-} as const satisfies WorkspaceConfiguration;
+/**
+ * What the Workspace Host offers as a Durable Object, rather than what any one of its surfaces
+ * decides. The build, provisioning, and credential surfaces are each checked in their own file;
+ * what is held here is that the object exposes those surfaces and nothing else, and that what a
+ * surface returns can cross an RPC boundary.
+ */
 
-type FailurePoint = keyof WorkspaceOperations;
+const commit = "5000000000000000000000000000000000000001";
 
-class FakeWorkspace implements WorkspaceOperations {
-  readonly calls: string[] = [];
-  readonly files = new Map<string, string>([["/workspace/readme.md", "before"]]);
-  readonly directories = new Set(["/workspace", "/workspace/src"]);
-  readonly symlinks = new Set<string>();
-  private readonly failAt: FailurePoint | undefined;
-
-  constructor(failAt?: FailurePoint) {
-    this.failAt = failAt;
+/** Enough of the operation port to answer one planned build read. */
+class FakeOperations implements WorkspaceOperations {
+  lstat(): Promise<WorkspacePathKind | undefined> {
+    return Promise.resolve("directory");
   }
 
-  lstat(path: string): Promise<"file" | "directory" | "symbolic-link" | undefined> {
-    this.calls.push(`lstat:${path}`);
-    if (this.failAt === "lstat") return Promise.reject(new Error("fake lstat failure"));
-    if (this.symlinks.has(path)) return Promise.resolve("symbolic-link");
-    if (this.directories.has(path)) return Promise.resolve("directory");
-    return Promise.resolve(this.files.has(path) ? "file" : undefined);
+  readFile(): Promise<string> {
+    return Promise.resolve("{}");
   }
 
-  readFile(path: string): Promise<string> {
-    this.calls.push(`read:${path}`);
-    if (this.failAt === "readFile") return Promise.reject(new Error("fake read failure"));
-    const content = this.files.get(path);
-    return content === undefined
-      ? Promise.reject(new Error("missing file"))
-      : Promise.resolve(content);
+  writeFile(): Promise<void> {
+    return Promise.reject(new Error("this test writes nothing"));
   }
 
-  writeFile(path: string, content: string): Promise<void> {
-    this.calls.push(`write:${path}:${content}`);
-    if (this.failAt === "writeFile") return Promise.reject(new Error("fake write failure"));
-    this.files.set(path, content);
-    return Promise.resolve();
+  runCommand(): Promise<CommandOutput> {
+    return Promise.reject(new Error("this test runs no command"));
   }
-
-  listFiles(path: string): Promise<readonly string[]> {
-    this.calls.push(`list:${path}`);
-    if (this.failAt === "listFiles") return Promise.reject(new Error("fake list failure"));
-    return this.directories.has(path)
-      ? Promise.resolve(["src", "readme.md"])
-      : Promise.reject(new Error("missing directory"));
-  }
-
-  runCommand(source: string, cwd: string): Promise<CommandOutput> {
-    this.calls.push(`command:${source}:${cwd}`);
-    if (this.failAt === "runCommand") return Promise.reject(new Error("fake command failure"));
-    return Promise.resolve({ stdout: `${source} output`, stderr: "", exitCode: 7 });
-  }
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function execute(fake: FakeWorkspace, request: unknown) {
-  return executeWorkspaceRequest({ configuration, operations: fake, request });
 }
 
 test("configures the container backend for direct egress", () => {
   expect(workspaceContainerBackendConfiguration("workspace-id").egress).toEqual({ mode: "direct" });
 });
 
-test("reads, writes, and lists only below the configured project root", async () => {
-  const fake = new FakeWorkspace();
-
-  await expect(execute(fake, { kind: "read-file", path: "readme.md" })).resolves.toEqual({
-    ok: true,
-    result: { kind: "file", content: "before" },
-  });
-  await expect(
-    execute(fake, { kind: "write-file", path: "src/new.ts", content: "export {};" }),
-  ).resolves.toEqual({ ok: true, result: { kind: "written" } });
-  await expect(execute(fake, { kind: "list-files", path: "" })).resolves.toEqual({
-    ok: true,
-    result: { kind: "files", entries: ["src", "readme.md"] },
-  });
-
-  expect(fake.calls).toContain("read:/workspace/readme.md");
-  expect(fake.calls).toContain("write:/workspace/src/new.ts:export {};");
-  expect(fake.calls).toContain("list:/workspace");
-});
-
-test("runs only configured commands and provides a fixed git diff", async () => {
-  const fake = new FakeWorkspace();
-
-  await expect(execute(fake, { kind: "run-command", command: "check" })).resolves.toEqual({
-    ok: true,
-    result: { kind: "command", stdout: "pnpm verify output", stderr: "", exitCode: 7 },
-  });
-  await expect(execute(fake, { kind: "git-diff" })).resolves.toEqual({
-    ok: true,
-    result: {
-      kind: "git-diff",
-      stdout: "git diff --no-ext-diff output",
-      stderr: "",
-      exitCode: 7,
-    },
-  });
-
-  expect(fake.calls).toEqual([
-    "command:pnpm verify:/workspace",
-    "command:git diff --no-ext-diff:/workspace",
-  ]);
-});
-
-test("rejects malformed requests, path escapes, and caller supplied commands", async () => {
-  const fake = new FakeWorkspace();
-
-  for (const [request, code] of [
-    [null, "invalid-request"],
-    [{ kind: "read-file" }, "invalid-request"],
-    [{ kind: "read-file", path: "readme.md", extra: true }, "invalid-request"],
-    [{ kind: "read-file", path: "../secret" }, "path-outside-root"],
-    [{ kind: "read-file", path: "/secret" }, "path-outside-root"],
-    [{ kind: "read-file", path: "src\\secret" }, "path-outside-root"],
-    [{ kind: "run-command", command: "check", source: "whoami" }, "invalid-request"],
-  ] as const) {
-    await expect(execute(fake, request)).resolves.toEqual({ ok: false, error: { code } });
-  }
-  await expect(execute(fake, { kind: "run-command", command: "whoami" })).resolves.toEqual({
-    ok: false,
-    error: { code: "unknown-command" },
-  });
-  expect(fake.calls).toEqual([]);
-});
-
-test("rejects paths containing a symbolic link before file operations", async () => {
-  const fake = new FakeWorkspace();
-  fake.symlinks.add("/workspace/src");
-
-  for (const request of [
-    { kind: "read-file", path: "src/readme.md" },
-    { kind: "write-file", path: "src/new.ts", content: "x" },
-    { kind: "list-files", path: "src" },
-  ] as const) {
-    await expect(execute(fake, request)).resolves.toEqual({
-      ok: false,
-      error: { code: "path-outside-root" },
-    });
-  }
-  expect(fake.calls.every((call) => call.startsWith("lstat:"))).toBe(true);
-});
-
-test.each<readonly [FailurePoint, unknown]>([
-  ["lstat", { kind: "read-file", path: "readme.md" }],
-  ["readFile", { kind: "read-file", path: "readme.md" }],
-  ["writeFile", { kind: "write-file", path: "readme.md", content: "after" }],
-  ["listFiles", { kind: "list-files", path: "" }],
-  ["runCommand", { kind: "run-command", command: "check" }],
-])("redacts a %s failure", async (failurePoint, request) => {
-  await expect(execute(new FakeWorkspace(failurePoint), request)).resolves.toEqual({
-    ok: false,
-    error: { code: "workspace-unavailable" },
-  });
-});
-
 test("returns plain cloneable values and exposes no raw Computer RPC method", async () => {
-  const result = await execute(new FakeWorkspace(), { kind: "list-files", path: "" });
+  const result = await executeHarnessBuildRequest({
+    configuration: HARNESS_BUILD_CONFIGURATION,
+    operations: new FakeOperations(),
+    request: { kind: "build-output", harnessCommit: commit },
+  });
 
+  expect(result).toEqual({ ok: true, result: { kind: "file", content: "{}" } });
   expect(structuredClone(result)).toEqual(result);
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(
     Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted(),
     "`project` hands out the narrow project capability; anything else added here is a new surface",
-  ).toEqual(["build", "constructor", "credential", "execute", "fetch", "project", "provision"]);
-});
-
-test("keeps request parsing and planning as pure decisions", () => {
-  const request = parseWorkspaceRequest({ kind: "run-command", command: "check" });
-  if ("ok" in request) throw new Error("valid request must parse");
-
-  expect(planWorkspaceRequest(configuration, request)).toEqual({
-    kind: "run-command",
-    source: "pnpm verify",
-    cwd: "/workspace",
-  });
+  ).toEqual(["build", "constructor", "credential", "fetch", "project", "provision"]);
 });

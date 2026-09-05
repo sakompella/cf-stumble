@@ -3,33 +3,40 @@
 // shape is proven until these functions prove it.
 
 import { isPlainObject, isString } from "./plain-values.js";
-import type { PiAgentTurnState } from "./pi-agent-turn.js";
+import type { AgentMessage } from "@cf-stumble/pi";
 
-/** What a caller sends to start one turn. The thread arrives with it and leaves in the frames. */
+/**
+ * What the host sends to start one turn: the prompt, and the conversation so far.
+ *
+ * The conversation is all the host has and all it may send. The system prompt, the model, and the
+ * thinking level are this generation's own: the prompt is rebuilt from the workspace's
+ * instructions on every turn, and the model is the route this facet was given. A request that
+ * carried them would let a caller choose a model, replace this generation's instructions, or hand
+ * the turn a history the host never saved, which is exactly what the host's saved thread is for.
+ */
 export type FacetTurnRequest = Readonly<{
   prompt: string;
-  state: PiAgentTurnState | null;
+  messages: readonly AgentMessage[];
 }>;
 
 /**
- * Recognizes a saved Pi state by the four fields Pi's agent declares, without reading inside them.
- * Pi owns the schema of a message and of a model descriptor, so parsing those here would fork that
- * schema into this generation and break the next Pi upgrade. What this does guarantee is that a
- * caller cannot start a turn from a value Pi's `Agent` would reject outright.
+ * Recognize a conversation without reading inside its messages. Pi owns the schema of a message,
+ * so parsing one here would fork that schema into this generation and break the next Pi upgrade;
+ * the host proved every message against its own stored-field rules before it saved them
+ * (`supervisor/threads/messages.ts`). An absent conversation is a first turn, not a fault.
  */
-function parsePiAgentTurnState(value: unknown): PiAgentTurnState | undefined {
-  if (!isPlainObject(value)) return undefined;
-  if (!isString(value.systemPrompt) || !isString(value.thinkingLevel)) return undefined;
-  if (!isPlainObject(value.model) || !Array.isArray(value.messages)) return undefined;
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the four fields Pi's agent state declares are present with the right kinds; their interiors stay Pi's to interpret.
-  return value as PiAgentTurnState;
+function parseTurnMessages(value: unknown): readonly AgentMessage[] | undefined {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the value is a list, which is everything this side may claim about a conversation Pi's `Agent` will interpret.
+  return Array.isArray(value) ? (value as readonly AgentMessage[]) : undefined;
 }
 
 export function parseFacetTurnRequest(value: unknown): FacetTurnRequest | undefined {
   if (!isPlainObject(value)) return undefined;
-  const { prompt, state } = value;
+  const { prompt, messages } = value;
   if (!isString(prompt)) return undefined;
-  if (state === null || state === undefined) return { prompt, state: null };
-  const parsed = parsePiAgentTurnState(state);
-  return parsed === undefined ? undefined : { prompt, state: parsed };
+  const conversation = parseTurnMessages(messages);
+  return conversation === undefined ? undefined : { prompt, messages: conversation };
 }

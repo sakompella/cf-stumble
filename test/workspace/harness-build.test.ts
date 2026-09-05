@@ -8,20 +8,13 @@ import {
 } from "../../src/harness-build.js";
 import {
   executeHarnessBuildRequest,
-  executeWorkspaceRequest,
   parseHarnessBuildRequest,
   planHarnessBuildRequest,
   type CommandOutput,
-  type WorkspaceConfiguration,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
-import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
-
-const projectConfiguration = {
-  root: WORKSPACE_ROOT,
-  commands: { check: "./test.sh" },
-} as const satisfies WorkspaceConfiguration;
+import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 
 const commit = harnessCommit("5000000000000000000000000000000000000001");
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
@@ -61,11 +54,6 @@ class FakeBuildOperations implements WorkspaceOperations {
   writeFile(path: string): Promise<void> {
     this.calls.push(`write:${path}`);
     return Promise.reject(new Error("a build never writes through the workspace surface"));
-  }
-
-  listFiles(path: string): Promise<readonly string[]> {
-    this.calls.push(`list:${path}`);
-    return Promise.reject(new Error("a build never lists through the workspace surface"));
   }
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
@@ -204,19 +192,6 @@ test("rejects a build output reached through a symbolic link", async () => {
     },
   );
   expect(operations.calls.every((call) => call.startsWith("lstat:"))).toBe(true);
-});
-
-test("keeps the project surface free of build requests", async () => {
-  const operations = new FakeBuildOperations();
-
-  await expect(
-    executeWorkspaceRequest({
-      configuration: projectConfiguration,
-      operations,
-      request: { kind: "build-step", harnessCommit: commit, step: "build" },
-    }),
-  ).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
-  expect(operations.calls).toEqual([]);
 });
 
 test("the checkout step fails on its own when the archive fails", () => {

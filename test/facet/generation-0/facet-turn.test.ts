@@ -45,7 +45,7 @@ test("streams the turn's text, tool results, and terminal state as byte frames",
   expect(frames[2]).toEqual({ kind: "text", text: "The file says: first line" });
 });
 
-test("carries the Pi state the next turn continues from in the terminal frame", async () => {
+test("continues from the conversation the host sends back with the next prompt", async () => {
   const received = FakeProjectCapability.create();
   const opening = await readFrames(turnStream(new ScriptedRoute([says("Noted.")]), received));
   const completed = opening.at(-1);
@@ -53,7 +53,7 @@ test("carries the Pi state the next turn continues from in the terminal frame", 
 
   const route = new ScriptedRoute([says("Still noted.")]);
   const continued = await readFrames(
-    turnStream(route, received, { prompt: "and again", state: completed.state }),
+    turnStream(route, received, { prompt: "and again", messages: completed.state.messages }),
   );
 
   expect(continued.at(-1)).toMatchObject({ kind: "completed" });
@@ -79,7 +79,12 @@ test("rejects a capability whose lifetime this generation cannot own", async () 
   const route = new ScriptedRoute([says("never reached")]);
 
   const frames = await readFrames(
-    startFacetTurn(capabilities(route), projectTarget, { prompt: "go", state: null }, "/workspace"),
+    startFacetTurn(
+      capabilities(route),
+      projectTarget,
+      { prompt: "go", messages: [] },
+      "/workspace",
+    ),
   );
 
   expect(frames).toEqual([{ kind: "rejected", code: "invalid-project-capability" }]);

@@ -35,7 +35,9 @@ async function pumpTurn(
   const frames = new TurnFrames();
   const outcome = await runPiAgentTurn({
     prompt: request.prompt,
-    state: request.state ?? createPiAgentTurnState(ROUTE_MODEL),
+    // The conversation arrives from the host's saved thread; everything else about the state is
+    // this generation's own, so it is built here rather than accepted from a request.
+    state: { ...createPiAgentTurnState(ROUTE_MODEL), messages: [...request.messages] },
     env: createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability }),
     streamFn: createRouteStreamFn(capabilities.MODEL, signal),
     onEvent: (event) => {

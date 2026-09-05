@@ -29,6 +29,34 @@ export {
   type ProjectUseResult,
 } from "./project-connections.js";
 export { streamProjectTurn } from "./project-turn.js";
+export { TurnCredits, type CompletedRealTurnCredit, type TurnCreditInput } from "./turn-credit.js";
+export {
+  PROJECT_TURN_PROMPT_MAX_LENGTH,
+  runProjectTurn,
+  type FacetTurnHandoff,
+  type ProjectTurnRun,
+  type ProjectTurnRunProblemCode,
+  type RunProjectTurnInput,
+  type TurnAttempts,
+  type TurnAttribution,
+  type TurnThreads,
+} from "./turn-run.js";
+export {
+  PROJECT_TURN_FRAME_MAX_BYTES,
+  parseFacetFrameLine,
+  type ProjectTurnFrame,
+  type TurnStreamProblem,
+} from "./turn-frames.js";
+export { projectTurnStream, type ProjectTurnStreamInput } from "./turn-stream.js";
+export {
+  endTurn,
+  type StreamEnding,
+  type TurnAttemptRecord,
+  type TurnCreditLedger,
+  type TurnEnd,
+  type TurnSettlement,
+  type TurnThreadWrites,
+} from "./turn-settle.js";
 // The Supervisor names its own workspace and hands that name to both the project path here and the
 // build path in `artifacts`. It reaches the one definition through this group rather than deriving
 // a second one, which is the drift E3 recorded.
