@@ -1,5 +1,6 @@
 import {
   Agent,
+  convertToLlm,
   createBashTool,
   createEditTool,
   createReadTool,
@@ -8,13 +9,22 @@ import {
 import type {
   AgentEvent,
   AgentHarnessTool,
+  AgentMessage,
   AgentState,
   AgentTool,
   ExecutionEnv,
   ExecutionToolContext,
   StreamFn,
 } from "@cf-stumble/pi";
-import { GENERATION_0_SYSTEM_PROMPT, MAX_MODEL_CALLS } from "./turn.js";
+import { compactThread, needsCompaction } from "./compaction.js";
+import { composeSystemPrompt, loadTurnInstructions } from "./instructions.js";
+import { createRouteModels } from "./route-models.js";
+import {
+  GENERATION_0_COMPACTION,
+  GENERATION_0_SYSTEM_PROMPT,
+  MAX_MODEL_CALLS,
+} from "./turn-policy.js";
+import type { CompactionPolicy } from "./compaction.js";
 
 export type PiAgentTurnState = Readonly<
   Pick<AgentState, "systemPrompt" | "model" | "thinkingLevel" | "messages">
@@ -37,6 +47,8 @@ export type PiAgentTurnRequest = Readonly<{
   onEvent?: (event: AgentEvent) => void;
   /** Aborts the run in progress. A turn already past its last model call ignores it. */
   signal?: AbortSignal;
+  /** Overrides this generation's compaction budget. A test uses it to force compaction. */
+  compaction?: CompactionPolicy;
 }>;
 
 export function createPiAgentTurnState(model: AgentState["model"]): PiAgentTurnState {
@@ -77,6 +89,41 @@ function handoffState(agent: Agent): PiAgentTurnState {
   };
 }
 
+/**
+ * The prompt this turn sends: this generation's own instructions plus whatever the workspace and
+ * the selected repository currently say.
+ *
+ * It is rebuilt from {@link GENERATION_0_SYSTEM_PROMPT} on every turn rather than continued from
+ * the saved state, because the saved prompt is last turn's answer to this same question. Rebuilding
+ * is what lets a re-provisioned workspace, an edited `AGENTS.md`, or a replaced generation change
+ * the instructions of a conversation that is already running.
+ */
+async function turnSystemPrompt(request: PiAgentTurnRequest): Promise<string> {
+  const instructions = await loadTurnInstructions(request.env, request.signal);
+  return composeSystemPrompt(GENERATION_0_SYSTEM_PROMPT, instructions);
+}
+
+/**
+ * The conversation this turn starts from, compacted first when it has outgrown this generation's
+ * declared budget. Compaction happens before the turn rather than between its model calls because
+ * Pi's `Agent` transforms the context it sends without changing the messages it hands back, and a
+ * compaction the thread does not keep would be paid for again on every later turn.
+ */
+async function startingMessages(request: PiAgentTurnRequest): Promise<readonly AgentMessage[]> {
+  const messages = request.state.messages;
+  const policy = request.compaction ?? GENERATION_0_COMPACTION;
+  if (!needsCompaction(messages, policy)) return messages;
+
+  const compacted = await compactThread(
+    messages,
+    createRouteModels(request.streamFn),
+    request.state.model,
+    policy,
+    request.signal,
+  );
+  return compacted ?? messages;
+}
+
 export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAgentTurnOutcome> {
   const context = { env: request.env } satisfies ExecutionToolContext;
   let reachedCallLimit = false;
@@ -84,9 +131,14 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
   const agent = new Agent({
     initialState: {
       ...request.state,
-      messages: [...request.state.messages],
+      systemPrompt: await turnSystemPrompt(request),
+      messages: [...(await startingMessages(request))],
       tools: executionTools(context),
     },
+    // Pi's own message conversion, so a compaction summary reaches the model as the summary block
+    // Pi defines. The agent's default conversion drops every role it does not send verbatim, which
+    // would silently discard exactly the message compaction just produced.
+    convertToLlm,
     streamFn: request.streamFn,
     shouldStopAfterTurn: ({ toolResults }) => {
       modelCalls += 1;

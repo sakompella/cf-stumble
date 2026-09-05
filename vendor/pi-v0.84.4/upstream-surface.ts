@@ -29,6 +29,21 @@ export type {
   BranchSummaryMessage,
   CompactionSummaryMessage,
 } from "./packages/agent/src/index.ts";
+export {
+  compact,
+  DEFAULT_COMPACTION_SETTINGS,
+  estimateContextTokens,
+  prepareCompaction,
+  shouldCompact,
+} from "./packages/agent/src/index.ts";
+export type {
+  CompactionPreparation,
+  CompactionSettings,
+  CompactResult,
+} from "./packages/agent/src/index.ts";
+export { convertToLlm, createCompactionSummaryMessage } from "./packages/agent/src/index.ts";
+export type { Entry, MessageEntry } from "./packages/agent/src/index.ts";
+export type { Models } from "./packages/ai/src/index.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";

@@ -12,7 +12,6 @@ import type {
 
 export { MainHarnessArtifact } from "./artifact.js";
 export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
-export type { WorkspaceCapability } from "./generation-0/index.js";
 
 /**
  * What every main-harness generation must expose, whatever else it adds. The Supervisor holds a

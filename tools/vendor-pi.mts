@@ -102,6 +102,24 @@ export type {
   BranchSummaryMessage,
   CompactionSummaryMessage,
 } from "./packages/agent/src/harness/messages.ts";
+export {
+  compact,
+  DEFAULT_COMPACTION_SETTINGS,
+  estimateContextTokens,
+  prepareCompaction,
+  shouldCompact,
+} from "./packages/agent/src/harness/compaction/compaction.ts";
+export type {
+  CompactionPreparation,
+  CompactionSettings,
+  CompactResult,
+} from "./packages/agent/src/harness/compaction/compaction.ts";
+export {
+  convertToLlm,
+  createCompactionSummaryMessage,
+} from "./packages/agent/src/harness/messages.ts";
+export type { Entry, MessageEntry } from "./packages/agent/src/harness/session/types.ts";
+export type { Models } from "./packages/ai/src/models.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
@@ -150,6 +168,21 @@ export type {
   BranchSummaryMessage,
   CompactionSummaryMessage,
 } from "./packages/agent/src/index.ts";
+export {
+  compact,
+  DEFAULT_COMPACTION_SETTINGS,
+  estimateContextTokens,
+  prepareCompaction,
+  shouldCompact,
+} from "./packages/agent/src/index.ts";
+export type {
+  CompactionPreparation,
+  CompactionSettings,
+  CompactResult,
+} from "./packages/agent/src/index.ts";
+export { convertToLlm, createCompactionSummaryMessage } from "./packages/agent/src/index.ts";
+export type { Entry, MessageEntry } from "./packages/agent/src/index.ts";
+export type { Models } from "./packages/ai/src/index.ts";
 export { streamSimple } from "./packages/ai/src/api/openai-completions.ts";
 export { createGatewayBindingFetch } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
 export type { AiGatewayBinding } from "./packages/ai/src/api/cloudflare-gateway-binding.ts";
@@ -201,6 +234,11 @@ const generatedFiles = new Map<string, string>([
     "ai-facade.ts",
     `export { EventStream } from "./packages/ai/src/utils/event-stream.ts";
 export { validateToolArguments } from "./packages/ai/src/utils/validation.ts";
+export { contentText } from "./packages/ai/src/utils/text.ts";
+export { retryAssistantCall } from "./packages/ai/src/utils/retry.ts";
+export type { RetryCallbacks, RetryPolicy } from "./packages/ai/src/utils/retry.ts";
+export { uuidv7 } from "./packages/ai/src/utils/uuid.ts";
+export type { Models } from "./packages/ai/src/models.ts";
 export type {
   Api,
   AssistantMessage,
@@ -211,6 +249,7 @@ export type {
   Message,
   Model,
   SimpleStreamOptions,
+  StopReason,
   TextContent,
   ThinkingBudgets,
   Tool,
@@ -346,6 +385,21 @@ export type ExportedTypesConformToVendoredPi = [
   Assert<Equivalent<Exported.CustomMessage, Upstream.CustomMessage>>,
   Assert<Equivalent<Exported.BranchSummaryMessage, Upstream.BranchSummaryMessage>>,
   Assert<Equivalent<Exported.CompactionSummaryMessage, Upstream.CompactionSummaryMessage>>,
+  Assert<Equivalent<typeof Exported.convertToLlm, typeof Upstream.convertToLlm>>,
+  Assert<Equivalent<typeof Exported.createCompactionSummaryMessage, typeof Upstream.createCompactionSummaryMessage>>,
+  Assert<Equivalent<Exported.CompactionPreparation, Upstream.CompactionPreparation>>,
+  Assert<Equivalent<Exported.CompactionSettings, Upstream.CompactionSettings>>,
+  Assert<Equivalent<Exported.CompactResult, Upstream.CompactResult>>,
+  Assert<Equivalent<Exported.Entry, Upstream.Entry>>,
+  Assert<Equivalent<Exported.MessageEntry, Upstream.MessageEntry>>,
+  Assert<Equivalent<typeof Exported.DEFAULT_COMPACTION_SETTINGS, typeof Upstream.DEFAULT_COMPACTION_SETTINGS>>,
+  Assert<Equivalent<typeof Exported.estimateContextTokens, typeof Upstream.estimateContextTokens>>,
+  Assert<Equivalent<typeof Exported.prepareCompaction, typeof Upstream.prepareCompaction>>,
+  Assert<Equivalent<typeof Exported.shouldCompact, typeof Upstream.shouldCompact>>,
+  // Models and compact are exported but not asserted here. Models.stream returns
+  // AssistantMessageEventStream, whose private fields make two separately-compiled declaration
+  // emits nominally distinct, for exactly the reason EventStreamShape above records; compact takes
+  // a Models parameter and inherits that. Comparing them yields false against an identical type.
   Assert<Equivalent<Exported.Api, Upstream.Api>>,
   Assert<Equivalent<Exported.Model<Exported.Api>, Upstream.Model<Upstream.Api>>>,
   Assert<Equivalent<Exported.ExecutionEnv, Upstream.ExecutionEnv>>,

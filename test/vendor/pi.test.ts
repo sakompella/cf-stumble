@@ -61,14 +61,21 @@ test("the built package's runtime namespace has exactly the expected keys", () =
     [
       "Agent",
       "AssistantMessageEventStream",
+      "DEFAULT_COMPACTION_SETTINGS",
       "ExecutionError",
       "FileError",
+      "compact",
+      "convertToLlm",
       "createAssistantMessageEventStream",
       "createBashTool",
+      "createCompactionSummaryMessage",
       "createEditTool",
       "createGatewayBindingFetch",
       "createReadTool",
       "createWriteTool",
+      "estimateContextTokens",
+      "prepareCompaction",
+      "shouldCompact",
       "streamSimple",
       "truncateTail",
     ].toSorted(),
@@ -77,6 +84,30 @@ test("the built package's runtime namespace has exactly the expected keys", () =
   expect(Pi.ExecutionError).toBeTypeOf("function");
   expect(Pi.AssistantMessageEventStream).toBeTypeOf("function");
   expect(Pi.createAssistantMessageEventStream).toBeTypeOf("function");
+});
+
+/**
+ * The compaction surface T7 added to the facade. It is a value export, not a declaration: the
+ * facet has to be able to call these at runtime inside workerd, and `vendor/pi-v0.84.4/index.ts`
+ * is generated, so a mistake in the generator's facade source would show up here as a missing
+ * function rather than as a compile error.
+ */
+test("the vendored compaction surface is callable, and reads the model's context window", () => {
+  expect(Pi.compact).toBeTypeOf("function");
+  expect(Pi.prepareCompaction).toBeTypeOf("function");
+  expect(Pi.convertToLlm).toBeTypeOf("function");
+  expect(Pi.DEFAULT_COMPACTION_SETTINGS.enabled).toBe(true);
+
+  const settings = Pi.DEFAULT_COMPACTION_SETTINGS;
+  expect(Pi.estimateContextTokens([]).tokens).toBe(0);
+
+  // The fact T7 had to settle before it could claim a forced-compaction test: `shouldCompact`
+  // compares against `contextWindow - reserveTokens`, so the zero window `ROUTE_MODEL` declares
+  // does not disable compaction. It makes an empty conversation exceed the threshold, which is why
+  // this generation compacts against a budget it declares instead (`turn-policy.ts`).
+  expect(Pi.shouldCompact(0, 0, settings)).toBe(true);
+  expect(Pi.shouldCompact(0, 64_000, settings)).toBe(false);
+  expect(Pi.shouldCompact(64_000 - settings.reserveTokens + 1, 64_000, settings)).toBe(true);
 });
 
 test("FileError carries its code, path, and cause", () => {
