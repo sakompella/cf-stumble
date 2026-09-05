@@ -10,7 +10,6 @@ import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
  */
 export const OWNER_PAGE_SCRIPT_GENERATIONS = `
   function renderSubmission(result) {
-    setRaw("${ID.submitRaw}", result.payload);
     var payload = result.payload;
     if (!payload || payload.ok !== true) {
       setText("${ID.submitStatus}", problemText(payload, result.status));
@@ -64,19 +63,16 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
           status: "${ID.activateStatus}",
           sentEpoch: "${ID.activateSentEpoch}",
           effect: "${ID.activateEffect}",
-          raw: "${ID.activateRaw}",
         }
       : {
           labelInput: "${ID.rollbackLabelInput}",
           status: "${ID.rollbackStatus}",
           sentEpoch: "${ID.rollbackSentEpoch}",
           effect: "${ID.rollbackEffect}",
-          raw: "${ID.rollbackRaw}",
         };
   }
 
   function renderControl(ids, result) {
-    setRaw(ids.raw, result.payload);
     var payload = result.payload;
     if (!payload || payload.ok !== true) {
       setText(ids.status, problemText(payload, result.status));

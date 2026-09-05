@@ -1,15 +1,32 @@
 import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
 
 /**
- * The shared part of the inline script: element access, the one fetch helper, and the way a
- * failure is worded. Every request is a same-origin relative path and carries the Access session
- * cookie the browser already holds, so the page asks for no credential and stores none.
+ * The shared part of the inline script: element access, the one JSON fetch helper, the mutable
+ * page state, and the way a failure is worded. Every request is a same-origin relative path and
+ * carries the Access session cookie the browser already holds, so the page asks for no credential
+ * and stores none.
  *
- * Identifiers are interpolated from `element-ids.ts`, so the markup and the script cannot
- * disagree. The script text uses no JavaScript template literal, so every `${...}` below is a
- * deliberate TypeScript interpolation.
+ * `page.selection` is the guard that keeps a turn's frames in the conversation they belong to.
+ * Selecting a project increments it, and every asynchronous renderer captures the number it started
+ * with; a frame or a thread read that arrives after a switch finds a different number and is
+ * dropped rather than appended to the newly selected project's conversation.
+ *
+ * Identifiers are interpolated from `element-ids.ts`, so the markup and the script cannot disagree.
+ * The script text uses no JavaScript template literal, so every `${...}` below is a deliberate
+ * TypeScript interpolation.
  */
 export const OWNER_PAGE_SCRIPT_HELPERS = `
+  var page = {
+    projectId: null,
+    projectName: "",
+    selection: 0,
+    turn: null,
+    turnActive: false,
+    tools: null,
+    assistantText: null,
+    freshArmed: false,
+  };
+
   function node(id) {
     return document.getElementById(id);
   }
@@ -21,10 +38,6 @@ export const OWNER_PAGE_SCRIPT_HELPERS = `
     }
   }
 
-  function setRaw(id, value) {
-    setText(id, value === null || value === undefined ? "" : JSON.stringify(value, null, 2));
-  }
-
   function inputValue(id) {
     var target = node(id);
     return target === null ? "" : target.value.trim();
@@ -32,6 +45,14 @@ export const OWNER_PAGE_SCRIPT_HELPERS = `
 
   function text(value) {
     return value === null || value === undefined ? "" : String(value);
+  }
+
+  function element(tag, className) {
+    var created = document.createElement(tag);
+    if (className !== undefined) {
+      created.className = className;
+    }
+    return created;
   }
 
   function reportError(where, error) {
@@ -72,5 +93,9 @@ export const OWNER_PAGE_SCRIPT_HELPERS = `
       payload = null;
     }
     return { status: response.status, payload: payload };
+  }
+
+  function projectPath(projectId, suffix) {
+    return "/api/projects/" + encodeURIComponent(projectId) + suffix;
   }
 `;
