@@ -9,11 +9,12 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0024](0024-facet-owns-the-evolvable-harness.md)**: the main facet owns all mutable harness code and may request generation changes; the recovery harness remains outside every generation.
 - **[ADR-0026](0026-adopt-computer-for-facet-work-environment.md)**: use the verified Computer source and image pair, without fixing the workspace layout or Worker artifact format.
 - **[ADR-0027](0027-use-labeled-commit-as-loader-identity.md)**: the labeled harness commit ID is the Worker Loader identity.
+- **[ADR-0030](0030-apply-generation-requests-directly.md)**: the Supervisor applies generation requests directly and does not keep a request-deduplication journal.
 - **[ADR-0033](0033-epoch-versions-generation-control-state.md)**: the generation-control epoch changes only when generation-control state changes.
 - **[ADR-0034](0034-cache-rebuildable-module-maps-in-r2.md)**: R2 caches rebuildable module maps under the labeled harness commit, while Computer rebuilds cache misses.
 - **[ADR-0037](0037-stream-real-turns-to-the-browser.md)**: version 0 streams Pi turns to the browser and credits only terminal, saved success.
-- **[ADR-0038](0038-one-thread-and-workspace-per-project.md)**: each GitHub project has one current Pi thread and one isolated Computer workspace.
-- **[ADR-0039](0039-treat-project-workspaces-as-development-machines.md)**: project workspaces have unrestricted internet, normal development tools, and local GitHub credentials.
+- **[ADR-0038](0038-one-thread-per-project-one-shared-workspace.md)**: each GitHub project has one current Pi thread, while one Computer workspace contains all of the owner's repositories.
+- **[ADR-0039](0039-treat-the-workspace-as-a-development-machine.md)**: the shared workspace has unrestricted internet, normal development tools, and local GitHub credentials.
 
 ## Agent-only decisions
 
@@ -21,7 +22,6 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0023](0023-agent-generated-docs-live-under-docs-agents.md)**: agent-authored records live under `docs/agents/`.
 - **[ADR-0028](0028-harness-artifacts-are-module-maps.md)**: a generation's executable form is a module map, and a bundle is a one-module map.
 - **[ADR-0029](0029-startup-check-is-an-ordinary-request.md)**: a generation's startup check is one bounded ordinary request, not a health protocol.
-- **[ADR-0030](0030-generation-requests-are-journaled-and-epoch-bound.md)**: generation requests are epoch-checked and journaled by request ID.
 - **[ADR-0031](0031-relay-facts-decide-known-good.md)**: the supervisor records relay attempts and derives known-good eligibility from their terminal outcomes.
 - **[ADR-0032](0032-recovery-bounds-an-episode-it-does-not-perform.md)**: recovery picks an evidence-backed fallback and bounds repair and startup checking it does not perform.
 - **[ADR-0035](0035-use-better-result-only-inside-process-boundaries.md)**: better-result represents recoverable failures only inside one Worker isolate; public and durable boundaries keep plain values.

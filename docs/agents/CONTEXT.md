@@ -63,12 +63,13 @@ that the user connected to cf-stumble.
 
 **Project thread**:
 The current Pi conversation for one project. Starting a fresh thread replaces its conversation and
-compacted context but preserves the project's Computer workspace. Version 0 presents one current
-thread per project.
+compacted context but preserves every repository in the Computer workspace. Version 0 presents one
+current thread per project.
 
 **Computer workspace**:
-A durable filesystem and command environment provided by `@cloudflare/computer`. Each project has
-one isolated Computer workspace. Harness builds use a separate workspace.
+A durable filesystem and command environment provided by `@cloudflare/computer`. Version 0 uses one
+workspace for the owner's harness repository and connected project repositories. Each repository
+has its own directory and Git history, but the directories are not security boundaries.
 
 **Accumulated context**:
 Pi thread history, compacted context, and other useful context that can survive a change of

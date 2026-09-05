@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
 
 /**
- * ADR-0039 grants a project workspace a shell, development tools, and unrestricted egress, and
+ * ADR-0039 grants the shared workspace a shell, development tools, and unrestricted egress, and
  * pays for it with one instruction it quotes verbatim. That instruction is only worth anything if
  * the file cf-stumble actually writes still contains it, and nothing about editing either side
  * forces the other to change.
@@ -19,7 +19,7 @@ declare global {
 }
 
 const adrFiles = import.meta.glob(
-  "../../docs/agents/adr/0039-treat-project-workspaces-as-development-machines.md",
+  "../../docs/agents/adr/0039-treat-the-workspace-as-a-development-machine.md",
   { eager: true, query: "?raw", import: "default" },
 );
 

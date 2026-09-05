@@ -12,4 +12,4 @@ Workers RPC also decides at the type level whether a returned value can be struc
 
 The library does offer a serializer that converts a result into a plain envelope, which would survive the copy. We decline it here because adopting that envelope would change the format of every method callers already depend on, and it would buy validation that cf-stumble has no present need for. A later interface may define one deliberately, but it would have to validate both halves of the envelope and prove the encoded values through a real workerd test.
 
-This decision keeps ADR-0003's rule that the Supervisor alone decides activation, ADR-0029's plain startup-check report, and ADR-0030's plain journaled result for generation requests.
+This decision keeps ADR-0003's rule that the Supervisor alone decides activation, ADR-0029's plain startup-check report, and the plain RPC result returned for generation requests.
