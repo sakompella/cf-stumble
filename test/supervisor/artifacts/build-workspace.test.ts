@@ -113,9 +113,7 @@ test("offline fake workspace schedules missing repository provisioning before a 
 
   expect(plan.steps[0]?.source).toContain('while ! mkdir "$lock" 2>/dev/null; do');
   expect(plan.steps[0]?.source).toContain('rm -rf "$repository"');
-  expect(plan.steps[0]?.source).toContain(
-    'git clone --no-checkout "$expected_remote" "$repository"',
-  );
+  expect(plan.steps[0]?.source).toContain('git clone --no-checkout "$expected_remote" "$incoming"');
   expect(host.requests).toEqual([
     { kind: "build-step", harnessCommit: commit, step: "provision" },
     { kind: "build-step", harnessCommit: commit, step: "isolate" },

@@ -11,11 +11,13 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "build:pi": "pnpm --filter @cf-stumble/pi build",
+    "build:artifact": "pnpm install --frozen-lockfile && pnpm run build:pi && pnpm run build:module-map",
     "build:module-map": "pnpm exec tsx tools/build-generation-0.mts",
     "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
     "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
     "local:access-session": "pnpm exec tsx tools/access-session.mts",
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
+    "probe:clean-build": "scripts/probe/clean-build.sh",
     "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },

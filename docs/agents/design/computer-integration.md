@@ -49,6 +49,66 @@ compilation and tests run; ADR-0028 and ADR-0034 define the artifact and cache.
 
 Worker Loader names are cached. The Supervisor uses the labeled harness commit ID as the Loader name, so a changed harness commit does not silently reuse old code.
 
+## Harness build preconditions
+
+The Supervisor's build runs `HARNESS_BUILD_CONFIGURATION.buildCommand` in a directory that
+`git archive` has just written. That directory contains tracked files only, so it has no
+`node_modules` and no `vendor/pi-v0.84.4/dist/`. The build command is therefore the single script
+`pnpm run build:artifact`, which installs from `pnpm-lock.yaml`, builds the vendored Pi package,
+and then builds the module map. `test/supervisor/artifacts/build-command.test.ts` checks that the
+configured command names a script `package.json` defines, so the deployed command and the local
+gate cannot drift apart again.
+
+The list below records what a fresh build container must provide. A developer machine hides most
+of these, because it has a warm pnpm store, a newer Node, and generated output already in place.
+
+1. **pnpm.** `pnpm-lock.yaml` declares `lockfileVersion: '9.0'`, and `package.json` pins
+   `"packageManager": "pnpm@11.18.0"`. The recorded container pnpm 11.24.0 reads that lockfile, but
+   it honours the pin, so its first run downloads pnpm 11.18.0 before `pnpm install` starts. That
+   download is unproved in the container.
+2. **Node.** The container ships Node 22.23.2. The tightest `engines` entries in the lockfile are
+   `^20.19.0 || >=22.12.0`, `>=22.0.0`, and vitest's `^20.0.0 || ^22.0.0 || >=24.0.0`, so 22.23.2
+   satisfies every one of them, and `@types/node` is pinned to 22.19.19 to match. A local run on
+   Node 26.7.0 is more permissive than the container, so it cannot disprove a Node 22 failure.
+3. **Registry reachability.** The install needs `registry.npmjs.org` and nothing else: the lockfile
+   has no Git or CDN resolution, and the one file dependency,
+   `vendor/cloudflare-computer-0.3.0.tgz`, is tracked and arrives with the archive. The recorded
+   paid evidence for network package access is one `pnpm add is-odd@3.0.1`. That is a much smaller
+   claim than 186 packages and about 145 MB, and a much smaller claim than reaching an arbitrary
+   internet destination.
+4. **Install scripts.** `pnpm-workspace.yaml` allows builds for `esbuild`, `koffi`, and `workerd`,
+   and refuses them for `@mongodb-js/zstd` and `node-liblzma`. None of the three is needed for the
+   artifact build. `tsx` declares no scripts, and esbuild and workerd ship their binaries as
+   platform optional dependencies that the lockfile already names for linux-x64, so an install run
+   with `--ignore-scripts` still yields a working `tsx` and `esbuild`. `koffi` serves the Hegel
+   property tests, which run in Node under `pnpm verify` and not in a harness build. A build
+   container therefore needs no compiler, node-gyp, CMake, or Python.
+5. **Cold install cost.** On linux-x64 the lockfile installs 186 packages: about 145 MB compressed
+   and about 496 MB unpacked, with `@cloudflare/workerd-linux-64` alone at 38 MB compressed and
+   152 MB unpacked. A local clean build with an isolated `HOME`, and therefore an empty
+   content-addressable store, downloaded all 183 resolved packages and finished
+   install, Pi build, and module-map build in about 13 seconds on a fast home network. A container
+   with slower storage and a possible FUSE-backed filesystem will be considerably slower, so the
+   recommended cold-build timeout is 900 seconds for the whole chain until a paid run measures it.
+6. **git and tar.** The provision step runs `git rev-parse`, `git clone --no-checkout`,
+   `git config`, `git cat-file`, and `git fetch`, and the checkout step runs `git archive` and
+   `tar`. The recorded container toolchain includes Git. It does not record `tar`, and the recorded
+   network evidence does not cover outbound HTTPS to `github.com`, which the clone and fetch need.
+
+## Clean-build checklist
+
+Run `pnpm probe:clean-build` before a release and before any paid build probe. The script extracts
+a commit into a temporary directory outside the repository, isolates `HOME` so pnpm starts from an
+empty store, builds the commit twice, and compares the two module maps byte for byte. Keep its
+output with the release evidence.
+
+The script is a pre-check, not the proof goal criterion 7 asks for. Criterion 7 requires two clean
+Computer builds of one labeled commit, and this script never starts a container.
+
+If `scripts/probe/clean-build.sh` or the `probe:clean-build` script is missing, this checklist
+fails and the release stops. `test/supervisor/artifacts/build-command.test.ts` checks that both are
+present, so `pnpm verify` fails before the checklist is reached.
+
 ## Generation requests
 
 A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The exact command, transport, and authentication mechanism remain open.

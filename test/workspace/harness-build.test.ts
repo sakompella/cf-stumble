@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
+  harnessBuildStep,
   planHarnessBuild,
   shellQuote,
 } from "../../src/harness-build.js";
@@ -110,7 +111,13 @@ test("plans one planned step, or the build output, from a validated commit", () 
 
   expect(planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, step)).toEqual({
     kind: "run-command",
-    source: `git --git-dir=/harness/.git archive ${commit} | tar -x -C ${buildDirectory}`,
+    source: [
+      "set -eu",
+      `archive=${buildDirectory}/.harness-archive.tar`,
+      `git --git-dir=/harness/.git archive --format=tar -o "$archive" ${commit}`,
+      `tar -x -C ${buildDirectory} -f "$archive"`,
+      'rm -f "$archive"',
+    ].join("\n"),
     cwd: "/",
   });
   expect(planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, output)).toEqual({
@@ -225,6 +232,47 @@ test("keeps the project surface free of build requests", async () => {
     }),
   ).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
   expect(operations.calls).toEqual([]);
+});
+
+test("the checkout step fails on its own when the archive fails", () => {
+  const checkout = harnessBuildStep(
+    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
+    "checkout",
+  );
+
+  // `git archive | tar -x` reports tar's exit code, so a failed archive used to reach the build
+  // step as an empty directory and a compilation error that named the wrong fault.
+  expect(checkout.source).not.toContain("|");
+  expect(checkout.source.startsWith("set -eu")).toBe(true);
+});
+
+test("the provision step obtains the requested commit before the build reads it", () => {
+  const provision = harnessBuildStep(
+    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
+    "provision",
+  );
+
+  expect(provision.source).toContain(`commit=${shellQuote(commit)}`);
+  expect(provision.source, "a commit pushed after provisioning must be fetched").toContain(
+    'git --git-dir="$git_dir" fetch --no-tags --quiet origin "$commit"',
+  );
+  expect(provision.source, "an absent commit must name itself and the repository").toContain(
+    'printf "harness commit %s is not in %s\\n" "$commit" "$expected_remote" >&2',
+  );
+});
+
+test("an interrupted provision leaves an existing harness checkout in place", () => {
+  const provision = harnessBuildStep(
+    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
+    "provision",
+  );
+  const clone = provision.source.indexOf('git clone --no-checkout "$expected_remote" "$incoming"');
+  const removal = provision.source.indexOf('rm -rf "$repository"');
+
+  expect(clone, "the replacement clone must land beside the repository").toBeGreaterThan(0);
+  expect(removal, "the existing checkout must survive a clone that never finishes").toBeGreaterThan(
+    clone,
+  );
 });
 
 test("shellQuote emits POSIX single-quote escaping the shell can parse", () => {

@@ -140,12 +140,29 @@ test("checks out the commit before it runs the build command", async () => {
 
   await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
 
-  expect(workspace.commands[2]?.source).toBe(
-    `git --git-dir=/harness/.git archive ${commit} | tar -x -C /harness-builds/${commit}`,
+  expect(workspace.commands[2]?.source).toContain(
+    `git --git-dir=/harness/.git archive --format=tar -o "$archive" ${commit}`,
   );
+  expect(workspace.commands[2]?.source).toContain(`tar -x -C /harness-builds/${commit}`);
   expect(workspace.commands[3]).toEqual({
     source: configuration.buildCommand,
     cwd: `/harness-builds/${commit}`,
+  });
+});
+
+test("reports a failed archive extraction as the checkout step, not as a build failure", async () => {
+  const workspace = new FakeBuildWorkspace({ failing: "git-dir=/harness/.git archive" });
+
+  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+
+  if (built.isOk()) {
+    throw new Error("a failed archive must not produce a module map");
+  }
+  expect(built.error).toEqual({
+    code: "build-step-failed",
+    harnessCommit: commit,
+    step: "checkout",
+    exitCode: 3,
   });
 });
 
