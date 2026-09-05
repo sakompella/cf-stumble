@@ -1,6 +1,6 @@
 import { Result } from "better-result";
 import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
-import { resolveProjectWorkspaceName } from "../../../src/workspace-names.js";
+import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { readFrames } from "../../facet/generation-0/facet-turn-helpers.js";
 import { loadFixtureEntrypoint } from "../../loaded-fixture.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/facet-turn.js";
@@ -13,8 +13,13 @@ import type {
 import type LoadedFacetTurnEntry from "../../facet/generation-0/loaded-facet-turn-entry.js";
 import type LoadedProjectWorkspacesEntry from "./loaded-project-workspaces-entry.js";
 
-/** One verified tenant. Every name these tests compare is derived from this one identity. */
-export const tenant = { identity: "tenant-1", audience: "test-audience" } as const;
+/**
+ * The tenant's one workspace, as the Supervisor names it from its own server-derived name. Every
+ * project of this tenant reaches this one name; a second tenant is a second Supervisor and so a
+ * second name.
+ */
+export const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-one");
+export const otherTenantWorkspaceName = tenantWorkspaceName("supervisor-name-of-tenant-two");
 
 const OPENING = { prompt: "do the work", state: null };
 
@@ -25,7 +30,7 @@ const OPENING = { prompt: "do the work", state: null };
  */
 export interface ProjectWorkspaces {
   readonly namespace: ProjectWorkspaceNamespace;
-  fileText(workspaceName: string, path: string): Promise<string | null>;
+  fileText(name: string, path: string): Promise<string | null>;
   requestedNames(): Promise<string[]>;
 }
 
@@ -35,7 +40,7 @@ export async function projectWorkspaces(): Promise<ProjectWorkspaces> {
   );
   return {
     namespace: { getByName: (name) => ({ project: () => host.project(name) }) },
-    fileText: (workspaceName, path) => host.fileText(workspaceName, path),
+    fileText: (name, path) => host.fileText(name, path),
     requestedNames: () => host.requestedNames(),
   };
 }
@@ -47,25 +52,18 @@ export function facetRunning(answers: readonly ModelRouteResponse[]): Promise<Pr
   });
 }
 
-/** The workspace name production would derive for this tenant and project id. */
-export async function derivedName(projectId: string): Promise<string> {
-  const resolved = await resolveProjectWorkspaceName({ ...tenant, projectId });
-  if (!resolved.ok) {
-    throw new Error("a configured project must resolve");
-  }
-  return resolved.workspaceName;
-}
-
 export function turnFor(
   workspaces: ProjectWorkspaces,
   facet: ProjectTurnFacet,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the boundary: a project id arrives from a client with no proven shape.
   projectId: unknown,
+  /** Only a second tenant's Supervisor supplies a different name; no request can. */
+  tenantWorkspace: string = workspaceName,
 ): Promise<ProjectTurnStart> {
   return streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
-    tenant,
+    workspaceName: tenantWorkspace,
     projectId,
     request: OPENING,
   });
@@ -76,7 +74,7 @@ export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<P
   return streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.err({ code: "no-active-generation" })),
-    tenant,
+    workspaceName,
     projectId: "project-one",
     request: OPENING,
   });
@@ -86,8 +84,9 @@ export async function completedTurn(
   workspaces: ProjectWorkspaces,
   facet: ProjectTurnFacet,
   projectId: string,
+  tenantWorkspace: string = workspaceName,
 ): Promise<FacetTurnFrame[]> {
-  const started = await turnFor(workspaces, facet, projectId);
+  const started = await turnFor(workspaces, facet, projectId, tenantWorkspace);
   if (!started.ok) {
     throw new Error(`the turn must start; it was refused with ${started.reason}`);
   }

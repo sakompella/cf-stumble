@@ -8,7 +8,6 @@ import { parseWorkspaceRequest, planWorkspaceRequest } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
-import type { ProjectProvisionConfiguration } from "../project-provision.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
@@ -149,7 +148,6 @@ export async function executeHarnessBuildRequest(
 export async function executeProjectProvisionRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
-    configuration: ProjectProvisionConfiguration;
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public provision request is parsed at this boundary.
     request: unknown;
   }>,
@@ -158,10 +156,7 @@ export async function executeProjectProvisionRequest(
   if ("ok" in parsed) return parsed;
 
   try {
-    return await executePlan(
-      input.operations,
-      planProjectProvisionRequest(input.configuration, parsed),
-    );
+    return await executePlan(input.operations, planProjectProvisionRequest(parsed));
   } catch {
     return unavailable();
   }

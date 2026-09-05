@@ -1,21 +1,24 @@
 import { FileError } from "@cf-stumble/pi";
 import type { Result } from "@cf-stumble/pi";
+/**
+ * `WORKSPACE_ROOT` is this adapter's root in two namespaces at once: its own absolute-path
+ * namespace (what Pi sees) and the project RPC target's addressed-path namespace (where the same
+ * location is simply "/"). Every path this adapter accepts or returns lives inside it.
+ *
+ * It is imported rather than declared here. `workspace-layout.ts` owns the root and the project
+ * RPC target reads the same constant, so the escape check below and that target's address
+ * translation cannot drift into two different opinions of what is inside the workspace.
+ */
+import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 
 /** `@cf-stumble/pi` exports the `FileError` class but not its `FileErrorCode` union; derive it. */
 type FileErrorCode = FileError["code"];
 
 /**
- * The facet-local project root, in both this adapter's own absolute-path namespace (what Pi sees)
- * and the project RPC target's addressed-path namespace (where the same location is simply "/").
- * Every path this adapter accepts or returns lives inside this root.
- */
-export const PROJECT_ROOT = "/project";
-
-/**
  * Lexically resolves a Pi-supplied path — relative to `cwd`, or already absolute — against the
- * fixed `/project` root, the same way `path.posix.resolve` would: it never touches the filesystem
+ * fixed workspace root, the same way `path.posix.resolve` would: it never touches the filesystem
  * and never follows a symlink. `.` segments are dropped and `..` pops the previous segment, exactly
- * as POSIX does at the filesystem root, so a `..` that would climb above `/project` is caught the
+ * as POSIX does at the filesystem root, so a `..` that would climb above the root is caught the
  * moment the walk finishes rather than left to look like a valid path outside the root.
  */
 export function resolveAbsolute(cwd: string, path: string): Result<string, FileError> {
@@ -30,25 +33,25 @@ export function resolveAbsolute(cwd: string, path: string): Result<string, FileE
     segments.push(segment);
   }
   const absolute = segments.length === 0 ? "/" : `/${segments.join("/")}`;
-  if (absolute !== PROJECT_ROOT && !absolute.startsWith(`${PROJECT_ROOT}/`)) {
+  if (absolute !== WORKSPACE_ROOT && !absolute.startsWith(`${WORKSPACE_ROOT}/`)) {
     return {
       ok: false,
-      error: new FileError("invalid", `path escapes ${PROJECT_ROOT}: ${path}`, path),
+      error: new FileError("invalid", `path escapes ${WORKSPACE_ROOT}: ${path}`, path),
     };
   }
   return { ok: true, value: absolute };
 }
 
-/** Converts one of this adapter's own absolute paths (rooted at `/project`) to the project RPC
+/** Converts one of this adapter's own absolute paths (rooted at the workspace root) to the project RPC
  * target's addressed-path form (rooted at `/`). `resolveAbsolute`'s output is always a valid input. */
 export function toAddressedPath(absolute: string): string {
-  return absolute === PROJECT_ROOT ? "/" : absolute.slice(PROJECT_ROOT.length);
+  return absolute === WORKSPACE_ROOT ? "/" : absolute.slice(WORKSPACE_ROOT.length);
 }
 
 /** The inverse of {@link toAddressedPath}: an addressed path from the project RPC target back to
  * one of this adapter's own absolute paths. */
 export function fromAddressedPath(addressed: string): string {
-  return addressed === "/" ? PROJECT_ROOT : `${PROJECT_ROOT}${addressed}`;
+  return addressed === "/" ? WORKSPACE_ROOT : `${WORKSPACE_ROOT}${addressed}`;
 }
 
 /**

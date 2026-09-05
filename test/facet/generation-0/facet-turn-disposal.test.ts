@@ -49,7 +49,7 @@ test("releases the duplicate when the turn completes", async () => {
 
   expect(frames.at(-1)).toMatchObject({ kind: "completed" });
   expect(
-    received.provider.readFileSync("/project/notes.txt"),
+    received.provider.readFileSync("/workspace/notes.txt"),
     "the turn must have reached the workspace through the duplicate",
   ).toEqual(encode("written by the turn"));
   expect(received.ledger).toEqual({ dups: 1, disposals: 1, live: 1 });
@@ -91,7 +91,9 @@ test("releases nothing it never duplicated when the request is rejected", async 
   const received = FakeProjectCapability.create();
   const route = new ScriptedRoute([]);
 
-  const frames = await readFrames(startFacetTurn(capabilities(route), received, { prompt: 7 }));
+  const frames = await readFrames(
+    startFacetTurn(capabilities(route), received, { prompt: 7 }, "/workspace"),
+  );
 
   expect(frames).toEqual([{ kind: "rejected", code: "invalid-turn-request" }]);
   expect(received.ledger).toEqual({ dups: 0, disposals: 0, live: 1 });

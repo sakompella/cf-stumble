@@ -53,7 +53,7 @@ test("hands Pi state to the next turn", async () => {
 
 test("reaches every supported execution operation through the four stock tools", async () => {
   const { env: base, execBackend } = makeFacetExecutionEnv();
-  await base.writeFile("/project/data.txt", "before");
+  await base.writeFile("/workspace/data.txt", "before");
   const operationSpies = [
     vi.spyOn(base, "absolutePath"),
     vi.spyOn(base, "readTextFile"),
@@ -131,7 +131,7 @@ test("reaches canonicalPath through the write tool alone, with no bash call", as
   expect(
     canonicalPath,
     "Pi's write tool canonicalizes the path itself through its file mutation queue",
-  ).toHaveBeenCalledWith("/project/queued.txt");
+  ).toHaveBeenCalledWith("/workspace/queued.txt");
   expect(execBackend.requests, "no command runs, so no bash prepare hook could have run").toEqual(
     [],
   );
@@ -167,7 +167,7 @@ test("reports call-limit exhaustion as a failure and makes no ninth model call",
     ),
   );
   const { env } = makeFacetExecutionEnv();
-  await env.writeFile("/project/data.txt", "data");
+  await env.writeFile("/workspace/data.txt", "data");
 
   const outcome = await runPiAgentTurn({
     prompt: "Keep reading.",

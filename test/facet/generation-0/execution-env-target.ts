@@ -11,7 +11,7 @@ import {
  * Worker facet would receive: a real `ProjectRpcTarget` (not a hand-rolled fake target), backed by
  * an in-memory filesystem and a scripted exec backend so every test stays deterministic.
  */
-export function makeFacetExecutionEnv(cwd = "/project") {
+export function makeFacetExecutionEnv(cwd = "/workspace") {
   const provider = new FakeProjectFilesystemProvider();
   const transactions = new FakeProjectTransactions();
   const execBackend = new FakeExecBackend();

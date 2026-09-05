@@ -1,4 +1,4 @@
-import { createFacetExecutionEnv, PROJECT_ROOT } from "./execution-env.js";
+import { createFacetExecutionEnv } from "./execution-env.js";
 import { parseFacetTurnRequest, type FacetTurnRequest } from "./facet-turn-request.js";
 import { createPiAgentTurnState, runPiAgentTurn } from "./pi-agent-turn.js";
 import { leaseProjectCapability, type ProjectCapabilityLease } from "./project-capability.js";
@@ -58,13 +58,14 @@ async function pumpTurn(
   capabilities: Generation0Capabilities,
   lease: ProjectCapabilityLease,
   request: FacetTurnRequest,
+  workingDirectory: string,
   signal: AbortSignal,
   publish: (frame: FacetTurnFrame) => void,
 ): Promise<void> {
   const outcome = await runPiAgentTurn({
     prompt: request.prompt,
     state: request.state ?? createPiAgentTurnState(ROUTE_MODEL),
-    env: createFacetExecutionEnv({ cwd: PROJECT_ROOT, projectTarget: lease.capability }),
+    env: createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability }),
     streamFn: createRouteStreamFn(capabilities.MODEL, signal),
     onEvent: (event) => {
       for (const frame of eventFrames(event)) publish(frame);
@@ -75,8 +76,8 @@ async function pumpTurn(
 }
 
 /**
- * Runs one turn against a project capability received as an RPC method argument, and returns the
- * newline-delimited JSON frames it produces.
+ * Runs one turn against a workspace capability received as an RPC method argument, starting in the
+ * working directory the host selected, and returns the newline-delimited JSON frames it produces.
  *
  * The capability is request-scoped by construction. It never reaches this generation's
  * environment, which the Worker Loader caches per harness commit and which therefore cannot hold
@@ -93,6 +94,7 @@ export function startFacetTurn(
   received: ProjectRpcTargetContract,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request arrives over RPC, so it has no proven shape here.
   request: unknown,
+  workingDirectory: string,
 ): ReadableStream<Uint8Array> {
   const cancellation = new AbortController();
   let lease: ProjectCapabilityLease | undefined;
@@ -113,7 +115,6 @@ export function startFacetTurn(
         close();
         return;
       }
-
       lease = leaseProjectCapability(received);
       if (lease === undefined) {
         publish({ kind: "rejected", code: "invalid-project-capability" });
@@ -122,7 +123,7 @@ export function startFacetTurn(
       }
 
       try {
-        await pumpTurn(capabilities, lease, parsed, cancellation.signal, publish);
+        await pumpTurn(capabilities, lease, parsed, workingDirectory, cancellation.signal, publish);
         close();
       } catch (error) {
         if (!cancellation.signal.aborted) controller.error(error);

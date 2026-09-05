@@ -1,4 +1,5 @@
 import { startFacetTurn } from "../../../src/facet/generation-0/facet-turn.js";
+import { WORKSPACE_ROOT } from "../../../src/workspace-layout.js";
 import type {
   FacetTurnFrame,
   FacetTurnRequest,
@@ -60,8 +61,9 @@ export function turnStream(
   route: ModelCapability,
   received: FakeProjectCapability,
   request: FacetTurnRequest = OPENING_TURN,
+  workingDirectory: string = WORKSPACE_ROOT,
 ): ReadableStream<Uint8Array> {
-  return startFacetTurn(capabilities(route), received, request);
+  return startFacetTurn(capabilities(route), received, request, workingDirectory);
 }
 
 export async function readFrames(stream: ReadableStream<Uint8Array>): Promise<FacetTurnFrame[]> {

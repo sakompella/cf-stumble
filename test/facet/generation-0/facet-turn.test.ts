@@ -14,7 +14,7 @@ import {
 
 test("streams the turn's text, tool results, and terminal state as byte frames", async () => {
   const received = FakeProjectCapability.create();
-  received.provider.addFile("/project/readme.md", encode("first line"));
+  received.provider.addFile("/workspace/readme.md", encode("first line"));
   const route = new ScriptedRoute([
     calls("read", { path: "readme.md" }),
     says("The file says: first line"),
@@ -65,7 +65,7 @@ test("rejects a capability whose lifetime this generation cannot own", async () 
   const route = new ScriptedRoute([says("never reached")]);
 
   const frames = await readFrames(
-    startFacetTurn(capabilities(route), projectTarget, { prompt: "go", state: null }),
+    startFacetTurn(capabilities(route), projectTarget, { prompt: "go", state: null }, "/workspace"),
   );
 
   expect(frames).toEqual([{ kind: "rejected", code: "invalid-project-capability" }]);

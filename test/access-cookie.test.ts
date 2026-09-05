@@ -79,6 +79,7 @@ describe("Access cookie authentication", () => {
         identity: "owner-1",
         audience: accessAudience,
       }),
+      scope: { identity: "owner-1", audience: accessAudience },
     });
   });
 
@@ -213,6 +214,7 @@ describe("Access cookie authentication", () => {
         identity: accessOwnerSubject,
         audience: accessAudience,
       }),
+      scope: { identity: accessOwnerSubject, audience: accessAudience },
     });
   });
 

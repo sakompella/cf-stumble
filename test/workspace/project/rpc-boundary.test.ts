@@ -35,7 +35,7 @@ function assertPlainlyCloneable(value: unknown): void {
 
 test("every ProjectResult is a plain, structured-clone-safe value", async () => {
   const { provider, target } = makeTarget();
-  provider.addFile("/project/f.txt", new TextEncoder().encode("hi"));
+  provider.addFile("/workspace/f.txt", new TextEncoder().encode("hi"));
 
   assertPlainlyCloneable(await target.lstat("/missing"));
   assertPlainlyCloneable(await target.lstat("/f.txt"));

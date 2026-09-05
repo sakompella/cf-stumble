@@ -13,15 +13,19 @@ import {
   writeVia,
 } from "./execution-env-filesystem.js";
 
-export { PROJECT_ROOT } from "./execution-env-paths.js";
-
 export interface FacetExecutionEnvLocal {
+  /**
+   * Where the turn starts. It is the selected project's directory in the shared workspace, so
+   * relative paths land in that repository, and it is only a starting point: every path this
+   * environment resolves is checked against the workspace root itself, so a `cwd` outside the root
+   * yields rejected operations rather than an escape.
+   */
   readonly cwd: string;
   readonly projectTarget: ProjectRpcTargetContract;
 }
 
 /**
- * Builds a Pi `ExecutionEnv` local to one project: every filesystem and shell operation Pi's stock
+ * Builds a Pi `ExecutionEnv` local to one turn: every filesystem and shell operation Pi's stock
  * tools need, translated onto the six-method `ProjectRpcTarget` surface. `cwd` and `projectTarget`
  * are captured by closure only, so the returned object carries no `projectTarget` property —
  * enumerable or otherwise — and reaches no build, fetch, raw Computer, or container capability.

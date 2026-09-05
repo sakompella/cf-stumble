@@ -5,7 +5,6 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
 import { PROJECT_CATALOG } from "../../../src/project-catalog.js";
 import { activateFixtureGeneration } from "../helpers.js";
-import { tenant } from "./project-turn-helpers.js";
 import type {
   ProjectTurnRequest,
   ProjectTurnStart,
@@ -14,13 +13,12 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 /**
  * The real Supervisor Durable Object, its real Workspace Host binding, and no capability supplied
- * by this test. `streamProjectTurn` takes a tenant, a project id, and a turn request; there is no
- * parameter through which a capability could arrive, so whatever reaches the generation the
- * Supervisor obtained itself.
+ * by this test. `streamProjectTurn` takes a project id and a turn request and nothing else: there
+ * is no parameter through which a capability, a tenant, or a workspace name could arrive, so
+ * whatever reaches the generation the Supervisor named and obtained itself.
  */
 
 const request: ProjectTurnRequest = {
-  tenant,
   projectId: PROJECT_CATALOG[0].id,
   request: { prompt: "do the work", state: null },
 };
@@ -33,10 +31,9 @@ afterEach(async () => {
   await reset();
 });
 
-test("the turn surface accepts a project id and a request, and never a capability", () => {
+test("the turn surface accepts a project id and a request, and never a tenant or capability", () => {
   expectTypeOf<Parameters<Supervisor["streamProjectTurn"]>>().toEqualTypeOf<[ProjectTurnRequest]>();
   expectTypeOf<ProjectTurnRequest>().toEqualTypeOf<{
-    readonly tenant: ProjectTurnRequest["tenant"];
     readonly projectId: unknown;
     readonly request: unknown;
   }>();

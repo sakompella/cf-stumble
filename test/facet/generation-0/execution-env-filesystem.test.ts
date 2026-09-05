@@ -10,29 +10,29 @@ test('joinPath resolves local FileError("not_supported")', async () => {
 
 test('readTextLines resolves local FileError("not_supported")', async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.readTextLines("/project/a.txt")).resolves.toMatchObject(NOT_SUPPORTED);
+  await expect(env.readTextLines("/workspace/a.txt")).resolves.toMatchObject(NOT_SUPPORTED);
 });
 
 test('renameFile resolves local FileError("not_supported")', async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.renameFile("/project/a.txt", "/project/b.txt")).resolves.toMatchObject(
+  await expect(env.renameFile("/workspace/a.txt", "/workspace/b.txt")).resolves.toMatchObject(
     NOT_SUPPORTED,
   );
 });
 
 test('listDir resolves local FileError("not_supported")', async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.listDir("/project")).resolves.toMatchObject(NOT_SUPPORTED);
+  await expect(env.listDir("/workspace")).resolves.toMatchObject(NOT_SUPPORTED);
 });
 
 test('createDir resolves local FileError("not_supported")', async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.createDir("/project/a")).resolves.toMatchObject(NOT_SUPPORTED);
+  await expect(env.createDir("/workspace/a")).resolves.toMatchObject(NOT_SUPPORTED);
 });
 
 test('remove resolves local FileError("not_supported")', async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.remove("/project/a.txt")).resolves.toMatchObject(NOT_SUPPORTED);
+  await expect(env.remove("/workspace/a.txt")).resolves.toMatchObject(NOT_SUPPORTED);
 });
 
 test('createTempDir resolves local FileError("not_supported")', async () => {
@@ -50,18 +50,18 @@ test("enumerates all 18 ExecutionEnv methods without throwing, including every f
   const calls: Array<Promise<unknown>> = [
     env.absolutePath("missing.txt"),
     env.joinPath(["a"]),
-    env.readTextFile("/project/missing.txt"),
-    env.readTextLines("/project/missing.txt"),
-    env.readBinaryFile("/project/missing.txt"),
-    env.writeFile("/project/nested/missing/dir/f.txt", "x"),
-    env.appendFile("/project/nested/missing/dir/f.txt", "x"),
-    env.renameFile("/project/a.txt", "/project/b.txt"),
-    env.fileInfo("/project/missing.txt"),
-    env.listDir("/project/missing"),
-    env.canonicalPath("/project/missing.txt"),
-    env.exists("/project/missing.txt"),
-    env.createDir("/project/a"),
-    env.remove("/project/a.txt"),
+    env.readTextFile("/workspace/missing.txt"),
+    env.readTextLines("/workspace/missing.txt"),
+    env.readBinaryFile("/workspace/missing.txt"),
+    env.writeFile("/workspace/nested/missing/dir/f.txt", "x"),
+    env.appendFile("/workspace/nested/missing/dir/f.txt", "x"),
+    env.renameFile("/workspace/a.txt", "/workspace/b.txt"),
+    env.fileInfo("/workspace/missing.txt"),
+    env.listDir("/workspace/missing"),
+    env.canonicalPath("/workspace/missing.txt"),
+    env.exists("/workspace/missing.txt"),
+    env.createDir("/workspace/a"),
+    env.remove("/workspace/a.txt"),
     env.createTempDir(),
     env.createTempFile(),
     env.cleanup(),
@@ -75,17 +75,17 @@ test("enumerates all 18 ExecutionEnv methods without throwing, including every f
 
 test("cwd is a synchronous, local absolute path", () => {
   const { env } = makeFacetExecutionEnv();
-  expect(env.cwd).toBe("/project");
+  expect(env.cwd).toBe("/workspace");
 });
 
 test("arbitrary bytes round-trip exactly through writeFile/readBinaryFile", async () => {
   const { env } = makeFacetExecutionEnv();
   const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28]);
-  await expect(env.writeFile("/project/weird.bin", bytes)).resolves.toEqual({
+  await expect(env.writeFile("/workspace/weird.bin", bytes)).resolves.toEqual({
     ok: true,
     value: undefined,
   });
-  const read = await env.readBinaryFile("/project/weird.bin");
+  const read = await env.readBinaryFile("/workspace/weird.bin");
   expect(read.ok).toBe(true);
   if (read.ok) expect(Array.from(read.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
 });
@@ -93,16 +93,16 @@ test("arbitrary bytes round-trip exactly through writeFile/readBinaryFile", asyn
 test("readTextFile decodes with replacement, but readBinaryFile preserves the raw bytes", async () => {
   const { env } = makeFacetExecutionEnv();
   const invalidUtf8 = new Uint8Array([0x00, 0xff, 0xc3, 0x28]);
-  await env.writeFile("/project/weird.bin", invalidUtf8);
+  await env.writeFile("/workspace/weird.bin", invalidUtf8);
 
-  const text = await env.readTextFile("/project/weird.bin");
+  const text = await env.readTextFile("/workspace/weird.bin");
   expect(text.ok).toBe(true);
   if (text.ok) {
     expect(text.value.includes("\uFFFD")).toBe(true);
     expect(text.value.codePointAt(0)).toBe(0);
   }
 
-  const binary = await env.readBinaryFile("/project/weird.bin");
+  const binary = await env.readBinaryFile("/workspace/weird.bin");
   expect(binary.ok).toBe(true);
   if (binary.ok) expect(Array.from(binary.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
 });
@@ -110,35 +110,35 @@ test("readTextFile decodes with replacement, but readBinaryFile preserves the ra
 test("multibyte text round-trips and reports a byte-counted size, not a character count", async () => {
   const { env } = makeFacetExecutionEnv();
   // "héllo" is 5 UTF-16 code units but 6 UTF-8 bytes.
-  await env.writeFile("/project/greeting.txt", "héllo");
+  await env.writeFile("/workspace/greeting.txt", "héllo");
 
-  const text = await env.readTextFile("/project/greeting.txt");
+  const text = await env.readTextFile("/workspace/greeting.txt");
   expect(text).toEqual({ ok: true, value: "héllo" });
 
-  const info = await env.fileInfo("/project/greeting.txt");
+  const info = await env.fileInfo("/workspace/greeting.txt");
   expect(info.ok).toBe(true);
   if (info.ok) expect(info.value.size).toBe(6);
 });
 
 test("appendFile appends without reading the file first", async () => {
   const { env } = makeFacetExecutionEnv();
-  await env.writeFile("/project/log.txt", "a");
-  await env.appendFile("/project/log.txt", "b");
-  await env.appendFile("/project/log.txt", "c");
-  await expect(env.readTextFile("/project/log.txt")).resolves.toEqual({ ok: true, value: "abc" });
+  await env.writeFile("/workspace/log.txt", "a");
+  await env.appendFile("/workspace/log.txt", "b");
+  await env.appendFile("/workspace/log.txt", "c");
+  await expect(env.readTextFile("/workspace/log.txt")).resolves.toEqual({ ok: true, value: "abc" });
 });
 
 test("fileInfo strips the target's nested canonicalPath and returns Pi's own FileInfo shape", async () => {
   const { provider, env } = makeFacetExecutionEnv();
   provider.now = 1234;
-  await env.writeFile("/project/dir/file.txt", "hi");
+  await env.writeFile("/workspace/dir/file.txt", "hi");
 
-  const info = await env.fileInfo("/project/dir/file.txt");
+  const info = await env.fileInfo("/workspace/dir/file.txt");
   expect(info).toEqual({
     ok: true,
     value: {
       name: "file.txt",
-      path: "/project/dir/file.txt",
+      path: "/workspace/dir/file.txt",
       kind: "file",
       size: 2,
       mtimeMs: 1234,
@@ -150,15 +150,15 @@ test("absolutePath resolves a relative path against cwd", async () => {
   const { env } = makeFacetExecutionEnv();
   await expect(env.absolutePath("src/index.ts")).resolves.toEqual({
     ok: true,
-    value: "/project/src/index.ts",
+    value: "/workspace/src/index.ts",
   });
 });
 
 test("absolutePath is purely lexical: it normalizes . and .. without touching the filesystem", async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.absolutePath("/project/a/../b/./c")).resolves.toEqual({
+  await expect(env.absolutePath("/workspace/a/../b/./c")).resolves.toEqual({
     ok: true,
-    value: "/project/b/c",
+    value: "/workspace/b/c",
   });
   await expect(env.absolutePath("a/../../etc/passwd")).resolves.toMatchObject({
     ok: false,
@@ -168,7 +168,7 @@ test("absolutePath is purely lexical: it normalizes . and .. without touching th
 
 test("readBinaryFile on a missing file is not_found", async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.readBinaryFile("/project/nope.txt")).resolves.toMatchObject({
+  await expect(env.readBinaryFile("/workspace/nope.txt")).resolves.toMatchObject({
     ok: false,
     error: { code: "not_found" },
   });
@@ -176,9 +176,9 @@ test("readBinaryFile on a missing file is not_found", async () => {
 
 test("exists is false only for a missing path; other failures stay FileErrors", async () => {
   const { env } = makeFacetExecutionEnv();
-  await expect(env.exists("/project/nope.txt")).resolves.toEqual({ ok: true, value: false });
-  await env.writeFile("/project/there.txt", "hi");
-  await expect(env.exists("/project/there.txt")).resolves.toEqual({ ok: true, value: true });
+  await expect(env.exists("/workspace/nope.txt")).resolves.toEqual({ ok: true, value: false });
+  await env.writeFile("/workspace/there.txt", "hi");
+  await expect(env.exists("/workspace/there.txt")).resolves.toEqual({ ok: true, value: true });
   await expect(env.exists("/../escape.txt")).resolves.toMatchObject({
     ok: false,
     error: { code: "invalid" },
@@ -187,23 +187,23 @@ test("exists is false only for a missing path; other failures stay FileErrors", 
 
 function withSymlinks() {
   const context = makeFacetExecutionEnv();
-  context.provider.addDirectory("/project/dir");
-  context.provider.addFile("/project/dir/file.txt", encode("hello"));
-  context.provider.addSymlink("/project/rel-link", "dir/file.txt");
-  context.provider.addSymlink("/project/dangling", "dir/missing.txt");
-  context.provider.addSymlink("/project/escape", "../outside");
-  context.provider.addSymlink("/project/loop-a", "loop-b");
-  context.provider.addSymlink("/project/loop-b", "loop-a");
+  context.provider.addDirectory("/workspace/dir");
+  context.provider.addFile("/workspace/dir/file.txt", encode("hello"));
+  context.provider.addSymlink("/workspace/rel-link", "dir/file.txt");
+  context.provider.addSymlink("/workspace/dangling", "dir/missing.txt");
+  context.provider.addSymlink("/workspace/escape", "../outside");
+  context.provider.addSymlink("/workspace/loop-a", "loop-b");
+  context.provider.addSymlink("/workspace/loop-b", "loop-a");
   return context;
 }
 
 test("an in-root symlink reads through to its target, but absolutePath never resolves it", async () => {
   const { env } = withSymlinks();
-  await expect(env.absolutePath("/project/rel-link")).resolves.toEqual({
+  await expect(env.absolutePath("/workspace/rel-link")).resolves.toEqual({
     ok: true,
-    value: "/project/rel-link",
+    value: "/workspace/rel-link",
   });
-  await expect(env.readTextFile("/project/rel-link")).resolves.toEqual({
+  await expect(env.readTextFile("/workspace/rel-link")).resolves.toEqual({
     ok: true,
     value: "hello",
   });
@@ -211,15 +211,15 @@ test("an in-root symlink reads through to its target, but absolutePath never res
 
 test("canonicalPath follows an in-root symlink to its real path", async () => {
   const { env } = withSymlinks();
-  await expect(env.canonicalPath("/project/rel-link")).resolves.toEqual({
+  await expect(env.canonicalPath("/workspace/rel-link")).resolves.toEqual({
     ok: true,
-    value: "/project/dir/file.txt",
+    value: "/workspace/dir/file.txt",
   });
 });
 
 test("a dangling symlink is not_found through canonicalPath", async () => {
   const { env } = withSymlinks();
-  await expect(env.canonicalPath("/project/dangling")).resolves.toMatchObject({
+  await expect(env.canonicalPath("/workspace/dangling")).resolves.toMatchObject({
     ok: false,
     error: { code: "not_found" },
   });
@@ -227,7 +227,7 @@ test("a dangling symlink is not_found through canonicalPath", async () => {
 
 test("an escaping symlink is a local FileError, not a crash", async () => {
   const { env } = withSymlinks();
-  await expect(env.canonicalPath("/project/escape")).resolves.toMatchObject({
+  await expect(env.canonicalPath("/workspace/escape")).resolves.toMatchObject({
     ok: false,
     error: { code: "invalid" },
   });
@@ -235,11 +235,11 @@ test("an escaping symlink is a local FileError, not a crash", async () => {
 
 test("a symlink loop is a local FileError", async () => {
   const { env } = withSymlinks();
-  await expect(env.canonicalPath("/project/loop-a")).resolves.toMatchObject({
+  await expect(env.canonicalPath("/workspace/loop-a")).resolves.toMatchObject({
     ok: false,
     error: { code: "invalid" },
   });
-  await expect(env.readTextFile("/project/loop-a")).resolves.toMatchObject({
+  await expect(env.readTextFile("/workspace/loop-a")).resolves.toMatchObject({
     ok: false,
     error: { code: "invalid" },
   });

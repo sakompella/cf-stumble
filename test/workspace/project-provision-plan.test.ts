@@ -1,14 +1,19 @@
 import { expect, test } from "vitest";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
-  PROJECT_PROVISION_CONFIGURATION,
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
+  projectProvisionConfiguration,
   projectProvisionStep,
 } from "../../src/project-provision.js";
 import { PROJECT_CATALOG, parsePublicRepositoryUrl } from "../../src/project-catalog.js";
 import type { Project } from "../../src/project-catalog.js";
 import { shellQuote } from "../../src/shell-quote.js";
+import {
+  HARNESS_DIRECTORY,
+  MANAGED_AGENT_INSTRUCTIONS_PATH,
+  projectDirectory,
+} from "../../src/workspace-layout.js";
 
 /**
  * These tests read planned text. Nothing here runs a shell: the Workers pool has no
@@ -20,11 +25,12 @@ import { shellQuote } from "../../src/shell-quote.js";
 
 const [projectOne, projectTwo] = PROJECT_CATALOG;
 
+function planFor(project: Project) {
+  return planProjectProvision(projectProvisionConfiguration(project.id), project);
+}
+
 function cloneSource(project: Project): string {
-  const step = projectProvisionStep(
-    planProjectProvision(PROJECT_PROVISION_CONFIGURATION, project),
-    "clone",
-  );
+  const step = projectProvisionStep(planFor(project), "clone");
   if (step.name !== "clone") {
     throw new Error("the clone step must be the command step");
   }
@@ -33,7 +39,7 @@ function cloneSource(project: Project): string {
 }
 
 test("plans the clone before the managed instructions, and nothing else", () => {
-  const plan = planProjectProvision(PROJECT_PROVISION_CONFIGURATION, projectOne);
+  const plan = planFor(projectOne);
 
   expect(plan.projectId).toBe(projectOne.id);
   expect(plan.steps.map((step) => step.name)).toEqual([...PROJECT_PROVISION_STEP_NAMES]);
@@ -80,10 +86,18 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
   expect(source, "a clone becomes the project root only after it succeeds").toContain(
     [
       '  git clone "$expected_remote" "$staging"',
-      '  rm -rf "$repository"',
+      '  rmdir "$repository" 2>/dev/null || true',
       '  mv "$staging" "$repository"',
     ].join("\n"),
   );
+  expect(
+    source,
+    "a populated directory that is not a repository is reported, never deleted",
+  ).toContain('    printf "%s is not a git repository and is not empty\\n" "$repository" >&2');
+  expect(
+    source.includes('rm -rf "$repository"'),
+    "nothing here may delete a directory this step did not create",
+  ).toBe(false);
   expect(source, "an unexpected origin fails the step rather than being repaired").toContain(
     'test "$actual_remote" = "$expected_remote"',
   );
@@ -93,27 +107,40 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
   ).toBe(false);
 });
 
-test("writes the managed instructions above the project root", () => {
-  const step = projectProvisionStep(
-    planProjectProvision(PROJECT_PROVISION_CONFIGURATION, projectOne),
-    "instructions",
-  );
+test("writes the managed instructions above every repository in the workspace", () => {
+  const step = projectProvisionStep(planFor(projectOne), "instructions");
   if (step.name !== "instructions") {
     throw new Error("the instructions step must be the file step");
   }
 
-  expect(step.path).toBe("/AGENTS.md");
-  expect(
-    step.path.startsWith(`${PROJECT_PROVISION_CONFIGURATION.projectRoot}/`),
-    "a managed file inside the clone would overwrite the repository's own instructions",
-  ).toBe(false);
+  expect(step.path).toBe(MANAGED_AGENT_INSTRUCTIONS_PATH);
+  for (const repository of [projectDirectory(projectOne.id), HARNESS_DIRECTORY]) {
+    expect(
+      step.path.startsWith(`${repository}/`),
+      "a managed file inside a clone would overwrite that repository's own instructions",
+    ).toBe(false);
+  }
   expect(step.content).toBe(MANAGED_AGENT_INSTRUCTIONS);
   expect(step.content).toContain("Never print or commit authentication tokens.");
 });
 
 test("plans the same steps for a repeated provision of one project", () => {
-  const first = planProjectProvision(PROJECT_PROVISION_CONFIGURATION, projectOne);
-  const second = planProjectProvision(PROJECT_PROVISION_CONFIGURATION, projectOne);
+  expect(planFor(projectOne)).toEqual(planFor(projectOne));
+});
 
-  expect(second).toEqual(first);
+test("gives each project its own directory inside the one workspace", () => {
+  const one = projectProvisionConfiguration(projectOne.id);
+  const two = projectProvisionConfiguration(projectTwo.id);
+
+  expect(one.projectRoot).toBe(projectDirectory(projectOne.id));
+  expect(one.projectGitDir).toBe(`${one.projectRoot}/.git`);
+  expect(one.projectRoot).not.toBe(two.projectRoot);
+  expect(
+    [one.projectRoot, two.projectRoot, HARNESS_DIRECTORY].some((directory, index, all) =>
+      all.some((other, otherIndex) => otherIndex !== index && other.startsWith(`${directory}/`)),
+    ),
+    "no repository may sit inside another",
+  ).toBe(false);
+  expect(cloneSource(projectOne)).not.toContain(projectDirectory(projectTwo.id));
+  expect(cloneSource(projectOne)).not.toContain(HARNESS_DIRECTORY);
 });

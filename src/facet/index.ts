@@ -23,6 +23,11 @@ export type { WorkspaceCapability } from "./generation-0/index.js";
  * has a method rather than only `fetch`: a capability belonging to one project must not reach
  * loader environment, which is cached per harness commit and shared by every project the
  * generation serves.
+ *
+ * `workingDirectory` is an argument of its own rather than a field of `request` because the host
+ * decides it and a client must not be able to present one. The host resolves the selected project
+ * against its catalog and passes that project's directory in the shared workspace (ADR-0038); the
+ * request beside it is the untrusted half.
  */
 export interface MainFacetTarget extends Rpc.DurableObjectBranded {
   fetch(request: Request): Promise<Response>;
@@ -30,6 +35,7 @@ export interface MainFacetTarget extends Rpc.DurableObjectBranded {
     projectTarget: ProjectRpcTargetContract,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request crosses an RPC hop into generated code, so the host proves nothing about its shape and the generation parses it.
     request: unknown,
+    workingDirectory: string,
   ): ReadableStream<Uint8Array>;
 }
 

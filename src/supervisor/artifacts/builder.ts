@@ -20,14 +20,14 @@ export type HarnessModuleMapBuilder = Readonly<{
 
 /**
  * The only operations a build needs from its workspace. It stays narrower than the operations the
- * project workspace offers: a build runs commands and reads its own output, nothing else.
+ * project capability offers: a build runs commands and reads its own output, nothing else.
  */
 export type BuildWorkspace = Readonly<{
   runCommand(source: string, cwd: string): Promise<CommandOutput>;
   readFile(path: string): Promise<string>;
 }>;
 
-/** Builds a labeled harness commit in a build workspace kept apart from the project workspace. */
+/** Builds a labeled harness commit in the scratch subtree kept apart from every repository. */
 export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
   private readonly workspace: BuildWorkspace;
   private readonly configuration: HarnessBuildConfiguration;

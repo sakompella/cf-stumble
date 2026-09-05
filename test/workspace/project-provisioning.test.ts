@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
-  PROJECT_PROVISION_CONFIGURATION,
+  projectProvisionConfiguration,
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
 import { PROJECT_CATALOG } from "../../src/project-catalog.js";
-import { deriveProjectWorkspaceName } from "../../src/workspace-names.js";
+import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
@@ -35,7 +35,7 @@ import {
  * filesystem state".
  */
 
-const tenant = { identity: "tenant-1", audience: "test-audience" } as const;
+const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-1");
 const [projectOne] = PROJECT_CATALOG;
 
 /**
@@ -54,7 +54,7 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
       return Promise.resolve(parsed);
     }
 
-    const plan = planProjectProvisionRequest(PROJECT_PROVISION_CONFIGURATION, parsed);
+    const plan = planProjectProvisionRequest(parsed);
     this.plans.push(plan);
     if (request.step === this.failingStep) {
       // A clone reports failure through its exit code; a write has none, so the host redacts it
@@ -102,7 +102,7 @@ function provisionerFor(host: FakeProvisionHost) {
     namespace,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
     provision: (projectId: unknown = projectOne.id) =>
-      provisionProjectWorkspace({ ...tenant, projectId, namespace }),
+      provisionProjectWorkspace({ workspaceName, projectId, namespace }),
   };
 }
 
@@ -110,7 +110,7 @@ function stepsOf(host: FakeProvisionHost): ProjectProvisionStepName[] {
   return host.requests.map((request) => request.step);
 }
 
-test("clones and then writes the managed instructions into the derived workspace", async () => {
+test("clones and then writes the managed instructions into the tenant's workspace", async () => {
   const host = new FakeProvisionHost();
   const { provision, namespace } = provisionerFor(host);
 
@@ -119,16 +119,14 @@ test("clones and then writes the managed instructions into the derived workspace
   if (provisioned.isErr()) {
     throw new Error(`provisioning a catalog project must succeed: ${provisioned.error.code}`);
   }
-  expect(provisioned.value).toEqual({
-    projectId: projectOne.id,
-    workspaceName: await deriveProjectWorkspaceName({ ...tenant, project: projectOne }),
-  });
+  expect(provisioned.value).toEqual({ projectId: projectOne.id, workspaceName });
   expect(host.requests).toEqual([
     { kind: "provision-project", projectId: projectOne.id, step: "clone" },
     { kind: "provision-project", projectId: projectOne.id, step: "instructions" },
   ]);
-  expect(namespace.names).toEqual([provisioned.value.workspaceName]);
-  expect(namespace.names[0]?.startsWith("access:")).toBe(true);
+  expect(namespace.names, "one project reaches the tenant's one workspace").toEqual([
+    workspaceName,
+  ]);
 });
 
 test("carries a project id and a step name, never a repository URL or command text", async () => {
@@ -196,7 +194,7 @@ test("repeats the clone after the instructions step failed, rather than resuming
   expect(stepsOf(host)).toEqual(["clone", "instructions", "clone", "instructions"]);
   expect(host.plans.at(-1)).toEqual({
     kind: "write-file",
-    path: PROJECT_PROVISION_CONFIGURATION.agentInstructionsPath,
+    path: projectProvisionConfiguration(projectOne.id).agentInstructionsPath,
     content: MANAGED_AGENT_INSTRUCTIONS,
   });
 });

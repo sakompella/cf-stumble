@@ -36,9 +36,26 @@ The workspace behaves like an ordinary development machine. It has unrestricted 
 access, `git`, `gh`, and repository toolchains. GitHub credentials live in local configuration
 outside the repositories.
 
-The current implementation still derives a separate Computer workspace name for each project and a
-separate name for harness builds. It must be simplified to use the shared workspace before version 0
-is complete.
+The workspace name comes from the tenant and from nothing else. The Worker turns a verified Access
+token into the Supervisor's name, and the Supervisor derives its one workspace name from that name,
+so harness builds and every project of one owner reach the same container and a different verified
+identity reaches a different one. No request supplies the name.
+
+`src/workspace-layout.ts` owns the layout:
+
+| Path                               | Holds                                                         |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `/workspace`                       | The workspace root. Every addressed path lives beneath it.    |
+| `/workspace/AGENTS.md`             | The managed instructions, above every repository.             |
+| `/workspace/harness`               | The owner's editable harness checkout.                        |
+| `/workspace/projects/<project id>` | One connected project's clone.                                |
+| `/workspace/.builds/<commit>`      | Build scratch for one labeled commit. It holds no repository. |
+
+Selecting a project sets the working directory a turn starts in. The project capability addresses
+the whole workspace, so the agent can read a sibling repository or the managed instructions, and
+the path guard is the workspace root. Both the guard and the addressed-path translation read
+`WORKSPACE_ROOT` from that one module, so they cannot drift into disagreeing about what is inside
+the workspace.
 
 ## Harness execution
 
@@ -48,6 +65,19 @@ the rebuildable output in R2 under that commit. Computer supplies the environmen
 compilation and tests run; ADR-0028 and ADR-0034 define the artifact and cache.
 
 Worker Loader names are cached. The Supervisor uses the labeled harness commit ID as the Loader name, so a changed harness commit does not silently reuse old code.
+
+## Harness build isolation
+
+A build extracts its commit into `/workspace/.builds/<commit>` and clears that directory first.
+Nothing else lives there, so clearing it can destroy no checkout. The harness directory is the
+owner's editable clone: a build reconciles it and fetches into it, and refuses rather than deletes
+when it finds a populated directory that is not that repository.
+
+Two builds of one commit cannot delete each other's files. Each tenant builds in its own container,
+which removes the cross-tenant case that a single global build workspace created, and
+`WorkspaceHostModuleMapBuilder` admits one build per commit at a time, so a second request for a
+commit already building joins that build. Nothing is queued, deferred, or retried. Whether Computer
+permits overlapping container operations at all is a separate paid question.
 
 ## Harness build preconditions
 

@@ -3,11 +3,7 @@ import {
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
 } from "../project-provision.js";
-import {
-  resolveProjectWorkspaceName,
-  type ResolveProjectWorkspaceNameInput,
-} from "../workspace-names.js";
-import type { ProjectId } from "../project-catalog.js";
+import { resolveProject, type ProjectCatalog, type ProjectId } from "../project-catalog.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
 
@@ -17,8 +13,9 @@ export type ProvisionWorkspaceHost = Readonly<{
 }>;
 
 /**
- * Just enough of the Workspace Host binding to reach one project workspace by name. The caller
- * derives that name from a catalog-resolved project, so no request can name a workspace.
+ * Just enough of the Workspace Host binding to reach the tenant's workspace by name. The caller
+ * holds that name, which the Supervisor derives from its own tenant key, so no request can name a
+ * workspace.
  */
 export type ProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): ProvisionWorkspaceHost;
@@ -50,7 +47,12 @@ export type ProvisionedProjectWorkspace = Readonly<{
   workspaceName: string;
 }>;
 
-export interface ProvisionProjectWorkspaceInput extends ResolveProjectWorkspaceNameInput {
+export interface ProvisionProjectWorkspaceInput {
+  /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
+  readonly workspaceName: string;
+  /** The client-supplied project id. The catalog resolves it before anything is provisioned. */
+  readonly projectId: unknown;
+  readonly catalog?: ProjectCatalog;
   readonly namespace: ProvisionWorkspaceNamespace;
 }
 
@@ -97,7 +99,8 @@ async function runStep(
 }
 
 /**
- * Provision one project's workspace: reconcile its clone, then rewrite the managed instructions.
+ * Provision one project inside the tenant's workspace: reconcile its clone, then rewrite the
+ * managed instructions.
  *
  * Every run performs every step. Nothing here remembers that a workspace was provisioned before,
  * because the state that matters lives in the workspace and not in the caller: the Workspace Host
@@ -105,19 +108,26 @@ async function runStep(
  * be deciding from the wrong place. Each step is written to converge, so a run after an
  * interrupted one asks for exactly what the interrupted one asked for.
  *
- * The project id is resolved against the catalog first, so a workspace name exists only for a
- * project the server recognizes, and the repository URL is never a value this function carries.
+ * The project id is resolved against the catalog first, so only a project the server recognizes is
+ * provisioned, and the repository URL is never a value this function carries. The workspace name
+ * belongs to the tenant, not to the project: the id selects a directory inside that one workspace.
  */
-export async function provisionProjectWorkspace(
+export function provisionProjectWorkspace(
   input: ProvisionProjectWorkspaceInput,
 ): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
-  const resolved = await resolveProjectWorkspaceName(input);
+  const resolved = resolveProject(input.projectId, input.catalog);
   if (!resolved.ok) {
-    return Result.err({ code: "project-not-in-catalog", reason: resolved.reason });
+    return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
   }
 
-  const host = input.namespace.getByName(resolved.workspaceName);
-  const projectId = resolved.project.id;
+  return provisionResolvedProject(input, resolved.project.id);
+}
+
+async function provisionResolvedProject(
+  input: ProvisionProjectWorkspaceInput,
+  projectId: ProjectId,
+): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
+  const host = input.namespace.getByName(input.workspaceName);
   for (const step of PROJECT_PROVISION_STEP_NAMES) {
     const ran = await runStep(host, projectId, step);
     if (ran.isErr()) {
@@ -125,5 +135,5 @@ export async function provisionProjectWorkspace(
     }
   }
 
-  return Result.ok({ projectId, workspaceName: resolved.workspaceName });
+  return Result.ok({ projectId, workspaceName: input.workspaceName });
 }

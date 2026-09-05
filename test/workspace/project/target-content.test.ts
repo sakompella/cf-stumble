@@ -29,7 +29,7 @@ test("a symlink's size is the byte length of its target, not the string length",
   const { provider, target } = makeTarget();
   // "café-target" is 11 characters but 12 UTF-8 bytes.
   const targetText = "café-target";
-  provider.addSymlink("/project/link", targetText);
+  provider.addSymlink("/workspace/link", targetText);
 
   const info = await target.lstat("/link");
   expect(info.ok).toBe(true);
@@ -42,9 +42,9 @@ test("a symlink's size is the byte length of its target, not the string length",
 
 test("lstat reports kind, size, mtimeMs, and the addressed path", async () => {
   const { provider, target } = makeTarget();
-  provider.addDirectory("/project/dir");
+  provider.addDirectory("/workspace/dir");
   provider.now = 1234;
-  provider.addFile("/project/dir/file.txt", encode("hi"));
+  provider.addFile("/workspace/dir/file.txt", encode("hi"));
 
   const info = await target.lstat("/dir/file.txt");
   expect(info.ok).toBe(true);

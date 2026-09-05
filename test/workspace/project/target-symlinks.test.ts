@@ -3,18 +3,18 @@ import { encode, makeTarget } from "./target-helpers.js";
 
 function withSymlinks() {
   const context = makeTarget();
-  context.provider.addDirectory("/project/dir");
-  context.provider.addFile("/project/dir/file.txt", encode("hello"));
-  context.provider.addDirectory("/project/dir2");
-  context.provider.addFile("/project/dir2/a.txt", encode("a"));
-  context.provider.addSymlink("/project/rel-link", "dir/file.txt");
-  context.provider.addSymlink("/project/abs-link", "/project/dir/file.txt");
-  context.provider.addSymlink("/project/dir-link", "dir2");
-  context.provider.addSymlink("/project/dangling", "dir/missing.txt");
-  context.provider.addSymlink("/project/escape-rel", "../outside");
-  context.provider.addSymlink("/project/escape-abs", "/etc/passwd");
-  context.provider.addSymlink("/project/loop-a", "loop-b");
-  context.provider.addSymlink("/project/loop-b", "loop-a");
+  context.provider.addDirectory("/workspace/dir");
+  context.provider.addFile("/workspace/dir/file.txt", encode("hello"));
+  context.provider.addDirectory("/workspace/dir2");
+  context.provider.addFile("/workspace/dir2/a.txt", encode("a"));
+  context.provider.addSymlink("/workspace/rel-link", "dir/file.txt");
+  context.provider.addSymlink("/workspace/abs-link", "/workspace/dir/file.txt");
+  context.provider.addSymlink("/workspace/dir-link", "dir2");
+  context.provider.addSymlink("/workspace/dangling", "dir/missing.txt");
+  context.provider.addSymlink("/workspace/escape-rel", "../outside");
+  context.provider.addSymlink("/workspace/escape-abs", "/etc/passwd");
+  context.provider.addSymlink("/workspace/loop-a", "loop-b");
+  context.provider.addSymlink("/workspace/loop-b", "loop-a");
   return context;
 }
 
@@ -31,7 +31,7 @@ test("writing through a symlink writes the real target, not the link", async () 
   const { provider, target } = withSymlinks();
   await target.writeFile("/rel-link", encode("changed"), "overwrite");
 
-  expect(provider.nodes.get("/project/dir/file.txt")).toMatchObject({ type: "file" });
+  expect(provider.nodes.get("/workspace/dir/file.txt")).toMatchObject({ type: "file" });
   const real = await target.readFile("/dir/file.txt");
   expect(real.ok).toBe(true);
   if (real.ok) expect(new TextDecoder().decode(real.value)).toBe("changed");
@@ -60,7 +60,7 @@ test("startExec resolves cwd through a symlink to its real directory", async () 
   expect(started.ok).toBe(true);
   expect(execBackend.requests).toEqual([
     // oxlint-disable-next-line typescript/no-unsafe-assignment -- `expect.any(Number)` is vitest's untyped asymmetric matcher.
-    { command: "true", cwd: "/project/dir2", timeoutMs: expect.any(Number) },
+    { command: "true", cwd: "/workspace/dir2", timeoutMs: expect.any(Number) },
   ]);
 });
 

@@ -17,6 +17,29 @@ The guard reads these environment variables. The shell or CI secret manager supp
 | `CF_ACCESS_OWNER_SUB`       | The owner's stable `sub` subject claim from the Access identity provider. | The deploy command supplies a Worker secret with this name. The Worker reads `env.CF_ACCESS_OWNER_SUB`.                        |
 | `CF_STUMBLE_HARNESS_COMMIT` | The full harness commit the deploy publishes, from `git rev-parse HEAD`.  | The Worker receives no binding for it. The owner submits it after the deploy, as the Generation 0 step below describes.        |
 
+## The Access application and policy this Worker requires
+
+The Worker verifies the token itself, but it verifies it against one application and admits one
+subject. A deploy that configures the application differently leaves the Worker refusing every
+request, so record these three facts with the deploy.
+
+1. **One self-hosted Access application** covering the deployed hostname and every path under it,
+   including `/api/`. The Worker has no unauthenticated route: a request without a usable token is
+   `401`, whatever it asks for.
+2. **One policy on that application, of action Allow, with a single include rule that names the
+   owner's identity** — the owner's email through the configured identity provider. The application
+   audience tag is `CF_ACCESS_AUD` and the owner's stable `sub` claim is `CF_ACCESS_OWNER_SUB`. The
+   Worker checks the `sub` itself, so an Access policy that admitted a second identity would still
+   be refused here; the two are configured to agree, and the Worker is the one that fails closed.
+3. **No bypass, service-token, or "everyone" rule** on the application, and no second policy. The
+   Worker takes the tenant from the verified token alone: it refuses any request that also carries
+   a `tenant`, `identity`, `audience`, `workspace`, or `supervisor` query parameter, or the matching
+   `x-cf-stumble-*` header, with `400` rather than serving it and ignoring the field.
+
+`test/access/tenant-selection.test.ts` and `test/access-owner.test.ts` hold the Worker side of this
+to its contract locally. The application and policy themselves are deployed configuration, so they
+are checked when the owner deploys.
+
 `CF_STUMBLE_HARNESS_COMMIT` must be a full SHA-1 or SHA-256 Git object ID in lowercase hexadecimal, because a generation is one specific labeled commit (ADR-0002). A branch name or a short ref fails the guard rather than the submission.
 
 A deploy wrapper must invoke the guard before it invokes `wrangler deploy`. It must pass the same environment-backed values to Wrangler. Use `wrangler secret put` for secrets, or the deploy command's `--var` option where that binding is appropriate. The guard does not set, persist, or forward any value itself.
