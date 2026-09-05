@@ -84,6 +84,8 @@ test("the streaming client reads the frames the turn route emits", () => {
     "text",
     "tool-start",
     "tool-result",
+    "diff",
+    "diff-unavailable",
     "saved",
     "turn-failed",
     "turn-rejected",
@@ -99,6 +101,20 @@ test("the streaming client reads the frames the turn route emits", () => {
   expect(script).toContain("getReader()");
   expect(script).toContain("application/x-ndjson");
   expect(script).toContain("AbortController");
+});
+
+test("a turn's diff renders with the tool-result colouring, and an unavailable diff states why", () => {
+  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+
+  // T13 added `diff` (`content`, `truncated`) and `diff-unavailable` (`detail`) to
+  // `FacetTurnFrame`/`ProjectTurnFrame`. Both must render: a diff reuses the bounded, coloured
+  // output every other frame gets, and a stated reason replaces a silent, empty diff.
+  expect(script).toContain('frame.kind === "diff"');
+  expect(script).toContain('frame.kind === "diff-unavailable"');
+  expect(script).toContain("diffMessage(frame)");
+  expect(script).toContain("diffUnavailableMessage(frame)");
+  expect(script).toContain("frame.detail");
+  expect(script).toContain("the harness truncated this diff");
 });
 
 test("the page never turns repository or model output into markup", () => {
