@@ -10,10 +10,25 @@ import type { ProjectThread, ThreadProblem } from "./thread.js";
  * A turn holds the project's thread until its deadline. The facet that starts a turn can die
  * before it finishes, and nothing else would ever release the slot, so admission treats a turn
  * whose deadline has passed as free and lets the next caller take it over.
+ *
+ * Admission mints a lease id, and only that id may finish or abandon the turn it admitted. The
+ * row holds one lease id at a time, and every commit, abandonment, and fresh thread clears it, so
+ * a presented id that still matches proves both that this caller was admitted and that the thread
+ * has not moved on to a replacement turn at the same revision.
  */
 
 function holdsTurn(current: ProjectThread, now: number): boolean {
   return current.turnActive && (current.turnDeadlineAt ?? 0) > now;
+}
+
+/** The lease the row holds against the lease a caller presented to complete its turn. */
+export type TurnLeaseClaim = Readonly<{
+  held: string | undefined;
+  presented: string;
+}>;
+
+function ownsTurn(claim: TurnLeaseClaim): boolean {
+  return claim.held !== undefined && claim.held === claim.presented;
 }
 
 export type StartTurnDecision =
@@ -49,22 +64,19 @@ export type FinishTurnDecision =
 export function decideFinishTurn(
   projectId: ProjectId,
   current: ProjectThread,
-  expectedRevision: number,
+  claim: TurnLeaseClaim,
   now: number,
 ): FinishTurnDecision {
   if (!current.turnActive) {
     return { kind: "rejected", problem: { code: "turn-not-active", projectId } };
   }
+  if (!ownsTurn(claim)) {
+    return { kind: "rejected", problem: { code: "turn-lease-lost", projectId } };
+  }
   if (!holdsTurn(current, now)) {
     return {
       kind: "rejected",
       problem: { code: "turn-expired", projectId, deadlineAt: current.turnDeadlineAt ?? 0 },
-    };
-  }
-  if (expectedRevision !== current.revision) {
-    return {
-      kind: "rejected",
-      problem: { code: "stale-revision", projectId, currentRevision: current.revision },
     };
   }
 
@@ -75,13 +87,23 @@ export type AbandonTurnDecision =
   | Readonly<{ kind: "rejected"; problem: ThreadProblem }>
   | Readonly<{ kind: "abandoned" }>;
 
+/**
+ * Abandoning is releasing the slot a caller was admitted to, so it asks for the lease but not for
+ * a live deadline: a turn that ran past its deadline and nobody took over may still clean up.
+ */
 export function decideAbandonTurn(
   projectId: ProjectId,
   current: ProjectThread,
+  claim: TurnLeaseClaim,
 ): AbandonTurnDecision {
-  return current.turnActive
-    ? { kind: "abandoned" }
-    : { kind: "rejected", problem: { code: "turn-not-active", projectId } };
+  if (!current.turnActive) {
+    return { kind: "rejected", problem: { code: "turn-not-active", projectId } };
+  }
+  if (!ownsTurn(claim)) {
+    return { kind: "rejected", problem: { code: "turn-lease-lost", projectId } };
+  }
+
+  return { kind: "abandoned" };
 }
 
 export function assertNever(value: never): never {

@@ -14,6 +14,7 @@ export type {
   ProjectThread,
   ProjectThreadProblem,
   ProjectThreadResult,
+  ProjectTurnLeaseResult,
   SerializedThread,
   ThreadProblem,
   ThreadResult,

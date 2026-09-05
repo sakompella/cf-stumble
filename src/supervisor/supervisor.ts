@@ -26,7 +26,11 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { FacetRelay, RelayAttempts, type RelayAttempt } from "./relay/index.js";
-import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
+import {
+  ProjectThreads,
+  type ProjectThreadResult,
+  type ProjectTurnLeaseResult,
+} from "./threads/index.js";
 import {
   Recovery,
   type RecoveryEpisode,
@@ -223,30 +227,37 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.threads.startFreshThread(projectId);
   }
 
+  /**
+   * Take the project's turn slot and receive the lease that may complete it. The lease id is
+   * minted in storage and returned once, here: a caller cannot name a turn, only return the id it
+   * was admitted with.
+   */
   startProjectTurn(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
     projectId: unknown,
     expectedRevision: number,
     now: number,
     leaseMs: number,
-  ): ProjectThreadResult {
+  ): ProjectTurnLeaseResult {
     return this.threads.startTurn(projectId, expectedRevision, now, leaseMs);
   }
 
+  /** Save a turn's conversation. Only the lease that admitted the turn may commit it. */
   finishProjectTurn(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
     projectId: unknown,
-    expectedRevision: number,
+    leaseId: string,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a conversation arriving over RPC is parsed before it is stored.
     messages: unknown,
     now: number,
   ): ProjectThreadResult {
-    return this.threads.finishTurn(projectId, expectedRevision, messages, now);
+    return this.threads.finishTurn(projectId, leaseId, messages, now);
   }
 
+  /** Give the turn slot back without saving. Only the lease that admitted the turn may do so. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
-  abandonProjectTurn(projectId: unknown): ProjectThreadResult {
-    return this.threads.abandonTurn(projectId);
+  abandonProjectTurn(projectId: unknown, leaseId: string): ProjectThreadResult {
+    return this.threads.abandonTurn(projectId, leaseId);
   }
 
   /**
@@ -255,9 +266,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * This is the other half of a turn from the three lease methods above: they decide who may write
    * a project's thread and store the conversation it ends with, while this one does the work. It
    * reads and writes no thread, so a caller drives both halves — take the lease, stream the turn,
-   * then save the `state.messages` the terminal frame carries, which is the `AgentMessage[]`
-   * `finishProjectTurn` parses. Joining them is the next unit's work, because it has to settle
-   * what a disconnected browser leaves behind (ADR-0037), not merely call the two in order.
+   * then present that lease id with the `state.messages` the terminal frame carries, which is the
+   * `AgentMessage[]` `finishProjectTurn` parses. Joining them is the next unit's work, because it
+   * has to settle what a disconnected browser leaves behind (ADR-0037), not merely call the two in
+   * order; whatever joins them holds the lease id server-side and never hands it to the page.
    *
    * The workspace capability travels to the generation as an argument of its `startTurn`, and this
    * method receives none of its own: `streamProjectTurn` explains the order its steps run in.

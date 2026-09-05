@@ -43,13 +43,26 @@ function sortedFiles(workspace: FakeWorkspace): readonly (readonly [string, stri
   return [...workspace.files.entries()].toSorted(([left], [right]) => left.localeCompare(right));
 }
 
+/** Admit a turn and keep the lease it returns, which is the only key its completion accepts. */
+async function admit(
+  control: DurableObjectStub<Supervisor>,
+  projectId: string,
+  expectedRevision: number,
+): Promise<string> {
+  const started = await control.startProjectTurn(projectId, expectedRevision, NOW, LEASE_MS);
+  if (!started.ok) {
+    throw new Error(`the ${projectId} turn must be admitted: ${started.problem.code}`);
+  }
+  return started.leaseId;
+}
+
 async function threadWithConversation(
   control: DurableObjectStub<Supervisor>,
   projectId: string,
 ): Promise<void> {
-  const started = await control.startProjectTurn(projectId, 0, NOW, LEASE_MS);
-  const finished = await control.finishProjectTurn(projectId, 0, savedConversation, NOW);
-  if (!started.ok || !finished.ok) {
+  const lease = await admit(control, projectId, 0);
+  const finished = await control.finishProjectTurn(projectId, lease, savedConversation, NOW);
+  if (!finished.ok) {
     throw new Error(`the ${projectId} thread must accept a first turn`);
   }
 }
@@ -70,13 +83,15 @@ test("starting a fresh thread removes the conversation and leaves the workspace 
   expect(workspace.requests.length, "a fresh thread must not call the workspace").toBe(callsBefore);
 
   // The conversation is gone. A reset that wrote nothing would pass the two assertions above.
+  // The revision advances past the replaced conversation rather than counting turns again from
+  // zero, which is what stops a caller holding the old number from writing into the replacement.
   expect(fresh).toEqual({
     ok: true,
     thread: {
       projectId: "project-one",
       conversation: "[]",
       messageCount: 0,
-      revision: 0,
+      revision: 2,
       turnActive: false,
       turnDeadlineAt: undefined,
     },
@@ -87,21 +102,92 @@ test("starting a fresh thread removes the conversation and leaves the workspace 
 test("a fresh thread frees the turn slot the replaced conversation held", async () => {
   const control = supervisor("fresh-thread-releases-turn");
   await threadWithConversation(control, "project-one");
-  const held = await control.startProjectTurn("project-one", 1, NOW, LEASE_MS);
+  const heldLease = await admit(control, "project-one", 1);
 
   await control.startFreshProjectThread("project-one");
 
   // The turn that was running cannot commit into the thread it no longer holds, and the next turn
   // starts from the fresh thread's revision rather than waiting for the old lease to expire.
-  const lateFinish = await control.finishProjectTurn("project-one", 1, savedConversation, NOW);
-  const restarted = await control.startProjectTurn("project-one", 0, NOW, LEASE_MS);
+  const lateFinish = await control.finishProjectTurn(
+    "project-one",
+    heldLease,
+    savedConversation,
+    NOW,
+  );
+  const restarted = await control.startProjectTurn("project-one", 2, NOW, LEASE_MS);
 
-  expect(held).toMatchObject({ ok: true, thread: { turnActive: true } });
   expect(lateFinish).toEqual({
     ok: false,
     problem: { code: "turn-not-active", projectId: "project-one" },
   });
-  expect(restarted).toMatchObject({ ok: true, thread: { conversation: "[]", revision: 0 } });
+  expect(restarted).toMatchObject({ ok: true, thread: { conversation: "[]", revision: 2 } });
+});
+
+test("a delayed start cannot enter a replaced thread by presenting its old revision", async () => {
+  const control = supervisor("fresh-thread-reset-race");
+  // Nothing has been committed, so the running turn holds the thread at revision zero: the one
+  // number a replacement would count back to if a fresh thread restarted the count.
+  const staleLease = await admit(control, "project-one", 0);
+
+  await control.startFreshProjectThread("project-one");
+
+  const delayedStart = await control.startProjectTurn("project-one", 0, NOW + 1, LEASE_MS);
+  const lateFinish = await control.finishProjectTurn(
+    "project-one",
+    staleLease,
+    savedConversation,
+    NOW + 1,
+  );
+  const lateAbandon = await control.abandonProjectTurn("project-one", staleLease);
+
+  expect(delayedStart).toEqual({
+    ok: false,
+    problem: { code: "stale-revision", projectId: "project-one", currentRevision: 1 },
+  });
+  expect(lateFinish).toEqual({
+    ok: false,
+    problem: { code: "turn-not-active", projectId: "project-one" },
+  });
+  expect(lateAbandon).toEqual({
+    ok: false,
+    problem: { code: "turn-not-active", projectId: "project-one" },
+  });
+  expect(await control.getProjectThread("project-one")).toMatchObject({
+    ok: true,
+    thread: { conversation: "[]", messageCount: 0, revision: 1, turnActive: false },
+  });
+});
+
+test("the replaced thread's lease cannot save into the turn that replaced it", async () => {
+  const control = supervisor("fresh-thread-lease-fenced");
+  const staleLease = await admit(control, "project-one", 0);
+  await control.startFreshProjectThread("project-one");
+
+  // The coordinator of the later turn holds a lease of its own on a thread the replaced turn
+  // cannot name: its predecessor's save is refused while its own succeeds.
+  const freshLease = await admit(control, "project-one", 1);
+  const staleSave = await control.finishProjectTurn(
+    "project-one",
+    staleLease,
+    savedConversation,
+    NOW,
+  );
+  const freshSave = await control.finishProjectTurn(
+    "project-one",
+    freshLease,
+    savedConversation,
+    NOW,
+  );
+
+  expect(staleLease).not.toEqual(freshLease);
+  expect(staleSave).toEqual({
+    ok: false,
+    problem: { code: "turn-lease-lost", projectId: "project-one" },
+  });
+  expect(freshSave).toMatchObject({
+    ok: true,
+    thread: { revision: 2, messageCount: savedConversation.length },
+  });
 });
 
 test("a fresh thread for one project leaves the other project's thread alone", async () => {
@@ -113,7 +199,7 @@ test("a fresh thread for one project leaves the other project's thread alone", a
 
   expect(await control.getProjectThread("project-one")).toMatchObject({
     ok: true,
-    thread: { conversation: "[]", messageCount: 0, revision: 0 },
+    thread: { conversation: "[]", messageCount: 0, revision: 2 },
   });
   expect(await control.getProjectThread("project-two")).toMatchObject({
     ok: true,
