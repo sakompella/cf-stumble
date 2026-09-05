@@ -2,7 +2,7 @@
 
 **Status: retained for implementation history and local evidence. `feature-map.md` now defines the version 0 completion scope and cut line.** The locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed. This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
 
-What exists: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked and journaled generation requests (ADR-0030), a relay that records one attempt for each turn and derives known-good eligibility from terminal outcomes (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032).
+What existed at the end of this plan: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked requests with a request-deduplication journal, a relay that records one attempt for each turn and derives known-good eligibility from terminal outcomes (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032). ADR-0030 now replaces the request journal with direct generation commands.
 
 The local module-map store does not satisfy ADR-0034. It must move to an evictable R2 cache and rebuild cache misses through Computer before cf-stumble relies on bounded artifact storage. The main remaining gap is authenticated control transport. Nothing authenticates a principal yet, because the transport that carries a request from a browser or from the main facet remains open.
 
@@ -14,7 +14,7 @@ Start with local workerd tests, then use the paid account for behavior that loca
 
 2. **Test startup.** Load the first mutable Pi-fork generation, force a cold start, and run an ordinary interaction through the proposed boundary. Record what demonstrates that the generation is ready rather than turning the check into a permanent custom facet protocol.
 
-3. **Test project access.** Use the pinned Computer pair from ADR-0026. Confirm the Worker-shell and container capabilities, then compare at least a separate project workspace, a separate harness project, and a temporary combined view. Choose a filesystem layout only after the model can complete a project task and a harness-change task without mixing their Git histories.
+3. **Test project access.** Use the pinned Computer pair from ADR-0026. Confirm the Worker-shell and container capabilities, then compare at least a separate project workspace, a separate harness project, and a temporary combined view. This spike preceded ADR-0038, which selected one shared workspace with a separate directory and Git history for each repository.
 
 4. **Exercise generation requests.** Submit one harness revision as a generation candidate, then request activation of a named existing generation. The supervisor must allocate identities, validate requests, perform or reject state changes, and record the results. The requester must not be able to write protected state directly.
 
@@ -37,10 +37,9 @@ The vertical path is complete when a paid deployment proves all of the following
 
 ## Open choices before implementation commits to them
 
-ADRs 0028 through 0032 settle the startup check, the artifact shape, the request checks, the relay-attempt policy and the recovery bounds. Each of those records what it does not settle. The rest of this list stands.
+ADRs 0028 through 0032 settle the startup check, the artifact shape, direct generation requests, the relay-attempt policy and the recovery bounds. Each of those records what it does not settle. The rest of this list stands.
 
 - The supervisor-to-facet interface and the startup check that fits it.
-- The filesystem layout for projects, harness source, sessions, and accumulated context.
 - What counts as a completed real turn, including 4xx and 5xx responses, streams, and disconnects. The supervisor must not treat a successful HTTP status as enough evidence: a stream can fail after its headers arrive, and a client disconnect can leave a forwarded response unresolved. The spike must measure those cases before it chooses a completion rule or a bound for an abandoned forward.
 - The model egress or gateway choice.
 - HTTP, SSE, or WebSocket for the UI transport.

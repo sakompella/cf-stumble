@@ -18,13 +18,13 @@ depend on that unconfirmed integration. The research records are
 
 cf-stumble is a personal coding agent on Cloudflare. It starts with one tenant, who may use several
 browsers or machines. The user connects GitHub repositories as projects and selects one from a
-collapsible left sidebar. The active main facet uses that project's durable Computer workspace and
-Pi thread to complete the work.
+collapsible left sidebar. The active main facet uses that project's directory in the shared durable
+Computer workspace and its Pi thread to complete the work.
 
 The owner may submit a harness commit as a generation candidate. The Supervisor builds and checks
 that commit while the active generation continues to run. Once the check passes, the owner may
-activate it and may later return to a generation that ran before. Project workspaces and current
-threads survive either move.
+activate it and may later return to a generation that ran before. The shared workspace and current
+project threads survive either move.
 
 Harness code is replaceable. Project files and conversation state are not. Version 0 proves that boundary. It does not claim the agent can decide how to improve itself safely.
 
@@ -50,10 +50,11 @@ If a feature neither makes that recording work nor makes it safe to run, it is o
 - The tenant may connect several GitHub project repositories and has a separate harness repository.
   Later tenants may share that harness repository or own one; version 0 does not choose between
   those models.
-- Each project has one isolated Computer workspace and one current Pi thread. Harness code builds
-  elsewhere, so project and harness Git histories stay separate.
+- Each project has one current Pi thread. One Computer workspace contains the harness and project
+  repositories in separate directories, so they retain separate Git histories without separate
+  container lifecycles.
 - Starting a fresh thread replaces the project's conversation and compacted context but preserves
-  its workspace. Thread state stays outside every generation, and Pi owns its schema.
+  its files. Thread state stays outside every generation, and Pi defines its message types.
 - The main harness runs the vendored Pi core and one fixed model route. That route's credential stays outside the mutable facet.
 - The agent has a shell, unrestricted outbound internet access, and normal development tools,
   including `git` and `gh`. GitHub credentials live in local tool configuration outside the project
@@ -80,9 +81,9 @@ verified Access identity
 ```
 
 Every client for one identity reaches one Supervisor. A request selects a project owned by that
-tenant, and the server derives the corresponding Workspace Host name; a request cannot choose
-another tenant's workspace. Each project accepts one active turn because it has one current Pi
-thread. Two projects may run turns independently.
+tenant, and the server derives that project's directory in the tenant's shared workspace; a request
+cannot choose another tenant's workspace. Each project accepts one active turn because it has one
+current Pi thread. The shared workspace may serialize operations that use its single container.
 
 An invited user added later takes the same route and receives separate durable state on first use: a
 Supervisor, project collection, Workspace Hosts, generation history, and threads. R2 may cache
@@ -93,12 +94,14 @@ The Access policy still admits only the owner's identity. Identity routing is in
 
 ## Where the repository stands
 
-The project is lopsided. The Supervisor has deliberate generation, relay, eligibility, and recovery code. The code it supervises is still a test fixture. That imbalance is why the project feels late: `pnpm verify` has 33 passing test files and 168 passing tests for the half a user cannot yet use.
+The project is lopsided. The Supervisor has deliberate generation, relay, eligibility, and recovery
+code. The code it supervises is still incomplete. Most of the passing tests exercise control
+machinery rather than the coding path a user needs.
 
 | Capability                                               | What exists now                                   | What version 0 needs                                                  |
 | -------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
 | Generation labels, status, epoch, and activation history | Implemented and tested locally                    | Keep it. Do not redesign it.                                          |
-| Journaled candidate, activation, and rollback requests   | Implemented and tested locally                    | Put them behind an authenticated tenant route.                        |
+| Candidate, activation, and rollback requests             | A journaled implementation is authenticated       | Remove request IDs and the request journal; keep epoch checks.        |
 | Bounded startup check                                    | Implemented and tested locally                    | Run it against real candidate module maps.                            |
 | Active-generation facet serving                          | Works locally with `src/facet/fixture.ts`         | Load a real Pi-based main facet.                                      |
 | Relay attempts and eligibility                           | Implemented and tested locally                    | Credit only terminal streamed turns whose thread state was saved.     |
@@ -123,7 +126,7 @@ The paid-account probe must show all of the following:
 - The facet reads a durable file, writes another, and runs one container command.
 - The file survives a restart or eviction of the host and the facet.
 - A model probe returns through the route the main harness will use.
-- The project workspace reaches arbitrary internet destinations through ordinary development tools.
+- The shared workspace reaches arbitrary internet destinations through ordinary development tools.
 - Computer builds a module map the Worker Loader accepts.
 - A cold facet from that map passes the existing `GET /` startup check.
 - Probe notes preserve timings and raw failures, rather than a summary written from memory.
@@ -189,8 +192,9 @@ The page and routes are ready when:
   current threads.
 - Test identities with different stable claims resolve to different Supervisor and workspace-host names.
 - The page shows the active generation and the epoch used for activation or rollback.
-- Repeating one request ID returns the journaled result.
-- Reusing that ID for a different command fails.
+- Repeating candidate submission returns the generation already assigned to that harness commit.
+- Activation of the generation that is already active is a no-op.
+- Activation and rollback reject a stale generation-control epoch.
 - A failed candidate does not change the active generation.
 - A passing candidate activates only through an epoch-checked owner request.
 - Rollback accepts only a ready generation that ran before.

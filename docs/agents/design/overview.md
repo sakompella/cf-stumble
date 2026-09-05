@@ -27,16 +27,18 @@ The recovery harness has a narrower aim: keep a usable main harness available. I
 ## Projects and files
 
 In version 0, a project is a GitHub repository that the user connects to cf-stumble. Each project
-has one isolated Computer workspace and one current Pi thread. The page lists projects in a
-collapsible left sidebar.
+has one current Pi thread. One Computer workspace contains the harness repository and every
+connected project repository in separate directories. The page lists projects in a collapsible left
+sidebar.
 
 Starting a fresh thread resets Pi's conversation and compacted context but preserves the project
-workspace. Changing the main-harness generation also preserves both. Harness source builds in a
-separate workspace, so project and harness Git histories do not share a filesystem.
+files. Changing the main-harness generation also preserves both. Project and harness Git histories
+remain separate repositories, but their directories share one workspace and are not security
+boundaries.
 
-Project workspaces behave like normal development machines. They have unrestricted internet access
-and ordinary tools such as `git` and `gh`. GitHub credentials stay in local tool configuration
-outside the repository, and the supervisor does not own or interpret project files or thread state.
+The workspace behaves like a normal development machine. It has unrestricted internet access and
+ordinary tools such as `git` and `gh`. GitHub credentials stay in local tool configuration outside
+the repositories, and the supervisor does not own or interpret project files or thread state.
 
 ## Generations and self-improvement
 
@@ -52,7 +54,11 @@ A newly started generation should pass a basic cold-start check before normal us
 
 Computer's Worker-shell backend is useful for text operations and host-forwarded Git. Its container backend provides Node, pnpm, TypeScript compilation, tests, and project commands. The tested source and image pair are recorded in `computer-integration.md`.
 
-The harness source is TypeScript. Dynamic Workers execute Worker-compatible modules, so some compilation or transformation is necessary before a generation runs. The Supervisor uses each generation's labeled harness commit ID as its Worker Loader identity, so a changed commit cannot reuse old loaded code. The output could be one bundle or a module map; its production, storage, and retention are not settled.
+The harness source is TypeScript. Dynamic Workers execute Worker-compatible modules, so Computer
+builds a canonical module map before a generation runs. The Supervisor uses each generation's
+labeled harness commit ID as its Worker Loader identity, so a changed commit cannot reuse old loaded
+code. R2 caches the rebuildable module map under that commit; the cache budget and eviction rule
+remain open.
 
 ## The first useful version
 

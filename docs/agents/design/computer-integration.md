@@ -14,29 +14,44 @@ The paired source and image ran on a paid Cloudflare account on 2026-08-29. Cont
 
 Computer issue [#114](https://github.com/cloudflare/computer/issues/114) reports a deployed WebSocket failure in 0.2.1. The exact 0.2.1 reproduction was not deployed, so the issue is neither disproved nor known to be fixed. Repeated warm and cold requests using the pinned 0.3.0 pair did not show the failure.
 
+## Upgrade follow-up
+
+Before version 0 relies on the pinned pair, check whether Cloudflare has published a supported
+Computer release that provides the required Worker-shell, container, and Durable Object behavior.
+Prefer that release if the full application workflow passes against it. Until then, retain the
+source and image pair that the paid-account test exercised; do not update one without the other.
+
 ## Workspace layout
 
-Each connected GitHub project has one durable Computer workspace. The page selects a project, and
-the main facet receives only that project's workspace capability. Harness builds run in a separate
-workspace, so build commands cannot reach project files.
+Version 0 uses one durable Computer workspace for the owner's harness repository and connected
+GitHub project repositories. Each repository has its own directory and Git history. The page selects
+a project directory in which the main facet starts work, but the shared filesystem is not a security
+boundary between the owner's repositories.
 
 Each project also has one current Pi thread stored outside the workspace and outside generation
 state. Starting a fresh thread replaces conversation and compacted context without changing project
-files. Both the project thread and workspace survive main-harness generation changes.
+files. Both the project thread and shared workspace survive main-harness generation changes.
 
-Project workspaces behave like ordinary development machines. They have unrestricted outbound
-internet access, `git`, `gh`, and repository toolchains. GitHub credentials live in the workspace's
-local configuration outside the project repository.
+The workspace behaves like an ordinary development machine. It has unrestricted outbound internet
+access, `git`, `gh`, and repository toolchains. GitHub credentials live in local configuration
+outside the repositories.
 
-## Harness execution remains open
+The current implementation still derives a separate Computer workspace name for each project and a
+separate name for harness builds. It must be simplified to use the shared workspace before version 0
+is complete.
 
-The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. The project still needs to choose whether it emits one bundle or a module map and where those outputs are stored. Computer supplies the environment in which compilation and tests can run; it does not decide the artifact format.
+## Harness execution
+
+The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. Computer
+builds a canonical module map for a labeled harness commit. The Supervisor validates it and caches
+the rebuildable output in R2 under that commit. Computer supplies the environment in which
+compilation and tests run; ADR-0028 and ADR-0034 define the artifact and cache.
 
 Worker Loader names are cached. The Supervisor uses the labeled harness commit ID as the Loader name, so a changed harness commit does not silently reuse old code.
 
 ## Generation requests
 
-A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests. The exact command, transport, and authentication mechanism remain open.
+A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The exact command, transport, and authentication mechanism remain open.
 
 ## Deployment risk
 
