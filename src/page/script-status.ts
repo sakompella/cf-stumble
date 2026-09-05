@@ -2,8 +2,12 @@ import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
 
 /**
  * Reading `GET /api/status` and `GET /api/recovery/latest`. Both render recorded facts into
- * elements. The epoch rendered here is the one activation and rollback later send, so what the
- * page shows is what it uses.
+ * elements. The epoch rendered here is the one activation and rollback later send, so what the page
+ * shows is what it uses (ADR-0033).
+ *
+ * The recovery panel states what was recorded and nothing more. It never says a generation is
+ * known-good and never implies a repair is running, because cf-stumble performs none: the way back
+ * to working code is the manual rollback in the same drawer (ADR-0032).
  */
 export const OWNER_PAGE_SCRIPT_STATUS = `
   function renderRecovery(report) {
@@ -20,7 +24,6 @@ export const OWNER_PAGE_SCRIPT_STATUS = `
   }
 
   function renderStatus(result) {
-    setRaw("${ID.statusRaw}", result.payload);
     var payload = result.payload;
     var active = payload && payload.activeGeneration ? payload.activeGeneration : null;
     if (active === null) {
@@ -51,7 +54,6 @@ export const OWNER_PAGE_SCRIPT_STATUS = `
     clearError();
     try {
       var result = await call("GET", "/api/recovery/latest");
-      setRaw("${ID.recoveryRaw}", result.payload);
       var payload = result.payload;
       if (payload && payload.ok === true) {
         renderRecovery(payload.report);

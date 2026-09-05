@@ -4,12 +4,14 @@
  * The owner page is one plain HTML document behind Cloudflare Access. These tests hold the three
  * properties the rest of version 0 depends on: a browser gets the page, a machine keeps the
  * relayed `GET /` the startup check uses, and no unauthenticated request ever sees the markup.
- * The last test pins the stable identifiers, because browser tests act on them by name.
+ *
+ * What the page itself contains is tested in `test/page/owner-page.test.ts`. This file is about
+ * the request boundary, so it stays readable as one thing.
  */
 
 import { SELF, env } from "cloudflare:test";
 import { expect, test } from "vitest";
-import { ownerPageHtml, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "../../src/page/index.js";
+import { OWNER_PAGE_IDS } from "../../src/page/index.js";
 import { isOwnerPageRequest, ownerPageResponse } from "../../src/routes/index.js";
 import worker from "../../src/worker.js";
 import {
@@ -26,15 +28,6 @@ const BROWSER_ACCEPT =
 
 function pageRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://cf-stumble.test/", { headers });
-}
-
-/** The script the browser actually receives, taken out of the one inline `<script>` element. */
-function inlinePageScript(html: string): string {
-  const found = /<script nonce="[^"]*">([\s\S]*?)<\/script>/u.exec(html);
-  if (found?.[1] === undefined) {
-    throw new Error("the owner page carries no inline script");
-  }
-  return found[1];
 }
 
 /** The Worker checks expiry against the real clock, so this token has to be valid right now. */
@@ -119,55 +112,6 @@ test("a request with an unusable Access credential never receives the owner page
 
   expect(response.status).toBe(401);
   expect(body).toBe("Unauthorized");
-});
-
-test("the page markup carries every stable element id", () => {
-  const html = ownerPageHtml("test-nonce");
-
-  for (const id of OWNER_PAGE_ELEMENT_IDS) {
-    expect(html, `missing id ${id}`).toContain(`id="${id}"`);
-  }
-  expect(OWNER_PAGE_ELEMENT_IDS.length).toBe(new Set(OWNER_PAGE_ELEMENT_IDS).size);
-});
-
-test("the inline script the browser receives parses as JavaScript", () => {
-  // Every other assertion in this file matches text, and text matching cannot see a syntax
-  // error: each id still appears in the markup while none of the script runs, so the page looks
-  // right and populates nothing. Parsing the delivered script is the only check that the page
-  // can fill itself in at all.
-  const script = inlinePageScript(ownerPageHtml("test-nonce"));
-
-  expect(script).toContain("refreshStatus");
-  // oxlint-disable-next-line typescript/no-implied-eval -- Constructing the function is the check. It parses the script and is never called.
-  expect(() => new Function(script)).not.toThrow();
-});
-
-test("the page uses only the owner JSON endpoints, on this origin", () => {
-  const html = ownerPageHtml("test-nonce");
-
-  expect(html).toContain('"/api/status"');
-  expect(html).toContain('"/api/recovery/latest"');
-  expect(html).toContain('"/api/projects/"');
-  expect(html).toContain('"/api/generations/submit"');
-  expect(html).toContain('"/api/generations/" + kind');
-  expect(html).not.toMatch(/https?:\/\/(?!cf-stumble\.test)/u);
-});
-
-test("the page asks for no credential and stores none", () => {
-  const html = ownerPageHtml("test-nonce");
-
-  expect(html).not.toContain("password");
-  expect(html).not.toContain("localStorage");
-  expect(html).not.toContain("sessionStorage");
-  expect(html).not.toContain("document.cookie");
-  expect(html).not.toContain("CF_Authorization");
-});
-
-test("the page states that recovery repairs nothing by itself", () => {
-  const html = ownerPageHtml("test-nonce");
-
-  expect(html).toContain(`id="${OWNER_PAGE_IDS.recoveryNotice}"`);
-  expect(html).toContain("does not repair a");
 });
 
 test("the page policy allows only inline code from this response and this origin", async () => {

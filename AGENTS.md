@@ -20,6 +20,10 @@ Run `pnpm verify` before you claim anything works. It runs typecheck, format che
 
 A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
 
+### Browser harness
+
+`pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. `pnpm harness:browser` does: it starts a local stub of the owner API, serves the real page, drives headless Chromium over the DevTools protocol, and asserts the streaming conversation, the project sidebar, the generation drawer, keyboard access, and narrow and wide viewports. It needs a local Chromium and about a minute, so it stays outside the commit gate. Read `tools/browser-harness/README.md` before you change the page. The harness proves nothing about Cloudflare Access, which needs a deployed environment.
+
 ### Project architecture
 
 For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, implementation plan, and Computer evidence. Everything under `docs/agents/` is agent-generated; `README.md` is reserved for human-written project documentation and agents must not change it unless the user explicitly directs the content.
