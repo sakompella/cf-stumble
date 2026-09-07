@@ -1,0 +1,28 @@
+Throwaway src/worker.ts used only by the isolation probe, on branch probe/worker-previews.
+It was reverted after the probe, so it exists nowhere in the repository. Restore this file to
+reproduce the attemptCount numbers in isolation-probe0.txt and isolation-probe1.txt.
+
+import { Supervisor } from "./supervisor/supervisor.js";
+
+export { Supervisor };
+
+type ProbeEnv = { SUPERVISOR: DurableObjectNamespace<Supervisor> };
+
+export default {
+  async fetch(request: Request, env: ProbeEnv): Promise<Response> {
+    const supervisor = env.SUPERVISOR.getByName("facet-spike");
+
+    if (new URL(request.url).pathname === "/probe/state") {
+      const active = await supervisor.getActiveGeneration();
+      const attempts = await supervisor.getRelayAttempts();
+      return Response.json({
+        activeLabel: active.generation?.label ?? null,
+        activeStatus: active.generation?.status ?? null,
+        harnessCommit: active.generation?.harnessCommit ?? null,
+        attemptCount: attempts.length,
+      });
+    }
+
+    return supervisor.fetch(request);
+  },
+};

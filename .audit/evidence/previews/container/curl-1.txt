@@ -1,0 +1,5 @@
+### GET / (loader path still alive)
+main facet ready
+### GET /probe/container attempt 1
+HTTP/2 504 
+container never accepted a request

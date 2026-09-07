@@ -1,0 +1,11 @@
+$ cd /private/tmp/cf-stumble-wt/T1a && pnpm probe:clean-build
+$ scripts/probe/clean-build.sh
+Clean build of 4bdd6dca7f2bc938f6ad1db962a339974aaad772
+Work directory: /var/folders/r7/mn_tb22j0m58tffljxw6fqqr0000gn/T//cf-stumble-clean-build.qLs5oCZJ
+Archive bytes: 5785600
+Build 1: 12 seconds, module map 905270 bytes, build directory 491M, cold store 536M
+Build 2: 15 seconds, module map 905270 bytes, build directory 491M, cold store 536M
+Module map sha256 (build 1): 387ed749d810edbabdea95e3078d4f5e3714fbb8007cbe7b989ee4b903b8da00
+Module map sha256 (build 2): 387ed749d810edbabdea95e3078d4f5e3714fbb8007cbe7b989ee4b903b8da00
+Two clean builds of 4bdd6dca7f2bc938f6ad1db962a339974aaad772 produced identical module maps
+

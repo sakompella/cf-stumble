@@ -1,0 +1,8 @@
+{
+  "teamDomain": "local-dev.cloudflareaccess.com",
+  "audience": "local-development-audience",
+  "subject": "local-owner",
+  "expiresAt": 1788448043,
+  "publicKeys": "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"pxRoGO3nXWP_TmzGTFQQCcI9k3KvQrZ_kVb2sd3SRSE\",\"y\":\"a-i1MJLmSrL2wJDApvHnRye_kW75Snnf-VqrBqzkYxw\",\"alg\":\"ES256\",\"use\":\"sig\",\"kid\":\"local-dev-key\"}]}",
+  "token": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImxvY2FsLWRldi1rZXkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2xvY2FsLWRldi5jbG91ZGZsYXJlYWNjZXNzLmNvbSIsImF1ZCI6WyJsb2NhbC1kZXZlbG9wbWVudC1hdWRpZW5jZSJdLCJzdWIiOiJsb2NhbC1vd25lciIsImlhdCI6MTc4ODQxOTI0MywibmJmIjoxNzg4NDE5MjQzLCJleHAiOjE3ODg0NDgwNDN9.m_EpZmb9AUCknBYCEerejYhfgbT2KWWwhyv99tt543Uso6cyhz7_-KTiwQyzd1Yfgmz6MsNSr2XHCk7QymhNsQ"
+}

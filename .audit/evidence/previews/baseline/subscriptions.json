@@ -1,0 +1,476 @@
+[
+  {
+    "id": "d03852dd0cc04268b985187c456b368e",
+    "rate_plan": {
+      "id": "free",
+      "public_name": "Cloudflare Free Plan",
+      "currency": "USD",
+      "scope": "zone",
+      "externally_managed": false,
+      "sets": null,
+      "is_contract": false
+    },
+    "component_values": [
+      {
+        "name": "page_rules",
+        "display_name": "Page Rules",
+        "value": 3,
+        "kind": "sum"
+      },
+      {
+        "name": "automatic_platform_optimization",
+        "display_name": "Automatic Platform Optimization",
+        "value": 0,
+        "kind": "enum"
+      }
+    ],
+    "zone": {
+      "id": "414a72982db988221e15a4c1484fd563",
+      "name": "akompella.dev"
+    },
+    "frequency": "not-applicable",
+    "state": "Paid",
+    "currency": "USD",
+    "price": 0,
+    "trial": null,
+    "product": {
+      "name": "prod_cloudflare",
+      "period": "",
+      "billing": "",
+      "public_name": "Cloudflare Free Plan",
+      "duration": 0
+    },
+    "cancel_at_period_end": false,
+    "client_secrets": null,
+    "handler": "stripe",
+    "created_date": "2025-09-30T07:59:12Z",
+    "intent": "FREE"
+  },
+  {
+    "id": "4f804de5226b418ca60637d0616193cf",
+    "rate_plan": {
+      "id": "workers_paid",
+      "public_name": "Workers Paid",
+      "currency": "USD",
+      "scope": "account",
+      "externally_managed": false,
+      "sets": null,
+      "is_contract": false
+    },
+    "component_values": [
+      {
+        "name": "zaraz_enabled",
+        "display_name": "Zaraz Enabled",
+        "value": 1,
+        "kind": "enum"
+      },
+      {
+        "name": "cloudchamber_memory_usage",
+        "display_name": "Cloudchamber Memory Usage",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "cloudchamber_vcpu_usage",
+        "display_name": "Cloudchamber Vcpu Usage",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "cloudchamber_disk_usage",
+        "display_name": "Cloudchamber Disk Usage",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "container_egress_namer_eu",
+        "display_name": "Container Egress Namer Eu",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "container_egress_all_other",
+        "display_name": "Container Egress All Other",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "container_egress_oc_taiwan_korea",
+        "display_name": "Container Egress Oc Taiwan Korea",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_requests",
+        "display_name": "Worker Durable Objects Requests",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_stored_data",
+        "display_name": "Worker Durable Objects Stored Data",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_kv_reads",
+        "display_name": "Worker Kv Reads",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_kv_storage",
+        "display_name": "Worker Kv Storage",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_storage_reads",
+        "display_name": "Worker Durable Objects Storage Reads",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_storage_deletes",
+        "display_name": "Worker Durable Objects Storage Deletes",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_kv_deletes",
+        "display_name": "Worker Kv Deletes",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_kv_lists",
+        "display_name": "Worker Kv Lists",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_storage_writes",
+        "display_name": "Worker Durable Objects Storage Writes",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "zaraz_loads",
+        "display_name": "Zaraz Loads",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_kv_writes",
+        "display_name": "Worker Kv Writes",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_duration",
+        "display_name": "Worker Durable Objects Duration",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "queues_enabled",
+        "display_name": "Queues Enabled",
+        "value": 1,
+        "kind": "enum"
+      },
+      {
+        "name": "worker_logpush_requests",
+        "display_name": "Worker Logpush Requests",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_unbound_request",
+        "display_name": "Worker Unbound Request",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_unbound_duration",
+        "display_name": "Worker Unbound Duration",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_bundled_request",
+        "display_name": "Worker Bundled Request",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "queues_standard_operations",
+        "display_name": "Queues Standard Operations",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_standard_request",
+        "display_name": "Worker Standard Request",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_standard_cpu_ms",
+        "display_name": "Worker Standard Cpu Ms",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "workers_ai_regular_twitch_neurons",
+        "display_name": "Workers Ai Regular Twitch Neurons",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "workers_ai_fast_twitch_neurons",
+        "display_name": "Workers Ai Fast Twitch Neurons",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "d1_rows_read",
+        "display_name": "D1 Rows Read",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "d1_rows_written",
+        "display_name": "D1 Rows Written",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "d1_storage",
+        "display_name": "D1 Storage",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "vectorize_enabled",
+        "display_name": "Vectorize Enabled",
+        "value": 1,
+        "kind": "enum"
+      },
+      {
+        "name": "vectorize_queried_dimensions",
+        "display_name": "Vectorize Queried Dimensions",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "vectorize_stored_dimensions",
+        "display_name": "Vectorize Stored Dimensions",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "pipelines_sink_json",
+        "display_name": "Pipelines Sink Json",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "pipelines_sink_parquet_iceberg",
+        "display_name": "Pipelines Sink Parquet Iceberg",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "pipelines_sql_transforms",
+        "display_name": "Pipelines Sql Transforms",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_observability_events",
+        "display_name": "Worker Observability Events",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_build_minute",
+        "display_name": "Worker Build Minute",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "browser_rendering_total_browser_hours",
+        "display_name": "Browser Rendering Total Browser Hours",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "browser_rendering_avg_concurrent_browsers",
+        "display_name": "Browser Rendering Avg Concurrent Browsers",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_srs_storage_reads",
+        "display_name": "Worker Durable Objects Srs Storage Reads",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_srs_storage_writes",
+        "display_name": "Worker Durable Objects Srs Storage Writes",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "worker_durable_objects_srs_stored_data",
+        "display_name": "Worker Durable Objects Srs Stored Data",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "email_service_emails_sent",
+        "display_name": "Email Service Emails Sent",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "dynamic_workers_daily",
+        "display_name": "Dynamic Workers Daily",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      }
+    ],
+    "frequency": "monthly",
+    "current_period_start": "2026-08-27T20:23:18Z",
+    "current_period_end": "2026-09-27T00:00:00Z",
+    "state": "Paid",
+    "currency": "USD",
+    "price": 5,
+    "trial": null,
+    "product": {
+      "name": "prod_workers",
+      "period": "",
+      "billing": "",
+      "public_name": "Workers Paid",
+      "duration": 0
+    },
+    "cancel_at_period_end": false,
+    "client_secrets": null,
+    "handler": "stripe",
+    "created_date": "2026-08-27T20:23:52Z",
+    "external_id": "sub_1U99pTCM3YxTUEmt0bJLSlcz",
+    "intent": "PAYGO"
+  },
+  {
+    "id": "3eb34c151099481c8a698d96c1ffb631",
+    "rate_plan": {
+      "id": "images_v2_stream_basic",
+      "public_name": "Images Stream Basic",
+      "currency": "USD",
+      "scope": "account",
+      "externally_managed": false,
+      "sets": null,
+      "is_contract": false
+    },
+    "component_values": [
+      {
+        "name": "images_storage_per_hundred_thousand",
+        "display_name": "Images Storage Per Hundred Thousand",
+        "value": 0,
+        "kind": "sum"
+      },
+      {
+        "name": "image_delivered_per_hundred_thousand",
+        "display_name": "Image Delivered Per Hundred Thousand",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "stream_storage_thousand_minutes",
+        "display_name": "Stream Storage Thousand Minutes",
+        "value": 0,
+        "kind": "sum"
+      },
+      {
+        "name": "stream_viewed_thousand_minutes",
+        "display_name": "Stream Viewed Thousand Minutes",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      },
+      {
+        "name": "image_unique_transformations",
+        "display_name": "Image Unique Transformations",
+        "value": 1,
+        "default": 1,
+        "kind": "usage"
+      }
+    ],
+    "frequency": "monthly",
+    "current_period_start": "2026-08-27T20:23:18Z",
+    "current_period_end": "2026-09-27T00:00:00Z",
+    "state": "Paid",
+    "currency": "USD",
+    "price": 0,
+    "trial": null,
+    "product": {
+      "name": "prod_stream",
+      "period": "",
+      "billing": "",
+      "public_name": "Images Stream Basic",
+      "duration": 0
+    },
+    "cancel_at_period_end": false,
+    "client_secrets": null,
+    "handler": "stripe",
+    "created_date": "2026-08-27T20:24:00Z",
+    "external_id": "sub_1U99pTCM3YxTUEmt0bJLSlcz",
+    "intent": "PAYGO"
+  }
+]

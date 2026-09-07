@@ -1,0 +1,14 @@
+### containers list
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler.jsonc configuration:[0m
+
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+
+
+┌──────────────────────────────────────┬───────────────────────────────────────────┬───────┬────────────────┬────────────────────────────────┐
+│ ID                                   │ NAME                                      │ STATE │ LIVE INSTANCES │ LAST MODIFIED                  │
+├──────────────────────────────────────┼───────────────────────────────────────────┼───────┼────────────────┼────────────────────────────────┤
+│ a03b44cd-75fd-4dee-bae8-d5b48b1f78b1 │ cf-stumble_probe-container_ProbeContainer │ ready │ 1              │ 2026-09-02T17:46:24.408999936Z │
+└──────────────────────────────────────┴───────────────────────────────────────────┴───────┴────────────────┴────────────────────────────────┘
+### retrying /probe/container with backoff
+container never accepted a requestcontainer never accepted a requestcontainer never accepted a requestcontainer never accepted a requestcontainer never accepted a requestcontainer never accepted a requestcontainer never accepted a requestcontainer never accepted a request

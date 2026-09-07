@@ -1,0 +1,7 @@
+### probe0 state before traffic
+{"activeLabel":null,"activeStatus":null,"harnessCommit":null,"attemptCount":4}
+GET / -> 200
+GET / -> 200
+GET / -> 200
+### probe0 state after 3 requests
+{"activeLabel":null,"activeStatus":null,"harnessCommit":null,"attemptCount":7}

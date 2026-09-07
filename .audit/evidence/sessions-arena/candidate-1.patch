@@ -1,0 +1,597 @@
+diff --git a/RATIONALE.md b/RATIONALE.md
+new file mode 100644
+index 0000000..273563e
+--- /dev/null
++++ b/RATIONALE.md
+@@ -0,0 +1,27 @@
++# Rationale
++
++## Data shape
++
++One table, `sessions`, keyed by the caller's `session_id`. Columns: `document` (nullable TEXT), `revision` (INTEGER), `turn_active` (INTEGER 0/1). No column names a generation, an activation, or a harness commit. The row is the whole session.
++
++`document` is a plain string, not `unknown` or JSON I parse. The brief says the Supervisor does not parse a session's contents. Storing a string and returning it unread is the literal reading of that rule. Generation code can put JSON, a length-prefixed format, or anything else inside that string; the Supervisor never looks.
++
++`revision` and `turn_active` live on the same row as the document, not in a separate table. A turn is a property of one session, and a Durable Object transaction already serializes reads and writes to one row, so splitting them would add a join for no isolation benefit.
++
++## Rejected alternatives
++
++A `turns` table keyed by a generated turn ID, matching `relay_attempts`. Rejected because the brief needs exactly one active turn per session, not a history of turns; a boolean column expresses that directly, and a history the caller never queries is unbuilt scope.
++
++Treating `document` as JSON and parsing it to validate shape. Rejected because that is exactly the parsing the brief forbids the Supervisor from doing.
++
++A single `writeSession` RPC with no turn concept, layering the turn lock in the facet instead. Rejected because the conflict error has to come from the same durable state the revision check reads, inside one transaction, or two racing starts could both pass.
++
++## Pure and imperative halves
++
++`decisions.ts` holds three pure functions, `decideStartTurn`, `decideFinishTurn`, `decideAbandonTurn`. Each takes the current record (or undefined) and returns a plain decision; none touches SQL. `index.ts` is the shell: it reads the row, calls a decider inside `transactionSync`, and applies the one effect the decision names. This mirrors `generations/decisions.ts` and `generations/index.ts`.
++
++Supervisor RPC methods return the store's plain `{ ok, session }` / `{ ok, problem }` union directly. No `better-result` value crosses `sessions/index.ts`; the store never needed the chaining that pushed `Generations` and `GenerationControl` toward `Result`, so I left it out rather than added it to look consistent.
++
++## Where the brief is off
++
++"A second start for the same sessionId fails with a conflict error that a caller can distinguish from a stale revision" only makes sense if starting a turn itself carries an expected revision. The brief never says that explicitly. I read `startTurn(sessionId, expectedRevision)` as the intended shape, since without it there is no revision to be stale against, but a reviewer expecting a revision-free start method would find this a real design choice, not a detail.
+diff --git a/src/supervisor/sessions/decisions.ts b/src/supervisor/sessions/decisions.ts
+new file mode 100644
+index 0000000..d934e70
+--- /dev/null
++++ b/src/supervisor/sessions/decisions.ts
+@@ -0,0 +1,81 @@
++import type { SessionDocument, SessionProblem, SessionRecord } from "./session.js";
++
++/**
++ * Pure deciders for the session store. Each takes the current record (or undefined for a session
++ * that has never been written) and returns a plain decision. The imperative shell in index.ts
++ * reads the record, calls a decider, and applies the effect the decision names inside one Durable
++ * Object transaction, so the record cannot change between the read and the write.
++ */
++
++export type StartTurnDecision =
++  | { readonly kind: "rejected"; readonly problem: SessionProblem }
++  | {
++      readonly kind: "started";
++      readonly revision: number;
++      readonly document: SessionDocument | undefined;
++    };
++
++export function decideStartTurn(
++  sessionId: string,
++  current: SessionRecord | undefined,
++  expectedRevision: number,
++): StartTurnDecision {
++  if (current?.turnActive === true) {
++    return { kind: "rejected", problem: { code: "turn-conflict", sessionId } };
++  }
++
++  const revision = current?.revision ?? 0;
++  if (expectedRevision !== revision) {
++    return {
++      kind: "rejected",
++      problem: { code: "stale-revision", sessionId, currentRevision: revision },
++    };
++  }
++
++  return { kind: "started", revision, document: current?.document };
++}
++
++export type FinishTurnDecision =
++  | { readonly kind: "rejected"; readonly problem: SessionProblem }
++  | { readonly kind: "finished"; readonly nextRevision: number };
++
++export function decideFinishTurn(
++  sessionId: string,
++  current: SessionRecord | undefined,
++  expectedRevision: number,
++): FinishTurnDecision {
++  if (current === undefined || !current.turnActive) {
++    return { kind: "rejected", problem: { code: "turn-not-active", sessionId } };
++  }
++  if (expectedRevision !== current.revision) {
++    return {
++      kind: "rejected",
++      problem: { code: "stale-revision", sessionId, currentRevision: current.revision },
++    };
++  }
++
++  return { kind: "finished", nextRevision: current.revision + 1 };
++}
++
++export type AbandonTurnDecision =
++  | { readonly kind: "rejected"; readonly problem: SessionProblem }
++  | {
++      readonly kind: "abandoned";
++      readonly revision: number;
++      readonly document: SessionDocument | undefined;
++    };
++
++export function decideAbandonTurn(
++  sessionId: string,
++  current: SessionRecord | undefined,
++): AbandonTurnDecision {
++  if (current === undefined || !current.turnActive) {
++    return { kind: "rejected", problem: { code: "turn-not-active", sessionId } };
++  }
++
++  return { kind: "abandoned", revision: current.revision, document: current.document };
++}
++
++export function assertNever(value: never): never {
++  throw new Error(`unexpected session decision: ${JSON.stringify(value)}`);
++}
+diff --git a/src/supervisor/sessions/index.ts b/src/supervisor/sessions/index.ts
+new file mode 100644
+index 0000000..f188665
+--- /dev/null
++++ b/src/supervisor/sessions/index.ts
+@@ -0,0 +1,135 @@
++/// <reference types="@cloudflare/workers-types" />
++
++import { assertNever, decideAbandonTurn, decideFinishTurn, decideStartTurn } from "./decisions.js";
++import { sessionFromRow } from "./row.js";
++import type { SessionRow } from "./row.js";
++import type { SessionDocument, SessionProblem, SessionRecord, SessionResult } from "./session.js";
++
++export type { SessionDocument, SessionProblem, SessionRecord, SessionResult } from "./session.js";
++
++/**
++ * Owns session documents for the Supervisor. A session's contents are opaque to this store: it
++ * stores and returns the caller's document string without reading it, and generation code owns
++ * that document's schema. This table names no generation, activation or harness commit, so a
++ * session survives a generation change or a facet replacement by construction, not by convention.
++ *
++ * Every mutating method is an imperative shell around a pure decider in ./decisions.ts, the split
++ * ADR-0036 names. A Durable Object serializes its storage transactions, so the read-decide-write
++ * sequence below cannot interleave with another call for the same session.
++ */
++export class SessionStore {
++  private readonly storage: DurableObjectStorage;
++  private readonly sql: SqlStorage;
++
++  constructor(storage: DurableObjectStorage) {
++    this.storage = storage;
++    this.sql = storage.sql;
++    this.sql.exec(`
++      CREATE TABLE IF NOT EXISTS sessions (
++        session_id TEXT PRIMARY KEY,
++        document TEXT,
++        revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
++        turn_active INTEGER NOT NULL DEFAULT 0 CHECK (turn_active IN (0, 1))
++      );
++    `);
++  }
++
++  get(sessionId: string): SessionRecord | undefined {
++    return this.readRecord(sessionId);
++  }
++
++  startTurn(sessionId: string, expectedRevision: number): SessionResult {
++    return this.storage.transactionSync(() => {
++      const decision = decideStartTurn(sessionId, this.readRecord(sessionId), expectedRevision);
++      switch (decision.kind) {
++        case "rejected":
++          return rejected(decision.problem);
++        case "started":
++          this.sql.exec(
++            `INSERT INTO sessions (session_id, document, revision, turn_active)
++             VALUES (?, ?, ?, 1)
++             ON CONFLICT (session_id) DO UPDATE SET turn_active = 1`,
++            sessionId,
++            decision.document ?? null,
++            decision.revision,
++          );
++          return succeeded({
++            sessionId,
++            document: decision.document,
++            revision: decision.revision,
++            turnActive: true,
++          });
++        default:
++          return assertNever(decision);
++      }
++    });
++  }
++
++  finishTurn(
++    sessionId: string,
++    expectedRevision: number,
++    document: SessionDocument,
++  ): SessionResult {
++    return this.storage.transactionSync(() => {
++      const decision = decideFinishTurn(sessionId, this.readRecord(sessionId), expectedRevision);
++      switch (decision.kind) {
++        case "rejected":
++          return rejected(decision.problem);
++        case "finished":
++          this.sql.exec(
++            "UPDATE sessions SET document = ?, revision = ?, turn_active = 0 WHERE session_id = ?",
++            document,
++            decision.nextRevision,
++            sessionId,
++          );
++          return succeeded({
++            sessionId,
++            document,
++            revision: decision.nextRevision,
++            turnActive: false,
++          });
++        default:
++          return assertNever(decision);
++      }
++    });
++  }
++
++  abandonTurn(sessionId: string): SessionResult {
++    return this.storage.transactionSync(() => {
++      const decision = decideAbandonTurn(sessionId, this.readRecord(sessionId));
++      switch (decision.kind) {
++        case "rejected":
++          return rejected(decision.problem);
++        case "abandoned":
++          this.sql.exec("UPDATE sessions SET turn_active = 0 WHERE session_id = ?", sessionId);
++          return succeeded({
++            sessionId,
++            document: decision.document,
++            revision: decision.revision,
++            turnActive: false,
++          });
++        default:
++          return assertNever(decision);
++      }
++    });
++  }
++
++  private readRecord(sessionId: string): SessionRecord | undefined {
++    const row = this.sql
++      .exec<SessionRow>(
++        "SELECT session_id, document, revision, turn_active FROM sessions WHERE session_id = ?",
++        sessionId,
++      )
++      .toArray()[0];
++
++    return row === undefined ? undefined : sessionFromRow(row);
++  }
++}
++
++function succeeded(session: SessionRecord): SessionResult {
++  return { ok: true, session };
++}
++
++function rejected(problem: SessionProblem): SessionResult {
++  return { ok: false, problem };
++}
+diff --git a/src/supervisor/sessions/row.ts b/src/supervisor/sessions/row.ts
+new file mode 100644
+index 0000000..b1fd4dc
+--- /dev/null
++++ b/src/supervisor/sessions/row.ts
+@@ -0,0 +1,17 @@
++import type { SessionRecord } from "./session.js";
++
++export type SessionRow = {
++  readonly session_id: string;
++  readonly document: string | null;
++  readonly revision: number;
++  readonly turn_active: number;
++};
++
++export function sessionFromRow(row: SessionRow): SessionRecord {
++  return {
++    sessionId: row.session_id,
++    document: row.document ?? undefined,
++    revision: row.revision,
++    turnActive: row.turn_active === 1,
++  };
++}
+diff --git a/src/supervisor/sessions/session.ts b/src/supervisor/sessions/session.ts
+new file mode 100644
+index 0000000..35f0ecf
+--- /dev/null
++++ b/src/supervisor/sessions/session.ts
+@@ -0,0 +1,21 @@
++export type SessionDocument = string;
++
++export type SessionRecord = {
++  readonly sessionId: string;
++  readonly document: SessionDocument | undefined;
++  readonly revision: number;
++  readonly turnActive: boolean;
++};
++
++export type SessionProblem =
++  | {
++      readonly code: "stale-revision";
++      readonly sessionId: string;
++      readonly currentRevision: number;
++    }
++  | { readonly code: "turn-conflict"; readonly sessionId: string }
++  | { readonly code: "turn-not-active"; readonly sessionId: string };
++
++export type SessionResult =
++  | { readonly ok: true; readonly session: SessionRecord }
++  | { readonly ok: false; readonly problem: SessionProblem };
+diff --git a/src/supervisor/supervisor.ts b/src/supervisor/supervisor.ts
+index 7dbbd39..aee03d3 100644
+--- a/src/supervisor/supervisor.ts
++++ b/src/supervisor/supervisor.ts
+@@ -21,6 +21,7 @@ import {
+   type PreparationCheck,
+ } from "./generations/index.js";
+ import { RelayAttempts, type RelayAttempt } from "./relay/index.js";
++import { SessionStore, type SessionRecord, type SessionResult } from "./sessions/index.js";
+ import {
+   Recovery,
+   type RecoveryEpisode,
+@@ -48,6 +49,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
+   private readonly relayAttempts: RelayAttempts;
+   private readonly recovery: Recovery;
+   private readonly relay: FacetRelay;
++  private readonly sessions: SessionStore;
+ 
+   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
+     super(ctx, env);
+@@ -57,6 +59,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
+     this.relayAttempts = new RelayAttempts(ctx.storage);
+     this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
+     this.relay = new FacetRelay(this.relayAttempts);
++    this.sessions = new SessionStore(ctx.storage);
+   }
+ 
+   checkGenerationStartup(
+@@ -167,6 +170,22 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
+     );
+   }
+ 
++  getSession(sessionId: string): SessionRecord | undefined {
++    return this.sessions.get(sessionId);
++  }
++
++  startSessionTurn(sessionId: string, expectedRevision: number): SessionResult {
++    return this.sessions.startTurn(sessionId, expectedRevision);
++  }
++
++  finishSessionTurn(sessionId: string, expectedRevision: number, document: string): SessionResult {
++    return this.sessions.finishTurn(sessionId, expectedRevision, document);
++  }
++
++  abandonSessionTurn(sessionId: string): SessionResult {
++    return this.sessions.abandonTurn(sessionId);
++  }
++
+   override fetch(request: Request): Promise<Response> {
+     const active = this.generations.active();
+     const preparationCheckId = active.generation
+diff --git a/test/supervisor/sessions/decisions.test.ts b/test/supervisor/sessions/decisions.test.ts
+new file mode 100644
+index 0000000..c48de73
+--- /dev/null
++++ b/test/supervisor/sessions/decisions.test.ts
+@@ -0,0 +1,91 @@
++import { expect, test } from "vitest";
++
++import {
++  decideAbandonTurn,
++  decideFinishTurn,
++  decideStartTurn,
++} from "../../../src/supervisor/sessions/decisions.js";
++import type { SessionRecord } from "../../../src/supervisor/sessions/session.js";
++
++function record(overrides: Partial<SessionRecord> = {}): SessionRecord {
++  return {
++    sessionId: "session-a",
++    document: "conversation-v1",
++    revision: 3,
++    turnActive: false,
++    ...overrides,
++  };
++}
++
++test("starting a turn on an unknown session accepts revision zero", () => {
++  expect(decideStartTurn("new-session", undefined, 0)).toEqual({
++    kind: "started",
++    revision: 0,
++    document: undefined,
++  });
++});
++
++test("starting a turn with a stale revision is rejected and reports the current one", () => {
++  expect(decideStartTurn("session-a", record(), 1)).toEqual({
++    kind: "rejected",
++    problem: { code: "stale-revision", sessionId: "session-a", currentRevision: 3 },
++  });
++});
++
++test("starting a turn while one is already active is a conflict, not a stale revision", () => {
++  expect(decideStartTurn("session-a", record({ turnActive: true }), 3)).toEqual({
++    kind: "rejected",
++    problem: { code: "turn-conflict", sessionId: "session-a" },
++  });
++});
++
++test("a matching revision starts the turn and carries the existing document forward", () => {
++  expect(decideStartTurn("session-a", record(), 3)).toEqual({
++    kind: "started",
++    revision: 3,
++    document: "conversation-v1",
++  });
++});
++
++test("finishing a turn on a session with no active turn is rejected", () => {
++  expect(decideFinishTurn("session-a", record({ turnActive: false }), 3)).toEqual({
++    kind: "rejected",
++    problem: { code: "turn-not-active", sessionId: "session-a" },
++  });
++});
++
++test("finishing a turn on an unknown session is rejected", () => {
++  expect(decideFinishTurn("session-a", undefined, 0)).toEqual({
++    kind: "rejected",
++    problem: { code: "turn-not-active", sessionId: "session-a" },
++  });
++});
++
++test("finishing an active turn with a stale revision is rejected and leaves the write undone", () => {
++  expect(decideFinishTurn("session-a", record({ turnActive: true }), 9)).toEqual({
++    kind: "rejected",
++    problem: { code: "stale-revision", sessionId: "session-a", currentRevision: 3 },
++  });
++});
++
++test("finishing an active turn with the current revision advances it by one", () => {
++  expect(decideFinishTurn("session-a", record({ turnActive: true }), 3)).toEqual({
++    kind: "finished",
++    nextRevision: 4,
++  });
++});
++
++test("abandoning a turn on a session with no active turn is rejected", () => {
++  expect(decideAbandonTurn("session-a", record({ turnActive: false }))).toEqual({
++    kind: "rejected",
++    problem: { code: "turn-not-active", sessionId: "session-a" },
++  });
++});
++
++test("abandoning an active turn frees the slot and leaves the document and revision alone", () => {
++  expect(decideAbandonTurn("session-a", record({ turnActive: true }))).toEqual({
++    kind: "abandoned",
++    revision: 3,
++    document: "conversation-v1",
++  });
++});
+diff --git a/test/supervisor/sessions/sessions.test.ts b/test/supervisor/sessions/sessions.test.ts
+new file mode 100644
+index 0000000..89dffb2
+--- /dev/null
++++ b/test/supervisor/sessions/sessions.test.ts
+@@ -0,0 +1,132 @@
++/// <reference types="@cloudflare/vitest-plugin/types" />
++
++import { env } from "cloudflare:workers";
++import { reset } from "cloudflare:test";
++import { afterEach, expect, test } from "vitest";
++import type { Supervisor } from "../../../src/supervisor/supervisor.js";
++import { activateGeneration, prepareGeneration, submitCandidate } from "../helpers.js";
++
++const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
++
++function supervisor(name: string): DurableObjectStub<Supervisor> {
++  return env.SUPERVISOR.getByName(name);
++}
++
++afterEach(async () => {
++  await reset();
++});
++
++test("a write with a stale expected revision fails and leaves the stored document untouched", async () => {
++  const control = supervisor("session-stale-write");
++  const started = await control.startSessionTurn("session-a", 0);
++  if (!started.ok) {
++    throw new Error("a fresh session must accept the first turn");
++  }
++  const finished = await control.finishSessionTurn("session-a", 0, "turn one");
++  if (!finished.ok) {
++    throw new Error("a matching revision must be accepted");
++  }
++
++  const staleWrite = await control.startSessionTurn("session-a", 0);
++
++  expect(staleWrite).toEqual({
++    ok: false,
++    problem: { code: "stale-revision", sessionId: "session-a", currentRevision: 1 },
++  });
++  expect(Object.getPrototypeOf(staleWrite)).toBe(Object.prototype);
++  expect(await control.getSession("session-a")).toEqual({
++    sessionId: "session-a",
++    document: "turn one",
++    revision: 1,
++    turnActive: false,
++  });
++});
++
++test("a second start for a session with an active turn is a conflict, not a stale revision", async () => {
++  const control = supervisor("session-conflicting-turn");
++  const first = await control.startSessionTurn("session-a", 0);
++  if (!first.ok) {
++    throw new Error("a fresh session must accept the first turn");
++  }
++
++  const second = await control.startSessionTurn("session-a", 0);
++
++  expect(second).toEqual({
++    ok: false,
++    problem: { code: "turn-conflict", sessionId: "session-a" },
++  });
++  expect(await control.getSession("session-a")).toMatchObject({ turnActive: true });
++});
++
++test("finishing or abandoning a turn frees the slot for a later start", async () => {
++  const control = supervisor("session-turn-release");
++  await control.startSessionTurn("session-a", 0);
++  const finished = await control.finishSessionTurn("session-a", 0, "first document");
++  if (!finished.ok) {
++    throw new Error("finishing the only active turn must succeed");
++  }
++
++  const restarted = await control.startSessionTurn("session-a", 1);
++  if (!restarted.ok) {
++    throw new Error("finishing a turn must free the slot for a later start");
++  }
++  const abandoned = await control.abandonSessionTurn("session-a");
++
++  expect(abandoned).toEqual({
++    ok: true,
++    session: { sessionId: "session-a", document: "first document", revision: 1, turnActive: false },
++  });
++  expect(await control.getSession("session-a")).toMatchObject({ turnActive: false, revision: 1 });
++
++  const startedAgain = await control.startSessionTurn("session-a", 1);
++  expect(startedAgain).toMatchObject({ ok: true, session: { turnActive: true } });
++});
++
++test("two different sessions run their turns at the same time without interference", async () => {
++  const control = supervisor("session-two-concurrent");
++
++  const [startedA, startedB] = await Promise.all([
++    control.startSessionTurn("session-a", 0),
++    control.startSessionTurn("session-b", 0),
++  ]);
++
++  expect(startedA).toMatchObject({ ok: true, session: { sessionId: "session-a" } });
++  expect(startedB).toMatchObject({ ok: true, session: { sessionId: "session-b" } });
++
++  const [finishedA, finishedB] = await Promise.all([
++    control.finishSessionTurn("session-a", 0, "document a"),
++    control.finishSessionTurn("session-b", 0, "document b"),
++  ]);
++
++  expect(finishedA).toMatchObject({ ok: true, session: { document: "document a" } });
++  expect(finishedB).toMatchObject({ ok: true, session: { document: "document b" } });
++  expect(await control.getSession("session-a")).toMatchObject({ document: "document a" });
++  expect(await control.getSession("session-b")).toMatchObject({ document: "document b" });
++});
++
++test("a session survives a generation change and names no generation in its stored schema", async () => {
++  const control = supervisor("session-survives-generation-change");
++  await control.startSessionTurn("session-a", 0);
++  const beforeChange = await control.finishSessionTurn("session-a", 0, "conversation state");
++  if (!beforeChange.ok) {
++    throw new Error("the first finish must succeed");
++  }
++
++  const label = await submitCandidate(control, secondHarnessCommit, "submit-next-generation");
++  await prepareGeneration(control, label, secondHarnessCommit);
++  await activateGeneration(control, label, "activate-next-generation");
++
++  const afterChange = await control.getSession("session-a");
++
++  expect(afterChange).toEqual(beforeChange.session);
++  expect(Object.keys(afterChange ?? {}).toSorted()).toEqual([
++    "document",
++    "revision",
++    "sessionId",
++    "turnActive",
++  ]);
++  expect((await control.getActiveGeneration()).generation).toMatchObject({
++    label,
++    harnessCommit: secondHarnessCommit,
++  });
++});

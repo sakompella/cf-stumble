@@ -1,0 +1,12 @@
+
+ ⛅️ wrangler 4.126.0 (update available 4.128.0)
+───────────────────────────────────────────────
+Getting User settings...
+👋 You are logged in with an OAuth Token, associated with the email kompella.sa@northeastern.edu.
+🔐 Credentials are stored in: /Users/aditya/.config/.wrangler/config/default.toml
+┌──────────────────────────────────────┬──────────────────────────────────┐
+│ Account Name                         │ Account ID                       │
+├──────────────────────────────────────┼──────────────────────────────────┤
+│ Adityakompella@outlook.com's Account │ 0817758e93f2d197d0c512d94f276650 │
+└──────────────────────────────────────┴──────────────────────────────────┘
+🔓 Token Permissions:

@@ -1,0 +1,38 @@
+=== instances
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler.jsonc configuration:[0m
+
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+
+
+┌──────────────────────────────────────────────────────────────────┬───────┬──────────┬──────────┬─────────┬──────────────────────┐
+│ INSTANCE                                                         │ NAME  │ STATE    │ LOCATION │ VERSION │ CREATED              │
+├──────────────────────────────────────────────────────────────────┼───────┼──────────┼──────────┼─────────┼──────────────────────┤
+│ f4693a5fb4dba41fb9cb74478cf5fff5c33739eb3fa2f5d3689c403e7f5bb601 │ probe │ inactive │ -        │ -       │ 2026-09-02T19:15:16Z │
+└──────────────────────────────────────────────────────────────────┴───────┴──────────┴──────────┴─────────┴──────────────────────┘
+=== info
+        "tiers": [
+            1,
+            2
+        ]
+    },
+    "durable_objects": {
+        "namespace_id": "b95f4d3df034441b9695626b5ef2020b"
+    },
+    "rollout_active_grace_period": 0,
+    "health": {
+        "errors": [],
+        "instances": {
+            "active": 0,
+            "assigned": 0,
+            "healthy": 1,
+            "stopped": 0,
+            "failed": 0,
+            "scheduling": 0,
+            "starting": 0
+        }
+    },
+    "network": {
+        "bandwidth_limit_mbps": 100
+    }
+}

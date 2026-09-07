@@ -1,0 +1,13 @@
+ts	phase	decision	why	evidence	result
+2026-09-01T08:54:58Z	frame	adopted the eight-job overnight plan	the plan puts paid behavior checks before code that depends on them	.audit/overnight-completion-plan.md	execution started
+2026-09-01T08:56:18Z	frame	recorded the initial program predicate	the loop needs a red baseline before any implementation can advance it	.audit/loop.json	predicate exit 0
+2026-09-01T08:57:58Z	frame	added frequent compaction handoffs and owner-question tracking	the run will cross context boundaries and old chat decisions are not authoritative	.audit/overnight-handoff.md, .audit/design-questions.md	local records active
+2026-09-01T17:42:06Z	night1	rejected partial Computer vendoring commit 34678ff	the usage-limited worker committed a manifest for 78 dist files that gitignore omitted	branch pi-agent-4c1236bb-9849-47e, commit 34678ff	not merged, repair brief recorded
+2026-09-01T17:42:06Z	night2	parked the P0 capability design after the synthesis agent failed	four candidates and the judge are durable in the workflow journal, so a fresh synthesis can resume without rerunning them	wf_655a10832504.workflow.jsonl	design evidence preserved
+2026-09-01T17:42:06Z	pause	paused with main clean and local audit state complete	the owner asked to wrap up before Night 1 was verified	.audit/overnight-completion-resume.md	resume from Night 1 repair
+2026-09-01T17:46:41Z	correction	superseded the earlier predicate exit 0 row with exit 1	the earlier row captured the loop wrapper status instead of lastObservation.exitCode	.audit/loop.json	predicate red as expected
+2026-09-01T17:46:41Z	correction	recorded the 09:10 to 17:39 execution stall	the coordinator blocked on the usage-limited worker and no code or decision advanced during that interval	current transcript entries around 09:10 and 17:39	stall disclosed
+2026-09-01T17:46:41Z	frame	committed the version 0 feature map	workers needed a tracked release scope before isolated worktrees started	commit d5cd134	pnpm verify passed
+2026-09-01T17:46:41Z	frame	left later tenant harness ownership open	old chats contained no user choice and version 0 does not need the decision	commit caffbbc	pnpm verify passed
+2026-09-01T17:46:41Z	pause	cancelled the portable loop for the clean pause	the next agent must re-arm before ticking	.audit/loop.json, .audit/overnight-completion-resume.md	cancelled, resume command recorded
+2026-09-01T17:46:41Z	evidence	copied volatile build and arena evidence into .audit	temporary directories and workflow journals do not survive reboot	.audit/evidence/night1, .audit/evidence/night2	126992 bytes preserved

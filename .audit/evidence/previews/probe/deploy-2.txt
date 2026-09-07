@@ -1,0 +1,18 @@
+Captured from the run's stdout tail (pnpm exec wrangler preview --name probe0 --message "probe0 with state route").
+This is the SECOND deployment of Preview probe0, made after src/worker.ts was patched with the
+/probe/state route. The first deployment is deploy.txt, deployment ID 7248eedb-73af-4419-bac7-231e8d89a2ed.
+
+Deployment ID: 0d6ae53d-fe87-40e2-b58c-6d025c0d756e
+Deployment URL: https://0d6ae53d-cf-stumble.adityakompella.workers.dev
+WARNING Your configuration has diverged.
+
+  The following bindings are configured at the top level of your Wrangler config file, but are missing from the Previews settings of your Worker.
+
+    MODULE_MAPS  R2 Bucket
+
+  Either include these bindings in the "previews" field of your Wrangler config or update the Previews settings of your Worker in the Cloudflare dashboard.
+
+Order of events, for the record:
+1. deployment 7248eedb served three requests recorded in curl-root.txt, and the repo-fit worker re-curled GET / once. Four relay attempts total.
+2. this deployment, 0d6ae53d, then read attemptCount 4 before receiving any traffic of its own. See isolation-probe0.txt.
+3. three further GET / requests took it to 7.

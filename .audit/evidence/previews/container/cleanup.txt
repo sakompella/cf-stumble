@@ -1,0 +1,49 @@
+### delete preview
+
+
+✨ Preview "probe-container" deleted successfully.
+### containers list before app delete
+┌──────────────────────────────────────┬───────────────────────────────────────────┬──────────────┬────────────────┬──────────────────────────┐
+│ ID                                   │ NAME                                      │ STATE        │ LIVE INSTANCES │ LAST MODIFIED            │
+├──────────────────────────────────────┼───────────────────────────────────────────┼──────────────┼────────────────┼──────────────────────────┤
+│ a03a89d6-69dc-466f-bcb7-c29f4fb93829 │ cf-stumble-probecontainer                 │ ready        │ 1              │ 2026-09-02T19:20:26.872Z │
+├──────────────────────────────────────┼───────────────────────────────────────────┼──────────────┼────────────────┼──────────────────────────┤
+│ a03b44cd-75fd-4dee-bae8-d5b48b1f78b1 │ cf-stumble_probe-container_ProbeContainer │ provisioning │ 1              │ 2026-09-02T19:20:46.676Z │
+└──────────────────────────────────────┴───────────────────────────────────────────┴──────────────┴────────────────┴──────────────────────────┘
+### delete preview container app
+│
+╰ Your container has been deleted 
+
+### delete production container app
+│
+╰ Your container has been deleted 
+
+### containers list after
+No containers found.
+### images
+REPOSITORY                                 TAG
+cf-stumble-probecontainer                  3c706a46
+cf-stumble_probe-container_probecontainer  0eb51356
+cf-stumble_probe-container_probecontainer  852776cf
+### delete images
+🤖 Using fallback value in non-interactive context: yes
+Deleted cf-stumble-probecontainer:3c706a46 (sha256:700648f0220638985e7dee4802483bd2a0215ff6d1e455ae2b521e61556bca38)
+🤖 Using fallback value in non-interactive context: yes
+Deleted cf-stumble_probe-container_probecontainer:0eb51356 (sha256:d4f372975b9fa0ef548215c90f7b5ea0c46332cb1174e8d45305e7963096da1c)
+🤖 Using fallback value in non-interactive context: yes
+Deleted cf-stumble_probe-container_probecontainer:852776cf (sha256:700648f0220638985e7dee4802483bd2a0215ff6d1e455ae2b521e61556bca38)
+### images after
+REPOSITORY  TAG
+### delete worker
+
+ ⛅️ wrangler 4.126.0 (update available 4.128.0)
+───────────────────────────────────────────────
+? Are you sure you want to delete cf-stumble? This action cannot be undone.
+🤖 Using fallback value in non-interactive context: yes
+Successfully deleted cf-stumble
+### workers list
+[]
+### urls
+https://cf-stumble.adityakompella.workers.dev/ -> 404
+https://probe-container-cf-stumble.adityakompella.workers.dev/ -> 404
+https://probe0-cf-stumble.adityakompella.workers.dev/ -> 404

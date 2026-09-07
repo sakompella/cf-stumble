@@ -1,0 +1,32 @@
+=== instances
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+
+
+┌──────────────────────────────────────────────────────────────────┬───────┬──────────┬──────────┬─────────┬──────────────────────┐
+│ INSTANCE                                                         │ NAME  │ STATE    │ LOCATION │ VERSION │ CREATED              │
+├──────────────────────────────────────────────────────────────────┼───────┼──────────┼──────────┼─────────┼──────────────────────┤
+│ f4693a5fb4dba41fb9cb74478cf5fff5c33739eb3fa2f5d3689c403e7f5bb601 │ probe │ inactive │ -        │ -       │ 2026-09-02T19:18:16Z │
+└──────────────────────────────────────────────────────────────────┴───────┴──────────┴──────────┴─────────┴──────────────────────┘
+=== info health+image
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+    "version": 3,
+    "scheduling_policy": "default",
+        "image": "registry.cloudflare.com/0817758e93f2d197d0c512d94f276650/cf-stumble_probe-container_probecontainer@sha256:700648f0220638985e7dee4802483bd2a0215ff6d1e455ae2b521e61556bca38",
+    "rollout_active_grace_period": 0,
+            "active": 0,
+            "assigned": 0,
+            "healthy": 1,
+            "stopped": 0,
+            "failed": 0,
+            "scheduling": 0,
+            "starting": 0
+=== images list
+
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+    - The "dev" instance_type has been renamed to "lite" and will be removed in a subsequent version. Please update your configuration to use "lite" instead.
+
+
+REPOSITORY                                 TAG
+cf-stumble_probe-container_probecontainer  0eb51356
+cf-stumble_probe-container_probecontainer  852776cf

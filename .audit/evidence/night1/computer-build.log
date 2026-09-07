@@ -1,0 +1,109 @@
+
+> @cloudflare/computer@0.3.0 prebuild
+> npm run build:deps && npm run build:shell-bundle
+
+
+> @cloudflare/computer@0.3.0 build:deps
+> npm run build --workspace @cloudflare/computer-rpc
+
+
+> @cloudflare/computer-rpc@0.3.0 prebuild
+> npm run build --workspace @cloudflare/dofs
+
+
+> @cloudflare/dofs@0.3.0 build
+> tsc -p tsconfig.build.json
+
+
+> @cloudflare/computer-rpc@0.3.0 build
+> tsc -p tsconfig.build.json
+
+
+> @cloudflare/computer@0.3.0 build:shell-bundle
+> node ./src/backends/worker-shell/script/build-bundle.mjs
+
+Wrote /private/tmp/cf-stumble-computer-proof/packages/computer/src/backends/worker-shell/generated (core 179 modules, shell.js 623745 bytes, features: curl 1, html-to-markdown 2, python 1, sqlite 2, js-exec 1, yq 2, file 2, xan 4, jq 2, total 2988685 bytes)
+
+> @cloudflare/computer@0.3.0 build
+> rolldown -c
+
+<DIR>/shared-Bzxmpfrh.js.map                               asset │ size:     0.96 kB
+<DIR>/observe/cloudflare.js.map                            asset │ size:     5.64 kB
+<DIR>/shared-Oh7F7E9i.js.map                               asset │ size:     6.29 kB
+<DIR>/shared-D6R1zh4N.js.map                               asset │ size:     7.19 kB
+<DIR>/backends/worker-shell/shell/python.js.map            asset │ size:    11.98 kB
+<DIR>/backends/worker-shell/shell/jq.js.map                asset │ size:    12.43 kB
+<DIR>/backends/worker-shell/shell/js-exec.js.map           asset │ size:    13.59 kB
+<DIR>/backends/worker-shell/shell/curl.js.map              asset │ size:    18.72 kB
+<DIR>/shared-kgWICmfl.js.map                               asset │ size:    19.18 kB
+<DIR>/assets/index.js.map                                  asset │ size:    28.78 kB
+<DIR>/shared-C_QLY6ay.js.map                               asset │ size:    66.02 kB
+<DIR>/backends/worker-shell/index.js.map                   asset │ size:    70.10 kB
+<DIR>/backends/container/index.js.map                      asset │ size:    76.85 kB
+<DIR>/shared-C3szXVBu.js.map                               asset │ size:    79.23 kB
+<DIR>/backends/worker-shell/shell/xan.js.map               asset │ size:   111.95 kB
+<DIR>/backends/worker-shell/shell/sqlite.js.map            asset │ size:   112.36 kB
+<DIR>/backends/worker-shell/shell/file.js.map              asset │ size:   115.88 kB
+<DIR>/tools/index.js.map                                   asset │ size:   124.59 kB
+<DIR>/git.js.map                                           asset │ size:   281.43 kB
+<DIR>/backends/worker-shell/shell/yq.js.map                asset │ size:   328.84 kB
+<DIR>/backends/worker-javascript/index.js.map              asset │ size:   501.92 kB
+<DIR>/index.js.map                                         asset │ size:   591.43 kB
+<DIR>/backends/worker-shell/shell/html-to-markdown.js.map  asset │ size:   624.07 kB
+<DIR>/shared-C-jXUzC6.js.map                               asset │ size: 1,005.88 kB
+<DIR>/backends/worker-shell/shell/core.js.map              asset │ size: 2,009.18 kB
+<DIR>/backends/worker-shell/shell/jq.d.ts                  chunk │ size:     0.20 kB
+<DIR>/backends/worker-shell/shell/yq.d.ts                  chunk │ size:     0.20 kB
+<DIR>/backends/worker-shell/shell/xan.d.ts                 chunk │ size:     0.20 kB
+<DIR>/backends/worker-shell/shell/core.d.ts                chunk │ size:     0.20 kB
+<DIR>/backends/worker-shell/shell/curl.d.ts                chunk │ size:     0.20 kB
+<DIR>/backends/worker-shell/shell/file.d.ts                chunk │ size:     0.20 kB
+<DIR>/backends/worker-shell/shell/python.d.ts              chunk │ size:     0.21 kB
+<DIR>/backends/worker-shell/shell/sqlite.d.ts              chunk │ size:     0.21 kB
+<DIR>/backends/worker-shell/shell/js-exec.d.ts             chunk │ size:     0.21 kB
+<DIR>/backends/worker-shell/shell/html-to-markdown.d.ts    chunk │ size:     0.23 kB
+<DIR>/shared-3MpgXJDw.d.ts                                 chunk │ size:     0.28 kB
+<DIR>/artifacts/index.js                                   chunk │ size:     0.30 kB
+<DIR>/assets/index.d.ts                                    chunk │ size:     0.35 kB
+<DIR>/shared-Bzxmpfrh.js                                   chunk │ size:     0.53 kB
+<DIR>/artifacts/index.d.ts                                 chunk │ size:     0.67 kB
+<DIR>/observe/cloudflare.d.ts                              chunk │ size:     1.16 kB
+<DIR>/shared-DYgTonH4.d.ts                                 chunk │ size:     1.17 kB
+<DIR>/observe/cloudflare.js                                chunk │ size:     1.27 kB
+<DIR>/shared-DwuIaYac.d.ts                                 chunk │ size:     1.68 kB
+<DIR>/shared-D6R1zh4N.js                                   chunk │ size:     2.10 kB
+<DIR>/backends/worker-javascript/index.d.ts                chunk │ size:     2.64 kB
+<DIR>/shared-DYgflRlD.d.ts                                 chunk │ size:     2.86 kB
+<DIR>/git.d.ts                                             chunk │ size:     3.10 kB
+<DIR>/shared-Oh7F7E9i.js                                   chunk │ size:     3.72 kB
+<DIR>/backends/container/index.d.ts                        chunk │ size:     3.90 kB
+<DIR>/shared-DFg2UeZ4.d.ts                                 chunk │ size:     5.63 kB
+<DIR>/shared-C9CTqSgh.d.ts                                 chunk │ size:     6.58 kB
+<DIR>/shared-NFUbWCX1.d.ts                                 chunk │ size:     7.00 kB
+<DIR>/shared-kgWICmfl.js                                   chunk │ size:     7.84 kB
+<DIR>/assets/index.js                                      chunk │ size:     8.78 kB
+<DIR>/backends/worker-shell/index.d.ts                     chunk │ size:    10.55 kB
+<DIR>/backends/worker-shell/shell/python.js                chunk │ size:    11.06 kB
+<DIR>/backends/worker-shell/shell/jq.js                    chunk │ size:    11.14 kB
+<DIR>/tools/index.d.ts                                     chunk │ size:    12.01 kB
+<DIR>/backends/worker-shell/shell/js-exec.js               chunk │ size:    12.69 kB
+<DIR>/backends/worker-shell/shell/curl.js                  chunk │ size:    17.13 kB
+<DIR>/index.d.ts                                           chunk │ size:    20.16 kB
+<DIR>/backends/container/index.js                          chunk │ size:    21.40 kB
+<DIR>/backends/worker-shell/index.js                       chunk │ size:    22.64 kB
+<DIR>/shared-C3szXVBu.js                                   chunk │ size:    29.43 kB
+<DIR>/shared-C_QLY6ay.js                                   chunk │ size:    30.16 kB
+<DIR>/shared-DDTBl1w_.d.ts                                 chunk │ size:    34.04 kB
+<DIR>/tools/index.js                                       chunk │ size:    58.06 kB
+<DIR>/git.js                                               chunk │ size:   103.06 kB
+<DIR>/backends/worker-shell/shell/xan.js                   chunk │ size:   103.55 kB
+<DIR>/backends/worker-shell/shell/sqlite.js                chunk │ size:   106.20 kB
+<DIR>/backends/worker-shell/shell/file.js                  chunk │ size:   106.60 kB
+<DIR>/index.js                                             chunk │ size:   200.39 kB
+<DIR>/backends/worker-javascript/index.js                  chunk │ size:   250.19 kB
+<DIR>/backends/worker-shell/shell/yq.js                    chunk │ size:   305.26 kB
+<DIR>/shared-C-jXUzC6.js                                   chunk │ size:   574.38 kB
+<DIR>/backends/worker-shell/shell/html-to-markdown.js      chunk │ size:   584.65 kB
+<DIR>/backends/worker-shell/shell/core.js                  chunk │ size: 1,880.72 kB
+
+✔ rolldown v1.2.1 Finished in 765.31 ms

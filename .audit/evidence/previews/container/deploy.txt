@@ -1,0 +1,45 @@
+│
+│   {
+│     "containers": [
+│       {
+│         "name": "cf-stumble_probe-container_ProbeContainer",
+│         "scheduling_policy": "default",
+│         "configuration": {
+│           "image": "registry.cloudflare.com/0817758e93f2d197d0c512d94f276650/cf-stumble_probe-container_probecontainer@sha256:d4f372975b9fa0ef548215c90f7b5ea0c46332cb1174e8d45305e7963096da1c",
+│           "instance_type": "dev"
+│         },
+│         "instances": 0,
+│         "max_instances": 1,
+│         "constraints": {
+│           "tiers": [
+│             1,
+│             2
+│           ]
+│         },
+│         "durable_objects": {
+│           "namespace_id": "b95f4d3df034441b9695626b5ef2020b"
+│         },
+│         "rollout_active_grace_period": 0
+│       }
+│     ]
+│   }
+│
+│
+│  SUCCESS  Created application cf-stumble_probe-container_ProbeContainer (Application ID: a03b44cd-75fd-4dee-bae8-d5b48b1f78b1)
+│
+╰ Applied changes 
+
+Preview: probe-container (new)
+Preview URL: https://probe-container-cf-stumble.adityakompella.workers.dev
+
+Deployment ID: 0eb51356-26d7-489e-a3db-14c58a2e74f9
+Deployment URL: https://0eb51356-cf-stumble.adityakompella.workers.dev
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mYour configuration has diverged.[0m
+
+  The following bindings are configured at the top level of your Wrangler config file, but are missing from the Previews settings of your Worker.
+  
+    MODULE_MAPS  R2 Bucket
+  
+  Either include these bindings in the "previews" field of your Wrangler config or update the Previews settings of your Worker in the Cloudflare dashboard.
+
+

@@ -1,0 +1,116 @@
+{
+  "T1a": [
+    [
+      "build:artifact script exists",
+      "grep -q \"\\\"build:artifact\\\"\" package.json"
+    ],
+    [
+      "buildCommand names build:artifact",
+      "grep -q \"build:artifact\" src/harness-build.ts"
+    ],
+    [
+      "buildCommand<->script test in gate",
+      "grep -rqn \"buildCommand\" test/"
+    ],
+    [
+      "clean-build script committed",
+      "ls scripts/probe/clean-build.sh 2>/dev/null || find scripts tools -name \"*clean-build*\" -o -name \"*build-artifact*\" | grep -q ."
+    ],
+    [
+      "dist NOT committed",
+      "! git ls-files \"vendor/**/dist\" | grep -q ."
+    ]
+  ],
+  "T2": [
+    [
+      "journal.ts deleted",
+      "! test -f src/supervisor/control/journal.ts"
+    ],
+    [
+      "no requestId/fingerprint/journal in src",
+      "! grep -rqn \"requestId\\|fingerprint\\|generation_control_journal\" src --include=*.ts"
+    ],
+    [
+      "epoch checks survive",
+      "grep -rqn \"epoch\" src/supervisor/control/"
+    ],
+    [
+      "resubmission test exists",
+      "grep -rqn \"resubmit\\|already\\|existing generation\" test/ --include=*.ts"
+    ]
+  ],
+  "T4": [
+    [
+      "route has a streaming type",
+      "grep -rqn \"ReadableStream\\|stream\" src/model-route.ts"
+    ],
+    [
+      "streamOnce no longer single-await",
+      "! grep -qn \"await model.run(request)\" src/facet/generation-0/route-stream.ts"
+    ],
+    [
+      "FORBIDDEN_FIELDS intact",
+      "grep -q \"FORBIDDEN_FIELDS\" src/model-route.ts"
+    ],
+    [
+      "MODEL still fixed",
+      "grep -q \"@cf/zai-org/glm-5.3-flash\" src/model-route.ts"
+    ],
+    [
+      "mid-stream failure test",
+      "grep -rqin \"mid-stream\\|midstream\" test/"
+    ]
+  ],
+  "T5": [
+    [
+      "startTurn returns a lease to the caller",
+      "grep -q \"ThreadLeaseResult\" src/supervisor/threads/store.ts"
+    ],
+    [
+      "client surface exposes leaseId",
+      "grep -q \"leaseId\" src/supervisor/threads/project-threads.ts"
+    ],
+    [
+      "finishTurn REQUIRES leaseId (not optional)",
+      "grep -A6 \"^  finishTurn(\" src/supervisor/threads/store.ts | grep -q \"leaseId: string\""
+    ],
+    [
+      "abandonTurn REQUIRES leaseId",
+      "grep -q \"abandonTurn(project: Project, leaseId: string)\" src/supervisor/threads/store.ts"
+    ],
+    [
+      "no unfenced duplicate pair survives",
+      "! grep -q \"WithLease\" src/supervisor/threads/store.ts"
+    ],
+    [
+      "supervisor wrappers carry lease",
+      "grep -q \"leaseId\" src/supervisor/supervisor.ts"
+    ],
+    [
+      "dedicated lease test exists",
+      "test -f test/supervisor/threads/turn-lease.test.ts"
+    ]
+  ],
+  "T7": [
+    [
+      "Pi path can produce a diff (tool OR bash+git diff, proven by test)",
+      "(grep -qi \"diff\" src/facet/generation-0/pi-agent-turn.ts || grep -q \"git diff\" src/facet/generation-0/turn-policy.ts) && test -f test/facet/generation-0/turn-diff.test.ts"
+    ],
+    [
+      "legacy buffered turn path deleted",
+      "! test -f src/facet/generation-0/turn.ts"
+    ],
+    [
+      "vendor tree not hand-edited (gate would fail anyway)",
+      "pnpm exec tsx tools/vendor-pi.mts --check >/dev/null 2>&1"
+    ],
+    [
+      "compaction reachable from the facet",
+      "grep -rqi \"compact\" src/facet/generation-0/"
+    ],
+    [
+      "a diff-related test exists",
+      "grep -rqi \"diff\" test/facet/"
+    ]
+  ]
+}

@@ -1,0 +1,23 @@
+
+ ⛅️ wrangler 4.126.0 (update available 4.128.0)
+───────────────────────────────────────────────
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1m🚧 `wrangler preview` is a private beta command. Please report any issues to https://github.com/cloudflare/workers-sdk/issues/new/choose[0m
+
+
+? Worker "cf-stumble" does not exist yet. Would you like to create it for this Preview?
+🤖 Using fallback value in non-interactive context: yes
+🌀 Creating new Worker "cf-stumble"...
+Preview: probe0 (new)
+Preview URL: https://probe0-cf-stumble.adityakompella.workers.dev
+
+Deployment ID: 7248eedb-73af-4419-bac7-231e8d89a2ed
+Deployment URL: https://7248eedb-cf-stumble.adityakompella.workers.dev
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mYour configuration has diverged.[0m
+
+  The following bindings are configured at the top level of your Wrangler config file, but are missing from the Previews settings of your Worker.
+  
+    MODULE_MAPS  R2 Bucket
+  
+  Either include these bindings in the "previews" field of your Wrangler config or update the Previews settings of your Worker in the Cloudflare dashboard.
+
+

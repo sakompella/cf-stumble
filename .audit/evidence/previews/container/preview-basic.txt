@@ -1,0 +1,4 @@
+### preview /probe/container with basic
+{"hasContainer":true,"runningBeforeStart":false,"runningAfterStart":true,"startError":null,"attempts":1,"fetchError":null,"body":"container ok\n","monitorState":"not observed"}
+### preview /
+main facet ready

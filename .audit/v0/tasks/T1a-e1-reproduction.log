@@ -1,0 +1,33 @@
+# E1 reproduction: clean archive of 4bdd6dc, install only, old build command `pnpm run build:module-map`
+--- vendor dist present? ---
+ls: vendor/pi-v0.84.4/dist: No such file or directory
+--- install done, dist still absent? ---
+ls: vendor/pi-v0.84.4/dist: No such file or directory
+--- old build command: pnpm run build:module-map ---
+  let error = new Error(text);
+              ^
+
+Error: Build failed with 5 errors:
+src/facet/generation-0/execution-env-exec.ts:1:45: ERROR: Could not resolve "@cf-stumble/pi"
+src/facet/generation-0/execution-env-filesystem.ts:1:26: ERROR: Could not resolve "@cf-stumble/pi"
+src/facet/generation-0/execution-env-paths.ts:1:26: ERROR: Could not resolve "@cf-stumble/pi"
+src/facet/generation-0/pi-agent-turn.ts:7:7: ERROR: Could not resolve "@cf-stumble/pi"
+src/facet/generation-0/route-stream.ts:1:50: ERROR: Could not resolve "@cf-stumble/pi"
+    at failureErrorWithLog (/private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1748:15)
+    at /private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1207:25
+    at /private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1159:52
+    at buildResponseToResult (/private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1205:7)
+    at /private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1232:16
+    at responseCallbacks.<computed> (/private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:884:9)
+    at handleIncomingPacket (/private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:939:12)
+    at Socket.readFromStdout (/private/tmp/t1a-repro.oCGtx4/build/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:862:7)
+    at Socket.emit (node:events:514:20)
+    at addChunk (node:internal/streams/readable:568:12) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+
+Node.js v26.7.0
+[ELIFECYCLE] Command failed with exit code 1.
+EXIT=1
+

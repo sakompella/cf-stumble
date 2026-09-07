@@ -1,0 +1,5 @@
+### production /
+main facet ready
+### production /probe/container
+{"hasContainer":true,"runningBeforeStart":false,"runningAfterStart":true,"startError":null,"attempts":10,"fetchError":"Error: There is no container instance that can be provided to this Durable Object, try again later","body":null,"monitorState":"errored Error: There is no container instance that can be provided to this Durable Object, try again later"}
+{"hasContainer":true,"runningBeforeStart":false,"runningAfterStart":true,"startError":null,"attempts":2,"fetchError":null,"body":"container ok\n","monitorState":"not observed"}

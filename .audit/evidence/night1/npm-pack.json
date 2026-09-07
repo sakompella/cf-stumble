@@ -1,0 +1,417 @@
+Wrote /private/tmp/cf-stumble-computer-proof/packages/computer/src/backends/worker-shell/generated (core 179 modules, shell.js 623745 bytes, features: curl 1, html-to-markdown 2, python 1, sqlite 2, js-exec 1, yq 2, file 2, xan 4, jq 2, total 2988685 bytes)
+[
+  {
+    "id": "@cloudflare/computer@0.3.0",
+    "name": "@cloudflare/computer",
+    "version": "0.3.0",
+    "size": 2405549,
+    "unpackedSize": 10820145,
+    "shasum": "40278956df1bcca8bd2e0eb61ea175f13bfc7b41",
+    "integrity": "sha512-C7/ySja0ctlR/8ygCHmRFTOF32luaPQLa1jIG0erwwayDnsDabFjcmextZoPi8B0okIFksrGR7fbSROkm/HNAg==",
+    "filename": "cloudflare-computer-0.3.0.tgz",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 21278,
+        "mode": 420
+      },
+      {
+        "path": "dist/artifacts/index.d.ts",
+        "size": 674,
+        "mode": 420
+      },
+      {
+        "path": "dist/artifacts/index.js",
+        "size": 297,
+        "mode": 420
+      },
+      {
+        "path": "dist/assets/index.d.ts",
+        "size": 346,
+        "mode": 420
+      },
+      {
+        "path": "dist/assets/index.js",
+        "size": 8776,
+        "mode": 420
+      },
+      {
+        "path": "dist/assets/index.js.map",
+        "size": 28780,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/container/index.d.ts",
+        "size": 3900,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/container/index.js",
+        "size": 21403,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/container/index.js.map",
+        "size": 76852,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-javascript/index.d.ts",
+        "size": 2640,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-javascript/index.js",
+        "size": 250185,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-javascript/index.js.map",
+        "size": 501918,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/index.d.ts",
+        "size": 10548,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/index.js",
+        "size": 22644,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/index.js.map",
+        "size": 70100,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/core.d.ts",
+        "size": 204,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/core.js",
+        "size": 1880718,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/core.js.map",
+        "size": 2009182,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/curl.d.ts",
+        "size": 204,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/curl.js",
+        "size": 17129,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/curl.js.map",
+        "size": 18715,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/file.d.ts",
+        "size": 204,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/file.js",
+        "size": 106602,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/file.js.map",
+        "size": 115880,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/html-to-markdown.d.ts",
+        "size": 228,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/html-to-markdown.js",
+        "size": 584653,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/html-to-markdown.js.map",
+        "size": 624065,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/jq.d.ts",
+        "size": 200,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/jq.js",
+        "size": 11140,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/jq.js.map",
+        "size": 12434,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/js-exec.d.ts",
+        "size": 210,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/js-exec.js",
+        "size": 12690,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/js-exec.js.map",
+        "size": 13594,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/python.d.ts",
+        "size": 208,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/python.js",
+        "size": 11058,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/python.js.map",
+        "size": 11983,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/sqlite.d.ts",
+        "size": 208,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/sqlite.js",
+        "size": 106196,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/sqlite.js.map",
+        "size": 112355,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/xan.d.ts",
+        "size": 202,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/xan.js",
+        "size": 103550,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/xan.js.map",
+        "size": 111949,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/yq.d.ts",
+        "size": 200,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/yq.js",
+        "size": 305262,
+        "mode": 420
+      },
+      {
+        "path": "dist/backends/worker-shell/shell/yq.js.map",
+        "size": 328840,
+        "mode": 420
+      },
+      {
+        "path": "dist/git.d.ts",
+        "size": 3100,
+        "mode": 420
+      },
+      {
+        "path": "dist/git.js",
+        "size": 103059,
+        "mode": 420
+      },
+      {
+        "path": "dist/git.js.map",
+        "size": 281432,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.d.ts",
+        "size": 20158,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.js",
+        "size": 200392,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.js.map",
+        "size": 591434,
+        "mode": 420
+      },
+      {
+        "path": "dist/observe/cloudflare.d.ts",
+        "size": 1158,
+        "mode": 420
+      },
+      {
+        "path": "dist/observe/cloudflare.js",
+        "size": 1271,
+        "mode": 420
+      },
+      {
+        "path": "dist/observe/cloudflare.js.map",
+        "size": 5643,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-3MpgXJDw.d.ts",
+        "size": 276,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-Bzxmpfrh.js",
+        "size": 534,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-Bzxmpfrh.js.map",
+        "size": 957,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C_QLY6ay.js",
+        "size": 30160,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C_QLY6ay.js.map",
+        "size": 66018,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C-jXUzC6.js",
+        "size": 574382,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C-jXUzC6.js.map",
+        "size": 1005879,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C3szXVBu.js",
+        "size": 29434,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C3szXVBu.js.map",
+        "size": 79227,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-C9CTqSgh.d.ts",
+        "size": 6583,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-D6R1zh4N.js",
+        "size": 2099,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-D6R1zh4N.js.map",
+        "size": 7190,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-DDTBl1w_.d.ts",
+        "size": 34043,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-DFg2UeZ4.d.ts",
+        "size": 5629,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-DwuIaYac.d.ts",
+        "size": 1675,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-DYgflRlD.d.ts",
+        "size": 2855,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-DYgTonH4.d.ts",
+        "size": 1169,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-kgWICmfl.js",
+        "size": 7837,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-kgWICmfl.js.map",
+        "size": 19176,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-NFUbWCX1.d.ts",
+        "size": 6999,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-Oh7F7E9i.js",
+        "size": 3717,
+        "mode": 420
+      },
+      {
+        "path": "dist/shared-Oh7F7E9i.js.map",
+        "size": 6294,
+        "mode": 420
+      },
+      {
+        "path": "dist/tools/index.d.ts",
+        "size": 12013,
+        "mode": 420
+      },
+      {
+        "path": "dist/tools/index.js",
+        "size": 58058,
+        "mode": 420
+      },
+      {
+        "path": "dist/tools/index.js.map",
+        "size": 124594,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 5296,
+        "mode": 420
+      }
+    ],
+    "entryCount": 80,
+    "bundled": []
+  }
+]

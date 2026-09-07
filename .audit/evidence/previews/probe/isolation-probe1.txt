@@ -1,0 +1,8 @@
+### probe1 fresh state
+{"activeLabel":null,"activeStatus":null,"harnessCommit":null,"attemptCount":0}
+### probe1 GET /
+main facet ready
+### probe1 state after 1 request
+{"activeLabel":null,"activeStatus":null,"harnessCommit":null,"attemptCount":1}
+### probe0 state unchanged?
+{"activeLabel":null,"activeStatus":null,"harnessCommit":null,"attemptCount":7}

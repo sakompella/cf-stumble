@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 2,
+  "tasks": {
+    "cf-stumble-overnight-audit": {
+      "taskName": "cf-stumble-overnight-audit",
+      "objective": "Deploy the version 0 coding-agent demo from docs/agents/design/feature-map.md.",
+      "predicate": "test -f tools/verify-version0.mts && pnpm verify && pnpm exec tsx tools/verify-version0.mts --evidence .audit/version0-acceptance.json",
+      "cadenceSeconds": 3600,
+      "lifecycle": "cancelled",
+      "armedAt": "2026-09-01T08:54:58.797Z",
+      "updatedAt": "2026-09-01T17:42:06.197Z",
+      "lastObservation": {
+        "observedAt": "2026-09-01T08:56:18.827Z",
+        "exitCode": 1,
+        "stdout": "",
+        "stderr": "",
+        "error": null
+      }
+    },
+    "autonomous-v0": {
+      "taskName": "autonomous-v0",
+      "objective": "Advance cf-stumble v0 to deployment-ready owner-only runtime evidence.",
+      "predicate": "test -f .audit/v0-demo-evidence.md && pnpm verify",
+      "cadenceSeconds": 300,
+      "lifecycle": "armed",
+      "armedAt": "2026-09-03T02:42:49.582Z",
+      "updatedAt": "2026-09-03T02:42:49.652Z",
+      "lastObservation": {
+        "observedAt": "2026-09-03T02:42:49.641Z",
+        "exitCode": 1,
+        "stdout": "",
+        "stderr": "",
+        "error": null
+      }
+    }
+  }
+}

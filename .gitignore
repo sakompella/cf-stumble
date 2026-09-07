@@ -1,9 +1,0 @@
-node_modules/
-dist/
-build/
-.wrangler/
-*.log
-.DS_Store
-.dev.vars
-.audit/
-.hegel/
