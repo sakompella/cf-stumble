@@ -102,6 +102,16 @@ export const OWNER_PAGE_SCRIPT_TURN = `
       toolResult(frame);
       return false;
     }
+    if (frame.kind === "diff") {
+      page.assistantText = null;
+      diffMessage(frame);
+      return false;
+    }
+    if (frame.kind === "diff-unavailable") {
+      page.assistantText = null;
+      diffUnavailableMessage(frame);
+      return false;
+    }
     if (TERMINAL_KINDS.indexOf(frame.kind) < 0) {
       return false;
     }

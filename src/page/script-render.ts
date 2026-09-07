@@ -152,4 +152,26 @@ export const OWNER_PAGE_SCRIPT_RENDER = `
       block.open = true;
     }
   }
+
+  // The turn's own diff (ADR-0040), forwarded on the same terms as a tool result: proven fields,
+  // bounded, and shown with the same added/removed colouring as any other diff-shaped output.
+  function diffMessage(frame) {
+    var entry = messageEntry("diff", "diff");
+    var body = element("pre", "text");
+    entry.appendChild(body);
+    renderOutput(body, frame.content);
+    if (frame.truncated) {
+      var note = element("span", "note");
+      note.textContent = "\\n… the harness truncated this diff";
+      body.appendChild(note);
+    }
+  }
+
+  // The repository could not answer what the turn changed; the reason replaces a silent diff.
+  function diffUnavailableMessage(frame) {
+    var entry = messageEntry("diff unavailable", "diff");
+    var body = element("pre", "text");
+    body.textContent = frame.detail;
+    entry.appendChild(body);
+  }
 `;
