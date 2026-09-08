@@ -37,9 +37,13 @@ test("gives the harness, each project, and build scratch separate directories", 
     BUILD_SCRATCH_ROOT,
   ];
 
-  for (const directory of directories) {
+  for (const directory of [HARNESS_DIRECTORY, projectDirectory(projectOne.id)]) {
     expect(directory.startsWith(`${WORKSPACE_ROOT}/`)).toBe(true);
   }
+  expect(
+    BUILD_SCRATCH_ROOT.startsWith(`${WORKSPACE_ROOT}/`),
+    "build scratch is the container's, because a build in durable storage reset the Durable Object",
+  ).toBe(false);
   expect(new Set(directories).size, "every directory is distinct").toBe(directories.length);
   for (const directory of directories) {
     for (const other of directories) {

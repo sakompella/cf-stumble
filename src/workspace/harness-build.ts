@@ -3,11 +3,13 @@ import {
   harnessBuildStep,
   HARNESS_BUILD_STEP_NAMES,
   planHarnessBuild,
-  readModuleMapSource,
+  shellQuote,
   type HarnessBuildConfiguration,
+  type HarnessBuildPlan,
   type HarnessBuildStepName,
 } from "../harness-build.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
+import { WORKSPACE_ROOT } from "../workspace-layout.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
 
 /** A build request whose commit passed `parseHarnessCommit`. Only this form reaches a command. */
@@ -62,6 +64,28 @@ export function parseHarnessBuildRequest(
 }
 
 /**
+ * Read the module map a build wrote, as a command rather than as a filesystem read.
+ *
+ * A build writes its output to the container's filesystem, which the workspace filesystem API
+ * cannot read. The shell that wrote it can.
+ *
+ * The path is derived from the configuration and a validated commit, never from a request. The
+ * symbolic-link refusal keeps the property the filesystem read had: `git archive` can carry a
+ * symbolic link, so a harness commit could otherwise name a file outside its own build directory.
+ */
+function readModuleMapSource(plan: HarnessBuildPlan): string {
+  return [
+    "set -eu",
+    `path=${shellQuote(plan.moduleMapPath)}`,
+    'if [ -L "$path" ]; then',
+    '  echo "the module map path is a symbolic link" >&2',
+    "  exit 3",
+    "fi",
+    'cat -- "$path"',
+  ].join("\n");
+}
+
+/**
  * Decide the one operation a parsed build request performs. Every path it names is derived from
  * the fixed configuration and a validated commit, so no request can reach outside the build root.
  */
@@ -74,7 +98,7 @@ export function planHarnessBuildRequest(
     return {
       kind: "run-command",
       source: readModuleMapSource(plan),
-      cwd: "/",
+      cwd: WORKSPACE_ROOT,
       timeoutMs: configuration.stepTimeoutMs,
     };
   }

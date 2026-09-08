@@ -4,7 +4,6 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
   planHarnessBuild,
-  readModuleMapSource,
   shellQuote,
 } from "../../src/harness-build.js";
 import {
@@ -15,7 +14,7 @@ import {
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
-import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
+import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 
 const commit = harnessCommit("5000000000000000000000000000000000000001");
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
@@ -98,15 +97,12 @@ test("plans one planned step, or the build output, from a validated commit", () 
       `tar -x -m --no-same-owner --no-same-permissions -C ${buildDirectory} -f "$archive"`,
       'rm -f "$archive"',
     ].join("\n"),
-    cwd: "/",
+    cwd: WORKSPACE_ROOT,
     timeoutMs: HARNESS_BUILD_CONFIGURATION.stepTimeoutMs,
   });
-  expect(planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, output)).toEqual({
-    kind: "run-command",
-    source: readModuleMapSource(planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit)),
-    cwd: "/",
-    timeoutMs: HARNESS_BUILD_CONFIGURATION.stepTimeoutMs,
-  });
+  const readPlan = planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, output);
+  expect(readPlan.kind).toBe("run-command");
+  expect(readPlan.kind === "run-command" ? readPlan.source : "").toContain(moduleMapPath);
 });
 
 test("runs a planned build step and returns its exit code", async () => {
@@ -125,7 +121,7 @@ test("runs a planned build step and returns its exit code", async () => {
     },
   });
   expect(operations.calls).toEqual([
-    `command:${HARNESS_BUILD_CONFIGURATION.buildCommand}:${buildDirectory}`,
+    `command:cd '${buildDirectory}'\n${HARNESS_BUILD_CONFIGURATION.buildCommand}:${WORKSPACE_ROOT}`,
   ]);
 });
 
@@ -201,7 +197,11 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
 });
 
 test("refuses a module map reached through a symbolic link", () => {
-  const source = readModuleMapSource(planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit));
+  const planned = planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, {
+    kind: "build-output",
+    harnessCommit: commit,
+  });
+  const source = planned.kind === "run-command" ? planned.source : "";
 
   expect(source, "a symbolic link is refused before anything is read").toContain(
     'if [ -L "$path" ]; then',

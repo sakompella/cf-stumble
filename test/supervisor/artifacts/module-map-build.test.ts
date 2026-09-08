@@ -11,7 +11,7 @@ import type {
   HarnessBuildConfiguration,
 } from "../../../src/supervisor/artifacts/index.js";
 import type { CommandOutput } from "../../../src/workspace/index.js";
-import { PROJECTS_DIRECTORY } from "../../../src/workspace-layout.js";
+import { PROJECTS_DIRECTORY, WORKSPACE_ROOT } from "../../../src/workspace-layout.js";
 
 const configuration: HarnessBuildConfiguration = {
   buildRoot: "/harness-builds",
@@ -105,8 +105,8 @@ test("plans an isolated build directory outside the project workspace", () => {
   ]);
   expect(plan.steps.at(-1)).toEqual({
     name: "build",
-    source: configuration.buildCommand,
-    cwd: plan.directory,
+    source: `cd '${plan.directory}'\n${configuration.buildCommand}`,
+    cwd: WORKSPACE_ROOT,
   });
   expect(
     plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
@@ -126,8 +126,8 @@ test("checks out the commit before it runs the build command", async () => {
     `tar -x -m --no-same-owner --no-same-permissions -C /harness-builds/${commit}`,
   );
   expect(workspace.commands[3]).toEqual({
-    source: configuration.buildCommand,
-    cwd: `/harness-builds/${commit}`,
+    source: `cd '/harness-builds/${commit}'\n${configuration.buildCommand}`,
+    cwd: WORKSPACE_ROOT,
   });
 });
 

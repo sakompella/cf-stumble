@@ -5,7 +5,11 @@ import {
   harnessBuildStep,
   planHarnessBuild,
 } from "../../src/harness-build.js";
-import { HARNESS_DIRECTORY, PROJECTS_DIRECTORY } from "../../src/workspace-layout.js";
+import {
+  HARNESS_DIRECTORY,
+  PROJECTS_DIRECTORY,
+  WORKSPACE_ROOT,
+} from "../../src/workspace-layout.js";
 
 /**
  * What a build is allowed to write in the one shared workspace (ADR-0038). It extracts into scratch
@@ -45,8 +49,12 @@ test("keeps build scratch apart from every repository in the workspace", () => {
     "a harness build must not name a project directory",
   ).toBe(true);
   expect(
-    plan.steps.every((step) => step.cwd === "/" || step.cwd.startsWith(buildDirectory)),
-    "a build step runs at the root or in the directory it isolated",
+    plan.steps.every((step) => step.cwd === WORKSPACE_ROOT),
+    "every build step runs in the workspace, because Computer refuses a working directory outside it",
+  ).toBe(true);
+  expect(
+    harnessBuildStep(plan, "build").source.startsWith(`cd '${buildDirectory}'`),
+    "and the build command changes into its own scratch directory itself",
   ).toBe(true);
   expect(
     harnessBuildStep(plan, "isolate").source,

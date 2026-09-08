@@ -271,9 +271,7 @@ test("refuses a command the build plan does not contain", async () => {
   const workspace = new CommitBuildWorkspace(() => host, HARNESS_BUILD_CONFIGURATION, commit);
 
   await expect(workspace.runCommand("whoami", "/")).rejects.toThrow(/planned steps/u);
-  await expect(workspace.runCommand(plan.steps[0].source, "/workspace")).rejects.toThrow(
-    /planned steps/u,
-  );
+  await expect(workspace.runCommand(plan.steps[0].source, "/")).rejects.toThrow(/planned steps/u);
   await expect(
     workspace.runCommand("./test.sh", HARNESS_BUILD_CONFIGURATION.buildRoot),
   ).rejects.toThrow(/planned steps/u);

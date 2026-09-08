@@ -34,17 +34,24 @@ export const HARNESS_GIT_DIRECTORY = `${HARNESS_DIRECTORY}/.git`;
 export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
 
 /**
- * Where a build extracts a labeled commit. It is a sibling of the repositories, so a build's own
- * `rm -rf` can never name the harness checkout or a project clone: every path a build writes is
- * `${BUILD_SCRATCH_ROOT}/<commit>` and a commit is forty hexadecimal characters.
+ * Where a build extracts a labeled commit: the container's own filesystem, not the workspace.
  *
- * It has to be inside the workspace. A build tried the container's own `/tmp` once, to keep fifty
- * thousand transient `node_modules` files out of the Durable Object storage the workspace lives in,
- * and the build step died with "spawn failed: no such path": what one command writes outside the
- * workspace is not there for the next one. The workspace is the only filesystem the steps of a
- * build share.
+ * Everything under `WORKSPACE_ROOT` is durable, and Computer routes it through the Durable Object
+ * that hosts the workspace. A build installs 186 packages, about fifty thousand files, and doing
+ * that inside the workspace reset the Durable Object mid-build ("Durable Object connection closed
+ * because the object was reset"), which reached the browser as `build-workspace-unavailable`. The
+ * deployed builds that survived took eleven to twenty-one minutes and left the workspace so large
+ * that an ordinary two second command took over five minutes afterwards.
+ *
+ * A build needs scratch space, not durable space. Computer validates a command's working directory
+ * against the workspace, so every build step runs with a working directory inside the workspace and
+ * names this path in the command itself.
+ *
+ * A build still writes only `${BUILD_SCRATCH_ROOT}/<commit>`, where a commit is forty hexadecimal
+ * characters, so its own `rm -rf` can name neither the harness checkout nor a project clone. The
+ * directory belongs to the tenant's own container, so this moves no boundary.
  */
-export const BUILD_SCRATCH_ROOT = `${WORKSPACE_ROOT}/.builds`;
+export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 
 /**
  * The instructions cf-stumble manages for the whole workspace.

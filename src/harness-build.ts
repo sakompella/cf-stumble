@@ -214,6 +214,30 @@ function provisionHarnessRepository(
  * extraction of the same commit. The invariant below refuses a configuration in which the harness
  * checkout would sit inside the directory a build deletes.
  */
+/**
+ * `git archive | tar -x` reports tar's exit code, so a failed archive used to reach the build step
+ * as an empty directory and a confusing compilation error. Writing the archive first makes an
+ * archive failure the step's own failure.
+ *
+ * The metadata flags are not tidiness. The deployed workspace filesystem is Computer's userspace
+ * shim, because a Cloudflare container cannot grant the privileges a kernel FUSE mount needs. That
+ * filesystem refuses `utime`, `chown` and `chmod` on a directory tar has just created, and tar
+ * exits 2 on those errors, which failed every deployed checkout.
+ */
+function checkoutSource(
+  configuration: HarnessBuildConfiguration,
+  directory: string,
+  harnessCommit: HarnessCommit,
+): string {
+  return [
+    "set -eu",
+    `archive=${directory}/.harness-archive.tar`,
+    `git --git-dir=${configuration.harnessGitDir} archive --format=tar -o "$archive" ${harnessCommit}`,
+    `tar -x -m --no-same-owner --no-same-permissions -C ${directory} -f "$archive"`,
+    'rm -f "$archive"',
+  ].join("\n");
+}
+
 export function planHarnessBuild(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
@@ -229,62 +253,28 @@ export function planHarnessBuild(
       {
         name: "provision",
         source: provisionHarnessRepository(configuration, harnessCommit),
-        cwd: "/",
+        cwd: WORKSPACE_ROOT,
       },
       {
         name: "isolate",
         source: `mkdir -p ${configuration.buildRoot} && rm -rf ${directory} && mkdir -p ${directory}`,
-        cwd: "/",
+        cwd: WORKSPACE_ROOT,
       },
       {
         name: "checkout",
-        // `git archive | tar -x` reports tar's exit code, so a failed archive reached the build
-        // step as an empty directory and a confusing compilation error. Writing the archive
-        // first makes an archive failure the step's own failure.
-        //
-        // The metadata flags are not tidiness. The deployed workspace filesystem is Computer's
-        // userspace shim, because a Cloudflare container cannot grant the privileges a kernel FUSE
-        // mount needs. That filesystem rejects `utime`, `chown` and `chmod` on a directory tar has
-        // just created, and tar exits 2 on those errors, which failed every deployed checkout.
-        // The build reads tracked source; none of it needs a preserved timestamp, owner or mode.
-        source: [
-          "set -eu",
-          `archive=${directory}/.harness-archive.tar`,
-          `git --git-dir=${configuration.harnessGitDir} archive --format=tar -o "$archive" ${harnessCommit}`,
-          `tar -x -m --no-same-owner --no-same-permissions -C ${directory} -f "$archive"`,
-          'rm -f "$archive"',
-        ].join("\n"),
-        cwd: "/",
+        source: checkoutSource(configuration, directory, harnessCommit),
+        cwd: WORKSPACE_ROOT,
       },
-      { name: "build", source: configuration.buildCommand, cwd: directory },
+      {
+        // Computer resolves a working directory against the workspace and refuses one outside it,
+        // so the command changes into the scratch directory itself (`workspace-layout.ts`).
+        name: "build",
+        source: `cd ${shellQuote(directory)}\n${configuration.buildCommand}`,
+        cwd: WORKSPACE_ROOT,
+      },
     ],
     moduleMapPath: `${directory}/${configuration.moduleMapPath}`,
   };
-}
-
-/**
- * Read the module map a build wrote, as a command rather than as a filesystem read.
- *
- * The deployed workspace filesystem is Computer's userspace shim, because a Cloudflare container
- * cannot grant the privileges a kernel FUSE mount needs. A file a container process writes is not
- * reliably visible through the workspace filesystem API there: a deployed build ran to exit 0 for
- * eleven minutes and the module map it had just written read as absent. The container shell sees
- * the file the build wrote, so the build reads its own output through the shell.
- *
- * The path is derived from the configuration and a validated commit, never from a request. The
- * symbolic-link refusal keeps the property the filesystem read had: `git archive` can carry a
- * symbolic link, so a harness commit could otherwise name a file outside its own build directory.
- */
-export function readModuleMapSource(plan: HarnessBuildPlan): string {
-  return [
-    "set -eu",
-    `path=${shellQuote(plan.moduleMapPath)}`,
-    'if [ -L "$path" ]; then',
-    '  echo "the module map path is a symbolic link" >&2',
-    "  exit 3",
-    "fi",
-    'cat -- "$path"',
-  ].join("\n");
 }
 
 /** The step of a commit's build plan, named rather than described by its command text. */
