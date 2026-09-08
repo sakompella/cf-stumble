@@ -18,7 +18,7 @@
     "local:access-session": "pnpm exec tsx tools/access-session.mts",
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
     "probe:clean-build": "scripts/probe/clean-build.sh",
-    "harness:browser": "pnpm exec tsx tools/browser-harness/run.mts",
+    "harness:browser": "pnpm exec tsx tools/browser-harness/smoke.mts",
     "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
