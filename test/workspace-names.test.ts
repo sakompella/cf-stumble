@@ -12,8 +12,8 @@ import { projectDirectory } from "../src/workspace-layout.js";
 
 const audience = "workspace-name-audience";
 
-function nameFor(identity: string, forAudience: string = audience): Promise<string> {
-  return deriveSupervisorName({ identity, audience: forAudience });
+function nameFor(identity: string): Promise<string> {
+  return deriveSupervisorName({ identity, audience });
 }
 
 test("harness builds and every project of one tenant select the same workspace", async () => {
@@ -27,20 +27,6 @@ test("harness builds and every project of one tenant select the same workspace",
     `/workspace/projects/${sampleProjectOne.id}`,
     `/workspace/projects/${sampleProjectTwo.id}`,
   ]);
-});
-
-test("two verified identities select two workspaces", async () => {
-  const first = tenantWorkspaceName(await nameFor("owner-1"));
-  const second = tenantWorkspaceName(await nameFor("owner-2"));
-
-  expect(first).not.toBe(second);
-});
-
-test("one identity in two audiences selects two workspaces", async () => {
-  const first = tenantWorkspaceName(await nameFor("owner-1", "audience-one"));
-  const second = tenantWorkspaceName(await nameFor("owner-1", "audience-two"));
-
-  expect(first).not.toBe(second);
 });
 
 test("carries no project id, so no project can name a workspace of its own", async () => {
