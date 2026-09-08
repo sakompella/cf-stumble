@@ -108,3 +108,24 @@ survives the first cancellation request.
 2. T17's diff contract, because it is a product decision.
 3. T16's credit split, because it decides which generation serves.
 4. `.audit/v0/q7-request.md`, the one ask waiting on you.
+
+
+## 7. Gate results per branch
+
+Measured on hp with `pnpm verify` in each worktree. `pnpm verify` runs typecheck, format check, and
+lint *before* the tests, so a style failure means the tests never ran.
+
+| branch | verdict | detail |
+|---|---|---|
+| work/T16 | **green** | 117 test files, 842 tests |
+| work/T19 | **green** | 118 test files, 852 tests (+10 over main) |
+| work/T20 | **green** | 117 test files, 842 tests |
+| work/T15 | style only | 2 lint warnings, 0 errors: "function too long, consider splitting" in the new turn boundary. Tests not reached. |
+| work/T17 | style only | one unformatted file, `test/facet/generation-0/real-process-project-target.ts`. Tests not reached. Formatter has since been run. |
+| work/T18 | style only | 1 lint warning, 0 errors, same "function too long" rule in the harness fixture. Tests not reached. |
+
+No branch has a type error, a broken build, or a failing test that the gate reached. The three
+amber rows are the repository's own warning budget (`--max-warnings=0`) refusing a long function,
+plus one file that missed the formatter. Splitting those two functions is a small mechanical change,
+and it is deliberately left for review rather than done silently, because it reshapes code you are
+about to read.

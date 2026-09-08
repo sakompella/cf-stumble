@@ -39,7 +39,17 @@ Default. Keep the one fixed `@cf/zai-org/glm-5.3-flash` route while proving its 
 Why this is yours. `.audit/design-questions.md` records a preference for OpenAI, while `src/model-route.ts` selects a different provider's model through Workers AI. T4 must observe whether that route satisfies the required interface. Whether the provider preference itself is a release requirement is your decision.
 
 
-## Q7 (root agent, needs an explicit yes) — may an unsupervised agent spend paid Cloudflare budget?
+## Q7 — ANSWERED YES. Approved, and the owner states it was always approved.
+
+Recorded in tracked documentation at `docs/agents/design/computer-integration.md`, section "Owner
+approval for a paid environment". The request itself is `.audit/v0/q7-request.md`. Every criterion
+that was blocked on this is now unblocked; a report that still calls a criterion Q7-blocked is stale.
+The standing rules are the four in that doc section: the account is disposable, local container runs
+are local evidence only, a probe that cannot run states its blocker, and every run keeps its output.
+
+The original question and its five addenda are kept below for the reasoning they carry.
+
+## Q7 (original question, now answered) — may an unsupervised agent spend paid Cloudflare budget?
 
 T1 acceptance criteria 4 and 5 require a real paid probe: deploy a candidate facet, have Computer
 build a module map, load it under the commit-named Worker Loader, cold-start it, run a container
