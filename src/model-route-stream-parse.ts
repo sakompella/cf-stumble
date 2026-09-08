@@ -37,6 +37,32 @@ type MutableToolCallFunction = { name?: string; argumentsDelta?: string };
 /** Same fields as {@link ToolCallDelta}, but mutable while this module builds one. */
 type MutableToolCallDelta = { index: number; id?: string; name?: string; argumentsDelta?: string };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted provider field.
+function stringField(value: unknown): string | undefined {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider field.
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * The `delta` of the first choice, for a provider that streams chat completions rather than
+ * Workers AI's classic `{ response }` events.
+ *
+ * This is where a deployed turn was losing its whole answer. The model streams
+ * `{"choices":[{"delta":{"content":"ready"}}]}` and reports its usage at the top level, so the
+ * route recorded three output tokens and no text, and Pi saved an assistant message with nothing
+ * in it. Only the first choice matters: the route never asks for more than one.
+ */
+function firstChoiceDelta(obj: UntrustedObject): UntrustedObject | undefined {
+  const choices = field(obj, "choices");
+  if (!Array.isArray(choices)) return undefined;
+  const first: unknown = choices.at(0);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted choice entry.
+  if (first === null || typeof first !== "object") return undefined;
+  const delta = field(asUntrusted(first), "delta");
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted delta field.
+  return delta === null || typeof delta !== "object" ? undefined : asUntrusted(delta);
+}
+
 function numberField(obj: UntrustedObject, key: string): number | undefined {
   const value = field(obj, key);
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider chunk field.
@@ -106,9 +132,10 @@ function parseProviderToolCallDeltas(toolCalls: unknown): ToolCallDelta[] {
 }
 
 /**
- * Parse one decoded provider SSE data payload, tolerating either shape this route has reason to
- * expect on `env.AI.run(model, { ..., stream: true })`: Workers AI's classic `{ response }` token
- * events, and OpenAI-chat-completions-shaped `{ tool_calls: [...] }` / `{ usage: {...} }` chunks.
+ * Parse one decoded provider SSE data payload, tolerating both shapes this route sees on
+ * `env.AI.run(model, { ..., stream: true })`: Workers AI's classic `{ response }` token events, and
+ * chat-completion chunks, whose text and tool calls live in `choices[0].delta` while usage stays at
+ * the top level. The deployed model streams the second shape.
  * Unrecognized fields are ignored rather than rejected — this seam degrades, it does not throw,
  * because a provider detail this route does not model must not fail an otherwise-good turn.
  */
@@ -117,14 +144,18 @@ export function parseProviderChunk(raw: unknown): ParsedProviderChunk | undefine
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider chunk.
   if (raw === null || typeof raw !== "object") return undefined;
   const obj = asUntrusted(raw);
+  const delta = firstChoiceDelta(obj);
 
   const response = field(obj, "response");
-  const toolCallDeltas = parseProviderToolCallDeltas(field(obj, "tool_calls"));
+  const content = delta === undefined ? undefined : field(delta, "content");
+  const toolCalls =
+    field(obj, "tool_calls") ?? (delta === undefined ? undefined : field(delta, "tool_calls"));
+  const toolCallDeltas = parseProviderToolCallDeltas(toolCalls);
   const usage = parseProviderUsage(obj);
 
   const parsed: MutableParsedChunk = {};
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted response field.
-  if (typeof response === "string" && response !== "") parsed.textDelta = response;
+  const text = stringField(response) ?? stringField(content);
+  if (text !== undefined) parsed.textDelta = text;
   if (toolCallDeltas.length > 0) parsed.toolCallDeltas = toolCallDeltas;
   if (usage !== undefined) parsed.usage = usage;
   return parsed satisfies ParsedProviderChunk;
