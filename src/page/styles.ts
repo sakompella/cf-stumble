@@ -6,7 +6,8 @@
  * Two rules carry weight rather than taste. The transcript scrolls inside its own box, so a long
  * turn cannot push the composer off the screen. And below 52rem the sidebar leaves the flow
  * entirely, so a narrow window shows the conversation at full width; the toggle button puts the
- * project list back.
+ * project list back. The toggle sits in the sidebar's column but outside the panel that collapses,
+ * so hiding the projects never hides the control that shows them again.
  */
 export const OWNER_PAGE_STYLES = `
   :root { color-scheme: light dark; }
@@ -21,14 +22,16 @@ export const OWNER_PAGE_STYLES = `
   h2 { font-size: 1.05rem; margin: 0 0 0.4rem; }
   h3 { font-size: 0.9rem; margin: 0.6rem 0 0.2rem; text-transform: uppercase; }
   #owner-layout { display: flex; align-items: flex-start; gap: 1rem; }
+  .sidebar-column { display: flex; flex-direction: column; gap: 0.4rem; }
+  #project-sidebar-toggle { align-self: flex-start; }
   #project-sidebar {
     border: 1px solid rgba(128, 128, 128, 0.4);
     border-radius: 6px;
-    flex: 0 0 18rem;
+    box-sizing: border-box;
     padding: 0.75rem;
+    width: 18rem;
   }
   #owner-layout.sidebar-collapsed #project-sidebar { display: none; }
-  .sidebar-head { align-items: baseline; display: flex; gap: 0.5rem; justify-content: space-between; }
   .sidebar-panel { border-top: 1px solid rgba(128, 128, 128, 0.3); margin-top: 0.6rem; }
   #project-list { list-style: none; margin: 0.3rem 0; padding: 0; }
   #project-list li { margin: 0.2rem 0; }

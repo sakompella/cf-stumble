@@ -194,3 +194,30 @@ test("the page asks for no credential and stores none", () => {
   expect(html).not.toContain("document.cookie");
   expect(html).not.toContain("CF_Authorization");
 });
+
+/** The delivered script's own label check, extracted and run rather than matched as text. */
+function controlLabelFrom(script: string): (raw: string) => number | null {
+  const found = /\n {2}function controlLabel\(raw\) \{[\s\S]*?\n {2}\}\n/u.exec(script);
+  if (found === null) {
+    throw new Error("the owner page carries no controlLabel function");
+  }
+  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: the constructed function is the extracted source above, whose only added statement returns `controlLabel`.
+  const made = new Function(`${found[0]}\nreturn controlLabel;`) as () => (
+    raw: string,
+  ) => number | null;
+  return made();
+}
+
+test("a generation label names one whole generation or nothing", () => {
+  const controlLabel = controlLabelFrom(inlinePageScript(ownerPageHtml("test-nonce")));
+
+  // Number.parseInt("1.5") is 1, so a page that parsed the field would activate generation 1 for a
+  // reader who typed something that names no generation at all.
+  expect(controlLabel("2")).toBe(2);
+  expect(controlLabel(" 3 ")).toBe(3);
+  expect(controlLabel("0")).toBe(0);
+  expect(controlLabel("1.5")).toBe(null);
+  expect(controlLabel("-1")).toBe(null);
+  expect(controlLabel("")).toBe(null);
+  expect(controlLabel("two")).toBe(null);
+});

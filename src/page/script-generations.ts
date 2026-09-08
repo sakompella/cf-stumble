@@ -72,6 +72,17 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
         };
   }
 
+  // A generation label names one whole generation. "1.5" names none, and Number.parseInt would
+  // read it as 1 and send a command the reader never asked for.
+  function controlLabel(raw) {
+    var trimmed = String(raw).trim();
+    if (trimmed === "") {
+      return null;
+    }
+    var parsed = Number(trimmed);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  }
+
   function renderControl(ids, result) {
     var payload = result.payload;
     if (!payload || payload.ok !== true) {
@@ -93,8 +104,8 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       setText(ids.status, "refresh the status first");
       return;
     }
-    var label = Number.parseInt(inputValue(ids.labelInput), 10);
-    if (!Number.isSafeInteger(label) || label < 0) {
+    var label = controlLabel(inputValue(ids.labelInput));
+    if (label === null) {
       setText(ids.status, "enter a generation label");
       return;
     }
