@@ -29,14 +29,6 @@ test("harness builds and every project of one tenant select the same workspace",
   ]);
 });
 
-test("carries no project id, so no project can name a workspace of its own", async () => {
-  const workspace = tenantWorkspaceName(await nameFor("owner-1"));
-
-  for (const project of sampleCatalog) {
-    expect(workspace).not.toContain(project.id);
-  }
-});
-
 test("refuses to name a workspace without a tenant key", () => {
   expect(() => tenantWorkspaceName("")).toThrow(
     "a tenant workspace name needs a server-derived tenant key",

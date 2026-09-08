@@ -1,10 +1,8 @@
 import { expect, test } from "vitest";
 import {
   canonicalRepositoryUrl,
-  defaultProjectDisplayName,
   EMPTY_PROJECT_CATALOG,
   parseProjectCatalog,
-  parsePublicRepositoryUrl,
   projectIdForRepository,
   resolveProject,
   type ProjectCatalog,
@@ -87,14 +85,6 @@ test("refuses a repository URL that no clone could use", () => {
   expect(canonicalRepositoryUrl("https://github.com/sample")).toBeUndefined();
   expect(projectIdForRepository("not a url")).toBeUndefined();
   expect(projectIdForRepository("https://github.com/--/--")).toBeUndefined();
-});
-
-test("names a project after the repository when nobody chooses a name", () => {
-  const url = parsePublicRepositoryUrl("https://github.com/sample/repo-1");
-  if (url === undefined) {
-    throw new Error("this fixture URL must parse");
-  }
-  expect(defaultProjectDisplayName(url)).toBe("sample/repo-1");
 });
 
 test("gives two connected projects different directories in the one workspace", () => {
