@@ -42,8 +42,6 @@ export type FacetTerminalFrame =
  * same terms as a tool result: proven fields only, and bounded by the frame limit above.
  *
  * `saved` is the only authoritative success, and it exists only after the thread commit returned.
- * `credited` says whether that turn earned the one completed-real-turn credit
- * (`supervisor/eligibility.ts`), which is a durability fact and not an HTTP one.
  */
 export type ProjectTurnFrame =
   | Readonly<{ kind: "text"; text: string }>
@@ -63,7 +61,7 @@ export type ProjectTurnFrame =
     }>
   | Readonly<{ kind: "diff"; content: string; truncated: boolean }>
   | Readonly<{ kind: "diff-unavailable"; detail: string }>
-  | Readonly<{ kind: "saved"; revision: number; messageCount: number; credited: boolean }>
+  | Readonly<{ kind: "saved"; revision: number; messageCount: number }>
   | Readonly<{
       kind: "turn-failed";
       code: "model-call-limit" | "model-error";

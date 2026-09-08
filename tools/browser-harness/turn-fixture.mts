@@ -73,18 +73,13 @@ function largeToolOutput(): string {
 }
 
 const TERMINAL = {
-  ready: { kind: "saved", revision: 4, messageCount: 6, credited: true },
-  "github-disconnected": { kind: "saved", revision: 4, messageCount: 6, credited: true },
-  "github-awaiting-authorization": {
-    kind: "saved",
-    revision: 4,
-    messageCount: 6,
-    credited: true,
-  },
+  ready: { kind: "saved", revision: 4, messageCount: 6 },
+  "github-disconnected": { kind: "saved", revision: 4, messageCount: 6 },
+  "github-awaiting-authorization": { kind: "saved", revision: 4, messageCount: 6 },
   "turn-failed": { kind: "turn-failed", code: "model-error", saved: true, revision: 4 },
   "save-failed": { kind: "save-failed", code: "stale-revision" },
   "stream-invalid": { kind: "stream-invalid", code: "malformed-frame" },
-  "diff-unavailable": { kind: "saved", revision: 4, messageCount: 6, credited: true },
+  "diff-unavailable": { kind: "saved", revision: 4, messageCount: 6 },
   cancelled: { kind: "cancelled" },
   "timed-out": { kind: "timed-out" },
   "turn-conflict": { kind: "cancelled" },

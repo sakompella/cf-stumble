@@ -7,7 +7,6 @@ import {
   controlPayload,
   parseScenario,
   projectsPayload,
-  recoveryPayload,
   statusPayload,
   submitPayload,
   threadPayload,
@@ -88,7 +87,6 @@ const JSON_ROUTES: readonly Readonly<{
 }>[] = [
   { method: "GET", path: "/api/projects", payload: (scenario) => projectsPayload(scenario) },
   { method: "GET", path: "/api/status", payload: () => statusPayload() },
-  { method: "GET", path: "/api/recovery/latest", payload: () => recoveryPayload() },
   {
     method: "GET",
     path: "/api/github/connection",

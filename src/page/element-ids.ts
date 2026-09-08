@@ -66,19 +66,6 @@ export const OWNER_PAGE_IDS = {
   rollbackStatus: "rollback-status",
   rollbackSentEpoch: "rollback-sent-epoch",
   rollbackEffect: "rollback-effect",
-
-  refreshRecoveryButton: "refresh-recovery-button",
-  recoveryNotice: "recovery-notice",
-  recoveryPresence: "recovery-presence",
-  recoveryId: "recovery-id",
-  recoveryPhase: "recovery-phase",
-  recoveryResult: "recovery-result",
-  recoveryFailedLabel: "recovery-failed-generation-label",
-  recoveryFallbackLabel: "recovery-fallback-generation-label",
-  recoveryAttempts: "recovery-attempts-used",
-  recoveryErrorCount: "recovery-error-count",
-  recoveryStartedAt: "recovery-started-at",
-  recoveryAwaiting: "recovery-awaiting-external-report",
 } as const;
 
 export type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];

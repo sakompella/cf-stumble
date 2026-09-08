@@ -29,7 +29,6 @@ export {
   type ProjectUseResult,
 } from "./project-connections.js";
 export { streamProjectTurn } from "./project-turn.js";
-export { TurnCredits, type CompletedRealTurnCredit, type TurnCreditInput } from "./turn-credit.js";
 export {
   PROJECT_TURN_PROMPT_MAX_LENGTH,
   runProjectTurn,
@@ -37,7 +36,6 @@ export {
   type ProjectTurnRun,
   type ProjectTurnRunProblemCode,
   type RunProjectTurnInput,
-  type TurnAttempts,
   type TurnAttribution,
   type TurnStartContext,
   type TurnThreads,
@@ -53,8 +51,6 @@ export { projectTurnStream, type ProjectTurnStreamInput } from "./turn-stream.js
 export {
   endTurn,
   type StreamEnding,
-  type TurnAttemptRecord,
-  type TurnCreditLedger,
   type TurnEnd,
   type TurnSettlement,
   type TurnThreadWrites,

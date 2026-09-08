@@ -55,7 +55,7 @@ afterEach(async () => {
  * The Supervisor once seeded Generation 0 from the fixture commit and served the fixture module
  * map whenever no generation was active, so `/facet/ping` answered `pong` on a Supervisor that had
  * never been given code. Nothing is built in now: with no active generation there is nothing to
- * serve and nothing to attribute a relay attempt to.
+ * serve.
  */
 test("reports a typed failure and serves nothing when no generation is active", async () => {
   const control = supervisor("no-active-generation-serves-nothing");
@@ -68,10 +68,6 @@ test("reports a typed failure and serves nothing when no generation is active", 
     problem: { code: "no-active-generation" },
   });
   expect(await control.getGenerations(), "no submission means no labeled generation").toEqual([]);
-  expect(
-    await control.getRelayAttempts(),
-    "a request that reached no generation is evidence about none",
-  ).toEqual([]);
 });
 
 test("serves the activated generation's retained artifact", async () => {

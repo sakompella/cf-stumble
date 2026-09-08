@@ -12,18 +12,10 @@ import {
   type GenerationRequest,
 } from "./control/index.js";
 import {
-  DEFAULT_ELIGIBILITY_POLICY,
-  generationEligibility,
-  type EligibilityPolicy,
-  type GenerationEligibility,
-} from "./eligibility.js";
-import {
   ProjectConnections,
   runProjectTurn,
   streamProjectTurn,
   tenantWorkspaceName,
-  TurnCredits,
-  type CompletedRealTurnCredit,
   type FacetTurnHandoff,
   type ConnectRepositoryResult,
   type CredentialWorkspaceNamespace,
@@ -35,7 +27,6 @@ import {
   type ProjectTurnRun,
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
-  type TurnAttribution,
   type TurnStartContext,
 } from "./projects/index.js";
 import {
@@ -45,16 +36,8 @@ import {
   type Generation,
   type PreparationCheck,
 } from "./generations/index.js";
-import { FacetRelay, RelayAttempts, type RelayAttempt } from "./relay/index.js";
+import { FacetRelay } from "./relay/index.js";
 import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
-import {
-  Recovery,
-  type RecoveryEpisode,
-  type RecoveryFailureInput,
-  type RecoveryOperationReport,
-  type RecoveryOperationOutcomeInput,
-  type RecoveryPolicy,
-} from "./recovery/index.js";
 import {
   HarnessArtifacts,
   type BuildWorkspaceNamespace,
@@ -114,10 +97,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
   private readonly generations: Generations;
   private readonly artifacts: HarnessArtifacts;
-  private readonly relayAttempts: RelayAttempts;
-  /** The durable ledger of completed real turns, which is a different fact from relay evidence. */
-  private readonly credits: TurnCredits;
-  private readonly recovery: Recovery;
   private readonly relay: FacetRelay;
   private readonly threads: ProjectThreads;
   /** The tenant's connected repositories, their GitHub authorization, and their provisioning. */
@@ -142,10 +121,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.workspaceName,
     );
     this.control = new GenerationControl(this.generations);
-    this.relayAttempts = new RelayAttempts(ctx.storage);
-    this.credits = new TurnCredits(ctx.storage);
-    this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
-    this.relay = new FacetRelay(this.relayAttempts);
+    this.relay = new FacetRelay();
     this.connections = new ProjectConnections({
       storage: ctx.storage,
       workspaceName: this.workspaceName,
@@ -227,61 +203,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       : this.generations.preparationCheckHistory(generationLabel);
   }
 
-  getRelayAttempts(): readonly RelayAttempt[] {
-    return this.relayAttempts.all();
-  }
-
-  sweepExpiredRelayAttempts(now: number): readonly RelayAttempt[] {
-    return this.relayAttempts.sweepExpired(now);
-  }
-
-  startRecovery(
-    failure: RecoveryFailureInput,
-    policy: RecoveryPolicy,
-    now: number,
-    eligibilityPolicy?: EligibilityPolicy,
-  ): RecoveryEpisode {
-    return this.recovery.start(failure, policy, now, eligibilityPolicy);
-  }
-
-  resumeRecovery(id: number, now: number): RecoveryEpisode {
-    return this.recovery.resume(id, now);
-  }
-
-  reportRecoveryOperation(
-    id: number,
-    key: string,
-    outcome: RecoveryOperationOutcomeInput,
-    now: number,
-  ): RecoveryOperationReport {
-    return this.recovery.reportOperation(id, key, outcome, now);
-  }
-
-  reconcileRecoveryOperation(
-    id: number,
-    key: string,
-    outcome: RecoveryOperationOutcomeInput,
-    now: number,
-  ): RecoveryOperationReport {
-    return this.recovery.reconcileOperation(id, key, outcome, now);
-  }
-
-  getRecoveryEpisode(id: number): RecoveryEpisode | undefined {
-    return this.recovery.get(id);
-  }
-
-  /** The latest recovery report, read only. Reading it starts, resumes, and repairs nothing. */
-  getLatestRecoveryEpisode(): RecoveryEpisode | undefined {
-    return this.recovery.latest();
-  }
-
-  getGenerationEligibility(
-    label: number,
-    policy: EligibilityPolicy = DEFAULT_ELIGIBILITY_POLICY,
-  ): GenerationEligibility {
-    return generationEligibility(label, this.generations, this.relayAttempts.all(), policy);
-  }
-
   /**
    * The tenant's connected repositories, with a GitHub connection status that carries no
    * credential. This is what the page's project sidebar reads.
@@ -348,8 +269,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   /**
    * Run one authenticated project turn and stream it: admit the turn, run it on the generation
-   * that serves, save what Pi ended with, and decide whether it earned a completed-real-turn
-   * credit — all on this side of the boundary.
+   * that serves, and save what Pi ended with — all on this side of the boundary.
    *
    * A client sends a project id and a prompt. It cannot send a tenant, a conversation, a model,
    * or a lease: the tenant is this object, the conversation is the thread this object saved, the
@@ -367,24 +287,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       projectId,
       prompt,
       threads: this.threads,
-      attempts: this.relayAttempts,
-      credits: this.credits,
-      attribution: () => this.servingAttribution(),
+      attribution: () => ({ active: this.generations.active() }),
       start: (project, request, context) => this.startTurnStream(project, request, context),
       now: () => Date.now(),
       leaseMs: PROJECT_TURN_LEASE_MS,
       deadlineMs: PROJECT_TURN_DEADLINE_MS,
     });
-  }
-
-  /**
-   * Every completed real turn this Supervisor has recorded: Pi terminal success with a committed
-   * thread save (goal criterion 6). This is a durability record and not relay evidence, so
-   * `getGenerationEligibility` does not read it and a save failure cannot make a generation
-   * ineligible.
-   */
-  getCompletedRealTurns(): readonly CompletedRealTurnCredit[] {
-    return this.credits.all();
   }
 
   /**
@@ -406,7 +314,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       namespace: this.env.WORKSPACE_HOST,
       signal: context.signal,
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
-      // on, and recorded against, the same generation (`turn-run.ts`).
+      // on the same generation it was admitted against (`turn-run.ts`).
       mount: () => this.mountServing(context.attribution.active),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
@@ -414,27 +322,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
-  /**
-   * The generation a relay attempt is recorded against, read at the moment the work is admitted.
-   * A turn snapshots this once, so an activation while it runs cannot relabel its evidence.
-   */
-  private servingAttribution(): TurnAttribution {
-    const active = this.generations.active();
-    const preparationCheckId = active.generation
-      ? this.generations.latestPreparationCheck(active.generation.label)?.id
-      : undefined;
-    return { active, preparationCheckId };
-  }
-
   /** Relay one request to the generation that serves, or serve nothing when none is active. */
   override async fetch(request: Request): Promise<Response> {
-    const attribution = this.servingAttribution();
-    const mainFacet = await this.mountServing(attribution.active);
+    const mainFacet = await this.mountServing(this.generations.active());
 
     if (mainFacet.isErr()) {
-      return this.relay.recordMountFailure(mainFacet.error, attribution);
+      return this.relay.mountFailureResponse(mainFacet.error);
     }
 
-    return this.relay.forward(request, mainFacet.value.fetcher, attribution);
+    return this.relay.forward(request, mainFacet.value.fetcher);
   }
 }

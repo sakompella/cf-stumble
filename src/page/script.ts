@@ -37,7 +37,6 @@ const OWNER_PAGE_SCRIPT_WIRING = `
   onClick("${ID.cancelTurnButton}", cancelTurn);
   onClick("${ID.freshThreadButton}", startFreshThread);
   onClick("${ID.refreshStatusButton}", refreshStatus);
-  onClick("${ID.refreshRecoveryButton}", refreshRecovery);
   onClick("${ID.submitCandidateButton}", submitCandidate);
   onClick("${ID.activateButton}", function () {
     return runControl("activate");

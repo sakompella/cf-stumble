@@ -41,9 +41,6 @@ export function ownerApiSupervisor(
     prepareGeneration() {
       return Promise.reject(new Error("this test must not reach generation preparation"));
     },
-    getLatestRecoveryEpisode() {
-      return Promise.resolve(void 0);
-    },
     listProjects() {
       return Promise.resolve({ projects: [], github: { state: "disconnected" } });
     },

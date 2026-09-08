@@ -50,7 +50,6 @@ test("the page uses only the owner JSON endpoints, on this origin", () => {
   const html = ownerPageHtml("test-nonce");
 
   expect(html).toContain('"/api/status"');
-  expect(html).toContain('"/api/recovery/latest"');
   expect(html).toContain('"/api/projects"');
   expect(html).toContain('"/api/projects/"');
   expect(html).toContain('"/thread"');
@@ -145,8 +144,8 @@ test("every element the script reads is an element the markup renders", () => {
 test("the sidebar collapses and the generation controls stay in a drawer", () => {
   const html = ownerPageHtml("test-nonce");
 
-  // Q4: the active generation stays visible, and submission, activation, rollback and the recovery
-  // report sit in a compact drawer on the same page.
+  // Q4: the active generation stays visible, and submission, activation and rollback sit in a
+  // compact drawer on the same page.
   expect(html).toContain(`id="${OWNER_PAGE_IDS.sidebarToggle}"`);
   expect(html).toContain(`aria-controls="${OWNER_PAGE_IDS.sidebar}"`);
   expect(html).toContain(`aria-expanded="true"`);
@@ -181,11 +180,4 @@ test("the page asks for no credential and stores none", () => {
   expect(html).not.toContain("sessionStorage");
   expect(html).not.toContain("document.cookie");
   expect(html).not.toContain("CF_Authorization");
-});
-
-test("the page states that recovery repairs nothing by itself", () => {
-  const html = ownerPageHtml("test-nonce");
-
-  expect(html).toContain(`id="${OWNER_PAGE_IDS.recoveryNotice}"`);
-  expect(html).toContain("does not repair a");
 });
