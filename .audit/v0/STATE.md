@@ -5,7 +5,7 @@ Written at the end of the 2026-09-08 overnight finishing run on hp. Durable home
 
 ## Head of main
 
-`d3c6b29`, pushed. `pnpm verify` green: 109 test files, 778 tests, about 56 s.
+`b49a72f`, pushed. `pnpm verify` green: 109 test files, 778 tests, about 56 s.
 `pnpm harness:browser` green: 41 cases, 41 passed.
 
 ## The deployment
@@ -49,9 +49,9 @@ in 0.26 s with no build. `.audit/v0/evidence/deployed-generation-loop.md` quotes
 
 - The Cloudflare Access application (D81). One owner action: create the application, add the owner
   policy, read the `sub` claim from the first login. `docs/deploy.md` has the steps.
-- The deploy button end to end. Only Cloudflare's own fork and provisioning screen is left; it
-  needs an interactive login. The tracked configuration itself is proved to provision from nothing
-  (D84).
+- The deploy button end to end, recorded as the owner's step. Only Cloudflare's own fork and
+  provisioning screen is left, and it needs an interactive dashboard login and a second GitHub
+  account. The tracked configuration itself is proved to provision from nothing (D84).
 
 ## Rules earned in this run
 

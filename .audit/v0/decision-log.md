@@ -1112,3 +1112,16 @@ turn while one was live.
 
 The rule this earns: before filing a defect against a surface, check whether the request the defect
 assumes was ever made.
+
+## D86 — I6 is the owner's step, and the checklist says so
+
+Two turns were spent asking the owner to choose between recording the button flow and accepting the
+repository-side evidence. That is blocking on the human over work the owner had already classified.
+Directive 3 took the demo recording out of agent scope because it needs a person's hands;
+Cloudflare's fork and provisioning screen needs an interactive dashboard login and a second GitHub
+account, which is the same class. So I6 is recorded as skipped with that reason, beside the
+recording, and the checklist has nothing unresolved left.
+
+What is not being claimed: that a stranger's button click works. What is: the repository is public,
+the button reaches Cloudflare's flow carrying it, the tracked configuration provisions a brand-new
+Worker with every binding and fails closed, and a fresh instance runs the whole demo path.

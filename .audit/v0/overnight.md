@@ -37,8 +37,8 @@ and building it is off the critical path (handoff decision 14)`.
 
 ## Legend
 
-`[x]` done. `[~]` in progress with evidence. `[ ]` not started. `blocked:` and `skip:` carry a
-stated reason.
+`[x]` done. `[-]` skipped, with the reason on the line. `[~]` in progress. `[ ]` not started.
+Nothing is left in the last two states.
 
 ## Items
 
@@ -187,16 +187,19 @@ stated reason.
       The first authenticated request provisioned the workspace and cloned the harness repository,
       and the first submission labeled generation 0 through the ordinary path with no special-case
       machinery. Everything above happened on that instance.
-- [~] I6 Prove the button flow end to end against a clean account. `blocked: Cloudflare's fork and
-      provisioning screen needs an interactive browser login and a second account, so no agent can
-      finish it.` Everything either side of that screen is now proved. Before it: the repository is
-      public, the button image serves, and the button URL reaches Cloudflare's
+- [-] I6 Prove the button flow end to end against a clean account. `skip: the only step left is
+      Cloudflare's own fork and provisioning screen, which needs an interactive dashboard login and
+      a second GitHub account. That is a human's hands, the same class of work as the demo
+      recording the owner took out of agent scope in directive 3. Faking it or claiming it is not
+      an option, so it is recorded as the owner's step.`
+      Everything either side of that screen is proved. Before it: the repository is public, the
+      button image serves, and the button URL reaches Cloudflare's
       `workers-and-pages/create/deploy-to-workers` flow carrying this repository. What the screen
       consumes: the tracked `wrangler.jsonc` provisioned a brand-new Worker with both Durable
-      Object namespaces and their migrations, the container application, and every binding, and
-      that Worker failed closed with no configuration exactly as the guide says (section 7 of
-      `.audit/v0/evidence/deployed-generation-loop.md`). The probe Worker was deleted afterwards.
-      After it: a fresh instance with empty storage runs the whole demo path.
+      Object namespaces and their SQLite migrations, the container application and every binding,
+      and that Worker failed closed with no configuration exactly as the guide says. The probe
+      Worker was deleted afterwards. After it: a fresh instance with empty storage ran the whole
+      demo path. Sections 7 and 8 of `.audit/v0/evidence/deployed-generation-loop.md`.
 - [x] J1 `work/T17` dropped, per decision 13. It is a `wip(...)` commit from a worker that was
       killed, based on a `main` from before ten merges, and it changes `vitest.config.ts` to add a
       Node test pool. Not green as it stands, so decision 13 says drop. The gap it aimed at is
@@ -205,8 +208,10 @@ stated reason.
 - [x] J2 Decision log current in `.audit/v0/decision-log.md` (D75 to D81); `.audit/v0/STATE.md`
       rewritten for this run.
 - [x] J3 `pnpm verify` green at the head of `main`, and `main` pushed. 108 test files, 776 tests.
-- [x] J4 Out of scope, stated: the demo recording is human made. `skip: owner directive 3`. The log
-      evidence the human would narrate is partly captured; see F3.
+- [-] J4 The demo recording. `skip: owner directive 3 makes the video human work.` The two log
+      clips the narration needs are captured, in section 4 and section 5 of
+      `.audit/v0/evidence/deployed-generation-loop.md`, and screenshots of the deployed page are in
+      `/tmp/page-probe/` on hp.
 
 ## Where this run ends
 
