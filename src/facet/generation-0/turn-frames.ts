@@ -3,6 +3,7 @@ import { isPlainObject } from "./plain-values.js";
 import { TOOL_RESULT_DISPLAY_MAX_BYTES, TOOL_RESULT_DISPLAY_MAX_LINES } from "./turn-policy.js";
 import type { AgentEvent, AgentMessage } from "@cf-stumble/pi";
 import type { PiAgentTurnState } from "./pi-agent-turn.js";
+import type { WorkspaceDiff } from "./workspace-diff.js";
 
 /**
  * One frame of a turn's byte stream.
@@ -45,6 +46,19 @@ export type FacetTurnFrame =
   | Readonly<{ kind: "completed"; state: PiAgentTurnState }>
   | Readonly<{ kind: "failed"; code: "model-call-limit" | "model-error"; state: PiAgentTurnState }>
   | Readonly<{ kind: "rejected"; code: "invalid-project-capability" | "invalid-turn-request" }>;
+
+/**
+ * The frame that carries a turn's own diff: the repository's answer, or the reason it has none.
+ *
+ * It lives beside the frame type rather than inside the turn loop because two callers need the
+ * same mapping — the loop that publishes it, and the Node integration test that runs the diff
+ * against a real Git repository and checks the frame a reader would receive.
+ */
+export function diffFrame(diff: WorkspaceDiff): FacetTurnFrame {
+  return diff.available
+    ? { kind: "diff", content: diff.content, truncated: diff.truncated }
+    : { kind: "diff-unavailable", detail: diff.detail };
+}
 
 function assistantText(message: AgentMessage): string {
   if (message.role !== "assistant") return "";

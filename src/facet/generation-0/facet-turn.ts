@@ -3,13 +3,12 @@ import { parseFacetTurnRequest, type FacetTurnRequest } from "./facet-turn-reque
 import { createPiAgentTurnState, runPiAgentTurn } from "./pi-agent-turn.js";
 import { leaseProjectCapability, type ProjectCapabilityLease } from "./project-capability.js";
 import { createRouteStreamFn, ROUTE_MODEL } from "./route-stream.js";
-import { TurnFrames } from "./turn-frames.js";
+import { diffFrame, TurnFrames } from "./turn-frames.js";
 import { mutatesWorkspace, readWorkspaceDiff } from "./workspace-diff.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { Generation0Capabilities } from "./capabilities.js";
 import type { PiAgentTurnOutcome } from "./pi-agent-turn.js";
 import type { FacetTurnFrame } from "./turn-frames.js";
-import type { WorkspaceDiff } from "./workspace-diff.js";
 
 export type { FacetTurnRequest } from "./facet-turn-request.js";
 export type { FacetTurnFrame } from "./turn-frames.js";
@@ -24,12 +23,6 @@ function outcomeFrame(outcome: PiAgentTurnOutcome): FacetTurnFrame {
   return outcome.ok
     ? { kind: "completed", state: outcome.state }
     : { kind: "failed", code: outcome.problem.code, state: outcome.state };
-}
-
-function diffFrame(diff: WorkspaceDiff): FacetTurnFrame {
-  return diff.available
-    ? { kind: "diff", content: diff.content, truncated: diff.truncated }
-    : { kind: "diff-unavailable", detail: diff.detail };
 }
 
 async function pumpTurn(
