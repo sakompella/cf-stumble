@@ -34,11 +34,21 @@ export const HARNESS_GIT_DIRECTORY = `${HARNESS_DIRECTORY}/.git`;
 export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
 
 /**
- * Where a build extracts a labeled commit. It is a sibling of the repositories, so a build's own
- * `rm -rf` can never name the harness checkout or a project clone: every path a build writes is
- * `${BUILD_SCRATCH_ROOT}/<commit>` and a commit is forty hexadecimal characters.
+ * Where a build extracts a labeled commit.
+ *
+ * It sits outside the workspace root, and that is the point. The workspace is durable: Computer
+ * keeps every file under `WORKSPACE_ROOT` in the Durable Object's own SQLite storage, so a build
+ * that installed inside it wrote about fifty thousand transient `node_modules` files into durable
+ * storage. A deployed build took eleven to twenty-one minutes, the container was recycled part way
+ * through, and afterwards an ordinary two second workspace command took over five minutes. A build
+ * needs a scratch directory, not a durable one, so it uses the container's own filesystem and
+ * leaves nothing behind that a later request has to read past.
+ *
+ * A build still writes only `${BUILD_SCRATCH_ROOT}/<commit>`, where a commit is forty hexadecimal
+ * characters, so its own `rm -rf` can name neither the harness checkout nor a project clone. The
+ * directory is the container's, and a container belongs to one tenant, so this moves no boundary.
  */
-export const BUILD_SCRATCH_ROOT = `${WORKSPACE_ROOT}/.builds`;
+export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 
 /**
  * The instructions cf-stumble manages for the whole workspace.
