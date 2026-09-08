@@ -1,5 +1,7 @@
 # Product overview
 
+> **Superseded for v0:** Handoff decisions 6 and 7 remove R2 cache, recovery, eligibility, and turn-credit behavior from version 0.
+
 cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main and recovery harnesses both start from Pi-derived forks, running on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
 
 The product is meant first for one person. It should grow around that person's projects, instructions, working habits, and accumulated context. Coding is its primary use, not a permanent limit on what the harness may help with.

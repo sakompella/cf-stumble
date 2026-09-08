@@ -1,5 +1,7 @@
 # Computer integration
 
+> **Superseded for v0:** Handoff decision 6 removes R2 cache and its rebuild requirements from version 0.
+
 cf-stumble uses Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. ADR-0026 records the decision.
 
 ## Pinned pair
@@ -73,11 +75,10 @@ Nothing else lives there, so clearing it can destroy no checkout. The harness di
 owner's editable clone: a build reconciles it and fetches into it, and refuses rather than deletes
 when it finds a populated directory that is not that repository.
 
-Two builds of one commit cannot delete each other's files. Each tenant builds in its own container,
-which removes the cross-tenant case that a single global build workspace created, and
-`WorkspaceHostModuleMapBuilder` admits one build per commit at a time, so a second request for a
-commit already building joins that build. Nothing is queued, deferred, or retried. Whether Computer
-permits overlapping container operations at all is a separate paid question.
+Two builds of one commit cannot delete each other's files. The owner builds in one workspace
+container. `WorkspaceHostModuleMapBuilder` admits one build per commit at a time, so a second request
+for a commit already building joins that build. Nothing is queued, deferred, or retried. Whether
+Computer permits overlapping container operations at all is a separate paid question.
 
 ## Harness build preconditions
 

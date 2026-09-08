@@ -1,10 +1,12 @@
 # First implementation plan
 
+> **Superseded for v0:** Handoff decisions 6 and 7 remove R2 cache, recovery, promotion rules, and relay records from version 0.
+
 **Status: retained for implementation history and local evidence. `feature-map.md` now defines the version 0 completion scope and cut line.** The locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed. This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
 
-What existed at the end of this plan: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), epoch-checked requests with a request-deduplication journal, a relay that records one attempt for each turn and derives known-good eligibility from terminal outcomes (ADR-0031), and a bounded recovery episode that picks an evidence-backed fallback (ADR-0032). ADR-0030 now replaces the request journal with direct generation commands.
+What existed at the end of this plan: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), and epoch-checked requests with a request-deduplication journal. ADR-0030 replaces the request journal with direct generation commands. Handoff decisions 6 and 7 later cut R2 cache, relay records, promotion rules, and recovery behavior from version 0.
 
-The local module-map store does not satisfy ADR-0034. It must move to an evictable R2 cache and rebuild cache misses through Computer before cf-stumble relies on bounded artifact storage. The main remaining gap is authenticated control transport. Nothing authenticates a principal yet, because the transport that carries a request from a browser or from the main facet remains open.
+The module map now stays in Supervisor SQLite. The main remaining gap is authenticated control transport. Nothing authenticates a principal yet, because the transport that carries a request from a browser or from the main facet remains open.
 
 Start with local workerd tests, then use the paid account for behavior that local tests cannot prove. Build one small end-to-end path before broadening the harness.
 
@@ -18,11 +20,11 @@ Start with local workerd tests, then use the paid account for behavior that loca
 
 4. **Exercise generation requests.** Submit one harness revision as a generation candidate, then request activation of a named existing generation. The supervisor must allocate identities, validate requests, perform or reject state changes, and record the results. The requester must not be able to write protected state directly.
 
-5. **Run one real conversation.** After the spike selects a model egress path, run a real coding turn against a cloned project repository. Persist the conversation route, generation number, and probation count, then exercise the selected UI transport through a disconnect or retry case before relying on it. Do not count a response as a completed real turn from its HTTP status alone: a response can start successfully and fail while streaming. Record what the supervisor observes when a response stream completes, fails, or remains unresolved after a client disconnect, then choose the real-turn rule and its bound before probation depends on it.
+5. **Run one real conversation.** After the spike selects a model egress path, run a real coding turn against a cloned project repository. Persist the conversation route and generation number. Do not count a response as a completed real turn from its HTTP status alone. A response can start successfully and fail while streaming.
 
-6. **Establish recovery.** Define a small set of external failures for the first recovery loop, trigger one in the vertical path, and validate the user-controlled `AGENTS.md` and recovery instructions before use. The recovery harness may select a previously successful generation or materialize a repair generation; after the chosen bound, it must return to the last known-good generation and record a recovery report.
+6. **Keep manual rollback.** A failed candidate leaves the active generation serving. An owner may return to an earlier generation that ran before. Do not add automatic repair or promotion behavior.
 
-7. **Add the first UI.** Keep it to the conversation, current generation and reliability evidence, recovery reports, and checked activation or rollback requests. Broader administration and development interfaces can wait.
+7. **Add the first UI.** Keep it to the conversation, current generation, and checked activation or rollback requests. Broader administration and development interfaces can wait.
 
 ## Completion evidence
 
@@ -32,19 +34,18 @@ The vertical path is complete when a paid deployment proves all of the following
 - Normal traffic and the startup check exercise the same proposed supervisor-to-facet boundary.
 - A specific harness commit can receive a generation label and become a generation candidate without granting the requester direct recovery authority.
 - The main harness can work with durable Computer files while project and harness Git histories remain separate.
-- A generation can gather evidence toward becoming known good without hard-coding an arbitrary turn threshold.
-- A defined external failure produces a recovery report and returns to a known-good generation after the chosen repair bound.
+- A failed candidate leaves the active generation serving.
+- Manual rollback loads the stored module map for an earlier generation that ran before.
 
 ## Open choices before implementation commits to them
 
-ADRs 0028 through 0032 settle the startup check, the artifact shape, direct generation requests, the relay-attempt policy and the recovery bounds. Each of those records what it does not settle. The rest of this list stands.
+ADRs 0028 through 0030 settle the startup check, artifact shape, and direct generation requests. Each record states what it does not settle. The rest of this list stands.
 
 - The supervisor-to-facet interface and the startup check that fits it.
-- What counts as a completed real turn, including 4xx and 5xx responses, streams, and disconnects. The supervisor must not treat a successful HTTP status as enough evidence: a stream can fail after its headers arrive, and a client disconnect can leave a forwarded response unresolved. The spike must measure those cases before it chooses a completion rule or a bound for an abandoned forward.
+- What counts as a completed real turn, including 4xx and 5xx responses and streams. The Supervisor must not treat a successful HTTP status as enough evidence because a stream can fail after its headers arrive.
 - The model egress or gateway choice.
 - HTTP, SSE, or WebSocket for the UI transport.
-- Repair count and operation timeouts.
-- How Computer rebuilds executable Worker modules, the R2 cache budget and eviction rule, and cold-request behavior after a cache miss. ADR-0027 selects the labeled harness commit ID as the Worker Loader identity, and ADR-0034 selects R2 as the cache.
+- How Computer builds executable Worker modules from the labeled harness commit and stores the resulting map in Supervisor SQLite.
 
 Do not settle these by implication in an implementation. The paid-account spike should produce evidence for each choice, and the resulting decision should be recorded before the dependent path grows.
 

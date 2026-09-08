@@ -1,5 +1,7 @@
 # Represent an executable generation as a module map
 
+> **Superseded for v0:** Handoff decision 6 replaces the R2 cache named below with Supervisor SQLite module-map storage.
+
 > **Review:** Agent-only
 
 The executable form of a generation is a module map: named Worker modules plus the name of the entry module. A single-file bundle is expressed as a one-module map rather than as a second shape.

@@ -21,7 +21,7 @@ A Dynamic Worker facet that runs one generation of the main harness.
 _Avoid_: supervisor, recovery harness
 
 **Generation**:
-A specific, labeled Git commit in the harness repository. The Supervisor records preparation checks, activation, and recovery evidence against it.
+A specific, labeled Git commit in the harness repository. The Supervisor records preparation checks and activation against it.
 _Avoid_: ordinary commit, revision, version
 
 **Generation 0**:
@@ -33,20 +33,8 @@ The generation currently selected and running as the main harness.
 **Last active generation**:
 The generation that most recently ran as the main harness when no generation is currently active.
 
-**Known-good generation**:
-A generation for which the supervisor has enough evidence to consider it a safe recovery target. The required evidence and threshold remain open.
-
-**Probation**:
-A period in which a generation may run but has not yet gathered enough evidence to become known good.
-
 **Real turn**:
-A user interaction that may contribute evidence about a generation. A successful HTTP status alone does not prove that a streamed interaction completed.
-
-**Relay attempt**:
-The Supervisor's durable record of one forwarded request, including its generation attribution, response status, and terminal outcome. Eligibility derives from terminal relay attempts in the current evidence era.
-
-**Recovery report**:
-The supervisor's durable record of a recovery attempt, its error, and its result.
+A user interaction. A successful HTTP status alone does not prove that a streamed interaction completed.
 
 ## Repositories and files
 
