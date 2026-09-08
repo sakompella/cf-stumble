@@ -60,19 +60,15 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       return Result.err({ code: "build-workspace-unavailable", harnessCommit });
     }
 
-    console.error(
-      "PROBE step",
-      step.name,
-      "exit",
-      output.exitCode,
-      "cwd",
-      step.cwd,
-      "stdout",
-      output.stdout.slice(-1500),
-      "stderr",
-      output.stderr.slice(-1500),
-    );
     if (output.exitCode !== 0) {
+      // A build failure reaches the browser as a step name and an exit code, which says nothing
+      // about what the command reported. The tail of the step's own output is the only account of
+      // why the build failed, and it exists nowhere else once the build directory is cleared.
+      console.error(`harness build step ${step.name} exited ${output.exitCode}`, {
+        harnessCommit,
+        stdout: output.stdout.slice(-2000),
+        stderr: output.stderr.slice(-2000),
+      });
       return Result.err({
         code: "build-step-failed",
         harnessCommit,
@@ -92,7 +88,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     try {
       encoded = await this.workspace.readFile(path);
     } catch (error) {
-      console.error("PROBE read failed", path, String(error));
+      console.error(`harness build wrote no module map at ${path}`, String(error));
       return Result.err({ code: "build-output-missing", harnessCommit });
     }
 
