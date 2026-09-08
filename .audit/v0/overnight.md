@@ -137,10 +137,13 @@ stated reason.
       active generation kept serving. Rollback then loaded the stored map in 0.26 s with no build.
       Both are quoted with their raw responses in
       `.audit/v0/evidence/deployed-generation-loop.md`.
-- [x] G1 Sidebar lists the one project and the harness. done: `15b3b40`, merged as `6a0c776`. One
-      union in `src/selectable-projects.ts`; the harness variant has no repository URL, so no call
-      site can clone, authorize or provision it, and `selectedWorkingDirectory` is the only place
-      that knows the two cases apart. The chat stream and generation controls already existed.
+- [x] G1 The page, deployed and in a real browser. done: `15b3b40`, merged as `6a0c776`, and then
+      driven against the deployment with headless Chromium and the Access token as the
+      `CF_Authorization` cookie. The sidebar lists `harness /workspace/harness`, clicking it sets
+      the conversation to that project, the drawer reads the real active generation (label 3,
+      commit `a199797`, ready, epoch 13), four page-driven turns completed and saved, and the
+      transcript carries the earlier coding turn with its tool calls and diff after a reload. Zero
+      console errors. Section 8 of `.audit/v0/evidence/deployed-generation-loop.md`.
 - [x] G2 Merged web test case list. done: `.audit/v0/web-test-cases.md`, 40 cases over six
       surfaces, 12 must and 28 should, merged from independent opus-5 and sol sets with one
       disagreement kept explicit.

@@ -1093,3 +1093,22 @@ was deleted afterwards. The remaining gap is Cloudflare's own screen, which need
 login, and the fork itself, which needs a second GitHub account.
 
 Recorded so nobody re-opens the question as if the repository were the unknown part.
+
+## D85 — the page, proved against the deployment, and one defect that was not one
+
+The 41 browser cases drive the real page against a stub. This closes the remaining gap: headless
+Chromium against the deployment itself, with the Access token as the `CF_Authorization` cookie a
+signed-in browser would send. The sidebar lists the harness with its working directory, selecting
+it switches the conversation, the drawer reads the real active generation, four page-driven turns
+completed and saved, and the transcript survives a reload with its tool calls and diff. No console
+errors.
+
+The near-miss is worth keeping. Every probe run showed `turn-state: running` while the same turn
+through `curl` took 1.9 s, which reads like a page defect. It was the probe. A run that kills the
+browser mid-stream abandons its turn, the lease holds the project to its deadline, and the page
+guards Send on the thread's `turnActive`. `wrangler tail` proved it: in the run that looked stuck
+there was no turn POST at all, only the page's own reads. The page had refused to start a second
+turn while one was live.
+
+The rule this earns: before filing a defect against a surface, check whether the request the defect
+assumes was ever made.

@@ -228,3 +228,56 @@ GET /            with a credential  500  Unauthorized   (invalid-configuration)
 The probe Worker and its container application were then deleted, so the account is back to one
 Worker and one container application. What remains unproved about the button is Cloudflare's fork
 and provisioning screen itself, which needs an interactive login.
+
+## 8. The real page, in a real browser, against the deployment
+
+The 41 browser cases drive the real page against a stub owner API. This is the page against the
+deployment itself: headless Chromium, the Access token set as the `CF_Authorization` cookie the way
+a signed-in browser sends it, and nothing else faked.
+
+```
+document.title                     "cf-stumble"
+#owner-page                        present
+#project-list > li                 ["harness/workspace/harness"]
+#project-list-status               "no repository connected yet"
+click the harness entry            #conversation-project becomes "harness"
+active-generation-label            3
+active-generation-commit           a199797e1dd61828ced853c8c0c1b9876ce396f7
+active-generation-status            ready
+generation-epoch                   13
+console errors                     0
+```
+
+That is demo step 1 and demo step 2 against the deployment. The drawer shows the generation this
+run built, activated and rolled back to, read from the deployed Supervisor rather than a fixture.
+
+Then a turn, driven by the page's own prompt box and Send button rather than by `curl`:
+
+```
+#turn-state            "running"
+thread afterwards      revision 16, 50 messages, turnActive false
+transcript             "you Reply with exactly: page probe ok."
+                       "assistant page probe ok."
+                       "you Reply with exactly: page probe two ok."
+                       "assistant page probe two ok."
+```
+
+Two page-driven turns completed and were saved. The transcript on the next load also carries the
+whole earlier coding turn, its tool calls and its diff, so the conversation survives a reload.
+
+Four page-driven turns completed and saved across these runs. Every one of them was sent by the
+page, streamed by the deployment and written to the thread.
+
+One measured behavior, and a correction I nearly filed as a page defect. Each probe run saw
+`running` at capture time while the reply landed later, and the same turn through `curl` takes
+1.9 s. That is not page latency. A probe that closes the browser mid-stream abandons its turn, the
+turn lease then holds the project until its deadline, and the page guards its own Send button on
+the thread's `turnActive`. So a probe that fires Send three seconds after selecting a project races
+the previous probe's lease. `wrangler tail` settled it: in the run where the page appeared stuck,
+there was **no `POST /api/projects/.../turn` at all**, only the page's own `GET` of the status,
+projects and thread. The page had correctly refused to start a second turn. The lease and the guard
+were both doing their job, and the probe was the thing at fault.
+
+Screenshots for the narration are in `/tmp/page-probe/` on hp (`01-owner-page.png`,
+`02-after-turn.png`). They are not committed, because `.audit/` is gitignored and the repository
+holds no binaries.
