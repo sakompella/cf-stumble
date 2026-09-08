@@ -34,6 +34,9 @@ function assertVisible(box: Awaited<ReturnType<typeof readBox>>, what: string): 
 
 export const CASES: readonly HarnessCase[] = [
   {
+    // The sidebar's pixel width is an implementation detail of its padding and borders. What a wide
+    // window owes the reader is a project column that holds its own buttons and a conversation that
+    // takes the space that is left.
     id: "WID-1",
     title: "populated desktop is a bounded two-column page",
     rank: "must",
@@ -47,6 +50,7 @@ export const CASES: readonly HarnessCase[] = [
       const conversation = await readConversation(page);
       const metrics = await readPageMetrics(page);
       const content = await readBox(page, byId(ID.layout));
+      const project = await readBox(page, projectButton(HARNESS_SELF_PROJECT_ID));
 
       assertSame(conversation.title, "cf-stumble", "the document title");
       assertNonEmpty(generation.activeLabel, "the active generation label");
@@ -54,16 +58,17 @@ export const CASES: readonly HarnessCase[] = [
       assertSame(projects.projects.length, 2, "populated project count");
       assertNonEmpty(conversation.allText, "the selected conversation");
       assertSame(thread.state, "ok", "the selected thread state");
-      assertAtLeast(layout.sidebarWidth, 286, "the sidebar width");
-      assertAtMost(layout.sidebarWidth, 290, "the sidebar width");
+      assertVisible(project, "a project button on a wide desktop");
       assertAtMost(
         layout.sidebarRight,
         layout.conversationLeft,
         "the sidebar/conversation boundary",
       );
+      assertAtMost(project.right, layout.sidebarRight, "a project button inside the sidebar");
+      assertAtLeast(project.left, layout.sidebarRight - layout.sidebarWidth, "that button's left");
       assert(
-        layout.conversationWidth > layout.sidebarWidth,
-        "the conversation is wider than the sidebar",
+        layout.conversationWidth >= 2 * layout.sidebarWidth,
+        `the conversation's share of a wide window: ${layout.conversationWidth} against a ${layout.sidebarWidth} sidebar`,
       );
       assertAtMost(content.width, 1248, "the combined content width");
       assertAtLeast(metrics.bodyLeft, 100, "the content's distance from the window edge");

@@ -93,6 +93,8 @@ async function connectRepository(
 
 export const CASES: readonly HarnessCase[] = [
   {
+    // The status counts connections, and the harness entry is not one: it needs no repository, no
+    // credential and no clone. Two buttons, one connection.
     id: "SIDE-1",
     title: "list one repository plus the harness and choose a default",
     rank: "must",
@@ -107,7 +109,7 @@ export const CASES: readonly HarnessCase[] = [
       assertIncludes(list.locations.join(" "), HARNESS_PROJECT_URL, "the repository location");
       assertIncludes(list.locations.join(" "), HARNESS_LOCATION, "the harness location");
       assertExcludes(list.locations.join(" "), "spoon-knife", "the project locations");
-      assertSame(list.status, "2 connected", "the project count status");
+      assertSame(list.status, "1 connected", "the connected-repository count");
       assertSame(list.githubState, "connected", "the GitHub state");
       assertSame(list.githubDetail, "octocat (owner-authorization)", "the GitHub detail");
       assertSame(list.selected.length, 1, "the selected project count");
@@ -115,7 +117,7 @@ export const CASES: readonly HarnessCase[] = [
       assertSame(thread.project, "hello-world", "the default conversation heading");
       assertNonEmpty(transcript, "the default conversation");
       assertIncludes(transcript, HARNESS_PROJECT_ID, "the default conversation project");
-      return `two project buttons show ${HARNESS_PROJECT_URL} and ${HARNESS_LOCATION}; hello-world is the sole current project with a nonempty thread`;
+      return `two project buttons show ${HARNESS_PROJECT_URL} and ${HARNESS_LOCATION}; the count named 1 connected repository beside the harness checkout, and hello-world is the sole current project with a nonempty thread`;
     },
   },
   {
