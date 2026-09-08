@@ -2,7 +2,7 @@ import { parseGenerationLabel } from "../../src/supervisor/generations/index.js"
 import { deriveGenerationEligibility } from "../../src/supervisor/eligibility.js";
 import type { EligibilityPolicy } from "../../src/supervisor/eligibility.js";
 import type { PreparationCheck } from "../../src/supervisor/generations/index.js";
-import type { RelayAttempt } from "../../src/supervisor/relay/index.js";
+import type { RelayAttempt, TurnTerminal } from "../../src/supervisor/relay/index.js";
 
 export const policy: EligibilityPolicy = {
   minimumCreditedTurns: 3,
@@ -36,6 +36,7 @@ export function relayAttempt(
   responseStatus: number | undefined,
   finishedAt: number,
   attribution: AttemptAttribution = {},
+  turnTerminal?: TurnTerminal,
 ): RelayAttempt {
   const base = {
     id,
@@ -54,6 +55,10 @@ export function relayAttempt(
       }
       return { ...base, outcome, responseStatus: undefined, finishedAt };
     case "body-completed":
+      if (responseStatus === undefined) {
+        throw new Error("body attempt must have a response status");
+      }
+      return { ...base, outcome, responseStatus, finishedAt, turnTerminal };
     case "body-failed":
       if (responseStatus === undefined) {
         throw new Error("body attempt must have a response status");

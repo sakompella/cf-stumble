@@ -1,5 +1,5 @@
 import { earnsCompletedRealTurnCredit } from "../eligibility.js";
-import type { RelayAttempt, RelayOutcome } from "../relay/index.js";
+import type { RelayAttempt, RelayOutcome, TurnTerminal } from "../relay/index.js";
 import type { ProjectThreadResult } from "../threads/index.js";
 import type { TurnCreditInput } from "./turn-credit.js";
 import type { FacetTerminalFrame, ProjectTurnFrame, TurnStreamProblem } from "./turn-frames.js";
@@ -18,7 +18,12 @@ export type TurnThreadWrites = Readonly<{
 /** The relay record of this turn, read back at the commit and settled once at the end. */
 export type TurnAttemptRecord = Readonly<{
   byId(attemptId: number): RelayAttempt | undefined;
-  settle(attemptId: number, outcome: Exclude<RelayOutcome, "pending">, observedAt: number): void;
+  settle(
+    attemptId: number,
+    outcome: Exclude<RelayOutcome, "pending">,
+    observedAt: number,
+    turnTerminal?: TurnTerminal,
+  ): void;
 }>;
 
 export type TurnCreditLedger = Readonly<{ record(input: TurnCreditInput): void }>;
@@ -30,10 +35,17 @@ export type StreamEnding =
   | Readonly<{ kind: "cancelled" }>
   | Readonly<{ kind: "timed-out" }>;
 
-/** What the turn is written down as: one frame for the browser, one outcome for the relay row. */
+/**
+ * What the turn is written down as: one frame for the browser, and the relay row's two facts.
+ *
+ * `outcome` is the transport fact. `turnTerminal` is what the turn itself said, and it is present
+ * only when the Supervisor proved a terminal frame: a cancelled, timed-out, or protocol-breaking
+ * stream never said how its turn ended, so it records nothing about one.
+ */
 export type TurnEnd = Readonly<{
   frame: ProjectTurnFrame;
   outcome: Exclude<RelayOutcome, "pending">;
+  turnTerminal: TurnTerminal | undefined;
 }>;
 
 /** Everything the settlement needs. `projectTurnStream` holds it for the length of one turn. */
@@ -55,9 +67,10 @@ function released(
   turn: TurnSettlement,
   frame: ProjectTurnFrame,
   outcome: TurnEnd["outcome"],
+  turnTerminal?: TurnTerminal,
 ): TurnEnd {
   turn.threads.abandonTurn(turn.projectId, turn.leaseId);
-  return { frame, outcome };
+  return { frame, outcome, turnTerminal };
 }
 
 /**
@@ -130,14 +143,35 @@ function saveFailedTurn(
   };
 }
 
+/**
+ * The three endings a generation can state, each recorded as the clean body it was and as the
+ * turn it actually was.
+ *
+ * The terminal kind travels to the relay row unchanged, including for a `completed` turn whose
+ * save then failed: Pi did complete the turn, and the storage failure that followed is the
+ * Supervisor's and is answered by withholding the credit in {@link saveCompletedTurn} instead.
+ */
 function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): TurnEnd {
   switch (frame.kind) {
     case "rejected":
-      return released(turn, { kind: "turn-rejected", code: frame.code }, "body-completed");
+      return released(
+        turn,
+        { kind: "turn-rejected", code: frame.code },
+        "body-completed",
+        "rejected",
+      );
     case "failed":
-      return { frame: saveFailedTurn(turn, frame.code, frame.messages), outcome: "body-completed" };
+      return {
+        frame: saveFailedTurn(turn, frame.code, frame.messages),
+        outcome: "body-completed",
+        turnTerminal: "failed",
+      };
     case "completed":
-      return { frame: saveCompletedTurn(turn, frame.messages), outcome: "body-completed" };
+      return {
+        frame: saveCompletedTurn(turn, frame.messages),
+        outcome: "body-completed",
+        turnTerminal: "completed",
+      };
     default: {
       // oxlint-disable-next-line eslint/no-underscore-dangle -- Exhaustiveness guard.
       const _exhaustive: never = frame;
@@ -147,13 +181,17 @@ function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): TurnEn
 }
 
 /**
- * The turn's ending as one frame for the browser and one outcome for the relay record.
+ * The turn's ending as one frame for the browser and the facts the relay record keeps.
  *
- * The two are different judgements about different things. A generation that streamed a clean
- * turn served a good response even when the Supervisor could not save the thread, so a save
- * failure settles `body-completed` and withholds the credit instead. A generation that broke the
- * frame protocol settles `body-failed`: a stream that never wrote a terminal frame did not
- * complete a turn, which is the completion evidence ADR-0031 recorded as missing.
+ * These are different judgements about different things. A generation that streamed a clean turn
+ * served a good response even when the Supervisor could not save the thread, so a save failure
+ * settles `body-completed` and withholds the credit instead. A generation that broke the frame
+ * protocol settles `body-failed`: a stream that never wrote a terminal frame did not complete a
+ * turn, which is the completion evidence ADR-0031 recorded as missing.
+ *
+ * A rejection and a model failure sit between the two. Both served the browser a clean body, so
+ * neither is a failed one, and neither completed a turn, so neither is credit either: the turn
+ * terminal on the record is what keeps them out of both counts.
  */
 export function endTurn(turn: TurnSettlement, ending: StreamEnding): TurnEnd {
   switch (ending.kind) {

@@ -173,7 +173,7 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
         );
         const end = endTurn(input, ending);
         publish(end.frame);
-        input.attempts.settle(input.attempt.id, end.outcome, input.now());
+        input.attempts.settle(input.attempt.id, end.outcome, input.now(), end.turnTerminal);
       } finally {
         input.bound.signal.removeEventListener("abort", stopReading);
         input.bound.stop();
