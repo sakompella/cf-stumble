@@ -50,6 +50,11 @@ export interface ProjectTurnInput extends ProjectTurnRequest {
   readonly namespace: ProjectWorkspaceNamespace;
   readonly mount: MountServingGeneration;
   readonly provision: ProvisionSelectedProject;
+  /**
+   * The admitted turn's one cancellation. Starting a turn is four calls that can each be lost, and
+   * this is what stops the next one from being made once the turn is over.
+   */
+  readonly signal: AbortSignal;
 }
 
 /**
@@ -68,6 +73,9 @@ export type ProjectTurnRefusal =
 export type ProjectTurnStart =
   | Readonly<{ ok: true; frames: ReadableStream<Uint8Array> }>
   | Readonly<{ ok: false; reason: ProjectTurnRefusal }>;
+
+/** A turn that did not begin. The four steps below all end here when the turn is already over. */
+const NOT_STARTED = { ok: false, reason: "turn-not-started" } as const satisfies ProjectTurnStart;
 
 /** The mount problem arrives as a code because a project knows nothing about module maps. */
 function mountRefusal(problemCode: string): "no-active-generation" | "mount-failed" {
@@ -102,14 +110,23 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
   if (!resolved.ok) {
     return { ok: false, reason: resolved.reason };
   }
+  if (input.signal.aborted) {
+    return NOT_STARTED;
+  }
 
   const mounted = await input.mount();
   if (mounted.isErr()) {
     return { ok: false, reason: mountRefusal(mounted.error.code) };
   }
+  if (input.signal.aborted) {
+    return NOT_STARTED;
+  }
 
   if (!(await input.provision(resolved.project))) {
     return { ok: false, reason: "workspace-unavailable" };
+  }
+  if (input.signal.aborted) {
+    return NOT_STARTED;
   }
 
   let capability: ProjectRpcTargetContract;
@@ -118,6 +135,9 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
   } catch {
     return { ok: false, reason: "workspace-unavailable" };
   }
+  if (input.signal.aborted) {
+    return NOT_STARTED;
+  }
 
   try {
     const frames = await mounted.value.fetcher.startTurn(
@@ -125,8 +145,28 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
       input.request,
       projectDirectory(resolved.project.id),
     );
-    return { ok: true, frames };
+    return endedBeforeItBegan(input, frames);
   } catch {
-    return { ok: false, reason: "turn-not-started" };
+    return NOT_STARTED;
   }
+}
+
+/**
+ * A turn whose bound passed while the facet was starting. The facet answered with a live stream
+ * and has already begun the work behind it, so the stream is cancelled rather than returned: that
+ * is what ends a turn nobody will read (`facet/generation-0/facet-turn.ts`).
+ */
+function endedBeforeItBegan(
+  input: ProjectTurnInput,
+  frames: ReadableStream<Uint8Array>,
+): ProjectTurnStart {
+  if (!input.signal.aborted) {
+    return { ok: true, frames };
+  }
+
+  frames.cancel().then(
+    () => {},
+    () => {},
+  );
+  return NOT_STARTED;
 }

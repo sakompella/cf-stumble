@@ -30,6 +30,11 @@ const OPENING = { prompt: "do the work", state: null };
  */
 const provisioned = (): Promise<boolean> => Promise.resolve(true);
 
+/** The signal of a turn that is still within its bound, which is what an ordinary start carries. */
+export function runningTurn(): AbortSignal {
+  return new AbortController().signal;
+}
+
 /**
  * The Workspace Host stand-in in its own isolate, plus the namespace view the Supervisor's project
  * path uses. `fileText` reads a named workspace directly, so an isolation check does not depend on
@@ -66,6 +71,7 @@ export function turnFor(
   projectId: unknown,
   /** Only a second tenant's Supervisor supplies a different name; no request can. */
   tenantWorkspace: string = workspaceName,
+  signal: AbortSignal = runningTurn(),
 ): Promise<ProjectTurnStart> {
   return streamProjectTurn({
     namespace: workspaces.namespace,
@@ -75,6 +81,7 @@ export function turnFor(
     workspaceName: tenantWorkspace,
     projectId,
     request: OPENING,
+    signal,
   });
 }
 
@@ -88,6 +95,7 @@ export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<P
     workspaceName,
     projectId: sampleProjectOne.id,
     request: OPENING,
+    signal: runningTurn(),
   });
 }
 
