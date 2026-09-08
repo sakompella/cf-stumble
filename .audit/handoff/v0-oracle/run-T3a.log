@@ -1,0 +1,22 @@
+T3a is complete and committed.
+
+## Result
+
+**Commit `a1bcb7e`** on `work/T3a` — `refactor(workspace): hold every repository in one tenant workspace`.
+- `pnpm verify`: **101 files, 681 tests** pass (main: 96 / 658). The pre-commit hook ran the same gate.
+- `scripts/probe/clean-build.sh` at `a1bcb7e`: two identical module maps, sha256 `d88c820412f2597bdc4fb6a64c786679e2f7192e6f44c862b2cb06c805617995`.
+- Report written to `.audit/v0/tasks/T3a.md`. No paid action of any kind.
+
+## What changed
+
+- **One owning module.** `src/workspace-layout.ts` owns the layout: `/workspace` root, `/workspace/harness`, `/workspace/projects/<id>`, `/workspace/AGENTS.md`, `/workspace/.builds/<commit>`. Both former `PROJECT_ROOT` definitions now import `WORKSPACE_ROOT`, so the addressed-path translation and the facet path-escape guard cannot drift.
+- **One tenant key.** The workspace name comes from the Supervisor's own server-derived name, used for harness builds and every project. `HARNESS_BUILD_WORKSPACE_NAME` and the project-id hashing are deleted. A browser cannot supply a tenant: `ProjectTurnRequest` is only `{projectId, request}`.
+- **Selection sets cwd only.** The project directory is derived server-side and passed as a third argument of `startTurn`. A turn can read a sibling repository; it cannot leave the workspace root or reach another tenant.
+- **Provisioning deletes nothing it did not create.** A populated non-repository fails the step; only an empty root is removed before a staged clone moves in. The same rule now protects the editable harness checkout.
+- **The isolate race is closed deterministically**: per-tenant scratch plus one build per commit in flight. No scheduler, alarm, or queue.
+- **Access**: owner-only enforcement already existed (the roadmap's premise was wrong — the report says so). I added the verified scope for T6a, refused caller-supplied tenant fields with `400`, and recorded the exact Access application and policy for T12a in `scripts/deploy/README.md`.
+
+## Two things the wave manager should know
+
+1. `src/supervisor/supervisor.ts:87`: I **left a written interface** for T6a rather than wiring a catalog — the seam is `new ProjectThreads(ctx.storage, catalog)`, and `streamProjectTurn` takes the same optional `catalog`.
+2. `src/facet/generation-0/facet-turn.ts` and its three tests changed (the working-directory argument). T7 owns that file later; the diff is small and mechanical.

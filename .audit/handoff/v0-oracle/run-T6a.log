@@ -1,0 +1,25 @@
+T6a is done and committed.
+
+## Result
+
+**Commit `af9a562`** on `work/T6a` — `feat(projects): connect GitHub repositories with a testable credential`.
+
+- `pnpm verify` passes: 111 test files, **797 tests** (base: 103 / 698).
+- `scripts/probe/clean-build.sh` at this commit: two identical maps, sha256 **`8e821d8635751e9bb75db7042aa4925f97b77225378f2d3338134724191327ec`** — same as main.
+- No paid spend: no deploy, no Computer workspace, no Cloudflare or GitHub account calls. All GitHub traffic in tests goes to a scripted provider with the fake token `ghp_cfstumbleFAKE…`.
+- Report written to `/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T6a.md`.
+
+## What changed
+
+- **Catalog (E4).** `ProjectCatalog` is now `readonly Project[]`; the two `example.invalid` entries are deleted. A project's id comes from its canonical repository URL, so order and display name carry no identity and a duplicate connection converges. The tenant's list is a Supervisor SQLite table.
+- **Authorization (ADR-0039, Q2).** GitHub device flow in the Supervisor. The browser sees only the verification URL and user code. Redemption is bound to the verified Access scope T3a supplies, the device code is deleted on use, and state-changing routes refuse a foreign `Origin`.
+- **Credential.** New `WorkspaceHost.credential` surface installs the token into the workspace's own `gh` config through a private staging file outside every repository. The Supervisor stores a login name, source, and time — never a token. `GH_TOKEN` is the documented fallback for unattended runs, recorded as `configured-token`.
+- **Wiring (E9).** `provisionProjectWorkspace` now has callers: on connection and on every turn. `ProjectThreads` and `streamProjectTurn` both read the one stored catalog.
+- **Routes.** `GET /api/projects`, `POST /api/projects/connect`, `GET /api/github/connection`, and the two authorization POSTs; thread routes now resolve against stored projects.
+
+## Open blockers (all in the report)
+
+1. `gh` presence on the pinned image is unverified — **blocked: awaiting owner approval for a paid probe**. Missing `gh` reports `tooling-missing`; nothing guesses.
+2. `GITHUB_OAUTH_CLIENT_ID` does not exist yet (owner step, T6b); `GH_TOKEN` still works.
+3. The device-flow calls have never met the real GitHub; T6b is the first live exchange.
+4. Noted but not fixed (out of scope): `src/page/markup.ts` still defaults its project input to `project-one`, which now names nothing — T10 should read the list from `GET /api/projects`.

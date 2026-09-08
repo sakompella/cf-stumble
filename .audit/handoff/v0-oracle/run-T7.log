@@ -1,0 +1,28 @@
+T7 is complete, committed on green, and reported.
+
+## Result
+
+**Commit:** `133b275731021f882463c5bca223bc586f5c438d` on `work/T7`
+**Gate:** `pnpm verify` passes — 105 test files, 698 tests (baseline was 103 / 698). The pre-commit hook re-ran it.
+**Clean-build probe:** two builds of the commit produced identical module maps, new sha256 `18cea22b3a4afdb8f9847195dcd128f267a6c4296ac0583c75185b663f304668` (was `8e821d86...`; the map moved because the facet changed).
+**Report:** `/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T7.md`
+
+## The three traps
+
+**1. `git_diff` was not deleted blindly.** Its replacement landed in the same commit. Pi's `bash` tool has no command allowlist and the project clone is a normal checkout, so `git diff` runs. A tool-result frame now carries bounded content at 2,000 lines / 51,200 bytes — the same limits Pi's own tools apply, so a frame never truncates a result Pi already bounded. A forty-line diff arrives whole; a 4,000-line diff is cut, marked, and keeps its end.
+
+**2. `vendor/**` was never hand-edited.** I edited the facade source, the upstream mirror, the `ai-facade.ts` shim, and the conformance template in `tools/vendor-pi.mts`, then ran `--refresh-generated`. `verify:vendor` passes. The conformance check did reject two of my thirteen asserts — `Models` and `compact` — because `Models.stream` returns a class with private fields, which two separate declaration emits can never match. I dropped those two asserts and recorded why in the generator rather than forcing them. The other eleven pass.
+
+**3. The zero context window makes compaction fire always, not never.** `shouldCompact` is `tokens > contextWindow - reserveTokens`, so a zero window gives a threshold of `-16384` and an empty conversation exceeds it. E7 guessed the trigger was unreachable; it is the opposite. The facet therefore passes its own declared 64,000-token budget to Pi's own decision function. The honest source for a real number is `src/model-route.ts`, which pins `@cf/zai-org/glm-5.3-flash` — but that file is T4's, so I recorded it as a follow-up instead of inventing a value.
+
+## Notable design points
+
+- Pi's `compact` needs a `Models` value, so `route-models.ts` presents the host route as one and reports every provider, auth, and deferred member as unavailable — the same shape `createFacetExecutionEnv` already takes with `ExecutionEnv`.
+- Pi's `Agent` silently drops a compaction summary with its default message conversion, so the turn now hands Pi its own `convertToLlm`. Without that the summary would never reach the model.
+- Compaction runs before the turn, not between model calls: Pi's `transformContext` hook changes only the request and hands the untransformed messages back, so a compaction placed there would never be saved.
+
+## Deliberately not done
+
+No edits to `src/workspace/host.ts` (T6a owns it this wave) — the audited deletion list for `WorkspaceHost.execute` is committed as `docs/agents/design/legacy-workspace-execute-deletions.md` for T9. No HTTP turn surface (T9). No `ROUTE_MODEL` change (T4). `ModelCapability.run` stays, because removing it means changing `src/model-route.ts`.
+
+No paid calls were made. Nothing in T7 needed one.

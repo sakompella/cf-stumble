@@ -1,75 +1,66 @@
 # cf-stumble v0 — run state
 
-Living index. Written before acting, updated after each step. Durable home `.audit/v0/` (gitignored).
-Last consolidated 03:00.
+Written at the end of the 2026-09-08 overnight finishing run on hp. Durable home `.audit/v0/`
+(gitignored). The checklist is `.audit/v0/overnight.md`; read it first.
 
-## Objective
+## Head of main
 
-Goal id `c0552403`. Ten measurable done-criteria and the cut line: `.audit/v0/goal.md`.
-Dispatch from `.audit/v0/roadmap-v0.approved.md` (the reviewed roadmap; `roadmap-v0.md` is the
-oracle's original and is superseded).
+`2849183`, pushed. `pnpm verify` green: 109 test files, 778 tests, about 56 s.
+`pnpm harness:browser` green: 41 cases, 41 passed.
 
-## Read these, in this order
+## The deployment
 
-1. `MORNING-BRIEF.md` — what happened and what needs the owner.
-2. `questions.md` — Q7 blocks every paid step; Q2-Q6 have reversible defaults already applied.
-3. `decision-log.md` — D1..D52, every choice and why.
-4. `evidence/E1..E11` — findings confirmed from source, each tied to a goal criterion.
-5. `review-opus-round1.md` — adversarial plan review, verdict SHIP WITH FIXES.
-6. `wave1-integration-notes.md` — collisions and coverage gaps.
-7. `acceptance-checks.md` — how a worker's claim is falsified.
+`https://cf-stumble.adityakompella.workers.dev`, account `0817758e93f2d197d0c512d94f276650`.
+Deploy from hp with `pnpm exec wrangler deploy -c /tmp/wrangler-hp.jsonc`; that file is a copy of
+`wrangler.jsonc` with an absolute `main`, the managed-registry image digest, observability, and the
+probe `vars`. Rebuild it from the tracked config after any change to `wrangler.jsonc`.
 
-## Main branch
+The container image is built and pushed by hand on hp, because podman rewrites the manifest on push
+and wrangler then asks Cloudflare for a digest the registry does not have (D76):
 
-`0161f91`. `pnpm verify` green: 113 test files, 797 tests (baseline was 93/642).
-`scripts/probe/clean-build.sh` green on merged main: two identical maps, sha256 `18cea22b...`.
+```
+podman build --platform linux/amd64 -f containers/computerd.Dockerfile \
+  -t registry.cloudflare.com/<account>/cf-stumble-workspacehost:vN .
+pnpm exec wrangler containers push registry.cloudflare.com/<account>/cf-stumble-workspacehost:vN \
+  --path-to-docker "$(command -v podman)"
+```
 
-## Task board
+Then read the digest the registry actually stored from
+`https://registry.cloudflare.com/v2/<account>/cf-stumble-workspacehost/manifests/vN` with
+credentials from `wrangler containers registries credentials registry.cloudflare.com --pull --json`,
+and put that digest in the override config.
 
-| id | title | tier | status |
-|---|---|---|---|
-| T1a | Clean-commit build correctness + regression proof | opus-5 | **MERGED** `d1f2412` |
-| T2 | Remove generation request journaling (ADR-0030) | sonnet-5 | **MERGED** `c3e0d5a` |
-| T5 | Thread completion requires the admitting lease | opus-5 | **MERGED** `567d25e` |
-| T3a | One tenant workspace holds every repository | opus-5 | running |
-| T4 | Streaming interface across route -> facet -> RPC | sonnet-5 | **MERGED** `638890e` |
-| T1b | Paid capability / build / load gate | opus | BLOCKED on Q7 |
-| T3b | Shared-container concurrency experiment | opus | BLOCKED on Q7 |
-| T6a | Connected projects, unsupervised half | opus-5 | **MERGED** `0161f91` |
-| T6b | Owner-run device authorization | owner | waits for T6a, T1b |
-| T7 | Pi instructions, compaction, diff, turn events | opus-5 | **MERGED** `54b02e2` |
-| T8 | R2 cache age rule | sonnet | mostly paid; waits for Q7 |
-| T9 | Own the saved streamed turn + its HTTP surface | opus-5 | **MERGED `eb7c575`** on the third attempt (T9b). 116 files / 829 tests. Probe sha moved `18cea22b` -> `313ddf26` as expected: facet code changed. |
-| T13 | the turn's diff is the harness's, not the model's (from review 2.1) | opus-5 | **MERGED `3a77907`** 116 files / 834 tests, probe sha `e9c3008e`. Follow-up: T10 must render the two new frames. |
-| review r2 | opus-5 high (sol quota dead ~4.5 days) | adversarial review of the MERGED state | **DONE** -> `.audit/v0/review-round2.md`. Verdict SOUND WITH FIXES. |
-| T10 | Connected project conversation on one page | sonnet | waits for T2, T6a, T9 |
-| T11 | Workflow under failures and races | opus | waits for T3a, T8, T9 |
-| T12a/b | Deploy, evidence, demo, release | opus/owner | last |
+Deployed probes authenticate with the disposable token in `.audit/local/access-session.json`, sent
+as `Cf-Access-Jwt-Assertion`. The Worker verifies it through its ordinary path against an injected
+JWKS (D77). Mint a new one with `pnpm local:access-session`; `LOCAL_ACCESS_AUD` chooses the
+audience, and a new audience means a new Supervisor and a new empty workspace.
 
-## Blockers against the ten criteria
+## What is proved deployed
 
-| evidence | fault | criterion | state |
-|---|---|---|---|
-| E1 | clean build of a labeled commit failed | 7, 8 | CLOSED, proven (E10, E11) |
-| E2 | lease fencing was dead code | 6 | CLOSED, merged |
-| E3 | three encodings of the old workspace layout | 3 | CLOSED, merged `43e7ac8` |
-| E4 | `ProjectCatalog` is a fixed two-tuple type | 3 | CLOSED, merged `0161f91` |
-| E5/E7 | model route has no streaming interface | 4 | CLOSED, merged `638890e` |
-| E6 | no HTTP route reaches any turn method | 4, 5, 6 | T9 running |
-| E9 | no credential path; compaction unexported | 3, 5 | CLOSED, merged |
+The whole demo path except the parts that need a browser and a human: the owner page, the
+refusals, both Durable Objects, the tenant's own Computer container, a commit built into a stored
+module map, a candidate cold-checked through the Worker Loader, activation, a stale epoch refused,
+a real coding turn that read and edited a file and ran a command with its diff and thread saved, a
+deliberately broken candidate that failed while the active generation kept serving, and a rollback
+in 0.26 s with no build. `.audit/v0/evidence/deployed-generation-loop.md` quotes every response;
+`deployed-plumbing-probe.md` has the raw timings and the failures on the way.
 
-## Operating rules earned this run
+## What is blocked
 
-- Branch every new task from CURRENT main, never the run's original base (D48).
-- Await any cleanup a later step depends on; `bash()` is non-blocking (D37).
-- Workers are `prime-agent` shell-outs, not RLM children. `pgrep -f "wt/<id>"` finds only the
-  wrapper — use the session file's mtime and size as the liveness signal (D50).
-- After every merge, re-run the PROBE as well as the gate. The gate hides the E1 fault (D51).
-- Objective checks must assert the PROPERTY, never a presumed implementation (D40).
-- No paid spend until Q7 is answered. Blocked, never faked (D27).
+- The Cloudflare Access application (D81). One owner action: create the application, add the owner
+  policy, read the `sub` claim from the first login. `docs/deploy.md` has the steps.
+- The deploy button end to end. Needs a browser login and a second clean account.
+- The workspace `write` tool returns a backend error (D82). A turn works around it with `bash`.
 
-## Heartbeat
+## Rules earned in this run
 
-Label `cf-stumble-v0`, every 15 min. Detect finished workers, run objective checks, merge in a
-collision-safe order gating between every merge, dispatch the next unblocked task, and run the
-`gpt-5.6-sol` round-2 review after 05:57 when the Codex quota resets.
+- Wrap every podman, computerd or foreground server command in `timeout` and redirect its output.
+  One unbounded `podman run` blocked the session for about three hours.
+- A deployed failure is worth more than a local one. Five faults in this repository were invisible
+  to `pnpm verify`, to the local container preflight, and to the browser harness.
+- Never deploy immediately before a long probe. A deploy rolls the container out and kills whatever
+  it was doing: two probe failures were nothing but that.
+- Give a worker the verified fault with file and line, and an explicit way to report the brief
+  wrong. Three workers corrected their briefs, and each correction was right.
+- A test the review calls decorative may still bind real behavior. Mutate the production line
+  before deleting it: five such tests turned red under the right mutation and were kept.

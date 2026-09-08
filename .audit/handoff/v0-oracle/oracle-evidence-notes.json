@@ -1,0 +1,13 @@
+{
+  "head": "d6ff2380487a60f410c568272635d99f30560d14",
+  "gate": "pnpm verify exit 0; 93 files, 642 tests; 19.13 seconds total",
+  "main_gaps": [
+    "turn RPC separate from thread lease and relay",
+    "buffered model and whole-message frames; no tool-start/output frames",
+    "shared workspace still per-project names and global build name",
+    "static two-placeholder project catalog and no GitHub auth",
+    "clean git archive build lacks dependency install/Pi build/fetch",
+    "managed AGENTS file is above inaccessible /project root; Pi Agent does not load instructions or compact",
+    "paid evidence file proves only R2/model"
+  ]
+}

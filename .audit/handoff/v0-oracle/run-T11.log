@@ -1,0 +1,17 @@
+**Progress update**
+
+Plan: split T11's seven acceptance criteria across four workers in this worktree, then I integrate, run the gate, verify the "what would break this test" mutations myself, commit, and write the report.
+
+Done so far:
+- Baseline `pnpm verify` passes: 117 test files / 841 tests (the brief said 118 files; the test count matches).
+- Baseline `scripts/probe/clean-build.sh` ran twice: both module maps sha256 `e9c3008ea0dc4829bfec8fc21881310f8e7426f5abae37e1bb421c78d3e0a456` — matches the brief.
+- Surveyed the turn path, lease store, credit ledger, routes, and existing test coverage so the new tests attack real gaps, not covered ground.
+
+Running now (4 workers, disjoint new files):
+- `workflow` — AC1: real `runProjectTurn` + real facet in a Worker Loader isolate over workerd RPC (read/edit/check/diff, saved continuation after replacing the facet), plus the T13 diff-failure seam.
+- `races` — AC2/AC3: two projects, two clients, expired-lease takeover, late finish/abandon, fresh-thread ABA, and the credit-vs-eligibility split from E12.
+- `generations` — AC4/AC5: generation change during a turn, broken candidate, rollback, and the module-map cache cases.
+- `credentials` — AC6: fake-token containment across facet env, HTTP bodies, logs, saved threads, plus owner-only authority.
+
+No production edits are allowed by the workers; any real fault comes back to me as a finding with file:line. I will report again when the workers reply.
+Autonomous quality gate still failing after attempt 1/3: exited 1; autonomous limit reached: timeoutMs reached (20866088/10800000)

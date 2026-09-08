@@ -1,0 +1,15 @@
+## Summary
+
+T4 is complete. On branch `work/T4` (worktree `/tmp/cf-stumble-wt/T4`), commit **`e4d1d9cfc3367493b04db3b0149bcbad855deac4`**.
+
+**What changed:** The Workers AI model route now has a real streaming interface. `ModelRoute.runStream` calls `env.AI.run(model, {..., stream: true})` and translates the provider's Server-Sent Events into a small closed `ModelStreamEvent` union (text delta, tool-call delta, done, error), encoded as plain NDJSON bytes across the Worker RPC boundary (matches the existing plain-value RPC discipline, ADR-0035). `route-stream.ts` now drives this incrementally through a new `TurnAssembler`, pushing Pi's real `start`/`text_*`/`toolcall_*`/`done`/`error` event protocol as data arrives, instead of buffering one whole reply and pushing it as a single event. The old buffered path (`ModelRoute.run`) is kept only because a T7-owned legacy caller still needs it; it's marked `@deprecated` for T7 to delete alongside that caller.
+
+**Vendored Pi helpers:** evaluated all three named in the brief. Kept `createAssistantMessageEventStream` (already the right container). Rejected `createGatewayBindingFetch` (needs an AI Gateway resource that doesn't exist in this repo) and `streamSimple` (drives the OpenAI SDK against a real HTTPS endpoint with an API key — contradicts this route's binding-only, credential-free design). Hand-rolled a minimal SSE parser instead, with the reasoning recorded in the report.
+
+**Fixes along the way:** `validateRequest`'s 1 MiB bound now measures actual UTF-8 bytes instead of `string.length` (a real bug — under-counted multi-byte text).
+
+**Tests:** two new test files (`test/model-route-stream.test.ts`, `test/facet/generation-0/route-stream.test.ts`) cover split UTF-8, split tool-call arguments, truncated streams, provider errors, mid-stream failure (with partial content preserved), and cancellation both before and mid-stream. `pnpm verify` passes: 95 files / 659 tests (up from 642 baseline).
+
+**Honest gap:** whether Workers AI's real `stream: true` output yields incremental tool-call fragments or one final chunk is unverified — blocked awaiting owner approval for a paid probe, per the task's own instructions. The parser is written to produce a correct result either way.
+
+Full report with per-criterion evidence is at `.audit/v0/tasks/T4.md`.

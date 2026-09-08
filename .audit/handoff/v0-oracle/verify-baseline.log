@@ -1,0 +1,290 @@
+$ pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test
+$ pnpm --filter @cf-stumble/pi build
+$ tsx build.mts
+$ pnpm exec tsx tools/vendor-pi.mts --check
+$ pnpm exec tsx tools/verify-project-protocol.mts
+$ tsc --noEmit
+$ oxfmt --check
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 289ms on 293 files using 10 threads.
+$ oxlint --type-aware --max-warnings=0
+Found 0 warnings and 0 errors.
+Finished in 719ms on 239 files with 282 rules using 10 threads.
+$ pnpm exec tsx tools/build-generation-0.mts
+Wrote build/module-map.json (876056 bytes of module source)
+$ pnpm exec tsx tools/build-loaded-execution-env-fixture.mts
+Wrote build/loaded-execution-env-fixture.json (768866 bytes of module source)
+Wrote build/loaded-facet-turn-fixture.json (860507 bytes of module source)
+Wrote build/loaded-project-workspaces-fixture.json (29957 bytes of module source)
+$ vitest run
+
+ RUN  v4.1.11 /Users/aditya/repos/projects/cf-stumble
+
+Using secrets defined in .env
+Using secrets defined in .env
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |node| test/harness-commit.props.test.ts (5 tests) 29ms
+Using secrets defined in .env
+ ✓ |node| test/supervisor/generations/generation.props.test.ts (3 tests) 11ms
+ ✓ |node| test/supervisor/generations/decisions.props.test.ts (7 tests) 19ms
+ ✓ |node| test/supervisor/eligibility.props.test.ts (2 tests) 11ms
+Using secrets defined in .env
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |node| test/supervisor/artifacts/module-map.props.test.ts (2 tests) 14ms
+Using secrets defined in .env
+uncaught exception; source = Uncaught (in promise); stack = Error: WorkspaceContainerAPI: DO is not container-enabled (check wrangler.jsonc)
+    at new WorkspaceContainerAPI (/Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+computer@file+vendor+cloudflare-computer-0.3.0.tgz_supports-color@10.2.2_zod@4.4.3/node_modules/@cloudflare/computer/src/backends/container/container-host.ts:134:13)
+    at new WorkspaceHost (/Users/aditya/repos/projects/cf-stumble/src/workspace/host.ts:61:23)
+    at DurableObject.Wrapper.<computed> (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:536:22)
+    at getDurableObjectRPCProperty (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:507:47)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:364:21
+uncaught exception; source = Uncaught (in promise); stack = Error: facet failed before headers
+    at MainFacet.fetch (main-facet.js:52:13)
+uncaught exception; source = Uncaught; stack = Error: constructor exploded
+    at new MainFacet (main.js:6:11)
+Annotating with brokenness; internalMessage = jsg.Error: constructor exploded; brokennessReason = broken.constructorFailed
+uncaught exception; source = Uncaught (in promise); stack = Error: WorkspaceContainerAPI: DO is not container-enabled (check wrangler.jsonc)
+    at new WorkspaceContainerAPI (/Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+computer@file+vendor+cloudflare-computer-0.3.0.tgz_supports-color@10.2.2_zod@4.4.3/node_modules/@cloudflare/computer/src/backends/container/container-host.ts:134:13)
+    at new WorkspaceHost (/Users/aditya/repos/projects/cf-stumble/src/workspace/host.ts:61:23)
+    at DurableObject.Wrapper.<computed> (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:536:22)
+    at getDurableObjectRPCProperty (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:507:47)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:364:21
+uncaught exception; source = Uncaught (in promise); stack = Error: WorkspaceContainerAPI: DO is not container-enabled (check wrangler.jsonc)
+    at new WorkspaceContainerAPI (/Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+computer@file+vendor+cloudflare-computer-0.3.0.tgz_supports-color@10.2.2_zod@4.4.3/node_modules/@cloudflare/computer/src/backends/container/container-host.ts:134:13)
+    at new WorkspaceHost (/Users/aditya/repos/projects/cf-stumble/src/workspace/host.ts:61:23)
+    at DurableObject.Wrapper.<computed> (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:536:22)
+    at getDurableObjectRPCProperty (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:507:47)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:364:21
+uncaught exception; source = Uncaught; stack = Error: first request exploded
+    at MainFacet.fetch (main.js:4:19)
+ ✓ |workers| test/supervisor/recovery/reporting.test.ts (4 tests) 1042ms
+   ✓ rejects startup passes for the wrong repaired commit or generation label  331ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/generation-candidates.test.ts (6 tests) 1149ms
+Using secrets defined in .env
+uncaught exception; source = Uncaught (in promise); stack = RangeError: recovery time cannot precede episode start
+    at Recovery.validateEpisodeTime (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:222:13)
+    at Recovery.advance (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:215:10)
+    at /Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:102:52
+    at Recovery.resume (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:102:25)
+    at Supervisor.resumeRecovery (/Users/aditya/repos/projects/cf-stumble/src/supervisor/supervisor.ts:174:26)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+uncaught exception; source = Uncaught (in promise); stack = RangeError: recovery time cannot precede episode start
+    at Recovery.validateEpisodeTime (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:222:13)
+    at Recovery.report (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:158:10)
+    at /Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:115:12
+    at Recovery.reportOperation (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:114:25)
+    at Supervisor.reportRecoveryOperation (/Users/aditya/repos/projects/cf-stumble/src/supervisor/supervisor.ts:183:26)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+uncaught exception; source = Uncaught (in promise); stack = RangeError: recovery time cannot precede episode start
+    at Recovery.validateEpisodeTime (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:222:13)
+    at /Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:130:12
+    at Recovery.reconcileOperation (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:128:25)
+    at Supervisor.reconcileRecoveryOperation (/Users/aditya/repos/projects/cf-stumble/src/supervisor/supervisor.ts:192:26)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+ ✓ |workers| test/supervisor/control/control.test.ts (12 tests) 1322ms
+ ✓ |workers| test/supervisor/recovery/startup.test.ts (5 tests) 1324ms
+   ✓ returns to ready after a startup failure and opens repair attempt two  332ms
+Using secrets defined in .env
+Using secrets defined in .env
+uncaught exception; source = Uncaught (in promise); stack = Error: invalid persisted recovery 1: operation bounds
+    at invalidOperation (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/persistence/operation-row.ts:140:10)
+    at operationFromRow (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/persistence/operation-row.ts:15:11)
+    at decodeRow (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/persistence/row.ts:57:16)
+    at episodeFromRow (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/persistence/row.ts:40:26)
+    at RecoveryEpisodeStore.byId (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/store.ts:28:44)
+    at Recovery.get (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:145:67)
+    at Supervisor.getRecoveryEpisode (/Users/aditya/repos/projects/cf-stumble/src/supervisor/supervisor.ts:196:26)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+ ✓ |workers| test/supervisor/recovery/reconciliation.test.ts (6 tests) 1614ms
+   ✓ reconciles a verified startup-check pass into completion  352ms
+Using secrets defined in .env
+uncaught exception; source = Uncaught (in promise); stack = Error: failure event ID already belongs to generation 1
+    at /Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:79:17
+    at Recovery.start (/Users/aditya/repos/projects/cf-stumble/src/supervisor/recovery/index.ts:75:25)
+    at Supervisor.startRecovery (/Users/aditya/repos/projects/cf-stumble/src/supervisor/supervisor.ts:170:26)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:365:47
+ ✓ |workers| test/supervisor/recovery/review-findings.test.ts (7 tests) 1702ms
+   ✓ rejects a trailing lone surrogate operation error without URIError or persistence mutation  320ms
+   ✓ rejects pre-start resume, report, and reconciliation without changing the episode  317ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/relay/relay.test.ts (12 tests) 1707ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/startup-check/startup-check.test.ts (12 tests) 1903ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/recovery/recovery.test.ts (10 tests) 2057ms
+Using secrets defined in .env
+ ✓ |workers| test/access-jwks.test.ts (6 tests) 470ms
+Using secrets defined in .env
+ ✓ |workers| test/access-cookie.test.ts (16 tests) 571ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/generation-control.test.ts (6 tests) 648ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/eligibility.test.ts (13 tests) 221ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/epoch-scope.test.ts (3 tests) 400ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/page.test.ts (12 tests) 260ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/threads/fresh-thread.test.ts (4 tests) 122ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/evidence-era.test.ts (3 tests) 235ms
+Using secrets defined in .env
+ ✓ |workers| test/access.test.ts (11 tests) 269ms
+ ✓ |workers| test/supervisor/threads/threads.test.ts (12 tests) 442ms
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/generations/generations.test.ts (8 tests) 392ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/active-serving.test.ts (4 tests) 212ms
+Using secrets defined in .env
+ ✓ |workers| test/access-owner.test.ts (7 tests) 388ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/rpc-surface.test.ts (2 tests) 186ms
+ ✓ |workers| test/access-routing.test.ts (3 tests) 141ms
+Using secrets defined in .env
+Using secrets defined in .env
+uncaught exception; source = Uncaught (in promise); stack = Error: WorkspaceContainerAPI: DO is not container-enabled (check wrangler.jsonc)
+    at new WorkspaceContainerAPI (/Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+computer@file+vendor+cloudflare-computer-0.3.0.tgz_supports-color@10.2.2_zod@4.4.3/node_modules/@cloudflare/computer/src/backends/container/container-host.ts:134:13)
+    at new WorkspaceHost (/Users/aditya/repos/projects/cf-stumble/src/workspace/host.ts:61:23)
+    at DurableObject.Wrapper.<computed> (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:536:22)
+    at getDurableObjectRPCProperty (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:507:47)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:364:21
+ ✓ |workers| test/facet/facet-spike.test.ts (3 tests) 388ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/artifacts/generation-preparation.test.ts (2 tests) 364ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/recovery/state.test.ts (1 test) 395ms
+   ✓ reports every durable recovery state with a positive identifier and matching fields  395ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/recovery-report.test.ts (4 tests) 519ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/facet-turn-loaded.test.ts (6 tests) 169ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/artifacts/r2-binding.test.ts (4 tests) 195ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/owner-api.test.ts (9 tests) 28ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/facet-turn-disposal.test.ts (4 tests) 64ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/relay/cancellation.test.ts (1 test) 182ms
+Using secrets defined in .env
+uncaught exception; exception = workerd/io/io-context.c++:1592: failed: jsg.Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/
+stack: 10158eeaf
+ ✓ |workers| test/facet/generation-0/execution-env-loaded.test.ts (2 tests) 67ms
+ ✓ |workers| test/facet/generation-0/module-map.test.ts (4 tests) 63ms
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/projects/project-turn.test.ts (4 tests) 83ms
+ ✓ |workers| test/facet/generation-0/execution-env-tools.test.ts (3 tests) 16ms
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/artifacts/module-map-resolver.test.ts (4 tests) 21ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/pi-agent-turn.test.ts (5 tests) 19ms
+Using secrets defined in .env
+uncaught exception; source = Uncaught (in promise); stack = Error: WorkspaceContainerAPI: DO is not container-enabled (check wrangler.jsonc)
+    at new WorkspaceContainerAPI (/Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+computer@file+vendor+cloudflare-computer-0.3.0.tgz_supports-color@10.2.2_zod@4.4.3/node_modules/@cloudflare/computer/src/backends/container/container-host.ts:134:13)
+    at new WorkspaceHost (/Users/aditya/repos/projects/cf-stumble/src/workspace/host.ts:61:23)
+    at DurableObject.Wrapper.<computed> (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:536:22)
+    at getDurableObjectRPCProperty (Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:507:47)
+    at Users/aditya/repos/projects/cf-stumble/node_modules/.pnpm/@cloudflare+vitest-plugin@1.1.0_@cloudflare+workers-types@5.20260827.1_@vitest+runner@4_4bca36a2e24d947ee5e22cb7d40d5c03/node_modules/@cloudflare/vitest-plugin/dist/worker/lib/cloudflare/test-internal.mjs:364:21
+ ✓ |workers| test/supervisor/projects/supervisor-project-turn.test.ts (3 tests) 53ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/target-writes.test.ts (14 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/exec-lifecycle.test.ts (15 tests) 8ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/workspace-host.test.ts (12 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/exec-frame.test.ts (2 tests) 6ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/loader.test.ts (6 tests) 11ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/execution-env-filesystem.test.ts (25 tests) 8ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/target-validation.test.ts (26 tests) 8ms
+ ✓ |workers| test/facet/generation-0/execution-env-exec.test.ts (7 tests) 10ms
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |workers| test/model-route.test.ts (23 tests) 5ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/exec-pending-handle.test.ts (4 tests) 7ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/facet-turn.test.ts (4 tests) 6ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/rpc-boundary.test.ts (2 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/artifacts/build-workspace.test.ts (10 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/harness-build.test.ts (10 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/execution-env-malformed.test.ts (12 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/turn.test.ts (10 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project-provision-surface.test.ts (7 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/generation-requests.test.ts (16 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/routes/generation-submission.test.ts (21 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/generations/decisions.test.ts (8 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/execution-env-byte-framing.test.ts (5 tests) 4ms
+ ✓ |workers| test/supervisor/threads/thread-messages.test.ts (9 tests) 3ms
+Using secrets defined in .env
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/target-symlinks.test.ts (9 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/loader-environment.test.ts (2 tests) 4ms
+Using secrets defined in .env
+ ✓ |workers| test/access-credentials.test.ts (5 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/tools.test.ts (4 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/project-catalog.test.ts (5 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project-provision-plan.test.ts (6 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/docs/module-seams.test.ts (3 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/artifacts/module-map-build.test.ts (7 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/vendor/pi.test.ts (6 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/adapter.test.ts (17 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project-provisioning.test.ts (7 tests) 3ms
+Using secrets defined in .env
+ ✓ |workers| test/supervisor/generations/generation.test.ts (6 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/facet/generation-0/project-capability.test.ts (4 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/workspace/project/target-content.test.ts (4 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/harness-commit.test.ts (10 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/docs/managed-instructions.test.ts (1 test) 1ms
+Using secrets defined in .env
+ ✓ |workers| test/docs/adr-index.test.ts (4 tests) 2ms
+Using secrets defined in .env
+ ✓ |workers| test/docs/test-config.test.ts (1 test) 2ms
+ ✓ |workers| test/vendor/pins.test.ts (1 test) 1ms
+ ✓ |workers| test/supervisor/artifacts/module-map.test.ts (3 tests) 2ms
+ ✓ |workers| test/supervisor/recovery/operations.test.ts (3 tests) 2ms
+ ✓ |workers| test/supervisor/threads/decisions.test.ts (11 tests) 2ms
+ ✓ |workers| test/docs/props-siblings.test.ts (2 tests) 2ms
+ ✓ |workers| test/facet/fixture-reach.test.ts (4 tests) 3ms
+ ✓ |workers| test/supervisor/recovery/policy.test.ts (2 tests) 2ms
+ ✓ |workers| test/facet/generation-0/request-handler.test.ts (5 tests) 2ms
+
+ Test Files  93 passed (93)
+      Tests  642 passed (642)
+   Start at  02:04:31
+   Duration  12.51s (transform 5.57s, setup 0ms, import 36.31s, tests 21.66s, environment 8ms)
+

@@ -1,0 +1,19 @@
+Draft is on disk and the gate condition is satisfied. Sub-reviewers are still digging.
+
+**Fixed:** `/tmp/cf-stumble-v0/review-round2.md` now exists — a complete standalone draft (v1) built only from evidence I verified myself.
+
+**Terminal evidence:**
+```
+$ test -f /tmp/cf-stumble-v0/review-round2.md && echo EXISTS && wc -l ...
+EXISTS
+     161 /tmp/cf-stumble-v0/review-round2.md
+```
+
+**What the draft already says, with evidence:**
+- Verdict **SOUND WITH FIXES**. Gate and probe reproduce at my hand: 113/797 green, clean-build sha `18cea22b…` identical across two isolated builds.
+- **Main substantive objection:** T7's answer to round-1 B3 proves the *transport* of a diff, not its *production*. `turn-diff.test.ts:41-56` hand-feeds the stdout into a fake exec backend — no git runs. In production the only thing that causes a diff is one sentence in `turn-policy.ts:13`. D62 recorded this as "the worker's alternative was better"; I judge it as the check being relaxed to match an easier property.
+- **Nothing was lost in the conflicted merge.** Test count in `fresh-thread.test.ts` is 6 at every merge commit, and the resolution kept both sides (T7's import move plus T6a's catalog rename). T5's 7 lease tests also survive T6a's rewrite of that file.
+- **Board is stale:** `work/T9b` is finished, conflict-free against main, and green at 116/829 in its own worktree. It adds the missing `POST /api/projects/{id}/turn`. STATE.md still calls T9 "running".
+
+**Still running:** five sub-reviews (T7 deletion scope, T5+T2, T3a+T6a, T4+T1a, merge integrity/cut line/plan). One has already surfaced a possible dead-code-guarding test in the workspace execute path. I'll merge their file-level findings into the review and mark it final.
+Autonomous quality gate still failing after attempt 2/3: not rerun: workspace unchanged since previous failed gate; autonomous limit reached: maxTurns reached (45/40)

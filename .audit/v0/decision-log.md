@@ -781,3 +781,287 @@ Not treated as a T10 failure: it is a scheduling consequence of my own dispatch 
 small follow-up after T10 merges, to render `diff` and `diff-unavailable`, and the lesson is to
 dispatch a consumer only after its producer has landed, or to accept a known follow-up when running
 them in parallel for speed.
+
+## D70 — plan item 1 confirmed done, main pushed; the gate on hp is 117 files / 842 tests
+Verified rather than accepted: `9ac4b9c merge(T14)` is on local main, `pnpm verify` green in 63.8s
+with **117 test files / 842 tests**. Note the T14 brief's "118 files / 841 tests" figure was wrong
+in both halves; 117/842 is the measured baseline on this box and every worker brief now carries it.
+`git push origin main` moved origin `7818f8d..9ac4b9c`. `work/T14` no longer exists locally, so the
+`f00eaac` commit reaches origin through main and through the pre-existing `origin/work/T14`.
+
+## D71 — the remaining five plan items run as five parallel RLM children, one worktree each
+The previous run's workers were `prime-agent` shell-outs with no way to message a running one
+(D8/D50), which is what produced D69's dispatch-order fault: T10 could not learn that T13 had
+landed. On this box the workers are RLM children, so a running worker CAN be sent a correction and
+CAN be observed mid-flight. That removes the reason to serialize dependent work.
+Five worktrees at `/home/aditya/wt/T15..T19`, all based on `9ac4b9c`, each with its own
+`node_modules`, were already prepared. Mapping from `review-sol-consolidated.md`'s ordered plan:
+
+| id | plan item | scope | conflict surface |
+|---|---|---|---|
+| T15 | 2 | one absolute turn deadline, propagated cancellation, one attribution read | `turn-run.ts`, `turn-stream.ts`, `supervisor.ts`, `facet-turn.ts` |
+| T16 | 3 | the credit predicate | `turn-settle.ts`, `eligibility.ts`, `relay/attempt.ts` |
+| T17 | 4 | the diff proven over a real Git repository | `test/facet/generation-0/**`, vitest config |
+| T18 | 5 | land or retract `pnpm harness:browser` | `tools/browser-harness/**`, `package.json`, `AGENTS.md` |
+| T19 | 6 | cover `ModelRoute.runStream` | `src/model-route*.ts`, its tests |
+
+T15 and T16 are the one adjacent pair, both around the turn lifecycle. Rather than serialize them I
+partitioned the files in the briefs: T16 is told to keep its diff out of `boundedStart`,
+`streamAdmittedTurn` and `runProjectTurn`'s ordering and to hand anything it needs there to T15.
+Merge order is mine and stays serial: gate green on the merged tree before each merge, then the
+clean-build probe, exactly as D51 requires. Briefs are at `.audit/handoff/v0-hp/prompt-T1[5-9].md`.
+Every brief carries the mutation-proof requirement and the reviewer's three demonstrated green-under-
+mutation results, because that is the finding this whole round exists to answer.
+
+## D72 — each brief states the fault as already-verified evidence with file and line, not as a hunt
+The four sol reviews had already located every fault from source. Re-deriving them would spend a
+worker's context on work that is done and risks a worker "discovering" a different, easier problem
+and fixing that instead — which is exactly how D62/D67 went wrong on the diff. So each brief opens
+with a "do not re-derive it" evidence block and states the single condition that ends the task.
+T17 and T18 additionally carry an explicit escape hatch: T17 may report that the diff seam needs a
+design change instead of producing a second fake, and T18 may retract the advertised command
+instead of landing it. Both are told to make that call in the first line of their report. A worker
+allowed only to succeed will report success.
+
+## D73 — the clean-build probe on `9ac4b9c` is green and its sha did NOT move, as T14 predicted
+Two clean builds, 25s each, identical maps, sha256 `e9c3008e...` — the same sha T13 produced at
+`3a77907`. Correct: T14 is page-side only and `src/page/**` is Worker code, not facet code, so it is
+not in the module map the probe hashes. A moved sha here would have meant T14 exceeded its cut line.
+Recording the reasoning because "the sha did not move" is only evidence when the reason it should
+not have moved is stated in advance.
+
+## D74 — the astra review landed at 23:13, was read at 23:20, and it CONFIRMS the plan while
+## strengthening three of its items and adding two more
+`.audit/v0/review-astra-low.md`, `gpt-6-astra` at low effort. It reviewed the supplied reviews and
+the hp brief, not a fresh tree — it says so itself, so its authority is over JUDGEMENT, not over
+facts about the code. The owner's standing instruction is to treat it as almost certainly correct.
+Its highest-leverage action is a STRENGTHENING of the plan's item 2, not a different item, so no
+switch of current work was needed. The five workers were already running; three got live
+corrections. That is the payoff from D71's choice of RLM children over shell-outs — the correction
+reached T15, T17 and T18 mid-flight and all three acknowledged within minutes. Under the old
+shell-out model this review would have arrived too late to change anything and would have cost a
+re-dispatch of three tasks.
+
+### Where astra and `review-sol-consolidated.md` disagree, astra wins
+
+1. **Item 2 was under-specified and I had already dispatched it that way.** Sol asked for one
+   deadline, propagated cancellation and one attribution read. Astra: "an abort signal alone is not
+   the safety guarantee ... Lease checks on new calls do not stop a command already executing."
+   Correct, and it exposes a hole in my own brief: I asked T15 to prove "the superseded facet
+   stopped writing", which an implementation could satisfy by aborting a signal nothing was blocked
+   on. A `bash` tool call already running in the workspace ignores an aborted signal. So admission
+   itself must become conditional on the old turn having lost the ability to mutate, and it must
+   **fail closed** — refuse the replacement rather than admit it into a workspace an orphan may
+   still be writing. Refusing a turn is recoverable; two turns editing one shared tenant workspace
+   (ADR-0038) is not. T15's proof test is now specific: an already-running write command that
+   SURVIVES the first cancellation request, plus the cancellation-errors and cancellation-never-
+   returns paths.
+2. **Item 5's option (B) is withdrawn.** Sol offered "land or retract" and my brief preferred
+   landing. Astra: "retracting a broken browser command repairs documentation but does not satisfy
+   UI acceptance." Criterion 4 is a UI claim and the page has zero runnable UI evidence. Retraction
+   is now available to T18 only as a REPORTED BLOCKER, never as a completion.
+3. **Item 4 is half a design problem, not only a discipline problem.** Sol read the circular fake as
+   a discipline failure. Astra: both, and the design half is that "the turn's diff" has no defined
+   meaning. `git diff HEAD` describes tracked changes against HEAD; it is not "what this turn
+   changed". It misses an untracked new file, misses an edit the turn itself committed, and includes
+   dirt present before the turn began. D68 conceded the untracked-file gap and filed it as "outside
+   the cut line" — astra's correction is that it is a CONTRACT to be written down, not a limitation
+   that may stay implicit. So T17 now defines the contract first, tests pre-existing dirt, an
+   untracked file and an in-turn commit, and treats killing the `cat` mutation as a MINIMUM check
+   rather than as proof that the semantics meet criterion 4.
+
+### What astra adds that the ordered plan did not have
+
+4. **The x64 container preflight, dispatched as T20.** "Linux can now test tool availability and
+   clean builds locally, without claiming paid Cloudflare evidence." This is the capability that
+   justified moving the work to hp and nobody had spent it. It attacks D51/E1 directly: the host
+   probe passes `PATH="$PATH"` so both its builds share the HOST toolchain, which makes it a
+   regression guard and not criterion 7 evidence. Running the same two builds inside the real pinned
+   `ghcr.io/cloudflare/computer-computerd-linux-x64` image is the missing half and pulling a public
+   image costs nothing. Explicit boundary written into the brief: local container evidence is NOT
+   deployed evidence and must never be recorded as closing criterion 7 or 9 on its own.
+5. **The saved-compaction chain, dispatched as T21.** Checked before dispatching rather than taken
+   on faith, and the gap is real. `test/facet/generation-0/compaction.test.ts:111` already proves a
+   replacement FACET continues from saved compacted context, but it is facet-level: it passes state
+   from one `runPiAgentTurn` call to the next. Untested is the product's actual path — compacted
+   context saved through the Supervisor's thread store, Supervisor evicted and rehydrated from
+   SQLite, a replacement GENERATION activated, conversation continuing across all three. That spans
+   criterion 5 and criterion 8. T21 must mutate each of the three hops separately, because one test
+   that catches only one hop leaves the other two decorative.
+6. **Item 7 moves earlier.** "prepare the criterion-mapped Q7 request now rather than after all six
+   fixes." The owner is on a flight; the request should be waiting when he lands, not started then.
+   I own this, not a worker.
+7. **Criterion 10 splits.** "separate public publication in criterion 10 from private release
+   acceptance pending owner approval, while retaining the recording and release artifacts." Today
+   criterion 10 bundles making the recording with publishing it to an approved destination, so an
+   unanswered publication question blocks an otherwise-complete criterion. I own this edit to
+   `goal.md`.
+
+### Where astra says do NOT go, recorded so a later turn does not drift there
+No background turns, no automatic recovery, no broader cache policy, no general scheduler, no
+architecture rewrite. Known-good POLICY expansion stays outside v0 — but false credit inside
+retained code is still in scope, which is exactly T16. And v0 does not shrink: "useful coding, saved
+conversation across generation changes, manual rollback, owner isolation, and durable files are the
+product, not optional hardening." Unanswered paid approval makes their evidence BLOCKED; it is not a
+licence to delete the criteria.
+
+## D75 — Q7 is re-specified as one criterion-mapped request, and hp shrinks it before the owner sees it
+`.audit/v0/q7-request.md` supersedes the five Q7 addenda that accreted across the overnight run.
+The addenda stay as history but they had started repeating each other, and a request the owner has
+to reconstruct from five appended fragments is a request that gets a slow answer.
+The re-spec does three things the fragments did not. It maps all 19 measurements to the goal
+criterion each unblocks. It separates the rows hp can now answer FOR FREE — nine of them, all the
+toolchain and clean-build questions, because the pinned x64 image runs on this box — from the ten
+that genuinely need paid budget and a deployment. And it isolates the five decisions only the owner
+can make, led by the one that gates everything: a NAME for the disposable environment, since "an
+approved disposable paid environment" is not a name and without one a probe can overwrite something
+he cares about.
+It also offers a subset: rows 10, 13 and 11 (the streaming model probe, the Worker Loader cold path,
+Access) are the three cheapest probes that each invalidate a whole task, so approving only those
+three unblocks the critical path far more cheaply than approving the whole gate.
+Sequencing note: T20 is running now and is expected to answer the nine free rows within the hour.
+The document is written with those rows marked pending so it can be completed rather than rewritten.
+
+## D76 — goal criterion 10 splits into 10a acceptance and 10b publication
+Astra: "separate public publication in criterion 10 from private release acceptance pending owner
+approval, while retaining the recording and release artifacts." As written, criterion 10 bundled
+making the recording with publishing it, so Q5 — an unanswered question about a DESTINATION — could
+block an otherwise-finished release. 10a is now the owner-independent half (recording made, paid
+probe output and release notes retained) and is what "v0 is accepted" means. 10b is publication and
+stays blocked on Q5. A blocked 10b no longer makes 10a incomplete.
+The number stays 10 with lettered halves rather than becoming 10 and 11, because "criterion 10" is
+referenced throughout `.audit/v0/` and renumbering would silently invalidate those references.
+
+
+---
+
+# Run of 2026-09-08 (overnight, hp): finishing v0
+
+## D75 — the tracked container image could never have started
+
+Verified on the paid account. `wrangler.jsonc` named
+`ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11...` directly as the container
+image. Three separate faults, each proved by a deployed failure:
+
+1. `IMAGE_REGISTRY_NOT_CONFIGURED`. Cloudflare containers pull only from the deploying account's
+   managed registry or from a registry that account has configured with credentials. A fresh
+   account has neither, so the container application was never created and the deploy aborted
+   after uploading the Worker.
+2. The pinned image is a single layer over `scratch` holding only the dynamically linked
+   `computerd` binary. It has no libc, no shell and no toolchain, so Cloudflare starts it and it
+   exits 1. `scripts/probe/container-preflight.Dockerfile` already recorded this fact and copied
+   the binary into a Debian and Node userland; the deployed configuration did not.
+   `podman run` of the pinned image reproduces it locally:
+   "exec container process (missing dynamic library?) `/usr/local/bin/computerd`".
+3. `FUSE_MOUNT=auto` selects the kernel FUSE backend inside a Cloudflare container and computerd
+   exits 1. `FUSE_MOUNT=shim` starts and serves. This is the fix that turned a 60 second
+   `workspace-unavailable` into a 2 second answer.
+
+Decision: `wrangler.jsonc` names `containers/computerd.Dockerfile`, which pins the same digest in
+its `FROM`, copies `computerd` into Debian plus Node 22, adds `git`, `gh`, `tar` and corepack, and
+sets `FUSE_MOUNT=shim`. wrangler builds it and pushes to the deploying account's own managed
+registry, which is also what Workers Builds does for a deploy button user. The probe script and
+the deployed image now come from one file, so they cannot drift.
+
+Recorded because it changes what "the pinned pair ran on a paid account" meant: the pair had run in
+a *locally built* userland, never as the deployed container image.
+
+## D76 — deploying from hp needs a local override config
+
+podman rewrites an image manifest when it pushes, so the digest podman reports locally is not the
+digest the registry stores, and wrangler asks Cloudflare for the local one. Cloudflare then answers
+`IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`. Verified against the registry API with both Docker and OCI
+accept headers and with `podman push --format v2s2`, which produced a third digest. There is no
+shim for this, so hp builds and pushes the image by hand and deploys with `/tmp/wrangler-hp.jsonc`,
+whose only differences from the tracked config are an absolute `main`, the managed-registry digest,
+`observability`, and the probe `vars`. A docker host and Workers Builds do not have this problem.
+
+## D77 — deployed probes run against an injected Access JWKS
+
+`tools/access-session.mts` mints a disposable ES256 key pair and one token, and the Worker verifies
+it through its ordinary path because `CF_ACCESS_PUBLIC_KEYS` is a supported configuration. The
+deployed probes therefore exercise real Access verification code with a key the run owns. This is
+not proof that a Cloudflare Access application admits the owner; that claim still needs the real
+application and the owner's own login, and is recorded separately.
+
+Fail-closed evidence from the same deployment: no credential gives 401, a credential with no Access
+configuration gives 500 (`invalid-configuration`).
+
+## D78 — decision 6's premise was false, and the R2 cut is a replacement
+
+There is no "existing, tested Supervisor SQLite artifact store". Module maps live only in R2
+(`src/supervisor/artifacts/cache.ts`), and `src/supervisor/artifacts/index.ts` says SQLite stores
+no module source. Cutting R2 therefore means writing a store. Reviewed with sol
+(`.audit/v0/review-sol-simplify.md`): canonical encoding split into 1 MiB UTF-8 BLOB chunks plus a
+manifest row, written in one `ctx.storage.transactionSync`, because a Durable Object row may not
+exceed 2 MB and one generated module can be larger. `prepare` may build, `load` never does, so
+rollback cannot rebuild. Kept the owner's decision rather than keeping R2, which would have been
+the smaller diff.
+
+## D79 — the harness browser command has never worked
+
+`package.json` points `harness:browser` at `tools/browser-harness/run.mts`, which does not exist;
+the entrypoint is `smoke.mts`. `tools/browser-harness/README.md`, which `AGENTS.md` tells every
+agent to read, does not exist either. Found by the recovery-deletion worker. Fixed out of band on
+its own branch, because the end-to-end web testing this run owes depends on that command.
+
+## D80 — the deployed build is blocked by the container, not by this repository
+
+Five distinct deployed failures of the build step. Four were real faults here and are fixed on
+`main`: tar's metadata syscalls against Computer's userspace filesystem, no time budget on a
+planned command, a module map read that the workspace filesystem API could not see, and one
+Workspace Host stub held for a whole multi-minute build.
+
+The fifth is the container. Inside the durable workspace, installing about fifty thousand
+`node_modules` files resets the Durable Object that hosts the workspace mid-build. Moved to the
+container's own filesystem, the Durable Object survives and the container exits 1 at about 300 s of
+`pnpm run build:artifact`. The container is `vcpu: 0.5, memory: 4 GiB, disk: 8 GB`, and
+`PATCH .../containers/applications/<id>` with `instance_type: standard-4` returns 200 and changes
+nothing.
+
+A first attempt to move the build to `/tmp` also moved the working directory there and died with
+"spawn failed: no such path": Computer resolves a working directory against the workspace. Every
+step now runs in the workspace and names the scratch path in the command.
+
+Recorded as blocked, with the next three experiments in
+`.audit/v0/evidence/deployed-plumbing-probe.md`. Nothing about the generation loop is claimed as
+deployed proof.
+
+## D81 — the Cloudflare Access application needs one owner action
+
+`GET /accounts/.../access/apps` reads with the run's OAuth token; `POST` to the same path returns
+401, and `access/organizations` returns 403. The Zero Trust team domain
+`adityakompella.cloudflareaccess.com` exists and serves a JWKS, and the zone `akompella.dev` is
+active, so the remaining work is one application, one owner policy, and reading the `sub` claim
+from the owner's first login. `docs/deploy.md` carries the steps. Deployed probes used an injected
+JWKS instead (D77) and no claim is made about Access admitting the owner.
+
+## D82 — the deployed loop closed, and what it cost
+
+Superseding D80's "blocked". The build's own output was the cause: Computer holds a command's output
+in memory, and an unbounded `pnpm install` log made the container exit 1 part way through every
+build. A probe that discarded the install log ran the whole build, wrote a 942311 byte module map
+and left the container alive. `a199797` makes the install silent and keeps the last 4000 bytes of
+the rest; `2efcb75` seeds the pnpm store into the image so the registry is off the critical path.
+
+With that in place the deployed loop runs: submit to ready in 334 s, activation in 0.3 s, a
+deliberately broken candidate recorded `response-rejected` while the active generation kept
+serving, rollback in 0.26 s with no Workspace Host call at all, and a real coding turn that read a
+file, wrote it, ran a command, streamed its work and saved its thread.
+
+Three more bugs sat in the turn path, and each hid the next:
+
+1. The facet told Pi the route had a zero context window and a zero output budget, so Pi sized
+   every response against zero (`a15718d`).
+2. Workers AI's default output budget truncated the model's answer before any content arrived
+   (`194a76f`).
+3. The provider stream parser read only Workers AI's classic `{response}` shape. The model streams
+   chat-completion chunks whose text and tool calls live in `choices[0].delta`, so the route
+   recorded the token count and threw away every answer and every tool call (`2849183`).
+
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast` was tried while diagnosing 2 and rejected every call:
+the Workers AI binding validates against the model's schema, and that model takes
+`messages[].content` as a string while Pi sends content parts. The comment on `MODEL` records it.
+
+Known defect, not fixed: the workspace `write` tool returns a backend error, and the agent falls
+back to `bash`. The turn completes, so it is a follow-up rather than a blocker.

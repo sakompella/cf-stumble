@@ -1,0 +1,23 @@
+T5 is done and committed on green.
+
+## What changed
+
+**Lease-keyed completion.** `startTurn` now mints the lease id and returns it to the caller it admitted. `finishTurn(project, messages, now, leaseId)` and `abandonTurn(project, leaseId)` require that id. The lease-discarding variants (`startTurnWithLease`, `finishTurnWithLease`, `abandonTurnWithLease`, the optional-`leaseId` helpers, and `ownsLease`) are deleted — `grep -rn "WithLease" src test` now matches nothing.
+
+**The reset race (criterion 3).** `revision` is now a monotonic concurrency version. `startFreshThread` keeps the row, clears the conversation and lease, and does `revision = revision + 1`, so revision zero cannot recur and a delayed start with the replaced thread's number is refused.
+
+**Failing-first evidence.** A temporary probe at the base commit proved both holes: the delayed start after a fresh thread was accepted, and a late finish after takeover wrote into the replacement turn. Both returned `ok: true` before the change. The probe file was deleted after real tests replaced it.
+
+## Gate
+
+`pnpm verify` passes: 94 test files, 653 tests (baseline 93 / 642). The pre-commit hook ran it again at commit time.
+
+Commit: `df094f36c983287f8b55a1491077c38dd54b64fc`
+
+## Merge note for T3
+
+I changed three regions of `supervisor.ts` only: the `./threads/index.js` import (line 29 → 29-33), the three thread RPC wrappers (226-249 → 230-262), and two sentences in the `streamProjectTurn` doc comment (258-260 → 269-272). The constructor, `workspace-names.ts`, and `artifacts/` are untouched.
+
+## Report
+
+`/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T5.md` lists each acceptance criterion with its evidence, what I deliberately did not do (no HTTP turn route — that is T9; no new ADR; no turn coordinator), and three observations I left alone: the page's raw revision label, unused index exports, and the T1 dependency being wave ordering only. No blockers, no paid spend.

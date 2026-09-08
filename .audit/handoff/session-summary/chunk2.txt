@@ -1,0 +1,2109 @@
+[2026-09-05T09:31:09.743Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:09.838Z] TOOL_RESULT (ipython):
+OPUS_RUNNING
+--- T2 ---
+T2_RUNNING
+
+
+
+[2026-09-05T09:31:15.969Z] ASSISTANT THINKING:
+With both processes running, I want to prioritize checking the T3/T5 partition claim concretely, since that's the same-wave collision risk that the dispatch contract asserts is safe—this seems like the highest-value verification target right now, more so than the browser-save ordering or facet frame detail claims.
+[2026-09-05T09:31:15.969Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:15.998Z] TOOL_RESULT (ipython):
+289 lines
+74 constructor
+99 checkGenerationStartup
+120 prepareGeneration
+132 getActiveGeneration
+136 getGeneration
+141 getGenerations
+145 controlGeneration
+149 getPreparationCheckHistory
+156 getRelayAttempts
+160 sweepExpiredRelayAttempts
+164 startRecovery
+173 resumeRecovery
+177 reportRecoveryOperation
+186 reconcileRecoveryOperation
+195 getRecoveryEpisode
+200 getLatestRecoveryEpisode
+204 getGenerationEligibility
+217 getProjectThread
+222 startFreshProjectThread
+226 startProjectTurn
+236 finishProjectTurn
+248 abandonProjectTurn
+265 streamProjectTurn
+
+
+[2026-09-05T09:31:18.383Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:18.404Z] TOOL_RESULT (ipython):
+  startProjectTurn(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+    projectId: unknown,
+    expectedRevision: number,
+    now: number,
+    leaseMs: number,
+  ): ProjectThreadResult {
+    return this.threads.startTurn(projectId, expectedRevision, now, leaseMs);
+  }
+
+  finishProjectTurn(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+    projectId: unknown,
+    expectedRevision: number,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a conversation arriving over RPC is parsed before it is stored.
+    messages: unknown,
+    now: number,
+  ): ProjectThreadResult {
+    return this.threads.finishTurn(projectId, expectedRevision, messages, now);
+  }
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+  abandonProjectTurn(projectId: unknown): ProjectThreadResult {
+    return this.threads.abandonTurn(projectId);
+  }
+
+  /**
+   * Run one turn against a project's own Computer workspace and stream the frames it produces.
+   *
+   * This is the other half of a turn from the three lease methods above: they decide who may write
+   * a project's thread and store the conversation it ends with, while this one does the work. It
+   * reads and writes no thread, so a caller drives both halves — take the lease, stream the turn,
+   * then save the `state.messages` the terminal frame carries, which is the `AgentMessage[]`
+   * `finishProjectTurn` parses. Joining them is the next unit's work, because it has to settle
+   * what a disconnected browser leaves behind (ADR-0037), not merely call the two in order.
+   *
+   * The workspace capability travels to the generation as an argument of its `startTurn`, and this
+   * method receives none of its own: `streamProjectTurn` explains the order its steps run in.
+   */
+
+~~~~~~ constructor ~~~~~~
+  constructor(ctx: DurableObjectState, env: SupervisorEnv) {
+    super(ctx, env);
+    this.generations = new Generations(ctx.storage);
+    // A cache miss builds the labeled commit in the harness build workspace, which is a separate
+    // Workspace Host from the project workspace and is named by a module constant.
+    this.artifacts = new HarnessArtifacts(
+      env.MODULE_MAPS,
+      new WorkspaceHostModuleMapBuilder(env.WORKSPACE_HOST),
+    );
+    this.control = new GenerationControl(ctx.storage, this.generations);
+    this.relayAttempts = new RelayAttempts(ctx.storage);
+    this.recovery = new Recovery(ctx.storage, this.generations, this.relayAttempts);
+    this.relay = new FacetRelay(this.relayAttempts);
+    this.threads = new ProjectThreads(ctx.storage);
+  }
+
+  private modelRoute(): MainFacetCapabilities["MODEL"] {
+    return this.ctx.exports.ModelRoute({});
+  }
+
+  /** Mount one generation as a facet. Relaying and starting a project turn both use this. */
+  private mountServing(active: ActiveGeneration) {
+    return this.artifacts.mount(active, this.
+...[truncated 55 chars]
+
+[2026-09-05T09:31:32.248Z] ASSISTANT THINKING:
+This confirms the T3/T5 partition is genuinely file-level distinct: T5 touches the project turn lifecycle functions and thread/store files, while T3 touches the constructor setup and workspace-names file—so they shouldn't conflict.
+
+The constructor comment itself confirms E3, explicitly stating the harness build workspace is separate from the project workspace and named by a module constant. I also notice `ProjectThreads` is constructed without a catalog, meaning `resolveProject` defaults to the placeholder catalog—relevant to T6/E4.
+
+The `streamProjectTurn` doc comment also self-confirms the T9 finding: it explicitly says joining the halves of a turn is "the next unit's work" because of disconnected-browser handling per ADR-0037—strong validation that this gap is real and acknowledged by the codebase itself. I should check what currently calls `startProjectTurn`/`streamProjectTurn` from the routes to see if anything already joins them.
+[2026-09-05T09:31:32.248Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:32.324Z] TOOL_RESULT (ipython):
+src/supervisor/projects/project-turn.ts:84:export async function streamProjectTurn(input: ProjectTurnInput): Promise<ProjectTurnStart> {
+src/supervisor/projects/index.ts:1:export { streamProjectTurn } from "./project-turn.js";
+---routes---
+generations.ts
+index.ts
+json.ts
+owner-api.ts
+page.ts
+recovery.ts
+---
+src/supervisor/supervisor.ts:87:    this.threads = new ProjectThreads(ctx.storage);
+
+
+
+[2026-09-05T09:31:39.312Z] ASSISTANT THINKING:
+I'm searching the routes and only finding internal helpers—there's no actual conversation/turn route in the codebase, meaning the entire project-turn path is unreachable from HTTP even though the Supervisor exposes those RPC methods.
+[2026-09-05T09:31:39.312Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:39.345Z] TOOL_RESULT (ipython):
+/bin/bash: -c: line 3: unexpected EOF while looking for matching ``'
+/bin/bash: -c: line 12: syntax error: unexpected end of file
+
+
+
+[2026-09-05T09:31:42.951Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:42.974Z] TOOL_RESULT (ipython):
+[]
+7 lines
+['/api/generations/activate', '/api/generations/rollback', '/api/generations/submit', '/api/recovery/latest', '/api/status', '/fresh']
+
+
+[2026-09-05T09:31:53.976Z] ASSISTANT THINKING:
+Now I can confirm the owner API surface only covers generation activation, rollback, submit, recovery, and status endpoints plus /fresh -- there's no turn, project, or streaming endpoint at all. So the coding-agent half handling project turns and conversation streaming isn't reachable from the browser, which is a critical scope constraint affecting several of the roadmap's goal criteria.
+
+I want to write E6 with this route inventory, noting the code's own comment admits the two halves need joining as future work, confirming the T3/T5 partition at the region level in supervisor.ts, and flagging that ProjectThreads has no catalog and defaults to a two-placeholder setup. Before finalizing, I should check what /fresh actually maps to and which supervisor methods owner-api calls, since startFreshProjectThread or getProjectThread might be reachable after all.
+[2026-09-05T09:31:53.976Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:31:53.997Z] TOOL_RESULT (ipython):
+['getActiveGeneration', 'getProjectThread', 'startFreshProjectThread']
+---
+[('get', 'ActiveGeneration'), ('get', 'ProjectThread'), ('start', 'FreshProjectThread')]
+
+
+[2026-09-05T09:32:16.365Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:32:16.458Z] TOOL_RESULT (ipython):
+OPUS_RUNNING
+T2_RUNNING
+
+
+
+[2026-09-05T09:32:26.025Z] ASSISTANT:
+**Biggest finding of the night — E6. The coding half of v0 has no HTTP surface at all.**
+
+The owner API serves exactly six paths:
+
+```
+/api/status
+/api/generations/submit
+/api/generations/activate
+/api/generations/rollback
+/api/recovery/latest
+/fresh
+```
+
+The Supervisor exposes `startProjectTurn`, `finishProjectTurn`, `abandonProjectTurn` and `streamProjectTurn`. Searching all of `src` outside `supervisor.ts` for those four names returns **one** match — an internal helper. **No route calls any of them.**
+
+So the generation-control half of v0 is wired to HTTP, and the coding-agent half is not reachable from a browser. A turn cannot be started, streamed, saved, or cancelled over HTTP today. That blocks goal criteria 4, 5 and 6.
+
+The codebase already admits it. The doc comment on `streamProjectTurn` reads: *"Joining them is the next unit's work, because it has to settle what a disconnected browser leaves behind (ADR-0037), not merely call the two in order."*
+
+**What this changes in the plan:** T9 is not "join two halves in the Supervisor". There is no entry point to join them behind, so T9 must build the turn route surface too — re-size to L. And T10 cannot be a page-only task if the endpoints it consumes do not exist yet. That dependency needs confirming before wave 3.
+
+Two smaller facts from the same read:
+
+- **The T3/T5 partition holds**, at region level. T5 edits `supervisor.ts` lines 226–263 plus the thread modules; T3 edits the constructor at 74–88 plus `workspace-names.ts`. Same file, different regions — the wave manager merges and re-runs the gate.
+- **`supervisor.ts:87` builds `new ProjectThreads(ctx.storage)` with no catalog argument**, so it falls back to the two placeholder projects. T6 must pass a real catalog there, and that line sits inside T3's constructor region — so T3 and T6 collide on it.
+
+The constructor also confirms E3 in the code's own words: *"the harness build workspace, which is a separate Workspace Host from the project workspace"*.
+
+Six blockers confirmed from source now. T2 and the opus review are both still running.
+
+[2026-09-05T09:32:30.009Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:32:30.115Z] TOOL_RESULT (ipython):
+OPUS_RUNNING
+ls: /tmp/cf-stumble-v0/review-opus-round1.md: No such file or directory
+T2_RUNNING
+---
+d6ff238 docs(design): align version zero architecture
+2f37ff3 docs(architecture): simplify control and workspace decisions
+61ac8b2 refactor(facet): use Pi's default tool scheduling
+
+
+
+[2026-09-05T09:32:42.756Z] ASSISTANT THINKING:
+T2's worktree is clean with no new commits yet, both processes still running. The opus review has been running about 45 minutes with an empty log, which seems odd, so I want to verify it's actually alive rather than stalled by checking process elapsed time and whether its session file is still being updated.
+[2026-09-05T09:32:42.756Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:32:42.869Z] TOOL_RESULT (ipython):
+  PID ELAPSED      TIME COMMAND
+59934   06:03   0:00.01 /bin/bash -c exec 9>&0 8>&1 0</dev/null\012read -r _prime_agent_gate <&9 || exit 127\012{\012cd /Users/aditya/repos/
+---sessions---
+/Users/aditya/.prime/agent/sessions/01a070bd-ddfb-73ff-a380-b683a2793600.jsonl
+   42624 /Users/aditya/.prime/agent/sessions/01a070bd-ddfb-73ff-a380-b683a2793600.jsonl
+/Users/aditya/.prime/agent/sessions/01a070e4-3654-75e8-b124-3e98526ab130.jsonl
+  438268 /Users/aditya/.prime/agent/sessions/01a070e4-3654-75e8-b124-3e98526ab130.jsonl
+/Users/aditya/.prime/agent/sessions/01a070ce-a8a2-7745-810c-ed51a75e1753.jsonl
+ 1246191 /Users/aditya/.prime/agent/sessions/01a070ce-a8a2-7745-810c-ed51a75e1753.jsonl
+/Users/aditya/.prime/agent/sessions/01a070e3-6318-769b-b577-c7df58ac12d1.jsonl
+    6195 /Users/aditya/.prime/agent/sessions/01a070e3-6318-769b-b577-c7df58ac12d1.jsonl
+/Users/aditya/.prime/agent/sessions/01a070bf-26a9-76ea-b00f-a32505d7e229.jsonl
+  628019 /Users/aditya/.prime/agent/sessions/01a070bf-26a9-76ea-b00f-a32505d7e229.jsonl
+
+
+
+[2026-09-05T09:32:56.168Z] ASSISTANT THINKING:
+Only 6 minutes elapsed for pid 59934, but I launched that process around 45 minutes ago, so something seems off — maybe it restarted or the pgrep matched a different process despite the pid matching.
+
+Rather than dwell on the elapsed time, I should figure out which session file actually corresponds to the opus review run — the 1.2MB recently-modified session (01a070ce) is the likely candidate, so I'll check its mtime and peek at the last line for the model field to confirm. It's not worth burning more context on this diagnostic; I'll do this one check and then move on to verification work regardless.
+
+
+[2026-09-05T09:32:56.168Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:32:56.203Z] TOOL_RESULT (ipython):
+01a070ce-a8a2-7745-810c-ed51a75e1753 mtime 02:22:57 lines 65 models ['gpt-6-astra']
+01a070e4-3654-75e8-b124-3e98526ab130 mtime 02:32:53 lines 111 models ['claude-opus-5']
+01a070e3-6318-769b-b577-c7df58ac12d1 mtime 02:26:03 lines 10 models ['openai/gpt-5.6-sol']
+
+
+[2026-09-05T09:33:02.116Z] ASSISTANT THINKING:
+The opus review session was last modified at 02:32:53, and if it's now around 03:15, that's roughly 40 minutes with no writes — suggesting a hang, or the process finished but is still lingering. But the process elapsed time shows only 6 minutes, which contradicts a 40-minute stall, so something doesn't add up here.
+
+Maybe the file mtime is stale due to output buffering rather than an actual halt. Let me pull the actual current time to verify this more carefully.
+
+
+[2026-09-05T09:33:02.116Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:33:02.188Z] TOOL_RESULT (ipython):
+now 02:33:02
+35487       51:27 prime-agent     
+38062       47:07 prime-agent     
+38383       46:52 prime-agent     
+59934       06:23 /bin/bash -c exec 9>&0 8>&1 0</dev/null\012read -r _prime_agent_gate <&9 || exit 127\012{\012cd /Users
+59936       06:23 prime-agent                 
+59946       06:23 prime-agent     
+62174       02:18 /bin/bash -c exec 9>&0 8>&1 0</dev/null\012read -r _prime_agent_gate <&9 || exit 127\012{\012git -C /U
+62260       02:15 prime-agent                     
+62283       02:14 prime-agent     
+68827    12:54:58 prime-agent     
+81745 03-07:31:39 prime-agent     
+81772 03-07:31:39 /nix/store/cszc64x273c2nm8ykgszj2rbv39vyf3g-nodejs-slim-22.23.2/bin/node /nix/store/2vky11d03z3ny9hg5s
+68822    12:54:58 prime-agent 
+71661 02-03:02:47 prime-agent 
+35024       51:45 prime-agent 
+38382       46:52 prime-agent 
+
+
+
+[2026-09-05T09:33:13.614Z] ASSISTANT THINKING:
+Checking the time now, I realize my sense of elapsed time was off — the session's only been about 35 minutes, not 45. The opus review started 6 minutes ago and its file was updated just seconds ago, so it's actively working, and T2 kicked off 2 minutes back. Both jobs are young and progressing normally.
+
+The other PIDs I'm seeing (35487/38062/38383, 68827, 81745) look like unrelated leftover processes from the astra oracle and other long-lived prime-agent jobs, not something to worry about.
+
+Rather than prep the T5/T4 briefs now (which is cheap to do later), the higher-value move is verifying the facet frame shape, since that determines whether the browser can ever see tool activity and decides the scope for T4/T7/T9. Let me look at the frame types.
+[2026-09-05T09:33:13.614Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:33:13.635Z] TOOL_RESULT (ipython):
+/// <reference types="@cloudflare/workers-types" />
+
+import { Result } from "better-result";
+import { MainHarnessArtifact } from "./artifact.js";
+import type { ModelRoute } from "../model-route.js";
+import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
+import type {
+  HarnessModule,
+  MainHarnessArtifactInput,
+  MainHarnessArtifactProblem,
+} from "./artifact.js";
+
+export { MainHarnessArtifact } from "./artifact.js";
+export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
+export type { WorkspaceCapability } from "./generation-0/index.js";
+
+/**
+ * What every main-harness generation must expose, whatever else it adds. The Supervisor holds a
+ * stub of this shape and nothing wider, so a generation cannot widen the surface the host talks
+ * to by adding methods.
+ *
+ * `startTurn` takes the project capability as an argument. That is the whole reason this contract
+ * has a method rather than only `fetch`: a capability belonging to one project must not reach
+ * loader environment, which is cached per harness commit and shared by every project the
+ * generation serves.
+ */
+export interface MainFacetTarget extends Rpc.DurableObjectBranded {
+  fetch(request: Request): Promise<Response>;
+  startTurn(
+    projectTarget: ProjectRpcTargetContract,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request crosses an RPC hop into generated code, so the host proves nothing about its shape and the generation parses it.
+    request: unknown,
+  ): ReadableStream<Uint8Array>;
+}
+
+function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {
+  return [module.name, { js: module.source }];
+}
+
+/**
+ * What a main-facet generation receives in its loader environment. These are capabilities, not
+ * bindings: the model route keeps the model choice, the reasoning effort, the endpoint, and the
+ * credential outside the facet.
+ *
+ * Only generation-invariant capabilities belong here. The Worker Loader caches an entry under the
+ * harness commit, so anything placed here outlives the request that installed it and is shared by
+ * every request that generation serves; a capability scoped to one project would be whichever
+ * project warmed the cache. Those arrive as arguments of {@link MainFacetTarget.startTurn}
+ * instead.
+ */
+export type MainFacetCapabilities = Readonly<{
+  MODEL: Fetcher<ModelRoute>;
+}>;
+
+function loadArtifact(
+  loader: WorkerLoader,
+  artifact: MainHarnessArtifact,
+  capabilities: MainFacetCapabilities,
+): WorkerStub {
+  return loader.get(artifact.harness
+
+
+[2026-09-05T09:33:19.581Z] ASSISTANT THINKING:
+I notice `MainFacetTarget.startTurn` actually returns a `ReadableStream<Uint8Array>`, so there is a streaming contract at the facet boundary—meaning frames get streamed out even though the underlying model call itself is request/response, so a frame can only emit once the full model reply lands. I want to check route-stream.ts and turn.ts to see what these frames actually carry.
+[2026-09-05T09:33:19.581Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:33:19.602Z] TOOL_RESULT (ipython):
+import { createAssistantMessageEventStream } from "@cf-stumble/pi";
+import type {
+  Api,
+  AssistantMessage,
+  AssistantMessageEventStream,
+  Model,
+  StreamFn,
+} from "@cf-stumble/pi";
+
+/**
+ * `@cf-stumble/pi` exports `StreamFn` but not the `Context` it receives, so derive both that and
+ * its message type from the function it belongs to rather than restating either shape here.
+ */
+type Context = Parameters<StreamFn>[1];
+type Message = Context["messages"][number];
+import {
+  isResponseError,
+  piContextToRouteRequest,
+  routeResponseToPiAssistant,
+} from "./workers-ai-adapter.js";
+import type { PiMessage, PiTool, PiToolParameters } from "./workers-ai-adapter.js";
+import type { ModelCapability } from "./capabilities.js";
+
+/**
+ * The model descriptor Pi's `Agent` needs in its state. Every field the host actually decides —
+ * which model, which reasoning effort, which endpoint, which credential — lives behind the model
+ * route in the immutable `src/model-route.ts`, so nothing here selects anything. This describes
+ * the route, not a model, which is why its costs and its context window are zero: Generation 0 has
+ * no way to learn the real values and must not invent them.
+ */
+export const ROUTE_MODEL = {
+  id: "host-model-route",
+  name: "Host model route",
+  api: "workers-ai",
+  provider: "cloudflare-workers-ai",
+  baseUrl: "",
+  reasoning: false,
+  input: ["text"],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 0,
+  maxTokens: 0,
+} satisfies Model<Api>;
+
+const ZERO_USAGE = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+} as const;
+
+/**
+ * Narrows one Pi message to the text-only shape the model route's closed message union can carry,
+ * or reports `undefined` when it holds content the route has no field for.
+ *
+ * Generation 0 prompts with text and runs four text tools, so image content cannot arise from its
+ * own turns. Rejecting it is still the honest answer for a conversation that somehow holds one:
+ * the route would otherwise receive a message with the image silently missing, and the model would
+ * answer about a picture it 
+
+
+[2026-09-05T09:33:22.701Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:33:22.725Z] TOOL_RESULT (ipython):
+ge.content.filter((block) => block.type === "text");
+    return text.length === message.content.length ? { ...message, content: text } : undefined;
+  }
+  const text = message.content.filter((block) => block.type === "text");
+  return text.length === message.content.length ? { ...message, content: text } : undefined;
+}
+
+function routableMessages(messages: readonly Message[]): readonly PiMessage[] | undefined {
+  const routable: PiMessage[] = [];
+  for (const message of messages) {
+    const narrowed = routableMessage(message);
+    if (narrowed === undefined) return undefined;
+    routable.push(narrowed);
+  }
+  return routable;
+}
+
+function routableTools(tools: Context["tools"]): readonly PiTool[] {
+  return (tools ?? []).map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: a Pi tool's typebox schema is a JSON Schema object, which is what the route's tool definition carries.
+    parameters: tool.parameters as PiToolParameters,
+  }));
+}
+
+function assistantShell(stopReason: AssistantMessage["stopReason"]): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [],
+    api: ROUTE_MODEL.api,
+    provider: ROUTE_MODEL.provider,
+    model: ROUTE_MODEL.id,
+    usage: ZERO_USAGE,
+    stopReason,
+    timestamp: Date.now(),
+  };
+}
+
+function endedStream(reason: "error" | "aborted", detail: string): AssistantMessageEventStream {
+  const stream = createAssistantMessageEventStream();
+  stream.push({
+    type: "error",
+    reason,
+    error: { ...assistantShell(reason), errorMessage: detail },
+  });
+  return stream;
+}
+
+function failedStream(detail: string): AssistantMessageEventStream {
+  return endedStream("error", detail);
+}
+
+async function streamOnce(
+  model: ModelCapability,
+  context: Context,
+): Promise<AssistantMessageEventStream> {
+  const messages = routableMessages(context.messages);
+  if (messages === undefined) return failedStream("the conversation holds non-text content");
+
+  const request = piContextToRouteRequest(
+    context.systemPrompt === undefined
+      ? { messages, tools: routableTools(context.tools) }
+      : {
+          systemPrompt: context.systemPrompt,
+          messages,
+          tools: routableTools(context.tools),
+        },
+  );
+
+  let response;
+  try {
+    response = await model.run(request);
+  } catch {
+    return failedStream("the model route did not answer");
+  }
+  if (!response.ok) return failedStream(response.error.code);
+
+  const assistant = routeResponseToPiAssistant(response);
+  if (isResponseError(assistant)) return failedStream(assistant.detail);
+
+  const message: AssistantMessage =
+
+
+[2026-09-05T09:33:45.735Z] ASSISTANT THINKING:
+Now I've confirmed E7 exactly: `streamOnce` awaits the full model response, then wraps the completed message into a Pi `AssistantMessageEventStream` after the fact — a stream of exactly one finished item. That's the precise mechanism behind the model route buffering output rather than truly streaming.
+
+This makes T4's fix narrow and well-located: make `ModelCapability.run` incremental (Workers AI supports `stream: true`) and push deltas into the existing event stream instead of pushing once. The plumbing above and below already supports streaming — only the adapter and route interface are non-incremental, which is much better scoped than "add streaming everywhere." Time to write up E7 and check jobs before ending the turn.
+
+
+[2026-09-05T09:33:45.735Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:33:45.830Z] TOOL_RESULT (ipython):
+OPUS_RUNNING
+T2_RUNNING
+
+
+
+[2026-09-05T09:33:55.219Z] ASSISTANT:
+**E7 — and this one is good news. It makes T4 smaller, not bigger.**
+
+The streaming plumbing already exists on both sides:
+
+- `MainFacetTarget.startTurn` returns `ReadableStream<Uint8Array>` — the facet boundary is a stream by contract.
+- Pi exports `createAssistantMessageEventStream()` and the code already uses it.
+
+The collapse is one line, in `route-stream.ts:streamOnce`:
+
+```ts
+response = await model.run(request);   // whole reply, one await
+// ...then the FINISHED message is pushed into a fresh event stream as a single event
+```
+
+It is a stream of one. So the non-incremental surface is exactly **two hops** — the model route's return type (E5) and this adapter. T4 does not have to invent streaming through the facet, the page transport, or Pi. It must give the route an incremental interface (Workers AI supports `stream: true`) and push deltas instead of one event. That is a narrow change at a real seam.
+
+If the roadmap sized T4 as large on the strength of the critique's phrase "buffers output", that sizing should come down.
+
+**One caveat I logged to keep T4 and T7 honest:** `ROUTE_MODEL` declares `contextWindow: 0`, `maxTokens: 0`, with the comment that Generation 0 "has no way to learn the real values and must not invent them". Compaction reads context-window numbers, so a zero window may mean Pi's compaction never triggers. T7 must confirm that before claiming the forced-compaction test in goal criterion 5.
+
+**Correction to something I said earlier:** I misjudged elapsed time. The opus review has run about 6 minutes, not 45, and its session file was written 9 seconds ago. T2 started 2 minutes ago. Both are healthy and young — the whole run is only ~35 minutes old.
+
+Seven findings now confirmed from source. Five are blockers (E1–E6), one shrinks a task (E7).
+
+[2026-09-05T09:34:00.988Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:34:01.094Z] TOOL_RESULT (ipython):
+02:34:01
+OPUS_RUNNING
+ls: /tmp/cf-stumble-v0/review-opus-round1.md: No such file or directory
+T2_RUNNING
+d6ff238 docs(design): align version zero architecture
+
+
+
+[2026-09-05T09:34:09.153Z] ASSISTANT THINKING:
+Both processes are still running with only a minute elapsed, so I'll hold off on repeated status checks to conserve context. Instead, I should focus on verifying finding #3's claim about paid evidence covering only R2 and Workers AI, and finding #7's adapter/protocol test recovery scope — starting with T1 since it's the paid wave-0 item.
+
+I'll read computer-integration.md, the pinned doc, to see what's already verified before spending money, since that directly de-risks the only paid task.
+[2026-09-05T09:34:09.153Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:34:09.174Z] TOOL_RESULT (ipython):
+4229
+# Computer integration
+
+cf-stumble uses Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. ADR-0026 records the decision.
+
+## Pinned pair
+
+Both pins must change and be retested together. The source contains unreleased `@cloudflare/computer` and `@cloudflare/computerd` 0.3.0, while npm `latest` remains 0.2.1; changing only one pin could combine incompatible versions.
+
+## Verified capabilities
+
+Worker-shell handles text operations and host-forwarded Git. The container handles Node, pnpm, TypeScript compilation, tests, and project commands.
+
+The paired source and image ran on a paid Cloudflare account on 2026-08-29. Container commands worked after cold starts of about 2.6–2.9 seconds. Files persisted across requests and stayed isolated by workspace identity. The stock example provided Node 22.23.2, pnpm 11.24.0, Git, and FUSE. `pnpm add is-odd@3.0.1` installed and ran through network package access.
+
+Computer issue [#114](https://github.com/cloudflare/computer/issues/114) reports a deployed WebSocket failure in 0.2.1. The exact 0.2.1 reproduction was not deployed, so the issue is neither disproved nor known to be fixed. Repeated warm and cold requests using the pinned 0.3.0 pair did not show the failure.
+
+## Upgrade follow-up
+
+Before version 0 relies on the pinned pair, check whether Cloudflare has published a supported
+Computer release that provides the required Worker-shell, container, and Durable Object behavior.
+Prefer that release if the full application workflow passes against it. Until then, retain the
+source and image pair that the paid-account test exercised; do not update one without the other.
+
+## Workspace layout
+
+Version 0 uses one durable Computer workspace for the owner's harness repository and connected
+GitHub project repositories. Each repository has its own directory and Git history. The page selects
+a project directory in which the main facet starts work, but the shared filesystem is not a security
+boundary between the owner's repositories.
+
+Each project also has one current Pi thread stored outside the workspace and outside generation
+state. Starting a fresh thread replaces conversation and compacted context without changing project
+files. Both the project thread and shared workspace survive main-harness generation changes.
+
+The workspace behaves like an ordinary development machine. It has unrestricted outbound internet
+access, `git`, `gh`, and repository toolchains. GitHub credentials live in local configuration
+outside the repositories.
+
+The current implementation still derives a separate Computer workspace name for each project and a
+separate name for harness builds. It must be simplified to use the shared workspace before version 0
+is complete.
+
+## Harness execution
+
+The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. Comput
+...[truncated 1235 chars]
+
+[2026-09-05T09:34:37.638Z] ASSISTANT THINKING:
+This matches finding #3 exactly, and the doc itself confirms the separate workspace naming needs simplifying before version 0 is complete. Looking at the paid test evidence from 2026-08-29, it covered container commands, cold start, persistence, isolation, toolchain, and network install, but didn't test the Worker Loader + facet + Computer + workspace-capability path end to end that the doc's own deploy flow describes.
+
+So the oracle's claim that existing paid evidence proves only R2 and Workers AI is slightly off — it actually does cover Computer container basics, just not the Worker Loader/facet/module-map build/load path. That's worth recording as a correction: the paid probe should target the untested path rather than re-proving container basics, which saves paid budget. I should also flag as a lower-priority follow-up whether Cloudflare has published a supported Computer release, since the doc lists that as an open question, though the pinned pair currently works fine. Time to write this up as E8.
+[2026-09-05T09:34:37.638Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:34:37.669Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:34:48.313Z] ASSISTANT:
+**E8 — the audit corrected the oracle, and it will save paid budget.**
+
+The critique said existing paid evidence "proves only R2 and Workers AI, not Computer build/load or the full capability path". The first half is too strong. `docs/agents/design/computer-integration.md` records a paid-account test on 2026-08-29 with the pinned 0.3.0 pair that already proved:
+
+- container commands after 2.6–2.9 s cold starts
+- files persisting across requests, isolated by workspace identity
+- Node 22.23.2, pnpm 11.24.0, Git, FUSE present
+- network package installs working
+- no reproduction of Computer issue #114
+
+T1 should not spend money re-proving any of that. The genuinely unproved chain is the one the document itself names under "Deployment risk": **module-map build for a labeled commit → R2 cache under that commit → Worker Loader load by commit id → facet cold start with the workspace capability passed as a `startTurn` argument.** And step one must run twice, since goal criterion 7 demands identical module maps from two clean builds.
+
+That chain is also exactly where E1 bites — the build command cannot resolve `@cf-stumble/pi` from clean state — so T1's local fix must land before its paid probe, or the money is wasted on a known failure.
+
+The same document independently confirms E3 in its own words: *"The current implementation still derives a separate Computer workspace name for each project and a separate name for harness builds. It must be simplified to use the shared workspace before version 0 is complete."*
+
+**Net effect of the audit so far:** eight evidence notes. Six confirm blockers. Two push the other way — E7 shrinks T4 to a narrow seam change, and E8 narrows T1's paid scope. Treating the oracle as almost certainly correct was the right default, and checking it against source paid for itself twice.
+
+One open risk logged, not acted on: the doc asks whether Cloudflare has since published a supported Computer release. Both pins must move together. Tonight keeps the pinned pair; revisit only if T1 fails against it.
+
+T2 and the opus review are both still running.
+
+[2026-09-05T09:34:51.783Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:34:51.885Z] TOOL_RESULT (ipython):
+02:34
+OPUS_RUNNING
+T2_RUNNING
+d6ff238 docs(design): align version zero architecture
+
+
+
+[2026-09-05T09:34:58.923Z] ASSISTANT THINKING:
+Time's barely moving even as turns fire rapidly, so I should stop polling status and focus on substantive work that doesn't burn context. The deep audit is done, but rather than prepping task briefs that depend on the review, it might be more valuable to actually read the task specs in the roadmap beyond just their headings, so dispatch decisions are well-informed.
+
+I'll read T1's section first since it's the paid task and most consequential to gate correctly, then move on to T5.
+[2026-09-05T09:34:58.923Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:34:58.947Z] TOOL_RESULT (ipython):
+### T1. Prove the clean commit build and paid execution seams
+
+- **Why.** Warm local builds hide missing Pi build prerequisites. Existing paid evidence proves R2 and Workers AI, not Computer-to-facet execution. Later work must use observed contracts.
+- **Scope.** `src/harness-build.ts`, `src/supervisor/artifacts/{builder,build-workspace,build-plan}.ts`, `src/workspace/harness-build.ts`, `tools/build-generation-0.mts`, `package.json`, `vendor/pi-v0.84.4/package.json`, `scripts/probe/`, focused tests in `test/supervisor/artifacts/` and `test/workspace/harness-build.test.ts`. Read `src/workspace/host.ts`, `src/facet/index.ts`, and ADRs 0026 through 0029 and 0034. Update evidence in `docs/agents/design/computer-integration.md` without rewriting the layout decision.
+- **Acceptance criteria.**
+  1. Reproduce the oracle's clean-archive failure. Make the build operation explicitly obtain the named commit, use the lockfile, build Pi, then produce the module map from a clean checkout. It must not borrow parent `node_modules`, generated Pi output, or the owner's uncommitted source. Propagate failures from archive extraction as well as compilation.
+  2. A new commit submitted after the harness checkout was provisioned is fetched or found locally. A commit absent from the configured repository returns a bounded, actionable failure. An interrupted provision must not erase an existing editable harness checkout.
+  3. Two independent clean builds of one commit produce byte-identical canonical maps. Retain commands and outputs. The existing fake-module ordering test is not this check.
+  4. In an approved disposable paid environment, a loaded facet receives the model capability and a per-turn Computer RPC capability, reads and writes a durable file, runs a container command, and reaches an arbitrary ordinary internet destination. No capability is serialized into a cached project-specific Loader environment.
+  5. Computer builds the map, the commit-named Loader accepts it, and a cold candidate passes bounded `GET /`. Restart or evict the host and facet and show the durable file again. Record cold/warm timings, image/source pins, input commit, and raw redacted failures.
+  6. Check for a supported Computer source/image pair. Retain the current paired pins unless the replacement passes the same checks. A mismatch or unreproducible map stops this gate; record the disproof rather than adding a fake or a second cache identity. Paid authorization or account access missing means blocked, not passed.
+- **Verification command.** `pnpm verify`. Also run the task's repeatable clean-build and paid probe commands and record their exact invocation. They are mandatory additional evidence, not part of the local gate.
+- **Dependencies.** None.
+- **Size.** L.
+- **Owner tier.** `opus-manager`.
+
+
+
+
+[2026-09-05T09:35:24.281Z] ASSISTANT THINKING:
+T1 looks well-specified — criterion 4 requires a paid disposable environment for deployment, and criterion 6 makes clear that missing paid access means the task is blocked, not passed. This means T1 can be dispatched safely overnight since the criteria already handle the unsupervised case by reporting "blocked" rather than falsely claiming success.
+
+The concern is whether dispatching T1 risks spending money unsupervised, since criteria 4/5 would attempt a paid Cloudflare deploy if credentials exist. Given the roadmap itself names "approved disposable paid environment" as a precondition, I think the safer approach is splitting T1: dispatch the local half now (criteria 1, 2, 3, and the criterion 6 check) which is pure local work fixing E1 and proving deterministic builds, while explicitly forbidding any paid deploy and recording criteria 4/5 as blocked pending owner approval. This unblocks the critical path locally at zero cost while staying faithful to the plan's own blocked-not-passed semantics.
+
+Checking file overlap: T1 touches the harness build file while T2 touches the control journal, so there's no conflict — both start from the same commit in separate worktrees, safe to run in parallel. The pending review doesn't block this either, since T1's first three criteria are ADR-independent and just prove a clean build works, which E1 shows is currently broken. I'll dispatch T1-local now with the paid-deploy prohibition explicit, and add a question for the owner about approving
+[2026-09-05T09:35:24.281Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:35:24.320Z] TOOL_RESULT (ipython):
+64698 True
+
+
+[2026-09-05T09:35:42.512Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:35:42.539Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:35:52.161Z] ASSISTANT:
+**T1 dispatched — local half only. No money spent.**
+
+T1 is wave 0 and everything depends on it, but its criteria 4 and 5 require a real paid probe, and the roadmap itself demands "an approved disposable paid environment". You are asleep and gave no such approval.
+
+So I split it:
+
+- **Running now:** criteria 1, 2, 3 and the pin *check* — all local. This includes the E1 fix and, most importantly, **criterion 3: two independent clean builds producing byte-identical canonical maps.** That is the core of goal criterion 7, and it cannot be checked at all while E1 stands.
+- **Explicitly forbidden in the brief:** `wrangler deploy`, creating or starting any Computer workspace, any billing API call, any use of your account credentials.
+- **Recorded as blocked:** criteria 4, 5 and pin replacement — using T1's *own* rule that missing paid authorization means blocked, not passed. Faking or simulating a paid result is forbidden in writing, since that is the obvious way a worker would otherwise "finish".
+
+The worker also gets the E1 diagnosis with file and line evidence, so it spends its budget on the fix and the proof rather than rediscovering the fault. It is told to prefer one owning `build:artifact` script that both the Supervisor command and the local gate use, so the two cannot drift apart again — and not to commit `dist/`, which would trade a build fault for a staleness fault.
+
+Tier is opus-5 as the roadmap specifies. No file overlap with T2, so both run in parallel in separate worktrees.
+
+**Q7 is waiting for you** in `.audit/v0/questions.md` and needs an explicit yes:
+
+1. May a worker run the paid probe unsupervised, and against which account or disposable environment?
+2. Is there a spend ceiling?
+3. Pinned Computer pair, or check for a supported release first?
+
+Until you answer, the critical path stops after the local clean-build fix. Every other wave-1 task is local and continues regardless.
+
+Running now: T1 (opus-5), T2 (sonnet-5), and the opus plan review.
+
+[2026-09-05T09:35:56.906Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:35:56.988Z] TOOL_RESULT (ipython):
+02:35
+T1: RUNNING
+T2: RUNNING
+
+
+
+[2026-09-05T09:36:08.225Z] ASSISTANT THINKING:
+With all three running, I want to keep making progress rather than just checking status, so I'm looking at the remaining wave-1 tasks—T3, T4, T5—to see if I should dispatch T4 and T5 now. T5 involves lease fencing tied to goal criterion 6, is local and reversible, and touches the supervisor and thread modules, while T3 overlaps with some of the same supervisor code.
+
+Since T3 and T5 sit in separate worktrees off the same base, merging later should still work fine as a normal git merge on distinct regions. T4 covers model route streaming and doesn't overlap with any of T1, T2, T3, or T5's files, so it looks safe to run in parallel too. Given the same reasoning I used for T1 and T2 — local, reversible, goal-driven, separate worktrees, and independent confirmation from the E2/E5/E7 evidence — I'll go ahead and read the T4 and T5 sections before dispatching both.
+
+
+[2026-09-05T09:36:08.225Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:36:08.244Z] TOOL_RESULT (ipython):
+### T5. Make thread completion require the lease that admitted it
+
+- **Why.** Thread revision alone cannot distinguish an expired turn from its replacement. The store already creates a lease ID, but public completion methods discard it.
+- **Scope.** `src/supervisor/threads/`, only the thread RPC wrappers in `src/supervisor/supervisor.ts`, and `test/supervisor/threads/`. Read ADRs 0035, 0036, and 0038. T3 owns Supervisor construction and workspace wiring.
+- **Acceptance criteria.**
+  1. Every finish or abandon operation requires the lease ID that admitted that turn. Migrate the current RPC wrappers and tests and remove optional/unkeyed completion paths in the same task. Keep lease IDs server-owned; do not make the browser the save coordinator.
+  2. A late finish or abandon from turn A cannot alter turn B after expiry/takeover at the same revision. Test both operations, not only successful finish.
+  3. Fresh thread invalidates old leases even when revision zero recurs. A delayed start against a replaced thread must not be accepted solely because its old numeric revision matches. Use a durable thread identity or monotonic concurrency version and test the reset race through storage.
+  4. Starting fresh clears Pi messages and compacted context without touching workspace files. It cannot let the old lease save into the replacement. The later turn coordinator receives enough identity to cancel or fence its old work.
+  5. Reads, admission, and writes use the existing synchronous transactions and plain serialized Pi messages. Keep one active turn per project. An expired lease permits a new admission without needing an alarm.
+- **Verification command.** `pnpm verify`.
+- **Dependencies.** T1.
+- **Size.** M.
+- **Owner tier.** `sonnet-implementer`.
+
+
+
+
+[2026-09-05T09:36:44.119Z] ASSISTANT THINKING:
+The T1 dependency for T5 seems spurious since T5 is pure thread-store work unrelated to T1's build fix—likely just a wave-ordering artifact. But I should consider whether T5's tier needs bumping since it's actually an interface change touching every consumer.
+
+Digging into T5's criteria, criterion 3 requires durable thread identity or monotonic concurrency version—that's a schema change plus race testing through storage, real design work rather than mechanical implementation. Despite the roadmap listing sonnet-implementer size M, my D20 review flagged this, so I'll upgrade T5 to opus-5 and record the deviation, since the roadmap's own definition of opus-manager tasks fits here.
+
+I'll dispatch T5 on opus-5 with E2 and E6 evidence, then check whether T4 can be dispatched too using E5 and E7 without fully re-reading its section to save context—though I'm second-guessing whether that's the right call.
+
+I don't need to read T4 myself since the worker reads the roadmap directly; my job is just supplying evidence. I do want to confirm whether T4 involves paid spend—it's about carrying real model events through the fixed Workers AI route, and testing against real Workers AI might require a paid account, so I'll add the same no-paid-spend clause to T4 before dispatching both.
+[2026-09-05T09:36:44.119Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:36:44.161Z] TOOL_RESULT (ipython):
+65499 65503
+
+
+[2026-09-05T09:36:59.630Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:36:59.657Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:37:09.889Z] ASSISTANT:
+**Wave 1 is now three-quarters running: T2, T4 and T5 are in flight alongside T1's local half.**
+
+Dispatched this turn:
+
+- **T5 — lease fencing** (opus-5). I **raised its tier** from the roadmap's `sonnet-implementer`. Its criterion 3 needs a durable thread identity or monotonic concurrency version plus a reset-race test through storage — by the roadmap's own sizing rule that is "an empirical design choice", which is L, not M. E2 also shows it changes an interface and every consumer. Logged as a deviation for the reviewer to confirm.
+- **T4 — model route streaming** (sonnet-5). The brief carries E7's proof that the change is two hops, not a rewrite, and tells the worker not to touch the facet transport or the page. It must keep `FORBIDDEN_FIELDS` blocking client overrides of model, provider and credentials, keep the model fixed (model selection is outside the cut line), and test a **mid-stream** failure, not only a failure before the stream starts.
+
+**Two judgement calls worth flagging:**
+
+**I refused a false dependency.** The roadmap lists T1 as a dependency of T5. T1 fixes the clean *build* path and touches no thread code — that is wave ordering, not a semantic prerequisite. Obeying it would have serialised the whole night behind a task whose paid half is blocked on Q7 anyway. The T5 brief says so and tells the worker to stop and report if a real dependency turns up.
+
+**I held T3 back deliberately.** It is the largest critical-path task, it collides with T5 in `supervisor.ts` and with T6 at line 87, and E3 shows it must treat the duplicated `PROJECT_ROOT` as one seam rather than two constants. That is exactly the scope the review should confirm before an opus manager commits to a long run.
+
+Every worker brief now carries the same written no-paid-spend clause: no deploy, no Computer workspace, no billing API, no account credentials — and faking or simulating a paid result to close a criterion is forbidden in writing.
+
+Running: T1 (local half, opus-5), T2 (sonnet-5), T4 (sonnet-5), T5 (opus-5), and the plan review (opus-5). Each in its own worktree, each gated on `pnpm verify` plus a written report.
+
+[2026-09-05T09:37:13.943Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:37:14.101Z] TOOL_RESULT (ipython):
+02:37
+T1: RUN d6ff238 docs(design): align version zero architect
+T2: RUN d6ff238 docs(design): align version zero architect
+T4: RUN d6ff238 docs(design): align version zero architect
+T5: RUN d6ff238 docs(design): align version zero architect
+
+
+
+[2026-09-05T09:37:37.925Z] ASSISTANT THINKING:
+All four workers are still running with no commits yet, and review is pending, so instead of continuing to poll I should use this time productively by drafting the fan-in procedure — the order and gates for merging the four branches into main — and recording it in STATE.md so it's ready for whoever executes it next.
+
+Working out merge order based on file overlaps, I'm settling on T1 first (since build wiring underlies verify), then T2, T4, T5, each merged sequentially into main with a pnpm verify gate before committing. I'll also add a recovery notes section covering how to resume after a kernel restart, so the state stays useful across interruptions.
+
+
+[2026-09-05T09:37:37.925Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:37:37.950Z] TOOL_RESULT (ipython):
+12286 chars
+
+
+[2026-09-05T09:37:42.171Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:37:42.325Z] TOOL_RESULT (ipython):
+02:37
+/tmp/cf-stumble-v0/review-opus-round1.md
+REVIEW_READY
+T1: RUN
+T2: RUN 7 files changed, 51 insertions(+), 277 deletions(-)
+
+T4: RUN
+T5: RUN
+
+
+
+[2026-09-05T09:37:45.213Z] ASSISTANT THINKING:
+The review is ready, and T2 shows 7 files changed with 277 lines removed from deleting the journal. I'll read through the review now.
+
+
+[2026-09-05T09:37:45.213Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:37:45.233Z] TOOL_RESULT (ipython):
+39249
+# Adversarial review of `roadmap-v0.md` — round 1 (opus)
+
+Reviewer: root agent (`anthropic/claude-opus-5`), independent of the roadmap author and of the
+`sol` reviewer. Base commit `d6ff2380487a60f410c568272635d99f30560d14`, working tree clean, no
+tracked file modified. All file:line citations below were read by me in this session unless the
+section says otherwise.
+
+Inputs read: `oracle-summary.md`, `goal.md`, `roadmap-v0.md`, `architecture-critique.md`,
+`.audit/v0/evidence/E1..E5`, `.audit/v0/STATE.md`, `docs/agents/design/feature-map.md`,
+`docs/agents/adr/README.md`, `package.json`, `src/harness-build.ts`, `src/supervisor/supervisor.ts`,
+`src/facet/generation-0/*`, `src/model-route.ts`, `tools/vendor-pi.mts`,
+`vendor/pi-v0.84.4/{package.json,index.ts,UPSTREAM.json,SHA256SUMS}`, `clean-build-baseline.log`.
+
+---
+
+## 1. Verdict
+
+**SHIP WITH FIXES — but do not dispatch the wave plan unchanged tonight.**
+
+The plan's content is unusually good: the findings are real, the deletions are approved by
+human-approved ADRs, and the empirical gates are honest. The defects are structural, not
+intellectual. As written, one task (T1) mixes a cheap deterministic bug fix with an expensive
+paid probe and then gates four tasks that need no platform fact at all, so a missing Cloudflare
+authorization at 02:00 costs the entire night. T1 also does not leave behind any automated proof
+of the E1 blocker it is supposed to close, so the fault can silently return. T7 deletes the only
+code in the repository that produces a diff, which is required by goal criterion 4 and by step 3
+of the feature-map demo. T7 also edits a *generated* vendored file whose checker is inside
+`pnpm verify`, so the task as scoped cannot pass its own gate. T6 needs a human at
+`github.com/login/device` yet sits on the unsupervised critical path. Six roadmap edits, perhaps
+thirty minutes of work, remove all of that. Make them first.
+
+---
+
+
+
+
+[2026-09-05T09:37:50.356Z] ASSISTANT THINKING:
+The verdict confirms my read on T1's split and the false dependency, but also surfaces new risks: T1 lacks automated proof of E1 (regression risk), T7 deletes the only diff-producing code needed for the demo criterion and edits a vendored file whose checker sits in pnpm verify, and T6 requires human intervention at the device login step on an otherwise unsupervised path. Now I want to check the blocking objections section.
+[2026-09-05T09:37:50.356Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:37:50.375Z] TOOL_RESULT (ipython):
+## 2. Blocking objections
+
+### B1. T1 is two tasks, and its expensive half gates four tasks that do not depend on it
+
+**Defect.** T1 acceptance 1–3 are deterministic, local, free, and testable
+(`git archive` → install → build Pi → build map → compare two maps). T1 acceptance 4–6 need an
+approved paid Cloudflare environment, a Computer container, a Worker Loader, and account
+authorization. T1 is `L`/`opus-manager` and is the sole member of wave 0. Wave 1 (T2, T3, T4, T5)
+lists `Dependencies: T1` for **all four**.
+
+**Evidence.** T2 touches `src/supervisor/control/`, `src/routes/generations.ts`, `src/page/*`
+— nothing in that set reads a module map or a Computer capability. T5 touches
+`src/supervisor/threads/` plus three method bodies in `src/supervisor/supervisor.ts`
+(`finishProjectTurn` at line 236, `abandonProjectTurn` at 248, `startProjectTurn` at 226); it is
+pure Durable Object SQLite work. T8 is `Dependencies: T1` and is an R2 lifecycle rule. None of
+those four can be invalidated by any outcome of T1 acceptance 4–6. The roadmap itself admits
+T1's paid half can end in "blocked, not passed" (T1.6: "Paid authorization or account access
+missing means blocked, not passed") — which under the current dependency graph means the whole
+roadmap is blocked.
+
+**Exact fix.** Split T1 and rewire:
+
+| new id | scope | size | tier | deps |
+|---|---|---|---|---|
+| T1a Clean-commit build correctness | T1 acceptance 1, 2, 3 + the regression proof in B2 | M | `sonnet-implementer` | none |
+| T1b Paid capability / build / load gate | T1 acceptance 4, 5, 6 | L | `opus-manager` | T1a |
+
+Then set `Dependencies: none` on T2 and T5, `Dependencies: T1a` on T3 and T8, and
+`Dependencies: none` on T4's local work with T4.1's paid clause moved to T1b's probe list.
+Wave 0 becomes "T1a + T2 + T5 in parallel"; T1b runs beside them, and a paid failure stops only
+T3/T7/T9/T12, not the night.
+
+### B2. T1 as written does **not** durably fix or prove E1
+
+This is the objection the caller asked for specifically. T1 gets the *diagnosis* right and the
+*repair* roughly right, but its proof is unfalsifiable and it names none of the platform
+assumptions the repair introduces.
+
+**What T1 gets right.** T1.1 requires the build operation to "obtain the named commit, use the
+lockfile, build Pi, then produce the module map from a clean checkout" and forbids borrowing the
+parent `node_modules` or generated Pi output. That is the correct repair for
+`src/harness-build.ts:30` (`buildCommand: "pnpm run build:module-map"`), whose plan
+(`planHarnessBuild`, same file) runs exactly four steps — `provision`, `isolate`, `checkout`,
+`build` — with **no install step and no `build:pi` step**, into a directory populated by
+`git archive`, which cannot contain untracked `vendor/pi-v0.84.4/dist/`.
+
+**Gap 1 — no automated regression. A worker can claim T1.1 and T1.3 without evidence.**
+T1.1 says "Reproduce the oracle's clean-archive failure"; T1.3 says "Retain commands and outputs".
+Both are one-time manual acts rec
+...[truncated 6001 chars]
+
+[2026-09-05T09:38:03.224Z] ASSISTANT THINKING:
+This review is excellent and confirms my T1 split while flagging critical gaps: the running T1 worker lacks the regression proof items, wording fixes, container probes, and race isolation the review calls for. Since I can't message the shell-out mid-run, I need to decide whether to let it finish and dispatch a follow-up task, or intervene now.
+
+Given only ~6 minutes have elapsed, killing and re-dispatching T1 with the improved brief is worth it — the B2 gap around not letting faults silently return is exactly what needs baking in now rather than fixing in a second pass later. I'm also noting for later: B3 flags T7 as deleting the only diff-producing code (wave 2 issue), and T6 needs human device auth on its critical path.
+
+Before acting, I want to quickly scan the remaining blocking objections and find the "safe to dispatch now" section.
+[2026-09-05T09:38:03.224Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:38:03.241Z] TOOL_RESULT (ipython):
+`, `doc-verifier`) were still running when I wrote
+  this file; every claim above rests on my own reads, not on theirs. If their findings contradict
+  anything here, that goes in round 2.
+
+---
+
+## 9. Safe to dispatch now
+
+Question: of T2, T4 and T5, which can be implemented immediately at `d6ff238` without waiting for
+T1's paid proof, and which would be wasted work if T1 disproved a platform assumption?
+
+**T5 — dispatch now. Unconditionally safe.** It touches `src/supervisor/threads/store.ts`,
+`project-threads.ts`, three method bodies in `supervisor.ts`, and `test/supervisor/threads/`. All
+of it is Durable Object SQLite and plain values. No Computer, no R2, no Loader, no model. E2 has
+already located every call site, so the diff is known before the worker starts. No T1 outcome —
+build failure, non-reproducible map, absent capability — changes a single line of it. Dispatch it
+first, because it also clears the `supervisor.ts` merge hazard for T3 (B6).
+
+**T2 — dispatch now. Safe, with one small waste risk that is avoidable.** ADR-0030 is
+human-approved, the target files are `src/supervisor/control/`, `src/routes/generations.ts` and the
+page's generation script. Nothing in it depends on any platform fact. The stated `Dependencies: T1`
+is fictional. The one avoidable waste: T2's edits to `src/page/markup.ts`,
+`src/page/element-ids.ts` and `src/page/script-generations.ts` land in files T10 rewrites in wave 4,
+so restrict T2 to *deleting* the request-id controls and their tests, and forbid layout work.
+Before dispatch, resolve T2 acceptance 4 (the already-ready-candidate question) — as written it
+hands a design decision to a `sonnet-implementer`.
+
+**T4 — dispatch the local two-thirds now; hold acceptance 1's paid clause.** The Pi-facing side is
+fully determined at `d6ff238`: the event types are vendored and pinned
+(`AgentEvent`, `StreamFn`, `AssistantMessageEventStream` in `vendor/pi-v0.84.4/index.ts`), and the
+adapter can be built and tested against a deterministic provider adapter today. Acceptance 4's
+context/output limits are a pure fix to `ROUTE_MODEL` (`contextWindow: 0`, `maxTokens: 0`,
+`ZERO_USAGE` today). None of that needs T1.
+
+**Which would be wasted if T1 disproved a platform assumption.** Take T1's three possible
+disproofs in turn:
+
+1. *The Computer container cannot run install + `build:pi`* (no pnpm, no registry egress, native
+   install scripts blocked). The build moves out of the container — a prebuilt artifact, a
+   different image, or a changed build seam. This invalidates parts of T1's own design, T3.4 and
+   T8/T11's cache cases. **It does not touch T2, T4 or T5.**
+2. *Two clean builds are not byte-identical.* ADR-0034's assumption falls, artifact identity is
+   reconsidered, T8 and T11.4 change. **T2, T4 and T5 are untouched.**
+3. *Computer cannot deliver a per-turn RPC capability to a loaded facet, or the facet cannot reach
+   the internet.* This is the severe case: T3, T7, T9 and most of the product change shape. Even
+   then, **T
+...[truncated 1144 chars]
+
+[2026-09-05T09:38:14.894Z] ASSISTANT THINKING:
+My dispatch matches the review's recommended set well. I need to kill and re-dispatch T1 since it's missing regression-proof items like the probes and isolate race note, and I should narrow T2's scope to deletion-only changes in page files.
+
+For T4, I'm concerned since the paid Workers AI streaming smoke test the review recommends is blocked by Q7, but T4's already dispatched — I'll need its report to record assumptions about streaming with tools so I can add a cheap unblock to Q7. I'll also record B3 and T6 for wave 2, save the review to the audit folder, and prioritize re-dispatching T1 with the full fixes now.
+[2026-09-05T09:38:14.894Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:38:14.936Z] TOOL_RESULT (ipython):
+T1 killed, worktree removed
+
+
+[2026-09-05T09:38:37.242Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:38:37.268Z] TOOL_RESULT (ipython):
+67408
+
+
+[2026-09-05T09:39:05.984Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:39:06.010Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:39:18.561Z] ASSISTANT:
+**The plan review landed — verdict: SHIP WITH FIXES. It independently reached the same calls I made tonight.**
+
+Its recommended immediate dispatch set was *"T5, then T2, plus T4 minus its paid clause, with T1a in parallel and T1b queued"* — exactly what is running. It also called the `Dependencies: T1` on T2/T4/T5 **"fictional"**, matching the false dependency I refused earlier. Convergence between an independent reviewer and the dispatcher is worth more than either alone, so those dispatches stand.
+
+**The objection worth the whole review (B2):** T1 as written *fixes* E1 but does not *prove* it. No automated regression, so the drift returns the moment anyone edits either side. My running T1 worker had none of that in its brief, so I killed it at ~6 minutes (reading only, nothing lost) and re-dispatched as **T1a** carrying:
+
+- a `build:artifact` script, with `buildCommand` set to exactly that script name so the deployed command and the local gate cannot drift apart again
+- a gate test asserting `buildCommand` names a script that actually exists
+- a real clean-build test with `HOME` and the pnpm store isolated and `node_modules` unreachable
+- **six container preconditions to probe** — because the oracle's reproduction ran against a *warm* pnpm store (`reused 183, downloaded 0`) and a native `koffi`/`cnoke` install script, neither of which a fresh container gives
+- the correction that a local two-build check is only a pre-check; goal criterion 7 needs two clean **Computer** builds
+- the `rm -rf ${directory}` same-commit race handed to T3 in writing rather than absorbed
+
+**Three wave-2 defects found and recorded before those tasks are written:**
+
+1. **T7 would delete the only code that produces a diff.** `git_diff` exists solely on the legacy path (`tools.ts:77,92,138`); the Pi path builds four tools and has none. Goal criterion 4 and demo step 3 both require a diff, and T10/T11 consume it. T7.5 calls it a "duplicate tool" — it is not.
+2. **T7 edits a generated vendored file whose checker is inside `pnpm verify`**, so as scoped it cannot pass its own gate.
+3. **T6 needs a human at `github.com/login/device`** yet sits on the unsupervised critical path.
+
+**One cheap thing to approve when you wake, added to Q7:** a five-minute paid probe of `env.AI.run(..., { stream: true, tools: [...] })`. If tool-call deltas do not arrive incrementally, Q6 reopens and T4's provider-facing half is rewritten. Approving just that one probe is far cheaper than the whole paid gate.
+
+Running: T1a, T2, T4, T5. The `gpt-5.6-sol` round-2 review is still queued for 05:57.
+
+[2026-09-05T09:39:22.439Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:39:22.800Z] TOOL_RESULT (ipython):
+02:39
+T1a: RUN | d6ff238 docs(design): align version zero | 
+T2: RUN | d6ff238 docs(design): align version zero |  26 files changed, 106 insertions(+), 368 deletions(-)
+T4: RUN | d6ff238 docs(design): align version zero | 
+T5: RUN | d6ff238 docs(design): align version zero | 
+
+
+
+[2026-09-05T09:39:28.482Z] ASSISTANT THINKING:
+T2 is progressing well with 26 files touched and 368 lines removed, all still running. Now I should work through the remaining review sections I haven't covered yet — the task defect table, wave collisions, done-criteria coverage map, agreements, and unverifiable items. The coverage map matters most since it flags goal criteria with no owning task, a completeness gap I need to address, so I'll start by reading sections 5 and 4.
+
+
+[2026-09-05T09:39:28.482Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:39:28.542Z] TOOL_RESULT (ipython):
+## 4. Wave collisions
+
+| wave | file | tasks | fix |
+|---|---|---|---|
+| 1 | `src/supervisor/supervisor.ts` | T3 (construction), T5 (thread wrappers, lines 226/236/248/265), T2 (`GenerationRequest` type at 5-9 and 145) | serialize T5 → T3 → T2's type edge; the manager merges once, not three times |
+| 1 | `src/facet/generation-0/capabilities.ts` | T4 (owner), T3 (via `WorkspaceRequest/WorkspaceResult` import at line 6) | freeze `WorkspaceCapability` in wave 1; T4 owns the file |
+| 1 | `test/facet/**` | T3 ("related tests"), T4 ("focused adapter tests") | enumerate both test lists in the roadmap |
+| 1→4 | `src/page/{markup,element-ids,script-generations}.ts` | T2 (wave 1) then T10 (wave 4 rewrite) | T2 deletes only; no layout work |
+| 2 | managed-instructions path | T7 (reads them at turn start) and T3/T6 (who write them via `src/project-provision.ts`) | one exported constant, owned by T3, consumed by both |
+| 2 | `src/workspace/host.ts` | T6 (owner), T7 (audits `WorkspaceHost.execute` callers) | already partitioned in prose; make T7's output a committed file so T9 does not re-derive it |
+| 3→4 | `src/routes/index.ts` | T6, T9, T10 add routes in three waves | fine as sequenced; note it as the hub file |
+| 4 | `test/routes/` | T10 (`page.test.ts`), T11 (everything else) | already partitioned correctly — keep |
+
+Reordering that cuts wall-clock: run T1a, T2, T5 in parallel at `d6ff238` on night one while T1b's
+paid gate runs beside them; start T3 as soon as T1a lands rather than waiting for T1b's Computer
+probe; and pre-write T9's HTTP adapter against frozen T5/T7 interfaces during wave 2. That removes
+one full serialization point (wave 0) and shortens wave 3.
+
+---
+
+## 5. Done-criteria coverage map
+
+| # | criterion (short) | tasks | status |
+|---|---|---|---|
+| 1 | release commit passes `pnpm verify`; notes name SHA, Computer source/image pair, model route, deploy commands | T12.1, T12.2, T11 (verify at candidate SHA), T1.6 (pins) | covered |
+| 2 | Access admits only the owner; two browsers share Supervisor/projects/workspace/generation/threads; unauth + cross-tenant fail | T3.1, T6.6, T11.5, T12.4 | **partial gap** — no task implements or locally tests the Access policy *restricted to the owner*; it first appears as deploy configuration in T12.1 and is only exercised in T12.4. Add an acceptance item to T6 (or T3) for the owner-only policy and a local rejection test. |
+| 3 | ≥2 GitHub repos connected via authorization separate from Access; one workspace holds them + harness; git/gh use local creds outside repos; no credential leakage | T6.1–T6.5, T3.2, T3.4, T11.5 | covered, but gated on the human step in B5 |
+| 4 | collapsible sidebar + streaming conversation; one real turn reads, edits, runs the check, shows tool activity, command output, **and a diff**, then reports saved completion | T10.1–T10.3, T9.1–T9.2, T7.1/T7.3, T12.3 | **GAP — the diff is unowned and is actively deleted by T7.5** (see B3). Everything else is covered. |
+| 5 | one current Pi 
+...[truncated 2149 chars]
+
+[2026-09-05T09:39:39.320Z] ASSISTANT THINKING:
+I need to record a few coverage gaps: no task tests the owner-only Access policy (should fold into T6 or T3), the diff gap in criterion 4 relates to B3, criterion 7's T1.3 wording issue is really a T1b fix, and criterion 6 needs T9 to explicitly document that eligibility.ts credits any completed body with status under 400. I also need to flag that T2 touches the supervisor module, which could cause a collision I need to address right away.
+
+Both T2 and T5 are modifying supervisor.ts concurrently in different sections, which should merge cleanly but I need to track it; T4 owns capabilities.ts while T3 just imports from it so no conflict there; and my T2 brief never specified deletion-only scope for page files, so I need to check its diff once it's done to enforce that constraint. I'll write these action items into a wave-1 integration notes file, update STATE with the coverage gaps, and quickly verify the eligibility.ts:140 claim since it's cheap to confirm and relevant to T9.
+[2026-09-05T09:39:39.320Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:39:39.339Z] TOOL_RESULT (ipython):
+133:     attempt.generationLabel === generationLabel &&
+134:     attempt.activationId === activationId &&
+135:     attempt.preparationCheckId === preparationCheck.id
+136:   );
+137: }
+138: 
+139: function isCreditedTurn(attempt: RelayAttempt): attempt is CreditedAttempt {
+140:   return attempt.outcome === "body-completed" && attempt.responseStatus < 400;
+141: }
+142: 
+143: function isFailureObservation(attempt: RelayAttempt): boolean {
+144:   return (
+145:     attempt.outcome === "pre-header-failure" ||
+146:     attempt.outcome === "body-failed" ||
+147:     (attempt.outcome === "body-completed" && attempt.responseStatus >= 500)
+148:   );
+149: }
+150: 
+
+
+[2026-09-05T09:39:56.847Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:39:56.873Z] TOOL_RESULT (ipython):
+written
+
+
+[2026-09-05T09:40:07.256Z] ASSISTANT:
+**Recorded the review's collision map and coverage gaps — one of them I verified directly.**
+
+New file `.audit/v0/wave1-integration-notes.md`, to be read before any merge or wave-2 dispatch.
+
+**A collision I did not know about, between two branches already running:** T2 touches `supervisor.ts` at the `GenerationRequest` type (lines 5–9 and 145), and T5 touches the thread wrappers (~226–265). Different regions, so the merge order is T5 first, then T2 — but I would have merged blind without the review. Also, T2's brief never said "delete only" in the page files that T10 rewrites in wave 4, so I will check its diff and reject any layout work.
+
+**Four gaps against your ten done-criteria:**
+
+- **Criterion 2 — partial gap.** No task implements or locally tests an Access policy restricted to the **owner**. It first appears as deploy configuration in T12.1 and is only exercised at the very end in T12.4. Needs an acceptance item on T6 or T3 plus a local rejection test.
+- **Criterion 4 — real gap.** The diff is unowned and actively deleted by T7.
+- **Criterion 7 — partial gap.** T1.3 never requires the two builds to run on Computer. T1a carries the correction as a pre-check; the real proof belongs to T1b.
+- **Criterion 6 — scope omission, which I verified myself.** `src/supervisor/eligibility.ts:140` reads `attempt.outcome === "body-completed" && attempt.responseStatus < 400`. So **any completed body under 400 currently earns turn credit, with no requirement that the thread was saved** — the exact opposite of what criterion 6 demands. T9.3 addresses it, but `eligibility.ts` is not in T9's scope list.
+
+**One cut-line risk logged:** T3.4 and T9.5 can both grow into schedulers if a worker over-reads them. T9.5 already forbids it; T3.4 needs "no alarm, no scheduler, no queue framework" added before dispatch.
+
+**A reordering worth taking:** start T3 as soon as **T1a** lands, rather than waiting for T1b's paid probe. That removes the wave-0 serialization point entirely — which matters more than usual, since T1b is blocked on your Q7 answer.
+
+All four workers still running. T2 is at 26 files, −368 lines.
+
+[2026-09-05T09:40:11.369Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:40:11.683Z] TOOL_RESULT (ipython):
+02:40
+T1a: RUN | d6ff238 docs(design): align version ze | 
+T2: RUN | d6ff238 docs(design): align version ze |  29 files changed, 152 insertions(+), 452 deletions(-)
+T4: RUN | d6ff238 docs(design): align version ze | 
+T5: RUN | d6ff238 docs(design): align version ze | 
+
+
+
+[2026-09-05T09:40:17.950Z] ASSISTANT THINKING:
+With T2 progressing, I still need to absorb the remaining blocking objections B4, B5, and B6 from the review—covering the T7 vendored-file problem, T6's human-in-loop concern, and the supervisor merge issue—since B3 got cut off before I could finish it.
+[2026-09-05T09:40:17.950Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:40:17.975Z] TOOL_RESULT (ipython):
+### B4. T7's vendored-Pi export path cannot pass `pnpm verify` as scoped
+
+**Defect.** T7 scope names "`vendor/pi-v0.84.4/index.ts` plus its managed export tooling if a
+vendored capability needs exporting". That file is **generated**, and `pnpm verify` checks it.
+
+**Evidence.** `tools/vendor-pi.mts:198` lists `["index.ts", piFacadeSurfaceSource]` among managed
+generated files. `checkVendorTree()` (`tools/vendor-pi.mts:600-623`) compares every managed file
+against "its exact expected contents" and then compares SHA-256 sums; `SHA256SUMS:6` pins
+`index.ts`. `verify:vendor` (`pnpm exec tsx tools/vendor-pi.mts --check`) is the **second step of
+`pnpm verify`**. `tools/vendor-pi.mts:657` states the remedy: "Generated file … does not match its
+template. Run `pnpm exec tsx tools/vendor-pi.mts --refresh-generated`". There is also a
+declaration-conformance check against `upstream-surface.ts` (`SHA256SUMS:253`,
+`tsconfig.declaration-conformance.json`), so an export that does not exist upstream may fail
+independently. And T7.2 needs compaction, which is **not exported today**: `index.ts` exports only
+the `CompactionSummaryMessage` type (line 30), while the implementation lives at
+`vendor/pi-v0.84.4/packages/agent/src/harness/compaction/{compaction,utils,branch-summarization}.ts`.
+So T7 certainly must widen the export surface.
+
+**Exact fix.** Add `tools/vendor-pi.mts` to T7's scope, and add an acceptance item: "Export new Pi
+capability by editing the generator's facade source and running
+`pnpm exec tsx tools/vendor-pi.mts --refresh-generated`; never hand-edit `vendor/**`. If
+declaration conformance rejects the export, record why and choose a supported surface."
+Also warn: `--update` requires an upstream Pi checkout, clean, at tag `v0.84.4` /
+commit `b79e4cc834970cca69daebffab7df1da7d1e52c4`, defaulting to `/tmp/cf-stumble-pi-v0.84.4`
+(`UPSTREAM.json`, `tools/vendor-pi.mts:27,565-571`) — `/tmp` is exactly what this run's own
+`STATE.md` says gets cleared. Tell the worker not to attempt `--update`.
+
+### B5. T6 requires a human at a browser, and it is on the unsupervised critical path
+
+**Defect.** T6.2 defaults to "an owner-initiated gh device authorization in the workspace" — the
+owner must open `github.com/login/device` and type a code. T6 is wave 2, and T9 → T10/T11 → T12 all
+sit behind it. An overnight agent cannot complete it. T6's verification note admits it
+("Production credential authorization is an owner action; missing authorization blocks that
+acceptance item") but the wave plan does not act on the admission.
+
+**Evidence.** No credential path exists to build on: `grep -rn 'gh auth|GH_TOKEN|GITHUB_TOKEN' src
+scripts docs/agents/design` returns nothing. `src/workspace/provisioning.ts:111`
+(`provisionProjectWorkspace`) is exported by `src/workspace/index.ts:31` and has no other caller in
+`src/`. So T6 builds this from zero *and* then needs a human.
+
+**Exact fix.** Split T6 into T6a (connected-project storage, variable-arity catalog, ownership
+resolution, r
+...[truncated 4001 chars]
+
+[2026-09-05T09:40:22.998Z] ASSISTANT THINKING:
+B4-B8 all seem like later-stage concerns, but B8 matters now since it lays out the preconditions the owner needs to set for paid work — I should fold that list into Q7 so the owner can answer precisely. Let me pull in the rest of B8's items before updating questions.md.
+[2026-09-05T09:40:22.998Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:40:23.017Z] TOOL_RESULT (ipython):
+
+
+
+[2026-09-05T09:40:25.490Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:40:25.508Z] TOOL_RESULT (ipython):
+
+
+
+[2026-09-05T09:40:27.794Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:40:27.820Z] TOOL_RESULT (ipython):
+39249 16723 18847
+uild:artifact`, buildCommand↔script test, clean-build script per B2 Gap 1 |
+| T1 | wrong venue for the reproducibility proof | blocker | T1.3 must say two clean **Computer** builds (goal criterion 7) |
+| T1 | missing platform preconditions (pnpm, registry, native install scripts, cold-store time, disk, git) | major | add as named probes per B2 Gap 3 |
+| T1 | interaction with the `isolate` `rm -rf` race left implicit | minor | state install location and hand the race to T3 in writing |
+| T2 | hidden file dependency on `supervisor.ts` (`GenerationRequest`) | major | list `src/supervisor/supervisor.ts` type edge in scope; order after T5/T3 |
+| T2 | acceptance 4 is an open design decision handed to `sonnet` | major | decide now: "already-ready candidate returns current status; no implicit re-preparation" — or raise tier |
+| T2 | edits `src/page/{markup,element-ids,script-generations}.ts` that T10 rewrites in wave 4 | minor | restrict T2's page work to deleting request-id controls; forbid polish |
+| T2 | false dependency on T1 | major | set `Dependencies: none` |
+| T3 | size — identity + directories + provisioning + path adapters + a paid concurrency experiment | major | split T3.1–T3.3 (layout, deterministic) from T3.4 (concurrency experiment, paid) |
+| T3 | duplicated ownership of the Access verified-scope widening with T6 | major | assign the `src/access/index.ts` scope change to T3 only; T6 consumes it |
+| T3 | "related tests" unbounded, collides with T4 | minor | enumerate test paths |
+| T3 | `PROJECT_ROOT` defined twice (`src/workspace/project/resolve.ts:11`, `src/facet/generation-0/execution-env-paths.ts:12`) — task says "seams", not "one owner" | major | require one owning module for the repository-relative root; both consumers read it (E3 agrees) |
+| T4 | understated starting point: the route has **no** streaming interface at all (`src/model-route.ts:260` `this.env.AI.run(...)`, `ROUTE_MODEL.contextWindow: 0`, `maxTokens: 0`, `ZERO_USAGE`) | major | reword from "carry real model events" to "add a streaming interface across route → facet → RPC"; keep size L |
+| T4 | ignores existing vendored assets | minor | require evaluating Pi's `streamSimple`, `createAssistantMessageEventStream`, `createGatewayBindingFetch` (`vendor/pi-v0.84.4/index.ts:33-40`) before writing a third adapter |
+| T4 | paid clause blocks an otherwise-free task | major | move T4.1's paid proof into T1b's probe list; keep the local adapter work unblocked |
+| T5 | correctly scoped; only conflict is `supervisor.ts` ordering | minor | schedule first in wave 1 |
+| T5 | acceptance 3 says "durable thread identity **or** monotonic concurrency version" — two designs | minor | pick one now (durable thread id) so the sonnet tier is a fit |
+| T6 | requires a human mid-run | blocker | split T6
+
+
+[2026-09-05T09:40:53.603Z] ASSISTANT THINKING:
+This table is quite useful for the running workers. On T2's acceptance criterion 4, the reviewer recommends that an already-ready candidate should return its current status without implicit re-preparation—I should note this so I can verify T2's report matches, and require a fix if it chose differently. For T5's acceptance criterion 3 on picking a durable thread id, I gave it opus to design this properly, and I'll record the reviewer's preference as the answer to check against.
+
+For T4, the reviewer wants size L kept with a reword, and wants Pi's existing streaming helpers (`streamSimple`, `createAssistantMessageEventStream`, `createGatewayBindingFetch`) evaluated before building a third adapter—my T4 brief missed mentioning `streamSimple` and `createGatewayBindingFetch`, which is a real gap since T4 might end up hand-rolling a third adapter unnecessarily. T4 has been running on sonnet for about 4 minutes already, so I'm weighing whether to restart it now versus just flagging this as a mandatory check on its report afterward—restarting costs time but could prevent wasted implementation work, similar to the T1a situation, though repeated restarts create their own churn. I think the better move is to record it as something to verify when T4 reports back, with a follow-up task if it didn't check those helpers.
+
+Actually, letting a worker commit to a whole wrong design is more expensive than eating a 4-minute restart now, and T4 still needs the size/reword fix too—so I'll restart 
+[2026-09-05T09:40:53.603Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:40:53.678Z] TOOL_RESULT (ipython):
+T4 restarted 69028
+
+
+[2026-09-05T09:41:13.544Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:41:13.565Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:41:25.060Z] ASSISTANT:
+**Restarted T4 to stop it building a redundant adapter, and turned the review's paid-risk list into a precise question for you.**
+
+**T4 restart.** The review's defect table flagged that T4 "ignores existing vendored assets" — `vendor/pi-v0.84.4/index.ts` already exports `streamSimple`, `createAssistantMessageEventStream` **and** `createGatewayBindingFetch`. My first brief pointed at only one of them, so the worker could have hand-rolled a third adapter beside two that already exist. Killed at ~4 minutes with no commits, re-dispatched with: read all three first and justify the choice in the report; treat the task as "add a streaming interface across route → facet → RPC" (the roadmap understates it); and keep the design able to survive the opposite answer on whether `{ stream: true }` yields incremental **tool-call** fragments, since only a paid call settles that. Same trade as the T1a restart — minutes of rework now beats reworking a committed design later.
+
+**Two design decisions the review says must not be left to a worker**, now recorded so I judge the reports against them rather than accept them:
+
+- T2 acceptance 4 — the already-ready candidate case. Reviewer's answer: return current status, no implicit re-preparation. T2 is running without that instruction, so I will check its report.
+- T5 acceptance 3 offers "durable thread identity **or** monotonic concurrency version" — two different designs. Reviewer says pick durable thread id. T5 is on opus-5 so it can decide, but must justify against that.
+
+**Q7 is now a checklist, not a yes/no.** Eight tasks spend money or touch your accounts — including **T8, which creates an R2 deletion lifecycle rule on a real bucket**, and **T12, which publishes a recording, the only step with irreversible disclosure.** Before any of them runs unsupervised I need:
+
+1. a **named** non-production account or a run-prefix for Worker names, R2 bucket, DO namespaces and Container
+2. a spend cap, with stop-on-first-paid-failure (only T1.6 says that today)
+3. which **disposable** GitHub repos under a throwaway owner probes may clone and push to
+4. confirmation of which bucket T8's deletion rule may touch
+5. Q5 publication destination — still blocked
+
+Running: T1a, T2 (29 files, −452 lines), T4 (restarted), T5.
+
+[2026-09-05T09:41:28.835Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:41:29.166Z] TOOL_RESULT (ipython):
+02:41
+T1a: RUN | d6ff238 docs(design): align ve | 
+T2: RUN | d6ff238 docs(design): align ve |  33 files changed, 237 insertions(+), 551 deletions(-)
+T4: RUNT5: RUN | d6ff238 docs(design): align ve |  1 file changed, 32 insertions(+), 10 deletions(-)
+
+
+
+[2026-09-05T09:42:04.896Z] ASSISTANT THINKING:
+T5 is making changes while T4 restarts with a fresh worktree, everything else looking healthy. Given the reviewer's feedback that the roadmap needs six edits applied before later waves dispatch, I should prioritize producing the corrected `roadmap-v0.approved.md` first — that's the S5 freeze step and the right long-term move.
+
+Rather than rewriting a 33KB document myself and burning context, I'll delegate this to a worker that reads the roadmap, the review, and all evidence, then produces the approved version with fixes applied — preserving my decisions D24-D35, keeping task IDs stable, and adding the split tasks (T1a/T1b, T6a/T6b, T3 split) without changing any actual decisions. This is a clean, independent documentation task that only touches .audit, so no worktree is needed — I'll dispatch it now with a simpler invocation gated on the source file existing.
+[2026-09-05T09:42:04.896Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:42:04.930Z] TOOL_RESULT (ipython):
+70248
+
+
+[2026-09-05T09:42:15.464Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:42:15.489Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:42:27.134Z] ASSISTANT:
+**Dispatched the roadmap revision so later waves dispatch from a corrected document.**
+
+The reviewer's own summary said the structural defects are *"six roadmap edits, perhaps thirty minutes of work. Make them first."* The risk of skipping that: the known defects would live only in a separate review file that no wave-2 worker will ever read. So an opus-5 documentation worker is now producing `.audit/v0/roadmap-v0.approved.md` from the roadmap, the review, the eight evidence notes, and the binding decisions.
+
+What it must apply:
+
+- **Split T1** into T1a (local, already running) and T1b (paid gate)
+- **Split T6** into T6a (unsupervised, testable with a fake credential) and T6b (the one owner-run device authorization, moved to a wave-5 owner step) — this removes the human-in-the-loop from the unsupervised critical path
+- **Split T3** — deterministic layout work apart from the paid concurrency experiment
+- **Fix the fictional dependencies** on T2, T4, T5, T8
+- **T7 must keep a diff** on the Pi path, and regenerate vendored exports through `tools/vendor-pi.mts --refresh-generated` rather than hand-editing `vendor/**`
+- **T9 gains `eligibility.ts`** in scope, since line 140 credits any completed body under 400 with no saved-thread requirement
+- **T11 gains authority to land narrow fixes**, and gets re-sized
+- **Coverage gaps closed** — owner-only Access policy with a local rejection test, and the two-clean-build proof reworded to say **Computer**
+- **The two worker-facing design decisions resolved** rather than delegated
+- **Every paid task carries the B8 preconditions** plus "blocked, not passed — never fake a paid result"
+
+It writes exactly one file and touches no source, so it cannot conflict with the four code workers. Its brief forbids the two failure modes that matter here: weakening an acceptance criterion to make it easier, and adding scope past the cut line. I stay the judge — the dispatcher will only point at the approved roadmap after I read the diff.
+
+**Live now:** T1a, T2 (33 files, −551 lines), T4 (restarted), T5 (first edits landing), and the roadmap revision. Five workers, each gated on a real check rather than a self-report.
+
+[2026-09-05T09:42:31.593Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:42:31.881Z] TOOL_RESULT (ipython):
+02:42
+T1a: RUN | d6ff238 docs(design): al |  1 file changed, 64 insertions(+), 9 deletions(-)
+T2: RUN | d6ff238 docs(design): al |  34 files changed, 334 insertions(+), 623 deletions(-)
+T4: DONET5: RUN | d6ff238 docs(design): al |  6 files changed, 156 insertions(+), 86 deletions(-)
+
+
+
+[2026-09-05T09:42:35.909Z] ASSISTANT THINKING:
+T4 says DONE already, which is odd since it was only restarted a minute ago — I should check the log to see if the worktree is missing or the process actually finished or failed.
+
+
+[2026-09-05T09:42:35.909Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:42:35.981Z] TOOL_RESULT (ipython):
+total 0
+drwxr-xr-x@   5 aditya  wheel   160 Sep  5 02:40 .
+drwxrwxrwt  261 root    wheel  8352 Sep  5 02:33 ..
+drwxr-xr-x@  27 aditya  wheel   864 Sep  5 02:40 T1a
+drwxr-xr-x@  27 aditya  wheel   864 Sep  5 02:39 T2
+drwxr-xr-x@  28 aditya  wheel   896 Sep  5 02:42 T5
+---LOG---
+ssing shell/interpreter requires a shell or interpreter to run the repair from, and neither exists in this sandbox right now. This is not a `pnpm verify` failure caused by anything in the `cf-stumble` repository or T4 branch — it is an infrastructure fault in how this session's sandbox was provisioned (or de-provisioned mid-session).
+
+**Final status for this session: blocked, no code changes possible.**
+- No files were read or written.
+- No commands were run.
+- No commit was made.
+- `.audit/v0/tasks/T4.md` was not created.
+
+Recommended next step: restart or reprovision this worktree's sandbox/session from the orchestrator side so `/bin/sh` and the Nix Python environment exist again, then re-dispatch T4 (or resume this session). I'm not able to make further progress by retrying inside the same broken sandbox.
+Autonomous quality gate still failing after attempt 4/3: spawn /bin/sh ENOENT
+---PROC---
+
+handle running: False
+
+
+[2026-09-05T09:42:43.826Z] ASSISTANT THINKING:
+The T4 worktree never actually got created — I killed that process mid-work, then removed the worktree and branch, but the follow-up dispatch's `git worktree add` may have failed silently (perhaps the branch still lingered), causing the subsequent `cd` into the worktree to fail with a shell spawn error. The real bug is that my dispatch command chains `worktree add` and `cd` without checking if the add actually succeeded first.
+
+I should check `git worktree list` and branch state to clean up any stale entries, then make dispatch_task more resilient — running `git worktree prune`, deleting any leftover branch, and confirming the worktree directory exists before launching the agent.
+[2026-09-05T09:42:43.826Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:42:43.901Z] TOOL_RESULT (ipython):
+/Users/aditya/repos/projects/cf-stumble                                             d6ff238 [main]
+/private/tmp/cf-stumble-pi-agent-fix2                                               6c13393 [pi-agent-3c026af1-e506-4e9]
+/private/tmp/cf-stumble-verify-unit4b-final                                         4146393 (detached HEAD)
+/private/tmp/cf-stumble-wt/T1a                                                      d6ff238 [work/T1a]
+/private/tmp/cf-stumble-wt/T2                                                       d6ff238 [work/T2]
+/private/tmp/cf-stumble-wt/T5                                                       d6ff238 [work/T5]
+/private/var/folders/r7/mn_tb22j0m58tffljxw6fqqr0000gn/T/cf-stumble-review-1pz_uiiv 4f76bd4 (detached HEAD)
+/Users/aditya/repos/projects/.worktrees/cf-stumble-access-cookie                    4502881 [agent/cf-stumble-access-cookie]
+/Users/aditya/repos/projects/.worktrees/cf-stumble-build-workspace                  2386642 [agent/cf-stumble-build-workspace]
+/Users/aditya/repos/projects/.worktrees/cf-stumble-generation-0                     029ce88 [agent/cf-stumble-generation-0]
+/Users/aditya/repos/projects/.worktrees/cf-stumble-module-map                       6634d08 [agent/cf-stumble-module-map]
+/Users/aditya/repos/projects/.worktrees/cf-stumble-owner-page                       798a7a0 [agent/cf-stumble-owner-page]
+/Users/aditya/repos/projects/.worktrees/cf-stumble-retire-fixture                   ab0927a [agent/cf-stumble-retire-fixture]
+/Users/aditya/repos/projects/.worktrees/cf-stumble-submit-route                     243c6db [agent/cf-stumble-submit-route]
+---BRANCHES---
++ work/T1a
++ work/T2
++ work/T5
+---PRUNE---
+
+
+
+[2026-09-05T09:43:03.584Z] ASSISTANT THINKING:
+The worktree and branch are both gone, so that part's clean, but I realize the bug: I called the worktree removal command without awaiting it, then immediately triggered the re-dispatch, so the new `git worktree add` likely ran in a race against the still-in-flight removal.
+
+Fix: await cleanup fully before dispatching, and make dispatch_task defensive by pruning and verifying the directory exists before launching the agent. Let me redo this properly, sequenced correctly this time.
+[2026-09-05T09:43:03.584Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:43:03.648Z] TOOL_RESULT (ipython):
+CLEAN
+T4 re-dispatched 71346
+
+
+[2026-09-05T09:43:12.559Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:43:12.603Z] TOOL_RESULT (ipython):
+02:43
+T1a
+T2
+T4
+T5
+
+
+
+[2026-09-05T09:43:16.796Z] ASSISTANT THINKING:
+The T4 worktree is confirmed set up now. I want to save a general lesson here — waiting for cleanup before dispatching dependent work — as a durable harness insight worth persisting globally, then wrap up this turn with a status update.
+[2026-09-05T09:43:16.796Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:43:16.813Z] TOOL_RESULT (ipython):
+refine queued
+
+
+[2026-09-05T09:43:26.753Z] ASSISTANT:
+**Caught and fixed a bug in my own dispatcher.**
+
+T4's restart produced no worktree at all. The worker died with `spawn /bin/sh ENOENT` after four gate attempts, having read nothing and written nothing.
+
+The cause was mine. The restart cell called `bash('git worktree remove ...; git branch -D ...')` **without awaiting it**, then immediately called `dispatch_task`. `bash()` returns a handle rather than blocking, so the cleanup and the new `git worktree add` ran concurrently — and the cleanup deleted the directory the dispatch had just created. The worker then `cd`-ed into a path that no longer existed.
+
+Fixed: await the cleanup, verify `git worktree list` and the branch list are clean, then dispatch. T4 is running again on the same corrected brief, and its worktree exists.
+
+**Two things worth noting from this.**
+
+The gates did their job. The worker **could not** report success into a broken sandbox — it was forced to record "blocked, no code changes possible", and the failure was loud and diagnosable in the run log instead of silently producing an empty branch that I later merged.
+
+And the general trap is now written into the decision log: in this harness `bash()` is non-blocking by design, so any cleanup that a later step depends on must be awaited. Fire-and-forget is only correct for genuinely independent work. I have queued that as a persistent lesson rather than a one-off note.
+
+**Live status at 02:43:**
+
+| Worker | State |
+|---|---|
+| T1a — clean build + regression proof | running, first edits landing |
+| T2 — journal removal | running, 34 files, −623 lines |
+| T4 — streaming route | re-dispatched, worktree healthy |
+| T5 — lease fencing | running, 6 files, +156/−86 |
+| Roadmap revision | running, writes `roadmap-v0.approved.md` |
+
+No task has produced a report yet, so nothing is claimed as done. Q7 still blocks every paid step.
+
+[2026-09-05T09:43:31.573Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:43:31.823Z] TOOL_RESULT (ipython):
+02:43
+T1a: RUN | d6ff238 docs(design): alig |  1 file changed, 64 insertions(+), 9 deletions(-)
+T2: RUN | d6ff238 docs(design): alig |  35 files changed, 345 insertions(+), 645 deletions(-)
+T4: RUN | d6ff238 docs(design): alig | 
+T5: RUN | d6ff238 docs(design): alig |  7 files changed, 201 insertions(+), 96 deletions(-)
+roadmap-worker: RUN
+
+
+
+[2026-09-05T09:44:01.755Z] ASSISTANT THINKING:
+With all five healthy, there's nothing urgent to decide, so I should use this time productively. I want to build an actual reusable verification procedure for judging worker reports, since I'm meant to trust astra's advice but still need to verify claims per task rather than just taking reports at face value.
+
+I'm sketching out concrete, falsifiable checks per task: for T2, specific grep patterns and file existence checks that should pass or fail cleanly; for T1a, checking package.json scripts and build commands; for T5, verifying certain function calls appear and old unfenced variants are gone; for T4, confirming streaming types and failure-mode tests exist. These are objective checks I can run against the merged tree in seconds, independent of what the worker claims in prose — so I'm planning to formalize this as a small Python function and document the procedure, since it's genuinely durable, valuable infrastructure.
+
+
+[2026-09-05T09:44:01.755Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:44:01.870Z] TOOL_RESULT (ipython):
+[('PASS', 'journal.ts deleted'), ('PASS', 'no requestId/fingerprint/journal in src'), ('PASS', 'epoch checks survive'), ('PASS', 'resubmission test exists')]
+
+
+[2026-09-05T09:44:05.756Z] ASSISTANT THINKING:
+T2's working tree already passes all four objective checks even before committing, which is a good sign. I'll run baseline audits for T5 to check progress, record everything in STATE, then wrap up this turn.
+[2026-09-05T09:44:05.756Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:44:05.894Z] TOOL_RESULT (ipython):
+T5 [('FAIL', 'unfenced finishTurn gone from store'), ('PASS', 'lease id reaches the client surface'), ('PASS', 'supervisor wrappers carry lease'), ('FAIL', 'WithLease now has callers'), ('PASS', 'reset-race test exists')]
+T1a [('PASS', 'build:artifact script exists'), ('PASS', 'buildCommand names build:artifact'), ('PASS', 'buildCommand<->script test in gate'), ('FAIL', 'clean-build script committed'), ('PASS', 'dist NOT committed')]
+
+
+[2026-09-05T09:44:18.643Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:44:18.663Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:44:27.532Z] ASSISTANT:
+**Built an independent way to judge the workers, and it is already discriminating.**
+
+Every worker writes its own report and grades its own acceptance criteria. That is the one place a truthful-looking run can still be wrong. So I wrote `.audit/v0/acceptance-checks.{md,json}` and an `audit(task_id)` runner: crude, falsifiable shell assertions derived from the confirmed evidence (E1, E2, E5, E7) and the review's B2 items, run against each worktree **without reading the worker's prose**.
+
+They cannot prove a task is done. They can prove a task is **not** done — which is the failure mode that matters when an agent grades itself.
+
+First run, mid-flight at 02:44, nothing committed yet:
+
+| Task | Objective checks |
+|---|---|
+| **T2** | **4/4** — `control/journal.ts` gone, no `requestId`/`fingerprint`/journal left in `src`, epoch fencing still intact |
+| **T1a** | **4/5** — `build:artifact` exists, `harness-build.ts` names it, a test references `buildCommand`, `dist` still untracked. Missing only the committed clean-build script, B2 Gap 1(d) |
+| **T5** | **3/5** — `leaseId` already reaches `project-threads.ts` and `supervisor.ts` |
+| **T4** | not started; re-dispatched at 02:43 |
+
+The useful part: **T5's two failures are exactly what its brief called the point of the task** — the unfenced `finishTurn` is still present in `store.ts`, and `WithLease` still has no caller outside that file. So the checks discriminate rather than rubber-stamp. If T5 finishes with those two still red, its report is wrong no matter what it says.
+
+T2 passing 4/4 before committing is a genuinely good sign, and it matches the diff shape: 35 files, −645 lines, mostly deletion.
+
+All five workers still running. Nothing merged, nothing claimed done, Q7 still gates every paid step.
+
+[2026-09-05T09:44:32.323Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:44:32.638Z] TOOL_RESULT (ipython):
+02:44
+T1a: RUN | d6ff238 docs(design): alig |  2 files changed, 66 insertions(+), 9 deletions(-)
+T2: RUN | d6ff238 docs(design): alig |  35 files changed, 351 insertions(+), 663 deletions(-)
+T4: RUN | d6ff238 docs(design): alig | 
+T5: RUN | d6ff238 docs(design): alig |  8 files changed, 246 insertions(+), 118 deletions(-)
+roadmap: RUN
+
+
+
+[2026-09-05T09:44:41.763Z] ASSISTANT THINKING:
+With everything running, I'm burning context on status checks while turns move faster than real time passes. I should focus on substantive work instead—wave 2 dispatch briefs depend on the roadmap still in progress, so maybe I should independently verify remaining unverified claims as a better use of the time.
+
+Two claims stand out: B4's assertion about vendor-pi.mts and the compaction export affecting T7, and B5's claim that no credential path exists affecting T6. Verifying these now with a quick grep would make the T6a/T7 briefs evidence-backed rather than assumption-based, so let me start checking B5's claim and the compaction export.
+[2026-09-05T09:44:41.763Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:44:41.863Z] TOOL_RESULT (ipython):
+--creds--
+(none above = confirmed)
+--compaction exports--
+30:  CompactionSummaryMessage,
+--provisioning callers--
+src/workspace/provisioning.ts:111:export async function provisionProjectWorkspace(
+src/workspace/index.ts:31:  provisionProjectWorkspace,
+
+
+
+[2026-09-05T09:45:05.781Z] ASSISTANT THINKING:
+I've confirmed both B5 claims: there's no credential path anywhere for gh auth/GH_TOKEN/GITHUB_TOKEN, meaning T6 builds from zero, and `provisionProjectWorkspace` is dead code with no real caller besides its re-export. I also found that the compaction module only exports the message type, not the implementation, so T7 will need to widen the vendored export surface through the generator. Now I'm writing the E9 coverage notes.
+[2026-09-05T09:45:05.781Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:45:05.801Z] TOOL_RESULT (ipython):
+E9 written
+
+
+[2026-09-05T09:45:15.431Z] ASSISTANT:
+**E9 — verified the review's wave-2 objections before those tasks are written.**
+
+Three facts confirmed from source:
+
+1. **No GitHub credential path exists anywhere.** `grep "gh auth|GH_TOKEN|GITHUB_TOKEN" src scripts docs/agents/design` returns **zero matches**. So T6 builds credential handling from nothing *and* then needs a human at `github.com/login/device`. That confirms the split: T6a is the unsupervised part, T6b the single owner action. T6a needs a token-from-secret fallback for automated tests, or T9 and T11 inherit the human blocker.
+
+2. **The provisioning entry point is dead code.** `provisionProjectWorkspace` is defined at `provisioning.ts:111` and re-exported, with **no other caller in `src/`**. Good news for sizing — the seam T6 must wire already exists — but nothing exercises it, so its behaviour is unproven by use.
+
+3. **Pi compaction is not exported, and the file that would export it is generated and gate-checked.** `vendor/pi-v0.84.4/index.ts:30` exports only the `CompactionSummaryMessage` *type*; the implementation sits in `packages/agent/src/harness/compaction/`. Goal criterion 5 needs a forced-compaction test, so T7 must widen that surface — but `index.ts` is managed by `tools/vendor-pi.mts`, pinned in `SHA256SUMS`, and `verify:vendor` is the **second step of `pnpm verify`**. Hand-editing `vendor/**` fails the gate by construction. The correct move is editing the generator's facade source and running `--refresh-generated`, never `--update` (it needs a clean upstream checkout in `/tmp`, which this run cannot rely on).
+
+**Combined with E7, T7 faces two independent obstacles to goal criterion 5:** compaction is not exported, *and* `ROUTE_MODEL` declares `contextWindow: 0`, which may make the compaction trigger unreachable. Both must be settled before anyone claims that criterion.
+
+All five workers still running at 02:44. Nine evidence notes now, each tied to a numbered goal criterion or a named objection.
+
+[2026-09-05T09:45:20.378Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:45:20.629Z] TOOL_RESULT (ipython):
+02:45
+T1a: RUN | d6ff238 docs(design) |  3 files changed, 190 insertions(+), 9 deletions(-)
+T2: RUN | d6ff238 docs(design) |  35 files changed, 355 insertions(+), 663 deletions(-)
+T4: RUN | d6ff238 docs(design) | 
+T5: RUN | d6ff238 docs(design) |  9 files changed, 342 insertions(+), 128 deletions(-)
+
+
+
+[2026-09-05T09:45:27.059Z] ASSISTANT THINKING:
+T1a is up to 190 insertions now, likely from the clean-build script. Rather than continue fine-grained checking, I'll conserve context and just run the audit for T1a and T5 to see if those two red checks flipped, then wrap up.
+[2026-09-05T09:45:27.059Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:45:27.256Z] TOOL_RESULT (ipython):
+T1a 4/5 ['clean-build script committed']
+T5 3/5 ['unfenced finishTurn gone from store', 'WithLease now has callers']
+T2 4/4 []
+
+
+[2026-09-05T09:45:57.155Z] ASSISTANT THINKING:
+With workers still running, I can use this time well by writing the morning handoff document — a single file summarizing everything for when the user wakes up, with open questions front and center since that's what they specifically wanted documented. I'll put this at `.audit/v0/MORNING-BRIEF.md`, which feels like the right artifact for an overnight task.
+[2026-09-05T09:45:57.155Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:45:57.174Z] TOOL_RESULT (ipython):
+4844 chars written
+
+
+[2026-09-05T09:46:06.417Z] ASSISTANT:
+**Wrote the morning brief — `.audit/v0/MORNING-BRIEF.md`.** One file to read when you wake, with everything else linked from it.
+
+Its honest bottom line: nothing is merged, no task accepted, no money spent. The plan is now good; the implementation has just started.
+
+**What it says the real blockers are** — five, all confirmed from source rather than taken from the oracle's report:
+
+1. The Supervisor cannot build a labeled commit from clean state (E1)
+2. No HTTP route reaches any turn method, so the coding half of v0 is unreachable from a browser (E6)
+3. Lease fencing is dead code with zero callers (E2)
+4. Three surviving encodings of the pre-ADR-0038 workspace layout (E3)
+5. `ProjectCatalog` is a fixed two-tuple type, so no connect flow can add a project (E4)
+
+Two findings went the other way and made the plan cheaper: streaming already exists on both sides of the seam, and Computer container behaviour is already paid-verified.
+
+**The brief leads with what needs you**, since that is the only thing that cannot proceed without you: Q7's five-part precondition checklist, the cheap `{ stream: true }` probe that would de-risk T4 tonight, and Q6 — the code pins a flash model at `reasoning_effort: "low"` while your notes record a preference for OpenAI.
+
+Live at 02:45: T1a (4/5 objective checks, 190 insertions), T2 (4/4, −663 lines), T4 (starting), T5 (3/5, 342 insertions), roadmap revision. T5's two red checks are still exactly the ones its brief called the point of the task, so the audit remains discriminating.
+
+[2026-09-05T09:46:10.647Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:46:10.838Z] TOOL_RESULT (ipython):
+02:46
+.audit/v0/tasks/:
+T1a: RUN | d6ff238 docs(desig |  3 files changed, 190 insertions(+), 9 deletions(-)
+T2: RUN | d6ff238 docs(desig |  35 files changed, 373 insertions(+), 664 deletions(-)
+T4: RUN | d6ff238 docs(desig | 
+T5: RUN | d6ff238 docs(desig |  9 files changed, 336 insertions(+), 147 deletions(-)
+
+
+
+[2026-09-05T09:46:27.575Z] ASSISTANT THINKING:
+Everything's still running, with T4 three minutes in and just reading its vendored helpers before showing any diff. Rather than keep polling every turn, I should do something useful in the meantime — I'm noticing the heartbeat instructions are stale, still pointing to sending roadmap-v0.md to the sol reviewer when that review already happened on opus and sol is queued for later.
+
+I'll rewrite that heartbeat instruction so future turns automate the right sequence: check on the workers, merge whatever branches have finished, kick off round 2 with sol once it's available, and dispatch T3 once T1a lands. It's a small fix but genuinely helps keep things running smoothly overnight, so it's worth doing now.
+[2026-09-05T09:46:27.575Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:46:27.606Z] TOOL_RESULT (ipython):
+25fbf0fa-e0c1-4e7f-b7d7-f7a01cc74899
+cf-stumble-v0 {'kind': 'interval', 'expression': 'every 15m', 'intervalMs': 900000}
+
+
+[2026-09-05T09:46:38.760Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:46:38.826Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:46:46.447Z] ASSISTANT:
+**Fixed a stale autopilot before it could do damage.**
+
+The heartbeat still carried its original instruction: *"send roadmap-v0.md to gpt-5.6-sol for review, then dispatch wave 1."* All of that is done or superseded. A stale heartbeat is worse than none — a future turn would have re-dispatched finished work on top of running workers.
+
+Rewritten to the actual remaining pipeline, in order:
+
+1. **Detect finished workers** by `pgrep -f wt/<id>` plus the report file, then run the **objective checks** and read the diff. Never accept a report on its word.
+2. **Merge in the collision-safe order** T1a → T5 → T2 → T4, gating with `pnpm verify` between *every* merge. That order comes from the review's collision table: T5 and T2 both touch `supervisor.ts` in different regions. A red merge gets reset, not repaired in main.
+3. **Dispatch T3 as soon as T1a is merged** — the reviewer's reordering, which removes the wave-0 serialization point without waiting for the paid gate that Q7 blocks.
+4. **After 05:57, run review round 2 on `gpt-5.6-sol` medium** against the approved roadmap, as you originally asked, once the Codex quota resets.
+
+Interval tightened from 20 to 15 minutes, since four workers are now in flight. It also carries forward the two traps this run hit: workers are shell-outs rather than RLM children, so they are found with `pgrep` and not `list_subagents`; and any cleanup a later step depends on must be awaited.
+
+Status at 02:46 — T1a (190 insertions), T2 (35 files, −664), T5 (336 insertions), T4 reading the three vendored Pi helpers before writing anything, roadmap revision running. No reports yet, nothing merged, no money spent.
+
+[2026-09-05T09:46:50.552Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:46:50.735Z] TOOL_RESULT (ipython):
+02:46
+.audit/v0/tasks/:
+T1a: RUN |  4 files changed, 230 insertions(+), 10 deletions(-)
+T2: RUN |  35 files changed, 355 insertions(+), 663 deletions(-)
+T4: RUN | 
+T5: RUN |  10 files changed, 509 insertions(+), 147 deletions(-)
+roadmap: RUN
+
+
+
+[2026-09-05T09:46:57.314Z] ASSISTANT THINKING:
+Since everything's still running with nothing new to check, I should use this time productively instead of just polling again. Rather than waiting, I'll verify the merge order will actually be conflict-free by checking which files each worktree has touched and computing the overlaps between them—useful intelligence to have ready before merge time.
+[2026-09-05T09:46:57.314Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:46:57.409Z] TOOL_RESULT (ipython):
+OVERLAP T2/T5: ['src/supervisor/supervisor.ts', 'test/supervisor/threads/threads.test.ts']
+T1a 4 ['package.json', 'scripts/probe/clean-build.sh', 'src/harness-build.ts', 'test/workspace/harness-build.test.ts']
+T2 36 ['docs/agents/adr/0030-apply-generation-requests-directly.md', 'scripts/deploy/README.md', 'src/page/element-ids.ts', 'src/page/markup.ts', 'src/page/script-generations.ts', 'src/page/script-helpers.ts']
+T4 0 []
+T5 10 ['src/supervisor/supervisor.ts', 'src/supervisor/threads/decisions.ts', 'src/supervisor/threads/index.ts', 'src/supervisor/threads/project-threads.ts', 'src/supervisor/threads/store.ts', 'src/supervisor/threads/thread.ts']
+
+
+[2026-09-05T09:47:08.473Z] ASSISTANT THINKING:
+I'm seeing T2 and T5 both touch supervisor.ts, which was expected, but also both edit the threads test file, which wasn't predicted—likely because that test constructs a Supervisor referencing generation control types. That's a real conflict risk worth flagging.
+
+This is useful pre-merge intelligence, and since merge order runs T5 before T2, T2 will rebase onto T5's version of the test. I also notice T1a added the clean-build script that B2 Gap 1(d) required, but my earlier check searching for it in scripts/ and tools/ didn't recurse into the probe subdirectory, so I need to fix that check and re-audit T1a. Separately, T2 also edits an ADR file and a deploy README, both of which seem within scope—I'll note the overlap finding and correct the check now.
+[2026-09-05T09:47:08.473Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:47:08.601Z] TOOL_RESULT (ipython):
+T1a [('PASS', 'build:artifact script exists'), ('PASS', 'buildCommand names build:artifact'), ('PASS', 'buildCommand<->script test in gate'), ('PASS', 'clean-build script committed'), ('PASS', 'dist NOT committed')]
+T2 non-src files: docs/agents/adr/0030-apply-generation-requests-directly.md
+scripts/deploy/README.md
+
+
+[2026-09-05T09:47:21.037Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:47:21.060Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:47:29.134Z] ASSISTANT:
+**Measured the real overlap between branches instead of trusting the roadmap's prediction — and found one nobody flagged.**
+
+I ran `git diff --name-only` across all four worktrees:
+
+| branch | files |
+|---|---|
+| T1a | 4 |
+| T2 | 36 |
+| T5 | 10 |
+| T4 | 0 (still reading the vendored Pi helpers) |
+
+**Exactly one overlap: T2 and T5, on two files.**
+
+1. `src/supervisor/supervisor.ts` — predicted by review B6. Different regions, so the merge order handles it.
+2. **`test/supervisor/threads/threads.test.ts` — predicted by nobody.** T2 is editing a *threads* test, presumably because it constructs a Supervisor that references generation-control types. That is a same-file conflict on a test file, which is precisely where a careless merge silently drops a test case.
+
+The merge order T1a → T5 → T2 → T4 already covers both, since T5 lands first and T2 rebases onto it. I have written the specific instruction into the integration notes: when merging T2, diff that test file explicitly and confirm no T5 test case was lost — do not resolve it by taking either side wholesale.
+
+**T1a now passes 5/5 objective checks.** It committed `scripts/probe/clean-build.sh`, which closes review B2 Gap 1(d) — the requirement that the clean-build proof be a real committed script rather than a paragraph in an evidence file. I had to fix my own check first: it used `ls scripts/ tools/` and so missed a file in `scripts/probe/`. Worth noting the check was wrong, not the worker.
+
+T2's non-source edits are legitimate: it updates ADR-0030, which is the ADR recording the very cleanup it performs. Still flagged for a read at merge time.
+
+[2026-09-05T09:47:33.436Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:47:33.615Z] TOOL_RESULT (ipython):
+02:47
+.audit/v0/tasks/:
+T1a: RUN | d6ff238 docs(des |  4 files changed, 270 insertions(+), 16 deletions(-)
+T2: RUN | 119a7ce refactor | 
+T4: RUN | d6ff238 docs(des | 
+T5: RUN | df094f3 feat(thr | 
+
+
+
+[2026-09-05T09:47:38.731Z] ASSISTANT THINKING:
+T2 and T5 have both committed now with clean working trees, but no report files exist yet in the tasks directory. Since the gate requires both verify and the report, they're likely still writing their reports, so I should check their commits and run audits against the committed state.
+[2026-09-05T09:47:38.731Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:47:38.968Z] TOOL_RESULT (ipython):
+T2
+119a7ce refactor(control): apply generation requests directly (ADR-0030)
+--stat--
+ test/supervisor/threads/threads.test.ts            |   4 +-
+ 36 files changed, 386 insertions(+), 663 deletions(-)
+
+T5
+df094f3 feat(threads): require the admitting lease to finish or abandon a turn
+--stat--
+ test/supervisor/threads/turn-lease.test.ts   | 173 +++++++++++++++++++++++++++
+ 10 files changed, 509 insertions(+), 147 deletions(-)
+
+T2 audit [('PASS', 'journal.ts deleted'), ('PASS', 'no requestId/fingerprint/journal in src'), ('PASS', 'epoch checks survive'), ('PASS', 'resubmission test exists')]
+T5 audit [('FAIL', 'unfenced finishTurn gone from store'), ('PASS', 'lease id reaches the client surface'), ('PASS', 'supervisor wrappers carry lease'), ('FAIL', 'WithLease now has callers'), ('PASS', 'reset-race test exists')]
+
+
+[2026-09-05T09:47:44.479Z] ASSISTANT THINKING:
+T2 is committed with all objective checks passing. T5's commit added a lease requirement for finishing or abandoning a turn along with a new test file, but two of my checks are failing—unfenced finishTurn still appears in the store and withLease has no callers—so I need to verify whether these checks are accurate or the work is truly incomplete by examining store.ts's current public API.
+[2026-09-05T09:47:44.479Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:47:44.530Z] TOOL_RESULT (ipython):
+42:  constructor(storage: DurableObjectStorage) {
+57:  read(project: Project): ThreadResult {
+73:  startFreshThread(project: Project): ThreadResult {
+94:  startTurn(
+140:  finishTurn(
+183:  abandonTurn(project: Project, leaseId: string): ThreadResult {
+---WithLease refs---
+
+
+
+[2026-09-05T09:47:52.925Z] ASSISTANT THINKING:
+Actually T5 handled this differently than I expected: abandonTurn now requires a leaseId outright, and the WithLease duplicate methods are gone entirely rather than being unified with them. That's a cleaner outcome than what the review framed—instead of migrating callers to WithLease variants and deleting the old ones, it collapsed to a single lease-required method set.
+
+My checks were testing the wrong thing—grepping for the old unfenced finishTurn or for WithLease callers doesn't match what actually happened, since finishTurn still exists but now correctly requires a lease. I need to fix my checks to verify the property (that finish/abandon require a lease id) rather than assuming a specific implementation shape, so let me go look at the actual signatures for finishTurn and startTurn.
+
+
+[2026-09-05T09:47:52.925Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:47:52.976Z] TOOL_RESULT (ipython):
+  startTurn(
+    project: Project,
+    expectedRevision: number,
+    now: number,
+    leaseMs: number,
+  ): ThreadLeaseResult {
+    const deadlineAt = now + leaseMs;
+    const leaseId = crypto.randomUUID();
+
+    return this.storage.transactionSync(() => {
+      const current = this.readThread(project);
+      if (!current.ok) {
+  finishTurn(
+    project: Project,
+    messages: readonly AgentMessage[],
+    now: number,
+    leaseId: string,
+  ): ThreadResult {
+    const stored = serializeThreadMessages(messages);
+
+    return this.storage.transactionSync(() => {
+      const current = this.readThread(project);
+      if (!current.ok) {
+        return rejected(current.problem);
+      }
+===project-threads===
+52:  startTurn(
+60:      ? serializedLease(this.store.startTurn(resolved.project, expectedRevision, now, leaseMs))
+64:  finishTurn(
+66:    leaseId: string,
+87:    return serialized(this.store.finishTurn(resolved.project, parsed.value, now, leaseId));
+90:  abandonTurn(projectId: unknown, leaseId: string): ProjectThreadResult {
+92:    return resolved.ok ? serialized(this.store.abandonTurn(resolved.project, leaseId)) : resolved;
+109:    ? { ok: true, thread: serializedThread(result.lease.thread), leaseId: result.lease.leaseId }
+
+
+
+[2026-09-05T09:48:03.505Z] ASSISTANT THINKING:
+T5's implementation actually looks better than how I originally framed it: startTurn returns a ThreadLeaseResult with the leaseId serialized to the client, while finishTurn and abandonTurn now require the lease as a mandatory parameter rather than optional. The expectedRevision parameter was dropped from finishTurn entirely, since the lease itself now serves as the fencing token — which aligns with criterion 3's requirement.
+
+The duplicate *WithLease method pair is also gone, leaving one clean method set with a single safe path. My checks had been testing an assumed implementation shape rather than the actual property, so I need to fix them to verify that finish/abandon signatures require leaseId and that no unfenced overload exists. I'll rewrite those checks, re-audit, and note this lesson.
+[2026-09-05T09:48:03.505Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:48:03.621Z] TOOL_RESULT (ipython):
+T5 7/7 []
+
+
+[2026-09-05T09:48:17.838Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:48:17.884Z] TOOL_RESULT (ipython):
+ok
+
+
+[2026-09-05T09:48:28.947Z] ASSISTANT:
+**First two commits landed — and my own checks were wrong, not the work.**
+
+**T2** committed `refactor(control): apply generation requests directly (ADR-0030)` — 36 files, +386/−663. Passes 4/4 objective checks.
+
+**T5** committed `feat(threads): require the admitting lease to finish or abandon a turn` — 10 files, +509/−147, including a new 173-line `turn-lease.test.ts`.
+
+T5 initially showed 2 red checks, so I inspected the code rather than trusting either side. **The worker did something better than the design I handed it.** I had assumed, from E2, that the fix would be "make the client call the `*WithLease` methods and delete the unfenced ones". Instead T5 collapsed the duplicate pair entirely. There is now one method set where the lease is mandatory:
+
+- `startTurn` returns `ThreadLeaseResult`, and `project-threads.ts` serializes `leaseId` out to the client
+- `finishTurn(project, messages, now, leaseId)` and `abandonTurn(project, leaseId)` both **require** the lease
+- no `WithLease` symbol survives anywhere
+- `expectedRevision` is gone from `finishTurn` — which is exactly what criterion 3 demanded: do not admit a write solely because a numeric revision matches
+
+I rewrote the checks to assert the **property** rather than my imagined diff. T5 now passes 7/7. I had already made the same mistake on T1a, where the check used `ls scripts/ tools/` and missed `scripts/probe/clean-build.sh` because it did not recurse; T1a is 5/5.
+
+**The lesson, logged:** an objective check must encode the required property, never a presumed implementation. A check that encodes the reviewer's imagined solution punishes a better one — the same failure mode as a worker grading itself, just relocated to the judge.
+
+Neither task is accepted yet. The gate needs `pnpm verify` **and** a written report, and both workers are still running. Nothing merged, no money spent.
+
+[2026-09-05T09:48:33.019Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:48:33.194Z] TOOL_RESULT (ipython):
+02:48
+.audit/v0/tasks/:
+T2.md
+T5.md
+T1a: RUN | d6ff238 docs(des
+T2: RUN | 119a7ce refactor
+T4: RUN | d6ff238 docs(des
+T5: RUN | df094f3 feat(thr
+
+
+
+[2026-09-05T09:48:38.209Z] ASSISTANT THINKING:
+Both T2.md and T5.md reports exist now, so I should read through them to verify their claims as part of the acceptance step.
+[2026-09-05T09:48:38.209Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:48:38.279Z] TOOL_RESULT (ipython):
+10889 10366
+==================== T2
+# T2 — Remove generation request journaling end to end
+
+**Task ID:** T2
+**Commit SHA:** 119a7ceee709b00c0dd3883582f835e93c801e64
+**Worktree:** /tmp/cf-stumble-wt/T2 (branch work/T2, based on d6ff2380487a60f410c568272635d99f30560d14)
+
+## Changed paths
+
+Production:
+- `src/supervisor/control/journal.ts` — deleted
+- `src/supervisor/control/index.ts` — journal table, request-id lookup/record, command
+  fingerprinting removed; `execute()` now applies each request directly inside one Durable Object
+  transaction
+- `src/supervisor/control/request.ts` — `requestId` removed from `GenerationRequest`;
+  `reused-request-id` removed from `ControlProblemCode`
+- `src/supervisor/supervisor.ts` — `GenerationControl` constructor no longer takes a storage
+  handle it doesn't use
+- `src/routes/generations.ts` — `requestId` removed from the activation/rollback and submission
+  request bodies and their validation; doc comments updated
+- `src/page/script-generations.ts`, `src/page/markup.ts`, `src/page/element-ids.ts` — request-id
+  controls, inputs, and rendered fields removed from the owner page
+- `src/page/script-helpers.ts` — `newRequestId()` deleted (dead code once nothing calls it)
+- `scripts/deploy/README.md` — `requestId` dropped from the Generation 0 curl examples; the
+  repeat-safety note rewritten to describe direct application instead of journaling
+- `docs/agents/adr/0030-apply-generation-requests-directly.md` — removed the stale
+  "implementation still has `requestId`..." gap note now that the code matches the decision
+
+Tests (generation route/control tests, per task scope):
+- `test/supervisor/control/index.ts`'s test file `test/supervisor/control/control.test.ts` —
+  rewritten: request-id-replay tests replaced with tests proving resubmission returns the
+  existing generation, activation of the active generation with the current epoch is a no-op,
+  and a stale/reused epoch still rejects
+- `test/supervisor/control/schema.test.ts` — new: proves `generation_control_journal` is absent
+  from a fresh Supervisor's SQLite schema
+- `test/routes/generation-control.test.ts`, `test/routes/generation-requests.test.ts`,
+  `test/routes/generation-submission.test.ts`, `test/routes/generation-candidates.test.ts`,
+  `test/routes/owner-api.test.ts` — `requestId` removed from bodies and helper signatures;
+  journal-replay tests replaced with resubmission/no-op/stale-epoch tests; one malformed-body
+  case added proving a body carrying `requestId` is now rejected as an unknown key
+- `test/supervisor/rpc-surface.test.ts`, `test/supervisor/epoch-scope.test.ts`,
+  `test/supervisor/evidence-era.test.ts`, `test/supervisor/generations/generations.test.ts`,
+  `test/supervisor/active-serving.test.ts`, `test/supervisor/artifacts/generation-preparation.test.ts`,
+  `test/supervisor/helpers.ts`, `test/facet/generation-0/module-map.test.ts`, and the
+  `submitCandidate`/`activateGeneration` call sites in `test/supervisor/eligibility.test.ts`,
+  `test/super
+...[truncated 837 chars]
+
+[2026-09-05T09:48:43.248Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:48:43.325Z] TOOL_RESULT (ipython):
+========================= T2
+## Deliberately NOT done (out of this task's scope)
+
+- Did not touch `src/supervisor/generations/`, `decisions.ts`, `preparation-checks.ts`, or
+  `src/supervisor/startup-check/`. Their existing no-op/contradiction/epoch-advance behavior was
+  already correct for ADR-0030/0033 and is outside T2's listed scope
+  (`src/supervisor/control/`, `src/routes/generations.ts`, page files, deploy README, and the
+  generation route/control tests).
+- Did not update `docs/agents/design/feature-map.md`'s "what version 0 needs" row for
+  candidate/activation/rollback requests (it still says "Remove request IDs and the request
+  journal"). That file's scope note assigns this reconciliation to T12 ("Update
+  `docs/agents/design/feature-map.md`..."); T2's own scope list does not include it, so I left it
+  for that later task rather than editing an unlisted file.
+- Did not touch `docs/agents/design/slices.md` or `docs/agents/design/computer-integration.md`,
+  which mention the now-removed "request-deduplication journal" as historical record of what
+  existed at an earlier point; those are explicitly historical and out of scope per
+  `docs/agents/domain.md`.
+- Did not add a compatibility/migration path for any pre-existing
+  `generation_control_journal` table in a running Durable Object, since ADR-003
+---
+## Remaining blockers
+
+None. `pnpm verify` is green on commit 119a7ceee709b00c0dd3883582f835e93c801e64.
+
+---
+========================= T5
+## What I deliberately did not do
+
+- No HTTP route for `startProjectTurn`, `finishProjectTurn`, or `abandonProjectTurn`. E6 confirmed
+  none exists, and the turn surface is T9's work. The RPC wrappers and their tests are the whole
+  migration.
+- No change to Supervisor construction, `workspace-names.ts`, or `artifacts/` (T3's scope), and no
+  change to `streamProjectTurn` behavior. Only two sentences of its doc comment changed.
+- No new ADR. The lease rule refines how ADR-0038's one thread per project admits a turn; it does
+  not reverse a recorded decision. ADR-0035 (plain values across the boundary) and ADR-0036 (pure
+  decisions, imperative shells) are both preserved: the lease comparison moved out of the shell
+  into `decideFinishTurn`/`decideAbandonTurn` as a plain `TurnLeaseClaim` fact.
+- No coordinator that joins admission, streaming, and saving. That is the unit the existing
+  `streamProjectTurn` comment names, and it belongs to T9.
+- No paid probe. Nothing in this task needs one; `pnpm verify` runs locally in workerd.
+
+## Remaining blockers and observations
+
+- No blocker for T5. The T1 dependency was wave ordering only: nothing in the thread code depends
+  on the clean build path, and I found no real dependency on it.
+- Observation, not fixed here: the debug page shows `
+---
+## Remaining blockers and observations
+
+- No blocker for T5. The T1 dependency was wave ordering only: nothing in the thread code depends
+  on the clean build path, and I found no real dependency on it.
+- Observation, not f
+...[truncated 656 chars]
+
+[2026-09-05T09:48:51.559Z] ASSISTANT THINKING:
+Both reports show good discipline — T2 stayed in scope and left reconciliation to T12, while T5 correctly declined out-of-scope work and confirmed the spurious T1 dependency matching my earlier finding. Since both claim pnpm verify passes, I want to independently confirm that myself rather than take it on faith.
+
+The workers still show as running, so there's some risk of collision if I run verify concurrently in their worktrees since build steps write to shared output directories — but since they've already committed and filed reports, they're likely wrapping up. I'll run verify on T5 and T2's worktrees in the background to confirm independently.
+[2026-09-05T09:48:51.559Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:48:51.617Z] TOOL_RESULT (ipython):
+verifying independently 80058 80062
+
+
+[2026-09-05T09:48:53.952Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:49:34.186Z] TOOL_RESULT (ipython):
+T2: Test Files  94 passed (94)
+      Tests  639 passed (639)
+   Start at  02:49:02
+   Duration  31.12s (transform 15.55s, setup 0ms, import 84.54s, tests 76.60s, environment 7ms)
+T5: Test Files  94 passed (94)
+      Tests  653 passed (653)
+   Start at  02:49:02
+   Duration  31.10s (transform 14.47s, setup 0ms, import 81.81s, tests 77.71s, environment 8ms)
+
+
+[2026-09-05T09:49:44.471Z] ASSISTANT THINKING:
+Both T2 and T5 check out independently: T2 went from 93 to 94 files with tests dropping from 642 to 639 (removed journal replay tests, added a schema test), while T5 also added a file but grew tests from 642 to 653 with the new turn-lease test. Both pass all four checks, verify cleanly, report honestly, and stay in scope.
+
+On merge order, T1a was supposed to go first since everything after it gets gated by the corrected build, but that's still running and not a hard dependency for T5 or T2. I'll merge T5 then T2 now while T1a finishes, gating between each — starting from the clean main repo at d6ff238, watching for the known threads.test.ts conflict when T2 goes in.
+
+
+[2026-09-05T09:49:44.471Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:49:44.568Z] TOOL_RESULT (ipython):
+ test/supervisor/threads/fresh-thread.test.ts | 106 ++++++++++++++--
+ test/supervisor/threads/threads.test.ts      |  80 ++++++-------
+ test/supervisor/threads/turn-lease.test.ts   | 173 +++++++++++++++++++++++++++
+ 10 files changed, 509 insertions(+), 147 deletions(-)
+ create mode 100644 test/supervisor/threads/turn-lease.test.ts
+
+
+
+[2026-09-05T09:49:47.009Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:50:15.931Z] TOOL_RESULT (ipython):
+Tests  653 passed (653)
+   Start at  02:49:56
+   Duration  19.79s (transform 11.20s, setup 0ms, import 61.04s, tests 31.00s, environment 6ms)
+
+
+[2026-09-05T09:50:18.478Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:50:18.586Z] TOOL_RESULT (ipython):
+ test/supervisor/recovery/state.test.ts             |   6 +-
+ test/supervisor/relay/cancellation.test.ts         |   4 +-
+ test/supervisor/relay/relay.test.ts                |   6 +-
+ test/supervisor/rpc-surface.test.ts                |  79 +++++++-----
+ test/supervisor/threads/threads.test.ts            |   4 +-
+ 36 files changed, 386 insertions(+), 663 deletions(-)
+ delete mode 100644 src/supervisor/control/journal.ts
+ create mode 100644 test/supervisor/control/schema.test.ts
+
+
+
+[2026-09-05T09:50:23.544Z] ASSISTANT THINKING:
+T2 merged cleanly since git auto-resolved threads.test.ts, but since T5 had made larger changes there, I want to verify none of T5's test cases got lost—particularly the turn-lease tests. Let me run verify now to confirm everything's intact.
+[2026-09-05T09:50:23.544Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:50:49.586Z] TOOL_RESULT (ipython):
+Tests  650 passed (650)
+   Start at  02:50:31
+   Duration  18.23s (transform 9.66s, setup 0ms, import 56.16s, tests 24.80s, environment 7ms)
+4
+LEASE_TEST_PRESENT
+JOURNAL_GONE
+
+
+
+[2026-09-05T09:50:52.598Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:50:52.778Z] TOOL_RESULT (ipython):
+c3e0d5a merge(T2): apply generation requests directly (ADR-0030)
+567d25e merge(T5): require the admitting lease to finish or abandon a turn
+119a7ce refactor(control): apply generation requests directly (ADR-0030)
+df094f3 feat(threads): require the admitting lease to finish or abandon a turn
+---
+
+T2 4/4 []
+T5 7/7 []
+
+
+[2026-09-05T09:51:08.833Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:51:08.957Z] TOOL_RESULT (ipython):
+main: c3e0d5a merge(T2): apply generation requests directly (ADR-0030)
+
+
+[2026-09-05T09:51:18.025Z] ASSISTANT:
+**Two tasks accepted and merged to main. Both verified independently, not taken on their word.**
+
+**How I judged them:**
+
+- Read both reports in full. Both are honest and stayed in scope. T2 explicitly declined to edit files outside its scope list and left the `feature-map.md` reconciliation to T12. T5 declined to build the HTTP turn surface — E6 says none exists and that is T9's work — and independently confirmed the T1 dependency was wave ordering only, matching the call I made earlier.
+- **Ran `pnpm verify` myself** in each worktree rather than trusting the claim: T2 green at 94 files/639 tests, T5 green at 94 files/653 tests.
+- Objective checks: T2 4/4, T5 7/7.
+
+**Merged in the collision-safe order, gating between every step:**
+
+```
+567d25e merge(T5)  -> pnpm verify green, 653 tests
+c3e0d5a merge(T2)  -> pnpm verify green, 650 tests
+```
+
+The predicted collision on `test/supervisor/threads/threads.test.ts` auto-merged (T5 changed 80 lines there, T2 changed 4). I checked afterwards that nothing was lost: `turn-lease.test.ts` still present, `leaseId` still referenced in the shared test, `control/journal.ts` gone. Then re-ran both audits **against main** rather than the worktrees — still 4/4 and 7/7.
+
+Test-count movement is explained rather than waved through: baseline 93 files/642 tests → 650 on main. T5 adds 11 (the new lease test), T2 nets −3 (journal-replay tests deleted; a fresh-schema test and a malformed-body test added).
+
+**Two of the five confirmed blockers are now closed.** E2 is fixed — the duplicate method pair is gone, the lease is mandatory on finish and abandon, and `startTurn` hands the id to the client, so goal criterion 6's fencing half is implementable and tested. And the ADR-0030 cleanup that the previous session deferred is done: no request ids, no fingerprints, no journal, epoch checks intact.
+
+Still open: E1 (T1a running), E3, E4, E5/E7 (T4 running), E6 (needs T9). Still no money spent, Q7 still blocking every paid step.
+
+[2026-09-05T09:51:23.012Z] TOOL_CALL ipython: {}
+
+[2026-09-05T09:51:23.162Z] TOOL_RESULT (ipython):
+02:51
+.audit/v0/roadmap-v0.approved.md
+
+.audit/v0/tasks/:
+T2.md
+T5.md
+T1a: RUN | 4bdd6dc fix(build): make a lab | 
+T4: RUN | d6ff238 docs(design): align ve | 
+roadmap: DONE
+
+
+
+[2026-09-05T09:51:29.117Z] ASSISTANT THINKING:
+The roadmap revision finished with an approved file, and T1a committed a build fix. T4 is still quiet after roughly 8 minutes, which is a bit concerning though it was tasked with reading three helper files. I should check T1a's commit and audit first, then skim the approved roadmap's changes section.
+[2026-09-05T09:51:29.117Z] TOOL_CALL ipython: {}

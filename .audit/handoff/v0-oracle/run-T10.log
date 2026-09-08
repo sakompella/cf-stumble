@@ -1,0 +1,21 @@
+**Gate failure fixed.** Two causes, both in the worker's harness directory, both resolved:
+
+1. `tools/browser-harness/fixtures.mts` was unformatted — reformatted with `pnpm exec oxfmt`.
+2. A new harness file was not in any TypeScript project, so type-aware lint reported 24 `error`-type warnings (exactly the failure mode `AGENTS.md` warns about). I changed `tools/tsconfig.json` to include `browser-harness/**/*.mts` as a glob, so a new file can never fall outside the project again. The worker has been told to keep the glob and to run format, typecheck, and lint after every write.
+
+Terminal evidence, full gate on the current worktree:
+
+```
+$ pnpm verify
+$ pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck
+  && pnpm format:check && pnpm lint && pnpm build:module-map
+  && pnpm build:loaded-execution-env-fixture && pnpm test
+...
+ Test Files  117 passed (117)
+      Tests  836 passed (836)
+   Duration  22.13s
+```
+
+`pnpm exec oxlint --type-aware --max-warnings=0` → `Found 0 warnings and 0 errors` across 307 files.
+
+Harness status from the worker: phase 1 proven — real Chromium (`Google Chrome for Testing` 151.0.7922.34) loads the real page through the stub server, **no CSP violation, no console error, no uncaught exception**, and no fault found in the page. Phase 2 (the 10-step criterion‑8 scenario, `run.mts`, README) is being written now. The report file `.audit/v0/tasks/T10.md` exists and will be updated with the harness run output.

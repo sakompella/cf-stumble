@@ -1,0 +1,5 @@
+Wrote all five deliverables in `/tmp/cf-stumble-v0/`.
+
+Start with [oracle-summary.md](/tmp/cf-stumble-v0/oracle-summary.md). It links the critique, 12-task roadmap, goal, and questions. Q1 is preserved.
+
+`pnpm verify` passed 642 tests. A separate clean-build probe failed on missing Pi build output. Tracked files remain unchanged.

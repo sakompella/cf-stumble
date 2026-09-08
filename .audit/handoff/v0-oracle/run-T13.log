@@ -1,0 +1,29 @@
+T13 is done and committed.
+
+## What I built
+
+The diff is now a property of the turn, not an instruction to the model.
+
+- `src/facet/generation-0/workspace-diff.ts` (new): after the model stops, the harness runs `git --no-pager diff HEAD` through the turn's own `ExecutionEnv` — the same project capability the tools used — and returns bounded content or the reason git could not answer.
+- `facet-turn.ts` runs it whenever the turn published a `tool-start` for `bash`, `edit`, or `write`, then publishes a `diff` (or `diff-unavailable`) frame **before** the single terminal frame.
+- The prompt sentence that asked the model to run `git diff` is deleted; the prompt now tells the model not to spend a tool call on one.
+- The Supervisor proves and forwards both new frame kinds on the same terms as a tool result.
+
+## What the tests prove now
+
+No test supplies the diff text it asserts. `GitDiffExecBackend` answers only the harness's exact command, by diffing the real file bytes the turn wrote through the capability. Checks include: an `edit` turn with no `bash` call at all still gets a real `-`/`+` diff; a command that changes nothing yields an empty diff; a command that rewrites 4,000 real lines yields a bounded frame marked truncated; a non-zero exit yields `diff-unavailable` with git's own message. The cross-isolate test in `project-turn.test.ts` sees its own write come back as a diff.
+
+## Gates
+
+- `pnpm verify`: green — 116 files, 834 tests (base 829).
+- Commit `ad35ccf7ace53fff0869b5e61428925a2f8c328e` on `work/T13` (pre-commit hook re-ran the gate).
+- Clean-build probe at that commit: two identical maps, new sha256 `e9c3008ea0dc4829bfec8fc21881310f8e7426f5abae37e1bb421c78d3e0a456` (base was `313ddf26...`; facet code changed, so the move is expected).
+
+## Still model-dependent or unproven
+
+- The model still decides whether to change anything, and still writes the final summary sentence.
+- A new file that is never staged is not in `git diff HEAD`. Untracked files would need a second command — outside the cut line.
+- That `git` really runs in a workspace is proved only against the fake backend; workerd runs no child process. **Blocked: awaiting owner approval for a paid probe.** The failure path is explicit, not silent.
+- `src/page/` still has no streaming client, so T10 must render the two new frame kinds.
+
+Report written to `.audit/v0/tasks/T13.md`. Note: `roadmap-v0.approved.md` contains no T13 section (`grep` finds no "T13" anywhere under `.audit/v0`), so I worked from the brief, `review-round2.md` 2.1, and D62/D67; that is recorded in the report.

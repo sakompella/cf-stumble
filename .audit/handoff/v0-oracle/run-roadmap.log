@@ -1,0 +1,23 @@
+Done. `.audit/v0/roadmap-v0.approved.md` is written (77 KB, 16 tasks). No other file changed — `git status --porcelain` is empty.
+
+## What changed
+
+**Splits (stable a/b ids)**
+- **T1a** local build correctness + the B2 Gap 1 regression proof (deps: none, M) / **T1b** paid capability, build, load gate (deps: T1a, L). T1a's text matches the already-dispatched brief: `build:artifact` script, `buildCommand` equals that script name, a gate test that the script exists, a real isolated clean-build test, the six container preconditions, and a no-paid-spend clause.
+- **T3a** deterministic layout / **T3b** paid concurrency experiment.
+- **T6a** storage, variable-arity catalog, ownership, routes, provisioning, fake-credential testable / **T6b** the one owner-run device authorization + private-repo clone, moved to wave 5, tier `owner`.
+- **T12a** deploy + paid re-probes / **T12b** demo, recording, release notes (review defect table).
+
+**Dependency graph** — the fictional `Dependencies: T1` is gone from T2, T4, T5 and T8. Real prerequisites only; each task states why. Waves rebuilt: wave 0 is T1a, T2, T4, T5 with T1b beside them.
+
+**Coverage gaps closed**
+- T7 gains a diff acceptance item with a stated frame byte budget; `git_diff` may not be deleted without its replacement in the same commit. `tools/vendor-pi.mts` is in scope with the `--refresh-generated` rule, "never hand-edit `vendor/**`", and "do not attempt `--update`".
+- T9 gains `src/supervisor/eligibility.ts` and a criterion naming line 140: credit needs Pi terminal success **and** a committed save.
+- T3a gains the owner-only Access policy plus local rejection tests (criterion 2).
+- The two-clean-build proof now says **Computer** and lives in T1b; T1a's local pair is a pre-check.
+
+**Decisions made, not delegated** — T2.4 "already-ready candidate returns current status, no implicit re-preparation"; T5.3 "durable thread identity".
+
+**Guards** — T3b carries "no alarm, no scheduler, no queue framework". A "File ownership and merge order" table states per-wave ownership (`capabilities.ts` to T4, `supervisor.ts` serialized T5 → T3a → T2, T3's tests enumerated, T2's page work delete-only). A named "Paid-run preconditions" block encodes B8, and all eight paid tasks carry the preconditions reference plus "stop on the first paid failure" and "BLOCKED, not passed — never fake or simulate a paid result".
+
+Evidence E1–E8 is folded into the tasks that own it, including E8's correction that Computer container behavior is already paid-verified, so T1b confirms rather than re-buys it. A "Changes from roadmap-v0.md" section lists every edit with its objection id. No acceptance criterion was weakened and no scope was added past the cut line.

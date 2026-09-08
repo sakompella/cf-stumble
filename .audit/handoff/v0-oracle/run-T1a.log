@@ -1,0 +1,22 @@
+T1a is done and committed. Summary:
+
+**Commit** `4bdd6dc` on `work/T1a` (base `d6ff238`). `pnpm verify` passes: 94 files, 650 tests. Working tree clean, nothing pushed.
+
+**The repair**
+- `package.json` gains `build:artifact` = `pnpm install --frozen-lockfile && pnpm run build:pi && pnpm run build:module-map`.
+- `HARNESS_BUILD_CONFIGURATION.buildCommand` is now exactly `pnpm run build:artifact`.
+- Provision step now fetches a commit pushed after provisioning, fails with the commit and repo named when it is absent, and clones into a temp path before replacing an existing checkout, so an interrupted provision erases nothing.
+- Checkout writes the archive before extracting, so a failed `git archive` is a checkout failure, not a confusing esbuild error.
+
+**Proof, not prose**
+- E1 reproduced first: clean archive + install, old command → 5 × `Could not resolve "@cf-stumble/pi"` (log kept).
+- Verify-time test asserts the build command names a script `package.json` defines, in the right order, and that the probe stays committed.
+- `pnpm probe:clean-build` builds the commit twice with isolated `HOME` and cold store: both maps sha256 `387ed749...`, identical.
+
+**Stated plainly in the report**: the two-build check is a local pre-check only. It does not close goal criterion 7, which needs two clean **Computer** builds.
+
+**Blocked, awaiting owner approval for a paid probe**: T1.4, T1.5, the pin-replacement half of T1.6, plus four container facts (pnpm 11.18.0 self-download, sustained registry throughput, real cold install time, `tar` and github.com reachability). Recommended cold-build timeout for T9/T12: 900 s, marked as a ceiling, not a measurement.
+
+**Race handed over, not absorbed**: install lands inside `${buildRoot}/${commit}`, which widens T3.4's blast radius. The report gives T3 a written interface; the isolate step is unchanged.
+
+Report: `/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T1a.md`, with `T1a-clean-build.log` and `T1a-e1-reproduction.log` beside it.

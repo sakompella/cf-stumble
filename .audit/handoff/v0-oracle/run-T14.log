@@ -1,0 +1,15 @@
+## Summary
+
+T14 is complete. I implemented page-side rendering for the `diff` and `diff-unavailable` `FacetTurnFrame`/`ProjectTurnFrame` kinds that T13 added but T10's page never handled.
+
+**Changes** (all page-side, nothing under `src/facet/**` or `src/supervisor/**`):
+- `src/page/script-render.ts`: added `diffMessage(frame)` and `diffUnavailableMessage(frame)`, mirroring the existing `toolResult` pattern. `diffMessage` reuses the existing `renderOutput`/`looksLikeDiff` machinery, so a diff gets the same added/removed line colouring T10 already shipped, plus a "harness truncated this diff" note when `frame.truncated` is true. `diffUnavailableMessage` shows `frame.detail` as plain text.
+- `src/page/script-turn.ts`: wired both new kinds into `applyFrame`.
+- `test/page/owner-page.test.ts`: added the two kinds to the frame-vocabulary test and one new test asserting both are dispatched and rendered correctly.
+
+**Verification:**
+- `pnpm verify` passes: 117 test files / 842 tests (one new test added to an existing file; no new files). One earlier run hit known environmental flakiness (cloudflare-pool timeouts), unrelated to this change — a clean re-run passed fully.
+- `scripts/probe/clean-build.sh HEAD` run twice: both produced identical module maps, sha256 `e9c3008ea0dc4829bfec8fc21881310f8e7426f5abae37e1bb421c78d3e0a456` — matching the pre-change baseline prefix from the brief. The SHA did not move, as expected for a page-side-only change.
+- Committed as `f00eaac` with a conventional-commit message; the pre-commit hook ran `pnpm verify` again and passed.
+
+**Report:** written to `/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T14.md`, covering each acceptance criterion with evidence, and explicitly noting what was deliberately left out of scope: no new CSS (existing diff colours reused), no persistence of these frames into the saved-thread view (they're ephemeral harness statements per ADR-0040, out of this task's cut line), and no browser-harness run (that tooling doesn't exist on this branch and is outside the verify gate anyway). No blockers remain.

@@ -1,0 +1,14 @@
+T2 is complete.
+
+## Summary
+
+I implemented T2 ("Remove generation request journaling end to end") in the `/tmp/cf-stumble-wt/T2` worktree on branch `work/T2`:
+
+- Deleted `src/supervisor/control/journal.ts` and all journal machinery (SQLite table, request-id lookup, command fingerprinting) from `src/supervisor/control/index.ts`.
+- Removed `requestId` from `GenerationRequest`/RPC types, HTTP request bodies (`src/routes/generations.ts`), and the owner page (`script-generations.ts`, `markup.ts`, `element-ids.ts`, plus the now-dead `newRequestId()` helper in `script-helpers.ts`).
+- Updated `scripts/deploy/README.md` and ADR-0030's stale implementation-gap note.
+- Rewrote the generation route/control tests (13 files + 1 new schema test) to prove the actual ADR-0030 behaviors instead of journal replay: resubmitting a candidate returns the existing generation, activating the already-active generation with the current epoch is a no-op, and a stale epoch still rejects — plus a fresh-schema test proving `generation_control_journal` no longer exists.
+
+`pnpm verify` passes: typecheck, format, lint, and the full suite (94 files / 639 tests) all green. Committed as `119a7ceee709b00c0dd3883582f835e93c801e64` (conventional commit, pre-commit gate ran clean). Wrote the report to `/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T2.md` with per-criterion evidence and an explicit list of what was deliberately left untouched (generation/decisions/startup-check internals, `feature-map.md`, `slices.md` — all outside T2's listed scope).
+
+No blockers remain.

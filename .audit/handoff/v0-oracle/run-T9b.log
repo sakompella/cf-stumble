@@ -1,0 +1,26 @@
+T9b is done and green.
+
+## Result
+
+**Commits on `work/T9b`** (worktree clean):
+- `c3ac884` — applies T7's audited deletion list (`WorkspaceHost.execute` and the whole request-and-plan path behind it).
+- `4f47fc3` — the turn route, the Supervisor-side join, frame parsing, settlement, the completed-real-turn ledger, and the second eligibility predicate.
+
+**Gates (both re-run at `4f47fc3`)**
+- `pnpm verify`: pass — 116 test files, 829 tests (base was 113/797; the deletion removed tests, T9 added 44).
+- `scripts/probe/clean-build.sh`: two clean builds produced identical maps, sha256 `313ddf26f4492180326ded330d7f6ab49c692eb28a6764261511ecd9cf7897d0`. The map changed from the base `18cea22b...` because this commit changes `src/`; the probe holds that the two builds of this commit agree. No paid call was made.
+
+**The two predicates (E12)**
+- `servedSuccessfulResponse` — generation health, an HTTP/relay fact, unchanged logic, read only by `deriveGenerationEligibility`.
+- `earnsCompletedRealTurnCredit` — completed-real-turn credit, a durability fact needing Pi terminal success **and** a committed thread save **and** a still-delivering attempt. Its credits live in a separate `completed_real_turns` ledger that eligibility never reads.
+
+**Shape of the turn**: `POST /api/projects/{id}/turn` carries only a prompt; the Supervisor admits the lease, snapshots the serving generation, runs the turn, proves every frame, saves, then reports `saved`. The lease id never leaves the object, so the old split-turn RPC methods are gone.
+
+**Notes**
+- I started from the preserved WIP, then reviewed and fixed it. It was **not** green: its duplicate-terminal rule depended on write chunking and one test failed. The turn now stops at the first terminal frame, and I deleted the unreachable problem code.
+- I added two things the WIP missed: a bound on the *start* phase (a lost facet used to hold the lease with no bound) and an admission-time sweep of unresolved relay evidence.
+- The facet request changed from `{prompt, state}` to `{prompt, messages}`. This is outside the listed scope and necessary: the model and system prompt must stay the generation's, not the host's.
+
+**Blocked**: criterion 10 (paid disconnect and deadline measurement) — *awaiting owner approval for a paid probe*. Nothing simulates it. The 4-minute deadline is a stated choice, since T1b never ran.
+
+Report written to `/Users/aditya/repos/projects/cf-stumble/.audit/v0/tasks/T9b.md`.

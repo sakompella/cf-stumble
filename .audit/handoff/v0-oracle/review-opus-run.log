@@ -1,0 +1,18 @@
+Review written to `/tmp/cf-stumble-v0/review-opus-round1.md` (563 lines). Repository untouched (`git status --porcelain` empty).
+
+## Verdict: SHIP WITH FIXES — do not dispatch the wave plan unchanged
+
+The plan's thinking is sound; its structure is not. Six roadmap edits fix it.
+
+**Eight blocking objections.** The main ones:
+
+- **B1 — T1 is two tasks.** Its cheap local half (fix the build) is fused to an expensive paid probe, and all four wave‑1 tasks list `Dependencies: T1`. T1 itself admits missing paid authorization means "blocked, not passed" — which today blocks the entire roadmap. Split T1a/T1b and rewire.
+- **B2 — T1 does not prove E1** (the question you asked). It gets the repair right but leaves no automated regression: T1.1 and T1.3 are one-time manual acts a worker can claim. It also never says the two reproducible builds must run **on Computer** (goal criterion 7 does), and it names none of the platform assumptions the repair introduces. The oracle's repro used a **warm pnpm store** and ran a native install script (`koffi`/`cnoke`); a fresh container has neither. I list the exact additions: a `build:artifact` script, a test asserting `buildCommand` names a real script, a gate-level clean-archive build, and six container probes.
+- **B3 — T7 deletes the only diff producer.** `git_diff` (`tools.ts:77`, `tool-execution.ts:141`) exists only on the buffered path T7 removes as "duplicate tools"; the Pi agent has read/write/edit/bash only. Worse, tool-result frames carry `toolCallId, toolName, isError` and **no output text** (`facet-turn.ts:42-48`). Goal criterion 4 and feature-map step 3 both require a diff.
+- **B4 — T7 cannot pass its own gate.** `vendor/pi-v0.84.4/index.ts` is generated (`tools/vendor-pi.mts:198`) and checked by `verify:vendor`, step 2 of `pnpm verify`.
+- **B5 — T6 needs a human** at `github.com/login/device` yet sits on the unsupervised critical path.
+
+**Safe to dispatch now:** T5 unconditionally, T2 with deletion-only page scope, T4 minus its paid clause. None is invalidated by any T1 disproof — even the severe case (no per-turn Computer capability). The one real waste risk is unrelated to T1: if the fixed Workers AI route cannot stream tool-call deltas, T4's provider half is rewritten. Retire that with a five-minute `stream: true` smoke probe before dispatching T4.
+
+**Two verifier subagents changed the review.** They disproved my suspicion that T2 forces a third writer into `supervisor.ts` — I withdrew that objection in B6 — corrected a `ROUTE_MODEL` attribution the critique got wrong, confirmed `toolExecution` defaults to `parallel`, and confirmed ADR-0031's fixture limitation is stale. I also flag that `AGENTS.md:19` describes `pnpm verify` as four steps when it is nine, and that no paid-spend approval rule exists outside `.audit/` notes.
+Autonomous quality gate still failing after attempt 2/3: not rerun: workspace unchanged since previous failed gate; autonomous limit reached: maxTurns reached (33/30)
