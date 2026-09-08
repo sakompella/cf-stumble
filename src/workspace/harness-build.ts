@@ -74,5 +74,10 @@ export function planHarnessBuildRequest(
   }
 
   const step = harnessBuildStep(plan, request.step);
-  return { kind: "run-command", source: step.source, cwd: step.cwd };
+  return {
+    kind: "run-command",
+    source: step.source,
+    cwd: step.cwd,
+    timeoutMs: configuration.stepTimeoutMs,
+  };
 }

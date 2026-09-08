@@ -10,6 +10,7 @@ import {
   type GitHubCredentialState,
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import type { WorkspaceOperations } from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly } from "./untrusted.js";
 
@@ -113,7 +114,11 @@ async function installCredential(
 ): Promise<GitHubCredentialResult> {
   await operations.writeFile(GITHUB_TOKEN_STAGING_PATH, `${token}\n`);
   try {
-    const output = await operations.runCommand(installCredentialSource(), "/");
+    const output = await operations.runCommand(
+      installCredentialSource(),
+      "/",
+      WORKSPACE_COMMAND_TIMEOUT_MS,
+    );
     if (output.exitCode !== 0) {
       return failed("credential-command-failed", output.stderr);
     }
@@ -139,7 +144,11 @@ async function clearStagedToken(operations: WorkspaceOperations): Promise<void> 
 }
 
 async function credentialStatus(operations: WorkspaceOperations): Promise<GitHubCredentialResult> {
-  const output = await operations.runCommand(credentialStatusSource(), "/");
+  const output = await operations.runCommand(
+    credentialStatusSource(),
+    "/",
+    WORKSPACE_COMMAND_TIMEOUT_MS,
+  );
   const status = parseCredentialStatus(output.stdout);
   return {
     ok: true,
@@ -151,7 +160,11 @@ async function repositoryAccess(
   operations: WorkspaceOperations,
   repositoryUrl: string,
 ): Promise<GitHubCredentialResult> {
-  const output = await operations.runCommand(repositoryAccessSource(repositoryUrl), "/");
+  const output = await operations.runCommand(
+    repositoryAccessSource(repositoryUrl),
+    "/",
+    WORKSPACE_COMMAND_TIMEOUT_MS,
+  );
   const access = parseRepositoryAccess(output.stdout);
   return {
     ok: true,

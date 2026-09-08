@@ -20,6 +20,7 @@ const configuration: HarnessBuildConfiguration = {
   harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
   buildCommand: "pnpm run build:module-map",
   moduleMapPath: "build/module-map.json",
+  stepTimeoutMs: 60_000,
 };
 
 const commit = harnessCommit("2000000000000000000000000000000000000001");
@@ -121,7 +122,9 @@ test("checks out the commit before it runs the build command", async () => {
   expect(workspace.commands[2]?.source).toContain(
     `git --git-dir=/harness/.git archive --format=tar -o "$archive" ${commit}`,
   );
-  expect(workspace.commands[2]?.source).toContain(`tar -x -C /harness-builds/${commit}`);
+  expect(workspace.commands[2]?.source).toContain(
+    `tar -x -m --no-same-owner --no-same-permissions -C /harness-builds/${commit}`,
+  );
   expect(workspace.commands[3]).toEqual({
     source: configuration.buildCommand,
     cwd: `/harness-builds/${commit}`,

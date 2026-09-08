@@ -35,11 +35,12 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
     return this.workspace.fs.writeFile(path, content);
   }
 
-  async runCommand(source: string, cwd: string): Promise<CommandOutput> {
+  async runCommand(source: string, cwd: string, timeoutMs: number): Promise<CommandOutput> {
     const execution = await this.workspace.runtime.exec(source, {
       backend: "container-shell",
       cwd,
       encoding: "utf8",
+      timeoutMs,
     });
     const result = await execution.result();
     return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };

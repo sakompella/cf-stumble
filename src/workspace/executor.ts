@@ -10,7 +10,7 @@ export type WorkspaceOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
-  runCommand(source: string, cwd: string): Promise<Readonly<CommandOutput>>;
+  runCommand(source: string, cwd: string, timeoutMs: number): Promise<Readonly<CommandOutput>>;
 }>;
 
 export type CommandOutput = Readonly<{ stdout: string; stderr: string; exitCode: number }>;
@@ -57,7 +57,7 @@ async function executePlan(
       return { ok: true, result: { kind: "written" } };
     }
     case "run-command": {
-      const output = await operations.runCommand(plan.source, plan.cwd);
+      const output = await operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
       return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } };
     }
     default: {

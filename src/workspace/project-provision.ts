@@ -1,3 +1,4 @@
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
@@ -103,7 +104,12 @@ export function planProjectProvisionRequest(request: ParsedProjectProvisionReque
   );
   switch (step.name) {
     case "clone":
-      return { kind: "run-command", source: step.source, cwd: step.cwd };
+      return {
+        kind: "run-command",
+        source: step.source,
+        cwd: step.cwd,
+        timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+      };
     case "instructions":
       return { kind: "write-file", path: step.path, content: step.content };
     default: {

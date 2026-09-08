@@ -88,10 +88,11 @@ test("plans one planned step, or the build output, from a validated commit", () 
       "set -eu",
       `archive=${buildDirectory}/.harness-archive.tar`,
       `git --git-dir=${HARNESS_DIRECTORY}/.git archive --format=tar -o "$archive" ${commit}`,
-      `tar -x -C ${buildDirectory} -f "$archive"`,
+      `tar -x -m --no-same-owner --no-same-permissions -C ${buildDirectory} -f "$archive"`,
       'rm -f "$archive"',
     ].join("\n"),
     cwd: "/",
+    timeoutMs: HARNESS_BUILD_CONFIGURATION.stepTimeoutMs,
   });
   expect(planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, output)).toEqual({
     kind: "read-file",

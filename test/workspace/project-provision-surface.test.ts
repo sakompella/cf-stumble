@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
   planProjectProvision,
@@ -109,7 +110,12 @@ test("plans the clone from the resolved project the caller sent, and its directo
     id: projectOne.id,
     repositoryUrl: projectOne.repositoryUrl,
   });
-  expect(planned).toEqual({ kind: "run-command", source: cloneSource(), cwd: "/" });
+  expect(planned).toEqual({
+    kind: "run-command",
+    source: cloneSource(),
+    cwd: "/",
+    timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+  });
   expect(
     planned,
     "the directory as well as the repository comes from the resolved project",

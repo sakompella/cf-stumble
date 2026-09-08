@@ -10,7 +10,7 @@
 export type WorkspacePlan =
   | Readonly<{ kind: "read-file"; path: string }>
   | Readonly<{ kind: "write-file"; path: string; content: string }>
-  | Readonly<{ kind: "run-command"; source: string; cwd: string }>;
+  | Readonly<{ kind: "run-command"; source: string; cwd: string; timeoutMs: number }>;
 
 export type WorkspaceFailure = Readonly<{
   ok: false;

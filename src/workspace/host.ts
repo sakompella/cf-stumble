@@ -113,11 +113,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * so neither of the others can be asked to install, read, or exercise a token.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
-  credential(request: unknown): Promise<GitHubCredentialResult> {
-    return executeGitHubCredentialRequest({
+  async credential(request: unknown): Promise<GitHubCredentialResult> {
+    const result = await executeGitHubCredentialRequest({
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });
+    if (!result.ok) console.error("PROBE credential failure", JSON.stringify(result.error));
+    return result;
   }
 
   /**

@@ -60,6 +60,18 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       return Result.err({ code: "build-workspace-unavailable", harnessCommit });
     }
 
+    console.error(
+      "PROBE step",
+      step.name,
+      "exit",
+      output.exitCode,
+      "cwd",
+      step.cwd,
+      "stdout",
+      output.stdout.slice(-1500),
+      "stderr",
+      output.stderr.slice(-1500),
+    );
     if (output.exitCode !== 0) {
       return Result.err({
         code: "build-step-failed",
@@ -79,7 +91,8 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     let encoded: string;
     try {
       encoded = await this.workspace.readFile(path);
-    } catch {
+    } catch (error) {
+      console.error("PROBE read failed", path, String(error));
       return Result.err({ code: "build-output-missing", harnessCommit });
     }
 

@@ -1,4 +1,5 @@
 import { invariant } from "./invariant.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "./workspace-command-timeout.js";
 import { shellQuote } from "./shell-quote.js";
 import {
   BUILD_SCRATCH_ROOT,
@@ -37,6 +38,8 @@ export type HarnessBuildConfiguration = Readonly<{
    */
   buildCommand: string;
   moduleMapPath: string;
+  /** How long one build step may run (`workspace-command-timeout.ts`). */
+  stepTimeoutMs: number;
 }>;
 
 /** The one build configuration the Workspace Host offers and the Supervisor plans against. */
@@ -47,6 +50,7 @@ export const HARNESS_BUILD_CONFIGURATION = {
   harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
   buildCommand: "pnpm run build:artifact",
   moduleMapPath: "build/module-map.json",
+  stepTimeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
 } as const satisfies HarnessBuildConfiguration;
 
 export type HarnessBuildStepName = "provision" | "isolate" | "checkout" | "build";
@@ -219,11 +223,17 @@ export function planHarnessBuild(
         // `git archive | tar -x` reports tar's exit code, so a failed archive reached the build
         // step as an empty directory and a confusing compilation error. Writing the archive
         // first makes an archive failure the step's own failure.
+        //
+        // The metadata flags are not tidiness. The deployed workspace filesystem is Computer's
+        // userspace shim, because a Cloudflare container cannot grant the privileges a kernel FUSE
+        // mount needs. That filesystem rejects `utime`, `chown` and `chmod` on a directory tar has
+        // just created, and tar exits 2 on those errors, which failed every deployed checkout.
+        // The build reads tracked source; none of it needs a preserved timestamp, owner or mode.
         source: [
           "set -eu",
           `archive=${directory}/.harness-archive.tar`,
           `git --git-dir=${configuration.harnessGitDir} archive --format=tar -o "$archive" ${harnessCommit}`,
-          `tar -x -C ${directory} -f "$archive"`,
+          `tar -x -m --no-same-owner --no-same-permissions -C ${directory} -f "$archive"`,
           'rm -f "$archive"',
         ].join("\n"),
         cwd: "/",
