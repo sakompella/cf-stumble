@@ -53,8 +53,8 @@ export class MainHarnessArtifact {
   static parse(
     input: MainHarnessArtifactInput,
   ): Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
-    // R2 JSON is untrusted at this boundary. The public type describes the decoded shape, but
-    // these checks keep malformed cache objects from becoming executable module maps.
+    // Stored JSON is untrusted at this boundary. The public type describes the decoded shape,
+    // but these checks keep a malformed stored map from becoming executable module code.
     // oxlint-disable-next-line anti-slop/no-runtime-typeof
     if (
       // oxlint-disable-next-line anti-slop/no-runtime-typeof

@@ -66,8 +66,9 @@ export function checkGenerationStartup(
 }
 
 /**
- * Check a labeled generation from its harness commit alone. The module map comes from the R2 cache
- * or from a build of that commit, so startup checking and normal serving share one resolver.
+ * Check a labeled generation from its harness commit alone. The module map comes from the
+ * Supervisor's store, or from a build of that commit which is stored before the check runs, so a
+ * generation that this reports as ready has its code stored.
  */
 export function prepareGenerationStartup(
   ctx: DurableObjectState,
@@ -84,7 +85,7 @@ export function prepareGenerationStartup(
     artifacts,
     generations,
     label,
-    { kind: "resolved" },
+    { kind: "prepared" },
     modelRoute,
     options,
   );
@@ -125,7 +126,8 @@ function checkGenerationStartupFrom(
 
 /**
  * A module map that cannot be obtained records no preparation check. A missing build workspace or
- * an unreadable cache is not evidence about the candidate, and the active generation keeps serving.
+ * a store that refused the write is not evidence about the candidate, and the active generation
+ * keeps serving.
  */
 async function checkKnownGenerationStartup(
   ctx: DurableObjectState,

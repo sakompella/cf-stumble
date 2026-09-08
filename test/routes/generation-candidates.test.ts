@@ -1,15 +1,13 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { GenerationSubmissionResult } from "../../src/routes/index.js";
-import { encodeModuleMap } from "../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activeSupervisor } from "../supervisor/helpers.js";
+import { activeSupervisor, storeModuleMap } from "../supervisor/helpers.js";
 import { ownerScope } from "./helpers.js";
 
 const commits = {
@@ -38,16 +36,14 @@ export class MainFacet extends DurableObject {
   };
 }
 
-/** A cached module map stands in for the build P4b wires, so no test needs a build workspace. */
-async function seedCache(
+/** A stored module map stands in for a build, so no test here needs a build workspace. */
+function seedModuleMap(
+  control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
   body = "candidate serving",
   status = 200,
 ): Promise<void> {
-  await env.MODULE_MAPS.put(
-    `module-maps/${harnessCommit}`,
-    encodeModuleMap(moduleMap(harnessCommit, body, status)),
-  );
+  return storeModuleMap(control, moduleMap(harnessCommit, body, status));
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): Promise<Response> {
@@ -98,7 +94,7 @@ afterEach(async () => {
 
 test("submits a passing candidate and leaves the active generation serving", async () => {
   const control = await activeSupervisor("submit-passing-candidate");
-  await seedCache(commits.passing);
+  await seedModuleMap(control, commits.passing);
 
   const result = await submission(control, commits.passing);
 
@@ -138,7 +134,7 @@ test("returns a recorded failing preparation when the candidate module map canno
 
 test("records a candidate that fails its startup check and keeps the active generation", async () => {
   const control = await activeSupervisor("submit-failing-candidate");
-  await seedCache(commits.rejecting, "candidate refused the startup request", 500);
+  await seedModuleMap(control, commits.rejecting, "candidate refused the startup request", 500);
 
   const result = await submission(control, commits.rejecting);
   const label = submittedLabel(result);
@@ -154,7 +150,7 @@ test("records a candidate that fails its startup check and keeps the active gene
 
 test("resubmitting the same passing commit returns the existing generation without labeling it twice", async () => {
   const control = await activeSupervisor("submit-resubmit-passing");
-  await seedCache(commits.resubmitted);
+  await seedModuleMap(control, commits.resubmitted);
 
   const first = await submission(control, commits.resubmitted);
   const resubmitted = await submission(control, commits.resubmitted);

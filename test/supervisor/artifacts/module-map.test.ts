@@ -3,11 +3,7 @@
 import { expect, test } from "vitest";
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import {
-  canonicalModuleMap,
-  encodeModuleMap,
-  sameModuleMap,
-} from "../../../src/supervisor/artifacts/index.js";
+import { canonicalModuleMap, encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
 
 const harnessCommit = "5000000000000000000000000000000000000001";
 
@@ -49,7 +45,6 @@ test("encodes one module map to the same bytes whatever order it arrived in", ()
   const reversed = canonical(moduleMap("main.js", modules.toReversed()));
 
   expect(encodeModuleMap(reversed)).toBe(encodeModuleMap(forward));
-  expect(sameModuleMap(reversed, forward)).toBe(true);
 });
 
 test("separates module maps that differ in a module source", () => {
@@ -62,5 +57,5 @@ test("separates module maps that differ in a module source", () => {
     ]),
   );
 
-  expect(sameModuleMap(edited, original)).toBe(false);
+  expect(encodeModuleMap(edited)).not.toBe(encodeModuleMap(original));
 });

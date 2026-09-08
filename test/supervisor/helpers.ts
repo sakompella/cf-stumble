@@ -6,7 +6,9 @@ import { expect } from "vitest";
 import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
 import { sampleCatalog } from "../project-fixtures.js";
 import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
+import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 
 export const commits = {
@@ -46,6 +48,28 @@ export class MainFacet extends DurableObject {
 }
 `,
   );
+}
+
+/**
+ * Put a module map where a prepared generation puts one. A build runs in the tenant's workspace
+ * and this runtime has no container to run one, so a test that needs a stored map writes the rows
+ * a preparation writes and nothing else.
+ */
+export function storeModuleMap(
+  control: DurableObjectStub<Supervisor>,
+  input: MainHarnessArtifactInput,
+): Promise<void> {
+  return runInDurableObject(control, (_instance, state) => {
+    const parsed = MainHarnessArtifact.parse(input);
+    if (parsed.isErr()) {
+      throw new Error(`a stored module map must parse: ${parsed.error.code}`);
+    }
+
+    const written = new ModuleMapStore(state.storage).write(parsed.value);
+    if (written.isErr()) {
+      throw new Error(`a stored module map must be written: ${written.error.code}`);
+    }
+  });
 }
 
 /**

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Minimal paid-probe lever for cf-stumble P0.
+# Minimal paid-probe lever for cf-stumble.
 #
-# Deploys a disposable Worker that proves the R2 + Workers AI chain,
+# Deploys a disposable Worker that proves the Workers AI model route,
 # records redacted evidence, and tears down all created resources.
 #
 # Required environment variables:
@@ -10,14 +10,10 @@
 #   CLOUDFLARE_ACCOUNT_ID   target Cloudflare account
 #   PROBE_BEARER_SECRET     single-run bearer token for the probe endpoint
 #
-# Optional:
-#   R2_BUCKET_NAME          R2 bucket name (default: cf-stumble-module-maps)
-#
 # Cleanup order (on success AND failure):
 #   1. Durable Object / workspace data  (none in this minimal probe)
-#   2. R2 keys listed in the run manifest
-#   3. The disposable Worker
-#   4. Verify each manifest entry is gone; exit 1 if incomplete
+#   2. The disposable Worker
+#   3. Verify the Worker is gone; exit 1 if it is not
 #
 
 set -euo pipefail
@@ -33,8 +29,6 @@ if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] && ! wrangler whoami >/dev/null 2>&1; then
 fi
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID must be set}"
 : "${PROBE_BEARER_SECRET:?PROBE_BEARER_SECRET must be set}"
-
-R2_BUCKET_NAME="${R2_BUCKET_NAME:-cf-stumble-module-maps}"
 
 ##############################################################################
 # Fail fast: required tools
@@ -52,9 +46,8 @@ done
 ##############################################################################
 
 TIMESTAMP="$(date +%s)"
-WORKER_NAME="cf-stumble-probe-p0-${TIMESTAMP}"
+WORKER_NAME="cf-stumble-probe-model-${TIMESTAMP}"
 PROBE_RUN_ID="probe-${TIMESTAMP}"
-R2_KEY="probe/${PROBE_RUN_ID}/module-map.json"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_DIR="${SCRIPT_DIR}/manifests"
@@ -76,14 +69,10 @@ SECRET_FILE=""
 
 jq -n \
   --arg worker "$WORKER_NAME" \
-  --arg bucket "$R2_BUCKET_NAME" \
-  --arg r2key  "$R2_KEY" \
   --arg ts     "$TIMESTAMP" \
   --arg runid  "$PROBE_RUN_ID" \
   '{
     worker_name: $worker,
-    r2_bucket:   $bucket,
-    r2_keys:     [$r2key],
     container_app_ids: [],
     timestamp:   $ts,
     probe_run_id: $runid
@@ -111,48 +100,12 @@ export default {
       return new Response("PROBE_RUN_ID not configured", { status: 500 });
     }
 
-    var r2Key = "probe/" + env.PROBE_RUN_ID + "/module-map.json";
     var evidence = {
-      r2_put_ok: false,
-      r2_get_ok: false,
-      r2_round_trip_ok: false,
-      r2_key: r2Key,
       model_ok: false,
       model_redacted_summary: "",
       probe_run_id: env.PROBE_RUN_ID,
       timestamp: new Date().toISOString()
     };
-
-    var moduleMap = {
-      harnessCommit: "0000000000000000000000000000000000000000",
-      entryModule: "index.js",
-      modules: [{ name: "index.js", source: "export default {}" }]
-    };
-    try {
-      await env.MODULE_MAPS.put(r2Key, JSON.stringify(moduleMap));
-      evidence.r2_put_ok = true;
-    } catch (e) {
-      evidence.model_redacted_summary = "r2_put_error";
-      return Response.json(evidence);
-    }
-
-    try {
-      var obj = await env.MODULE_MAPS.get(r2Key);
-      if (obj === null) {
-        evidence.model_redacted_summary = "r2_get_null";
-        return Response.json(evidence);
-      }
-      evidence.r2_get_ok = true;
-      var parsed = JSON.parse(await obj.text());
-      evidence.r2_round_trip_ok =
-        parsed.harnessCommit === moduleMap.harnessCommit &&
-        parsed.entryModule === moduleMap.entryModule &&
-        Array.isArray(parsed.modules) &&
-        parsed.modules.length === moduleMap.modules.length;
-    } catch (e) {
-      evidence.model_redacted_summary = "r2_get_parse_error";
-      return Response.json(evidence);
-    }
 
     try {
       var result = await env.AI.run("@cf/zai-org/glm-5.3-flash", {
@@ -184,14 +137,12 @@ WRANGLER_CONFIG="$(mktemp "${TMPDIR:-/tmp}/probe-wrangler-XXXXXX.jsonc")"
 jq -n \
   --arg name   "$WORKER_NAME" \
   --arg main   "$WORKER_FILE" \
-  --arg bucket "$R2_BUCKET_NAME" \
   --arg runid  "$PROBE_RUN_ID" \
   '{
     name:               $name,
     main:               $main,
     compatibility_date: "2025-01-01",
     ai:                 { binding: "AI" },
-    r2_buckets:         [{ binding: "MODULE_MAPS", bucket_name: $bucket }],
     vars:               { PROBE_RUN_ID: $runid }
   }' > "$WRANGLER_CONFIG"
 
@@ -209,39 +160,22 @@ cleanup() {
   printf '=== Cleanup start ===\n' | tee -a "$CLEANUP_LOG"
 
   # Step 1: Durable Object / workspace data (none in this minimal probe).
-  printf 'Step 1/4: No DO or workspace data in this probe.\n' | tee -a "$CLEANUP_LOG"
+  printf 'Step 1/3: No DO or workspace data in this probe.\n' | tee -a "$CLEANUP_LOG"
 
-  # Step 2: Delete manifest-listed R2 keys.
-  if [ -f "$MANIFEST" ]; then
-    while IFS= read -r key; do
-      [ -z "$key" ] && continue
-      printf 'Step 2/4: Deleting R2 %s/%s\n' "$R2_BUCKET_NAME" "$key" | tee -a "$CLEANUP_LOG"
-      wrangler r2 object delete "${R2_BUCKET_NAME}/${key}" >>"$CLEANUP_LOG" 2>&1 || true
-    done <<< "$(jq -r '.r2_keys[]' "$MANIFEST" 2>/dev/null)"
-  fi
-
-  # Step 3: Delete the disposable Worker.
+  # Step 2: Delete the disposable Worker.
   if [ -n "$WRANGLER_CONFIG" ] && [ -f "$WRANGLER_CONFIG" ]; then
-    printf 'Step 3/4: Deleting Worker %s\n' "$WORKER_NAME" | tee -a "$CLEANUP_LOG"
+    printf 'Step 2/3: Deleting Worker %s\n' "$WORKER_NAME" | tee -a "$CLEANUP_LOG"
     printf 'y\n' | wrangler delete --config "$WRANGLER_CONFIG" >>"$CLEANUP_LOG" 2>&1 || true
   fi
 
-  # Step 4: Verify each manifest entry is gone.
+  # Step 3: Verify the Worker is gone.
   local incomplete=false
-  if [ -f "$MANIFEST" ]; then
-    while IFS= read -r key; do
-      [ -z "$key" ] && continue
-      # --pipe keeps the check from writing the object into the working tree.
-      if wrangler r2 object get "${R2_BUCKET_NAME}/${key}" --pipe >/dev/null 2>&1; then
-        printf 'STILL EXISTS: R2 %s/%s\n' "$R2_BUCKET_NAME" "$key" | tee -a "$CLEANUP_LOG"
-        incomplete=true
-      else
-        printf 'Verified gone: R2 %s/%s\n' "$R2_BUCKET_NAME" "$key" | tee -a "$CLEANUP_LOG"
-      fi
-    done <<< "$(jq -r '.r2_keys[]' "$MANIFEST" 2>/dev/null)"
+  if wrangler deployments list --name "$WORKER_NAME" >/dev/null 2>&1; then
+    printf 'STILL EXISTS: Worker %s\n' "$WORKER_NAME" | tee -a "$CLEANUP_LOG"
+    incomplete=true
+  else
+    printf 'Verified gone: Worker %s\n' "$WORKER_NAME" | tee -a "$CLEANUP_LOG"
   fi
-
-  printf 'Worker %s delete requested.\n' "$WORKER_NAME" | tee -a "$CLEANUP_LOG"
 
   rm -f "$WRANGLER_CONFIG" "$WORKER_FILE" "$SECRET_FILE" 2>/dev/null
 
@@ -310,13 +244,12 @@ printf 'Evidence written: %s\n' "$EVIDENCE"
 # Assert results
 ##############################################################################
 
-R2_OK="$(jq -r '.r2_round_trip_ok' "$EVIDENCE")"
 MODEL_OK="$(jq -r '.model_ok' "$EVIDENCE")"
 
-if [ "$R2_OK" != "true" ] || [ "$MODEL_OK" != "true" ]; then
-  printf 'PROBE FAILED  r2_round_trip_ok=%s  model_ok=%s\n' "$R2_OK" "$MODEL_OK" >&2
+if [ "$MODEL_OK" != "true" ]; then
+  printf 'PROBE FAILED  model_ok=%s\n' "$MODEL_OK" >&2
   exit 1
 fi
 
-printf 'Probe passed. R2 round-trip and model route both OK.\n'
+printf 'Probe passed. The model route answered.\n'
 # Cleanup runs via trap EXIT.
