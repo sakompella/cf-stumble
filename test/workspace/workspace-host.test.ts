@@ -33,7 +33,7 @@ class FakeOperations implements WorkspaceOperations {
   }
 
   runCommand(): Promise<CommandOutput> {
-    return Promise.reject(new Error("this test runs no command"));
+    return Promise.resolve({ stdout: "{}", stderr: "", exitCode: 0 });
   }
 }
 
@@ -48,7 +48,10 @@ test("returns plain cloneable values and exposes no raw Computer RPC method", as
     request: { kind: "build-output", harnessCommit: commit },
   });
 
-  expect(result).toEqual({ ok: true, result: { kind: "file", content: "{}" } });
+  expect(result).toEqual({
+    ok: true,
+    result: { kind: "command", stdout: "{}", stderr: "", exitCode: 0 },
+  });
   expect(structuredClone(result)).toEqual(result);
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(

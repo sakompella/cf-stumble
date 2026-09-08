@@ -3,6 +3,7 @@ import {
   harnessBuildStep,
   HARNESS_BUILD_STEP_NAMES,
   planHarnessBuild,
+  readModuleMapSource,
   type HarnessBuildConfiguration,
   type HarnessBuildStepName,
 } from "../harness-build.js";
@@ -70,7 +71,12 @@ export function planHarnessBuildRequest(
 ): WorkspacePlan {
   const plan = planHarnessBuild(configuration, request.harnessCommit);
   if (request.kind === "build-output") {
-    return { kind: "read-file", path: plan.moduleMapPath };
+    return {
+      kind: "run-command",
+      source: readModuleMapSource(plan),
+      cwd: "/",
+      timeoutMs: configuration.stepTimeoutMs,
+    };
   }
 
   const step = harnessBuildStep(plan, request.step);

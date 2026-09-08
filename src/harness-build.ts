@@ -244,6 +244,31 @@ export function planHarnessBuild(
   };
 }
 
+/**
+ * Read the module map a build wrote, as a command rather than as a filesystem read.
+ *
+ * The deployed workspace filesystem is Computer's userspace shim, because a Cloudflare container
+ * cannot grant the privileges a kernel FUSE mount needs. A file a container process writes is not
+ * reliably visible through the workspace filesystem API there: a deployed build ran to exit 0 for
+ * eleven minutes and the module map it had just written read as absent. The container shell sees
+ * the file the build wrote, so the build reads its own output through the shell.
+ *
+ * The path is derived from the configuration and a validated commit, never from a request. The
+ * symbolic-link refusal keeps the property the filesystem read had: `git archive` can carry a
+ * symbolic link, so a harness commit could otherwise name a file outside its own build directory.
+ */
+export function readModuleMapSource(plan: HarnessBuildPlan): string {
+  return [
+    "set -eu",
+    `path=${shellQuote(plan.moduleMapPath)}`,
+    'if [ -L "$path" ]; then',
+    '  echo "the module map path is a symbolic link" >&2',
+    "  exit 3",
+    "fi",
+    'cat -- "$path"',
+  ].join("\n");
+}
+
 /** The step of a commit's build plan, named rather than described by its command text. */
 export function harnessBuildStep(
   plan: HarnessBuildPlan,

@@ -44,7 +44,10 @@ class CountingBuildHost implements BuildWorkspaceHost {
   build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
     if (request.kind === "build-output") {
-      return Promise.resolve({ ok: true, result: { kind: "file", content: moduleMapFile() } });
+      return Promise.resolve({
+        ok: true,
+        result: { kind: "command", stdout: moduleMapFile(), stderr: "", exitCode: 0 },
+      });
     }
 
     return Promise.resolve({

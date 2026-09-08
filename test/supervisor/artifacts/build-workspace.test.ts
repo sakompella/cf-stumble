@@ -47,8 +47,11 @@ class FakeBuildHost implements BuildWorkspaceHost {
     if (request.kind === "build-output") {
       return Promise.resolve(
         this.output === undefined
-          ? { ok: false, error: { code: "workspace-unavailable" } }
-          : { ok: true, result: { kind: "file", content: this.output } },
+          ? { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 1 } }
+          : {
+              ok: true,
+              result: { kind: "command", stdout: this.output, stderr: "", exitCode: 0 },
+            },
       );
     }
 

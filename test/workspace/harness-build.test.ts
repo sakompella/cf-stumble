@@ -4,6 +4,7 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
   planHarnessBuild,
+  readModuleMapSource,
   shellQuote,
 } from "../../src/harness-build.js";
 import {
@@ -56,9 +57,15 @@ class FakeBuildOperations implements WorkspaceOperations {
     return Promise.reject(new Error("a build never writes through the workspace surface"));
   }
 
+  stdout: string | undefined;
+
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
     this.calls.push(`command:${source}:${cwd}`);
-    return Promise.resolve({ stdout: `${source} output`, stderr: "", exitCode: this.exitCode });
+    return Promise.resolve({
+      stdout: this.exitCode === 0 ? (this.stdout ?? `${source} output`) : "",
+      stderr: "",
+      exitCode: this.exitCode,
+    });
   }
 }
 
@@ -95,8 +102,10 @@ test("plans one planned step, or the build output, from a validated commit", () 
     timeoutMs: HARNESS_BUILD_CONFIGURATION.stepTimeoutMs,
   });
   expect(planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, output)).toEqual({
-    kind: "read-file",
-    path: moduleMapPath,
+    kind: "run-command",
+    source: readModuleMapSource(planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit)),
+    cwd: "/",
+    timeoutMs: HARNESS_BUILD_CONFIGURATION.stepTimeoutMs,
   });
 });
 
@@ -110,7 +119,7 @@ test("runs a planned build step and returns its exit code", async () => {
     ok: true,
     result: {
       kind: "command",
-      stdout: `${HARNESS_BUILD_CONFIGURATION.buildCommand} output`,
+      stdout: "",
       stderr: "",
       exitCode: 3,
     },
@@ -120,27 +129,36 @@ test("runs a planned build step and returns its exit code", async () => {
   ]);
 });
 
-test("reads the module map the build wrote and nothing else", async () => {
+test("reads the module map the build wrote, through the shell that wrote it", async () => {
   const operations = new FakeBuildOperations();
-  operations.files.set(moduleMapPath, '{"entryModule":"main.js","modules":[]}');
+  operations.stdout = '{"entryModule":"main.js","modules":[]}';
 
   await expect(build(operations, { kind: "build-output", harnessCommit: commit })).resolves.toEqual(
     {
       ok: true,
-      result: { kind: "file", content: '{"entryModule":"main.js","modules":[]}' },
+      result: {
+        kind: "command",
+        stdout: '{"entryModule":"main.js","modules":[]}',
+        stderr: "",
+        exitCode: 0,
+      },
     },
   );
-  expect(operations.calls).toContain(`read:${moduleMapPath}`);
+  const read = operations.calls.at(0) ?? "";
+  expect(read, "the read names the commit's own module map and no other path").toContain(
+    moduleMapPath,
+  );
+  expect(read, "and reads it rather than searching for it").toContain('cat -- "$path"');
 });
 
-test("reports a missing build output as an unavailable workspace", async () => {
+test("reports a build that wrote no module map as a non-zero read", async () => {
   const operations = new FakeBuildOperations();
-  operations.files.delete(moduleMapPath);
+  operations.exitCode = 1;
 
   await expect(build(operations, { kind: "build-output", harnessCommit: commit })).resolves.toEqual(
     {
-      ok: false,
-      error: { code: "workspace-unavailable" },
+      ok: true,
+      result: { kind: "command", stdout: "", stderr: "", exitCode: 1 },
     },
   );
 });
@@ -182,17 +200,14 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
   expect(operations.calls).toEqual([]);
 });
 
-test("rejects a build output reached through a symbolic link", async () => {
-  const operations = new FakeBuildOperations();
-  operations.symlinks.add(buildDirectory);
+test("refuses a module map reached through a symbolic link", () => {
+  const source = readModuleMapSource(planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit));
 
-  await expect(build(operations, { kind: "build-output", harnessCommit: commit })).resolves.toEqual(
-    {
-      ok: false,
-      error: { code: "path-outside-root" },
-    },
+  expect(source, "a symbolic link is refused before anything is read").toContain(
+    'if [ -L "$path" ]; then',
   );
-  expect(operations.calls.every((call) => call.startsWith("lstat:"))).toBe(true);
+  expect(source.indexOf('if [ -L "$path" ]; then')).toBeLessThan(source.indexOf('cat -- "$path"'));
+  expect(source, "and the refusal is a failing exit rather than empty output").toContain("exit 3");
 });
 
 test("the checkout step fails on its own when the archive fails", () => {

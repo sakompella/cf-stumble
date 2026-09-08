@@ -86,11 +86,17 @@ export class CommitBuildWorkspace implements BuildWorkspace {
     if (!result.ok) {
       throw unreachable(`the build output could not be read: ${result.error.code}`);
     }
-    if (result.result.kind !== "file") {
-      throw unreachable(`the build output returned ${result.result.kind}, not a file`);
+    if (result.result.kind !== "command") {
+      throw unreachable(`the build output returned ${result.result.kind}, not a command`);
+    }
+    if (result.result.exitCode !== 0) {
+      // A build that wrote no module map, or wrote it through a symbolic link, is an ordinary
+      // build failure rather than an impossible state, so this throws for the builder to report
+      // as `build-output-missing`.
+      throw new Error(`the build wrote no readable module map: exit ${result.result.exitCode}`);
     }
 
-    return result.result.content;
+    return result.result.stdout;
   }
 }
 
