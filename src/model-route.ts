@@ -12,9 +12,13 @@ export type {
   ToolCallDelta,
 } from "./model-route-events.js";
 
-/** The only model selected by the immutable host. */
-export const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
+// The only model the immutable host selects. An instruction model, not a reasoning one: deployed
+// turns against `@cf/zai-org/glm-5.3-flash` saved an empty assistant message every time, because
+// that model answers in `reasoning_content` and spent its whole budget there.
+export const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
 const REASONING_EFFORT = "low" as const;
+/** Workers AI's default output budget truncates a turn's first tool call into nothing. */
+const MAX_OUTPUT_TOKENS = 4096;
 const MAX_REQUEST_BYTES = 1_048_576;
 /** Shared encoder for the byte-size checks below; UTF-8 byte length, not `string.length`. */
 const REQUEST_BYTES = new TextEncoder();
@@ -70,6 +74,7 @@ export type ProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
   tools?: ReadonlyArray<ToolDefinition>;
   reasoning_effort: "low";
+  max_tokens: number;
 }>;
 export type ProviderResult = Readonly<{
   response?: string | null;
@@ -225,10 +230,10 @@ export function validateRequest(raw: unknown): Readonly<{ ok: true }> | Validati
 // -- Provider payload construction ------------------------------------------
 
 export function buildProviderPayload(request: ModelRouteRequest): ProviderPayload {
-  if (request.tools !== undefined) {
-    return { messages: request.messages, tools: request.tools, reasoning_effort: REASONING_EFFORT };
-  }
-  return { messages: request.messages, reasoning_effort: REASONING_EFFORT };
+  const fixed = { reasoning_effort: REASONING_EFFORT, max_tokens: MAX_OUTPUT_TOKENS } as const;
+  return request.tools === undefined
+    ? { messages: request.messages, ...fixed }
+    : { messages: request.messages, tools: request.tools, ...fixed };
 }
 
 // -- Response normalization -------------------------------------------------

@@ -71,6 +71,7 @@ test("builds provider payload with fixed model and low reasoning effort", () => 
       { role: "user", content: "Hello" },
     ],
     reasoning_effort: "low",
+    max_tokens: 4096,
   });
 });
 

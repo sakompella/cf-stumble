@@ -28,7 +28,7 @@ import type {
  */
 
 /** The one model the immutable host is allowed to call, written out rather than imported. */
-const REQUIRED_MODEL = "@cf/zai-org/glm-5.3-flash";
+const REQUIRED_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 
@@ -91,7 +91,12 @@ test("the entrypoint asks the one fixed model with a streaming payload and nothi
   const call = binding.calls[0];
   if (call === undefined) throw new Error("the entrypoint never called the binding");
   expect(call.model).toBe(REQUIRED_MODEL);
-  expect(Object.keys(call.input).toSorted()).toEqual(["messages", "reasoning_effort", "stream"]);
+  expect(Object.keys(call.input).toSorted()).toEqual([
+    "max_tokens",
+    "messages",
+    "reasoning_effort",
+    "stream",
+  ]);
   expect(call.input.stream).toBe(true);
   expect(call.input.reasoning_effort).toBe("low");
   expect(call.input.messages).toEqual([{ role: "user", content: "hi" }]);

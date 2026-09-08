@@ -18,11 +18,25 @@ import type {
   ToolCallDelta,
 } from "./model-route-events.js";
 
+/** The same output budget the buffered path uses (`model-route.ts`). */
+const MAX_OUTPUT_TOKENS = 4096;
+
 function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
   const tools = request.tools;
   return tools === undefined
-    ? { messages: request.messages, reasoning_effort: "low", stream: true }
-    : { messages: request.messages, tools, reasoning_effort: "low", stream: true };
+    ? {
+        messages: request.messages,
+        reasoning_effort: "low",
+        max_tokens: MAX_OUTPUT_TOKENS,
+        stream: true,
+      }
+    : {
+        messages: request.messages,
+        tools,
+        reasoning_effort: "low",
+        max_tokens: MAX_OUTPUT_TOKENS,
+        stream: true,
+      };
 }
 
 /**
