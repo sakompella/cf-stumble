@@ -37,6 +37,9 @@
       "instance_type": "basic",
     },
   ],
+  // The harness repository this deployment builds from. A fork sets it to its own repository;
+  // empty means the repository named in `src/harness-build.ts`. See `docs/deploy.md`.
+  "vars": { "HARNESS_REPOSITORY_URL": "" },
   "worker_loaders": [{ "binding": "LOADER" }],
   "ai": { "binding": "AI" },
 }

@@ -53,6 +53,24 @@ export const HARNESS_BUILD_CONFIGURATION = {
   stepTimeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
 } as const satisfies HarnessBuildConfiguration;
 
+/**
+ * The build configuration a deployment runs with.
+ *
+ * `HARNESS_REPOSITORY_URL` is the one setting a fork has to change. The default is the project's
+ * own repository, which is right for the owner's instance and wrong for everybody else: a deploy
+ * button user's instance would clone and build this repository instead of their fork, and their
+ * own harness commits would never be reachable. A deployment sets that variable to its own
+ * repository and changes nothing else.
+ */
+export function harnessBuildConfiguration(
+  repositoryUrl: string | undefined,
+): HarnessBuildConfiguration {
+  const trimmed = repositoryUrl?.trim();
+  return trimmed === undefined || trimmed.length === 0
+    ? HARNESS_BUILD_CONFIGURATION
+    : { ...HARNESS_BUILD_CONFIGURATION, harnessGitRemote: trimmed };
+}
+
 export type HarnessBuildStepName = "provision" | "isolate" | "checkout" | "build";
 
 export type HarnessBuildStep = Readonly<{

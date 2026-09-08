@@ -20,9 +20,12 @@ import {
   computerTransactions,
   ProjectRpcTarget,
 } from "./project/index.js";
-import { HARNESS_BUILD_CONFIGURATION } from "../harness-build.js";
+import { harnessBuildConfiguration } from "../harness-build.js";
 
-interface WorkspaceHostEnv {}
+interface WorkspaceHostEnv {
+  /** The harness repository this deployment builds from. See `harness-build.ts`. */
+  readonly HARNESS_REPOSITORY_URL?: string;
+}
 
 export function workspaceContainerBackendConfiguration(
   workspaceId: string,
@@ -73,7 +76,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
     return executeHarnessBuildRequest({
-      configuration: HARNESS_BUILD_CONFIGURATION,
+      configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });
