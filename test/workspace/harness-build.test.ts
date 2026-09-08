@@ -120,9 +120,9 @@ test("runs a planned build step and returns its exit code", async () => {
       exitCode: 3,
     },
   });
-  expect(operations.calls).toEqual([
-    `command:cd '${buildDirectory}'\n${HARNESS_BUILD_CONFIGURATION.buildCommand}:${WORKSPACE_ROOT}`,
-  ]);
+  expect(operations.calls).toHaveLength(1);
+  expect(operations.calls.at(0)).toContain(`cd '${buildDirectory}'`);
+  expect(operations.calls.at(0)).toContain(HARNESS_BUILD_CONFIGURATION.buildCommand);
 });
 
 test("reads the module map the build wrote, through the shell that wrote it", async () => {

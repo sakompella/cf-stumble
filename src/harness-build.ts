@@ -266,10 +266,19 @@ export function planHarnessBuild(
         cwd: WORKSPACE_ROOT,
       },
       {
-        // Computer resolves a working directory against the workspace and refuses one outside it,
-        // so the command changes into the scratch directory itself (`workspace-layout.ts`).
+        // Two things this command does beyond running the build script. It changes into the scratch
+        // directory itself, because Computer resolves a working directory against the workspace and
+        // refuses one outside it (`workspace-layout.ts`). And it keeps only the tail of the build's
+        // own output: Computer holds a command's output in memory, and an unbounded `pnpm install`
+        // log was enough to make the deployed container exit 1 part way through every build. The
+        // output is read only when a step fails, so a bounded tail loses nothing. `pipefail` keeps
+        // the build's exit code rather than `tail`'s.
         name: "build",
-        source: `cd ${shellQuote(directory)}\n${configuration.buildCommand}`,
+        source: [
+          "set -o pipefail",
+          `cd ${shellQuote(directory)}`,
+          `${configuration.buildCommand} 2>&1 | tail -c 4000`,
+        ].join("\n"),
         cwd: WORKSPACE_ROOT,
       },
     ],

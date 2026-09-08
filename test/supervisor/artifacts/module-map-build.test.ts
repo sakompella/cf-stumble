@@ -103,11 +103,15 @@ test("plans an isolated build directory outside the project workspace", () => {
     "checkout",
     "build",
   ]);
-  expect(plan.steps.at(-1)).toEqual({
-    name: "build",
-    source: `cd '${plan.directory}'\n${configuration.buildCommand}`,
-    cwd: WORKSPACE_ROOT,
-  });
+  const build = plan.steps.at(-1);
+  expect(build?.name).toBe("build");
+  expect(build?.cwd).toBe(WORKSPACE_ROOT);
+  expect(build?.source).toContain(`cd '${plan.directory}'`);
+  expect(build?.source).toContain(configuration.buildCommand);
+  expect(
+    build?.source,
+    "the build's own output is bounded, and its exit code survives the pipe",
+  ).toContain("set -o pipefail");
   expect(
     plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
     "a harness build must not name a project directory",
@@ -125,10 +129,9 @@ test("checks out the commit before it runs the build command", async () => {
   expect(workspace.commands[2]?.source).toContain(
     `tar -x -m --no-same-owner --no-same-permissions -C /harness-builds/${commit}`,
   );
-  expect(workspace.commands[3]).toEqual({
-    source: `cd '/harness-builds/${commit}'\n${configuration.buildCommand}`,
-    cwd: WORKSPACE_ROOT,
-  });
+  expect(workspace.commands[3]?.cwd).toBe(WORKSPACE_ROOT);
+  expect(workspace.commands[3]?.source).toContain(`cd '/harness-builds/${commit}'`);
+  expect(workspace.commands[3]?.source).toContain(configuration.buildCommand);
 });
 
 test("reports a failed archive extraction as the checkout step, not as a build failure", async () => {

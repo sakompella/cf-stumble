@@ -11,7 +11,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "build:pi": "pnpm --filter @cf-stumble/pi build",
-    "build:artifact": "pnpm install --frozen-lockfile && pnpm run build:pi && pnpm run build:module-map",
+    "build:artifact": "pnpm install --frozen-lockfile --reporter=silent && pnpm run build:pi && pnpm run build:module-map",
     "build:module-map": "pnpm exec tsx tools/build-generation-0.mts",
     "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
     "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
