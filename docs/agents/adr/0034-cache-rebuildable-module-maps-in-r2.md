@@ -1,5 +1,7 @@
 # Cache rebuildable module maps in R2
 
+> **Superseded for v0:** Handoff decision 6 replaces this R2 cache decision with Supervisor SQLite module-map storage.
+
 > **Review:** Human-approved
 
 A labeled harness commit is the authoritative description of a generation's executable code. For now, cf-stumble assumes that rebuilding one labeled commit through Computer produces the same module map each time.
