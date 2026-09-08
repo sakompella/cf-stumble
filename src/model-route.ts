@@ -12,12 +12,12 @@ export type {
   ToolCallDelta,
 } from "./model-route-events.js";
 
-// The only model the immutable host selects. An instruction model, not a reasoning one: deployed
-// turns against `@cf/zai-org/glm-5.3-flash` saved an empty assistant message every time, because
-// that model answers in `reasoning_content` and spent its whole budget there. A caller still may
-// not name a model, a reasoning effort or an endpoint; `FORBIDDEN_FIELDS` refuses all three.
-export const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
-/** Workers AI's default output budget truncates a turn's first tool call into nothing. */
+// The only model the immutable host selects. Two deployed facts pin it. Turns first saved an empty
+// assistant message, because this model answers in `reasoning_content` and the default output
+// budget was spent there, hence `MAX_OUTPUT_TOKENS`. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
+// then failed every call: its schema takes `messages[].content` as a string, and Pi sends parts.
+export const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
+const REASONING_EFFORT = "low" as const;
 const MAX_OUTPUT_TOKENS = 4096;
 const MAX_REQUEST_BYTES = 1_048_576;
 /** Shared encoder for the byte-size checks below; UTF-8 byte length, not `string.length`. */
@@ -73,6 +73,7 @@ export type ValidationFailure = Readonly<{
 export type ProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
   tools?: ReadonlyArray<ToolDefinition>;
+  reasoning_effort: "low";
   max_tokens: number;
 }>;
 export type ProviderResult = Readonly<{
@@ -229,9 +230,10 @@ export function validateRequest(raw: unknown): Readonly<{ ok: true }> | Validati
 // -- Provider payload construction ------------------------------------------
 
 export function buildProviderPayload(request: ModelRouteRequest): ProviderPayload {
+  const fixed = { reasoning_effort: REASONING_EFFORT, max_tokens: MAX_OUTPUT_TOKENS } as const;
   return request.tools === undefined
-    ? { messages: request.messages, max_tokens: MAX_OUTPUT_TOKENS }
-    : { messages: request.messages, tools: request.tools, max_tokens: MAX_OUTPUT_TOKENS };
+    ? { messages: request.messages, ...fixed }
+    : { messages: request.messages, tools: request.tools, ...fixed };
 }
 
 // -- Response normalization -------------------------------------------------
