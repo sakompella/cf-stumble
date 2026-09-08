@@ -3,7 +3,7 @@
  * if every surface agrees.
  *
  * Goal criterion 3 says a credential never appears in a tracked file, an application log, a
- * browser response, an R2 map, or saved facet state. Most of that is structural: no type that
+ * browser response, a stored module map, or saved facet state. Most of that is structural: no type that
  * crosses those boundaries has a token field, and the token a device authorization returns is
  * installed into the workspace and then dropped. This module covers the remaining path, which is
  * text a tool printed: `git` and `gh` write URLs and error messages, and a caller that forwards

@@ -13,7 +13,7 @@ import type { VerifiedAccessScope } from "../../src/access/index.js";
 
 /**
  * Goal criterion 3, stated as a negative and checked: a credential appears in no tracked file, no
- * application log, no browser response, no R2 map, and no saved state.
+ * application log, no browser response, no stored module map, and no saved state.
  *
  * The token here is recognizable on purpose. One authorization is driven end to end against the
  * fake workspace, and then every surface that could carry it is searched. The one place it is
@@ -100,9 +100,10 @@ test("no tracked source file or agent document contains a credential", () => {
     .map(([path]) => path);
 
   expect(Object.keys(files).length).toBeGreaterThan(20);
-  expect(carrying, "a credential in the repository is also a credential in every R2 map").toEqual(
-    [],
-  );
+  expect(
+    carrying,
+    "a credential in the repository is also a credential in every stored module map",
+  ).toEqual([]);
 });
 
 test("no module on the credential path writes to a log", () => {

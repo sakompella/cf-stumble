@@ -279,7 +279,7 @@ test("reports a preparation failure without echoing the internal error", async (
         return Promise.resolve(labeled);
       },
       prepareGeneration() {
-        return Promise.reject(new Error("R2 rejected key with account secret sk-live-1"));
+        return Promise.reject(new Error("storage rejected a row with account secret sk-live-1"));
       },
     }),
     ownerScope,

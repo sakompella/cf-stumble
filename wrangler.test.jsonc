@@ -42,10 +42,4 @@
     },
   ],
   "worker_loaders": [{ "binding": "LOADER" }],
-  "r2_buckets": [
-    {
-      "binding": "MODULE_MAPS",
-      "bucket_name": "cf-stumble-module-maps",
-    },
-  ],
 }

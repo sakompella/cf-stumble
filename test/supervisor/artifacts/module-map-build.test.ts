@@ -3,7 +3,6 @@
 import { expect, test } from "vitest";
 import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
 import {
-  encodeModuleMap,
   planHarnessBuild,
   WorkspaceModuleMapBuilder,
 } from "../../../src/supervisor/artifacts/index.js";
@@ -112,26 +111,6 @@ test("plans an isolated build directory outside the project workspace", () => {
     plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
     "a harness build must not name a project directory",
   ).toBe(true);
-});
-
-test("builds one commit into the same canonical module map twice", async () => {
-  const workspace = new FakeBuildWorkspace({
-    outputs: [
-      moduleMapFile([entryModule, helperModule]),
-      moduleMapFile([helperModule, entryModule]),
-    ],
-  });
-  const builder = new WorkspaceModuleMapBuilder(workspace, configuration);
-
-  const first = await builder.build(commit);
-  const second = await builder.build(commit);
-
-  if (first.isErr() || second.isErr()) {
-    throw new Error("both builds of one commit must succeed");
-  }
-  expect(encodeModuleMap(second.value)).toBe(encodeModuleMap(first.value));
-  expect(first.value.entryModule).toBe("main.js");
-  expect(first.value.harnessCommit).toBe(commit);
 });
 
 test("checks out the commit before it runs the build command", async () => {

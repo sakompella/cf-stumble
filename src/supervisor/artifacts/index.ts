@@ -4,115 +4,109 @@ import type {
   MainFacetCapabilities,
   MainFacetTarget,
   MainHarnessArtifactInput,
+  MainHarnessArtifactProblem,
 } from "../../facet/index.js";
-import { parseHarnessCommit } from "../../harness-commit.js";
-import { ModuleMapCache } from "./cache.js";
+import { parseHarnessCommit, type HarnessCommit } from "../../harness-commit.js";
+import { ModuleMapStore } from "./store.js";
+import type { ModuleMapStorage, StoredModuleMapProblem } from "./store.js";
 import { WorkspaceHostModuleMapBuilder, type BuildWorkspaceNamespace } from "./build-workspace.js";
-import { canonicalModuleMap, sameModuleMap } from "./module-map.js";
-import { resolveModuleMap } from "./resolver.js";
+import type { HarnessBuildProblem } from "./build-plan.js";
 import type { HarnessModuleMapBuilder } from "./builder.js";
 import { mainFacetName } from "./facet-name.js";
-import type { ModuleMapProblem, ModuleMapResolution } from "./resolver.js";
 import type { ActiveGeneration } from "../generations/index.js";
 
-export type HarnessArtifactProblem =
-  | ModuleMapProblem
-  | { readonly code: "retained-artifact-mismatch"; readonly harnessCommit: string };
+export type ModuleMapProblem =
+  | MainHarnessArtifactProblem
+  | StoredModuleMapProblem
+  | HarnessBuildProblem;
 
-export type HarnessArtifactResult = Result<
-  {
-    readonly artifact: MainHarnessArtifactInput;
-    readonly effect: "retained" | "verified" | "rebuilt";
-  },
-  HarnessArtifactProblem
->;
+export type ModuleMapResult = Result<MainHarnessArtifactInput, ModuleMapProblem>;
 
 /**
  * Why the main facet could not be mounted. `no-active-generation` is not a fault: no generation is
  * labeled active, so there is no code to serve. Every other problem describes the active
- * generation's module map, and none of them fall back to other code.
+ * generation's stored module map, and none of them fall back to other code or to a build.
  */
 export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;
 
 /**
- * The Supervisor's module-map access. R2 is an evictable cache and Durable Object SQLite stores no
- * module source, so every executable module map arrives through `resolve` or, for a map the caller
- * already holds, through `retain`.
+ * The Supervisor's module maps. There are two ways in and they are deliberately unequal.
+ * `prepare` runs at submission and may build a commit that has nothing stored. `retain` stores a
+ * map the caller already holds. Serving reads what is stored and never builds, so activating or
+ * rolling back to a generation that is ready cannot depend on Computer being reachable.
  */
 export class HarnessArtifacts {
-  private readonly cache: ModuleMapCache;
+  private readonly store: ModuleMapStore;
   private readonly builder: HarnessModuleMapBuilder;
 
-  constructor(bucket: R2Bucket, builder: HarnessModuleMapBuilder) {
-    this.cache = new ModuleMapCache(bucket);
+  constructor(storage: ModuleMapStorage, builder: HarnessModuleMapBuilder) {
+    this.store = new ModuleMapStore(storage);
     this.builder = builder;
   }
 
   /**
-   * The artifacts of a tenant that builds in its own workspace. A cache miss builds the labeled
-   * commit there, in the scratch subtree that holds no repository, so a build neither reads nor
+   * The artifacts of a tenant that builds in its own workspace. A commit with nothing stored is
+   * built there, in the scratch subtree that holds no repository, so a build neither reads nor
    * replaces a checkout, and one build per commit runs at a time.
    */
   static forWorkspace(
-    bucket: R2Bucket,
+    storage: ModuleMapStorage,
     namespace: BuildWorkspaceNamespace,
     workspaceName: string,
   ): HarnessArtifacts {
     return new HarnessArtifacts(
-      bucket,
+      storage,
       new WorkspaceHostModuleMapBuilder(namespace, workspaceName),
     );
   }
 
-  /** Build or read the module map for a labeled harness commit. See `resolveModuleMap`. */
-  resolve(harnessCommit: string): Promise<ModuleMapResolution> {
+  /**
+   * The module map of a labeled commit at submission time: the stored map when there is one, or a
+   * build of that commit, validated and stored before this returns. A store that cannot be written
+   * fails preparation, because a generation that becomes ready must have its code stored; nothing
+   * later is allowed to rebuild it.
+   */
+  async prepare(harnessCommit: string): Promise<ModuleMapResult> {
     const validatedCommit = parseHarnessCommit(harnessCommit);
     if (validatedCommit === undefined) {
-      return Promise.resolve(Result.err({ code: "invalid-harness-commit", harnessCommit }));
+      return Result.err({ code: "invalid-harness-commit", harnessCommit });
     }
 
-    return resolveModuleMap(this.cache, this.builder, validatedCommit);
+    const stored = this.store.read(validatedCommit);
+    if (stored.isErr()) {
+      return Result.err(stored.error);
+    }
+
+    if (stored.value.kind === "stored") {
+      return Result.ok(stored.value.moduleMap);
+    }
+
+    const built = await this.builder.build(validatedCommit);
+    if (built.isErr()) {
+      return Result.err(built.error);
+    }
+
+    const validated = validatedBuild(validatedCommit, built.value);
+    return validated.isErr() ? Result.err(validated.error) : this.store.write(validated.value);
+  }
+
+  /** Store a module map the caller already holds, replacing whatever that commit had stored. */
+  retain(input: MainHarnessArtifactInput): ModuleMapResult {
+    const parsed = MainHarnessArtifact.parse(input);
+    return parsed.isErr() ? Result.err(parsed.error) : this.store.write(parsed.value);
   }
 
   /**
-   * Cache a module map the caller already holds. A commit that is already cached must describe the
-   * same code, so a mismatch is reported rather than overwritten; a corrupt object is replaced.
+   * Mount the generation that serves. This waits for nothing: the module map is already in the
+   * Durable Object's own SQLite, and reading it is synchronous.
    */
-  async retain(input: MainHarnessArtifactInput): Promise<HarnessArtifactResult> {
-    const parsed = MainHarnessArtifact.parse(input);
-    if (parsed.isErr()) {
-      return Result.err(parsed.error);
-    }
-
-    const canonical = canonicalModuleMap(parsed.value);
-    const cached = await this.cache.read(parsed.value.harnessCommit);
-    if (cached.isErr()) {
-      if (cached.error.code !== "corrupt-artifact") {
-        return Result.err(cached.error);
-      }
-
-      return this.write(canonical, "rebuilt");
-    }
-
-    if (cached.value.kind === "hit") {
-      return sameModuleMap(cached.value.moduleMap, canonical)
-        ? Result.ok({ artifact: cached.value.moduleMap, effect: "verified" })
-        : Result.err({
-            code: "retained-artifact-mismatch",
-            harnessCommit: parsed.value.harnessCommit,
-          });
-    }
-
-    return this.write(canonical, "retained");
-  }
-
-  async mount(
+  mount(
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
-  ): Promise<Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem>> {
-    const moduleMap = await this.activeModuleMap(active);
+  ): Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem> {
+    const moduleMap = this.load(active);
     if (moduleMap.isErr()) {
       return Result.err(moduleMap.error);
     }
@@ -134,31 +128,62 @@ export class HarnessArtifacts {
   }
 
   /**
-   * The module map of the generation that serves. There is no built-in alternative: a Supervisor
-   * with no active generation reports `no-active-generation` and serves nothing. Generation 0
-   * arrives as an ordinary owner submission of the deployed harness commit, so the code that
-   * serves is always a labeled commit the Supervisor prepared.
+   * The module map of the generation that serves, read and nothing else. There is no built-in
+   * alternative and no build: a Supervisor with no active generation reports
+   * `no-active-generation`, and an active generation whose map is not stored reports that rather
+   * than rebuilding it. A generation only becomes ready once `prepare` or `retain` stored its map,
+   * so activation and rollback both load bytes that are already there.
    */
-  private async activeModuleMap(
-    active: ActiveGeneration,
-  ): Promise<Result<MainHarnessArtifactInput, MainFacetMountProblem>> {
+  private load(active: ActiveGeneration): Result<MainHarnessArtifactInput, MainFacetMountProblem> {
     if (active.generation === undefined) {
       return Result.err({ code: "no-active-generation" });
     }
 
-    const resolved = await this.resolve(active.generation.harnessCommit);
-    return resolved.isErr() ? Result.err(resolved.error) : Result.ok(resolved.value.moduleMap);
+    const harnessCommit = parseHarnessCommit(active.generation.harnessCommit);
+    if (harnessCommit === undefined) {
+      return Result.err({
+        code: "invalid-harness-commit",
+        harnessCommit: active.generation.harnessCommit,
+      });
+    }
+
+    const stored = this.store.read(harnessCommit);
+    if (stored.isErr()) {
+      return Result.err(stored.error);
+    }
+
+    return stored.value.kind === "stored"
+      ? Result.ok(stored.value.moduleMap)
+      : Result.err({ code: "stored-module-map-absent", harnessCommit });
+  }
+}
+
+/**
+ * Validate and identify every build before it is stored or loaded. A build cannot deliver an
+ * unloadable map, and it cannot deliver a map for another commit.
+ */
+function validatedBuild(
+  harnessCommit: HarnessCommit,
+  built: MainHarnessArtifactInput,
+): Result<MainHarnessArtifact, ModuleMapProblem> {
+  const parsed = MainHarnessArtifact.parse(built);
+  if (parsed.isErr()) {
+    return Result.err({
+      code: "build-output-invalid",
+      harnessCommit,
+      reason: parsed.error.code,
+    });
   }
 
-  private async write(
-    moduleMap: MainHarnessArtifactInput,
-    effect: "retained" | "rebuilt",
-  ): Promise<HarnessArtifactResult> {
-    const written = await this.cache.write(moduleMap);
-    return written.isErr()
-      ? Result.err(written.error)
-      : Result.ok({ artifact: written.value, effect });
+  if (parsed.value.harnessCommit !== harnessCommit) {
+    return Result.err({
+      code: "build-output-invalid",
+      harnessCommit,
+      reason: "invalid-harness-commit",
+    });
   }
+
+  return Result.ok(parsed.value);
 }
 
 /**
@@ -168,8 +193,8 @@ export class HarnessArtifacts {
  */
 export type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 export { mainFacetName } from "./facet-name.js";
-export { ModuleMapCache } from "./cache.js";
-export type { CachedModuleMap, StoredModuleMapProblem } from "./cache.js";
+export { MODULE_MAP_CHUNK_BYTES, ModuleMapStore } from "./store.js";
+export type { ModuleMapStorage, StoredModuleMap, StoredModuleMapProblem } from "./store.js";
 export {
   absentModuleMapBuilder,
   WorkspaceModuleMapBuilder,
@@ -193,6 +218,4 @@ export {
   type HarnessBuildProblem,
   type HarnessBuildStepName,
 } from "./build-plan.js";
-export { canonicalModuleMap, encodeModuleMap, sameModuleMap } from "./module-map.js";
-export { resolveModuleMap } from "./resolver.js";
-export type { ModuleMapProblem, ModuleMapResolution, ResolvedModuleMap } from "./resolver.js";
+export { canonicalModuleMap, encodeModuleMap } from "./module-map.js";

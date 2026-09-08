@@ -55,7 +55,6 @@ import {
 // workspace (ADR-0038). No view can perform another's operations.
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
-  readonly MODULE_MAPS: R2Bucket;
   readonly WORKSPACE_HOST: BuildWorkspaceNamespace &
     ProjectWorkspaceNamespace &
     CredentialWorkspaceNamespace &
@@ -80,7 +79,7 @@ export const PROJECT_TURN_LEASE_MS = 5 * 60 * 1_000;
  *
  * The number is four minutes, and it is a choice made from the timings that exist rather than a
  * measurement of a turn. A turn does not build a harness: it mounts the active generation's
- * cached module map, so the cold-build figures apply to preparing a generation and not to this
+ * stored module map, so the cold-build figures apply to preparing a generation and not to this
  * bound. What applies is the workspace cold start, which paid evidence E8 recorded at 2.6-2.9 s
  * on the pinned Computer pair, plus the turn's own work, which is bounded by `MAX_MODEL_CALLS`
  * model calls with tool execution between them. Four minutes leaves room for that and still fails
@@ -116,7 +115,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
     this.workspaceName = tenantWorkspaceName(supervisorName);
     this.artifacts = HarnessArtifacts.forWorkspace(
-      env.MODULE_MAPS,
+      ctx.storage,
       env.WORKSPACE_HOST,
       this.workspaceName,
     );
@@ -164,8 +163,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * Prepare a labeled generation from its harness commit: read the cached module map or build the
-   * commit, then run the bounded startup check. This never changes the active generation.
+   * Prepare a labeled generation from its harness commit: read the stored module map or build the
+   * commit and store it, then run the bounded startup check. This never changes the active
+   * generation.
    */
   prepareGeneration(label: number, options?: StartupCheckOptions): Promise<StartupCheckResult> {
     return prepareGenerationStartup(
@@ -314,8 +314,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       namespace: this.env.WORKSPACE_HOST,
       signal: context.signal,
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
-      // on the same generation it was admitted against (`turn-run.ts`).
-      mount: () => this.mountServing(context.attribution.active),
+      // on the same generation it was admitted against (`turn-run.ts`). Mounting is synchronous
+      // now; the turn path keeps its asynchronous mount contract, so this adapts here.
+      mount: () => Promise.resolve(this.mountServing(context.attribution.active)),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: async (project) => (await this.connections.ensureProvisioned(project.id)).ok,
@@ -323,11 +324,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /** Relay one request to the generation that serves, or serve nothing when none is active. */
-  override async fetch(request: Request): Promise<Response> {
-    const mainFacet = await this.mountServing(this.generations.active());
+  override fetch(request: Request): Promise<Response> {
+    const mainFacet = this.mountServing(this.generations.active());
 
     if (mainFacet.isErr()) {
-      return this.relay.mountFailureResponse(mainFacet.error);
+      return Promise.resolve(this.relay.mountFailureResponse(mainFacet.error));
     }
 
     return this.relay.forward(request, mainFacet.value.fetcher);

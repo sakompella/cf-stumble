@@ -1,20 +1,18 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../../src/facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activeSupervisor, labelCandidate } from "../helpers.js";
+import { activeSupervisor, labelCandidate, storeModuleMap } from "../helpers.js";
 
 const commits = {
-  cached: "4000000000000000000000000000000000000001",
-  uncached: "4000000000000000000000000000000000000002",
+  stored: "4000000000000000000000000000000000000001",
+  unstored: "4000000000000000000000000000000000000002",
 } as const;
 
-function cachedModuleMap(harnessCommit: string): MainHarnessArtifactInput {
+function storedModuleMap(harnessCommit: string): MainHarnessArtifactInput {
   return {
     harnessCommit,
     entryModule: "main.js",
@@ -24,19 +22,12 @@ function cachedModuleMap(harnessCommit: string): MainHarnessArtifactInput {
         source: `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  fetch() { return new Response("cached candidate serving"); }
+  fetch() { return new Response("stored candidate serving"); }
 }
 `,
       },
     ],
   };
-}
-
-async function seedCache(harnessCommit: string): Promise<void> {
-  await env.MODULE_MAPS.put(
-    `module-maps/${harnessCommit}`,
-    encodeModuleMap(cachedModuleMap(harnessCommit)),
-  );
 }
 
 async function activate(control: DurableObjectStub<Supervisor>, label: number): Promise<void> {
@@ -54,10 +45,10 @@ afterEach(async () => {
   await reset();
 });
 
-test("prepares and serves a generation from its cached module map", async () => {
-  const control = await activeSupervisor("prepare-from-cached-module-map");
-  await seedCache(commits.cached);
-  const label = await labelCandidate(control, commits.cached);
+test("prepares and serves a generation from its stored module map", async () => {
+  const control = await activeSupervisor("prepare-from-stored-module-map");
+  await storeModuleMap(control, storedModuleMap(commits.stored));
+  const label = await labelCandidate(control, commits.stored);
 
   const prepared = await control.prepareGeneration(label);
 
@@ -67,24 +58,24 @@ test("prepares and serves a generation from its cached module map", async () => 
   await activate(control, label);
   const response = await control.fetch(new Request("https://cf-stumble.test/"));
 
-  expect(await response.text()).toBe("cached candidate serving");
+  expect(await response.text()).toBe("stored candidate serving");
 });
 
 /**
- * The Supervisor now holds a real build workspace builder, and a Workspace Host cannot start its
+ * The Supervisor holds a real build workspace builder, and a Workspace Host cannot start its
  * container in the test pool, so this exercises the wired build path and its failure. workerd logs
  * that container failure as an uncaught exception; the failure still arrives as a plain typed
  * problem, which is what the test asserts.
  */
 test("leaves the active generation serving when the module map cannot be built", async () => {
   const control = await activeSupervisor("failed-build-keeps-active-generation");
-  const label = await labelCandidate(control, commits.uncached);
+  const label = await labelCandidate(control, commits.unstored);
 
   const prepared = await control.prepareGeneration(label);
 
   expect(prepared).toEqual({
     ok: false,
-    problem: { code: "build-workspace-unavailable", harnessCommit: commits.uncached },
+    problem: { code: "build-workspace-unavailable", harnessCommit: commits.unstored },
   });
   expect(Object.getPrototypeOf(prepared)).toBe(Object.prototype);
   expect(

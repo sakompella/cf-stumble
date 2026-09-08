@@ -116,8 +116,8 @@ export async function handleGenerationControl(
 /**
  * Submit a harness commit as a generation candidate. The Supervisor labels the commit directly
  * (ADR-0030: labeling a commit that already has a generation returns the existing generation
- * rather than labeling it twice), then prepares that label: it resolves the module map from the R2
- * cache or a build of the commit and runs the bounded startup check. Both steps record evidence
+ * rather than labeling it twice), then prepares that label: it reads the stored module map or
+ * builds and stores the commit, then runs the bounded startup check. Both steps record evidence
  * against the candidate and neither touches the active generation, so the owner learns whether the
  * candidate passed while the generation that serves keeps serving.
  *
