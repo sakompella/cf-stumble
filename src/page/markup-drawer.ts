@@ -3,9 +3,9 @@ import { control, value } from "./markup-fields.js";
 
 /**
  * The generation drawer. The active label and the observed epoch stay visible beside the
- * conversation; submission, activation, rollback, and the latest recovery report live inside a
- * `<details>` element that is closed by default, so the controls are one click away without taking
- * the reader's attention from the turn (Q4).
+ * conversation; submission, activation, and rollback live inside a `<details>` element that is
+ * closed by default, so the controls are one click away without taking the reader's attention
+ * from the turn (Q4).
  *
  * `<details>` is the whole mechanism: the browser gives it keyboard focus, an accessible expanded
  * state, and no script. Activation and rollback send the epoch this page rendered from
@@ -52,27 +52,6 @@ function controlPanel(panel: {
         </div>`;
 }
 
-const recoveryPanel = `
-        <div class="drawer-panel">
-          <h3>Latest recovery report</h3>
-          <p class="note" id="${ID.recoveryNotice}">
-            These are recorded facts about the last recovery episode. cf-stumble does not repair a
-            generation by itself. Nothing here runs now, and returning to working code is the manual
-            rollback above.
-          </p>
-          <div class="row"><button id="${ID.refreshRecoveryButton}" type="button">Refresh recovery report</button></div>
-          ${value("report", ID.recoveryPresence)}
-          ${value("report id", ID.recoveryId)}
-          ${value("phase", ID.recoveryPhase)}
-          ${value("result", ID.recoveryResult)}
-          ${value("failed generation", ID.recoveryFailedLabel)}
-          ${value("fallback generation", ID.recoveryFallbackLabel)}
-          ${value("attempts used", ID.recoveryAttempts)}
-          ${value("recorded errors", ID.recoveryErrorCount)}
-          ${value("started at", ID.recoveryStartedAt)}
-          ${value("awaiting external report", ID.recoveryAwaiting)}
-        </div>`;
-
 export const OWNER_PAGE_GENERATION_DRAWER = `
     <section class="generation-bar" aria-label="Active generation">
       <div class="row">
@@ -104,6 +83,5 @@ export const OWNER_PAGE_GENERATION_DRAWER = `
           sentEpoch: ID.rollbackSentEpoch,
           effect: ID.rollbackEffect,
         })}
-        ${recoveryPanel}
       </details>
     </section>`;

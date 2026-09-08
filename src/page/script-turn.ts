@@ -42,10 +42,8 @@ export const OWNER_PAGE_SCRIPT_TURN = `
 
   function terminalText(frame) {
     if (frame.kind === "saved") {
-      return (
-        "saved · revision " + text(frame.revision) + " · " + text(frame.messageCount) +
-        " messages · " + (frame.credited ? "counted as a completed real turn" : "not counted")
-      );
+      return "saved · revision " + text(frame.revision) + " · " + text(frame.messageCount) +
+        " messages";
     }
     if (frame.kind === "turn-failed") {
       return "failed: " + text(frame.code) +

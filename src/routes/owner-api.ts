@@ -11,11 +11,9 @@ import {
 import { jsonError } from "./json.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
-import { latestRecoveryReportSummary, type RecoveryReportSupervisor } from "./recovery.js";
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
-  RecoveryReportSupervisor &
   ProjectApiSupervisor &
   TurnApiSupervisor & {
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
@@ -48,22 +46,10 @@ function notFound(): Promise<Response> {
   return Promise.resolve(jsonError(404, "not-found"));
 }
 
-/** The active generation, the epoch a control request must observe, and the last recovery report. */
+/** The active generation and the epoch a control request must observe. */
 async function statusResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
   try {
-    const [activeGeneration, latestRecoveryReport] = await Promise.all([
-      supervisor.getActiveGeneration(),
-      latestRecoveryReportSummary(supervisor),
-    ]);
-    return Response.json({ activeGeneration, latestRecoveryReport });
-  } catch {
-    return jsonError(500, "internal-error");
-  }
-}
-
-async function recoveryResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
-  try {
-    return Response.json({ ok: true, report: await latestRecoveryReportSummary(supervisor) });
+    return Response.json({ activeGeneration: await supervisor.getActiveGeneration() });
   } catch {
     return jsonError(500, "internal-error");
   }
@@ -115,9 +101,6 @@ export function routeOwnerApiRequest(
 
   if (isGet && pathname === "/api/status") {
     return statusResponse(supervisor);
-  }
-  if (isGet && pathname === "/api/recovery/latest") {
-    return recoveryResponse(supervisor);
   }
   if (isPost && pathname === "/api/generations/submit") {
     return handleGenerationSubmission(request, supervisor);

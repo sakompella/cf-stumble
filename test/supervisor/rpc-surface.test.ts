@@ -46,8 +46,6 @@ afterEach(async () => {
 
 test("the real stub exposes only controlGeneration for generation mutation", async () => {
   const control = supervisor("control-only-generation-mutation");
-  expectTypeOf(control).toHaveProperty("getRelayAttempts");
-  expectTypeOf(control).not.toHaveProperty("getRelayFacts");
   expectTypeOf(control).not.toHaveProperty("labelGeneration");
   expectTypeOf(control).not.toHaveProperty("recordPreparationCheck");
   expectTypeOf(control).not.toHaveProperty("activateGeneration");

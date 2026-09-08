@@ -87,15 +87,15 @@ function violations(): string[] {
 describe("module seams", () => {
   it("finds the source files and their group directories", () => {
     expect(Object.keys(sourceFiles).length).toBeGreaterThan(20);
-    expect(groupDirectories).toContain("src/supervisor/recovery");
+    expect(groupDirectories).toContain("src/supervisor/generations");
   });
 
   it("resolves import specifiers against the importing directory", () => {
-    expect(resolveImport("src/supervisor/recovery", "./persistence/row.js")).toBe(
-      "src/supervisor/recovery/persistence/row.ts",
+    expect(resolveImport("src/supervisor/generations", "./preparation-checks.js")).toBe(
+      "src/supervisor/generations/preparation-checks.ts",
     );
-    expect(resolveImport("src/supervisor/recovery/persistence", "../../generations/index.js")).toBe(
-      "src/supervisor/generations/index.ts",
+    expect(resolveImport("src/supervisor/generations", "../../workspace-names.js")).toBe(
+      "src/workspace-names.ts",
     );
   });
 

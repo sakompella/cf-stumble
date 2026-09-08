@@ -21,14 +21,12 @@ test("the turn surface accepts a project id and a prompt, and never a tenant or 
   expectTypeOf<Parameters<Supervisor["runProjectTurn"]>>().toEqualTypeOf<[unknown, unknown]>();
 });
 
-test("a Supervisor with nothing serving refuses the turn and records no evidence", async () => {
+test("a Supervisor with nothing serving refuses the turn and keeps the thread", async () => {
   const control = await supervisor("project-turn-without-a-generation");
 
   const refused: ProjectTurnRun = await control.runProjectTurn("sample-project-one", "do the work");
 
   expect(refused).toEqual({ ok: false, problem: { code: "no-active-generation" } });
-  // ADR-0031: an attempt attributed to no generation is evidence about none, so none is written.
-  expect(await control.getRelayAttempts()).toEqual([]);
   expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { turnActive: false, revision: 0 },
@@ -42,7 +40,6 @@ test("a prompt that is not a turn takes no lease and reaches no generation", asy
   const refused = await control.runProjectTurn("sample-project-one", "   ");
 
   expect(refused).toEqual({ ok: false, problem: { code: "invalid-prompt" } });
-  expect(await control.getRelayAttempts()).toEqual([]);
   expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { turnActive: false },
@@ -83,10 +80,4 @@ test("a serving Supervisor obtains the capability itself, and releases the lease
     ok: true,
     thread: { turnActive: false, revision: 0 },
   });
-  // A generation was serving when the turn could not start, so the failure is recorded against it
-  // exactly as a mount failure is (ADR-0031), and it earned no completed-real-turn credit.
-  expect(await control.getRelayAttempts()).toMatchObject([
-    { generationLabel: 0, outcome: "pre-header-failure" },
-  ]);
-  expect(await control.getCompletedRealTurns()).toEqual([]);
 });

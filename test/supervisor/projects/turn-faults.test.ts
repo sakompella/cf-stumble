@@ -12,8 +12,7 @@ import {
   submitCandidate,
 } from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../threads/message-samples.js";
-import { NOW, runScriptedTurn } from "./turn-run-helpers.js";
-import { RelayAttempts } from "../../../src/supervisor/relay/index.js";
+import { runScriptedTurn } from "./turn-run-helpers.js";
 import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/index.js";
 
 /**
@@ -21,8 +20,7 @@ import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/i
  *
  * A generation is mutable harness code, so its stream is input: it can be malformed, oversized,
  * truncated, or say that the turn ended twice. None of those may save arbitrary state or count as
- * success (goal criterion 6). Each one also settles the relay attempt as a failed body, which is
- * the completion evidence ADR-0031 recorded that a stream did not carry.
+ * success (goal criterion 6).
  */
 
 const conversation = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
@@ -43,18 +41,15 @@ test("a stream that ends without saying how the turn ended saves nothing", async
     code: "missing-terminal-frame",
   });
   expect(observed.thread).toMatchObject({ conversation: "[]", revision: 0, turnActive: false });
-  expect(observed.credits).toEqual([]);
-  expect(observed.attempts).toMatchObject([{ outcome: "body-failed", responseStatus: 200 }]);
 });
 
-test("an empty stream earns no credit and frees the project", async () => {
+test("an empty stream saves nothing and frees the project", async () => {
   const control = await supervisor("turn-empty-eof");
   await activateFixtureGeneration(control);
 
   const observed = await runScriptedTurn(control, { frames: [] });
 
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "missing-terminal-frame" }]);
-  expect(observed.credits).toEqual([]);
   expect(observed.thread).toMatchObject({ revision: 0, turnActive: false });
 });
 
@@ -72,14 +67,13 @@ test("a second terminal frame cannot save a second conversation on one lease", a
   });
 
   expect(observed.frames).toEqual([
-    { kind: "saved", revision: 1, messageCount: conversation.length, credited: true },
+    { kind: "saved", revision: 1, messageCount: conversation.length },
   ]);
   expect(observed.thread).toMatchObject({
     conversation: JSON.stringify(conversation),
     revision: 1,
     turnActive: false,
   });
-  expect(observed.credits).toHaveLength(1);
 });
 
 test("a malformed line ends the turn instead of being passed on", async () => {
@@ -91,7 +85,6 @@ test("a malformed line ends the turn instead of being passed on", async () => {
   });
 
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
-  expect(observed.credits).toEqual([]);
 });
 
 test("a frame of a kind this Supervisor does not know is malformed, not forwarded", async () => {
@@ -99,11 +92,10 @@ test("a frame of a kind this Supervisor does not know is malformed, not forwarde
   await activateFixtureGeneration(control);
 
   const observed = await runScriptedTurn(control, {
-    lines: [JSON.stringify({ kind: "credit-me", credited: true })],
+    lines: [JSON.stringify({ kind: "invented", detail: "not a frame" })],
   });
 
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
-  expect(observed.credits).toEqual([]);
 });
 
 test("a frame missing a field its kind declares reaches no browser", async () => {
@@ -126,7 +118,6 @@ test("a diff frame that does not say whether it was cut reaches no browser", asy
   });
 
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
-  expect(observed.credits).toEqual([]);
 });
 
 test("an oversized frame ends the turn rather than being buffered", async () => {
@@ -141,11 +132,10 @@ test("an oversized frame ends the turn rather than being buffered", async () => 
   });
 
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "oversized-frame" }]);
-  expect(observed.credits).toEqual([]);
   expect(observed.thread).toMatchObject({ conversation: "[]", turnActive: false });
 });
 
-test("a browser that goes away mid-turn cancels the work and earns no credit", async () => {
+test("a browser that goes away mid-turn cancels the work and saves nothing", async () => {
   const control = await supervisor("turn-cancelled");
   await activateFixtureGeneration(control);
 
@@ -156,13 +146,11 @@ test("a browser that goes away mid-turn cancels the work and earns no credit", a
   });
 
   // Nothing was fabricated for the turn nobody was left to receive: the conversation is what it
-  // was, the project is free for the next turn, and the attempt says the relay was cancelled.
+  // was, and the project is free for the next turn.
   expect(observed.thread).toMatchObject({ conversation: "[]", revision: 0, turnActive: false });
-  expect(observed.credits).toEqual([]);
-  expect(observed.attempts).toMatchObject([{ outcome: "relay-cancelled" }]);
 });
 
-test("a save that committed before the disconnect stands, and keeps its credit", async () => {
+test("a save that committed before the disconnect stands", async () => {
   const control = await supervisor("turn-cancel-after-save");
   await activateFixtureGeneration(control);
 
@@ -174,9 +162,8 @@ test("a save that committed before the disconnect stands, and keeps its credit",
     cancelAfter: 2,
   });
 
-  expect(observed.frames.at(-1)).toMatchObject({ kind: "saved", revision: 1, credited: true });
+  expect(observed.frames.at(-1)).toMatchObject({ kind: "saved", revision: 1 });
   expect(observed.thread).toMatchObject({ revision: 1, turnActive: false });
-  expect(observed.credits).toHaveLength(1);
 });
 
 test("a turn that never ends is bounded, and gives the project back", async () => {
@@ -193,11 +180,9 @@ test("a turn that never ends is bounded, and gives the project back", async () =
 
   expect(observed.frames.at(-1)).toEqual({ kind: "timed-out" });
   expect(observed.thread).toMatchObject({ revision: 0, turnActive: false });
-  expect(observed.credits).toEqual([]);
-  expect(observed.attempts).toMatchObject([{ outcome: "bounded-abandonment" }]);
 });
 
-test("activating a generation mid-turn does not relabel the running turn's evidence", async () => {
+test("activating a generation mid-turn does not disturb the running turn", async () => {
   const control = await supervisor("turn-activation-mid-flight");
   await activateFixtureGeneration(control);
   const second = await submitCandidate(control, commits.ordinary);
@@ -217,11 +202,11 @@ test("activating a generation mid-turn does not relabel the running turn's evide
     },
   });
 
-  // The turn ran on generation 0 and stays evidence about generation 0. The activation decides
-  // what the next turn runs on, and this one drains on the generation that admitted it.
+  // The activation decides what the next turn runs on. This one was admitted on generation 0 and
+  // drains there, so it still saves the conversation it produced.
   expect(observed.activeLabel).toBe(second);
-  expect(observed.attempts).toMatchObject([{ generationLabel: 0, outcome: "body-completed" }]);
-  expect(observed.credits).toMatchObject([{ generationLabel: 0, threadRevision: 1 }]);
+  expect(observed.frames.at(-1)).toMatchObject({ kind: "saved", revision: 1 });
+  expect(observed.thread).toMatchObject({ revision: 1, turnActive: false });
 });
 
 test("a start that never answers is bounded, and the project does not stay held", async () => {
@@ -235,31 +220,4 @@ test("a start that never answers is bounded, and the project does not stay held"
 
   expect(observed.refused).toBe("turn-not-started");
   expect(observed.thread).toMatchObject({ revision: 0, turnActive: false });
-  expect(observed.credits).toEqual([]);
-  expect(observed.attempts).toMatchObject([{ outcome: "bounded-abandonment" }]);
-});
-
-test("admitting a turn reconciles a previous turn's unresolved evidence", async () => {
-  const control = await supervisor("turn-sweeps-pending");
-  await activateFixtureGeneration(control);
-
-  // A Supervisor evicted mid-turn leaves its attempt pending forever. Admission is the existing
-  // request path that reconciles it, with no alarm and no scheduler (ADR-0031).
-  const observed = await runScriptedTurn(control, {
-    frames: [completed],
-    beforeRun: (state) => {
-      new RelayAttempts(state.storage).start(
-        { generation: undefined, epoch: 0, activationId: undefined },
-        undefined,
-        NOW - 600_000,
-        1_000,
-      );
-    },
-  });
-
-  expect(observed.attempts).toMatchObject([
-    { id: 1, outcome: "bounded-abandonment", finishedAt: NOW },
-    { id: 2, outcome: "body-completed", responseStatus: 200 },
-  ]);
-  expect(observed.credits).toMatchObject([{ attemptId: 2 }]);
 });

@@ -171,9 +171,7 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
           () => state.cancelled,
           () => input.bound.timedOut(),
         );
-        const end = endTurn(input, ending);
-        publish(end.frame);
-        input.attempts.settle(input.attempt.id, end.outcome, input.now(), end.turnTerminal);
+        publish(endTurn(input, ending).frame);
       } finally {
         input.bound.signal.removeEventListener("abort", stopReading);
         input.bound.stop();

@@ -7,7 +7,7 @@ import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
-test("returns the active generation and no recovery report when none exists", async () => {
+test("returns the active generation", async () => {
   const response = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/status"),
     supervisor({
@@ -39,7 +39,6 @@ test("returns the active generation and no recovery report when none exists", as
       epoch: 2,
       activationId: 1,
     },
-    latestRecoveryReport: null,
   });
 });
 
@@ -164,35 +163,13 @@ test("an unauthenticated request cannot reach a generation control route", async
   const rollbackResponse = await SELF.fetch(rollback);
   // oxlint-disable-next-line typescript/no-deprecated
   const submitResponse = await SELF.fetch(submit);
-  // oxlint-disable-next-line typescript/no-deprecated
-  const recoveryResponse = await SELF.fetch(
-    new Request("https://cf-stumble.test/api/recovery/latest"),
-  );
 
-  expect([
-    activateResponse.status,
-    rollbackResponse.status,
-    submitResponse.status,
-    recoveryResponse.status,
-  ]).toEqual([401, 401, 401, 401]);
-});
-test("reports no recovery report before any recovery episode exists", async () => {
-  const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/recovery/latest"),
-    supervisor(),
-    ownerScope,
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({ ok: true, report: null });
+  expect([activateResponse.status, rollbackResponse.status, submitResponse.status]).toEqual([
+    401, 401, 401,
+  ]);
 });
 
-test("keeps a GET-only recovery route and a POST-only control route", async () => {
-  const postRecovery = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/recovery/latest", { method: "POST" }),
-    supervisor(),
-    ownerScope,
-  );
+test("keeps the generation control routes POST-only", async () => {
   const getActivate = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/generations/activate"),
     supervisor(),
@@ -204,7 +181,6 @@ test("keeps a GET-only recovery route and a POST-only control route", async () =
     ownerScope,
   );
 
-  expect(postRecovery.status).toBe(404);
   expect(getActivate.status).toBe(404);
   expect(getSubmit.status).toBe(404);
 });

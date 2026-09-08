@@ -4,26 +4,23 @@ import { runInDurableObject } from "cloudflare:test";
 import { Generations } from "../../../src/supervisor/generations/index.js";
 import {
   runProjectTurn,
-  TurnCredits,
-  type CompletedRealTurnCredit,
   type ProjectTurnRunProblemCode,
   type ProjectTurnStart,
   type RunProjectTurnInput,
 } from "../../../src/supervisor/projects/index.js";
-import { RelayAttempts, type RelayAttempt } from "../../../src/supervisor/relay/index.js";
 import { ProjectThreads, type SerializedThread } from "../../../src/supervisor/threads/index.js";
 import { PROJECT_TURN_LEASE_MS } from "../../../src/supervisor/supervisor.js";
 import { sampleCatalog } from "../../project-fixtures.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 /**
- * One project turn, run against the real thread store, the real relay attempts, and the real
- * credit ledger of a Supervisor, with a scripted generation in place of a mounted facet.
+ * One project turn, run against the real thread store of a Supervisor, with a scripted generation
+ * in place of a mounted facet.
  *
- * The generation is the only fake. Everything a turn decides — admission, the lease, the save, the
- * credit, and what the browser is told — runs here exactly as it does in a deployment, because a
- * turn's rules are about storage and not about which code produced the frames. workerd cannot run
- * a Computer container, so a real facet would refuse before any of that was reachable
+ * The generation is the only fake. Everything a turn decides — admission, the lease, the save, and
+ * what the browser is told — runs here exactly as it does in a deployment, because a turn's rules
+ * are about storage and not about which code produced the frames. workerd cannot run a Computer
+ * container, so a real facet would refuse before any of that was reachable
  * (`supervisor-project-turn.test.ts` holds that half).
  *
  * The generation's stream is created inside the Durable Object under test. A stream belongs to
@@ -84,8 +81,6 @@ export interface TurnObservation {
   /** Every frame the browser received, in order. */
   readonly frames: readonly unknown[];
   readonly thread: SerializedThread | undefined;
-  readonly attempts: readonly RelayAttempt[];
-  readonly credits: readonly CompletedRealTurnCredit[];
   /** The generation serving when the turn ended, which a mid-turn activation may have changed. */
   readonly activeLabel: number | undefined;
 }
@@ -126,9 +121,8 @@ async function readFrames(
   for (;;) {
     if (cancelAfter !== undefined && frames.length >= cancelAfter) {
       await reader.cancel();
-      // The turn settles after the cancellation reaches it: the read it was waiting on ends, the
-      // lease goes back, and the relay attempt is settled. None of that is the browser's to wait
-      // for, so a test waits for it here instead.
+      // The turn settles after the cancellation reaches it: the read it was waiting on ends and
+      // the lease goes back. Neither is the browser's to wait for, so a test waits here instead.
       await scheduler.wait(50);
       break;
     }
@@ -180,16 +174,12 @@ export function runScriptedTurn(
 
 interface TurnStores {
   readonly threads: ProjectThreads;
-  readonly attempts: RelayAttempts;
-  readonly credits: TurnCredits;
   readonly generations: Generations;
 }
 
 function turnStores(state: DurableObjectState): TurnStores {
   return {
     threads: new ProjectThreads(state.storage, () => sampleCatalog),
-    attempts: new RelayAttempts(state.storage),
-    credits: new TurnCredits(state.storage),
     generations: new Generations(state.storage),
   };
 }
@@ -205,17 +195,7 @@ function turnInput(
     projectId,
     prompt: script.prompt ?? "do the work",
     threads: stores.threads,
-    attempts: stores.attempts,
-    credits: stores.credits,
-    attribution: () => {
-      const active = stores.generations.active();
-      return {
-        active,
-        preparationCheckId: active.generation
-          ? stores.generations.latestPreparationCheck(active.generation.label)?.id
-          : undefined,
-      };
-    },
+    attribution: () => ({ active: stores.generations.active() }),
     start: (_project, request) => {
       script.handoff?.(request);
       if (script.stallStart === true) {
@@ -241,8 +221,6 @@ function observation(
     refused,
     frames,
     thread: thread.ok ? thread.thread : undefined,
-    attempts: stores.attempts.all(),
-    credits: stores.credits.all(),
     activeLabel: stores.generations.active().generation?.label,
   };
 }

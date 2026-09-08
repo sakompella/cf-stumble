@@ -82,7 +82,6 @@ export function statusPayload() {
       epoch: 3,
       activationId: "activation-3",
     },
-    latestRecoveryReport: null,
   };
 }
 
@@ -178,8 +177,4 @@ export function connectPayload(scenario: HarnessScenario) {
 
 export function authorizationPayload(scenario: HarnessScenario) {
   return { ok: true, github: github(scenario) };
-}
-
-export function recoveryPayload() {
-  return { ok: true, report: null };
 }
