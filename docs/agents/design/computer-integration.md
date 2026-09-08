@@ -143,6 +143,19 @@ present, so `pnpm verify` fails before the checklist is reached.
 
 A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The exact command, transport, and authentication mechanism remain open.
 
+## Owner approval for a paid environment
+
+The owner has approved a disposable paid Cloudflare account for the probes listed here and in
+`.audit/v0/q7-request.md`. That approval was always in force; nothing in this integration waits on
+it. The rules that stay:
+
+- The account is disposable. Nothing depends on it surviving, and it holds no data the project needs.
+- Local container results are local evidence. A probe run under Podman on an x86-64 box proves tool
+  availability and build behaviour; it is not deployed-platform proof, and a report may not claim it is.
+- A probe that cannot run states the blocker. It never reports a simulated result as a real one.
+- Every paid run keeps its output with the release evidence, so the next reader sees the measurement
+  rather than the claim.
+
 ## Deployment risk
 
 Dynamic Workers and Durable Object facets are beta, and Computer is preview software. Paid-account tests must exercise the exact Worker Loader, facet, Computer, and workspace-capability path before the project treats the integration as deployable.
