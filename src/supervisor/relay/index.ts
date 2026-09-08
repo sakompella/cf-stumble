@@ -220,4 +220,4 @@ function responseWithBody(body: BodyInit | null, upstream: Response): Response {
 }
 
 export { RelayAttempts } from "./attempts.js";
-export type { RelayAttempt, RelayAttribution, RelayOutcome } from "./attempt.js";
+export type { RelayAttempt, RelayAttribution, RelayOutcome, TurnTerminal } from "./attempt.js";

@@ -8,6 +8,17 @@ export type RelayOutcome =
   | "relay-cancelled"
   | "bounded-abandonment";
 
+/**
+ * What the turn a completed body carried said about itself, when it carried one at all.
+ *
+ * The relay outcome above is a transport fact and stays one (ADR-0031): a turn Pi rejected still
+ * streamed a clean 200, and recording that as a failed or cancelled body would blame the harness
+ * for a model that refused. This is the separate fact, taken from the one terminal frame the
+ * Supervisor proved (ADR-0037), that says whether the completed body carried a turn which
+ * completed. A relayed request that is not a project turn has no terminal frame and no value here.
+ */
+export type TurnTerminal = "completed" | "rejected" | "failed";
+
 export type RelayAttribution = {
   readonly generationLabel: GenerationLabel | undefined;
   readonly activationId: number | undefined;
@@ -32,7 +43,14 @@ export type RelayAttempt =
       readonly finishedAt: number;
     })
   | (RelayAttemptBase & {
-      readonly outcome: "body-completed" | "body-failed";
+      readonly outcome: "body-completed";
+      readonly responseStatus: number;
+      readonly finishedAt: number;
+      /** The turn this body carried, or undefined when the request was not a project turn. */
+      readonly turnTerminal: TurnTerminal | undefined;
+    })
+  | (RelayAttemptBase & {
+      readonly outcome: "body-failed";
       readonly responseStatus: number;
       readonly finishedAt: number;
     })
@@ -57,6 +75,7 @@ export type AttemptRow = {
   readonly response_status: number | null;
   readonly outcome: string;
   readonly finished_at: number | null;
+  readonly turn_terminal: string | null;
 };
 
 export function attemptFromRow(row: AttemptRow): RelayAttempt {
@@ -81,6 +100,16 @@ export function attemptFromRow(row: AttemptRow): RelayAttempt {
       }
       break;
     case "body-completed":
+      if (status !== undefined && finishedAt !== undefined) {
+        return {
+          ...base,
+          outcome,
+          responseStatus: status,
+          finishedAt,
+          turnTerminal: turnTerminalFromRow(row.turn_terminal, row.id),
+        };
+      }
+      break;
     case "body-failed":
       if (status !== undefined && finishedAt !== undefined) {
         return { ...base, outcome, responseStatus: status, finishedAt };
@@ -112,6 +141,23 @@ function relayOutcomeFromRow(value: string, id: number): RelayOutcome {
   }
 
   throw new Error(`invalid persisted relay attempt outcome for ${id}`);
+}
+
+/**
+ * The stored turn terminal, or undefined when the completed body carried no project turn.
+ *
+ * An unreadable value throws rather than reading as "no turn", because a value this predicate
+ * cannot understand must not be allowed to earn a generation credit it never demonstrated.
+ */
+function turnTerminalFromRow(value: string | null, id: number): TurnTerminal | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  if (value === "completed" || value === "rejected" || value === "failed") {
+    return value;
+  }
+
+  throw new Error(`invalid persisted relay attempt turn terminal for ${id}`);
 }
 
 function nullableGenerationLabelFromRow(

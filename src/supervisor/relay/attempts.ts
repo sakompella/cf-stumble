@@ -1,6 +1,12 @@
 import type { ActiveGeneration } from "../generations/index.js";
 import { attemptFromRow } from "./attempt.js";
-import type { AttemptRow, RelayAttempt, RelayAttribution, RelayOutcome } from "./attempt.js";
+import type {
+  AttemptRow,
+  RelayAttempt,
+  RelayAttribution,
+  RelayOutcome,
+  TurnTerminal,
+} from "./attempt.js";
 
 export type { RelayAttempt } from "./attempt.js";
 
@@ -24,9 +30,33 @@ export class RelayAttempts {
           'pending', 'pre-header-failure', 'body-completed', 'body-failed',
           'relay-cancelled', 'bounded-abandonment'
         )),
-        finished_at INTEGER
+        finished_at INTEGER,
+        turn_terminal TEXT CHECK (
+          turn_terminal IS NULL OR turn_terminal IN ('completed', 'rejected', 'failed')
+        )
       );
     `);
+    this.addTurnTerminalColumn();
+  }
+
+  /**
+   * `turn_terminal` joined this table after the first shape of it existed, and
+   * `CREATE TABLE IF NOT EXISTS` leaves an existing table exactly as it was. A Supervisor that
+   * already has the old table gets the column added here, and every row it wrote keeps its
+   * transport facts and reads with no turn terminal — which is all a row written before the
+   * column existed can honestly claim. A turn those rows recorded as rejected or failed is
+   * therefore still credited as a served response; only rows settled from now on carry the fact
+   * that withholds the credit.
+   */
+  private addTurnTerminalColumn(): void {
+    const columns = this.sql
+      .exec<{ readonly name: string }>("SELECT name FROM pragma_table_info('relay_attempts')")
+      .toArray();
+    if (columns.some((column) => column.name === "turn_terminal")) {
+      return;
+    }
+
+    this.sql.exec("ALTER TABLE relay_attempts ADD COLUMN turn_terminal TEXT");
   }
 
   start(
@@ -44,10 +74,10 @@ export class RelayAttempts {
       .exec<AttemptRow>(
         `INSERT INTO relay_attempts (
            generation_label, activation_id, preparation_check_id, started_at, deadline_at,
-           response_status, outcome, finished_at
-         ) VALUES (?, ?, ?, ?, ?, NULL, 'pending', NULL)
+           response_status, outcome, finished_at, turn_terminal
+         ) VALUES (?, ?, ?, ?, ?, NULL, 'pending', NULL, NULL)
          RETURNING id, generation_label, activation_id, preparation_check_id, started_at,
-                   deadline_at, response_status, outcome, finished_at`,
+                   deadline_at, response_status, outcome, finished_at, turn_terminal`,
         attribution.generationLabel ?? null,
         attribution.activationId ?? null,
         attribution.preparationCheckId ?? null,
@@ -74,7 +104,20 @@ export class RelayAttempts {
     });
   }
 
-  settle(attemptId: number, outcome: Exclude<RelayOutcome, "pending">, observedAt: number): void {
+  /**
+   * Settle one pending attempt.
+   *
+   * `turnTerminal` is the extra fact a project turn has and an ordinary relayed request does not:
+   * what the one terminal frame the Supervisor proved said the turn did. It is left out by every
+   * caller that relayed something which was not a turn, because such a request proves nothing
+   * about a turn either way.
+   */
+  settle(
+    attemptId: number,
+    outcome: Exclude<RelayOutcome, "pending">,
+    observedAt: number,
+    turnTerminal?: TurnTerminal,
+  ): void {
     this.storage.transactionSync(() => {
       const attempt = this.byId(attemptId);
       if (attempt?.outcome !== "pending") {
@@ -82,9 +125,10 @@ export class RelayAttempts {
       }
 
       this.sql.exec(
-        "UPDATE relay_attempts SET outcome = ?, finished_at = ? WHERE id = ?",
+        "UPDATE relay_attempts SET outcome = ?, finished_at = ?, turn_terminal = ? WHERE id = ?",
         outcome,
         observedAt,
+        turnTerminal ?? null,
         attemptId,
       );
     });
@@ -95,7 +139,7 @@ export class RelayAttempts {
       const pending = this.sql
         .exec<AttemptRow>(
           `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
-                  deadline_at, response_status, outcome, finished_at
+                  deadline_at, response_status, outcome, finished_at, turn_terminal
            FROM relay_attempts
            WHERE outcome = 'pending' AND deadline_at <= ?
            ORDER BY id ASC`,
@@ -124,7 +168,7 @@ export class RelayAttempts {
     return this.sql
       .exec<AttemptRow>(
         `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
-                deadline_at, response_status, outcome, finished_at
+                deadline_at, response_status, outcome, finished_at, turn_terminal
          FROM relay_attempts
          ORDER BY id ASC`,
       )
@@ -137,7 +181,7 @@ export class RelayAttempts {
     const row = this.sql
       .exec<AttemptRow>(
         `SELECT id, generation_label, activation_id, preparation_check_id, started_at,
-                deadline_at, response_status, outcome, finished_at
+                deadline_at, response_status, outcome, finished_at, turn_terminal
          FROM relay_attempts
          WHERE id = ?`,
         attemptId,

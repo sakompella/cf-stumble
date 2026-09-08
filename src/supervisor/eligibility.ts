@@ -164,13 +164,23 @@ function belongsToMostRecentEra(
 
 /**
  * Question one: did this generation serve a successful response? This is a transport fact and
- * ADR-0031's evidence for whether a generation is known good, so it stays exactly what that
- * decision defines: a completed body under 400 and nothing else. It says nothing about whether a
- * conversation was saved, and it must not: a thread-save failure is the Supervisor's storage
- * fault and would make a healthy harness look broken if it were folded in here.
+ * ADR-0031's evidence for whether a generation is known good: a completed body under 400. It says
+ * nothing about whether a conversation was saved, and it must not: a thread-save failure is the
+ * Supervisor's storage fault and would make a healthy harness look broken if it were folded in
+ * here.
+ *
+ * A completed body under 400 is not enough on its own, because a project turn carries its own
+ * ending inside a 200: a turn Pi rejected and a turn that failed on a model error both stream a
+ * clean body, so counting them would let three refusals qualify a generation that never completed
+ * any work. The turn terminal the attempt records is the missing fact, and it is read closed: an
+ * attempt earns credit only when it carried no turn at all or carried one that completed.
  */
 function servedSuccessfulResponse(attempt: RelayAttempt): attempt is SuccessfulResponseAttempt {
-  return attempt.outcome === "body-completed" && attempt.responseStatus < 400;
+  return (
+    attempt.outcome === "body-completed" &&
+    attempt.responseStatus < 400 &&
+    (attempt.turnTerminal === undefined || attempt.turnTerminal === "completed")
+  );
 }
 
 /**
@@ -201,6 +211,12 @@ function isDeliveringSuccessfully(attempt: RelayAttempt): boolean {
   return delivering && (attempt.responseStatus === undefined || attempt.responseStatus < 400);
 }
 
+/**
+ * Blame, which is not the complement of credit. A turn Pi rejected and a turn that failed on a
+ * model error earn neither: the model refusing a request or erroring is not evidence that the
+ * harness code is broken, so recording either as a failed body would wrongly make the generation
+ * ineligible for `failure-observed` rather than merely uncredited (ADR-0031).
+ */
 function isFailureObservation(attempt: RelayAttempt): boolean {
   return (
     attempt.outcome === "pre-header-failure" ||
