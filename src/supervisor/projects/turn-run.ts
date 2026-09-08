@@ -1,4 +1,5 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- The project id and the prompt arrive from a client through the Worker, so neither has a proven shape until this module proves it.
+// oxlint-disable max-lines, max-lines-per-function -- Admission is one ordered sequence: prompt, sweep, read, revision, lease, bound, attribution. Splitting it would hide the order that makes the turn the server's, so the sequence stays whole and this file carries it.
 
 import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
