@@ -32,7 +32,7 @@ The image also carries the packages your harness build needs, fetched from the l
 
 ## What to expect the first time
 
-Your first submission is slow. On a container with half a virtual CPU, a submission took between five and eight minutes end to end, and most of that is installing packages and bundling the harness. It is not stuck. Everything after that is fast: activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
+Your first submission is slow. On a container with half a virtual CPU, a submission took between five and eight minutes end to end, and most of that is installing packages and bundling the harness. It is not stuck. Everything after that is fast. Activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
 
 Cold starting the workspace container adds ten to sixty seconds to the first request after an idle period.
 
@@ -43,13 +43,14 @@ The Worker rejects every route until you configure Access. Set up Access after t
 1. Create your Zero Trust team if you do not already have one.
 2. In the Cloudflare dashboard, open **Zero Trust** > **Access controls** > **Applications**. Create a new application, choose **Self-hosted and private**, and add the public hostname that serves this Worker. Choose a hostname in the Cloudflare zone in your account.
 3. Add one Allow policy for your own identity. Access denies requests that do not match an Allow policy.
-4. Save the application and sign in to that hostname once. Read the token that Access issues for your own login. Set the Worker values below in the deployed Worker's settings.
+4. Save the application and sign in to that hostname once. Then read your own `sub` claim. The simplest way is to open `https://<your-hostname>/cdn-cgi/access/get-identity` in the same browser, which returns your Access identity as JSON. The other way is to decode the `CF_Authorization` cookie, which is an ordinary JWT whose payload carries `sub` and `aud`.
+5. Set the three values below in the deployed Worker's settings, then redeploy or save so the Worker picks them up.
 
-| Worker value            | Value to set                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN` | Your Zero Trust team domain. It is the domain that identifies the Zero Trust team. |
-| `CF_ACCESS_AUD`         | The `aud` claim in the Access token for this application.                          |
-| `CF_ACCESS_OWNER_SUB`   | The `sub` claim in your own Access token after your first login.                   |
+| Worker value            | Value to set                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `CF_ACCESS_TEAM_DOMAIN` | Your Zero Trust team domain. It is the domain that identifies the Zero Trust team.                               |
+| `CF_ACCESS_AUD`         | The application audience tag. The dashboard shows it on the application, and it is the `aud` claim in the token. |
+| `CF_ACCESS_OWNER_SUB`   | The `sub` claim in your own Access token after your first login.                                                 |
 
 Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accepts only the identity whose `sub` claim matches this value.
 
@@ -77,12 +78,12 @@ Your instance builds its own harness from a Git repository, and it has to be tol
 
 An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
 
-A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving. This was checked against a deployment: a URL naming a repository that does not exist failed in about 17 seconds and left the active generation untouched.
+A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving. This was checked against a deployment. A URL naming a repository that does not exist failed in about 17 seconds and left the active generation untouched.
 
 ## Known untested areas
 
 - Compaction across a reload has not been tested. Pi owns compaction, and this project has no forced-compaction test.
-- The Deploy to Cloudflare button flow has not been recorded against a clean account. What the deployed instance itself does after the button is finished has been: a fresh instance with empty storage provisioned its workspace, cloned the harness repository, built a commit into a generation, activated it, served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
+- The Deploy to Cloudflare button flow has not been recorded against a clean account. What the deployed instance itself does after the button is finished has been recorded. A fresh instance with empty storage provisioned its workspace, cloned the harness repository, built a commit into a generation, activated it, served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
 - The deployed probe tested Access token verification with an injected key. It did not prove that a real Cloudflare Access application admits the configured owner.
 
 ## Cost and cleanup
