@@ -1,45 +1,22 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ownerPageHtml } from "../../src/page/index.js";
-import {
-  authorizationPayload,
-  connectPayload,
-  controlPayload,
-  parseScenario,
-  projectsPayload,
-  statusPayload,
-  submitPayload,
-  threadPayload,
-  type HarnessScenario,
-  type ThreadState,
-} from "./fixtures.mjs";
-import type { JsonValue } from "./json.mjs";
+import { NEW_PROJECT, authorizationPayload, connectPayload, projectsPayload } from "./fixtures.mjs";
+import { runGenerationCommand, statusPayload, submitGeneration } from "./fixtures-generation.mjs";
+import { threadPayload } from "./fixtures-thread.mjs";
+import { isJsonNumber, isJsonRecord, isJsonString, type JsonValue } from "./json.mjs";
+import { threadOf, type ScenarioState } from "./server-state.mjs";
 
 /**
  * What the harness server answers, apart from the streaming turn.
  *
- * Everything here is a recorded answer, so the page's own behaviour is the only thing under test.
- * The thread is the one piece of state the server keeps, because the page checks its own work
- * against it: a completed turn re-reads the thread, and a check that asserted on a thread frozen
- * at its starting revision would pass a page that never re-read anything.
+ * Every route reads the state the stub keeps rather than a frozen payload, because the page checks
+ * its own work against it: a completed turn re-reads the thread, a submission is followed by a
+ * status read, and a case that asserted on a ledger frozen at its starting epoch would pass a page
+ * that never re-read anything.
  */
 
-/**
- * One request the page made, as the server saw it.
- *
- * The page is the thing under test, so what it sent is evidence and what it displays afterwards is
- * not: a check that read `#activate-sent-epoch` would be asking the page to confirm its own claim.
- * These records let a check compare the value a reader can see against the value that left the
- * browser.
- */
-export type RecordedRequest = Readonly<{ method: string; path: string; body: JsonValue }>;
-
-/** The mutable part of the server: which recorded world it serves, and where the thread stands. */
-export type ScenarioState = {
-  current: HarnessScenario;
-  thread: ThreadState;
-  readonly requests: RecordedRequest[];
-};
+export type RouteAnswer = Readonly<{ status: number; payload: JsonValue }>;
 
 export function sendJson(res: ServerResponse, status: number, payload: JsonValue): void {
   res.writeHead(status, {
@@ -79,64 +56,112 @@ export function acceptsHtml(accept: string | undefined): boolean {
     .some((entry) => (entry.split(";")[0] ?? "").trim().toLowerCase() === "text/html");
 }
 
-/** Every fixed-path JSON route, as data. The page's own paths are the only keys that matter. */
+function field(body: JsonValue, key: string): JsonValue | undefined {
+  return isJsonRecord(body) ? body[key] : undefined;
+}
+
+function readString(body: JsonValue, key: string): string | undefined {
+  const value = field(body, key);
+  return value !== undefined && isJsonString(value) ? value : undefined;
+}
+
+function readNumber(body: JsonValue, key: string): number | undefined {
+  const value = field(body, key);
+  return value !== undefined && isJsonNumber(value) ? value : undefined;
+}
+
+const INVALID_REQUEST: RouteAnswer = {
+  status: 400,
+  payload: { ok: false, problem: { code: "invalid-request" } },
+};
+
+function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
+  const repositoryUrl = readString(body, "repositoryUrl");
+  if (repositoryUrl === undefined || repositoryUrl === "") {
+    return INVALID_REQUEST;
+  }
+  const already = state.projects.some((project) => project.id === NEW_PROJECT.id);
+  if (!already) {
+    state.projects = [...state.projects, NEW_PROJECT];
+  }
+  return { status: 200, payload: connectPayload(state.scenario, already) };
+}
+
+function submit(state: ScenarioState, body: JsonValue): RouteAnswer {
+  const harnessCommit = readString(body, "harnessCommit");
+  if (harnessCommit === undefined || harnessCommit === "") {
+    return INVALID_REQUEST;
+  }
+  const answer = submitGeneration(state.generation, harnessCommit);
+  state.generation = answer.next;
+  return { status: answer.status, payload: answer.payload };
+}
+
+function command(
+  kind: "activate" | "rollback",
+): (state: ScenarioState, body: JsonValue) => RouteAnswer {
+  return (state, body) => {
+    const observedEpoch = readNumber(body, "observedEpoch");
+    const label = readNumber(body, "label");
+    if (observedEpoch === undefined || label === undefined) {
+      return INVALID_REQUEST;
+    }
+    const answer = runGenerationCommand(state.generation, kind, observedEpoch, label);
+    state.generation = answer.next;
+    return { status: answer.status, payload: answer.payload };
+  };
+}
+
+/** Every fixed-path route, as data. The page's own paths are the only keys that matter. */
 const JSON_ROUTES: readonly Readonly<{
   method: string;
   path: string;
-  payload: (scenario: HarnessScenario) => JsonValue;
+  answer: (state: ScenarioState, body: JsonValue) => RouteAnswer;
 }>[] = [
-  { method: "GET", path: "/api/projects", payload: (scenario) => projectsPayload(scenario) },
-  { method: "GET", path: "/api/status", payload: () => statusPayload() },
+  {
+    method: "GET",
+    path: "/api/projects",
+    answer: (state) => ({
+      status: 200,
+      payload: projectsPayload(state.scenario, state.projects),
+    }),
+  },
+  {
+    method: "GET",
+    path: "/api/status",
+    answer: (state) => statusPayload(state.generation, state.scenario),
+  },
   {
     method: "GET",
     path: "/api/github/connection",
-    payload: (scenario) => authorizationPayload(scenario),
+    answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
   },
-  { method: "POST", path: "/api/projects/connect", payload: (s) => connectPayload(s) },
-  { method: "POST", path: "/api/github/authorization", payload: (s) => authorizationPayload(s) },
+  { method: "POST", path: "/api/projects/connect", answer: connect },
+  {
+    method: "POST",
+    path: "/api/github/authorization",
+    answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
+  },
   {
     method: "POST",
     path: "/api/github/authorization/complete",
-    payload: (scenario) => authorizationPayload(scenario),
+    answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
   },
-  { method: "POST", path: "/api/generations/submit", payload: () => submitPayload() },
-  {
-    method: "POST",
-    path: "/api/generations/activate",
-    payload: () => controlPayload("activated", 2),
-  },
-  {
-    method: "POST",
-    path: "/api/generations/rollback",
-    payload: () => controlPayload("rolled-back", 1),
-  },
+  { method: "POST", path: "/api/generations/submit", answer: submit },
+  { method: "POST", path: "/api/generations/activate", answer: command("activate") },
+  { method: "POST", path: "/api/generations/rollback", answer: command("rollback") },
 ];
 
 export function serveJsonRoute(
   req: IncomingMessage,
-  res: ServerResponse,
   path: string,
   state: ScenarioState,
-): boolean {
+  body: JsonValue,
+): RouteAnswer | undefined {
   const route = JSON_ROUTES.find(
     (candidate) => candidate.method === req.method && candidate.path === path,
   );
-  if (route === undefined) {
-    return false;
-  }
-  sendJson(res, 200, route.payload(state.current));
-  return true;
-}
-
-/** The scenario switch: a POST the harness (or a developer with curl) makes by name. */
-export function serveScenarioSwitch(res: ServerResponse, url: URL, state: ScenarioState): void {
-  const requested = parseScenario(url.searchParams.get("name"));
-  if (requested === undefined) {
-    sendJson(res, 400, { ok: false, problem: { code: "unknown-scenario" } });
-    return;
-  }
-  state.current = requested;
-  sendJson(res, 200, { ok: true, scenario: requested });
+  return route === undefined ? undefined : route.answer(state, body);
 }
 
 const THREAD_PATH = /^\/api\/projects\/([^/]+)\/thread$/u;
@@ -148,20 +173,20 @@ const FRESH_THREAD_PATH = /^\/api\/projects\/([^/]+)\/thread\/fresh$/u;
  */
 export function serveThreadRoutes(
   req: IncomingMessage,
-  res: ServerResponse,
   path: string,
   state: ScenarioState,
-): boolean {
-  const thread = THREAD_PATH.exec(path)?.[1];
-  if (req.method === "GET" && thread !== undefined) {
-    sendJson(res, 200, threadPayload(decodeURIComponent(thread), state.thread));
-    return true;
+): RouteAnswer | undefined {
+  const read = THREAD_PATH.exec(path)?.[1];
+  if (req.method === "GET" && read !== undefined) {
+    const projectId = decodeURIComponent(read);
+    return { status: 200, payload: threadPayload(projectId, threadOf(state, projectId)) };
   }
   const fresh = FRESH_THREAD_PATH.exec(path)?.[1];
   if (req.method === "POST" && fresh !== undefined) {
-    state.thread = { revision: state.thread.revision + 1, messageCount: 0 };
-    sendJson(res, 200, threadPayload(decodeURIComponent(fresh), state.thread));
-    return true;
+    const projectId = decodeURIComponent(fresh);
+    const replaced = { revision: threadOf(state, projectId).revision + 1, messageCount: 0 };
+    state.threads.set(projectId, replaced);
+    return { status: 200, payload: threadPayload(projectId, replaced) };
   }
-  return false;
+  return undefined;
 }

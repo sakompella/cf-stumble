@@ -10,37 +10,52 @@ import type { CdpConnection } from "./cdp.mjs";
  * all — the local server sends the same policy the Worker sends, so a page that outgrows that
  * policy fails here rather than in production.
  */
-export function collectBrowserErrors(connection: CdpConnection): () => readonly string[] {
+export function collectBrowserErrors(
+  connection: CdpConnection,
+  sessionId?: string,
+): () => readonly string[] {
   const errors: string[] = [];
 
-  connection.onEvent("Runtime.consoleAPICalled", (params) => {
-    const level = params.text("type");
-    if (level !== "error" && level !== "assert") {
-      return;
-    }
-    const first = params.text("args.0.value") ?? params.text("args.0.description") ?? "";
-    errors.push(`console.${level}: ${first}`);
-  });
+  connection.onEvent(
+    "Runtime.consoleAPICalled",
+    (params) => {
+      const level = params.text("type");
+      if (level !== "error" && level !== "assert") {
+        return;
+      }
+      const first = params.text("args.0.value") ?? params.text("args.0.description") ?? "";
+      errors.push(`console.${level}: ${first}`);
+    },
+    sessionId,
+  );
 
-  connection.onEvent("Runtime.exceptionThrown", (params) => {
-    const description =
-      params.text("exceptionDetails.exception.description") ??
-      params.text("exceptionDetails.text") ??
-      "unnamed exception";
-    errors.push(`uncaught: ${description}`);
-  });
+  connection.onEvent(
+    "Runtime.exceptionThrown",
+    (params) => {
+      const description =
+        params.text("exceptionDetails.exception.description") ??
+        params.text("exceptionDetails.text") ??
+        "unnamed exception";
+      errors.push(`uncaught: ${description}`);
+    },
+    sessionId,
+  );
 
-  connection.onEvent("Log.entryAdded", (params) => {
-    const level = params.text("entry.level");
-    const source = params.text("entry.source");
-    if (level !== "error" && source !== "security") {
-      return;
-    }
-    const text = params.text("entry.text") ?? "";
-    const url = params.text("entry.url");
-    const at = url === undefined ? "" : ` (${url})`;
-    errors.push(`log[${source ?? "unknown"}/${level ?? "unknown"}]: ${text}${at}`);
-  });
+  connection.onEvent(
+    "Log.entryAdded",
+    (params) => {
+      const level = params.text("entry.level");
+      const source = params.text("entry.source");
+      if (level !== "error" && source !== "security") {
+        return;
+      }
+      const text = params.text("entry.text") ?? "";
+      const url = params.text("entry.url");
+      const at = url === undefined ? "" : ` (${url})`;
+      errors.push(`log[${source ?? "unknown"}/${level ?? "unknown"}]: ${text}${at}`);
+    },
+    sessionId,
+  );
 
   return () => [...errors];
 }

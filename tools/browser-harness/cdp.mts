@@ -85,6 +85,14 @@ type Pending = Readonly<{
 export type CdpEventListener = (params: CdpResult) => void;
 
 /**
+ * One listener, and the session it cares about.
+ *
+ * A flattened attachment carries every page's events over one socket, so a listener that ignored
+ * `sessionId` would collect the faults of a tab that some other case was driving.
+ */
+type Subscription = Readonly<{ listener: CdpEventListener; sessionId: string | undefined }>;
+
+/**
  * A connection to one DevTools endpoint. Session-scoped commands carry a `sessionId`, which is how
  * one socket drives both the browser and a page (`flatten` attachment).
  */
@@ -92,7 +100,7 @@ export class CdpConnection {
   private readonly socket: WebSocket;
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
-  private readonly listeners = new Map<string, CdpEventListener[]>();
+  private readonly listeners = new Map<string, Subscription[]>();
   private readonly commandTimeoutMs: number;
 
   private constructor(socket: WebSocket, commandTimeoutMs: number) {
@@ -137,13 +145,14 @@ export class CdpConnection {
     });
   }
 
-  onEvent(method: string, listener: CdpEventListener): void {
+  onEvent(method: string, listener: CdpEventListener, sessionId?: string): void {
+    const subscription: Subscription = { listener, sessionId };
     const existing = this.listeners.get(method);
     if (existing === undefined) {
-      this.listeners.set(method, [listener]);
+      this.listeners.set(method, [subscription]);
       return;
     }
-    existing.push(listener);
+    existing.push(subscription);
   }
 
   close(): void {
@@ -170,10 +179,14 @@ export class CdpConnection {
     if (method === undefined) {
       return;
     }
+    const session = result.text("sessionId");
     const params = result.value("params");
     const payload = params !== undefined && isJsonRecord(params) ? params : {};
-    for (const listener of this.listeners.get(method) ?? []) {
-      listener(cdpResult(payload));
+    for (const subscription of this.listeners.get(method) ?? []) {
+      if (subscription.sessionId !== undefined && subscription.sessionId !== session) {
+        continue;
+      }
+      subscription.listener(cdpResult(payload));
     }
   }
 
