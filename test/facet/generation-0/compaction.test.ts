@@ -46,13 +46,13 @@ function conversation(): AgentMessage[] {
 }
 
 /**
- * The fact T7 had to settle before claiming this criterion. `ROUTE_MODEL` reports no context
- * window, and Pi decides with `contextTokens > contextWindow - reserveTokens`, so passing that zero
- * through would make an empty conversation exceed the threshold and every turn compact. This
- * generation therefore compacts against the budget it declares.
+ * Pi decides with `contextTokens > contextWindow - reserveTokens`, so a zero window would make an
+ * empty conversation exceed the threshold and every turn compact. `ROUTE_MODEL` no longer reports
+ * zero, because a zero output budget also left every deployed turn with an empty assistant
+ * message, and this generation compacts against the budget it declares either way.
  */
-test("the route's zero context window would compact everything, so the declared budget is used", () => {
-  expect(ROUTE_MODEL.contextWindow).toBe(0);
+test("compaction reads the declared budget, so a zero window cannot compact everything", () => {
+  expect(ROUTE_MODEL.contextWindow).toBeGreaterThan(GENERATION_0_COMPACTION.settings.reserveTokens);
   expect(
     needsCompaction([], { ...GENERATION_0_COMPACTION, contextBudgetTokens: 0 }),
     "an empty conversation exceeds a zero window",

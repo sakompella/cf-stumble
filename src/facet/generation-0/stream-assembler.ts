@@ -8,9 +8,12 @@ import type { ModelUsage, ToolCallDelta } from "../../model-route.js";
  * the route, not a model, which is why its costs and its context window are zero: Generation 0 has
  * no way to learn the real values and must not invent them.
  *
- * FLAG for T7 (not fixed here, per this task's brief): a zero `contextWindow`/`maxTokens` may make
- * Pi's compaction trigger unreachable, since compaction decides from those numbers. T7 owns
- * confirming what Pi does with a zero window before it claims a forced-compaction test passes.
+ * The two numbers are not zero, and that is deployed evidence rather than taste. With a zero
+ * window and a zero output budget, every deployed turn saved an assistant message with empty
+ * content while the route itself streamed the text: Pi sizes a response against these numbers, and
+ * zero leaves no room for one. They mirror what the host route asks for in `model-route.ts`, which
+ * is the only place that selects a model, so this describes the route rather than choosing
+ * anything.
  */
 export const ROUTE_MODEL = {
   id: "host-model-route",
@@ -21,8 +24,8 @@ export const ROUTE_MODEL = {
   reasoning: false,
   input: ["text"],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 0,
-  maxTokens: 0,
+  contextWindow: 128_000,
+  maxTokens: 4096,
 } satisfies Model<Api>;
 
 const ZERO_USAGE: AssistantMessage["usage"] = {
