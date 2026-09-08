@@ -1,7 +1,5 @@
 # Computer integration
 
-> **Superseded for v0:** Handoff decision 6 removes R2 cache and its rebuild requirements from version 0.
-
 cf-stumble uses Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. ADR-0026 records the decision.
 
 ## Pinned pair
@@ -62,9 +60,10 @@ the workspace.
 ## Harness execution
 
 The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. Computer
-builds a canonical module map for a labeled harness commit. The Supervisor validates it and caches
-the rebuildable output in R2 under that commit. Computer supplies the environment in which
-compilation and tests run; ADR-0028 and ADR-0034 define the artifact and cache.
+builds a canonical module map for a labeled harness commit. The Supervisor validates it and stores
+it in its own Durable Object SQLite under that commit, so nothing rebuilds to serve or to roll
+back. Computer supplies the environment in which compilation and tests run, and ADR-0028 defines
+the artifact.
 
 Worker Loader names are cached. The Supervisor uses the labeled harness commit ID as the Loader name, so a changed harness commit does not silently reuse old code.
 
