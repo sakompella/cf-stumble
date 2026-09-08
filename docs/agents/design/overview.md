@@ -1,20 +1,22 @@
 # Product overview
 
-cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main and recovery harnesses both start from Pi-derived forks, running on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
+cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main harness starts from a Pi-derived fork, running on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
 
 The product is meant first for one person. It should grow around that person's projects, instructions, working habits, and accumulated context. Coding is its primary use, not a permanent limit on what the harness may help with.
 
 ## The two harnesses
 
-The system separates normal work from recovery.
+The system separates the harness that changes from the supervisor that does not.
 
 The **main harness** handles the user's work. Its model loop, prompts, tools, policies, and use of files may all change. One generation of the main harness runs in a Dynamic Worker facet.
 
-The **recovery harness** is an immutable Pi-derived fork in the Supervisor Durable Object. It remains close to the Pi base but omits the main harness's connector for requesting Supervisor capabilities. The Supervisor Durable Object is the primary Durable Object for a cf-stumble instance; it is not a facet. It creates or obtains main-harness facets, decides which generation may run, and restores service when a main harness fails.
+The **supervisor** is the immutable half. It lives in the Supervisor Durable Object, which is the primary Durable Object for a cf-stumble instance and is not a facet. It creates or obtains main-harness facets, decides which generation may run, and refuses a candidate whose startup check fails so the generation that is serving keeps serving.
+
+Version 0 has no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing. The earlier design put a second Pi-derived fork in the Supervisor and gave it recovery episodes, eligibility rules and relay evidence. Handoff decision 7 deleted all of it and kept the turn lease. A future multi-user or self-healing version can add it back, and this paragraph is the record that it once existed.
 
 The interface between the supervisor and a main facet is not settled. Forwarding an ordinary Worker `fetch(Request): Promise<Response>` call is attractive because it uses the platform's native interface and keeps the permanent contract small, and local prototypes show that it works. That evidence does not make `fetch` the only acceptable design.
 
-Generation 0 is the first mutable main harness, initially based closely on Pi. It is not the recovery harness and it is not a special recovery target.
+Generation 0 is the first mutable main harness, initially based closely on Pi. It is not a special rollback target; it is the first generation like any other.
 
 ## What the main harness knows and tries to do
 
@@ -22,7 +24,7 @@ For a piece of work, the main harness should receive the user's request, applica
 
 Its primary aim is to help the user complete useful work. It may inspect and edit code, run commands, explain results, preserve context, or improve its own harness when that serves the user's goal. Self-modification is a capability, not the purpose of every session.
 
-The recovery harness has a narrower aim: keep a usable main harness available. It needs operational evidence about generations and failures, not the user's full project context.
+The supervisor has a narrower aim. It keeps a usable main harness available by refusing a candidate that fails its startup check and by letting the owner roll back. It needs the generation record and the startup check's own result, not the user's project context.
 
 ## Projects and files
 
