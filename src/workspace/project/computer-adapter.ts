@@ -35,9 +35,19 @@ export function computerFilesystemProvider(workspace: Workspace): ProjectFilesys
   };
 }
 
-/** Runs a write inside the workspace's own synchronous SQLite transaction. */
-export function computerTransactions(workspace: Workspace): ProjectTransactions {
-  return { transactionSync: (closure) => workspace.db.transactionSync(closure) };
+/**
+ * Runs a write inside one synchronous Durable Object transaction.
+ *
+ * It has to be the Durable Object's own API rather than Computer's `workspace.db.transactionSync`.
+ * The workspace's database *is* this object's SQLite storage, and a deployed write through
+ * Computer's transaction reached the agent as `backend-unavailable` with the cause thrown away.
+ * What the runtime actually said was: "To execute a transaction, please use the
+ * state.storage.transaction() or state.storage.transactionSync() APIs instead of the SQL BEGIN
+ * TRANSACTION or SAVEPOINT statements." So the write uses the API the runtime names, which is also
+ * the one `generations/index.ts` and the module-map store already use.
+ */
+export function durableObjectTransactions(storage: DurableObjectStorage): ProjectTransactions {
+  return { transactionSync: (closure) => storage.transactionSync(closure) };
 }
 
 /**

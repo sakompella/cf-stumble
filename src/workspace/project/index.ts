@@ -1,7 +1,7 @@
 export {
   computerExecBackend,
   computerFilesystemProvider,
-  computerTransactions,
+  durableObjectTransactions,
 } from "./computer-adapter.js";
 export type {
   BackendExecEvent,

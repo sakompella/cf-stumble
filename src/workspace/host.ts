@@ -17,7 +17,7 @@ import {
 import {
   computerExecBackend,
   computerFilesystemProvider,
-  computerTransactions,
+  durableObjectTransactions,
   ProjectRpcTarget,
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
@@ -137,7 +137,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   project(): ProjectRpcTarget {
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),
-      computerTransactions(this.#workspace),
+      durableObjectTransactions(this.ctx.storage),
       computerExecBackend(this.#workspace),
     );
   }
