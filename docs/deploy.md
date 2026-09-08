@@ -28,6 +28,14 @@ This indirection is required. Cloudflare Containers only pull images from the de
 
 If you deploy by hand, use Docker. Podman does not work for this deployment because it can rewrite the image manifest when it pushes, leaving Wrangler with a local digest that Cloudflare cannot find in the registry. The resulting deployment error is `IMAGE_REGISTRY_DOESNT_CONTAIN_IMAGE`.
 
+The image also carries the packages your harness build needs, fetched from the lockfile. That makes it about a gigabyte larger and your first build several minutes faster, because the build reads packages from the image instead of the network.
+
+## What to expect the first time
+
+Your first submission is slow. On a container with half a virtual CPU, a submission took between five and eight minutes end to end, and most of that is installing packages and bundling the harness. It is not stuck. Everything after that is fast: activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
+
+Cold starting the workspace container adds ten to sixty seconds to the first request after an idle period.
+
 ## Configure Cloudflare Access
 
 The Worker rejects every route until you configure Access. Set up Access after the deployment and before the first normal use.
@@ -59,16 +67,22 @@ Before the first generation exists, the deployed Worker serves the page, but the
 
 It then uses the normal generation path. It runs `pnpm run build:artifact`, stores the module map in the Supervisor's SQLite storage, cold-checks `GET /`, and activates the candidate when the check passes. A failed bootstrap build leaves the deployed Worker serving. Repeating a submission for the same commit returns the existing generation.
 
-## Fork configuration gap: `HARNESS_REPOSITORY_URL`
+## Point the instance at your own fork
 
-A fork does not yet bootstrap from itself. `src/harness-build.ts` hardcodes `HARNESS_BUILD_CONFIGURATION.harnessGitRemote` to `https://github.com/sakompella/cf-stumble.git`. A forked deployment would therefore build the owner's repository.
+Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` variable in `wrangler.jsonc` to the HTTPS URL of your fork:
 
-After you fork the repository, edit that one constant to the HTTPS URL of your fork before you deploy. This is a product gap. The deploy button cannot correct it.
+```jsonc
+"vars": { "HARNESS_REPOSITORY_URL": "https://github.com/your-name/cf-stumble.git" },
+```
+
+An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
+
+A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving. This was checked against a deployment: a URL naming a repository that does not exist failed in about 17 seconds and left the active generation untouched.
 
 ## Known untested areas
 
 - Compaction across a reload has not been tested. Pi owns compaction, and this project has no forced-compaction test.
-- The Deploy to Cloudflare button flow has not yet been recorded against a clean account with empty cf-stumble storage.
+- The Deploy to Cloudflare button flow has not been recorded against a clean account. What the deployed instance itself does after the button is finished has been: a fresh instance with empty storage provisioned its workspace, cloned the harness repository, built a commit into a generation, activated it, served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
 - The deployed probe tested Access token verification with an injected key. It did not prove that a real Cloudflare Access application admits the configured owner.
 
 ## Cost and cleanup
