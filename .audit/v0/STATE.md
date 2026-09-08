@@ -5,7 +5,7 @@ Written at the end of the 2026-09-08 overnight finishing run on hp. Durable home
 
 ## Head of main
 
-`2849183`, pushed. `pnpm verify` green: 109 test files, 778 tests, about 56 s.
+`a50b14a`, pushed. `pnpm verify` green: 109 test files, 778 tests, about 56 s.
 `pnpm harness:browser` green: 41 cases, 41 passed.
 
 ## The deployment
@@ -50,7 +50,6 @@ in 0.26 s with no build. `.audit/v0/evidence/deployed-generation-loop.md` quotes
 - The Cloudflare Access application (D81). One owner action: create the application, add the owner
   policy, read the `sub` claim from the first login. `docs/deploy.md` has the steps.
 - The deploy button end to end. Needs a browser login and a second clean account.
-- The workspace `write` tool returns a backend error (D82). A turn works around it with `bash`.
 
 ## Rules earned in this run
 

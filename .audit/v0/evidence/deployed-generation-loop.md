@@ -63,9 +63,28 @@ saved        revision 9
 7.7 s. The agent read a file, wrote to it, ran a command, streamed its own account of what it did,
 and the harness produced the diff. The thread was saved.
 
-**A real defect this turn found**: the workspace `write` tool returned a backend error and the
-agent worked around it with `bash`. Recorded as a known issue rather than fixed, because the turn
-completed and the fix is not in this run's scope.
+**A real defect this turn found, since fixed.** The workspace `write` tool answered
+`backend-unavailable` and the agent worked around it with `bash`. The code is the fallback for an
+error with no errno, so the cause was thrown away. Logging the unmapped error named it: the runtime
+requires `state.storage.transactionSync()` rather than the SQL `BEGIN TRANSACTION` or `SAVEPOINT`
+that Computer's own `workspace.db.transactionSync` issues. Fixed in `a50b14a`, and the same turn
+then ran with the product's own tool:
+
+```
+tool-start   read
+tool-result  read           "# cf-stumble"
+tool-start   write
+tool-result  write          "Successfully wrote 139 bytes to README.md"
+tool-start   bash
+tool-result  bash           " README.md | 3 +++\n 1 file changed, 3 insertions(+)"
+text         "Done. I read README.md, rewrote it with the original line plus both proof lines,
+              and `git diff --stat -- README.md` printed ..."
+diff         diff --git a/README.md b/README.md
+saved
+```
+
+9.8 s. Read, write through the product's own tool, a command with its output, the harness's diff,
+and a saved thread.
 
 A later turn in the same thread answered from the conversation alone:
 
@@ -140,3 +159,38 @@ And three more in the turn path:
 8. The provider stream parser read only Workers AI's classic `{response}` shape, while the model
    streams chat-completion chunks whose text and tool calls live in `choices[0].delta`
    (`2849183`). This one silently threw away every answer and every tool call.
+
+And one in the workspace:
+
+9. Every project-file write failed, because the write ran inside Computer's own SQL transaction
+   rather than the Durable Object's (`a50b14a`).
+
+## 6. Fail closed before configuration, and the fork variable
+
+Two more deployed checks, each done by redeploying the same Worker with different variables.
+
+**Partial Access configuration.** With `CF_ACCESS_TEAM_DOMAIN` set and `CF_ACCESS_AUD` and
+`CF_ACCESS_OWNER_SUB` absent, every route refuses:
+
+```
+GET /?p=partial          with a credential      500  Unauthorized
+GET /api/status          with a credential      500  Unauthorized
+GET /api/projects        with a credential      500  Unauthorized
+GET /  Accept: text/html with a credential      500
+GET /                    with no credential     401
+```
+
+500 is the `invalid-configuration` refusal, which says the fault is the deployment's own. That is
+what the fresh-account bootstrap requires, because the deploy button runs before the user
+configures Access.
+
+**`HARNESS_REPOSITORY_URL`.** With the variable set to a repository that does not exist, a
+submission fails at its first step:
+
+```
+{"preparation":{"ok":false,"problem":{"code":"build-step-failed","step":"provision","exitCode":1}}}
+```
+
+16.5 s, and the active generation did not move. So the variable a fork has to change is honored by
+the deployed build plan, and a wrong value fails at the clone rather than quietly building this
+repository instead.

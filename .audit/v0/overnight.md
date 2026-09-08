@@ -118,15 +118,12 @@ stated reason.
 
 ### E. The real coding turn
 
-- [x] E1 The real coding turn, deployed. done: the agent read `README.md` in
-      `/workspace/harness`, wrote to it, ran a shell command, streamed its own account, and the
-      harness produced the diff (`+Deployed proof: this line was added by the agent.`). Thread
-      saved at revision 9, and a later turn answered from that conversation. 7.7 s. One real
-      defect found and recorded rather than fixed: the workspace `write` tool returns a backend
-      error and the agent fell back to `bash`.
-
-### F. Generation swap
-
+- [x] E1 The real coding turn, deployed. done. With the product's own tools: `read` README.md,
+      `write` 139 bytes back to it, `bash` for `git diff --stat -- README.md` which printed
+      `1 file changed, 3 insertions(+)`, streamed text explaining the work, the harness's own diff
+      frame, and a saved thread. 9.8 s. The first attempt exposed a real defect, since fixed
+      (`a50b14a`): every write answered `backend-unavailable` because it ran inside Computer's SQL
+      transaction rather than the Durable Object's.
 - [x] F1 Submit, build, cold check, activate, continue. done deployed: two generations built and
       activated, a stale epoch refused with `stale-epoch`, activation in 0.3 s, and the same
       conversation continued in the same workspace afterwards.
@@ -174,9 +171,11 @@ stated reason.
       container image and why docker rather than podman, Access step by step with where each value
       comes from, connecting a project, first run, the fork gap, the untested areas and the cost.
       Every claim this run could not support is written as a limit rather than a claim.
-- [x] I3 Verify the built Worker fails closed with `CF_ACCESS_*` unset or partial. done against the
-      deployment: no credential gives 401, a credential with no Access configuration gives 500
-      (`invalid-configuration`).
+- [x] I3 Verify the built Worker fails closed with `CF_ACCESS_*` unset or partial. done for both
+      against the deployment. Unset: 401 with no credential, 500 with one. Partial (team domain
+      set, audience and owner subject absent): 401 with no credential and 500 on `/`,
+      `/api/status`, `/api/projects` and the browser page path with one. 500 is
+      `invalid-configuration`, which says the fault is the deployment's own.
 - [x] I4 Already done before this run, and enforced: nothing under `src/` imports
       `src/facet/fixture.ts`, and `test/facet/fixture-reach.test.ts` fails if anything starts to.
       Verified by reading both.
@@ -227,5 +226,6 @@ Two things are still open, and both need a human rather than an agent:
   made about Access admitting the owner.
 - The deploy button against a clean account. It needs a browser login and a second account.
 
-Known defect worth a follow-up: the workspace `write` tool returns a backend error, and the agent
-works around it with `bash`.
+The `HARNESS_REPOSITORY_URL` variable a fork has to change is also proved deployed: with a
+repository that does not exist, a submission fails at its provision step in 16.5 s and the active
+generation does not move.

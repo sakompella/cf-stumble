@@ -1065,3 +1065,16 @@ the Workers AI binding validates against the model's schema, and that model take
 
 Known defect, not fixed: the workspace `write` tool returns a backend error, and the agent falls
 back to `bash`. The turn completes, so it is a follow-up rather than a blocker.
+
+## D83 — every project-file write was failing, and why nobody knew
+
+The `write` tool answered `backend-unavailable` on every deployed turn, and the agent worked around
+it with `bash`. That code is the fallback for an error with no errno, so the cause never left the
+Durable Object. Logging the unmapped error named it in one turn: the runtime requires
+`state.storage.transactionSync()` rather than the SQL `BEGIN TRANSACTION` or `SAVEPOINT` that
+Computer's `workspace.db.transactionSync` issues. The workspace's database is the object's own
+SQLite storage, so the write now uses the Durable Object API, the same one the generation store and
+the module-map store already use (`a50b14a`).
+
+The lesson is the logging, not the transaction. A typed failure code with no cause attached costs
+one deployed run per bug.
