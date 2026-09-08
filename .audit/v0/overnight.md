@@ -166,7 +166,10 @@ stated reason.
 
 - [x] I1 done: the official button at the top of `README.md`, pointed at
       `https://github.com/sakompella/cf-stumble`, with one sentence and a link to the guide.
-      Merged as `efa0cd4`.
+      Merged as `efa0cd4`. Checked as far as an agent can: the repository answers 200 and is
+      public, the button image serves, and the button URL redirects to Cloudflare's
+      `workers-and-pages/create/deploy-to-workers` flow carrying this repository as its
+      `repository` parameter. Finishing the flow needs a logged-in browser, which is I6.
 - [x] I2 done: `docs/deploy.md`. Prerequisites, what the button does and does not do, the
       container image and why docker rather than podman, Access step by step with where each value
       comes from, connecting a project, first run, the fork gap, the untested areas and the cost.
