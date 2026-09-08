@@ -3,38 +3,13 @@ import {
   streamModelEvents,
   validateRequest,
   type ModelRouteRequest,
-  type ModelStreamEvent,
   type ModelStreamInference,
   type StreamingProviderPayload,
   type ValidationFailure,
 } from "../src/model-route.js";
-
-/** A provider stream built from raw byte chunks, so a test controls exactly how bytes split
- * across `ReadableStream` reads — including splitting a multi-byte UTF-8 character in half. */
-function rawByteStream(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
-  let i = 0;
-  return new ReadableStream<Uint8Array>({
-    pull(controller) {
-      const chunk = chunks[i];
-      if (chunk === undefined) {
-        controller.close();
-        return;
-      }
-      controller.enqueue(chunk);
-      i += 1;
-    },
-  });
-}
+import { collectEvents, DONE_LINE, rawByteStream, sseLine } from "./model-route-provider-stream.js";
 
 const encoder = new TextEncoder();
-
-/** One SSE `data:` line carrying a JSON payload, as the classic Workers AI streaming shape sends. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test-only encoder: builds a wire payload rather than parsing untrusted input.
-function sseLine(payload: unknown): string {
-  return `data: ${JSON.stringify(payload)}\n`;
-}
-
-const DONE_LINE = "data: [DONE]\n";
 
 function fakeStreamInference(providerStream: ReadableStream<Uint8Array>): ModelStreamInference {
   return {
@@ -42,13 +17,6 @@ function fakeStreamInference(providerStream: ReadableStream<Uint8Array>): ModelS
       return Promise.resolve(providerStream);
     },
   };
-}
-
-async function collectEvents(stream: ReadableStream<Uint8Array>): Promise<ModelStreamEvent[]> {
-  const text = await new Response(stream).text();
-  const lines = text.split("\n").filter((line) => line !== "");
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: every line came from streamModelEvents, which encodes exactly one ModelStreamEvent per line.
-  return lines.map((line) => JSON.parse(line) as ModelStreamEvent);
 }
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
@@ -70,11 +38,14 @@ test("delivers incremental text deltas and a final assembled message", async () 
   });
 });
 
+/** One SSE line carrying a fragment of one tool call's arguments for slot 0. */
+function toolCallChunk(argsFragment: string): string {
+  return sseLine({
+    tool_calls: [{ index: 0, id: "call_1", function: { name: "bash", arguments: argsFragment } }],
+  });
+}
+
 test("assembles a tool call whose arguments arrive split across several chunks", async () => {
-  const toolCallChunk = (argsFragment: string) =>
-    sseLine({
-      tool_calls: [{ index: 0, id: "call_1", function: { name: "bash", arguments: argsFragment } }],
-    });
   const provider = rawByteStream([
     encoder.encode(toolCallChunk('{"cm')),
     encoder.encode(toolCallChunk('d":"l')),
