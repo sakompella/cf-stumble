@@ -4,12 +4,16 @@ import {
   type ProjectTurnFrame,
 } from "./turn-frames.js";
 import { endTurn, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
+import type { TurnBound } from "./turn-bound.js";
 
 export type ProjectTurnStreamInput = TurnSettlement &
   Readonly<{
     frames: ReadableStream<Uint8Array>;
-    /** How long the whole turn may take before the server stops waiting for the generation. */
-    deadlineMs: number;
+    /**
+     * When this turn ends, and the cancellation that ends it. The bound was opened at admission
+     * and the start already spent part of it, so what is left here is what is left of the turn.
+     */
+    bound: TurnBound;
   }>;
 
 const encoder = new TextEncoder();
@@ -143,8 +147,7 @@ class TurnReader {
  * that never ends, and the turn must still stop holding the project.
  */
 export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream<Uint8Array> {
-  const state = { cancelled: false, expired: false };
-  let expiry: ReturnType<typeof setTimeout> | undefined;
+  const state = { cancelled: false };
   let turn: TurnReader | undefined;
 
   return new ReadableStream<Uint8Array>({
@@ -154,27 +157,34 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
       };
       const reader = new TurnReader(input.frames, publish);
       turn = reader;
-      expiry = setTimeout(() => {
-        state.expired = true;
+      // The turn's own bound, not a second one: when the instant admission fixed arrives, the
+      // signal aborts and the generation's stream is cancelled, whether the start left the turn
+      // four minutes or four seconds.
+      const stopReading = () => {
         void reader.stop();
-      }, input.deadlineMs);
+      };
+      input.bound.signal.addEventListener("abort", stopReading, { once: true });
+      if (input.bound.signal.aborted) stopReading();
 
       try {
         const ending = await reader.read(
           () => state.cancelled,
-          () => state.expired,
+          () => input.bound.timedOut(),
         );
         const end = endTurn(input, ending);
         publish(end.frame);
         input.attempts.settle(input.attempt.id, end.outcome, input.now());
       } finally {
-        clearTimeout(expiry);
+        input.bound.signal.removeEventListener("abort", stopReading);
+        input.bound.stop();
         if (!state.cancelled) controller.close();
       }
     },
     cancel() {
       state.cancelled = true;
-      clearTimeout(expiry);
+      // The browser going away ends the whole turn and not only its frames, so the one signal
+      // every step of the turn holds is aborted here too.
+      input.bound.stop();
       return turn === undefined ? input.frames.cancel() : turn.stop();
     },
   });

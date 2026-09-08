@@ -36,6 +36,7 @@ import {
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
   type TurnAttribution,
+  type TurnStartContext,
 } from "./projects/index.js";
 import {
   Generations,
@@ -362,7 +363,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       attempts: this.relayAttempts,
       credits: this.credits,
       attribution: () => this.servingAttribution(),
-      start: (project, request) => this.startTurnStream(project, request),
+      start: (project, request, context) => this.startTurnStream(project, request, context),
       now: () => Date.now(),
       leaseMs: PROJECT_TURN_LEASE_MS,
       deadlineMs: PROJECT_TURN_DEADLINE_MS,
@@ -385,14 +386,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * The capability and the selected project's working directory both travel to the generation as
    * arguments of its `startTurn`; nothing here is reachable from a request.
    */
-  private startTurnStream(projectId: string, request: FacetTurnHandoff): Promise<ProjectTurnStart> {
+  private startTurnStream(
+    projectId: string,
+    request: FacetTurnHandoff,
+    context: TurnStartContext,
+  ): Promise<ProjectTurnStart> {
     return streamProjectTurn({
       projectId,
       request,
       catalog: this.connections.catalog(),
       workspaceName: this.workspaceName,
       namespace: this.env.WORKSPACE_HOST,
-      mount: () => this.mountServing(this.generations.active()),
+      signal: context.signal,
+      // The generation admission snapshotted, not the one that is active now: the turn is mounted
+      // on, and recorded against, the same generation (`turn-run.ts`).
+      mount: () => this.mountServing(context.attribution.active),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: async (project) => (await this.connections.ensureProvisioned(project.id)).ok,

@@ -39,6 +39,7 @@ export {
   type RunProjectTurnInput,
   type TurnAttempts,
   type TurnAttribution,
+  type TurnStartContext,
   type TurnThreads,
 } from "./turn-run.js";
 export {
@@ -47,6 +48,7 @@ export {
   type ProjectTurnFrame,
   type TurnStreamProblem,
 } from "./turn-frames.js";
+export { TurnBound } from "./turn-bound.js";
 export { projectTurnStream, type ProjectTurnStreamInput } from "./turn-stream.js";
 export {
   endTurn,
