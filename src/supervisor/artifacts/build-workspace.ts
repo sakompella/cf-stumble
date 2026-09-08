@@ -33,12 +33,21 @@ function unreachable(reason: string): Error {
  * command text, and it refuses any command or path that is not part of that commit's build.
  */
 export class CommitBuildWorkspace implements BuildWorkspace {
-  private readonly host: BuildWorkspaceHost;
+  /**
+   * A fresh stub for every call, not one stub for the whole build.
+   *
+   * A build is minutes long and its steps are separate calls. A deployed build spent five and a
+   * half minutes installing packages, and the call that read the module map it had just written
+   * failed with "this Durable Object instance is no longer active": the Workspace Host had
+   * restarted, and the stub taken before the build had died with it. A stub is cheap, so each call
+   * takes its own.
+   */
+  private readonly host: () => BuildWorkspaceHost;
   private readonly harnessCommit: HarnessCommit;
   private readonly plan: HarnessBuildPlan;
 
   constructor(
-    host: BuildWorkspaceHost,
+    host: () => BuildWorkspaceHost,
     configuration: HarnessBuildConfiguration,
     harnessCommit: HarnessCommit,
   ) {
@@ -55,7 +64,7 @@ export class CommitBuildWorkspace implements BuildWorkspace {
       throw unreachable("a build workspace runs only the planned steps of its own commit");
     }
 
-    const result = await this.host.build({
+    const result = await this.host().build({
       kind: "build-step",
       harnessCommit: this.harnessCommit,
       step: step.name,
@@ -79,7 +88,7 @@ export class CommitBuildWorkspace implements BuildWorkspace {
       throw unreachable("a build workspace reads only its own module map");
     }
 
-    const result = await this.host.build({
+    const result = await this.host().build({
       kind: "build-output",
       harnessCommit: this.harnessCommit,
     });
@@ -146,8 +155,11 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
 
   private runBuild(harnessCommit: HarnessCommit): Promise<HarnessBuildResult> {
     // The name is the tenant's own, never request data.
-    const host = this.namespace.getByName(this.workspaceName);
-    const workspace = new CommitBuildWorkspace(host, this.configuration, harnessCommit);
+    const workspace = new CommitBuildWorkspace(
+      () => this.namespace.getByName(this.workspaceName),
+      this.configuration,
+      harnessCommit,
+    );
     return new WorkspaceModuleMapBuilder(workspace, this.configuration).build(harnessCommit);
   }
 }

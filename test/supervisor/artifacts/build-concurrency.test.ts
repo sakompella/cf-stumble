@@ -112,7 +112,7 @@ test("admits one build per commit, so a concurrent request joins it instead of r
     host.inner.requests.filter((request) => request.kind === "build-step"),
     "one build ran its four steps once; the second caller ran none of its own",
   ).toHaveLength(4);
-  expect(namespace.names).toEqual([workspaceName]);
+  expect(namespace.names.every((name) => name === workspaceName)).toBe(true);
 });
 
 test("builds again once the build in flight has settled", async () => {

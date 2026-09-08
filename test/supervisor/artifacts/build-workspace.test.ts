@@ -109,9 +109,10 @@ test("builds a labeled commit through the named build workspace", async () => {
     }),
   );
   expect(
-    namespace.names,
-    "a build runs in the tenant's own workspace, not a global build container",
-  ).toEqual([workspaceName]);
+    namespace.names.every((name) => name === workspaceName),
+    "every stub a build takes names the tenant's own workspace, never a global build container",
+  ).toBe(true);
+  expect(namespace.names.length, "and a build takes one stub per call").toBeGreaterThan(1);
 });
 
 test("offline fake workspace schedules missing repository provisioning before a labeled checkout", async () => {
@@ -267,7 +268,7 @@ test("a refused build workspace stays a typed failure", async () => {
 
 test("refuses a command the build plan does not contain", async () => {
   const host = new FakeBuildHost();
-  const workspace = new CommitBuildWorkspace(host, HARNESS_BUILD_CONFIGURATION, commit);
+  const workspace = new CommitBuildWorkspace(() => host, HARNESS_BUILD_CONFIGURATION, commit);
 
   await expect(workspace.runCommand("whoami", "/")).rejects.toThrow(/planned steps/u);
   await expect(workspace.runCommand(plan.steps[0].source, "/workspace")).rejects.toThrow(
@@ -281,7 +282,7 @@ test("refuses a command the build plan does not contain", async () => {
 
 test("refuses a read that escapes the commit's build directory", async () => {
   const host = new FakeBuildHost();
-  const workspace = new CommitBuildWorkspace(host, HARNESS_BUILD_CONFIGURATION, commit);
+  const workspace = new CommitBuildWorkspace(() => host, HARNESS_BUILD_CONFIGURATION, commit);
 
   for (const path of [
     "/workspace/readme.md",
