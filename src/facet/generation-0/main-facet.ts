@@ -15,6 +15,14 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
  */
 export class MainFacet extends DurableObject<Generation0Capabilities> {
   override fetch(request: Request): Promise<Response> {
+    // DELIBERATELY BROKEN. This branch exists to prove the deployed startup check: the Supervisor
+    // builds this commit, cold-starts it, runs `GET /`, sees this, and leaves the active generation
+    // serving. Never merge it.
+    if (new URL(request.url).pathname === "/") {
+      return Promise.resolve(
+        new Response("this candidate is deliberately broken", { status: 500 }),
+      );
+    }
     return handleGeneration0Request(request);
   }
 
