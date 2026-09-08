@@ -70,7 +70,6 @@ test("builds provider payload with fixed model and low reasoning effort", () => 
       { role: "system", content: "System" },
       { role: "user", content: "Hello" },
     ],
-    reasoning_effort: "low",
     max_tokens: 4096,
   });
 });
@@ -86,7 +85,7 @@ test("includes tools in the provider payload when present", () => {
     ],
   };
   expect(buildProviderPayload(request)).toHaveProperty("tools");
-  expect(buildProviderPayload(request)).toHaveProperty("reasoning_effort", "low");
+  expect(buildProviderPayload(request)).toHaveProperty("max_tokens", 4096);
 });
 
 test("rejects a message with an unknown role", () => {

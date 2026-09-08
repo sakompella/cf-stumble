@@ -91,14 +91,9 @@ test("the entrypoint asks the one fixed model with a streaming payload and nothi
   const call = binding.calls[0];
   if (call === undefined) throw new Error("the entrypoint never called the binding");
   expect(call.model).toBe(REQUIRED_MODEL);
-  expect(Object.keys(call.input).toSorted()).toEqual([
-    "max_tokens",
-    "messages",
-    "reasoning_effort",
-    "stream",
-  ]);
+  expect(Object.keys(call.input).toSorted()).toEqual(["max_tokens", "messages", "stream"]);
   expect(call.input.stream).toBe(true);
-  expect(call.input.reasoning_effort).toBe("low");
+  expect(call.input.max_tokens).toBe(4096);
   expect(call.input.messages).toEqual([{ role: "user", content: "hi" }]);
 });
 

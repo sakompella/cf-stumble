@@ -14,9 +14,9 @@ export type {
 
 // The only model the immutable host selects. An instruction model, not a reasoning one: deployed
 // turns against `@cf/zai-org/glm-5.3-flash` saved an empty assistant message every time, because
-// that model answers in `reasoning_content` and spent its whole budget there.
+// that model answers in `reasoning_content` and spent its whole budget there. A caller still may
+// not name a model, a reasoning effort or an endpoint; `FORBIDDEN_FIELDS` refuses all three.
 export const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast" as const;
-const REASONING_EFFORT = "low" as const;
 /** Workers AI's default output budget truncates a turn's first tool call into nothing. */
 const MAX_OUTPUT_TOKENS = 4096;
 const MAX_REQUEST_BYTES = 1_048_576;
@@ -73,7 +73,6 @@ export type ValidationFailure = Readonly<{
 export type ProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
   tools?: ReadonlyArray<ToolDefinition>;
-  reasoning_effort: "low";
   max_tokens: number;
 }>;
 export type ProviderResult = Readonly<{
@@ -230,10 +229,9 @@ export function validateRequest(raw: unknown): Readonly<{ ok: true }> | Validati
 // -- Provider payload construction ------------------------------------------
 
 export function buildProviderPayload(request: ModelRouteRequest): ProviderPayload {
-  const fixed = { reasoning_effort: REASONING_EFFORT, max_tokens: MAX_OUTPUT_TOKENS } as const;
   return request.tools === undefined
-    ? { messages: request.messages, ...fixed }
-    : { messages: request.messages, tools: request.tools, ...fixed };
+    ? { messages: request.messages, max_tokens: MAX_OUTPUT_TOKENS }
+    : { messages: request.messages, tools: request.tools, max_tokens: MAX_OUTPUT_TOKENS };
 }
 
 // -- Response normalization -------------------------------------------------
