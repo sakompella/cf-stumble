@@ -53,7 +53,13 @@ export function readLayout(page: BrowserPage): Promise<LayoutSnapshot> {
   })()`);
 }
 
-/** One element's box. `visible` is the fact a real mouse click depends on. */
+/**
+ * One element's box. `visible` is the fact a real mouse click depends on.
+ *
+ * A rectangle is not that fact. Chrome lays out the skipped subtree of a closed `<details>` when a
+ * geometry API asks for it, so the controls inside a closed drawer report their full box while
+ * nothing paints them and no click reaches them. `checkVisibility` is what reports the skip.
+ */
 export type BoxSnapshot = Readonly<{
   present: boolean;
   visible: boolean;
@@ -77,7 +83,8 @@ export function readBox(page: BrowserPage, selector: string): Promise<BoxSnapsho
     return {
       present: true,
       visible: rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" &&
-        style.display !== "none",
+        style.display !== "none" &&
+        found.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true }),
       width: rect.width, height: rect.height,
       top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left,
     };

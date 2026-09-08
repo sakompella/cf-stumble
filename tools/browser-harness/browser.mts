@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import { rm } from "node:fs/promises";
 import { CdpConnection } from "./cdp.mjs";
 import { launchChromeProcess } from "./chrome-launch.mjs";
@@ -54,9 +55,21 @@ export class HarnessChrome {
     return BrowserPage.attach(this.connection, sessionId, targetId);
   }
 
+  /**
+   * A killed Chrome keeps writing its profile until its last child is gone, so removing the
+   * directory before the process has exited fails with ENOTEMPTY and takes the whole run with it.
+   */
   async close(): Promise<void> {
     this.connection.close();
     this.process.kill("SIGKILL");
-    await rm(this.userDataDir, { recursive: true, force: true });
+    if (this.process.exitCode === null && this.process.signalCode === null) {
+      await once(this.process, "exit");
+    }
+    await rm(this.userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 }

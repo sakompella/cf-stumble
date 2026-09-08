@@ -16,14 +16,18 @@ import { setTimeout as sleep } from "node:timers/promises";
  * per tab, so one case cannot inherit the console errors of the case before it.
  */
 
-/** The keys the harness presses. The virtual key code matters: Chrome drops a key without one. */
+/**
+ * The keys the harness presses. The virtual key code matters: Chrome drops a key without one, and
+ * so does the DOM key value, which is what a default action such as toggling a `<details>` summary
+ * reads. The name the harness uses is not always that value; Space is the character " ".
+ */
 const KEYS = {
-  Tab: { code: "Tab", keyCode: 9, text: "" },
-  Enter: { code: "Enter", keyCode: 13, text: "\r" },
-  Escape: { code: "Escape", keyCode: 27, text: "" },
-  Space: { code: "Space", keyCode: 32, text: " " },
-  ArrowDown: { code: "ArrowDown", keyCode: 40, text: "" },
-  ArrowUp: { code: "ArrowUp", keyCode: 38, text: "" },
+  Tab: { key: "Tab", code: "Tab", keyCode: 9, text: "" },
+  Enter: { key: "Enter", code: "Enter", keyCode: 13, text: "\r" },
+  Escape: { key: "Escape", code: "Escape", keyCode: 27, text: "" },
+  Space: { key: " ", code: "Space", keyCode: 32, text: " " },
+  ArrowDown: { key: "ArrowDown", code: "ArrowDown", keyCode: 40, text: "" },
+  ArrowUp: { key: "ArrowUp", code: "ArrowUp", keyCode: 38, text: "" },
 } as const;
 
 export type HarnessKey = keyof typeof KEYS;
@@ -146,7 +150,9 @@ export class BrowserPage {
         if (el === undefined) { return null; }
         el.scrollIntoView({ block: "center", inline: "center" });
         const r = el.getBoundingClientRect();
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2, visible: r.width > 0 && r.height > 0 };
+        const shown = r.width > 0 && r.height > 0 &&
+          el.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true });
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, visible: shown };
       })()`,
     );
     if (box === null) {
@@ -202,7 +208,7 @@ export class BrowserPage {
     for (const type of ["keyDown", "keyUp"]) {
       await this.command("Input.dispatchKeyEvent", {
         type,
-        key,
+        key: descriptor.key,
         code: descriptor.code,
         modifiers,
         windowsVirtualKeyCode: descriptor.keyCode,

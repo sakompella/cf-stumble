@@ -19,6 +19,7 @@ import {
   readTools,
   readGeneration,
   tabUntil,
+  TOOL_DISCLOSURE,
   waitForText,
   waitForThreadOk,
   type HarnessCase,
@@ -148,7 +149,7 @@ export const CASES: readonly HarnessCase[] = [
       const transcript = await readScroll(page, ID.messageList);
       const output = await readTools(page);
       const messageBox = await readBox(page, byId(ID.messageList));
-      const outputBox = await readBox(page, ".tool-output");
+      const outputBox = await readBox(page, `${TOOL_DISCLOSURE}[open] .tool-output`);
       const metrics = await readPageMetrics(page);
       assertSame(transcript.scrollable, true, "internal transcript scrolling on a short phone");
       assertAtMost(
