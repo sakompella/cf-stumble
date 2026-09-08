@@ -204,6 +204,25 @@ test("a fresh thread for one project leaves the other project's thread alone", a
   });
 });
 
+test("the harness entry has a thread of its own, and resetting it leaves a project's alone", async () => {
+  const control = await supervisor("fresh-thread-harness");
+  await threadWithConversation(control, "harness");
+  await threadWithConversation(control, "sample-project-one");
+
+  await control.startFreshProjectThread("harness");
+
+  // One current conversation per thing the owner can be working in, and the harness is one of
+  // them: its reset is the same reset, and it reaches nothing but its own row.
+  expect(await control.getProjectThread("harness")).toMatchObject({
+    ok: true,
+    thread: { projectId: "harness", conversation: "[]", messageCount: 0, revision: 2 },
+  });
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { conversation: JSON.stringify(savedConversation), revision: 1 },
+  });
+});
+
 test("a fresh thread is refused for a project the catalog does not have", async () => {
   const control = await supervisor("fresh-thread-unknown-project");
 

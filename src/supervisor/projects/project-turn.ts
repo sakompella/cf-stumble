@@ -1,5 +1,6 @@
-import { resolveProject, type Project, type ProjectCatalog } from "../../project-catalog.js";
-import { projectDirectory } from "../../workspace-layout.js";
+import type { Project } from "../../project-catalog.js";
+import { resolveSelectableProject, type SelectableCatalog } from "../../selectable-projects.js";
+import { selectedWorkingDirectory } from "../../workspace-layout.js";
 import type { Result } from "better-result";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { MainFacetMountProblem } from "../artifacts/index.js";
@@ -20,9 +21,13 @@ export type ProjectTurnFacet = Readonly<{
 }>;
 
 /**
- * Reconcile the selected project's clone before the turn runs, answering whether the workspace is
- * ready. Provisioning is idempotent (`workspace/provisioning.ts`), so this runs on every turn and
- * is also what repairs a workspace the platform recreated between two turns.
+ * Reconcile the selected repository's clone before the turn runs, answering whether the workspace
+ * is ready. Provisioning is idempotent (`workspace/provisioning.ts`), so this runs on every turn
+ * and is also what repairs a workspace the platform recreated between two turns.
+ *
+ * It takes a {@link Project}, so the harness selection cannot be handed to it: the harness
+ * checkout is provisioned by the bootstrap that clones it and has no repository URL to reconcile
+ * against.
  */
 export type ProvisionSelectedProject = (project: Project) => Promise<boolean>;
 
@@ -46,7 +51,8 @@ export interface ProjectTurnInput extends ProjectTurnRequest {
    * one.
    */
   readonly workspaceName: string;
-  readonly catalog?: ProjectCatalog;
+  /** Everything the tenant may select. Required, so a turn never resolves against a guess. */
+  readonly catalog: SelectableCatalog;
   readonly namespace: ProjectWorkspaceNamespace;
   readonly mount: MountServingGeneration;
   readonly provision: ProvisionSelectedProject;
@@ -85,20 +91,21 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
 /**
  * Start one streamed turn in the tenant's workspace, against the selected project's directory.
  *
- * The order of the steps is deliberate. The project id is resolved against the catalog first, so a
- * working directory exists only for a project the server recognizes and a client string never
+ * The order of the steps is deliberate. The selected id is resolved against the catalog first, so a
+ * working directory exists only for something the server recognizes and a client string never
  * becomes a path. The generation is mounted second, so a Supervisor with nothing serving refuses
- * before touching a workspace at all. The project's clone is reconciled third, because a turn that
- * is about to edit files needs them to be there. The capability is obtained last and reaches the
- * generation as an argument of `startTurn`, never as a loader environment entry: the Worker Loader
- * caches its entry under the harness commit, so a capability placed there would be whichever
- * project warmed the cache and would then serve every other project.
+ * before touching a workspace at all. A selected repository's clone is reconciled third, because a
+ * turn that is about to edit files needs them to be there. The capability is obtained last and
+ * reaches the generation as an argument of `startTurn`, never as a loader environment entry: the
+ * Worker Loader caches its entry under the harness commit, so a capability placed there would be
+ * whichever project warmed the cache and would then serve every other project.
  *
- * Selecting a project sets the turn's initial working directory and nothing else (ADR-0038). The
- * capability addresses the whole workspace, so the agent can still read a sibling repository or
- * the managed instructions when the work needs it; what it cannot do is reach another tenant,
- * because the workspace name comes from the Supervisor's own tenant key rather than from the
- * request.
+ * Selecting a project sets the turn's initial working directory and nothing else (ADR-0038), and
+ * that holds for the harness entry too: it is `/workspace/harness`, reached with the same
+ * capability, the same lease and the same thread rules as any repository. The capability addresses
+ * the whole workspace, so the agent can still read a sibling repository or the managed
+ * instructions when the work needs it; what it cannot do is reach another tenant, because the
+ * workspace name comes from the Supervisor's own tenant key rather than from the request.
  *
  * Nothing disposes the obtained stub here. The generation leases a duplicate that outlives this
  * call, and that duplicate is a reference held through it, so disposing here would cut a running
@@ -106,10 +113,11 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
  * `facet/generation-0/project-capability.ts` does, is what ends the whole chain.
  */
 export async function streamProjectTurn(input: ProjectTurnInput): Promise<ProjectTurnStart> {
-  const resolved = resolveProject(input.projectId, input.catalog);
+  const resolved = resolveSelectableProject(input.projectId, input.catalog);
   if (!resolved.ok) {
     return { ok: false, reason: resolved.reason };
   }
+  const selected = resolved.project;
   if (input.signal.aborted) {
     return NOT_STARTED;
   }
@@ -122,7 +130,9 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return NOT_STARTED;
   }
 
-  if (!(await input.provision(resolved.project))) {
+  // Only a connected repository has a clone to reconcile. The harness checkout is already in the
+  // workspace, so selecting it asks the workspace for nothing before the turn starts.
+  if (selected.kind === "repository" && !(await input.provision(selected))) {
     return { ok: false, reason: "workspace-unavailable" };
   }
   if (input.signal.aborted) {
@@ -143,7 +153,7 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     const frames = await mounted.value.fetcher.startTurn(
       capability,
       input.request,
-      projectDirectory(resolved.project.id),
+      selectedWorkingDirectory(selected),
     );
     return endedBeforeItBegan(input, frames);
   } catch {

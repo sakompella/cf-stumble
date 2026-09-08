@@ -2,7 +2,7 @@
 
 import { runInDurableObject } from "cloudflare:test";
 import { ProjectThreads } from "../../../src/supervisor/threads/index.js";
-import { sampleCatalog } from "../../project-fixtures.js";
+import { sampleSelectableCatalog } from "../../project-fixtures.js";
 import type {
   ProjectThreadResult,
   ProjectTurnLeaseResult,
@@ -19,7 +19,7 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
  * `getProjectThread` and a real turn read — rather than through a surface that no longer exists.
  */
 function threadsOf(state: DurableObjectState): ProjectThreads {
-  return new ProjectThreads(state.storage, () => sampleCatalog);
+  return new ProjectThreads(state.storage, () => sampleSelectableCatalog);
 }
 
 export function startProjectTurn(

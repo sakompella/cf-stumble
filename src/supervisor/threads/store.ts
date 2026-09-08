@@ -16,7 +16,7 @@ import {
   type ThreadProblem,
   type ThreadResult,
 } from "./thread.js";
-import type { Project } from "../../project-catalog.js";
+import type { SelectableProject } from "../../selectable-projects.js";
 
 export type ThreadLease = Readonly<{ thread: ProjectThread; leaseId: string }>;
 
@@ -25,11 +25,13 @@ export type ThreadLeaseResult =
   | Readonly<{ ok: false; problem: ThreadProblem }>;
 
 /**
- * The one thread each catalog project has, and the lease that decides who may write to it.
+ * The one thread each selectable project has, and the lease that decides who may write to it.
  *
- * Every method takes a `Project`, never a project id string. A `Project` only exists by resolving
- * a client's string against the catalog, so a caller cannot reach a row this store does not own,
- * and cannot invent a thread for a project the tenant does not have.
+ * Every method takes a `SelectableProject`, never a project id string. A `SelectableProject` only
+ * exists by resolving a client's string against the catalog, so a caller cannot reach a row this
+ * store does not own, and cannot invent a thread for a project the tenant does not have. The
+ * harness entry is one of those values, so it holds a row of its own and nothing here has to know
+ * which kind it is.
  *
  * Admission is the only way to obtain a lease id, and finishing or abandoning a turn requires the
  * id that admitted it. The store mints that id itself, so no caller can name the turn it wants to
@@ -54,7 +56,7 @@ export class ThreadStore {
     `);
   }
 
-  read(project: Project): ThreadResult {
+  read(project: SelectableProject): ThreadResult {
     return this.readThread(project);
   }
 
@@ -70,7 +72,7 @@ export class ThreadStore {
    * again; both hold without reading the conversation, so a damaged row is replaced rather than
    * reported.
    */
-  startFreshThread(project: Project): ThreadResult {
+  startFreshThread(project: SelectableProject): ThreadResult {
     return this.storage.transactionSync(() => {
       this.sql.exec(
         `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id)
@@ -92,7 +94,7 @@ export class ThreadStore {
    * the caller's: it is minted here and returned once.
    */
   startTurn(
-    project: Project,
+    project: SelectableProject,
     expectedRevision: number,
     now: number,
     leaseMs: number,
@@ -138,7 +140,7 @@ export class ThreadStore {
    * commit and every fresh thread replaces the lease it would have to match.
    */
   finishTurn(
-    project: Project,
+    project: SelectableProject,
     messages: readonly AgentMessage[],
     now: number,
     leaseId: string,
@@ -180,7 +182,7 @@ export class ThreadStore {
   }
 
   /** Give the turn slot back without writing a conversation, for the lease that holds it. */
-  abandonTurn(project: Project, leaseId: string): ThreadResult {
+  abandonTurn(project: SelectableProject, leaseId: string): ThreadResult {
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
       if (!current.ok) {
@@ -211,7 +213,7 @@ export class ThreadStore {
     });
   }
 
-  private leaseClaim(project: Project, presented: string): TurnLeaseClaim {
+  private leaseClaim(project: SelectableProject, presented: string): TurnLeaseClaim {
     const row = this.sql
       .exec<{ readonly turn_lease_id: string | null }>(
         "SELECT turn_lease_id FROM project_threads WHERE project_id = ?",
@@ -221,7 +223,7 @@ export class ThreadStore {
     return { held: row?.turn_lease_id ?? undefined, presented };
   }
 
-  private revisionOf(project: Project): number {
+  private revisionOf(project: SelectableProject): number {
     const row = this.sql
       .exec<{ readonly revision: number }>(
         "SELECT revision FROM project_threads WHERE project_id = ?",
@@ -231,7 +233,7 @@ export class ThreadStore {
     return row?.revision ?? 0;
   }
 
-  private readThread(project: Project): ThreadResult {
+  private readThread(project: SelectableProject): ThreadResult {
     const row = this.sql
       .exec<ThreadRow>(
         `SELECT project_id, messages, revision, turn_active, turn_deadline_at

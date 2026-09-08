@@ -1,6 +1,6 @@
 import { Result } from "better-result";
 import { parseThreadMessages, type ThreadMessagesUnreadable } from "./messages.js";
-import type { Project } from "../../project-catalog.js";
+import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectThread } from "./thread.js";
 
 export type ThreadRow = {
@@ -18,7 +18,7 @@ export type ThreadRow = {
  * value was written as.
  */
 export function threadFromRow(
-  project: Project,
+  project: SelectableProject,
   row: ThreadRow,
 ): Result<ProjectThread, ThreadMessagesUnreadable> {
   const messages = parseThreadMessages(row.messages);

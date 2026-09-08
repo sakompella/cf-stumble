@@ -1,10 +1,15 @@
 import { OWNER_PAGE_CLASSES as CLASS, OWNER_PAGE_IDS as ID } from "./element-ids.js";
+import { HARNESS_DIRECTORY } from "../workspace-layout.js";
 
 /**
- * The sidebar's behaviour: read `GET /api/projects`, show what is connected, and let a reader pick
- * one. Selecting a project is the only way this page names a project, which is why there is no
- * project-id field to type into — the catalog is what the tenant connected, and a typed id could
- * only ever name something outside it.
+ * The sidebar's behaviour: read `GET /api/projects`, show what the owner may work in, and let a
+ * reader pick one. Selecting a project is the only way this page names a project, which is why
+ * there is no project-id field to type into — the catalog is what the tenant connected plus the
+ * harness entry, and a typed id could only ever name something outside it.
+ *
+ * The list holds two kinds of entry. A connected repository shows its repository URL; the harness
+ * entry shows the checkout it selects and is not counted as a connection, because there is nothing
+ * to authorize and nothing to clone for it.
  *
  * Selection is also a boundary. It bumps `page.selection` and stops any turn still streaming, so
  * frames belonging to the project a reader just left cannot reach the conversation they switched
@@ -75,7 +80,9 @@ export const OWNER_PAGE_SCRIPT_PROJECTS = `
     button.setAttribute("data-project-id", project.id);
     button.textContent = text(project.displayName);
     var repository = element("span", "repo");
-    repository.textContent = text(project.repositoryUrl);
+    repository.textContent = project.kind === "harness"
+      ? "${HARNESS_DIRECTORY}"
+      : text(project.repositoryUrl);
     button.appendChild(repository);
     button.addEventListener("click", function () {
       void selectProject(project);
@@ -97,11 +104,19 @@ export const OWNER_PAGE_SCRIPT_PROJECTS = `
       item.appendChild(projectButton(payload.projects[index]));
       list.appendChild(item);
     }
+    var connected = 0;
+    for (var counted = 0; counted < payload.projects.length; counted += 1) {
+      if (payload.projects[counted].kind !== "harness") {
+        connected += 1;
+      }
+    }
+    setText(
+      "${ID.projectListStatus}",
+      connected === 0 ? "no repository connected yet" : connected + " connected",
+    );
     if (payload.projects.length === 0) {
-      setText("${ID.projectListStatus}", "no repository connected yet");
       return;
     }
-    setText("${ID.projectListStatus}", payload.projects.length + " connected");
     if (page.projectId === null) {
       void selectProject(payload.projects[0]);
     } else {

@@ -54,22 +54,27 @@ function github(scenario: HarnessScenario) {
   return CONNECTED_GITHUB;
 }
 
+/**
+ * The sidebar list, in the shape and the order the Supervisor sends it: the connected repositories
+ * first, then the harness entry, which carries no repository URL because it is not a connection.
+ */
 export function projectsPayload(scenario: HarnessScenario) {
   return {
     ok: true,
     projects: [
       {
+        kind: "repository",
         id: HARNESS_PROJECT_ID,
         displayName: "hello-world",
         repositoryUrl: "https://github.com/octocat/hello-world",
-        connectedAt: 1_759_000_000_000,
       },
       {
+        kind: "repository",
         id: "octocat-spoon-knife",
         displayName: "spoon-knife",
         repositoryUrl: "https://github.com/octocat/spoon-knife",
-        connectedAt: 1_759_100_000_000,
       },
+      { kind: "harness", id: "harness", displayName: "harness" },
     ],
     github: github(scenario),
   };

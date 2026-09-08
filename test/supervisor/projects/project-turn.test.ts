@@ -3,7 +3,8 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { sampleProjectOne, sampleProjectTwo } from "../../project-fixtures.js";
-import { projectDirectory } from "../../../src/workspace-layout.js";
+import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
+import { HARNESS_DIRECTORY, projectDirectory } from "../../../src/workspace-layout.js";
 import { calls, says } from "../../facet/generation-0/facet-turn-helpers.js";
 import {
   completedTurn,
@@ -11,6 +12,7 @@ import {
   otherTenantWorkspaceName,
   projectWorkspaces,
   turnFor,
+  turnRecordingProvisioning,
   turnWithNothingServing,
   workspaceName,
 } from "./project-turn-helpers.js";
@@ -118,6 +120,63 @@ test("selecting another project selects another directory, not another workspace
     await workspaces.requestedNames(),
     "two projects of one tenant must share one workspace (ADR-0038)",
   ).toEqual([workspaceName]);
+});
+
+test("a turn on the harness entry runs in the harness checkout", async () => {
+  const workspaces = await projectWorkspaces();
+  const facet = await facetRunning([
+    calls("write", { path: "notes.txt", content: "the agent edited its own harness" }),
+    says("Wrote it."),
+  ]);
+
+  const frames = await completedTurn(workspaces, facet, HARNESS_PROJECT_ID);
+
+  // Selecting the harness is a working-directory selection and nothing else: the same capability,
+  // in the same one workspace, with the relative path resolved against `/workspace/harness`.
+  expect(frames.at(-1)).toMatchObject({ kind: "completed" });
+  expect(await workspaces.fileText(workspaceName, `${HARNESS_DIRECTORY}/notes.txt`)).toBe(
+    "the agent edited its own harness",
+  );
+  expect(
+    await workspaces.fileText(workspaceName, `${projectDirectory(projectOne.id)}/notes.txt`),
+    "the harness entry is not one of the project directories",
+  ).toBeNull();
+  expect(await workspaces.requestedNames()).toEqual([workspaceName]);
+});
+
+test("the harness entry needs no clone, and a repository still gets one", async () => {
+  const workspaces = await projectWorkspaces();
+  const harnessFacet = await facetRunning([says("Nothing to do.")]);
+  const projectFacet = await facetRunning([says("Nothing to do.")]);
+
+  const harness = await turnRecordingProvisioning(workspaces, harnessFacet, HARNESS_PROJECT_ID);
+  const project = await turnRecordingProvisioning(workspaces, projectFacet, projectOne.id);
+
+  // The harness checkout is already in the workspace and has no repository URL to reconcile
+  // against, so selecting it must not reach the provisioning path at all.
+  expect(harness.start).toMatchObject({ ok: true });
+  expect(harness.provisioned).toEqual([]);
+  expect(project.start).toMatchObject({ ok: true });
+  expect(project.provisioned).toEqual([projectOne.id]);
+});
+
+test("a turn on the harness entry cannot address anything outside the workspace root", async () => {
+  const workspaces = await projectWorkspaces();
+  const facet = await facetRunning([
+    calls("read", { path: "../../etc/passwd" }),
+    says("Tried it."),
+  ]);
+
+  const frames = await completedTurn(workspaces, facet, HARNESS_PROJECT_ID);
+
+  // The message names the guard, so this cannot pass merely because the file is absent from the
+  // stand-in: the read was refused for escaping `/workspace`, one level above the harness checkout.
+  expect(toolResultFrame(frames)).toMatchObject({
+    kind: "tool-result",
+    toolName: "read",
+    isError: true,
+    content: "path escapes /workspace: ../../etc/passwd",
+  });
 });
 
 test("a turn may read a sibling repository, because the workspace is one machine", async () => {

@@ -1,4 +1,5 @@
 import { parseProjectCatalog, type Project, type ProjectCatalog } from "../src/project-catalog.js";
+import { selectableCatalog, type SelectableCatalog } from "../src/selectable-projects.js";
 
 /**
  * A tenant that has connected two repositories, for the tests that need projects to exist.
@@ -27,3 +28,9 @@ if (parsed === undefined || parsed[0] === undefined || parsed[1] === undefined) 
 export const sampleCatalog: ProjectCatalog = parsed;
 export const sampleProjectOne: Project = parsed[0];
 export const sampleProjectTwo: Project = parsed[1];
+
+/**
+ * The same tenant as the sidebar and the turn path see it: the two connected repositories and the
+ * harness entry, which is there without anyone connecting it.
+ */
+export const sampleSelectableCatalog: SelectableCatalog = selectableCatalog(sampleCatalog);
