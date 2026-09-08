@@ -1,3 +1,4 @@
+// oxlint-disable max-lines-per-function -- The frame list is one readable script of a turn; splitting it would scatter the sequence a reader needs to follow.
 import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames.js";
 import type { HarnessScenario } from "./fixtures.mjs";
 
