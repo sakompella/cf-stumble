@@ -37,6 +37,12 @@ export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
  * Where a build extracts a labeled commit. It is a sibling of the repositories, so a build's own
  * `rm -rf` can never name the harness checkout or a project clone: every path a build writes is
  * `${BUILD_SCRATCH_ROOT}/<commit>` and a commit is forty hexadecimal characters.
+ *
+ * It has to be inside the workspace. A build tried the container's own `/tmp` once, to keep fifty
+ * thousand transient `node_modules` files out of the Durable Object storage the workspace lives in,
+ * and the build step died with "spawn failed: no such path": what one command writes outside the
+ * workspace is not there for the next one. The workspace is the only filesystem the steps of a
+ * build share.
  */
 export const BUILD_SCRATCH_ROOT = `${WORKSPACE_ROOT}/.builds`;
 
