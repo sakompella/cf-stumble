@@ -128,7 +128,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage);
-    this.workspaceName = tenantWorkspaceName(ctx.id.name ?? ctx.id.toString());
+    const supervisorName = ctx.id.name;
+    if (supervisorName === undefined) {
+      // A Supervisor reached by raw id has no verified tenant behind it, and its one workspace is
+      // named from this object's name. Falling back to the id would mint a valid workspace name
+      // for a request that never proved whose workspace it is.
+      throw new Error("a Supervisor must be reached by name, not by id");
+    }
+    this.workspaceName = tenantWorkspaceName(supervisorName);
     this.artifacts = HarnessArtifacts.forWorkspace(
       env.MODULE_MAPS,
       env.WORKSPACE_HOST,

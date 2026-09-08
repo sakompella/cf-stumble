@@ -9,15 +9,10 @@ export { WorkspaceProxy } from "@cloudflare/computer";
 export { ModelRoute } from "./model-route.js";
 
 /**
- * What the boundary answers a refused request. A request that names a tenant is malformed rather
- * than unauthenticated: cf-stumble takes the tenant from the verified token, so there is no
- * credential that would make such a request servable. A missing or unusable Access configuration
- * is this Worker's own fault and says nothing about the caller.
+ * What the boundary answers a refused request. A missing or unusable Access configuration is this
+ * Worker's own fault and says nothing about the caller, so it answers 500 rather than 401.
  */
 function refusal(reason: Exclude<AccessRequestResult, { ok: true }>["reason"]): Response {
-  if (reason === "caller-supplied-tenant") {
-    return new Response("Bad Request", { status: 400 });
-  }
   return new Response("Unauthorized", { status: reason === "invalid-configuration" ? 500 : 401 });
 }
 

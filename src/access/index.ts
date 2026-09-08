@@ -51,34 +51,8 @@ export type AccessRequestResult =
   | { readonly ok: true; readonly supervisorName: string; readonly scope: VerifiedAccessScope }
   | {
       readonly ok: false;
-      readonly reason:
-        | AccessVerificationReason
-        | "invalid-configuration"
-        | "not-owner"
-        | "caller-supplied-tenant";
+      readonly reason: AccessVerificationReason | "invalid-configuration" | "not-owner";
     };
-
-/**
- * The names a request would use to try to select a tenant of its own. cf-stumble takes the tenant
- * from the verified token and from nothing else, so a request that carries one of these is refused
- * rather than served with the field ignored: ignoring it would leave a caller unable to tell
- * whether cf-stumble had honoured it.
- */
-const TENANT_FIELDS = ["tenant", "identity", "audience", "workspace", "supervisor"];
-
-const TENANT_HEADERS = TENANT_FIELDS.map((field) => `x-cf-stumble-${field}`);
-
-/**
- * Runs before the token is even parsed, so no verified identity, Supervisor name, workspace name,
- * or capability exists at the moment a tenant-naming request is refused.
- */
-function suppliesTenantField(request: Request): boolean {
-  const parameters = new URL(request.url).searchParams;
-  return (
-    TENANT_FIELDS.some((field) => parameters.has(field)) ||
-    TENANT_HEADERS.some((header) => request.headers.has(header))
-  );
-}
 
 // A missing, empty, or whitespace-only secret is indistinguishable from misconfiguration: this
 // Worker has exactly one owner, and there is no safe default identity to fall back to.
@@ -221,9 +195,9 @@ async function admitted(
 /**
  * Turn one request into the verified tenant it may act as, or into the reason it may not.
  *
- * Three kinds of request are refused here, before anything is named: one that presents no usable
- * credential, one whose verified identity is not the configured owner, and one that tries to name
- * a tenant of its own. The owner check runs on a verified identity but strictly before a Supervisor
+ * Two kinds of request are refused here, before anything is named: one that presents no usable
+ * credential, and one whose verified identity is not the configured owner. The owner check runs on
+ * a verified identity but strictly before a Supervisor
  * name is derived, so a non-owner never causes a Durable Object, a workspace, or a capability to
  * exist. This Worker has exactly one owner (goal criterion 2) and no default identity to fall back
  * on, so a missing owner subject is a configuration failure rather than an open door.
@@ -235,8 +209,6 @@ export async function authenticateAccessRequest(
   webCrypto: Crypto = crypto,
   fetcher: AccessFetch = fetch,
 ): Promise<AccessRequestResult> {
-  if (suppliesTenantField(request)) return { ok: false, reason: "caller-supplied-tenant" };
-
   // An absent credential and an unusable one are the same failure: no verified identity.
   const token = presentedAccessToken(request);
   if (token === undefined) {
