@@ -56,7 +56,11 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     let output: CommandOutput;
     try {
       output = await this.workspace.runCommand(step.source, step.cwd);
-    } catch {
+    } catch (error) {
+      // `build-workspace-unavailable` says nothing about which of the workspace, the container or
+      // the connection to them gave way, and each of those failed at least once during this
+      // project's deployed builds.
+      console.error(`harness build step ${step.name} could not run`, String(error));
       return Result.err({ code: "build-workspace-unavailable", harnessCommit });
     }
 
