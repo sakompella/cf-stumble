@@ -129,3 +129,20 @@ amber rows are the repository's own warning budget (`--max-warnings=0`) refusing
 plus one file that missed the formatter. Splitting those two functions is a small mechanical change,
 and it is deliberately left for review rather than done silently, because it reshapes code you are
 about to read.
+
+
+## 8. Final merge sweep
+
+`main` is `e769586` on origin. Gate green: 118 test files, 852 tests.
+
+| branch | outcome | tests after merge |
+|---|---|---|
+| work/T15 | merged `60f3e3f` | 842 |
+| work/T16 | merged `e08d4f3` | 842 |
+| work/T19 | merged `aff5e4e` | 852 |
+| work/T18 | merged `0934ae5` | 852 |
+| work/T20 | merged `e73bc6c` | 852 |
+| work/T17 | **paused, unmerged** | lint gate refuses the new process adapter; the design is settled and the code is written, only a style pass remains |
+| work/T21 | dropped | produced no code |
+
+Every branch is on origin. The full record is tracked at `docs/agents/design/v0-work-record.md`.
