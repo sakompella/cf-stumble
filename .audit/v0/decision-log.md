@@ -1078,3 +1078,18 @@ the module-map store already use (`a50b14a`).
 
 The lesson is the logging, not the transaction. A typed failure code with no cause attached costs
 one deployed run per bug.
+
+## D84 — what the deploy button question actually reduces to
+
+The button does three things: it forks the repository into the user's GitHub, it drives
+Cloudflare's provisioning screen from `wrangler.jsonc`, and it sets up Workers Builds. Only the
+middle one is about this repository, and the handoff said so: the supported-resource list is
+documentation, not evidence that this config survives the flow.
+
+That part is now evidence. A second Worker deployed from the tracked configuration, with no Access
+variables, provisioned both Durable Object namespaces with their SQLite migrations, the container
+application, and every binding, and then failed closed with 401 and 500 as the guide promises. It
+was deleted afterwards. The remaining gap is Cloudflare's own screen, which needs an interactive
+login, and the fork itself, which needs a second GitHub account.
+
+Recorded so nobody re-opens the question as if the repository were the unknown part.

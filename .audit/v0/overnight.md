@@ -184,13 +184,16 @@ stated reason.
       The first authenticated request provisioned the workspace and cloned the harness repository,
       and the first submission labeled generation 0 through the ordinary path with no special-case
       machinery. Everything above happened on that instance.
-- [ ] I6 `blocked: the button needs a Cloudflare login in a browser and a second clean account,
-      neither of which this run has. What it would have hit is already known and documented: the
-      container application is outside the button's provisioning list, and Access has to be
-      configured by hand.`
-
-### J. Housekeeping
-
+- [~] I6 Prove the button flow end to end against a clean account. `blocked: Cloudflare's fork and
+      provisioning screen needs an interactive browser login and a second account, so no agent can
+      finish it.` Everything either side of that screen is now proved. Before it: the repository is
+      public, the button image serves, and the button URL reaches Cloudflare's
+      `workers-and-pages/create/deploy-to-workers` flow carrying this repository. What the screen
+      consumes: the tracked `wrangler.jsonc` provisioned a brand-new Worker with both Durable
+      Object namespaces and their migrations, the container application, and every binding, and
+      that Worker failed closed with no configuration exactly as the guide says (section 7 of
+      `.audit/v0/evidence/deployed-generation-loop.md`). The probe Worker was deleted afterwards.
+      After it: a fresh instance with empty storage runs the whole demo path.
 - [x] J1 `work/T17` dropped, per decision 13. It is a `wip(...)` commit from a worker that was
       killed, based on a `main` from before ten merges, and it changes `vitest.config.ts` to add a
       Node test pool. Not green as it stands, so decision 13 says drop. The gap it aimed at is

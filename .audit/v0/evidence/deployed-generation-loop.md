@@ -194,3 +194,37 @@ submission fails at its first step:
 16.5 s, and the active generation did not move. So the variable a fork has to change is honored by
 the deployed build plan, and a wrong value fails at the clone rather than quietly building this
 repository instead.
+
+## 7. The tracked configuration provisions from nothing
+
+The one thing the deploy button does that this run cannot drive is Cloudflare's own fork and
+provisioning screen, which needs a browser login. What that screen consumes is
+`wrangler.jsonc`, and the handoff's worry was whether **this repository's** configuration survives
+it. That part is testable, and it does.
+
+A second Worker was deployed from the tracked configuration with three deviations only: a different
+name, an absolute `main`, and the container image named by the registry digest instead of the
+Dockerfile, which is what Workers Builds produces from that same Dockerfile. No Access variables at
+all, so the state is a fresh account before the user has configured anything.
+
+Cloudflare created, from nothing:
+
+```
+Worker            cf-stumble-buttonprobe, with its workers.dev route
+Durable Objects   SUPERVISOR and WORKSPACE_HOST, new namespace ids, SQLite migrations applied
+Container app     cf-stumble-buttonprobe-workspacehost (a0362fc9-...), instance_type basic
+Bindings          ai AI, worker_loader LOADER, plain_text HARNESS_REPOSITORY_URL,
+                  durable_object_namespace SUPERVISOR, durable_object_namespace WORKSPACE_HOST
+```
+
+And with nothing configured it failed closed, exactly as `docs/deploy.md` tells the reader it will:
+
+```
+GET /            no credential      401  Unauthorized
+GET /api/status  no credential      401  Unauthorized
+GET /            with a credential  500  Unauthorized   (invalid-configuration)
+```
+
+The probe Worker and its container application were then deleted, so the account is back to one
+Worker and one container application. What remains unproved about the button is Cloudflare's fork
+and provisioning screen itself, which needs an interactive login.
