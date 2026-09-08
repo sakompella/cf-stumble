@@ -9,7 +9,8 @@ import { HARNESS_DIRECTORY } from "../workspace-layout.js";
  *
  * The list holds two kinds of entry. A connected repository shows its repository URL; the harness
  * entry shows the checkout it selects and is not counted as a connection, because there is nothing
- * to authorize and nothing to clone for it.
+ * to authorize and nothing to clone for it. An empty catalog selects nothing, so the conversation
+ * says to select a project rather than staying blank.
  *
  * Selection is also a boundary. It bumps `page.selection` and stops any turn still streaming, so
  * frames belonging to the project a reader just left cannot reach the conversation they switched
@@ -115,6 +116,7 @@ export const OWNER_PAGE_SCRIPT_PROJECTS = `
       connected === 0 ? "no repository connected yet" : connected + " connected",
     );
     if (payload.projects.length === 0) {
+      setText("${ID.conversationState}", "select a project first");
       return;
     }
     if (page.projectId === null) {

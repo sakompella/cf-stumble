@@ -1,27 +1,43 @@
+import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
+import type { JsonValue } from "./json.mjs";
+
 /**
- * The recorded answers the harness server gives, and the turn frames it streams.
+ * The worlds the harness server can serve, and the recorded answers that are the same in all of
+ * them.
  *
  * Every payload here copies the field names of the real route it stands in for, so a page that
  * reads a field the Supervisor does not send fails against this server too. The values are typed
  * as plain JSON rather than as the Supervisor's own types because those carry branded ids
  * (`ProjectId`, `HarnessCommit`, `GenerationLabel`) that only a parser can mint; a fixture that
- * asserted its way into a brand would prove nothing about the wire shape. The turn frames are the
- * exception: `ProjectTurnFrame` is plain data, so it is imported and the compiler holds the
- * harness to the real frame vocabulary.
+ * asserted its way into a brand would prove nothing about the wire shape.
+ *
+ * A scenario names what cannot be reached by driving the page: which turn the Supervisor streams,
+ * which GitHub state the workspace is in, whether the catalog is empty, and whether the status
+ * route answers at all. Everything else — the thread, the generation ledger, the connected
+ * repositories — is state the server keeps and a case changes by acting on the page.
  */
 
 export const HARNESS_SCENARIOS = [
   "ready",
-  "github-disconnected",
-  "github-awaiting-authorization",
+  "ready-paused",
+  "no-terminal-frame",
+  "no-diff",
+  "diff-unavailable",
+  "markup-output",
+  "long-line",
+  "tool-failed",
+  "project-switch",
   "turn-failed",
   "save-failed",
   "stream-invalid",
-  "diff-unavailable",
   "cancelled",
   "timed-out",
   "turn-conflict",
   "no-active-generation",
+  "no-projects",
+  "github-disconnected",
+  "github-awaiting-authorization",
+  "status-problem",
 ] as const;
 
 export type HarnessScenario = (typeof HARNESS_SCENARIOS)[number];
@@ -30,7 +46,41 @@ export function parseScenario(value: string | null | undefined): HarnessScenario
   return HARNESS_SCENARIOS.find((scenario) => scenario === value);
 }
 
+/** The connected repository, and the harness checkout. The two working directories v0 allows. */
 export const HARNESS_PROJECT_ID = "octocat-hello-world";
+export const HARNESS_PROJECT_URL = "https://github.com/octocat/hello-world";
+export const HARNESS_SELF_PROJECT_ID = "harness";
+export const CONNECTED_PROJECT_ID = "octocat-new-repo";
+export const CONNECTED_PROJECT_URL = "https://github.com/octocat/new-repo";
+export const HARNESS_LOCATION = HARNESS_DIRECTORY;
+
+export type ProjectEntry = Readonly<{
+  kind: "repository" | "harness";
+  id: string;
+  displayName: string;
+  repositoryUrl?: string;
+}>;
+
+export const BASELINE_PROJECTS: readonly ProjectEntry[] = [
+  {
+    kind: "repository",
+    id: HARNESS_PROJECT_ID,
+    displayName: "hello-world",
+    repositoryUrl: HARNESS_PROJECT_URL,
+  },
+  { kind: "harness", id: HARNESS_SELF_PROJECT_ID, displayName: "harness" },
+];
+
+export const NEW_PROJECT: ProjectEntry = {
+  kind: "repository",
+  id: CONNECTED_PROJECT_ID,
+  displayName: "new-repo",
+  repositoryUrl: CONNECTED_PROJECT_URL,
+};
+
+export function initialProjects(scenario: HarnessScenario): readonly ProjectEntry[] {
+  return scenario === "no-projects" ? [] : BASELINE_PROJECTS;
+}
 
 const CONNECTED_GITHUB = {
   state: "connected",
@@ -38,9 +88,9 @@ const CONNECTED_GITHUB = {
   source: "owner-authorization",
 } as const;
 
-function github(scenario: HarnessScenario) {
+export function github(scenario: HarnessScenario): JsonValue {
   if (scenario === "github-disconnected") {
-    return { state: "disconnected" } as const;
+    return { state: "disconnected" };
   }
   if (scenario === "github-awaiting-authorization") {
     return {
@@ -49,137 +99,48 @@ function github(scenario: HarnessScenario) {
       userCode: "WDJB-MJHT",
       expiresAt: 1_760_000_900_000,
       intervalSeconds: 5,
-    } as const;
+    };
   }
   return CONNECTED_GITHUB;
 }
 
-/**
- * The sidebar list, in the shape and the order the Supervisor sends it: the connected repositories
- * first, then the harness entry, which carries no repository URL because it is not a connection.
- */
-export function projectsPayload(scenario: HarnessScenario) {
+function projectJson(project: ProjectEntry): JsonValue {
+  return project.repositoryUrl === undefined
+    ? { kind: project.kind, id: project.id, displayName: project.displayName }
+    : {
+        kind: project.kind,
+        id: project.id,
+        displayName: project.displayName,
+        repositoryUrl: project.repositoryUrl,
+      };
+}
+
+/** The sidebar list, in the shape and the order the Supervisor sends it. */
+export function projectsPayload(
+  scenario: HarnessScenario,
+  projects: readonly ProjectEntry[],
+): JsonValue {
   return {
     ok: true,
-    projects: [
-      {
-        kind: "repository",
-        id: HARNESS_PROJECT_ID,
-        displayName: "hello-world",
-        repositoryUrl: "https://github.com/octocat/hello-world",
-      },
-      {
-        kind: "repository",
-        id: "octocat-spoon-knife",
-        displayName: "spoon-knife",
-        repositoryUrl: "https://github.com/octocat/spoon-knife",
-      },
-      { kind: "harness", id: "harness", displayName: "harness" },
-    ],
+    projects: projects.map((project) => projectJson(project)),
     github: github(scenario),
   };
 }
 
-export function statusPayload() {
-  return {
-    activeGeneration: {
-      generation: { label: 1, harnessCommit: "abc123", status: "ready" },
-      epoch: 3,
-      activationId: "activation-3",
-    },
-  };
-}
-
-/**
- * The saved thread, built from the count the server is holding.
- *
- * The conversation is the string form the thread row holds — a JSON array of stored Pi messages —
- * and the first message names the project, so a check can tell one project's saved conversation
- * from another's instead of trusting that a re-render happened.
- */
-export type ThreadState = Readonly<{ revision: number; messageCount: number }>;
-
-export const INITIAL_THREAD: ThreadState = { revision: 3, messageCount: 2 };
-
-function savedMessage(projectId: string, index: number) {
-  const role = index % 2 === 0 ? "user" : "assistant";
-  const text =
-    index === 0
-      ? `Read the README of ${projectId} and say what it is.`
-      : role === "user"
-        ? `Ask ${projectId} something else (message ${index + 1}).`
-        : `Answer ${index + 1} about ${projectId}.`;
-  return { role, content: [{ type: "text", text }] };
-}
-
-export function threadPayload(projectId: string, thread: ThreadState) {
-  const messages = Array.from({ length: thread.messageCount }, (_unused, index) =>
-    savedMessage(projectId, index),
-  );
-  return {
-    ok: true,
-    thread: {
-      projectId,
-      conversation: JSON.stringify(messages),
-      messageCount: thread.messageCount,
-      revision: thread.revision,
-      turnActive: false,
-      turnDeadlineAt: null,
-    },
-  };
-}
-
-export function submitPayload() {
-  return {
-    ok: true,
-    outcome: {
-      kind: "candidate-submitted",
-      generation: { label: 2, harnessCommit: "def456", status: "ready" },
-      epoch: 3,
-    },
-    preparation: {
-      ok: true,
-      report: {
-        generation: { label: 2, harnessCommit: "def456", status: "ready" },
-        effect: "recorded",
-        stage: "ready",
-        reason: "startup check answered",
-        status: 200,
-      },
-    },
-  };
-}
-
-export function controlPayload(kind: "activated" | "rolled-back", label: number) {
-  return {
-    ok: true,
-    outcome: {
-      kind,
-      generation: {
-        label,
-        harnessCommit: kind === "activated" ? "def456" : "abc123",
-        status: "ready",
-      },
-      epoch: 4,
-      effect: kind,
-    },
-  };
-}
-
-export function connectPayload(scenario: HarnessScenario) {
+export function connectPayload(scenario: HarnessScenario, alreadyConnected: boolean): JsonValue {
   return {
     ok: true,
     project: {
-      id: "octocat-new-repo",
-      displayName: "new-repo",
-      repositoryUrl: "https://github.com/octocat/new-repo",
+      id: NEW_PROJECT.id,
+      displayName: NEW_PROJECT.displayName,
+      repositoryUrl: CONNECTED_PROJECT_URL,
       connectedAt: 1_760_000_000_000,
     },
-    alreadyConnected: false,
+    alreadyConnected,
     github: github(scenario),
   };
 }
 
-export function authorizationPayload(scenario: HarnessScenario) {
+export function authorizationPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario) };
 }

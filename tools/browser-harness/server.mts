@@ -1,20 +1,26 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { INITIAL_THREAD, parseScenario, type HarnessScenario } from "./fixtures.mjs";
-import { parseJsonRecordText } from "./json.mjs";
+import { parseScenario, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
+import type { GenerationRecord, GenerationState } from "./fixtures-generation.mjs";
+import type { ThreadState } from "./fixtures-thread.mjs";
+import { parseJsonRecordText, type JsonValue } from "./json.mjs";
 import {
   acceptsHtml,
   sendJson,
   sendOwnerPage,
   serveJsonRoute,
-  serveScenarioSwitch,
   serveThreadRoutes,
+} from "./server-routes.mjs";
+import {
+  initialState,
+  resetState,
+  threadOf,
+  waitUntil,
   type RecordedRequest,
   type ScenarioState,
-} from "./server-routes.mjs";
-import { turnFrames } from "./turn-fixture.mjs";
+} from "./server-state.mjs";
+import { serveTurn } from "./server-turn.mjs";
 
 /**
  * A local stand-in for the Worker, serving the real owner page.
@@ -24,18 +30,36 @@ import { turnFrames } from "./turn-fixture.mjs";
  * a paid model API and a real Cloudflare Access check needs a deployed environment. Everything the
  * page can observe about its own environment is kept identical: the same headers, the same policy
  * with a per-response nonce, and a turn that arrives as newline-delimited frames over time.
+ *
+ * The controls a case uses are functions on {@link HarnessServer} rather than test-only HTTP
+ * routes, because a case and this server share one Node process. The two routes under `/__harness`
+ * exist for a developer driving this server by hand with curl.
  */
-
-/** How long each frame waits behind the previous one. Slow enough to observe partial rendering. */
-const FRAME_INTERVAL_MS = 120;
 
 const TURN_PATH = /^\/api\/projects\/([^/]+)\/turn$/u;
 
+export type GenerationPatch = Readonly<{
+  activeLabel?: number;
+  epoch?: number;
+  generations?: readonly GenerationRecord[];
+}>;
+
 export type HarnessServer = Readonly<{
   url: string;
-  setScenario: (scenario: HarnessScenario) => void;
   scenario: () => HarnessScenario;
+  setScenario: (scenario: HarnessScenario) => void;
   requests: () => readonly RecordedRequest[];
+  clearRequests: () => void;
+  barrierReached: () => boolean;
+  waitForBarrier: (timeoutMs?: number) => Promise<void>;
+  release: () => void;
+  responseClosed: () => boolean;
+  waitForResponseClosed: (timeoutMs?: number) => Promise<void>;
+  thread: (projectId: string) => ThreadState;
+  projects: () => readonly ProjectEntry[];
+  generation: () => GenerationState;
+  setGeneration: (patch: GenerationPatch) => void;
+  reset: (scenario?: HarnessScenario) => void;
   close: () => Promise<void>;
 }>;
 
@@ -60,53 +84,26 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-/**
- * The turn, one frame at a time.
- *
- * Each frame is written and then awaited separately, so the response really is incremental: a page
- * that only paints when the body ends fails the streaming assertion instead of passing it by
- * accident. A browser that goes away mid-stream ends the loop, and the thread does not advance —
- * which is what makes the late-frame check meaningful, because an abandoned turn saves nothing.
- */
-async function streamTurn(res: ServerResponse, state: ScenarioState): Promise<void> {
-  res.writeHead(200, {
-    "content-type": "application/x-ndjson; charset=utf-8",
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-  });
-  for (const frame of turnFrames(state.current)) {
-    await sleep(FRAME_INTERVAL_MS);
-    if (res.writableEnded || res.destroyed) {
-      return;
-    }
-    res.write(`${JSON.stringify(frame)}\n`);
-    if (frame.kind === "saved") {
-      state.thread = { revision: frame.revision, messageCount: frame.messageCount };
-    }
+function serveHarnessRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  state: ScenarioState,
+): number | undefined {
+  if (req.method === "GET" && url.pathname === "/__harness/requests") {
+    sendJson(res, 200, { ok: true, requests: [...state.requests] });
+    return 200;
   }
-  res.end();
-}
-
-/** The two refusals a turn can receive before any frame exists, as HTTP facts. */
-function turnRefusal(
-  scenario: HarnessScenario,
-): Readonly<{ status: number; code: string }> | undefined {
-  if (scenario === "turn-conflict") {
-    return { status: 409, code: "turn-conflict" };
+  if (req.method !== "POST" || url.pathname !== "/__harness/scenario") {
+    return undefined;
   }
-  if (scenario === "no-active-generation") {
-    return { status: 503, code: "no-active-generation" };
+  const requested = parseScenario(url.searchParams.get("name"));
+  if (requested !== undefined) {
+    state.scenario = requested;
   }
-  return undefined;
-}
-
-async function serveTurn(res: ServerResponse, state: ScenarioState): Promise<void> {
-  const refusal = turnRefusal(state.current);
-  if (refusal === undefined) {
-    await streamTurn(res, state);
-    return;
-  }
-  sendJson(res, refusal.status, { ok: false, problem: { code: refusal.code } });
+  const status = requested === undefined ? 400 : 200;
+  sendJson(res, status, { ok: requested !== undefined, scenario: state.scenario });
+  return status;
 }
 
 async function handle(
@@ -117,50 +114,86 @@ async function handle(
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const path = url.pathname;
   const body = await readBody(req);
-  state.requests.push({
-    method: req.method ?? "",
-    path,
-    body: parseJsonRecordText(body) ?? null,
-  });
+  const parsed: JsonValue = parseJsonRecordText(body) ?? null;
+  const record = { method: req.method ?? "", path, body: parsed, status: 0 };
+  state.requests.push(record);
 
-  if (req.method === "GET" && path === "/__harness/requests") {
-    sendJson(res, 200, { ok: true, requests: [...state.requests] });
+  const turn = TURN_PATH.exec(path)?.[1];
+  if (req.method === "POST" && turn !== undefined) {
+    await serveTurn(res, state, decodeURIComponent(turn), record);
+    return;
+  }
+  const harnessStatus = serveHarnessRoute(req, res, url, state);
+  if (harnessStatus !== undefined) {
+    record.status = harnessStatus;
     return;
   }
   if (req.method === "GET" && path === "/" && acceptsHtml(req.headers.accept)) {
+    record.status = 200;
     sendOwnerPage(res);
     return;
   }
   if (req.method === "GET" && path === "/favicon.ico") {
     // A browser asks for this on every navigation and the owner API does not serve it. Answering
     // 204 keeps that request out of the browser's error log, where it would hide a real 404.
+    record.status = 204;
     res.writeHead(204).end();
     return;
   }
-  if (req.method === "POST" && path === "/__harness/scenario") {
-    serveScenarioSwitch(res, url, state);
-    return;
-  }
-  if (serveJsonRoute(req, res, path, state) || serveThreadRoutes(req, res, path, state)) {
-    return;
-  }
-  if (req.method === "POST" && TURN_PATH.test(path)) {
-    await serveTurn(res, state);
-    return;
-  }
-  sendJson(res, 404, { ok: false, error: { code: "not-found" } });
+  const answer = serveJsonRoute(req, path, state, parsed) ?? serveThreadRoutes(req, path, state);
+  record.status = answer?.status ?? 404;
+  sendJson(res, record.status, answer?.payload ?? { ok: false, error: { code: "not-found" } });
 }
 
 function isAddressInfo(address: string | AddressInfo | null): address is AddressInfo {
   return address !== null && typeof address !== "string";
 }
 
-export function startHarnessServer(initialScenario?: HarnessScenario): Promise<HarnessServer> {
-  const state: ScenarioState = {
-    current: initialScenario ?? parseScenario(process.env.CF_STUMBLE_HARNESS_SCENARIO) ?? "ready",
-    thread: INITIAL_THREAD,
-    requests: [],
+function controls(state: ScenarioState, url: string, close: () => Promise<void>): HarnessServer {
+  return {
+    url,
+    scenario: () => state.scenario,
+    setScenario: (next) => {
+      state.scenario = next;
+    },
+    requests: () => state.requests.map((entry) => ({ ...entry })),
+    clearRequests: () => {
+      state.requests = [];
+    },
+    barrierReached: () => state.stream.barrierReached,
+    waitForBarrier: (timeoutMs = 20_000) =>
+      waitUntil(() => state.stream.barrierReached, timeoutMs, "the turn stream to reach its hold"),
+    release: () => {
+      state.stream.released = true;
+    },
+    responseClosed: () => state.stream.responseClosed,
+    waitForResponseClosed: (timeoutMs = 20_000) =>
+      waitUntil(
+        () => state.stream.responseClosed,
+        timeoutMs,
+        "the browser to close the turn response",
+      ),
+    thread: (projectId) => threadOf(state, projectId),
+    projects: () => [...state.projects],
+    generation: () => state.generation,
+    setGeneration: (patch) => {
+      state.generation = {
+        generations: patch.generations ?? state.generation.generations,
+        activeLabel: patch.activeLabel ?? state.generation.activeLabel,
+        epoch: patch.epoch ?? state.generation.epoch,
+      };
+    },
+    reset: (scenario) => {
+      resetState(state, scenario ?? state.scenario);
+    },
+    close,
   };
+}
+
+export function startHarnessServer(initialScenario?: HarnessScenario): Promise<HarnessServer> {
+  const state = initialState(
+    initialScenario ?? parseScenario(process.env.CF_STUMBLE_HARNESS_SCENARIO) ?? "ready",
+  );
 
   const server = createServer((req, res) => {
     void handle(req, res, state).catch((error: Error) => {
@@ -177,21 +210,14 @@ export function startHarnessServer(initialScenario?: HarnessScenario): Promise<H
         reject(new Error("the harness server did not report a TCP port"));
         return;
       }
-      started({
-        url: `http://127.0.0.1:${address.port}`,
-        setScenario: (next) => {
-          state.current = next;
-        },
-        scenario: () => state.current,
-        requests: () => [...state.requests],
-        close: () =>
-          new Promise((closed) => {
-            server.closeAllConnections();
-            server.close(() => {
-              closed();
-            });
-          }),
-      });
+      const close = (): Promise<void> =>
+        new Promise((closed) => {
+          server.closeAllConnections();
+          server.close(() => {
+            closed();
+          });
+        });
+      started(controls(state, `http://127.0.0.1:${address.port}`, close));
     });
   });
 }
