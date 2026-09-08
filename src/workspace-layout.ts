@@ -1,4 +1,5 @@
 import type { ProjectId } from "./project-catalog.js";
+import type { SelectableProject } from "./selectable-projects.js";
 
 /**
  * Where every repository lives inside the one Computer workspace a tenant owns (ADR-0038).
@@ -58,4 +59,16 @@ export function projectDirectory(projectId: ProjectId): string {
 /** One project's Git directory, named rather than assembled again at each call site. */
 export function projectGitDirectory(projectId: ProjectId): string {
   return `${projectDirectory(projectId)}/.git`;
+}
+
+/**
+ * Where a turn starts when the owner selects something in the sidebar.
+ *
+ * This is the whole of what selecting does (ADR-0038): the harness entry is the harness checkout,
+ * a connected repository is that repository's clone, and both are directories of the one workspace
+ * the tenant owns. Nothing else about the two selections differs, so this is the only function in
+ * the program that has to know they are two, and every caller works in the directory it returns.
+ */
+export function selectedWorkingDirectory(project: SelectableProject): string {
+  return project.kind === "harness" ? HARNESS_DIRECTORY : projectDirectory(project.id);
 }

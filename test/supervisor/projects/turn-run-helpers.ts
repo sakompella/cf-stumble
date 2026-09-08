@@ -10,7 +10,7 @@ import {
 } from "../../../src/supervisor/projects/index.js";
 import { ProjectThreads, type SerializedThread } from "../../../src/supervisor/threads/index.js";
 import { PROJECT_TURN_LEASE_MS } from "../../../src/supervisor/supervisor.js";
-import { sampleCatalog } from "../../project-fixtures.js";
+import { sampleSelectableCatalog } from "../../project-fixtures.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
 /**
@@ -179,7 +179,7 @@ interface TurnStores {
 
 function turnStores(state: DurableObjectState): TurnStores {
   return {
-    threads: new ProjectThreads(state.storage, () => sampleCatalog),
+    threads: new ProjectThreads(state.storage, () => sampleSelectableCatalog),
     generations: new Generations(state.storage),
   };
 }

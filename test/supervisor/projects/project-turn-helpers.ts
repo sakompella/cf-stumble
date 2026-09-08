@@ -1,7 +1,7 @@
 import { Result } from "better-result";
 import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
-import { sampleCatalog, sampleProjectOne } from "../../project-fixtures.js";
+import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
 import { readFrames } from "../../facet/generation-0/facet-turn-helpers.js";
 import { loadFixtureEntrypoint } from "../../loaded-fixture.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/facet-turn.js";
@@ -29,6 +29,39 @@ const OPENING = { prompt: "do the work", state: null };
  * already. Provisioning is exercised by the provisioning tests; here it only has to not refuse.
  */
 const provisioned = (): Promise<boolean> => Promise.resolve(true);
+
+/** One turn, and the projects whose clone the start path reconciled before running it. */
+export interface RecordedTurn {
+  readonly start: ProjectTurnStart;
+  readonly provisioned: readonly string[];
+}
+
+/**
+ * Run a turn and watch the provisioning step. A connected repository is reconciled before its turn
+ * starts; the harness checkout has no repository URL to reconcile against, so a harness turn must
+ * leave this record empty.
+ */
+export async function turnRecordingProvisioning(
+  workspaces: ProjectWorkspaces,
+  facet: ProjectTurnFacet,
+  projectId: string,
+): Promise<RecordedTurn> {
+  const reconciled: string[] = [];
+  const start = await streamProjectTurn({
+    namespace: workspaces.namespace,
+    mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
+    provision: (project) => {
+      reconciled.push(project.id);
+      return Promise.resolve(true);
+    },
+    catalog: sampleSelectableCatalog,
+    workspaceName,
+    projectId,
+    request: OPENING,
+    signal: runningTurn(),
+  });
+  return { start, provisioned: reconciled };
+}
 
 /** The signal of a turn that is still within its bound, which is what an ordinary start carries. */
 export function runningTurn(): AbortSignal {
@@ -77,7 +110,7 @@ export function turnFor(
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
     provision: provisioned,
-    catalog: sampleCatalog,
+    catalog: sampleSelectableCatalog,
     workspaceName: tenantWorkspace,
     projectId,
     request: OPENING,
@@ -91,7 +124,7 @@ export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<P
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.err({ code: "no-active-generation" })),
     provision: provisioned,
-    catalog: sampleCatalog,
+    catalog: sampleSelectableCatalog,
     workspaceName,
     projectId: sampleProjectOne.id,
     request: OPENING,

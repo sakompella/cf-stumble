@@ -50,7 +50,7 @@ test("lists the tenant's projects and its connection status", async () => {
     supervisor({
       listProjects: () =>
         Promise.resolve({
-          projects: [{ ...connectedProject, connectedAt: 1 }],
+          projects: [{ kind: "repository", ...connectedProject }],
           github: { state: "connected", login: "octocat", source: "device-authorization" },
         }),
     }),
@@ -61,7 +61,7 @@ test("lists the tenant's projects and its connection status", async () => {
   const body = await response.text();
   expect(JSON.parse(body)).toEqual({
     ok: true,
-    projects: [{ ...connectedProject, connectedAt: 1 }],
+    projects: [{ kind: "repository", ...connectedProject }],
     github: { state: "connected", login: "octocat", source: "device-authorization" },
   });
   expect(body).not.toContain(FAKE_TOKEN);

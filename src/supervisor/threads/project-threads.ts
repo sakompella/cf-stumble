@@ -10,11 +10,10 @@ import {
   type ThreadResult,
 } from "./thread.js";
 import {
-  resolveProject,
-  EMPTY_PROJECT_CATALOG,
-  type Project,
-  type ProjectCatalog,
-} from "../../project-catalog.js";
+  resolveSelectableProject,
+  type SelectableCatalog,
+  type SelectableProject,
+} from "../../selectable-projects.js";
 
 /**
  * Where the tenant's catalog comes from, read at each call rather than captured once.
@@ -24,10 +23,10 @@ import {
  * request. A catalog captured in the constructor would answer `unknown-project-id` for it until
  * the object was evicted.
  */
-export type ProjectCatalogSource = () => ProjectCatalog;
+export type ProjectCatalogSource = () => SelectableCatalog;
 
 type ResolvedProject =
-  | Readonly<{ ok: true; project: Project }>
+  | Readonly<{ ok: true; project: SelectableProject }>
   | Readonly<{
       ok: false;
       problem: Readonly<{ code: "invalid-project-id" | "unknown-project-id" }>;
@@ -35,17 +34,19 @@ type ResolvedProject =
 
 /**
  * The thread surface a client reaches, and the only place a client-supplied project id turns into
- * a project.
+ * a selectable project.
  *
- * The catalog resolves the id first, and everything past that point works in `Project` values, so
- * the row a request touches is named by the server. A client can select one of the tenant's
- * projects; it cannot name a thread.
+ * The catalog resolves the id first, and everything past that point works in `SelectableProject`
+ * values, so the row a request touches is named by the server. A client can select one of the
+ * tenant's repositories or the harness entry; it cannot name a thread. The harness gets its own
+ * row for the same reason every repository does: one current conversation per thing you can be
+ * working in, and a fresh thread on one leaves the others alone.
  */
 export class ProjectThreads {
   private readonly store: ThreadStore;
   private readonly catalog: ProjectCatalogSource;
 
-  constructor(storage: DurableObjectStorage, catalog: ProjectCatalogSource = emptyCatalog) {
+  constructor(storage: DurableObjectStorage, catalog: ProjectCatalogSource) {
     this.store = new ThreadStore(storage);
     this.catalog = catalog;
   }
@@ -108,16 +109,11 @@ export class ProjectThreads {
   }
 
   private resolve(projectId: unknown): ResolvedProject {
-    const resolution = resolveProject(projectId, this.catalog());
+    const resolution = resolveSelectableProject(projectId, this.catalog());
     return resolution.ok
       ? { ok: true, project: resolution.project }
       : { ok: false, problem: { code: resolution.reason } };
   }
-}
-
-/** A Supervisor built without a catalog has no projects, so every id is unknown rather than a guess. */
-function emptyCatalog(): ProjectCatalog {
-  return EMPTY_PROJECT_CATALOG;
 }
 
 function serialized(result: ThreadResult): ProjectThreadResult {

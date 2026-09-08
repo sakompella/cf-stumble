@@ -13,6 +13,7 @@
 
 import { expect, test } from "vitest";
 import { ownerPageHtml, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "../../src/page/index.js";
+import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 
 /** The script the browser actually receives, taken out of the one inline `<script>` element. */
 function inlinePageScript(html: string): string {
@@ -72,6 +73,18 @@ test("a project is chosen from the tenant's catalog, never typed in", () => {
   expect(html).not.toContain("project-one");
   expect(html).not.toContain('id="project-id-input"');
   expect(html).not.toContain("input-project");
+});
+
+test("the sidebar can show an entry that is a checkout rather than a connection", () => {
+  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+
+  // The harness entry arrives in the same list with `kind: "harness"` and no repository URL, so
+  // the sidebar has to name the checkout it selects and must not count it as a connection: a page
+  // that read `repositoryUrl` for every row would show the owner an empty line and "1 connected"
+  // on a deployment where nothing is connected.
+  expect(script).toContain(`"${HARNESS_DIRECTORY}"`);
+  expect(script).toContain('"harness"');
+  expect(script).toContain("no repository connected yet");
 });
 
 test("the streaming client reads the frames the turn route emits", () => {

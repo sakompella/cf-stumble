@@ -2,8 +2,9 @@ import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
 import { control, value } from "./markup-fields.js";
 
 /**
- * The left sidebar: which repositories are connected, whether the workspace's GitHub authorization
- * works, and how to connect another one.
+ * The left sidebar: what the owner can work in — the connected repositories and the harness
+ * checkout — whether the workspace's GitHub authorization works, and how to connect another
+ * repository.
  *
  * It collapses because a narrow window has room for one column, and the conversation is the column
  * that matters. The toggle is a button with `aria-expanded`, so the state a sighted reader sees is
@@ -14,7 +15,7 @@ import { control, value } from "./markup-fields.js";
  * without passing through the browser (ADR-0039).
  */
 export const OWNER_PAGE_SIDEBAR = `
-    <aside id="${ID.sidebar}" aria-label="Connected projects">
+    <aside id="${ID.sidebar}" aria-label="Projects">
       <div class="sidebar-head">
         <h2>Projects</h2>
         <button id="${ID.sidebarToggle}" type="button" aria-expanded="true" aria-controls="${ID.sidebar}">Hide</button>

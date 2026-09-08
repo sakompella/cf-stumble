@@ -10,6 +10,7 @@ import {
   type ProjectId,
   type PublicRepositoryUrl,
 } from "../../project-catalog.js";
+import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 
 /**
  * The repositories this tenant has connected, and the only place that list is decided.
@@ -138,6 +139,12 @@ export class ConnectedProjects {
     const id = repositoryUrl === undefined ? undefined : projectIdForRepository(repositoryUrl);
     if (repositoryUrl === undefined || id === undefined) {
       return { ok: false, problem: { code: "invalid-repository-url" } };
+    }
+    if (id === HARNESS_PROJECT_ID) {
+      // The harness entry owns that id and is always in the selectable catalog, so a row holding
+      // it could never be selected. Refusing here is the same answer as any other id collision:
+      // cf-stumble will not store a project nobody can reach.
+      return { ok: false, problem: { code: "project-id-conflict" } };
     }
 
     const displayName = chosenDisplayName(input.displayName, repositoryUrl);

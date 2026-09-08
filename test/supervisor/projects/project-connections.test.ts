@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
+import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
 
 /**
@@ -99,7 +100,7 @@ test("connects a repository once the workspace credential works, and provisions 
     project: { id: "sample-repo-1", displayName: "Repo one", repositoryUrl: REPOSITORY },
     github: { state: "connected", login: "octocat", source: "configured-token" },
   });
-  expect(listed.projects.map((project) => project.id)).toEqual(["sample-repo-1"]);
+  expect(listed.projects.map((project) => project.id)).toEqual(["sample-repo-1", "harness"]);
   expect(
     subject.workspace.commands.filter((command) => command.includes("git clone")),
     "connecting provisions the repository it just verified",
@@ -121,6 +122,7 @@ test("a third repository joins the same one workspace, not a workspace of its ow
     "sample-repo-one",
     "sample-repo-three",
     "sample-repo-two",
+    "harness",
   ]);
   expect(
     [...new Set(subject.workspace.names)],
@@ -139,7 +141,9 @@ test("keeps a repository the workspace cannot read out of the catalog", async ()
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "repository-not-accessible" } });
-  expect(listed.projects).toEqual([]);
+  expect(listed.projects, "nothing was connected, so the harness entry is the whole list").toEqual([
+    HARNESS_PROJECT,
+  ]);
   expect(
     subject.workspace.commands.some((command) => command.includes("git clone")),
     "a repository is verified before anything is cloned",
@@ -157,7 +161,38 @@ test("takes a project back out when its clone fails, so a listed project has fil
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
-  expect(listed.projects).toEqual([]);
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+});
+
+test("lists the harness with no connection, and clones nothing for it", async () => {
+  const subject = tenant("harness-entry", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, "Repo one", NOW));
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+  const harness = listed.projects.find((project) => project.kind === "harness");
+
+  // The entry is a working-directory selection and nothing else: no repository URL, so nothing
+  // about it can be authorized, cloned, or disconnected, and it is there whatever GitHub says.
+  expect(harness).toEqual(HARNESS_PROJECT);
+  expect(harness).not.toHaveProperty("repositoryUrl");
+  expect(
+    subject.workspace.commands.filter((command) => command.includes("git clone")),
+    "only the connected repository was cloned; the harness checkout is already there",
+  ).toHaveLength(1);
+});
+
+test("refuses a repository whose id the harness entry already owns", async () => {
+  const subject = tenant("harness-id-taken", { fallbackToken: FAKE_TOKEN });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect("https://github.com/-/harness", undefined, NOW),
+  );
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  // `projectIdForRepository` reduces this URL to `harness`. Storing it would put a row in the
+  // catalog that no selection could ever reach, because the harness entry answers to that id.
+  expect(refused).toMatchObject({ ok: false, problem: { code: "project-id-conflict" } });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
 });
 
 test("provisions again every time a project is used", async () => {

@@ -197,12 +197,17 @@ export type ProjectResolution =
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
 /**
- * Turn a client-supplied project id into one of the tenant's projects.
+ * Turn a project id into one of the tenant's connected repositories.
  *
- * This is the single choke point every consumer goes through, and it takes the catalog it should
- * resolve against. The default is the empty catalog rather than a built-in project list: there is
- * no such thing as a project the server knows about before a tenant connects one, so a caller
- * that forgets to supply the tenant's catalog resolves nothing instead of resolving a placeholder.
+ * This is the resolver of the provisioning path, which needs the repository URL a clone is made
+ * from and so cannot be given the harness. What a *client* selects goes through
+ * {@link resolveSelectableProject} instead; by the time a project id reaches this function it has
+ * already been resolved there and narrowed to a repository.
+ *
+ * It takes the catalog it should resolve against. The default is the empty catalog rather than a
+ * built-in project list: there is no such thing as a connected repository the server knows about
+ * before a tenant connects one, so a caller that forgets to supply the tenant's catalog resolves
+ * nothing instead of resolving a placeholder.
  */
 export function resolveProject(
   projectId: unknown,

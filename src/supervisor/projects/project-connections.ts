@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { ConnectedProjects, type ConnectedProject } from "./connected-projects.js";
+import { ConnectedProjects } from "./connected-projects.js";
 import {
   GitHubConnection,
   type GitHubAuthorizationOutcome,
@@ -15,6 +15,7 @@ import {
   type ProjectCatalog,
   type PublicRepositoryUrl,
 } from "../../project-catalog.js";
+import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
 import {
   checkRepositoryAccess,
   provisionProjectWorkspace,
@@ -34,7 +35,7 @@ import type { VerifiedAccessScope } from "../../access/index.js";
  * only once its clone is in the workspace, so a project in the list is a project with files.
  */
 export type ProjectListView = Readonly<{
-  projects: readonly ConnectedProject[];
+  projects: SelectableCatalog;
   github: GitHubConnectionStatus;
 }>;
 
@@ -94,17 +95,25 @@ export class ProjectConnections {
   }
 
   /**
-   * The tenant's catalog as every consumer of `resolveProject` needs it. It is read on each call
-   * rather than cached, because connecting a repository has to be visible to the next request
-   * without restarting anything.
+   * Everything this tenant may select: the connected repositories and the harness entry.
+   *
+   * It is read on each call rather than cached, because connecting a repository has to be visible
+   * to the next request without restarting anything. The harness entry is added here, in the one
+   * place the catalog is built, so the sidebar, the thread surface and the turn path all see the
+   * same set and none of them has to remember a special case.
    */
-  catalog(): ProjectCatalog {
-    return this.projects.catalog();
+  catalog(): SelectableCatalog {
+    return selectableCatalog(this.projects.catalog());
   }
 
-  /** The page's list: the connected projects and a connection status that carries no credential. */
+  /**
+   * The page's list: everything selectable, and a connection status that carries no credential.
+   *
+   * The harness entry is in it and has no repository URL, which is what tells the sidebar that
+   * this one is not a connection: there is nothing to authorize and nothing to clone.
+   */
   async list(now: number): Promise<ProjectListView> {
-    return { projects: this.projects.list(), github: await this.github.status(now) };
+    return { projects: this.catalog(), github: await this.github.status(now) };
   }
 
   connectionStatus(now: number): Promise<GitHubConnectionStatus> {
@@ -192,7 +201,9 @@ export class ProjectConnections {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
     projectId: unknown,
   ): Promise<ProjectUseResult> {
-    const catalog = this.catalog();
+    // The connected repositories alone: provisioning clones a repository URL, and the harness
+    // entry has none. A turn on the harness never reaches here (`project-turn.ts`).
+    const catalog: ProjectCatalog = this.projects.catalog();
     const resolved = resolveProject(projectId, catalog);
     if (!resolved.ok) {
       return { ok: false, problem: { code: resolved.reason } };
