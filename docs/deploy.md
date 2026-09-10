@@ -56,6 +56,22 @@ Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accep
 
 The deployed smoke test verified the safe order. A request with no credential receives 401. A request that carries a credential while the Access values are missing receives 500 for `invalid-configuration`. This is deliberate. The Worker does not choose a default owner while configuration is incomplete.
 
+## Troubleshooting a hostname that serves another site
+
+Access can accept your login and then show a page that is not cf-stumble. The hostname can also answer another site before Access appears.
+
+A deployed Worker does not claim a hostname on its own. A proxied DNS record on the zone may already point that hostname somewhere else. This is often a wildcard record such as `*.example.com`.
+
+Check the hostname in the dashboard:
+
+- Open **Websites** > your zone > **DNS** > **Records**. Look for a record for the hostname and for a proxied wildcard record.
+- Open **Workers & Pages** > your Worker > **Settings** > **Domains & Routes**. Check whether the hostname has a Worker route or custom domain.
+- Run `curl -I https://<your-hostname>`. The response shows whether Access redirects the request or another site answers it.
+
+Use a Worker route when a proxied record already covers the hostname. Add a route for `<your-hostname>/*` in the zone. A route sends matching requests to the Worker and does not write DNS.
+
+Use a custom domain when the hostname has no record and you want Cloudflare to create one. A custom domain writes a DNS record for the hostname.
+
 ## Connect a project
 
 The workspace is a development machine. It has `git` and `gh`. Authorize GitHub inside the workspace, then connect one GitHub repository from there. The `gh` credential stays in the workspace's local GitHub configuration. The repository keeps its own files and Git history. Your browser does not receive the GitHub credential.
