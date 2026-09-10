@@ -1125,3 +1125,67 @@ recording, and the checklist has nothing unresolved left.
 What is not being claimed: that a stranger's button click works. What is: the repository is public,
 the button reaches Cloudflare's flow carrying it, the tracked configuration provisions a brand-new
 Worker with every binding and fails closed, and a fresh instance runs the whole demo path.
+
+## D87 — the instance was unreachable because nothing claimed the hostname
+
+Not a fault in this repository. The zone has a proxied wildcard record pointing at another machine,
+so `stumble.akompella.dev` resolved there, and the Worker had neither a route nor a custom domain.
+Access was correctly configured in front of the hostname, which is what made it confusing: the
+login succeeds and the page that appears belongs to the other machine.
+
+Fixed with one route in `wrangler.jsonc`, chosen over a custom domain because a custom domain
+writes a DNS record and a route does not, and the wildcard already makes the hostname proxied. The
+symptom and both fixes are now in `docs/deploy.md`, because a reader with a wildcard record will
+hit exactly this.
+
+## D88 — Access admits the owner, and the run can stop saying "injected JWKS"
+
+Every deployed claim until now carried the caveat that Access verification ran against a key this
+run minted. That caveat is retired. With the real team domain, the real audience and no
+`CF_ACCESS_PUBLIC_KEYS`, the Worker fetched Cloudflare's signing keys and admitted the owner's own
+token: `sub 3eb1d2b2-2e13-5243-ba1b-147f5bd3c2a1`, issuer `adityakompella.cloudflareaccess.com`.
+The `sub` is the `user_uuid` from `get-identity`, so no correction was needed.
+
+Reading it needed a temporary diagnostic, because `wrangler tail` redacts
+`cf-access-jwt-assertion` and a refusal would not have printed the subject either. The diagnostic
+decoded the presented token, logged its claims once, and was removed and redeployed within
+minutes. Worth remembering: a boundary that refuses without saying what it refused costs one
+deployed round trip per question, which is the third time this run has paid that toll.
+
+## D89 — bootstrap is an owner action, and the guide said otherwise
+
+The owner's instance answered 503 `no-active-generation` on every relayed route because nothing
+bootstraps on its own. The Supervisor waits for `POST /api/generations/submit`. The handoff's
+fresh-account sequence describes the Supervisor labeling the clone's HEAD on the first
+authenticated request, and `docs/deploy.md` repeated that, so the guide told a forker to expect
+something the code does not do. Recorded as a finding rather than built, because the owner asked
+for the finding and building it is new behavior.
+
+Second cause of the same confusion: the Supervisor's name comes from the verified Access identity
+and audience, so the probe identity this run used and the owner's real identity are different
+tenants with different workspaces. Everything this run proved earlier was proved on a Supervisor
+the owner had never signed in to.
+
+## D90 — three faults between a deployed Worker and a first generation
+
+1. The image seeds a pnpm store and no build ever used it. A command Computer runs in the container
+   inherits `PATH` and nothing else, so `PNPM_HOME` never arrives and pnpm falls back to its
+   default store under `$HOME`. Neither `/root/.npmrc` nor `~/.config/pnpm/rc` moves the store, so
+   the seeded store is linked into the default location. Install went from about 300 s and an
+   OOM-killed native install script to 39 s.
+2. A build only ever sees committed and pushed code, because it extracts the submitted commit from
+   the remote. Two probe rounds were spent on a fix that was sitting in the working tree.
+3. One shell command could not survive a whole build. Three consecutive attempts died at about
+   690 s, two as Durable Object resets and one as exit 1 with empty output, while everything that
+   ever succeeded was 527 s or shorter. A build is now one step per phase, so each has its own RPC,
+   exit code, bounded log and budget, and a failure names the phase. The owner's instance
+   bootstrapped on the first attempt afterwards, in 321 s.
+
+## D91 — two surfaces a forker will misread
+
+`/api/status` omits `generation` when none is active rather than zeroing it, and its `epoch`
+legitimately starts at 0, so the response reads like an active generation at a glance. And `/health`
+has no special case: anything that is not `/api/...` and is not a browser navigation relays to the
+active generation, so before the first generation exists `/health` answers the same 503. There is
+no generation-independent way to check that a deployed Worker is alive. Both recorded, neither
+changed, because a health route is new behavior and this run does not add features.

@@ -213,6 +213,43 @@ Nothing is left in the last two states.
       `.audit/v0/evidence/deployed-generation-loop.md`, and screenshots of the deployed page are in
       `/tmp/page-probe/` on hp.
 
+## Added after the run: the hostname fault
+
+The instance was never reachable, and the cause was not in this repository. The zone has a proxied
+wildcard record pointing at another machine, so `stumble.akompella.dev` resolved there and the
+Worker had no route and no custom domain. One route in `wrangler.jsonc` fixed it (`43fb571`), the
+probe Access values were replaced with the owner's real ones, and `CF_ACCESS_PUBLIC_KEYS` was
+removed so the Worker fetches the real signing keys.
+
+- [x] K1 The Worker owns its hostname. done: one route, `stumble.akompella.dev/*` in zone
+      `akompella.dev`, listed against the script. A route rather than a custom domain, because a
+      custom domain writes DNS and the wildcard already makes the hostname proxied.
+- [x] K2 Real Access configuration deployed. done: the team domain, the audience tag and the
+      owner's subject, with no injected JWKS.
+- [x] K3 **Cloudflare Access admits the owner, proved deployed.** done, and this was the last thing
+      the earlier run had to record as blocked. A temporary diagnostic read the claims the Worker
+      actually received when the owner loaded the page, and the boundary answered `admitted` for
+      `sub 3eb1d2b2-2e13-5243-ba1b-147f5bd3c2a1`, issuer `adityakompella.cloudflareaccess.com`,
+      the application's own audience. The requests reached this Worker, so the page behind Access
+      is cf-stumble. The diagnostic was removed and the Worker redeployed.
+      `.audit/v0/evidence/access-and-route.md`.
+- [x] K4 Troubleshooting entry in `docs/deploy.md` for a hostname that serves another site. done:
+      merged as `ffdde44`, written by terra through the three passes.
+
+- [x] K5 Bootstrap the owner's own instance. done. His real identity is a different tenant from the
+      probe identity, so his Supervisor had never run anything and answered 503
+      `no-active-generation` everywhere. **Finding: bootstrap is an explicit owner action, not a
+      side effect of the first authenticated request.** Three faults had to be fixed to get his
+      first generation built: the seeded pnpm store was never used because a Computer exec inherits
+      `PATH` and nothing else (install went from about 300 s and an OOM to 39 s), a build only sees
+      committed and pushed code, and one command could not survive the whole build. Generation 2
+      is now built, activated and serving: submit to ready 321 s, activate 0.4 s, `GET /` answers
+      `generation-0 main facet ready`, and the owner page renders at 42483 bytes.
+      `.audit/v0/evidence/access-and-route.md`.
+- [x] K6 One step per build phase. done: `0005650`, merged as `dd4ba4e`. `provision`, `isolate`,
+      `checkout`, `install`, `build-pi`, `build-module-map`, each its own RPC with its own exit
+      code, bounded log and time budget, so a failure names the phase.
+
 ## Where this run ends
 
 Done, and proved against the real paid account: the whole seven-step demo path except the parts
