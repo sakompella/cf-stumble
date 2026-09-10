@@ -50,31 +50,14 @@ export class MainHarnessArtifact {
     this.modules = modules;
   }
 
-  static parse(
-    input: MainHarnessArtifactInput,
-  ): Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
-    // Stored JSON is untrusted at this boundary. The public type describes the decoded shape,
-    // but these checks keep a malformed stored map from becoming executable module code.
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof
-    if (
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof
-      typeof input !== "object" ||
-      input === null ||
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof
-      typeof input.harnessCommit !== "string" ||
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof
-      typeof input.entryModule !== "string" ||
-      !Array.isArray(input.modules) ||
-      input.modules.some(
-        (module) =>
-          module === null ||
-          module === undefined ||
-          // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/no-unsafe-member-access
-          typeof module.name !== "string" ||
-          // oxlint-disable-next-line anti-slop/no-runtime-typeof, typescript/no-unsafe-member-access
-          typeof module.source !== "string",
-      )
-    ) {
+  /**
+   * A module map reaches this class as decoded JSON: a build wrote it, or a stored artifact
+   * decoded to it. Nothing before this point proved its shape, so the parameter says so and
+   * `isMainHarnessArtifactInput` is what turns it into the declared input type.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a built or stored module map is decoded JSON, so its shape is proven here.
+  static parse(input: unknown): Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
+    if (!isMainHarnessArtifactInput(input)) {
       return Result.err({ code: "invalid-artifact" });
     }
 
@@ -93,6 +76,37 @@ export class MainHarnessArtifact {
 
     return Result.ok(new MainHarnessArtifact(harnessCommit, moduleMap.value));
   }
+}
+
+function isHarnessModuleInput(
+  value: unknown,
+): value is MainHarnessArtifactInput["modules"][number] {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "source" in value &&
+    typeof value.source === "string"
+  );
+}
+
+/** The one place a decoded module map becomes a `MainHarnessArtifactInput`. */
+function isMainHarnessArtifactInput(value: unknown): value is MainHarnessArtifactInput {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("harnessCommit" in value) || typeof value.harnessCommit !== "string") {
+    return false;
+  }
+  if (!("entryModule" in value) || typeof value.entryModule !== "string") {
+    return false;
+  }
+  if (!("modules" in value)) {
+    return false;
+  }
+  const modules: unknown = value.modules;
+  return Array.isArray(modules) && modules.every((module) => isHarnessModuleInput(module));
 }
 
 function parseModuleMap(

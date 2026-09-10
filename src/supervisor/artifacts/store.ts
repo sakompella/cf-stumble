@@ -173,12 +173,9 @@ function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Arr
 }
 
 function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleMapResult {
-  let value: MainHarnessArtifactInput;
+  let value: unknown;
   try {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: stored bytes are untrusted here; MainHarnessArtifact.parse validates the decoded value below.
-    value = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes),
-    ) as MainHarnessArtifactInput;
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
   } catch {
     return Result.err({ code: "corrupt-artifact", harnessCommit });
   }
