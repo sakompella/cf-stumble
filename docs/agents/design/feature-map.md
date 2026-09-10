@@ -9,7 +9,7 @@ Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account fe
 3. Keep one shared durable Computer workspace. The harness clone and the connected project have separate directories and Git histories, but those directories are not security boundaries.
 4. Complete one real coding turn. The agent must read the selected repository, make a small edit, run its configured check, stream its response, and show the diff and command output. The saved project thread and project edit must survive a generation change.
 5. Keep the turn lease. It prevents a stale turn from changing a replacement turn. The demo does not use automatic repair, promotion rules, per-turn accounting, relay records, or recovery reports.
-6. Build each candidate from its named harness commit. The Supervisor must run `pnpm run build:artifact`, store the resulting module map in Supervisor SQLite, cold-check `GET /`, and leave the active generation serving when the candidate fails.
+6. Build each candidate from its named harness commit. The Supervisor must run the `build:artifact` phases, one build step each, store the resulting module map in Supervisor SQLite, cold-check `GET /`, and leave the active generation serving when the candidate fails.
 7. Activate a passing candidate and roll back to an earlier generation that ran before. Activation and rollback load stored module maps. They do not rebuild code. Repeating a submission for a known commit returns its existing generation.
 8. Keep R2 out of version 0. Its binding, cache code, cache tests, rebuild-on-cache-miss behavior, corruption recovery, cache age rule, double-build gate and SQLite schema deletion check are all deleted, and the module map lives in Supervisor SQLite instead.
 9. Keep Cloudflare Access as the owner-only gate. The Worker derives the Supervisor name from the verified Access identity and audience. No request supplies that name. Multi-user work is after version 0.
@@ -39,7 +39,7 @@ The demo defines the feature cut line. Delete code only when none of these steps
 1. The deployed Worker serves requests until a generation exists. The Supervisor performs bootstrap without an active main facet.
 2. The harness repository URL comes from one Wrangler variable. The deploy button creates the user's fork, or the user sets the URL manually.
 3. On the first authenticated owner request, or an explicit owner bootstrap action, the Supervisor provisions the workspace and clones that URL into `/workspace/harness`.
-4. The Supervisor labels the clone HEAD commit as the first candidate and uses the normal submission path. It runs `pnpm run build:artifact`, stores the module map in SQLite, cold-checks `GET /`, and activates a passing candidate.
+4. The Supervisor labels the clone HEAD commit as the first candidate and uses the normal submission path. It runs the `build:artifact` phases, one build step each, stores the module map in SQLite, cold-checks `GET /`, and activates a passing candidate.
 5. Repeating a submission for a known commit returns its existing generation. A failed bootstrap build leaves the deployed Worker serving and reports the failure.
 6. With `CF_ACCESS_*` unset or only partly configured, every Worker route fails closed with `invalid-configuration`. The deploy documentation must state this because the button deploys before the user configures Access.
 7. Remove the production fixture from application construction.

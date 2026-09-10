@@ -18,7 +18,14 @@ const configuration: HarnessBuildConfiguration = {
   harnessRepositoryRoot: "/harness",
   harnessGitDir: "/harness/.git",
   harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
-  buildCommand: "pnpm run build:module-map",
+  buildPhases: [
+    {
+      name: "install",
+      command: "pnpm install --frozen-lockfile --reporter=silent --ignore-scripts",
+    },
+    { name: "build-pi", command: "pnpm run build:pi" },
+    { name: "build-module-map", command: "pnpm run build:module-map" },
+  ],
   moduleMapPath: "build/module-map.json",
   stepTimeoutMs: 60_000,
 };
@@ -101,24 +108,27 @@ test("plans an isolated build directory outside the project workspace", () => {
     "provision",
     "isolate",
     "checkout",
-    "build",
+    "install",
+    "build-pi",
+    "build-module-map",
   ]);
-  const build = plan.steps.at(-1);
-  expect(build?.name).toBe("build");
-  expect(build?.cwd).toBe(WORKSPACE_ROOT);
-  expect(build?.source).toContain(`cd '${plan.directory}'`);
-  expect(build?.source).toContain(configuration.buildCommand);
-  expect(
-    build?.source,
-    "the build's own output is bounded, and its exit code survives the pipe",
-  ).toContain("set -o pipefail");
+  for (const phase of configuration.buildPhases) {
+    const step = plan.steps.find((planned) => planned.name === phase.name);
+    expect(step?.cwd).toBe(WORKSPACE_ROOT);
+    expect(step?.source).toContain(`cd '${plan.directory}'`);
+    expect(step?.source).toContain(phase.command);
+    expect(
+      step?.source,
+      "each phase's own output is bounded, and its exit code survives the pipe",
+    ).toContain("set -o pipefail");
+  }
   expect(
     plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
     "a harness build must not name a project directory",
   ).toBe(true);
 });
 
-test("checks out the commit before it runs the build command", async () => {
+test("checks out the commit before it runs the first build phase", async () => {
   const workspace = new FakeBuildWorkspace({ outputs: [moduleMapFile([entryModule])] });
 
   await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
@@ -131,7 +141,7 @@ test("checks out the commit before it runs the build command", async () => {
   );
   expect(workspace.commands[3]?.cwd).toBe(WORKSPACE_ROOT);
   expect(workspace.commands[3]?.source).toContain(`cd '/harness-builds/${commit}'`);
-  expect(workspace.commands[3]?.source).toContain(configuration.buildCommand);
+  expect(workspace.commands[3]?.source).toContain(configuration.buildPhases[0].command);
 });
 
 test("reports a failed archive extraction as the checkout step, not as a build failure", async () => {
@@ -150,18 +160,18 @@ test("reports a failed archive extraction as the checkout step, not as a build f
   });
 });
 
-test("reports the failing build step and its exit code", async () => {
-  const workspace = new FakeBuildWorkspace({ failing: configuration.buildCommand });
+test("reports the failing build phase and its exit code", async () => {
+  const workspace = new FakeBuildWorkspace({ failing: "pnpm run build:pi" });
 
   const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
 
   if (built.isOk()) {
-    throw new Error("a failing build command must not produce a module map");
+    throw new Error("a failing build phase must not produce a module map");
   }
   expect(built.error).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
-    step: "build",
+    step: "build-pi",
     exitCode: 3,
   });
 });

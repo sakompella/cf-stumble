@@ -105,12 +105,12 @@ test("plans one planned step, or the build output, from a validated commit", () 
   expect(readPlan.kind === "run-command" ? readPlan.source : "").toContain(moduleMapPath);
 });
 
-test("runs a planned build step and returns its exit code", async () => {
+test("runs a planned build phase and returns its exit code", async () => {
   const operations = new FakeBuildOperations();
   operations.exitCode = 3;
 
   await expect(
-    build(operations, { kind: "build-step", harnessCommit: commit, step: "build" }),
+    build(operations, { kind: "build-step", harnessCommit: commit, step: "install" }),
   ).resolves.toEqual({
     ok: true,
     result: {
@@ -122,7 +122,7 @@ test("runs a planned build step and returns its exit code", async () => {
   });
   expect(operations.calls).toHaveLength(1);
   expect(operations.calls.at(0)).toContain(`cd '${buildDirectory}'`);
-  expect(operations.calls.at(0)).toContain(HARNESS_BUILD_CONFIGURATION.buildCommand);
+  expect(operations.calls.at(0)).toContain(HARNESS_BUILD_CONFIGURATION.buildPhases[0].command);
 });
 
 test("reads the module map the build wrote, through the shell that wrote it", async () => {
@@ -166,7 +166,7 @@ test("rejects caller supplied command text and every project request", async () 
     [null, "invalid-request"],
     [{ kind: "build-step", harnessCommit: commit }, "invalid-request"],
     [
-      { kind: "build-step", harnessCommit: commit, step: "build", source: "whoami" },
+      { kind: "build-step", harnessCommit: commit, step: "install", source: "whoami" },
       "invalid-request",
     ],
     [{ kind: "build-step", harnessCommit: commit, step: "whoami" }, "unknown-command"],
