@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
+// oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
 
 /**
  * Every owner API failure that is not a Supervisor decision uses one of these codes. The codes name

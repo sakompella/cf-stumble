@@ -37,32 +37,46 @@ export default defineConfig({
     // grab-bag; only the default of 1 is wrong here.
     "eslint/max-classes-per-file": ["warn", { max: 12 }],
 
-    // Clean on adoption — enforced immediately.
+    // anti-slop is vendored from dmmulroy/anti-slop at tools/oxlint/anti-slop. Every generic rule
+    // the vendored version ships is listed here, enforced or off with its count and reason, so a
+    // re-vendor cannot add a rule this project never decided about.
+
+    // Enforced.
+    "anti-slop/no-array-filter-map": "error",
+    "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-known-value-widening": "error",
     "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reduce-accumulator-copy": "error",
     "anti-slop/no-reflect-apply": "error",
     "anti-slop/no-reflect-get": "error",
     "anti-slop/no-shape-in-symbol-names": "error",
-    "anti-slop/no-unknown-type-aliases": "error",
-    "anti-slop/no-widen-then-assert": "error",
-
-    // Violated on adoption. Ratcheted to "error" as each is cleared, so the gate never goes
-    // red and no violation is silently tolerated. Counts are from the adoption run.
-    // 58 violations on adoption
     "anti-slop/no-unknown-parameters": "error",
-    // 40 violations on adoption
-    "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
-    // 22 violations on adoption
-    "anti-slop/no-unsafe-dictionary-type": "error",
-    // 8 violations on adoption
-    "anti-slop/no-known-value-widening": "error",
-    // 4 violations on adoption
     "anti-slop/no-unknown-returns": "error",
-    // 2 violations on adoption
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-unsafe-dictionary-type": "error",
+    "anti-slop/no-widen-then-assert": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
-    // 1 violations on adoption
-    "anti-slop/no-object-parameters": "error",
-    // 1 violations on adoption
-    "anti-slop/no-chained-type-assertions": "error",
+
+    // A `typeof` check inside a type guard is the guard's whole job. The parsers that read
+    // untrusted JSON keep their checks; everywhere else the rule stays on.
+    "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
+
+    // Off, with the count from the re-vendor run.
+    //
+    // 2322 violations across 261 files. This rule inserts blank lines, and `--fix` clears every
+    // one of them, but the result puts 27 files over eslint(max-lines) and
+    // eslint(max-lines-per-function), which are errors under `--max-warnings=0`. Enforcing it
+    // therefore means splitting 27 files, and a 261-file whitespace diff during a release
+    // collides with every branch in flight. Formatting here belongs to oxfmt.
+    "anti-slop/require-readable-spacing": "off",
   },
+
+  // The vendored copy also ships an opt-in `anti-slop-effect` plugin: no-manual-effect-error-tag,
+  // no-manual-tag-comparison, no-manual-tagged-construction, no-service-constructor-imports and
+  // prefer-effect-match. It is deliberately not registered. This project uses better-result, not
+  // Effect (ADR 0035), and those rules are not gated on an Effect import: prefer-effect-match
+  // already reports one chained ternary in test/workspace/project/fakes.ts and demands an Effect
+  // `Match` that nothing here can import. Upstream registers this group only in Effect projects.
 });

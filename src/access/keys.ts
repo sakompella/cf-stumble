@@ -1,28 +1,37 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // The JWKS document is untrusted input, so keys are parsed before the verifier ever sees them.
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type
 
 export type AccessFetch = typeof fetch;
+
+/**
+ * A signing key this module accepted. `JsonWebKey` in workers-types has no `kid`, and Access
+ * publishes one per key, so the parsed type carries the field the verifier reads. The parser
+ * below is the only place that decides a `kid` is a non-empty string.
+ */
+export interface AccessPublicKey extends JsonWebKey {
+  readonly kid?: string;
+}
 
 interface CachedPublicKeys {
   readonly fetcher: AccessFetch;
   readonly url: string;
   readonly expiresAt: number;
-  readonly keys: readonly JsonWebKey[];
+  readonly keys: readonly AccessPublicKey[];
 }
 
 const publicKeyCacheTtlMs = 5 * 60 * 1000;
 const publicKeyRefreshCooldownMs = 30 * 1000;
 let publicKeyCache: CachedPublicKeys | undefined;
 let publicKeyRefreshAllowedAt = 0;
-let publicKeyFetchInFlight: Promise<readonly JsonWebKey[] | undefined> | undefined;
+let publicKeyFetchInFlight: Promise<readonly AccessPublicKey[] | undefined> | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isPublicJwk(value: unknown): value is JsonWebKey {
+function isPublicJwk(value: unknown): value is AccessPublicKey {
   if (!isRecord(value) || typeof value.kty !== "string") {
     return false;
   }
@@ -56,7 +65,7 @@ function isPublicJwk(value: unknown): value is JsonWebKey {
   return false;
 }
 
-export function parsePublicKeys(value: unknown): readonly JsonWebKey[] | undefined {
+export function parsePublicKeys(value: unknown): readonly AccessPublicKey[] | undefined {
   const keys = Array.isArray(value)
     ? value
     : isRecord(value) && Array.isArray(value.keys)
@@ -67,7 +76,9 @@ export function parsePublicKeys(value: unknown): readonly JsonWebKey[] | undefin
     : undefined;
 }
 
-export function parseSerializedPublicKeys(serialized: string): readonly JsonWebKey[] | undefined {
+export function parseSerializedPublicKeys(
+  serialized: string,
+): readonly AccessPublicKey[] | undefined {
   try {
     return parsePublicKeys(JSON.parse(serialized));
   } catch {
@@ -104,7 +115,7 @@ function cachedPublicKeys(
   url: string,
   fetcher: AccessFetch,
   now: number,
-): readonly JsonWebKey[] | undefined {
+): readonly AccessPublicKey[] | undefined {
   return publicKeyCache !== undefined &&
     publicKeyCache.fetcher === fetcher &&
     publicKeyCache.url === url &&
@@ -116,7 +127,7 @@ function cachedPublicKeys(
 async function loadPublicKeys(
   url: string,
   fetcher: AccessFetch,
-): Promise<readonly JsonWebKey[] | undefined> {
+): Promise<readonly AccessPublicKey[] | undefined> {
   try {
     const response = await fetcher(url);
     if (!response.ok) {
@@ -141,7 +152,7 @@ export function fetchPublicKeys(
   url: string,
   fetcher: AccessFetch,
   forceRefresh: boolean,
-): Promise<readonly JsonWebKey[] | undefined> {
+): Promise<readonly AccessPublicKey[] | undefined> {
   const now = Date.now();
   const cached = cachedPublicKeys(url, fetcher, now);
   if (cached !== undefined && (!forceRefresh || now < publicKeyRefreshAllowedAt)) {
