@@ -80,9 +80,16 @@ The sidebar also contains the harness project. It selects `/workspace/harness`, 
 
 ## First run
 
-Before the first generation exists, the deployed Worker serves the page, but there is no active generation to show. On the first authenticated owner request, the Supervisor creates the workspace, clones the configured harness repository into `/workspace/harness`, and labels that clone's HEAD commit as the first candidate.
+Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"epoch":0}}`. `GET /`, `/status`, `/generations`, `/projects`, and `/health` relay to a generation and return HTTP 503 with `{"ok":false,"problem":{"code":"no-active-generation"}}`. That response is normal on a new instance. It does not mean that the deployment failed. A browser request for `/` with `Accept: text/html` still receives the owner page.
 
-It then uses the normal generation path. It runs the `build:artifact` phases as separate build steps, stores the module map in the Supervisor's SQLite storage, cold-checks `GET /`, and activates the candidate when the check passes. A failed bootstrap build leaves the deployed Worker serving. Repeating a submission for the same commit returns the existing generation.
+The first generation does not happen by itself. Submit it as the verified owner, then activate it:
+
+1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
+2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response.
+
+One submission extracts the requested commit, installs dependencies, builds the vendored Pi package, bundles the module map, and stores that map in the Supervisor's SQLite storage. It cold-starts the candidate and runs `GET /` against it before it reports the candidate ready. These are separate build steps, so a failure reports its phase. On the measured first cold run, submission took 321 seconds. Activation took 0.4 seconds, and the ready generation answered `GET /` in 0.3 seconds. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
+
+Each verified Access identity gets its own Supervisor, workspace, and instance. If you sign in as another identity, you see a separate empty instance.
 
 ## Point the instance at your own fork
 
@@ -99,7 +106,7 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 ## Known untested areas
 
 - Compaction across a reload has not been tested. Pi owns compaction, and this project has no forced-compaction test.
-- The Deploy to Cloudflare button flow has not been recorded against a clean account. What the deployed instance itself does after the button is finished has been recorded. A fresh instance with empty storage provisioned its workspace, cloned the harness repository, built a commit into a generation, activated it, served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
+- The Deploy to Cloudflare button flow has not been recorded against a clean account. The deployed instance has been tested after the button flow. On an empty instance, the owner submitted and activated a generation, then served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
 - The deployed probe tested Access token verification with an injected key. It did not prove that a real Cloudflare Access application admits the configured owner.
 
 ## Cost and cleanup
