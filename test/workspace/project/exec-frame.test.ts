@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-runtime-typeof
+// oxlint-disable anti-slop/no-runtime-typeof -- The frames under test come back across the RPC boundary, so this file narrows them before it asserts on them.
 
 import { expect, test } from "vitest";
 import { MAX_EXEC_FRAME_BYTES, ProjectRpcTarget } from "../../../src/workspace/project/index.js";

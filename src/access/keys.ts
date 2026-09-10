@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // The JWKS document is untrusted input, so keys are parsed before the verifier ever sees them.
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type
 
 export type AccessFetch = typeof fetch;
 

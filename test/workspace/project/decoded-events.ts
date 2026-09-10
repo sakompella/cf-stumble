@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-object-parameters, anti-slop/no-unknown-returns, anti-slop/no-unknown-parameters
+// oxlint-disable anti-slop/no-object-parameters, anti-slop/no-unknown-returns -- Test-side decoder for one exec frame: a frame is decoded JSON, so reading a property off it and returning it is an untrusted read the caller narrows.
 
 import type { ExecEvent, ProjectFailure } from "../../../src/workspace/project/protocol.js";
 import type { ProjectRpcTarget } from "../../../src/workspace/project/target.js";

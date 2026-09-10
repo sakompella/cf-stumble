@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-unknown-parameters
+// oxlint-disable anti-slop/no-unknown-parameters -- This is the RPC contract itself: a Durable Object stub can be called with any value, so every argument here is unproven until ProjectRpcTarget parses it.
 
 export const MAX_FILE_BYTES = 1_000_000;
 export const MAX_EXEC_TIMEOUT_MS = 10 * 60 * 1_000;

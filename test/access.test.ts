@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 // The test deliberately builds varied claim dictionaries to exercise the untrusted JWT boundary.
-// oxlint-disable anti-slop/no-unsafe-dictionary-type, typescript/no-misused-spread, eslint/max-lines-per-function
+// oxlint-disable typescript/no-misused-spread, eslint/max-lines-per-function
 
 import { SELF } from "cloudflare:test";
 import { describe, expect, test } from "vitest";

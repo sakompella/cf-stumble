@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- These are
+// oxlint-disable anti-slop/no-unsafe-dictionary-type -- These are
 // the type guards the facet's parse boundaries share. A turn request that crossed an RPC hop and a
 // model-supplied tool argument both arrive without a proven shape, so the guards accept `unknown`
 // and the object guard reports the only representation an unvalidated JSON object has.
