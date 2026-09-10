@@ -45,6 +45,7 @@ export default defineConfig({
     "anti-slop/no-array-filter-map": "error",
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-known-value-widening": "error",
     "anti-slop/no-module-mocking": "error",
     "anti-slop/no-object-parameters": "error",
     "anti-slop/no-reduce-accumulator-copy": "error",
@@ -63,10 +64,6 @@ export default defineConfig({
     "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
 
     // Off, with the count from the re-vendor run.
-    //
-    // 1 violation. The re-vendored rule also rejects a known value passed into a type guard,
-    // which the previous version allowed. Ratcheted back to "error" in the following commit.
-    "anti-slop/no-known-value-widening": "off",
     //
     // 2322 violations across 261 files. This rule inserts blank lines, and `--fix` clears every
     // one of them, but the result puts 27 files over eslint(max-lines) and

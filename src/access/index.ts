@@ -9,6 +9,7 @@ import {
   issuerForTeamDomain,
   parseSerializedPublicKeys,
   type AccessFetch,
+  type AccessPublicKey,
 } from "./keys.js";
 import {
   deriveSupervisorName,
@@ -98,7 +99,7 @@ type BoundaryVerificationResult =
 
 async function verifyUsingAccessKeys(
   input: VerifyAccessTokenInput,
-  explicitKeys: readonly JsonWebKey[] | undefined,
+  explicitKeys: readonly AccessPublicKey[] | undefined,
   url: string | undefined,
   fetcher: AccessFetch,
   webCrypto: Crypto,
@@ -136,15 +137,15 @@ async function verifyUsingAccessKeys(
   return verified;
 }
 
-function hasMatchingKid(publicKeys: readonly JsonWebKey[], token: string): boolean {
+function hasMatchingKid(publicKeys: readonly AccessPublicKey[], token: string): boolean {
   const kid = tokenKeyId(token);
-  return kid !== undefined && publicKeys.some((key) => keyId(key) === kid);
+  return kid !== undefined && publicKeys.some((key) => key.kid === kid);
 }
 
 interface AccessConfiguration {
   readonly issuer: string;
   readonly audience: string;
-  readonly explicitKeys: readonly JsonWebKey[] | undefined;
+  readonly explicitKeys: readonly AccessPublicKey[] | undefined;
   readonly certsUrl: string | undefined;
 }
 
@@ -177,11 +178,6 @@ function accessConfiguration(env: AccessWorkerEnvironment): AccessConfiguration 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function keyId(key: JsonWebKey): string | undefined {
-  const record: unknown = key;
-  return isRecord(record) && typeof record.kid === "string" ? record.kid : undefined;
 }
 
 /** The one admitted result. The Supervisor's name and the scope it was derived from travel together. */

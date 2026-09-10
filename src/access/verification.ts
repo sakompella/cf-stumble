@@ -2,6 +2,7 @@
 
 // JWT parsing is the trust boundary. These checks intentionally validate unknown token data.
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof, typescript/no-redundant-type-constituents, typescript/no-unsafe-return
+import type { AccessPublicKey } from "./keys.js";
 
 /** The only token field used to route an authenticated request. */
 export type AccessIdentity = string;
@@ -24,7 +25,7 @@ export interface VerifyAccessTokenInput {
   readonly token: string;
   readonly issuer: string;
   readonly audience: string;
-  readonly publicKeys: readonly JsonWebKey[];
+  readonly publicKeys: readonly AccessPublicKey[];
   /** Current Unix time in seconds. JWT `exp` and `nbf` use the same unit. */
   readonly now: number;
 }
@@ -123,10 +124,8 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function keyMatches(key: JsonWebKey, header: JwtHeader): boolean {
-  const keyRecord = isRecord(key) ? key : undefined;
-  const kid = keyRecord?.kid;
-  if (kid !== undefined && (typeof kid !== "string" || kid !== header.kid)) {
+function keyMatches(key: AccessPublicKey, header: JwtHeader): boolean {
+  if (key.kid !== undefined && key.kid !== header.kid) {
     return false;
   }
   if (key.alg !== undefined && key.alg !== header.alg) {
@@ -142,7 +141,7 @@ async function verifiesKey(
   header: JwtHeader,
   signingInput: string,
   signature: Uint8Array,
-  publicKey: JsonWebKey,
+  publicKey: AccessPublicKey,
   crypto: Crypto,
 ): Promise<boolean> {
   try {
@@ -185,7 +184,7 @@ async function verifiesSignature(
   header: JwtHeader,
   signingInput: string,
   signature: Uint8Array,
-  publicKeys: readonly JsonWebKey[],
+  publicKeys: readonly AccessPublicKey[],
   crypto: Crypto,
 ): Promise<boolean> {
   for (const publicKey of publicKeys) {
