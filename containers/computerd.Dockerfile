@@ -70,4 +70,15 @@ RUN cd /seed \
  && corepack pnpm fetch \
  && rm -rf /seed
 
+# Put the store where a build will actually look for it.
+#
+# A command Computer runs in this container inherits `PATH` and nothing else, so `PNPM_HOME` never
+# reaches the build, and pnpm falls back to its default under `$HOME`. It found an empty store
+# there, downloaded all 182 packages from the registry, and the native install script that follows
+# was killed for memory (exit 137). Neither `/root/.npmrc` nor `~/.config/pnpm/rc` moves the store;
+# only `PNPM_HOME` does, which is the one thing the build does not get. So the default location is
+# the seeded one.
+RUN mkdir -p /root/.local/share/pnpm \
+ && ln -s /usr/local/pnpm/store /root/.local/share/pnpm/store
+
 ENTRYPOINT ["/usr/local/bin/computerd"]
