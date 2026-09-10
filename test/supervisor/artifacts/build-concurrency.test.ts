@@ -110,8 +110,8 @@ test("admits one build per commit, so a concurrent request joins it instead of r
   expect(encodeModuleMap(left.value)).toBe(encodeModuleMap(right.value));
   expect(
     host.inner.requests.filter((request) => request.kind === "build-step"),
-    "one build ran its four steps once; the second caller ran none of its own",
-  ).toHaveLength(4);
+    "one build ran its six steps once; the second caller ran none of its own",
+  ).toHaveLength(6);
   expect(namespace.names.every((name) => name === workspaceName)).toBe(true);
 });
 
@@ -128,5 +128,5 @@ test("builds again once the build in flight has settled", async () => {
   expect(
     host.requests.filter((request) => request.kind === "build-step"),
     "the conflict rule bounds concurrent builds; it does not cache a finished one",
-  ).toHaveLength(8);
+  ).toHaveLength(12);
 });

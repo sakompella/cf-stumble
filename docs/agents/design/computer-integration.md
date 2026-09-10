@@ -81,13 +81,24 @@ Computer permits overlapping container operations at all is a separate paid ques
 
 ## Harness build preconditions
 
-The Supervisor's build runs `HARNESS_BUILD_CONFIGURATION.buildCommand` in a directory that
+The Supervisor's build runs `HARNESS_BUILD_CONFIGURATION.buildPhases` in a directory that
 `git archive` has just written. That directory contains tracked files only, so it has no
-`node_modules` and no `vendor/pi-v0.84.4/dist/`. The build command is therefore the single script
-`pnpm run build:artifact`, which installs from `pnpm-lock.yaml`, builds the vendored Pi package,
-and then builds the module map. `test/supervisor/artifacts/build-command.test.ts` checks that the
-configured command names a script `package.json` defines, so the deployed command and the local
-gate cannot drift apart again.
+`node_modules` and no `vendor/pi-v0.84.4/dist/`. The phases are therefore an install from
+`pnpm-lock.yaml`, a build of the vendored Pi package, and a build of the module map, in that
+order.
+
+Each phase is a step of its own, so it is one Durable Object RPC, one exit code and one bounded
+output tail. One command was not survivable: three deployed builds of one commit died at 671 s,
+692 s and 696 s, two of them losing the Durable Object and one exiting 1 with an empty stdout and
+an empty stderr, and none of them said which phase had been running. Every build that ever
+succeeded on that account took 527 s or less, and the install alone measures 39 s in the deployed
+container.
+
+`pnpm run build:artifact` runs the same phases in the same order, and is what a developer and
+`scripts/probe/clean-build.sh` run locally.
+`test/supervisor/artifacts/build-command.test.ts` checks that every phase names a script
+`package.json` defines, or installs with flags only, and that the phases in order are exactly what
+`build:artifact` runs, so the deployed build and the local gate cannot drift apart again.
 
 The list below records what a fresh build container must provide. A developer machine hides most
 of these, because it has a warm pnpm store, a newer Node, and generated output already in place.

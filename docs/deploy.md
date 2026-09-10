@@ -82,7 +82,7 @@ The sidebar also contains the harness project. It selects `/workspace/harness`, 
 
 Before the first generation exists, the deployed Worker serves the page, but there is no active generation to show. On the first authenticated owner request, the Supervisor creates the workspace, clones the configured harness repository into `/workspace/harness`, and labels that clone's HEAD commit as the first candidate.
 
-It then uses the normal generation path. It runs `pnpm run build:artifact`, stores the module map in the Supervisor's SQLite storage, cold-checks `GET /`, and activates the candidate when the check passes. A failed bootstrap build leaves the deployed Worker serving. Repeating a submission for the same commit returns the existing generation.
+It then uses the normal generation path. It runs the `build:artifact` phases as separate build steps, stores the module map in the Supervisor's SQLite storage, cold-checks `GET /`, and activates the candidate when the check passes. A failed bootstrap build leaves the deployed Worker serving. Repeating a submission for the same commit returns the existing generation.
 
 ## Point the instance at your own fork
 

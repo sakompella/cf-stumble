@@ -53,8 +53,10 @@ test("keeps build scratch apart from every repository in the workspace", () => {
     "every build step runs in the workspace, because Computer refuses a working directory outside it",
   ).toBe(true);
   expect(
-    harnessBuildStep(plan, "build").source.includes(`cd '${buildDirectory}'`),
-    "and the build command changes into its own scratch directory itself",
+    HARNESS_BUILD_CONFIGURATION.buildPhases.every((phase) =>
+      harnessBuildStep(plan, phase.name).source.includes(`cd '${buildDirectory}'`),
+    ),
+    "and every build phase changes into its own scratch directory itself",
   ).toBe(true);
   expect(
     harnessBuildStep(plan, "isolate").source,

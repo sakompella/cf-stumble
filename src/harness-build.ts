@@ -1,4 +1,5 @@
 import { invariant } from "./invariant.js";
+import { provisionHarnessRepository } from "./harness-build-provision.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "./workspace-command-timeout.js";
 import { shellQuote } from "./shell-quote.js";
 import {
@@ -10,6 +11,11 @@ import {
 import type { HarnessCommit } from "./harness-commit.js";
 
 export { shellQuote };
+
+export type HarnessBuildPhaseName = "install" | "build-pi" | "build-module-map";
+
+/** One phase of a build: a name a failure can report, and the command that phase runs. */
+export type HarnessBuildPhase = Readonly<{ name: HarnessBuildPhaseName; command: string }>;
 
 /**
  * Where and how one labeled harness commit becomes a module map. Version 0 has one build path, so
@@ -29,14 +35,22 @@ export type HarnessBuildConfiguration = Readonly<{
   harnessGitDir: string;
   harnessGitRemote: string;
   /**
-   * The one package script that turns an extracted commit into a module map. It must install from
-   * the lockfile and build the vendored Pi package before it runs esbuild, because the extracted
-   * commit contains neither `node_modules` nor Pi's generated `dist/`, and it must name a script
-   * rather than spell out a command line, so the deployed build and the local gate cannot drift
-   * apart. `test/supervisor/artifacts/build-command.test.ts` checks that `package.json` defines
-   * it.
+   * The phases that turn an extracted commit into a module map, in the order they run. They are
+   * separate because one command was not survivable: three deployed builds of one commit died at
+   * 671 s, 692 s and 696 s, one of them with an empty stdout and an empty stderr, and the whole
+   * eleven minutes reported nothing about which phase was running. A phase is its own step, so it
+   * is its own RPC, its own exit code and its own bounded tail.
+   *
+   * Order is a dependency, not a preference. An extracted commit contains neither `node_modules`
+   * nor Pi's generated `dist/`, so the install comes first and esbuild cannot resolve
+   * `@cf-stumble/pi` until Pi is built.
+   *
+   * Each command names a script `package.json` defines, or is a flag-only `pnpm install`, so the
+   * deployed build and the local gate cannot drift apart.
+   * `test/supervisor/artifacts/build-command.test.ts` holds that rule and checks these phases
+   * against `build:artifact`, which is what a developer and the clean-build probe run locally.
    */
-  buildCommand: string;
+  buildPhases: readonly [HarnessBuildPhase, ...HarnessBuildPhase[]];
   moduleMapPath: string;
   /** How long one build step may run (`workspace-command-timeout.ts`). */
   stepTimeoutMs: number;
@@ -48,7 +62,14 @@ export const HARNESS_BUILD_CONFIGURATION = {
   harnessRepositoryRoot: HARNESS_DIRECTORY,
   harnessGitDir: HARNESS_GIT_DIRECTORY,
   harnessGitRemote: "https://github.com/sakompella/cf-stumble.git",
-  buildCommand: "pnpm run build:artifact",
+  buildPhases: [
+    {
+      name: "install",
+      command: "pnpm install --frozen-lockfile --reporter=silent --ignore-scripts",
+    },
+    { name: "build-pi", command: "pnpm run build:pi" },
+    { name: "build-module-map", command: "pnpm run build:module-map" },
+  ],
   moduleMapPath: "build/module-map.json",
   stepTimeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
 } as const satisfies HarnessBuildConfiguration;
@@ -71,7 +92,7 @@ export function harnessBuildConfiguration(
     : { ...HARNESS_BUILD_CONFIGURATION, harnessGitRemote: trimmed };
 }
 
-export type HarnessBuildStepName = "provision" | "isolate" | "checkout" | "build";
+export type HarnessBuildStepName = "provision" | "isolate" | "checkout" | HarnessBuildPhaseName;
 
 export type HarnessBuildStep = Readonly<{
   name: HarnessBuildStepName;
@@ -93,127 +114,18 @@ export type HarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: string; step: HarnessBuildStepName }>
   | Readonly<{ kind: "build-output"; harnessCommit: string }>;
 
+/**
+ * Every step a caller may name. It is derived from the one configuration's phases, so a phase
+ * added there is accepted by the RPC parser and a name that is not planned stays an
+ * `unknown-command`.
+ */
 export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "provision",
   "isolate",
   "checkout",
-  "build",
+  ...HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name),
 ];
 
-/** Hold the provision lock for the rest of the step, taking it from a process that has died. */
-function holdProvisionLock(): readonly string[] {
-  return [
-    'while ! mkdir "$lock" 2>/dev/null; do',
-    '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
-    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
-    '    stale_lock="${lock}.stale.$$"',
-    '    if mv "$lock" "$stale_lock" 2>/dev/null; then',
-    '      rm -rf "$stale_lock"',
-    "    fi",
-    "  else",
-    "    sleep 1",
-    "  fi",
-    "done",
-    'printf "%s\\n" "$$" > "$lock/pid"',
-    "trap 'rm -rf \"$lock\"' EXIT",
-  ];
-}
-
-/**
- * Make the harness repository exist and point at the configured remote.
- *
- * The harness directory is the owner's editable checkout in the shared workspace (ADR-0038), not
- * scratch this function owns, so a build never replaces it. An existing repository is only
- * checked; a directory that is populated but is not a repository fails the step and is left as it
- * was found; and a fresh clone lands beside the root and moves into place once it is complete, so
- * an interrupted provision leaves the owner with what was there rather than with neither the
- * previous checkout nor a usable replacement. `rmdir` removes the root only when it is an empty
- * directory, which is the one case where there is nothing to lose.
- */
-function reconcileHarnessRepository(): readonly string[] {
-  return [
-    'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
-    '  if test -e "$repository" && test -n "$(ls -A "$repository" 2>/dev/null)"; then',
-    '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
-    "    exit 1",
-    "  fi",
-    '  incoming="${repository}.incoming.$$"',
-    '  rm -rf "$incoming"',
-    '  git clone "$expected_remote" "$incoming"',
-    '  rmdir "$repository" 2>/dev/null || true',
-    '  mv "$incoming" "$repository"',
-    "fi",
-    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
-    'test "$actual_remote" = "$expected_remote"',
-  ];
-}
-
-/**
- * Obtain the requested commit. A commit submitted after this checkout was provisioned is not here
- * yet, so ask the remote for that commit, then fall back to the remote's branches for a server
- * that refuses a request for a bare object, and then stop. Two attempts bound the work, and the
- * message names the commit and the repository the build looked in, which is what the owner needs
- * in order to correct the request.
- */
-function obtainHarnessCommit(): readonly string[] {
-  return [
-    'if ! git --git-dir="$git_dir" cat-file -e "${commit}^{commit}" 2>/dev/null; then',
-    '  git --git-dir="$git_dir" fetch --no-tags --quiet origin "$commit" 2>/dev/null ||',
-    '    git --git-dir="$git_dir" fetch --no-tags --quiet origin ||',
-    "    true",
-    '  if ! git --git-dir="$git_dir" cat-file -e "${commit}^{commit}" 2>/dev/null; then',
-    '    printf "harness commit %s is not in %s\\n" "$commit" "$expected_remote" >&2',
-    "    exit 1",
-    "  fi",
-    "fi",
-  ];
-}
-
-function provisionHarnessRepository(
-  configuration: HarnessBuildConfiguration,
-  harnessCommit: HarnessCommit,
-): string {
-  const lock = `${configuration.harnessRepositoryRoot}.provision-lock`;
-  return [
-    "set -eu",
-    `mkdir -p ${shellQuote(WORKSPACE_ROOT)}`,
-    `lock=${shellQuote(lock)}`,
-    `repository=${shellQuote(configuration.harnessRepositoryRoot)}`,
-    `git_dir=${shellQuote(configuration.harnessGitDir)}`,
-    `expected_remote=${shellQuote(configuration.harnessGitRemote)}`,
-    `commit=${shellQuote(harnessCommit)}`,
-    ...holdProvisionLock(),
-    ...reconcileHarnessRepository(),
-    ...obtainHarnessCommit(),
-  ].join("\n");
-}
-
-/**
- * Plan the whole build as plain command strings. Provisioning reconciles the harness repository
- * and obtains the named commit, then `git archive` extracts that commit into a scratch directory
- * of its own, so no step mutates the editable harness checkout and a repeated build of one commit
- * starts from the same files. Interpolating the commit is safe because `HarnessCommit` accepts
- * only lower-case hexadecimal object IDs.
- *
- * Install location: the build step runs in the extracted directory, so `pnpm install` writes
- * `node_modules` inside that per-commit directory and nothing is borrowed from a parent checkout.
- * Only the content-addressed pnpm store is shared between builds, because the store is keyed by
- * package content and concurrent writes to it are the package manager's problem, not this plan's.
- *
- * Same-commit concurrency (T1a's handed-over race). The isolate step still deletes and recreates a
- * directory keyed only by the commit, because both sides of the build plan the same steps from the
- * commit alone and a per-build directory name would have to travel in the request to stay
- * agreeable. Two things make that safe instead. The scratch subtree now lives inside the tenant's
- * own workspace rather than in a globally named build container, so two tenants building one
- * commit no longer share a filesystem at all; and `WorkspaceHostModuleMapBuilder` admits one build
- * per commit at a time, so a second request for a commit already building joins that build instead
- * of starting a rival one that would delete its tree. Nothing here schedules or queues: a build
- * either is the one in flight or waits for its result.
- *
- * Blast radius: `buildRoot` holds no repository, so the delete can only ever remove a previous
- * extraction of the same commit. The invariant below refuses a configuration in which the harness
- * checkout would sit inside the directory a build deletes.
- */
 /**
  * `git archive | tar -x` reports tar's exit code, so a failed archive used to reach the build step
  * as an empty directory and a confusing compilation error. Writing the archive first makes an
@@ -238,6 +150,57 @@ function checkoutSource(
   ].join("\n");
 }
 
+/**
+ * One compile phase as a step of its own.
+ *
+ * Two things this command does beyond running the phase. It changes into the scratch directory
+ * itself, because Computer resolves a working directory against the workspace and refuses one
+ * outside it (`workspace-layout.ts`). And it keeps only the tail of the phase's own output:
+ * Computer holds a command's output in memory, and an unbounded `pnpm install` log was enough to
+ * make the deployed container exit 1 part way through every build. The output is read only when a
+ * step fails, so a bounded tail loses nothing, and a tail per phase is a tail of the phase that
+ * failed rather than of whatever the last eleven minutes ended on. `pipefail` keeps the phase's
+ * exit code rather than `tail`'s.
+ */
+function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildStep {
+  return {
+    name: phase.name,
+    source: [
+      "set -o pipefail",
+      `cd ${shellQuote(directory)}`,
+      `${phase.command} 2>&1 | tail -c 4000`,
+    ].join("\n"),
+    cwd: WORKSPACE_ROOT,
+  };
+}
+
+/**
+ * Plan the whole build as plain command strings. Provisioning reconciles the harness repository
+ * and obtains the named commit, then `git archive` extracts that commit into a scratch directory
+ * of its own, so no step mutates the editable harness checkout and a repeated build of one commit
+ * starts from the same files. Interpolating the commit is safe because `HarnessCommit` accepts
+ * only lower-case hexadecimal object IDs.
+ *
+ * Install location: every compile phase runs in the extracted directory, so `pnpm install` writes
+ * `node_modules` inside that per-commit directory and the phases after it find it there, and
+ * nothing is borrowed from a parent checkout. Only the content-addressed pnpm store is shared
+ * between builds, because the store is keyed by package content and concurrent writes to it are
+ * the package manager's problem, not this plan's.
+ *
+ * Same-commit concurrency (T1a's handed-over race). The isolate step still deletes and recreates a
+ * directory keyed only by the commit, because both sides of the build plan the same steps from the
+ * commit alone and a per-build directory name would have to travel in the request to stay
+ * agreeable. Two things make that safe instead. The scratch subtree now lives inside the tenant's
+ * own workspace rather than in a globally named build container, so two tenants building one
+ * commit no longer share a filesystem at all; and `WorkspaceHostModuleMapBuilder` admits one build
+ * per commit at a time, so a second request for a commit already building joins that build instead
+ * of starting a rival one that would delete its tree. Nothing here schedules or queues: a build
+ * either is the one in flight or waits for its result.
+ *
+ * Blast radius: `buildRoot` holds no repository, so the delete can only ever remove a previous
+ * extraction of the same commit. The invariant below refuses a configuration in which the harness
+ * checkout would sit inside the directory a build deletes.
+ */
 export function planHarnessBuild(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
@@ -265,22 +228,7 @@ export function planHarnessBuild(
         source: checkoutSource(configuration, directory, harnessCommit),
         cwd: WORKSPACE_ROOT,
       },
-      {
-        // Two things this command does beyond running the build script. It changes into the scratch
-        // directory itself, because Computer resolves a working directory against the workspace and
-        // refuses one outside it (`workspace-layout.ts`). And it keeps only the tail of the build's
-        // own output: Computer holds a command's output in memory, and an unbounded `pnpm install`
-        // log was enough to make the deployed container exit 1 part way through every build. The
-        // output is read only when a step fails, so a bounded tail loses nothing. `pipefail` keeps
-        // the build's exit code rather than `tail`'s.
-        name: "build",
-        source: [
-          "set -o pipefail",
-          `cd ${shellQuote(directory)}`,
-          `${configuration.buildCommand} 2>&1 | tail -c 4000`,
-        ].join("\n"),
-        cwd: WORKSPACE_ROOT,
-      },
+      ...configuration.buildPhases.map((phase) => phaseStep(directory, phase)),
     ],
     moduleMapPath: `${directory}/${configuration.moduleMapPath}`,
   };
