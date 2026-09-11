@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  GITHUB_TOKEN_STAGING_PATH,
-  REDACTED,
-  type GitHubCredentialState,
-} from "../../src/github/index.js";
-import { PROJECTS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
+import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js";
 import {
   executeGitHubCredentialRequest,
   type CommandOutput,
@@ -16,10 +11,10 @@ import {
 /**
  * The Workspace Host's credential surface, driven through a fake Computer.
  *
- * No test here runs a shell, so what a green run shows is which requests are accepted, where the
- * token is written, what text the commands are, and what the surface returns. The two properties
- * that matter for goal criterion 3 are checked directly: the token reaches exactly one place, a
- * private file outside every repository, and it appears in no command line and no result.
+ * No test here runs a shell, so what a green run shows is which requests are accepted, how the
+ * token is handed over, what text the commands are, and what the surface returns. The two
+ * properties that matter for goal criterion 3 are checked directly: the token reaches the install
+ * command on standard input and nothing else, and it appears in no command line and no result.
  */
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
@@ -27,6 +22,7 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 class FakeCredentialOperations implements WorkspaceOperations {
   readonly writes: (readonly [string, string])[] = [];
   readonly sources: string[] = [];
+  readonly stdins: (string | undefined)[] = [];
   stdout = "";
   stderr = "";
   exitCode = 0;
@@ -44,14 +40,62 @@ class FakeCredentialOperations implements WorkspaceOperations {
     return Promise.resolve();
   }
 
-  runCommand(source: string): Promise<CommandOutput> {
+  runCommand(
+    source: string,
+    _cwd: string,
+    _timeoutMs: number,
+    stdin?: string,
+  ): Promise<CommandOutput> {
     this.sources.push(source);
+    this.stdins.push(stdin);
     return Promise.resolve({ stdout: this.stdout, stderr: this.stderr, exitCode: this.exitCode });
   }
 }
 
+/**
+ * A workspace with no filesystem at all: every path operation rejects, whatever the path.
+ *
+ * Computer's workspace filesystem is not the container's, so `/tmp` and every other container
+ * path is missing from it. This fake is the honest version of that: a surface that needs any file
+ * cannot pass with it.
+ */
+class FilesystemlessOperations implements WorkspaceOperations {
+  readonly sources: string[] = [];
+  readonly stdins: (string | undefined)[] = [];
+  stdout = "";
+  stderr = "";
+  exitCode = 0;
+  commandFails = false;
+
+  lstat(path: string): Promise<WorkspacePathKind | undefined> {
+    return Promise.reject(new Error(`parent directory missing: ${path}`));
+  }
+
+  readFile(path: string): Promise<string> {
+    return Promise.reject(new Error(`parent directory missing: ${path}`));
+  }
+
+  writeFile(path: string): Promise<void> {
+    return Promise.reject(new Error(`parent directory missing: ${path}`));
+  }
+
+  runCommand(
+    source: string,
+    _cwd: string,
+    _timeoutMs: number,
+    stdin?: string,
+  ): Promise<CommandOutput> {
+    if (this.commandFails) return Promise.reject(new Error("workspace is unavailable"));
+    this.sources.push(source);
+    this.stdins.push(stdin);
+    return Promise.resolve({ stdout: this.stdout, stderr: this.stderr, exitCode: this.exitCode });
+  }
+}
+
+type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
+
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function credential(operations: FakeCredentialOperations, request: unknown) {
+function credential(operations: CredentialOperations, request: unknown) {
   return executeGitHubCredentialRequest({ operations, request });
 }
 
@@ -59,7 +103,7 @@ function statusOf(result: GitHubCredentialResult): GitHubCredentialState | undef
   return result.ok && result.result.kind === "credential-status" ? result.result.state : void 0;
 }
 
-test("stages the token outside every repository and keeps it out of the command line", async () => {
+test("hands the token to gh on standard input and keeps it out of the command line", async () => {
   const operations = new FakeCredentialOperations();
   operations.stdout = "installed";
 
@@ -70,9 +114,9 @@ test("stages the token outside every repository and keeps it out of the command 
   });
 
   expect(installed).toEqual({ ok: true, result: { kind: "credential-installed" } });
-  expect(operations.writes[0]).toEqual([GITHUB_TOKEN_STAGING_PATH, `${FAKE_TOKEN}\n`]);
-  expect(GITHUB_TOKEN_STAGING_PATH.startsWith(WORKSPACE_ROOT)).toBe(false);
-  expect(GITHUB_TOKEN_STAGING_PATH.startsWith(PROJECTS_DIRECTORY)).toBe(false);
+  expect(operations.stdins[0], "standard input is how --with-token reads a token").toBe(
+    `${FAKE_TOKEN}\n`,
+  );
   expect(operations.sources.join("\n")).not.toContain(FAKE_TOKEN);
   expect(operations.sources[0]).toContain("gh auth login --hostname github.com --with-token");
   expect(operations.sources[0], "the credential is also usable from git").toContain(
@@ -80,8 +124,32 @@ test("stages the token outside every repository and keeps it out of the command 
   );
 });
 
-test("overwrites the staged token whatever the install did", async () => {
-  const operations = new FakeCredentialOperations();
+/**
+ * The regression this file exists to prevent. The install used to write the token to a path and
+ * have the command read it back, and the path was on the container's filesystem while the write
+ * went to the workspace's, so every install failed as `workspace-unavailable` on a real
+ * deployment and the cause was discarded.
+ *
+ * The property, not the path, is what is asserted: a workspace whose filesystem refuses every
+ * operation must still install a credential. Any install that needs a file anywhere fails this,
+ * whatever path it picks.
+ */
+test("installs a credential without touching a filesystem at all", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.stdout = "installed";
+
+  const installed = await credential(operations, {
+    kind: "github-credential",
+    step: "install",
+    token: FAKE_TOKEN,
+  });
+
+  expect(installed).toEqual({ ok: true, result: { kind: "credential-installed" } });
+  expect(operations.stdins[0]).toBe(`${FAKE_TOKEN}\n`);
+});
+
+test("reports a failed install without leaving anything to clean up", async () => {
+  const operations = new FilesystemlessOperations();
   operations.exitCode = 1;
   operations.stderr = "gh: something went wrong";
 
@@ -95,7 +163,19 @@ test("overwrites the staged token whatever the install did", async () => {
     ok: false,
     error: { code: "credential-command-failed", detail: "gh: something went wrong" },
   });
-  expect(operations.writes.at(-1)).toEqual([GITHUB_TOKEN_STAGING_PATH, ""]);
+});
+
+test("reports an unavailable workspace when the install command cannot run", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.commandFails = true;
+
+  const failed = await credential(operations, {
+    kind: "github-credential",
+    step: "install",
+    token: FAKE_TOKEN,
+  });
+
+  expect(failed).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
 });
 
 test("redacts a token a tool printed back before it leaves the workspace", async () => {

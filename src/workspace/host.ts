@@ -105,11 +105,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   /**
    * Install, inspect, or exercise this workspace's GitHub credential.
    *
-   * This is where a token enters the workspace and stops. The install writes it to a private
-   * staging file outside every repository, `gh` reads it from there, and the command deletes it;
-   * from then on the credential lives in the ordinary local `gh` configuration and Git's helper
-   * reads it (ADR-0039). Nothing this surface returns carries a token: an install answers with a
-   * word, a status with a state and at most a login name, and a failure with redacted text.
+   * This is where a token enters the workspace and stops. The install hands it to `gh` on standard
+   * input, so it is in no command line and on no filesystem; from then on the credential lives in
+   * the ordinary local `gh` configuration and Git's helper reads it (ADR-0039). Nothing this
+   * surface returns carries a token: an install answers with a word, a status with a state and at
+   * most a login name, and a failure with redacted text.
    *
    * It is a surface of its own for the same reason provisioning is: a credential install is
    * neither a build step nor a provisioning step, and each surface parses only its own request,

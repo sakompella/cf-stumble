@@ -5,7 +5,6 @@ export {
   parseRepositoryAccess,
   repositoryAccessSource,
   GITHUB_HOSTNAME,
-  GITHUB_TOKEN_STAGING_PATH,
   type GitHubCredentialState,
   type GitHubCredentialStatus,
   type RepositoryAccess,

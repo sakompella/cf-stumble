@@ -9,15 +9,12 @@ import { shellQuote } from "../shell-quote.js";
  * `gh auth setup-git` points Git's credential helper at it, so `git` and `gh` authenticate the way
  * they would on any development machine and no cf-stumble code sits between them and GitHub.
  *
- * The token never appears in command text. It is written to a private staging file outside every
- * repository, read from that file on standard input, and deleted in the same command, so it is
- * never an argument a process list, a shell history, or an error message could carry. Everything
- * these commands print is a fixed word plus, at most, a login name or a Git error, and the caller
- * redacts what it forwards regardless.
+ * The token never appears in command text and never touches a filesystem. `gh auth login
+ * --with-token` reads it from standard input, which the caller hands to the command directly, so
+ * it is never an argument a process list, a shell history, or an error message could carry, and
+ * there is no file to remove afterwards. Everything these commands print is a fixed word plus, at
+ * most, a login name or a Git error, and the caller redacts what it forwards regardless.
  */
-
-/** Outside the workspace root, so the staged token is never inside a repository or a diff. */
-export const GITHUB_TOKEN_STAGING_PATH = "/tmp/cf-stumble-gh-token";
 
 export const GITHUB_HOSTNAME = "github.com";
 
@@ -38,22 +35,23 @@ const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u;
 /**
  * Install a token as the workspace's `gh` credential and let Git use it.
  *
- * The command deletes the staging file on every exit path, so an interrupted install leaves no
- * token behind. A missing `gh` is reported rather than repaired: ADR-0039 expects the pinned image
- * to carry the development tools, and silently installing a package manager's idea of `gh` during
- * an authorization is not a decision this path may take.
+ * The command reads the token from its own standard input, so an interrupted install leaves
+ * nothing behind: a token that never reaches a filesystem cannot be forgotten on one. `umask`
+ * still applies, because `gh` writes the credential into `~/.config/gh/hosts.yml` itself.
+ *
+ * A missing `gh` is reported rather than repaired: ADR-0039 expects the pinned image to carry the
+ * development tools, and silently installing a package manager's idea of `gh` during an
+ * authorization is not a decision this path may take.
  */
-export function installCredentialSource(stagingPath: string = GITHUB_TOKEN_STAGING_PATH): string {
+export function installCredentialSource(): string {
   return [
     "set -eu",
     "umask 077",
-    `token_file=${shellQuote(stagingPath)}`,
-    "trap 'rm -f \"$token_file\"' EXIT",
     "if ! command -v gh >/dev/null 2>&1; then",
     "  printf 'tooling-missing\\n'",
     "  exit 0",
     "fi",
-    `gh auth login --hostname ${GITHUB_HOSTNAME} --with-token < "$token_file"`,
+    `gh auth login --hostname ${GITHUB_HOSTNAME} --with-token`,
     `gh auth setup-git --hostname ${GITHUB_HOSTNAME}`,
     "printf 'installed\\n'",
   ].join("\n");

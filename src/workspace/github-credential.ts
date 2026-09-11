@@ -6,7 +6,6 @@ import {
   parseRepositoryAccess,
   redactCredentials,
   repositoryAccessSource,
-  GITHUB_TOKEN_STAGING_PATH,
   type GitHubCredentialState,
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
@@ -101,46 +100,29 @@ export function parseGitHubCredentialRequest(
 }
 
 /**
- * Stage the token in a private file and let `gh` read it from there.
+ * Hand the token to `gh` on standard input, which is what `--with-token` reads.
  *
- * The two operations are one step on purpose: the file exists only between the write and the
- * command that consumes and deletes it, and the command deletes it on every exit path. A failed
- * command still gets a removal attempt here, because the one thing worse than a failed install is
- * a token left on disk after it.
+ * The token is an argument of this one call and of nothing else. It is not in the command text, so
+ * no process list or shell history can hold it, and it is not written anywhere, so no install —
+ * failed, interrupted, or successful — can leave it on a filesystem to be found later. There is
+ * therefore nothing to clean up after this returns.
  */
 async function installCredential(
   operations: WorkspaceOperations,
   token: string,
 ): Promise<GitHubCredentialResult> {
-  await operations.writeFile(GITHUB_TOKEN_STAGING_PATH, `${token}\n`);
-  try {
-    const output = await operations.runCommand(
-      installCredentialSource(),
-      "/",
-      WORKSPACE_COMMAND_TIMEOUT_MS,
-    );
-    if (output.exitCode !== 0) {
-      return failed("credential-command-failed", output.stderr);
-    }
-    return output.stdout.trim() === "tooling-missing"
-      ? { ok: true, result: { kind: "credential-status", state: "tooling-missing", login: void 0 } }
-      : { ok: true, result: { kind: "credential-installed" } };
-  } finally {
-    await clearStagedToken(operations);
+  const output = await operations.runCommand(
+    installCredentialSource(),
+    "/",
+    WORKSPACE_COMMAND_TIMEOUT_MS,
+    `${token}\n`,
+  );
+  if (output.exitCode !== 0) {
+    return failed("credential-command-failed", output.stderr);
   }
-}
-
-/**
- * Overwrite the staged token, whatever the install did. The command deletes the file itself on
- * every exit path; this runs second, for the case where the command never ran at all.
- */
-async function clearStagedToken(operations: WorkspaceOperations): Promise<void> {
-  try {
-    await operations.writeFile(GITHUB_TOKEN_STAGING_PATH, "");
-  } catch {
-    // Nothing to report: the file is already gone, or the workspace is unavailable and the caller
-    // is about to hear that from the operation it asked for.
-  }
+  return output.stdout.trim() === "tooling-missing"
+    ? { ok: true, result: { kind: "credential-status", state: "tooling-missing", login: void 0 } }
+    : { ok: true, result: { kind: "credential-installed" } };
 }
 
 async function credentialStatus(operations: WorkspaceOperations): Promise<GitHubCredentialResult> {

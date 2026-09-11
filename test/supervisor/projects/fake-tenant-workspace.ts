@@ -15,13 +15,15 @@ import type { GitHubCredentialState } from "../../../src/github/index.js";
  * Every request goes through the production parse, plan, and effect shells; only Computer itself is
  * replaced, by a fake shell that answers the four commands cf-stumble sends. That keeps the tests
  * honest about which requests are accepted and what text is run, and it records every write and
- * every command so a test can prove where a token did and did not go.
+ * every command and every standard input so a test can prove where a token did and did not go.
  *
  * It cannot show that provisioning or `gh` works. No test in this repository runs a shell.
  */
 export class FakeTenantWorkspace implements WorkspaceOperations {
   readonly commands: string[] = [];
   readonly writes: (readonly [string, string])[] = [];
+  /** Every command that was given standard input, with what it was given. */
+  readonly stdins: (readonly [string, string])[] = [];
   /** Each credential request as JSON, so a test can search everything that was sent. */
   readonly credentialRequests: string[] = [];
   readonly names: string[] = [];
@@ -46,8 +48,14 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Promise.resolve();
   }
 
-  runCommand(source: string): Promise<CommandOutput> {
+  runCommand(
+    source: string,
+    _cwd?: string,
+    _timeoutMs?: number,
+    stdin?: string,
+  ): Promise<CommandOutput> {
     this.commands.push(source);
+    if (stdin !== undefined) this.stdins.push([source, stdin]);
     if (source.includes("gh auth login")) {
       this.credentialState =
         this.credentialState === "tooling-missing" ? "tooling-missing" : "connected";

@@ -5,7 +5,6 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { containsCredential } from "../../src/github/index.js";
 import { ProjectConnections } from "../../src/supervisor/projects/index.js";
-import { GITHUB_TOKEN_STAGING_PATH } from "../../src/github/index.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import type { GitHubFetch } from "../../src/github/index.js";
@@ -17,8 +16,8 @@ import type { VerifiedAccessScope } from "../../src/access/index.js";
  *
  * The token here is recognizable on purpose. One authorization is driven end to end against the
  * fake workspace, and then every surface that could carry it is searched. The one place it is
- * allowed is the install request into the workspace and the private staging file that request
- * writes, which is where ADR-0039 puts it.
+ * allowed is the install request into the workspace and the standard input of the one command
+ * that request runs, which is where ADR-0039 puts it.
  *
  * Vite resolves the globs at build time, so this reads no filesystem and runs in workerd.
  */
@@ -166,10 +165,10 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
   );
   expect(
     workspace.writes.filter(([, content]) => content.includes(FAKE_TOKEN)),
-    "the token is written once, to the private staging file the install consumes",
-  ).toEqual([[GITHUB_TOKEN_STAGING_PATH, `${FAKE_TOKEN}\n`]]);
+    "a file is a surface too: the token is written to no path at all",
+  ).toEqual([]);
   expect(
-    workspace.writes.filter(([path]) => path === GITHUB_TOKEN_STAGING_PATH).at(-1),
-    "and the staging file is cleared after the install",
-  ).toEqual([GITHUB_TOKEN_STAGING_PATH, ""]);
+    workspace.stdins.filter(([, input]) => input.includes(FAKE_TOKEN)).map(([source]) => source),
+    "the token reaches exactly one command, on its standard input",
+  ).toEqual([expect.stringContaining("gh auth login")]);
 });
