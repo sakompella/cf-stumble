@@ -72,6 +72,20 @@ Use a Worker route when a proxied record already covers the hostname. Add a rout
 
 Use a custom domain when the hostname has no record and you want Cloudflare to create one. A custom domain writes a DNS record for the hostname.
 
+## One entry point
+
+`wrangler.jsonc` sets `"workers_dev": false`. Your instance answers on the hostname you gave the
+Worker a route for, and nowhere else.
+
+This is deliberate. A `workers.dev` subdomain is reachable without Cloudflare Access, so leaving it
+on would put a second door on the same Worker with nothing watching it, and the Worker's own
+refusal would be the only thing standing there. One door, behind Access, is easier to reason about
+and easier to check.
+
+If you want the subdomain as well, set `"workers_dev": true`. Know what you are choosing: anything
+that reaches that address skips Access, and only the `CF_ACCESS_*` check inside the Worker refuses
+it.
+
 ## Connect a project
 
 The workspace is a development machine. It has `git` and `gh`. Authorize GitHub inside the workspace, then connect one GitHub repository from there. The `gh` credential stays in the workspace's local GitHub configuration. The repository keeps its own files and Git history. Your browser does not receive the GitHub credential.
