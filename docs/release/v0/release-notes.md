@@ -1,6 +1,6 @@
 # Version 0 release notes
 
-This release is the tag `v0` on `main`. Resolve it to its commit with `git rev-parse v0`, which is
+This release is the tag `v0` on `main`. Resolve it to its commit with `git rev-parse "v0^{commit}"`, which is
 the exact tree every result below was measured against. The tag exists because these notes ship
 inside the commit they describe, so no SHA written here could name it.
 
