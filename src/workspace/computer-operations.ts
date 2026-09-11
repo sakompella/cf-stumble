@@ -1,4 +1,4 @@
-import type { Workspace } from "@cloudflare/computer";
+import type { Workspace, WorkspaceRuntimeExecOptions } from "@cloudflare/computer";
 import type { CommandOutput, WorkspaceOperations, WorkspacePathKind } from "./executor.js";
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Computer threw this value; the function narrows its documented error code.
@@ -35,13 +35,22 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
     return this.workspace.fs.writeFile(path, content);
   }
 
-  async runCommand(source: string, cwd: string, timeoutMs: number): Promise<CommandOutput> {
-    const execution = await this.workspace.runtime.exec(source, {
+  async runCommand(
+    source: string,
+    cwd: string,
+    timeoutMs: number,
+    stdin?: string,
+  ): Promise<CommandOutput> {
+    const options: WorkspaceRuntimeExecOptions<"utf8"> = {
       backend: "container-shell",
       cwd,
       encoding: "utf8",
       timeoutMs,
-    });
+    };
+    // Only set when there is one: `exactOptionalPropertyTypes` makes an explicit `undefined` a
+    // different thing from an absent option, and a command with no standard input wants absent.
+    if (stdin !== undefined) options.stdin = stdin;
+    const execution = await this.workspace.runtime.exec(source, options);
     const result = await execution.result();
     return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
   }

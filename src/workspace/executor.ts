@@ -5,12 +5,24 @@ import type { HarnessBuildConfiguration } from "../harness-build.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
-/** The only imperative operations the Workspace Host needs from Computer. */
+/**
+ * The only imperative operations the Workspace Host needs from Computer.
+ *
+ * `runCommand` takes an optional `stdin` because a secret belongs on standard input and nowhere
+ * else: a command line is visible in a process list, and a file has to be created, read, and
+ * removed on a filesystem that may not be the one the command runs on. Standard input reaches the
+ * process directly, so nothing has to be cleaned up afterwards.
+ */
 export type WorkspaceOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
-  runCommand(source: string, cwd: string, timeoutMs: number): Promise<Readonly<CommandOutput>>;
+  runCommand(
+    source: string,
+    cwd: string,
+    timeoutMs: number,
+    stdin?: string,
+  ): Promise<Readonly<CommandOutput>>;
 }>;
 
 export type CommandOutput = Readonly<{ stdout: string; stderr: string; exitCode: number }>;

@@ -89,10 +89,10 @@ production authorization mechanism, and a deployment that sets neither `GITHUB_O
 
 ## Where the credential lives
 
-`WorkspaceHost.credential` is the only path that carries a token into the workspace. It writes the
-token to `/tmp/cf-stumble-gh-token`, which is outside every repository, runs
-`gh auth login --with-token` reading that file, deletes the file, and runs `gh auth setup-git`. The
-token is never part of a command line and never part of a result.
+`WorkspaceHost.credential` is the only path that carries a token into the workspace. It runs
+`gh auth login --with-token` with the token on the command's standard input, then runs
+`gh auth setup-git`. The token is never part of a command line, never part of a result, and never
+written to a file, so no interrupted install can leave one behind.
 
 After that, `git` and `gh` authenticate the way they do on any development machine. cf-stumble does
 not proxy GitHub operations, and the Supervisor keeps no copy of the token: the tenant's storage
