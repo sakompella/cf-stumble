@@ -36,6 +36,7 @@ export type TurnSettlement = Readonly<{
  */
 function released(turn: TurnSettlement, frame: ProjectTurnFrame): TurnEnd {
   turn.threads.abandonTurn(turn.projectId, turn.leaseId);
+
   return { frame };
 }
 
@@ -56,9 +57,11 @@ function released(turn: TurnSettlement, frame: ProjectTurnFrame): TurnEnd {
  */
 function saveCompletedTurn(turn: TurnSettlement, messages: readonly unknown[]): ProjectTurnFrame {
   const saved = turn.threads.finishTurn(turn.projectId, turn.leaseId, messages, turn.now());
+
   if (!saved.ok) {
     // Terminal success the Supervisor could not make durable is not success (ADR-0037).
     turn.threads.abandonTurn(turn.projectId, turn.leaseId);
+
     return { kind: "save-failed", code: saved.problem.code };
   }
 
@@ -79,9 +82,11 @@ function saveFailedTurn(
   messages: readonly unknown[],
 ): ProjectTurnFrame {
   const saved = turn.threads.finishTurn(turn.projectId, turn.leaseId, messages, turn.now());
+
   if (!saved.ok) {
     turn.threads.abandonTurn(turn.projectId, turn.leaseId);
   }
+
   return {
     kind: "turn-failed",
     code,

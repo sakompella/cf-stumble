@@ -29,6 +29,7 @@ function parseTurnMessages(value: unknown): readonly AgentMessage[] | undefined 
   if (value === undefined || value === null) {
     return [];
   }
+
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the value is a list, which is everything this side may claim about a conversation Pi's `Agent` will interpret.
   return Array.isArray(value) ? (value as readonly AgentMessage[]) : undefined;
 }
@@ -36,7 +37,9 @@ function parseTurnMessages(value: unknown): readonly AgentMessage[] | undefined 
 export function parseFacetTurnRequest(value: unknown): FacetTurnRequest | undefined {
   if (!isPlainObject(value)) return undefined;
   const { prompt, messages } = value;
+
   if (!isString(prompt)) return undefined;
   const conversation = parseTurnMessages(messages);
+
   return conversation === undefined ? undefined : { prompt, messages: conversation };
 }

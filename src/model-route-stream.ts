@@ -23,6 +23,7 @@ const MAX_OUTPUT_TOKENS = 4096;
 
 function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
   const tools = request.tools;
+
   return tools === undefined
     ? {
         messages: request.messages,
@@ -53,6 +54,7 @@ export function streamingBindingCall(
   input: StreamingProviderPayload,
 ): Promise<ReadableStream<Uint8Array>> {
   const raw: unknown = ai.run(model, input);
+
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: see the function doc above.
   return raw as Promise<ReadableStream<Uint8Array>>;
 }
@@ -76,8 +78,11 @@ class ProviderStreamAccumulator {
 
   private applyToolCallDelta(delta: ToolCallDelta): void {
     const acc = this.toolCalls.get(delta.index) ?? { id: "", name: "", args: [] };
+
     if (delta.id !== undefined) acc.id = delta.id;
+
     if (delta.name !== undefined) acc.name = delta.name;
+
     if (delta.argumentsDelta !== undefined) acc.args.push(delta.argumentsDelta);
     this.toolCalls.set(delta.index, acc);
     this.emit({ type: "tool-call-delta", delta });
@@ -86,29 +91,40 @@ class ProviderStreamAccumulator {
   /** Parse and apply one decoded line; returns `true` when it is the terminal `[DONE]` marker. */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
+
     if (trimmed === "" || !trimmed.startsWith("data:")) return false;
     const payload = trimmed.slice("data:".length).trim();
+
     if (payload === "[DONE]") return true;
     let parsedJson: unknown;
+
     try {
       parsedJson = JSON.parse(payload);
     } catch {
       return false;
     }
+
     const chunk = parseProviderChunk(parsedJson);
+
     if (chunk === undefined) return false;
+
     if (chunk.textDelta !== undefined) {
       this.texts.push(chunk.textDelta);
       this.emit({ type: "text-delta", delta: chunk.textDelta });
     }
+
     for (const delta of chunk.toolCallDeltas ?? []) this.applyToolCallDelta(delta);
+
     if (chunk.usage !== undefined) this.reportedUsage = chunk.usage;
+
     return false;
   }
 
   result(): ProviderResult {
     const response = this.texts.length > 0 ? this.texts.join("") : null;
+
     if (this.toolCalls.size === 0) return { response };
+
     return {
       response,
       tool_calls: Array.from(this.toolCalls.values()).map((acc) => ({
@@ -145,24 +161,32 @@ async function readSseLines(
   const decoder = new TextDecoder();
   let buffer = "";
   let totalBytes = 0;
+
   for (;;) {
     const next = await reader.read();
+
     if (next.done) break;
     totalBytes += next.value.byteLength;
+
     if (totalBytes > MAX_STREAM_EVENT_BYTES) {
       throw new Error("provider stream exceeded the event byte bound");
     }
+
     buffer += decoder.decode(next.value, { stream: true });
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
+
     for (const line of lines) {
       if (onLine(line)) return true;
     }
   }
+
   buffer += decoder.decode();
+
   for (const line of buffer.split("\n")) {
     if (onLine(line)) return true;
   }
+
   return false;
 }
 
@@ -184,6 +208,7 @@ async function pumpProviderStream(
   const reader = providerStream.getReader();
   const accumulator = new ProviderStreamAccumulator(emit);
   let terminated: boolean;
+
   try {
     terminated = await readSseLines(reader, (line) => accumulator.handleLine(line));
   } finally {
@@ -191,7 +216,9 @@ async function pumpProviderStream(
       /* the stream already ended or failed; nothing more to release */
     });
   }
+
   if (!terminated) throw new Error("provider stream ended before a terminal marker");
+
   return { result: accumulator.result(), usage: accumulator.usage() };
 }
 
@@ -216,10 +243,13 @@ function resolveUsage(
       estimated: false,
     };
   }
+
   const promptBytes = USAGE_BYTES.encode(JSON.stringify(request.messages)).length;
+
   const completionBytes = USAGE_BYTES.encode(
     (result.response ?? "") + JSON.stringify(result.tool_calls ?? []),
   ).length;
+
   return {
     inputTokens: estimateTokens(promptBytes),
     outputTokens: estimateTokens(completionBytes),
@@ -237,19 +267,24 @@ export function streamModelEvents(
   request: ModelRouteRequest,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       function emit(event: ModelStreamEvent): void {
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       }
+
       let providerStream: ReadableStream<Uint8Array>;
+
       try {
         providerStream = await ai.run(MODEL, buildStreamingProviderPayload(request));
       } catch {
         emit({ type: "error", error: { code: "model-unavailable" } });
         controller.close();
+
         return;
       }
+
       try {
         const { result, usage } = await pumpProviderStream(providerStream, emit);
         emit({
@@ -260,6 +295,7 @@ export function streamModelEvents(
       } catch {
         emit({ type: "error", error: { code: "model-unavailable" } });
       }
+
       controller.close();
     },
   });
@@ -280,9 +316,11 @@ export function encodeModelRouteResponseAsStream(
   usage?: ModelUsage,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+
   const event: ModelStreamEvent = response.ok
     ? { type: "done", message: response.message, usage: usage ?? DEFAULT_ESTIMATED_USAGE }
     : { type: "error", error: response.error };
+
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));

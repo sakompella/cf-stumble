@@ -21,7 +21,9 @@ function selected(cases: readonly HarnessCase[], only: string | undefined): read
   if (only === undefined) {
     return cases;
   }
+
   const wanted = only.toUpperCase();
+
   return cases.filter(
     (entry) => entry.id.toUpperCase() === wanted || surfaceOf(entry.id).toUpperCase() === wanted,
   );
@@ -29,17 +31,22 @@ function selected(cases: readonly HarnessCase[], only: string | undefined): read
 
 function argumentValue(argv: readonly string[], flag: string): string | undefined {
   const at = argv.indexOf(flag);
+
   return at < 0 ? undefined : argv[at + 1];
 }
 
 function report(outcome: CaseOutcome): void {
   const seconds = (outcome.durationMs / 1000).toFixed(1);
+
   if (outcome.passed) {
     console.log(`PASS ${outcome.id} ${outcome.title} (${seconds}s)`);
     console.log(`     ${outcome.evidence}`);
+
     return;
   }
+
   console.log(`FAIL ${outcome.id} ${outcome.title} (${seconds}s) [${outcome.rank}]`);
+
   for (const line of outcome.reason.split("\n")) {
     console.log(`     ${line}`);
   }
@@ -54,27 +61,35 @@ function summarise(outcomes: readonly CaseOutcome[]): number {
     `${outcomes.length} case(s): ${outcomes.length - failed.length} passed, ` +
       `${failed.length} failed${mustNote}`,
   );
+
   if (failed.length > 0) {
     console.log(`failed: ${failed.map((outcome) => outcome.id).join(", ")}`);
   }
+
   return failed.length === 0 ? 0 : 1;
 }
 
 export async function runHarness(argv: readonly string[]): Promise<number> {
   const cases = selected(await loadCases(), argumentValue(argv, "--only"));
+
   if (argv.includes("--list")) {
     for (const entry of cases) {
       console.log(`${entry.id} [${entry.rank}] ${entry.title} (${entry.scenario})`);
     }
+
     return 0;
   }
+
   if (cases.length === 0) {
     console.error("no case matched --only; run with --list to see the registered cases");
+
     return 1;
   }
+
   const chrome = await HarnessChrome.launch();
   console.log(`browser-harness: ${cases.length} case(s) in ${chrome.executable}`);
   const outcomes: CaseOutcome[] = [];
+
   try {
     for (const entry of cases) {
       const outcome = await runCase(chrome, entry);
@@ -84,6 +99,7 @@ export async function runHarness(argv: readonly string[]): Promise<number> {
   } finally {
     await chrome.close();
   }
+
   return summarise(outcomes);
 }
 

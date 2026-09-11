@@ -40,6 +40,7 @@ async function streamFrames(
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
   });
+
   for (const [index, frame] of script.frames.entries()) {
     if (script.hold > 0 && index === script.hold) {
       watch.barrierReached = true;
@@ -49,16 +50,21 @@ async function streamFrames(
         "a case to release the held turn frames",
       );
     }
+
     await sleep(FRAME_INTERVAL_MS);
+
     if (res.writableEnded || res.destroyed) {
       return;
     }
+
     res.write(`${JSON.stringify(frame)}\n`);
     watch.framesWritten = index + 1;
+
     if (frame.kind === "saved") {
       state.threads.set(projectId, { revision: frame.revision, messageCount: frame.messageCount });
     }
   }
+
   res.end();
 }
 
@@ -68,9 +74,11 @@ function turnRefusal(
   if (scenario === "turn-conflict") {
     return { status: 409, code: "turn-conflict" };
   }
+
   if (scenario === "no-active-generation") {
     return { status: 503, code: "no-active-generation" };
   }
+
   return undefined;
 }
 
@@ -81,11 +89,14 @@ export async function serveTurn(
   record: AnsweredRequest,
 ): Promise<void> {
   const refusal = turnRefusal(state.scenario);
+
   if (refusal === undefined) {
     record.status = 200;
     await streamFrames(res, state, projectId);
+
     return;
   }
+
   record.status = refusal.status;
   sendJson(res, refusal.status, { ok: false, problem: { code: refusal.code } });
 }

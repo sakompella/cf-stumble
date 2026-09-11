@@ -66,6 +66,7 @@ const DISPLAY_NAME_LIMIT = 80;
 function chosenDisplayName(value: unknown, repositoryUrl: PublicRepositoryUrl): string {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the display name is untrusted.
   const trimmed = typeof value === "string" ? value.trim() : "";
+
   return trimmed.length === 0
     ? defaultProjectDisplayName(repositoryUrl)
     : trimmed.slice(0, DISPLAY_NAME_LIMIT);
@@ -79,7 +80,9 @@ function projectFromRow(row: ConnectedProjectRow): ConnectedProject {
       repositoryUrl: row.repository_url,
     },
   ]);
+
   const project = catalog?.[0];
+
   if (project === undefined) {
     throw new Error(`invalid connected project row ${row.project_id}`);
   }
@@ -137,9 +140,11 @@ export class ConnectedProjects {
   connect(input: ConnectProjectInput, now: number): ConnectProjectResult {
     const repositoryUrl = canonicalRepositoryUrl(input.repositoryUrl);
     const id = repositoryUrl === undefined ? undefined : projectIdForRepository(repositoryUrl);
+
     if (repositoryUrl === undefined || id === undefined) {
       return { ok: false, problem: { code: "invalid-repository-url" } };
     }
+
     if (id === HARNESS_PROJECT_ID) {
       // The harness entry owns that id and is always in the selectable catalog, so a row holding
       // it could never be selected. Refusing here is the same answer as any other id collision:
@@ -148,8 +153,10 @@ export class ConnectedProjects {
     }
 
     const displayName = chosenDisplayName(input.displayName, repositoryUrl);
+
     return this.storage.transactionSync(() => {
       const existing = this.byId(id);
+
       if (existing !== undefined) {
         return existing.repositoryUrl === repositoryUrl
           ? {
@@ -172,6 +179,7 @@ export class ConnectedProjects {
         repositoryUrl,
         now,
       );
+
       return { ok: true, project: { id, displayName, repositoryUrl }, alreadyConnected: false };
     });
   }
@@ -193,6 +201,7 @@ export class ConnectedProjects {
         id,
       )
       .toArray()[0];
+
     return row === undefined ? undefined : projectFromRow(row);
   }
 }

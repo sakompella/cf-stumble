@@ -23,18 +23,22 @@ export const INITIAL_THREAD: ThreadState = { revision: 3, messageCount: 2 };
 
 /** The marker that proves the reader is looking at this project's own stored conversation. */
 export const HARNESS_THREAD_MARKER = "HARNESS-THREAD";
+
 export const EARLIER_EDIT_MARKER = "EARLIER-EDIT-KEPT";
 
 export function projectLocation(projectId: string): string {
   if (projectId === HARNESS_SELF_PROJECT_ID) {
     return HARNESS_LOCATION;
   }
+
   if (projectId === HARNESS_PROJECT_ID) {
     return HARNESS_PROJECT_URL;
   }
+
   if (projectId === CONNECTED_PROJECT_ID) {
     return CONNECTED_PROJECT_URL;
   }
+
   return `/workspace/projects/${projectId}`;
 }
 
@@ -44,12 +48,15 @@ function threadMarker(projectId: string): string {
 
 function savedMessageText(projectId: string, index: number): string {
   const location = projectLocation(projectId);
+
   if (index === 0) {
     return `Read the README of ${projectId} at ${location} and say what it is.`;
   }
+
   if (index === 1) {
     return `${projectId} is checked out at ${location}. ${threadMarker(projectId)}`;
   }
+
   return index % 2 === 0
     ? `Ask ${projectId} something else (message ${index + 1}).`
     : `Answer ${index + 1} about ${projectId}.`;
@@ -66,6 +73,7 @@ export function threadPayload(projectId: string, thread: ThreadState): JsonValue
   const messages = Array.from({ length: thread.messageCount }, (_unused, index) =>
     savedMessage(projectId, index),
   );
+
   return {
     ok: true,
     thread: {

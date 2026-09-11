@@ -114,18 +114,23 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
  */
 export async function streamProjectTurn(input: ProjectTurnInput): Promise<ProjectTurnStart> {
   const resolved = resolveSelectableProject(input.projectId, input.catalog);
+
   if (!resolved.ok) {
     return { ok: false, reason: resolved.reason };
   }
+
   const selected = resolved.project;
+
   if (input.signal.aborted) {
     return NOT_STARTED;
   }
 
   const mounted = await input.mount();
+
   if (mounted.isErr()) {
     return { ok: false, reason: mountRefusal(mounted.error.code) };
   }
+
   if (input.signal.aborted) {
     return NOT_STARTED;
   }
@@ -135,16 +140,19 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
   if (selected.kind === "repository" && !(await input.provision(selected))) {
     return { ok: false, reason: "workspace-unavailable" };
   }
+
   if (input.signal.aborted) {
     return NOT_STARTED;
   }
 
   let capability: ProjectRpcTargetContract;
+
   try {
     capability = await input.namespace.getByName(input.workspaceName).project();
   } catch {
     return { ok: false, reason: "workspace-unavailable" };
   }
+
   if (input.signal.aborted) {
     return NOT_STARTED;
   }
@@ -155,6 +163,7 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
       input.request,
       selectedWorkingDirectory(selected),
     );
+
     return endedBeforeItBegan(input, frames);
   } catch {
     return NOT_STARTED;
@@ -178,5 +187,6 @@ function endedBeforeItBegan(
     () => {},
     () => {},
   );
+
   return NOT_STARTED;
 }

@@ -21,12 +21,15 @@ const parsed = parseProjectCatalog([
     repositoryUrl: "https://github.com/sample/project-two",
   },
 ]);
+
 if (parsed === undefined || parsed[0] === undefined || parsed[1] === undefined) {
   throw new Error("the sample catalog must parse");
 }
 
 export const sampleCatalog: ProjectCatalog = parsed;
+
 export const sampleProjectOne: Project = parsed[0];
+
 export const sampleProjectTwo: Project = parsed[1];
 
 /**

@@ -47,6 +47,7 @@ test("cleanup always resolves", async () => {
 
 test("enumerates all 18 ExecutionEnv methods without throwing, including every failure path", async () => {
   const { env } = makeFacetExecutionEnv();
+
   const calls: Array<Promise<unknown>> = [
     env.absolutePath("missing.txt"),
     env.joinPath(["a"]),
@@ -69,6 +70,7 @@ test("enumerates all 18 ExecutionEnv methods without throwing, including every f
     // without a test needing to script an exec backend response for this generic sweep.
     env.exec("true", { timeout: 0.001 }),
   ];
+
   const settled = await Promise.allSettled(calls);
   expect(settled.every((entry) => entry.status === "fulfilled")).toBe(true);
 });
@@ -87,6 +89,7 @@ test("arbitrary bytes round-trip exactly through writeFile/readBinaryFile", asyn
   });
   const read = await env.readBinaryFile("/workspace/weird.bin");
   expect(read.ok).toBe(true);
+
   if (read.ok) expect(Array.from(read.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
 });
 
@@ -97,6 +100,7 @@ test("readTextFile decodes with replacement, but readBinaryFile preserves the ra
 
   const text = await env.readTextFile("/workspace/weird.bin");
   expect(text.ok).toBe(true);
+
   if (text.ok) {
     expect(text.value.includes("\uFFFD")).toBe(true);
     expect(text.value.codePointAt(0)).toBe(0);
@@ -104,6 +108,7 @@ test("readTextFile decodes with replacement, but readBinaryFile preserves the ra
 
   const binary = await env.readBinaryFile("/workspace/weird.bin");
   expect(binary.ok).toBe(true);
+
   if (binary.ok) expect(Array.from(binary.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
 });
 
@@ -117,6 +122,7 @@ test("multibyte text round-trips and reports a byte-counted size, not a characte
 
   const info = await env.fileInfo("/workspace/greeting.txt");
   expect(info.ok).toBe(true);
+
   if (info.ok) expect(info.value.size).toBe(6);
 });
 
@@ -194,6 +200,7 @@ function withSymlinks() {
   context.provider.addSymlink("/workspace/escape", "../outside");
   context.provider.addSymlink("/workspace/loop-a", "loop-b");
   context.provider.addSymlink("/workspace/loop-b", "loop-a");
+
   return context;
 }
 

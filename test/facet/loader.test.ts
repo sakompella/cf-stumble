@@ -33,6 +33,7 @@ function loaderWithRecordedNames(names: string[]): WorkerLoader {
 
 async function responseText(worker: WorkerStub): Promise<string> {
   const response = await worker.getEntrypoint().fetch(new Request("https://cf-stumble.test/"));
+
   return response.text();
 }
 
@@ -75,6 +76,7 @@ test("loads a multi-module main harness whose entry module uses an imported valu
   );
 
   expect(loadedHarness.isOk()).toBe(true);
+
   if (loadedHarness.isErr()) {
     return;
   }
@@ -95,6 +97,7 @@ test("loads a one-module main harness through the artifact loader", async () => 
   );
 
   expect(loadedHarness.isOk()).toBe(true);
+
   if (loadedHarness.isErr()) {
     return;
   }
@@ -105,6 +108,7 @@ test("loads a one-module main harness through the artifact loader", async () => 
 test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader name", async () => {
   const loaderNames: string[] = [];
   const loader = loaderWithRecordedNames(loaderNames);
+
   const firstHarness = loadMainFacet(
     loader,
     artifact("2123456789abcdef0123456789abcdef01234567", "main.js", [
@@ -115,6 +119,7 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
     ]),
     { MODEL: modelRoute },
   );
+
   const secondHarness = loadMainFacet(
     loader,
     artifact("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "main.js", [
@@ -132,6 +137,7 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
     "2123456789abcdef0123456789abcdef01234567",
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   ]);
+
   if (firstHarness.isErr() || secondHarness.isErr()) {
     return;
   }
@@ -142,6 +148,7 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
 
 test("reuses the cached Worker Loader entry when the same harness commit is loaded again", async () => {
   const harnessCommit = "5123456789abcdef0123456789abcdef01234567";
+
   const firstHarness = loadMainFacet(
     env.LOADER,
     artifact(harnessCommit, "main.js", [
@@ -149,6 +156,7 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     ]),
     { MODEL: modelRoute },
   );
+
   const rebuiltHarness = loadMainFacet(
     env.LOADER,
     artifact(harnessCommit, "main.js", [
@@ -159,6 +167,7 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
 
   expect(firstHarness.isOk()).toBe(true);
   expect(rebuiltHarness.isOk()).toBe(true);
+
   if (firstHarness.isErr() || rebuiltHarness.isErr()) {
     return;
   }
@@ -180,6 +189,7 @@ test("returns the raw invalid harness commit in artifact input diagnostics", () 
   );
 
   expect(loadedHarness.isErr()).toBe(true);
+
   if (loadedHarness.isOk()) {
     return;
   }
@@ -190,6 +200,7 @@ test("returns the raw invalid harness commit in artifact input diagnostics", () 
 
 test("rejects an artifact with no entry module before calling the Worker Loader", () => {
   const loaderNames: string[] = [];
+
   const loadedHarness = loadMainFacet(
     loaderWithRecordedNames(loaderNames),
     artifact("4123456789abcdef0123456789abcdef01234567", "main.js", [
@@ -202,6 +213,7 @@ test("rejects an artifact with no entry module before calling the Worker Loader"
   );
 
   expect(loadedHarness.isErr()).toBe(true);
+
   if (loadedHarness.isOk()) {
     return;
   }

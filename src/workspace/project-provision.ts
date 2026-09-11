@@ -52,6 +52,7 @@ function invalidRequest(): WorkspaceFailure {
 function parsedProject(value: UntrustedObject): Project | undefined {
   const projectId = parseProjectId(field(value, "projectId"));
   const repositoryUrl = canonicalRepositoryUrl(field(value, "repositoryUrl"));
+
   if (
     projectId === undefined ||
     repositoryUrl === undefined ||
@@ -78,15 +79,19 @@ export function parseProjectProvisionRequest(
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
   if (value === null || typeof value !== "object") return invalidRequest();
   const request = asUntrusted(value);
+
   if (field(request, "kind") !== "provision-project") return invalidRequest();
+
   if (!fieldsAreExactly(request, ["kind", "projectId", "repositoryUrl", "step"])) {
     return invalidRequest();
   }
 
   const project = parsedProject(request);
+
   if (project === undefined) return invalidRequest();
 
   const step = PROJECT_PROVISION_STEP_NAMES.find((name) => name === field(request, "step"));
+
   if (step === undefined) return { ok: false, error: { code: "unknown-command" } };
 
   return { kind: "provision-project", project, step };
@@ -102,6 +107,7 @@ export function planProjectProvisionRequest(request: ParsedProjectProvisionReque
     planProjectProvision(projectProvisionConfiguration(request.project.id), request.project),
     request.step,
   );
+
   switch (step.name) {
     case "clone":
       return {
@@ -114,6 +120,7 @@ export function planProjectProvisionRequest(request: ParsedProjectProvisionReque
       return { kind: "write-file", path: step.path, content: step.content };
     default: {
       const exhaustive: never = step;
+
       return exhaustive;
     }
   }

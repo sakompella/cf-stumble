@@ -12,6 +12,7 @@ import { activeSupervisor } from "../supervisor/helpers.js";
  */
 async function facetRequest(name: string, path: string): Promise<Response> {
   const control = await activeSupervisor(name);
+
   return control.fetch(new Request(`https://cf-stumble.test${path}`));
 }
 

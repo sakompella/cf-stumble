@@ -19,11 +19,14 @@ import {
  */
 
 const commit = harnessCommit("5000000000000000000000000000000000000002");
+
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
+
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }

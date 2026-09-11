@@ -11,6 +11,7 @@ import type {
 } from "./artifact.js";
 
 export { MainHarnessArtifact } from "./artifact.js";
+
 export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
 
 /**
@@ -83,6 +84,7 @@ export function loadMainFacet(
   MainHarnessArtifactProblem
 > {
   const artifact = MainHarnessArtifact.parse(input);
+
   if (artifact.isErr()) {
     return Result.err(artifact.error);
   }

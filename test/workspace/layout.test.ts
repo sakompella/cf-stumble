@@ -27,6 +27,7 @@ import {
  */
 
 const projectOne = sampleProjectOne;
+
 const projectTwo = sampleProjectTwo;
 
 test("gives the harness, each project, and build scratch separate directories", () => {
@@ -40,11 +41,13 @@ test("gives the harness, each project, and build scratch separate directories", 
   for (const directory of [HARNESS_DIRECTORY, projectDirectory(projectOne.id)]) {
     expect(directory.startsWith(`${WORKSPACE_ROOT}/`)).toBe(true);
   }
+
   expect(
     BUILD_SCRATCH_ROOT.startsWith(`${WORKSPACE_ROOT}/`),
     "build scratch is the container's, because a build in durable storage reset the Durable Object",
   ).toBe(false);
   expect(new Set(directories).size, "every directory is distinct").toBe(directories.length);
+
   for (const directory of directories) {
     for (const other of directories) {
       expect(
@@ -53,6 +56,7 @@ test("gives the harness, each project, and build scratch separate directories", 
       ).toBe(false);
     }
   }
+
   expect(projectGitDirectory(projectOne.id)).toBe(`${projectDirectory(projectOne.id)}/.git`);
   expect(HARNESS_GIT_DIRECTORY).toBe(`${HARNESS_DIRECTORY}/.git`);
   expect(projectDirectory(projectOne.id).startsWith(`${PROJECTS_DIRECTORY}/`)).toBe(true);
@@ -79,9 +83,11 @@ test("the facet guard and the addressed-path space share one root", () => {
 
   for (const path of inside) {
     const resolved = resolveAbsolute(projectDirectory(projectOne.id), path);
+
     if (!resolved.ok) {
       throw new Error(`${path} is inside the workspace and must resolve`);
     }
+
     expect(resolved.value).toBe(path);
     expect(
       parseAddressedPath(toAddressedPath(resolved.value)).ok,
@@ -101,6 +107,7 @@ test("a sibling repository is reachable and everything above the root is not", (
     ok: true,
     value: MANAGED_AGENT_INSTRUCTIONS_PATH,
   });
+
   for (const escape of ["../../../etc/passwd", "/etc/passwd", `${WORKSPACE_ROOT}/../secrets`]) {
     expect(resolveAbsolute(cwd, escape).ok, `${escape} must not resolve`).toBe(false);
   }

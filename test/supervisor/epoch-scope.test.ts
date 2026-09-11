@@ -23,11 +23,13 @@ async function readyReplacement(name: string): Promise<DurableObjectStub<Supervi
   await activateFixtureGeneration(control);
   const label = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, label, replacementCommit);
+
   return control;
 }
 
 async function activateReplacement(control: DurableObjectStub<Supervisor>, observedEpoch: number) {
   const generation = await control.getGeneration(1);
+
   if (generation === undefined) {
     throw new Error("the replacement generation must be labeled");
   }
@@ -42,6 +44,7 @@ async function completedTurn(control: DurableObjectStub<Supervisor>): Promise<vo
   const response = await control.fetch(
     new Request("https://cf-stumble.test/facet/relay/body-complete"),
   );
+
   await response.text();
 }
 
@@ -86,18 +89,22 @@ test("a repeated passing check advances the epoch and rejects an activation from
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName(
     "epoch-scope-recheck-stale-activation",
   );
+
   await activateFixtureGeneration(control);
   const targetLabel = await submitCandidate(control, replacementCommit);
   await prepareGeneration(control, targetLabel, replacementCommit);
 
   const beforeRecheck = await control.getActiveGeneration();
   const checksBefore = await control.getPreparationCheckHistory(0);
+
   const rechecked = await control.checkGenerationStartup(
     0,
     readyArtifact(fixtureMainHarnessCommit),
   );
+
   const checksAfter = await control.getPreparationCheckHistory(0);
   const afterRecheck = await control.getActiveGeneration();
+
   const result = await control.controlGeneration({
     principal: { kind: "user" },
     command: {

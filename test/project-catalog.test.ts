@@ -25,9 +25,11 @@ function catalogOf(...urls: readonly string[]): ProjectCatalog {
       repositoryUrl,
     })),
   );
+
   if (parsed === undefined) {
     throw new Error("these repository URLs must produce a catalog");
   }
+
   return parsed;
 }
 
@@ -44,12 +46,15 @@ test.each([0, 1, 2, 3])("resolves every project of a catalog holding %i of them"
     { length: count },
     (_, index) => `https://github.com/sample/repo-${index}`,
   );
+
   const catalog = catalogOf(...urls);
 
   expect(catalog).toHaveLength(count);
+
   for (const project of catalog) {
     expect(resolveProject(project.id, catalog)).toEqual({ ok: true, project });
   }
+
   expect(resolveProject("not-connected", catalog)).toEqual({
     ok: false,
     reason: "unknown-project-id",
@@ -60,6 +65,7 @@ test("gives one repository the same identity whatever its position or display na
   const url = "https://github.com/sample/repo-1";
   const first = catalogOf(url, "https://github.com/sample/repo-2");
   const reordered = catalogOf("https://github.com/sample/repo-2", url);
+
   const renamed = parseProjectCatalog([
     { id: projectIdForRepository(url), displayName: "a new name", repositoryUrl: url },
   ]);

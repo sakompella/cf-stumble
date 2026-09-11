@@ -48,6 +48,7 @@ export const CASES: readonly HarnessCase[] = [
         "keyboard turn ending",
       );
       await waitForSettledReads(page);
+
       return `Control-Enter sent one exact turn request; the prompt cleared and ${held.assistantCharacters} assistant characters were visible before release`;
     },
   },

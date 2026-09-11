@@ -103,6 +103,7 @@ describe("the owner allowlist", () => {
       }),
       workerEnvironment(key, accessOwnerSubject),
     );
+
     const nonOwnerResponse = await worker.fetch(
       new Request("https://cf-stumble.test/", {
         headers: { accept: "*/*", "cf-access-jwt-assertion": nonOwnerToken },
@@ -128,6 +129,7 @@ describe("the owner allowlist", () => {
       }),
       workerEnv,
     );
+
     const unauthenticatedResponse = await worker.fetch(
       new Request("https://cf-stumble.test/"),
       workerEnv,

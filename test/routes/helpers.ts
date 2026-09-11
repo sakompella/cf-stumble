@@ -63,6 +63,7 @@ export function ownerApiSupervisor(
 /** Stands in for the catalog: the first catalog project has a thread, and nothing else does. */
 function unknownProjectOr(projectId: string): ProjectThreadResult {
   const firstProject = sampleProjectOne;
+
   return projectId === firstProject.id
     ? { ok: true, thread: serializedThread(emptyThread(firstProject.id)) }
     : { ok: false, problem: { code: "unknown-project-id" } };

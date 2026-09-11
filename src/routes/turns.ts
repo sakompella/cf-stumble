@@ -47,11 +47,14 @@ const TURN_STATUS = {
 /** The project id a client named, still a plain string. The Supervisor resolves it. */
 function turnRoute(pathname: string): string | undefined {
   const encodedProjectId = /^\/api\/projects\/([^/]+)\/turn$/u.exec(pathname)?.[1];
+
   if (encodedProjectId === undefined) {
     return undefined;
   }
+
   try {
     const projectId = decodeURIComponent(encodedProjectId);
+
     return projectId.length === 0 ? undefined : projectId;
   } catch {
     return undefined;
@@ -62,6 +65,7 @@ function turnPrompt(value: unknown): string | undefined {
   if (!isRecord(value) || !hasExactKeys(value, ["prompt"]) || typeof value.prompt !== "string") {
     return undefined;
   }
+
   return value.prompt;
 }
 
@@ -89,12 +93,14 @@ async function turnResponse(
   projectId: string,
 ): Promise<Response> {
   const prompt = turnPrompt(await readJson(request));
+
   if (prompt === undefined) {
     return jsonError(400, "invalid-turn-request");
   }
 
   try {
     const run = await supervisor.runProjectTurn(projectId, prompt);
+
     return run.ok
       ? turnStreamResponse(run.frames)
       : Response.json(
@@ -120,9 +126,11 @@ export function routeProjectTurnRequest(
   supervisor: TurnApiSupervisor,
 ): Promise<Response> | undefined {
   const projectId = turnRoute(new URL(request.url).pathname);
+
   if (projectId === undefined || request.method !== "POST") {
     return undefined;
   }
+
   if (isCrossOriginMutation(request)) {
     return Promise.resolve(jsonError(403, "cross-origin-request"));
   }

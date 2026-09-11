@@ -45,6 +45,7 @@ async function restoreEarlier(page: BrowserPage, server: HarnessServer) {
     0,
     "activation requests during rollback",
   );
+
   return { before, transcript };
 }
 
@@ -75,6 +76,7 @@ async function finishRollback(
     "EARLIER-EDIT-KEPT",
     "the retained edit marker",
   );
+
   return `rollback sent epoch 4 to label 1, preserved ${HARNESS_PROJECT_ID} revision 3 and its conversation across reload, then saved a continuation with EARLIER-EDIT-KEPT`;
 }
 
@@ -128,6 +130,7 @@ export const CASES: readonly HarnessCase[] = [
     scenario: "ready",
     run: async ({ page, server }) => {
       const evidence = await restoreEarlier(page, server);
+
       return finishRollback(page, evidence);
     },
   },
@@ -147,13 +150,16 @@ export const CASES: readonly HarnessCase[] = [
         0,
         "empty submission requests",
       );
+
       for (const value of ["", "-1", "1.5"]) {
         await rejectLabel(page, server, value);
       }
+
       await reopen("status-problem");
       await openControls(page);
       server.clearRequests();
       await rejectWithoutEpoch(page, server);
+
       return "empty, negative, and fractional labels were rejected locally, and missing status epoch was rejected without a generation POST";
     },
   },

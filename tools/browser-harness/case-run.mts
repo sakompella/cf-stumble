@@ -31,11 +31,13 @@ export type CaseOutcome = Readonly<{
 
 async function withTimeout<T>(work: Promise<T>, timeoutMs: number, what: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+
   const guard = new Promise<never>((_answer, reject) => {
     timer = setTimeout(() => {
       reject(new Error(`${what} did not finish in ${timeoutMs}ms`));
     }, timeoutMs);
   });
+
   try {
     return await Promise.race([work, guard]);
   } finally {
@@ -64,6 +66,7 @@ function unexpectedRefusals(server: HarnessServer, allowed: readonly string[]): 
 /** A browser fault, except the network error the case already declared it expected. */
 function browserFaults(faults: readonly string[], allowed: readonly string[]): readonly string[] {
   const paths = allowed.map((entry) => entry.slice(entry.indexOf(" ") + 1));
+
   return faults.filter(
     (fault) => !fault.startsWith("log[network/") || !paths.some((path) => fault.includes(path)),
   );
@@ -78,10 +81,13 @@ function enforce(
   const allowed = entry.allowedRequestFailures ?? [];
   assertNonEmpty(evidence, `${entry.id} reported no result`);
   const faults = browserFaults(page.consoleErrors(), allowed);
+
   if (faults.length > 0) {
     throw new Error(`the browser reported ${faults.length} fault(s):\n  ${faults.join("\n  ")}`);
   }
+
   const refused = unexpectedRefusals(server, allowed);
+
   if (refused.length > 0) {
     throw new Error(`the page made a request this Worker refused:\n  ${refused.join("\n  ")}`);
   }
@@ -95,9 +101,11 @@ async function openCase(
   const viewport = entry.viewport ?? DEFAULT_VIEWPORT;
   await page.setViewport(viewport.width, viewport.height);
   const start = entry.start ?? "settled";
+
   if (start !== "blank") {
     await page.goto(`${server.url}/`);
   }
+
   if (start === "settled") {
     await waitForSettledReads(page);
   }
@@ -124,6 +132,7 @@ export async function runCase(chrome: HarnessChrome, entry: HarnessCase): Promis
   const started = Date.now();
   const server = await startHarnessServer(entry.scenario);
   const page = await chrome.openPage();
+
   const context: CaseContext = {
     page,
     server,
@@ -133,14 +142,18 @@ export async function runCase(chrome: HarnessChrome, entry: HarnessCase): Promis
       await waitForSettledReads(page);
     },
   };
+
   try {
     await openCase(entry, page, server);
+
     const evidence = await withTimeout(
       entry.run(context),
       entry.timeoutMs ?? DEFAULT_CASE_TIMEOUT_MS,
       entry.id,
     );
+
     enforce(page, server, evidence, entry);
+
     return outcome(entry, started, evidence, "");
   } catch (error) {
     return outcome(entry, started, "", error instanceof Error ? error.message : String(error));

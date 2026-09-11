@@ -6,7 +6,9 @@ import type { AssistantMessageEventStream, StreamFn } from "@cf-stumble/pi";
  * its message type from the function it belongs to rather than restating either shape here.
  */
 type Context = Parameters<StreamFn>[1];
+
 type Message = Context["messages"][number];
+
 import { assistantShell, TurnAssembler } from "./stream-assembler.js";
 import {
   isResponseError,
@@ -31,23 +33,30 @@ export { ROUTE_MODEL } from "./stream-assembler.js";
  */
 function routableMessage(message: Message): PiMessage | undefined {
   if (message.role === "assistant") return message;
+
   if (message.role === "user") {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Pi types this content as `string | (TextContent | ImageContent)[]`; the union needs narrowing.
     if (typeof message.content === "string") return { ...message, content: message.content };
     const text = message.content.filter((block) => block.type === "text");
+
     return text.length === message.content.length ? { ...message, content: text } : undefined;
   }
+
   const text = message.content.filter((block) => block.type === "text");
+
   return text.length === message.content.length ? { ...message, content: text } : undefined;
 }
 
 function routableMessages(messages: readonly Message[]): readonly PiMessage[] | undefined {
   const routable: PiMessage[] = [];
+
   for (const message of messages) {
     const narrowed = routableMessage(message);
+
     if (narrowed === undefined) return undefined;
     routable.push(narrowed);
   }
+
   return routable;
 }
 
@@ -67,6 +76,7 @@ function endedStream(reason: "error" | "aborted", detail: string): AssistantMess
     reason,
     error: { ...assistantShell(reason), errorMessage: detail },
   });
+
   return stream;
 }
 
@@ -84,18 +94,22 @@ function isAborted(signal: AbortSignal | undefined): boolean {
  */
 function parseStreamEventLine(line: string): ModelStreamEvent | undefined {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(line);
   } catch {
     return undefined;
   }
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: one decoded NDJSON line from the model route's own stream.
   if (parsed === null || typeof parsed !== "object" || !("type" in parsed)) return undefined;
   const { type } = parsed;
+
   if (type === "text-delta" || type === "tool-call-delta" || type === "done" || type === "error") {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `type` narrowed to every member of the closed ModelStreamEvent union above.
     return parsed as ModelStreamEvent;
   }
+
   return undefined;
 }
 
@@ -107,16 +121,21 @@ function applyModelStreamEvent(
   switch (event.type) {
     case "text-delta":
       assembler.textDelta(event.delta, stream);
+
       return;
     case "tool-call-delta":
       assembler.toolCallDelta(event.delta, stream);
+
       return;
     case "done": {
       const assistant = routeResponseToPiAssistant({ ok: true, message: event.message });
+
       if (isResponseError(assistant)) {
         assembler.fail(stream, "error", assistant.detail);
+
         return;
       }
+
       assembler.finish(stream, {
         ...assistantShell(
           assistant.stopReason === "toolUse" ? "toolUse" : "stop",
@@ -125,10 +144,13 @@ function applyModelStreamEvent(
         ),
         timestamp: assistant.timestamp,
       });
+
       return;
     }
+
     case "error":
       assembler.fail(stream, "error", event.error.code);
+
       return;
     default: {
       // oxlint-disable-next-line eslint/no-underscore-dangle -- Exhaustiveness guard: underscore signals the value is never reached.
@@ -149,39 +171,52 @@ async function pumpModelStream(
   signal: AbortSignal | undefined,
 ): Promise<void> {
   const reader = modelStream.getReader();
+
   const abort = () => {
     reader.cancel().catch(() => {
       /* the stream already ended or failed; nothing more to release */
     });
   };
+
   signal?.addEventListener("abort", abort, { once: true });
   const decoder = new TextDecoder();
   let buffer = "";
+
   try {
     for (;;) {
       if (isAborted(signal)) {
         assembler.fail(stream, "aborted", "the turn was cancelled");
+
         return;
       }
+
       const next = await reader.read();
+
       if (next.done) {
         if (isAborted(signal)) {
           assembler.fail(stream, "aborted", "the turn was cancelled");
+
           return;
         }
+
         break;
       }
+
       buffer += decoder.decode(next.value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
+
       for (const line of lines) {
         if (line.trim() === "") continue;
         const event = parseStreamEventLine(line);
+
         if (event === undefined) continue;
         applyModelStreamEvent(event, assembler, stream);
+
         if (event.type === "done" || event.type === "error") return;
       }
     }
+
     // The provider stream closed without a terminal event: nothing more will arrive.
     assembler.fail(stream, "error", "the model route ended its stream without a result");
   } catch {
@@ -199,16 +234,21 @@ async function driveModelStream(
   signal: AbortSignal | undefined,
 ): Promise<void> {
   let outcome: ReadableStream<Uint8Array> | ValidationFailure;
+
   try {
     outcome = await model.runStream(request);
   } catch {
     assembler.fail(stream, "error", "the model route did not answer");
+
     return;
   }
+
   if (!(outcome instanceof ReadableStream)) {
     assembler.fail(stream, "error", outcome.error.reason);
+
     return;
   }
+
   await pumpModelStream(outcome, assembler, stream, signal);
 }
 
@@ -219,6 +259,7 @@ function streamOnce(
 ): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
   const messages = routableMessages(context.messages);
+
   if (messages === undefined) {
     stream.push({
       type: "error",
@@ -228,6 +269,7 @@ function streamOnce(
         errorMessage: "the conversation holds non-text content",
       },
     });
+
     return stream;
   }
 
@@ -239,6 +281,7 @@ function streamOnce(
 
   const assembler = new TurnAssembler();
   void driveModelStream(model, request, assembler, stream, signal);
+
   return stream;
 }
 

@@ -22,6 +22,7 @@ export function threadFromRow(
   row: ThreadRow,
 ): Result<ProjectThread, ThreadMessagesUnreadable> {
   const messages = parseThreadMessages(row.messages);
+
   return messages.isErr()
     ? Result.err(messages.error)
     : Result.ok({

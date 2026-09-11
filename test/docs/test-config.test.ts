@@ -32,9 +32,11 @@ function withoutComments(source: string): string {
 
 function config(name: string): string {
   const found = Object.entries(configs).find(([path]) => path.endsWith(name));
+
   if (found === undefined) {
     throw new Error(`missing ${name}`);
   }
+
   return withoutComments(found[1]);
 }
 

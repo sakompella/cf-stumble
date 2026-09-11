@@ -44,6 +44,7 @@ export type ProjectApiSupervisor = Readonly<{
  */
 export function isCrossOriginMutation(request: Request): boolean {
   const origin = request.headers.get("origin");
+
   return origin !== null && origin !== new URL(request.url).origin;
 }
 
@@ -68,6 +69,7 @@ const AUTHORIZATION_STATUS = {
 async function listResponse(supervisor: ProjectApiSupervisor): Promise<Response> {
   try {
     const view = await supervisor.listProjects();
+
     return Response.json({ ok: true, projects: view.projects, github: view.github });
   } catch {
     return jsonError(500, "internal-error");
@@ -89,11 +91,14 @@ function connectRequest(
   if (!isRecord(value)) {
     return undefined;
   }
+
   const named = hasExactKeys(value, ["repositoryUrl"]);
   const withName = hasExactKeys(value, ["displayName", "repositoryUrl"]);
+
   if ((!named && !withName) || typeof value.repositoryUrl !== "string") {
     return undefined;
   }
+
   if (withName && typeof value.displayName !== "string") {
     return undefined;
   }
@@ -109,18 +114,21 @@ async function connectResponse(
   supervisor: ProjectApiSupervisor,
 ): Promise<Response> {
   const body = connectRequest(await readJson(request));
+
   if (body === undefined) {
     return jsonError(400, "invalid-connect-request");
   }
 
   try {
     const result = await supervisor.connectProject(body.repositoryUrl, body.displayName);
+
     if (!result.ok) {
       return Response.json(
         { ok: false, problem: result.problem, github: result.github },
         { status: CONNECT_STATUS[result.problem.code] },
       );
     }
+
     return Response.json({
       ok: true,
       project: result.project,
@@ -137,6 +145,7 @@ async function authorizationResponse(
 ): Promise<Response> {
   try {
     const result = await outcome();
+
     return result.ok
       ? Response.json({ ok: true, github: result.status })
       : Response.json(
@@ -165,6 +174,7 @@ export function routeProjectApiRequest(
   if (isGet && pathname === "/api/projects") {
     return listResponse(supervisor);
   }
+
   if (isGet && pathname === "/api/github/connection") {
     return connectionResponse(supervisor);
   }
@@ -173,9 +183,11 @@ export function routeProjectApiRequest(
     pathname === "/api/projects/connect" ||
     pathname === "/api/github/authorization" ||
     pathname === "/api/github/authorization/complete";
+
   if (!isPost || !mutation) {
     return undefined;
   }
+
   if (isCrossOriginMutation(request)) {
     return Promise.resolve(jsonError(403, "cross-origin-request"));
   }
@@ -183,6 +195,7 @@ export function routeProjectApiRequest(
   if (pathname === "/api/projects/connect") {
     return connectResponse(request, supervisor);
   }
+
   return authorizationResponse(() =>
     pathname === "/api/github/authorization"
       ? supervisor.startGitHubAuthorization(scope)

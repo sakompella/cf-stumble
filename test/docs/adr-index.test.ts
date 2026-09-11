@@ -22,6 +22,7 @@ const adrFiles = import.meta.glob("../../docs/agents/adr/[0-9]*.md", {
   query: "?raw",
   import: "default",
 });
+
 const indexFiles = import.meta.glob("../../docs/agents/adr/README.md", {
   eager: true,
   query: "?raw",
@@ -30,6 +31,7 @@ const indexFiles = import.meta.glob("../../docs/agents/adr/README.md", {
 
 function basename(path: string): string {
   const lastSlash = path.lastIndexOf("/");
+
   return lastSlash < 0 ? path : path.slice(lastSlash + 1);
 }
 
@@ -43,6 +45,7 @@ describe("the ADR index", () => {
 
   it("links every ADR", () => {
     const linked = index ?? "";
+
     const missing = Object.keys(adrFiles)
       .map((path) => basename(path))
       .filter((file) => !linked.includes(`(${file})`))

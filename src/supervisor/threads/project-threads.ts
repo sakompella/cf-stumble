@@ -53,11 +53,13 @@ export class ProjectThreads {
 
   read(projectId: unknown): ProjectThreadResult {
     const resolved = this.resolve(projectId);
+
     return resolved.ok ? serialized(this.store.read(resolved.project)) : resolved;
   }
 
   startFreshThread(projectId: unknown): ProjectThreadResult {
     const resolved = this.resolve(projectId);
+
     return resolved.ok ? serialized(this.store.startFreshThread(resolved.project)) : resolved;
   }
 
@@ -72,6 +74,7 @@ export class ProjectThreads {
     leaseMs: number,
   ): ProjectTurnLeaseResult {
     const resolved = this.resolve(projectId);
+
     return resolved.ok
       ? serializedLease(this.store.startTurn(resolved.project, expectedRevision, now, leaseMs))
       : resolved;
@@ -84,11 +87,13 @@ export class ProjectThreads {
     now: number,
   ): ProjectThreadResult {
     const resolved = this.resolve(projectId);
+
     if (!resolved.ok) {
       return resolved;
     }
 
     const parsed = parseAgentMessages(messages);
+
     if (parsed.isErr()) {
       return {
         ok: false,
@@ -105,11 +110,13 @@ export class ProjectThreads {
 
   abandonTurn(projectId: unknown, leaseId: string): ProjectThreadResult {
     const resolved = this.resolve(projectId);
+
     return resolved.ok ? serialized(this.store.abandonTurn(resolved.project, leaseId)) : resolved;
   }
 
   private resolve(projectId: unknown): ResolvedProject {
     const resolution = resolveSelectableProject(projectId, this.catalog());
+
     return resolution.ok
       ? { ok: true, project: resolution.project }
       : { ok: false, problem: { code: resolution.reason } };

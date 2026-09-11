@@ -14,9 +14,11 @@ test("returns the active generation", async () => {
       getActiveGeneration() {
         const label = parseGenerationLabel(0);
         const harnessCommit = parseHarnessCommit("f53a0e1c1bdbe213ab700a84b1db23615cc24b02");
+
         if (label === undefined || harnessCommit === undefined) {
           throw new Error("test fixture must contain valid generation values");
         }
+
         return Promise.resolve({
           generation: { label, harnessCommit, status: "ready" },
           epoch: 2,
@@ -78,6 +80,7 @@ test("reports a project the catalog does not have without inventing a thread", a
 
 test("starts a fresh thread only on POST, and passes the id the client named", async () => {
   let reset: string | undefined;
+
   const fresh = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh", {
       method: "POST",
@@ -85,6 +88,7 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
     supervisor({
       startFreshProjectThread(projectId) {
         reset = projectId;
+
         return Promise.resolve({
           ok: true,
           thread: {
@@ -101,6 +105,7 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
     }),
     ownerScope,
   );
+
   const wrongMethod = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh"),
     supervisor(),
@@ -118,6 +123,7 @@ test("returns JSON 404 for unknown route and method pairs", async () => {
     supervisor(),
     ownerScope,
   );
+
   const unknownMethod = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/status", { method: "POST" }),
     supervisor(),
@@ -146,10 +152,12 @@ test("an unauthenticated request cannot reach a generation control route", async
     "/api/generations/activate",
     JSON.stringify({ observedEpoch: 0, label: 0 }),
   );
+
   const rollback = controlRequest(
     "/api/generations/rollback",
     JSON.stringify({ observedEpoch: 0, label: 0 }),
   );
+
   const submit = controlRequest(
     "/api/generations/submit",
     JSON.stringify({
@@ -175,6 +183,7 @@ test("keeps the generation control routes POST-only", async () => {
     supervisor(),
     ownerScope,
   );
+
   const getSubmit = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/generations/submit"),
     supervisor(),

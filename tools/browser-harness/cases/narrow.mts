@@ -26,7 +26,9 @@ import {
 } from "../harness.mjs";
 
 const PHONE = { width: 390, height: 720 } as const;
+
 const SHORT_PHONE = { width: 390, height: 640 } as const;
+
 const DRAWER_CONTROLS = [
   ID.candidateCommitInput,
   ID.submitCandidateButton,
@@ -41,6 +43,7 @@ async function assertDrawerControls(
   viewportHeight: number,
 ): Promise<number> {
   const focused: string[] = [];
+
   for (const control of DRAWER_CONTROLS) {
     const stops = await tabUntil(page, (stop) => stop.id === control);
     const stop = stops.at(-1);
@@ -53,6 +56,7 @@ async function assertDrawerControls(
     );
     focused.push(control);
   }
+
   return focused.length;
 }
 
@@ -186,6 +190,7 @@ export const CASES: readonly HarnessCase[] = [
         1,
         "short-phone horizontal overflow",
       );
+
       return `the transcript scrolled at ${transcript.height}px with ${output[2]?.outputLength ?? 0} command characters; Send answered "type a prompt first" and all ${focused} drawer controls received visible keyboard focus`;
     },
   },

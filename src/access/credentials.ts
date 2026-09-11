@@ -10,11 +10,13 @@
  */
 
 const ACCESS_ASSERTION_HEADER = "cf-access-jwt-assertion";
+
 const ACCESS_COOKIE_NAME = "CF_Authorization";
 
 function isAccessCookie(pair: string): boolean {
   const separator = pair.indexOf("=");
   const name = separator === -1 ? pair : pair.slice(0, separator);
+
   return name.trim() === ACCESS_COOKIE_NAME;
 }
 
@@ -22,13 +24,16 @@ function accessCookieToken(cookieHeader: string | null): string | undefined {
   if (cookieHeader === null) {
     return undefined;
   }
+
   for (const pair of cookieHeader.split(";")) {
     const separator = pair.indexOf("=");
+
     if (separator !== -1 && isAccessCookie(pair)) {
       // The value is a JWT, so it needs no cookie decoding; decoding it would change the token.
       return pair.slice(separator + 1).trim();
     }
   }
+
   return undefined;
 }
 
@@ -39,9 +44,11 @@ function accessCookieToken(cookieHeader: string | null): string | undefined {
  */
 export function presentedAccessToken(request: Request): string | undefined {
   const asserted = request.headers.get(ACCESS_ASSERTION_HEADER);
+
   if (asserted !== null && asserted.trim().length > 0) {
     return asserted;
   }
+
   return accessCookieToken(request.headers.get("cookie"));
 }
 
@@ -63,8 +70,10 @@ export function withoutAccessCredentials(request: Request): Request {
   headers.delete(ACCESS_ASSERTION_HEADER);
 
   const cookieHeader = headers.get("cookie");
+
   if (cookieHeader !== null) {
     const remaining = cookiesWithoutAccess(cookieHeader);
+
     if (remaining.length === 0) {
       headers.delete("cookie");
     } else {

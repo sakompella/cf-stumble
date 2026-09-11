@@ -43,8 +43,11 @@ const agentDocuments = import.meta.glob("../../docs/agents/**/*.md", {
 });
 
 const NOW = 1_700_000_000_000;
+
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+
 const REPOSITORY = "https://github.com/sample/repo-1";
+
 const owner: VerifiedAccessScope = { identity: "owner-subject", audience: "owner-audience" };
 
 /** The modules that can hold a credential at all. None of them may write one anywhere. */
@@ -69,10 +72,13 @@ function githubReplying(): GitHubFetch {
     },
     { access_token: FAKE_TOKEN, token_type: "bearer" },
   ];
+
   let index = 0;
+
   return () => {
     const reply = replies[Math.min(index, replies.length - 1)];
     index += 1;
+
     return Promise.resolve(Response.json(reply));
   };
 }
@@ -82,6 +88,7 @@ function storedText(storage: DurableObjectStorage): string {
   const tables = storage.sql
     .exec<{ readonly name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table'")
     .toArray();
+
   return tables
     .map((table) => JSON.stringify(storage.sql.exec(`SELECT * FROM "${table.name}"`).toArray()))
     .join("\n");
@@ -141,6 +148,7 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
       const listed = await connections.list(NOW + 3_000);
       const status = await connections.connectionStatus(NOW + 4_000);
       answers.push(started, completed, connected, listed, status);
+
       return storedText(state.storage);
     },
   );

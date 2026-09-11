@@ -79,10 +79,12 @@ export async function waitUntil(
   what: string,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+
   while (!held()) {
     if (Date.now() > deadline) {
       throw new Error(`waited ${timeoutMs}ms for ${what}, which did not happen`);
     }
+
     await sleep(20);
   }
 }

@@ -32,6 +32,7 @@ function isDuplicableStub(
 ): received is DuplicableStub & ProjectRpcTargetContract {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: reads two possibly-absent members off the received value; both are checked before use.
   const stub = received as Partial<DuplicableStub> & Partial<Disposable>;
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: see above.
   return typeof stub.dup === "function" && typeof stub[Symbol.dispose] === "function";
 }
@@ -48,6 +49,7 @@ export function leaseProjectCapability(
 
   const duplicate = received.dup();
   let released = false;
+
   return {
     capability: duplicate,
     get released() {

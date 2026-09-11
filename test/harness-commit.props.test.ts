@@ -5,7 +5,9 @@ import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../src/harness-commit.js";
 
 const commitPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+
 const validCommit = gs.fromRegex("(?:[0-9a-f]{40}|[0-9a-f]{64})");
+
 const invalidLength = gs
   .sampledFrom([39, 41, 63, 65])
   .flatMap((length) => gs.text({ alphabet: "0123456789abcdef", minSize: length, maxSize: length }));

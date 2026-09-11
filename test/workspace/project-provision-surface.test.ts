@@ -27,6 +27,7 @@ import {
  */
 
 const projectOne = sampleProjectOne;
+
 const projectTwo = sampleProjectTwo;
 
 /** One provision request, as the Supervisor sends it: the project it resolved, and a step. */
@@ -46,10 +47,12 @@ function provisionRequest(
 function pathParts(path: string): string[] {
   const prefixes: string[] = [];
   let current = "";
+
   for (const part of path.split("/").filter((segment) => segment.length > 0)) {
     current += `/${part}`;
     prefixes.push(current);
   }
+
   return prefixes;
 }
 
@@ -58,6 +61,7 @@ function cloneSource(): string {
     planProjectProvision(projectProvisionConfiguration(projectOne.id), projectOne),
     "clone",
   );
+
   if (step.name !== "clone") {
     throw new Error("the clone step must be the command step");
   }
@@ -73,22 +77,26 @@ class FakeProjectOperations implements WorkspaceOperations {
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.calls.push(`lstat:${path}`);
+
     return Promise.resolve(this.symlinks.has(path) ? "symbolic-link" : "directory");
   }
 
   readFile(path: string): Promise<string> {
     this.calls.push(`read:${path}`);
+
     return Promise.reject(new Error("provisioning never reads through the workspace surface"));
   }
 
   writeFile(path: string, content: string): Promise<void> {
     this.calls.push(`write:${path}:${content.length}`);
+
     return Promise.resolve();
   }
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
     this.calls.push(`command:${cwd}`);
     this.sources.push(source);
+
     return Promise.resolve({ stdout: "", stderr: "", exitCode: this.exitCode });
   }
 }
@@ -100,6 +108,7 @@ function provision(operations: FakeProjectOperations, request: unknown) {
 
 test("plans the clone from the resolved project the caller sent, and its directory from the id", () => {
   const parsed = parseProjectProvisionRequest(provisionRequest(projectOne, "clone"));
+
   if ("ok" in parsed) {
     throw new Error("a catalog project and a planned step must parse");
   }
@@ -124,6 +133,7 @@ test("plans the clone from the resolved project the caller sent, and its directo
 
 test("plans the managed instructions as a file the server decides", () => {
   const parsed = parseProjectProvisionRequest(provisionRequest(projectTwo, "instructions"));
+
   if ("ok" in parsed) {
     throw new Error("a catalog project and a planned step must parse");
   }

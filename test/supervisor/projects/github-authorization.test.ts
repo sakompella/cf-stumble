@@ -19,10 +19,13 @@ import type { VerifiedAccessScope } from "../../../src/access/index.js";
  */
 
 const NOW = 1_700_000_000_000;
+
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+
 const CLIENT_ID = "Iv1.cfstumbleFAKE";
 
 const owner: VerifiedAccessScope = { identity: "owner-subject", audience: "owner-audience" };
+
 const otherOwner: VerifiedAccessScope = { identity: "someone-else", audience: "owner-audience" };
 
 type Reply = Readonly<{ [field: string]: string | number }>;
@@ -37,9 +40,11 @@ const deviceReply = {
 
 function githubReplying(replies: readonly Reply[]): GitHubFetch {
   let index = 0;
+
   return () => {
     const reply = replies[Math.min(index, replies.length - 1)] ?? {};
     index += 1;
+
     return Promise.resolve(Response.json(reply));
   };
 }
@@ -54,6 +59,7 @@ function tenant(name: string, replies: readonly Reply[], configured = true): Ten
   const clientId = configured ? CLIENT_ID : undefined;
   const workspace = new FakeTenantWorkspace();
   const fetcher = githubReplying(replies);
+
   return {
     workspace,
     connections: (use) =>
@@ -80,6 +86,7 @@ test("shows the verification page and the user code, and never the device code",
   const started = await subject.connections((connections) =>
     connections.startAuthorization(owner, NOW),
   );
+
   const status = await subject.connections((connections) => connections.connectionStatus(NOW));
 
   expect(started).toEqual({
@@ -100,6 +107,7 @@ test("installs the token into the workspace and returns a status without it", as
     deviceReply,
     { access_token: FAKE_TOKEN, token_type: "bearer" },
   ]);
+
   await subject.connections((connections) => connections.startAuthorization(owner, NOW));
 
   const completed = await subject.connections((connections) =>
@@ -122,6 +130,7 @@ test("keeps waiting while the owner is still at GitHub's page", async () => {
     deviceReply,
     { error: "authorization_pending" },
   ]);
+
   await subject.connections((connections) => connections.startAuthorization(owner, NOW));
 
   const polled = await subject.connections((connections) =>
@@ -138,6 +147,7 @@ test("refuses a redemption by any owner other than the one that started it", asy
   const refused = await subject.connections((connections) =>
     connections.completeAuthorization(otherOwner, NOW + 1_000),
   );
+
   const stillWaiting = await subject.connections((connections) =>
     connections.connectionStatus(NOW + 1_000),
   );
@@ -154,6 +164,7 @@ test("redeems one authorization once, so a replayed completion finds nothing", a
   const first = await subject.connections((connections) =>
     connections.completeAuthorization(owner, NOW + 1_000),
   );
+
   const replayed = await subject.connections((connections) =>
     connections.completeAuthorization(owner, NOW + 2_000),
   );
@@ -172,6 +183,7 @@ test.each([
   const ended = await subject.connections((connections) =>
     connections.completeAuthorization(owner, NOW + 1_000),
   );
+
   const afterwards = await subject.connections((connections) =>
     connections.connectionStatus(NOW + 1_000),
   );

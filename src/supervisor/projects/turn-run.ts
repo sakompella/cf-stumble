@@ -89,7 +89,9 @@ function parsePrompt(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
+
   const prompt = value.trim();
+
   return prompt === "" || prompt.length > PROJECT_TURN_PROMPT_MAX_LENGTH ? undefined : prompt;
 }
 
@@ -118,26 +120,32 @@ type AdmittedTurn = Readonly<{
  */
 export async function runProjectTurn(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
   const prompt = parsePrompt(input.prompt);
+
   if (prompt === undefined) {
     return refused("invalid-prompt");
   }
 
   const current = input.threads.read(input.projectId);
+
   if (!current.ok) {
     return refused(current.problem.code);
   }
+
   const history = parseThreadMessages(current.thread.conversation);
+
   if (history.isErr()) {
     return refused("unreadable-thread");
   }
 
   const admittedAt = input.now();
+
   const admitted = input.threads.startTurn(
     input.projectId,
     current.thread.revision,
     admittedAt,
     input.leaseMs,
   );
+
   if (!admitted.ok) {
     return refused(admitted.problem.code);
   }
@@ -150,13 +158,17 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
   };
 
   const started = await boundedStart(input, turn, { prompt, messages: history.value });
+
   if (started === "timed-out") {
     input.threads.abandonTurn(turn.projectId, turn.leaseId);
+
     return refused("turn-not-started");
   }
+
   if (!started.ok) {
     turn.bound.stop();
     input.threads.abandonTurn(turn.projectId, turn.leaseId);
+
     return refused(started.reason);
   }
 
@@ -187,6 +199,7 @@ async function boundedStart(
   const context: TurnStartContext = { attribution: turn.attribution, signal: turn.bound.signal };
   const started = input.start(turn.projectId, request, context);
   const outcome = await Promise.race([started, turn.bound.whenTimedOut()]);
+
   if (outcome !== "timed-out") {
     return outcome;
   }
@@ -194,6 +207,7 @@ async function boundedStart(
   started.then(cancelOrphanedStart, () => {
     // A start that failed after the bound left nothing running to cancel.
   });
+
   return "timed-out";
 }
 

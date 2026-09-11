@@ -3,6 +3,7 @@
 const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 declare const projectIdBrand: unique symbol;
+
 declare const repositoryUrlBrand: unique symbol;
 
 export type ProjectId = string & {
@@ -54,6 +55,7 @@ export function parsePublicRepositoryUrl(value: unknown): PublicRepositoryUrl | 
   }
 
   let url: URL;
+
   try {
     url = new URL(value);
   } catch {
@@ -61,6 +63,7 @@ export function parsePublicRepositoryUrl(value: unknown): PublicRepositoryUrl | 
   }
 
   const pathSegments = url.pathname.split("/").filter((segment) => segment.length > 0);
+
   if (
     url.protocol !== "https:" ||
     url.username !== "" ||
@@ -88,6 +91,7 @@ export function parsePublicRepositoryUrl(value: unknown): PublicRepositoryUrl | 
  */
 export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | undefined {
   const parsed = parsePublicRepositoryUrl(value);
+
   if (parsed === undefined) {
     return undefined;
   }
@@ -95,9 +99,11 @@ export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | un
   const url = new URL(parsed);
   const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
   const last = segments.at(-1);
+
   if (last !== undefined && last.endsWith(".git")) {
     segments[segments.length - 1] = last.slice(0, -".git".length);
   }
+
   if (segments.some((segment) => segment.length === 0)) {
     return undefined;
   }
@@ -122,11 +128,13 @@ export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | un
  */
 export function projectIdForRepository(repositoryUrl: unknown): ProjectId | undefined {
   const canonical = canonicalRepositoryUrl(repositoryUrl);
+
   if (canonical === undefined) {
     return undefined;
   }
 
   const segments = new URL(canonical).pathname.split("/").filter((segment) => segment.length > 0);
+
   const slug = segments
     .slice(-2)
     .join("-")
@@ -134,12 +142,14 @@ export function projectIdForRepository(repositoryUrl: unknown): ProjectId | unde
     .replaceAll(/[^a-z0-9]+/gu, "-")
     .replace(/^-+/u, "")
     .replace(/-+$/u, "");
+
   return parseProjectId(slug);
 }
 
 /** The name a project is shown under when the person connecting it does not choose one. */
 export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): string {
   const segments = new URL(repositoryUrl).pathname.split("/").filter((part) => part.length > 0);
+
   return segments.slice(-2).join("/");
 }
 
@@ -154,6 +164,7 @@ export function parseProject(value: unknown): Project | undefined {
 
   const id = parseProjectId(value.id);
   const repositoryUrl = parsePublicRepositoryUrl(value.repositoryUrl);
+
   if (
     id === undefined ||
     Object.keys(value).length !== 3 ||
@@ -181,11 +192,14 @@ export function parseProjectCatalog(value: unknown): ProjectCatalog | undefined 
   }
 
   const projects: Project[] = [];
+
   for (const entry of value) {
     const project = parseProject(entry);
+
     if (project === undefined || projects.some((existing) => existing.id === project.id)) {
       return undefined;
     }
+
     projects.push(Object.freeze(project));
   }
 
@@ -214,11 +228,13 @@ export function resolveProject(
   catalog: ProjectCatalog = EMPTY_PROJECT_CATALOG,
 ): ProjectResolution {
   const parsedProjectId = parseProjectId(projectId);
+
   if (parsedProjectId === undefined) {
     return { ok: false, reason: "invalid-project-id" };
   }
 
   const project = catalog.find((candidate) => candidate.id === parsedProjectId);
+
   return project === undefined
     ? { ok: false, reason: "unknown-project-id" }
     : { ok: true, project };

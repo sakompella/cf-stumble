@@ -109,6 +109,7 @@ export function repositoryAccessSource(repositoryUrl: string): string {
 /** Parse the status command's one line. Anything unrecognized is `unusable`, never `connected`. */
 export function parseCredentialStatus(stdout: string): GitHubCredentialStatus {
   const [state, login] = stdout.trim().split(/\s+/u);
+
   if (state === undefined) {
     return { state: "unusable", login: undefined };
   }
@@ -133,8 +134,10 @@ export type RepositoryAccess =
 /** Parse the access check. The failure detail is Git's own text, which the caller redacts. */
 export function parseRepositoryAccess(stdout: string): RepositoryAccess {
   const output = stdout.trim();
+
   if (output === "granted") {
     return { granted: true };
   }
+
   return { granted: false, detail: output.startsWith("denied ") ? output.slice(7) : output };
 }

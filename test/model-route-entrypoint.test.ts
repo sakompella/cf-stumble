@@ -37,12 +37,15 @@ type FakeBinding = Readonly<{ ai: Ai; calls: readonly RecordedCall[] }>;
 /** A Workers AI binding whose `run` answers from `answer` and records what it was asked for. */
 function fakeAiBinding(answer: () => Promise<ReadableStream<Uint8Array>>): FakeBinding {
   const calls: RecordedCall[] = [];
+
   const binding = {
     run(model: string, input: StreamingProviderPayload): Promise<ReadableStream<Uint8Array>> {
       calls.push({ model, input });
+
       return answer();
     },
   };
+
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: `runStream` reaches the binding only through `AI.run`, which this object implements with the payload type that call passes; no other member of `Ai` is reachable from it.
   return { ai: binding as Ai, calls };
 }
@@ -71,6 +74,7 @@ test("the entrypoint answers a provider's two text deltas with exactly those two
     sseLine({ response: "lo" }),
     DONE_LINE,
   ]);
+
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events).toHaveLength(3);
   expect(events.slice(0, 2)).toEqual([
@@ -78,6 +82,7 @@ test("the entrypoint answers a provider's two text deltas with exactly those two
     { type: "text-delta", delta: "lo" },
   ]);
   const done = events[2];
+
   if (done?.type !== "done") throw new Error("the entrypoint sent no terminal done event");
   expect(done.message).toEqual({ role: "assistant", content: "Hello", tool_calls: [] });
   expect(done.usage.estimated).toBe(true);
@@ -89,6 +94,7 @@ test("the entrypoint asks the one fixed model with a streaming payload and nothi
   await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(binding.calls).toHaveLength(1);
   const call = binding.calls[0];
+
   if (call === undefined) throw new Error("the entrypoint never called the binding");
   expect(call.model).toBe(REQUIRED_MODEL);
   expect(Object.keys(call.input).toSorted()).toEqual([
@@ -104,10 +110,12 @@ test("the entrypoint asks the one fixed model with a streaming payload and nothi
 
 test("a request that names its own model is refused as a plain value and never reaches the binding", () => {
   const binding = bindingStreaming([DONE_LINE]);
+
   const outcome = routeOver(binding).runStream({
     messages: [{ role: "user", content: "hi" }],
     model: "@cf/some/other-model",
   });
+
   expect(outcome).toEqual({
     ok: false,
     error: {
@@ -145,6 +153,7 @@ test("malformed provider lines are skipped and the deltas around them still arri
     sseLine({ response: "two" }),
     DONE_LINE,
   ]);
+
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.filter((event) => event.type === "text-delta")).toEqual([
     { type: "text-delta", delta: "one" },
@@ -161,6 +170,7 @@ test("the entrypoint assembles one tool call whose id, name and argument fragmen
     sseLine({ tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] }),
     DONE_LINE,
   ]);
+
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.filter((event) => event.type === "tool-call-delta")).toEqual([
     { type: "tool-call-delta", delta: { index: 0, id: "call_1", name: "bash" } },
@@ -186,6 +196,7 @@ test("two tool calls the provider reports without an index stay two separate cal
     }),
     DONE_LINE,
   ]);
+
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.at(-1)).toMatchObject({
     type: "done",
@@ -204,6 +215,7 @@ test("the entrypoint reports the provider's own input_tokens/output_tokens as a 
     sseLine({ usage: { input_tokens: 41, output_tokens: 7 } }),
     DONE_LINE,
   ]);
+
   const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
   expect(events.at(-1)).toMatchObject({
     type: "done",

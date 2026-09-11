@@ -39,13 +39,16 @@ function piAssistant(
 function fakeRoute(responses: ReadonlyArray<ModelRouteResponse>) {
   const calls: ModelRouteRequest[] = [];
   let i = 0;
+
   return {
     calls,
     run(req: ModelRouteRequest) {
       calls.push(req);
       const r = responses[i];
+
       if (r === undefined) throw new Error("exhausted");
       i += 1;
+
       return r;
     },
   };
@@ -53,7 +56,9 @@ function fakeRoute(responses: ReadonlyArray<ModelRouteResponse>) {
 
 function expectPi(v: PiAssistantMessage | AdapterError): PiAssistantMessage {
   expect(isResponseError(v)).toBe(false);
+
   if (isResponseError(v)) throw new Error("error");
+
   return v;
 }
 
@@ -95,14 +100,17 @@ const TOOL: PiContext["tools"] = [
 
 test("cycle step 1: model returns a tool call from the initial request", () => {
   const route = fakeRoute([tcRes("call_42", "read_file", '{"path":"a.txt"}')]);
+
   const ctx: PiContext = {
     systemPrompt: "Help.",
     messages: [{ role: "user", content: "Read a.txt", timestamp: 100 }],
     tools: TOOL,
   };
+
   const a = expectPi(routeResponseToPiAssistant(route.run(piContextToRouteRequest(ctx))));
   expect(a.stopReason).toBe("toolUse");
   const tc = a.content[0];
+
   if (tc?.type === "toolCall") {
     expect(tc.id).toBe("call_42");
     expect(tc.arguments).toEqual({ path: "a.txt" });
@@ -115,7 +123,9 @@ test("cycle step 2: tool result fed back produces final text", () => {
   const a1 = expectPi(
     routeResponseToPiAssistant(tcRes("call_42", "read_file", '{"path":"a.txt"}')),
   );
+
   const route = fakeRoute([txtRes("File contents: hello")]);
+
   const ctx: PiContext = {
     systemPrompt: "Help.",
     messages: [
@@ -125,6 +135,7 @@ test("cycle step 2: tool result fed back produces final text", () => {
     ],
     tools: TOOL,
   };
+
   const req = piContextToRouteRequest(ctx);
   expect(req.messages).toHaveLength(4);
   expect(req.messages[3]?.role).toBe("tool");
@@ -139,6 +150,7 @@ test("user message preserves content including TextContent array", () => {
   expect(
     piContextToRouteRequest({ messages: [{ role: "user", content: "hi", timestamp: 1 }] }).messages,
   ).toEqual([{ role: "user", content: "hi" }]);
+
   const arr = piContextToRouteRequest({
     messages: [
       {
@@ -151,6 +163,7 @@ test("user message preserves content including TextContent array", () => {
       },
     ],
   });
+
   expect(arr.messages[0]).toEqual({ role: "user", content: "a b" });
 });
 
@@ -159,6 +172,7 @@ test("system prompt becomes a system message; empty prompt omitted", () => {
     systemPrompt: "Be concise.",
     messages: [{ role: "user", content: "hi", timestamp: 1 }],
   });
+
   expect(req.messages[0]).toEqual({ role: "system", content: "Be concise." });
   expect(
     piContextToRouteRequest({
@@ -171,6 +185,7 @@ test("system prompt becomes a system message; empty prompt omitted", () => {
 test("assistant text survives conversion", () => {
   const m = piContextToRouteRequest({ messages: [piAssistant([{ type: "text", text: "ok" }])] })
     .messages[0];
+
   if (m?.role === "assistant") expect(m.content).toBe("ok");
   else expect.unreachable("expected assistant");
 });
@@ -181,6 +196,7 @@ test("assistant tool call arguments serialised to JSON", () => {
       piAssistant([{ type: "toolCall", id: "c1", name: "w", arguments: { p: 1 } }], "toolUse"),
     ],
   }).messages[0];
+
   if (m?.role === "assistant") expect(m.tool_calls[0]?.function.arguments).toBe('{"p":1}');
   else expect.unreachable("expected assistant");
 });
@@ -202,6 +218,7 @@ test("thinking blocks dropped from assistant messages", () => {
       ]),
     ],
   }).messages[0];
+
   if (m?.role === "assistant") {
     expect(m.content).toBe("a");
     expect(m.tool_calls).toEqual([]);
@@ -213,6 +230,7 @@ test("Pi tools mapped to route tool definitions", () => {
     messages: [{ role: "user", content: "go", timestamp: 1 }],
     tools: TOOL,
   });
+
   expect(req.tools?.[0]).toEqual({
     type: "function",
     function: {
@@ -257,6 +275,7 @@ test.each([["not-json{"], ['"just a string"']])(
         },
       }),
     );
+
     if (pi.content[0]?.type === "toolCall") expect(pi.content[0].arguments).toEqual({});
     else expect.unreachable("expected toolCall");
   },
@@ -274,6 +293,7 @@ test("route request carries no provider override fields", () => {
     ],
     tools: [{ name: "r", description: "R", parameters: {} }],
   });
+
   for (const k of ["model", "reasoning_effort", "credentials", "endpoint", "provider"]) {
     expect(Object.keys(req)).not.toContain(k);
   }

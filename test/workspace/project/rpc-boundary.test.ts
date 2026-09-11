@@ -21,12 +21,14 @@ function makeTarget() {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
   const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
+
   return { provider, execBackend, target };
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test helper: asserts an RPC return value is a plain clonable object, whatever its shape.
 function assertPlainlyCloneable(value: unknown): void {
   expect(structuredClone(value)).toEqual(value);
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Test helper: checking whether an already-untyped value is an object before inspecting its prototype.
   if (value !== null && typeof value === "object" && !(value instanceof Uint8Array)) {
     expect(Object.getPrototypeOf(value)).toBe(Object.prototype);
@@ -51,6 +53,7 @@ test("every ProjectResult is a plain, structured-clone-safe value", async () => 
 test("every startExec stream event is a structured-clone-safe byte frame", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "echo hi" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   assertPlainlyCloneable({ operationId: started.value.operationId });
 
@@ -61,13 +64,16 @@ test("every startExec stream event is a structured-clone-safe byte frame", async
   handle.push({ name: "exit", exitCode: 0 });
 
   const reader = started.value.events.getReader();
+
   for (;;) {
     const next = await reader.read();
+
     if (next.done) break;
     assertPlainlyCloneable(next.value);
     expect(next.value).toBeInstanceOf(Uint8Array);
     expect(() => {
       const parsed: unknown = JSON.parse(new TextDecoder().decode(next.value));
+
       return parsed;
     }).not.toThrow();
   }

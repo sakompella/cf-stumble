@@ -40,15 +40,19 @@ async function supervisorSpy() {
     identity: accessOwnerSubject,
     audience: accessAudience,
   });
+
   // oxlint-disable-next-line typescript/no-deprecated
   const supervisor = env.SUPERVISOR.getByName(name);
   // oxlint-disable-next-line typescript/no-deprecated
   vi.spyOn(env.SUPERVISOR, "getByName").mockReturnValue(supervisor);
   let received: Request | undefined;
+
   const fetch = vi.spyOn(supervisor, "fetch").mockImplementation((input, init) => {
     received = new Request(input, init);
+
     return Promise.resolve(new Response("forwarded"));
   });
+
   return { fetch, getReceived: () => received };
 }
 
@@ -71,14 +75,17 @@ test("strips every Access credential before forwarding a non-API request", async
     }),
     workerEnvironment(key),
   );
+
   const received = spy.getReceived();
 
   expect(response.status).toBe(200);
   expect(spy.fetch).toHaveBeenCalledOnce();
   expect(received).toBeDefined();
+
   if (received === undefined) {
     throw new Error("the non-API request must reach the Supervisor");
   }
+
   expect(received.headers.has("cf-access-jwt-assertion")).toBe(false);
   const cookies = received.headers.get("cookie") ?? "";
   expect(cookies.includes("CF_Authorization=")).toBe(false);
@@ -150,6 +157,7 @@ test("answers liveness without a generation, a Supervisor, or a hole in Access",
     new Request("https://cf-stumble.test/health"),
     workerEnvironment(key),
   );
+
   expect(refused.status, "liveness is not an exception to the Access boundary").toBe(401);
 });
 

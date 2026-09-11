@@ -60,6 +60,7 @@ async function buildFixture(fixture: Fixture): Promise<void> {
   });
 
   const output = bundled.outputFiles.at(0);
+
   if (output === undefined) {
     throw new Error(`esbuild produced no output for ${fixture.entryPoint}`);
   }

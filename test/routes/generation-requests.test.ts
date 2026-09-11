@@ -7,11 +7,13 @@ import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./
 
 test("activates directly with a server-derived principal", async () => {
   let received: GenerationRequest | undefined;
+
   const response = await routeOwnerApiRequest(
     controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
     supervisor({
       controlGeneration(request) {
         received = request;
+
         return Promise.resolve({ ok: false, problem: { code: "unknown-generation" } });
       },
     }),
@@ -31,11 +33,13 @@ test("activates directly with a server-derived principal", async () => {
 
 test("rolls back through the same direct control operation", async () => {
   let received: GenerationRequest | undefined;
+
   const response = await routeOwnerApiRequest(
     controlRequest("/api/generations/rollback", JSON.stringify({ observedEpoch: 4, label: 0 })),
     supervisor({
       controlGeneration(request) {
         received = request;
+
         return Promise.resolve({ ok: false, problem: { code: "not-previously-active" } });
       },
     }),
@@ -64,11 +68,13 @@ test.each(malformedBodies)(
   "rejects an activation carrying %s without reaching the Supervisor",
   async (_description, body) => {
     let invoked = false;
+
     const response = await routeOwnerApiRequest(
       controlRequest("/api/generations/activate", body),
       supervisor({
         controlGeneration() {
           invoked = true;
+
           return Promise.resolve({ ok: false, problem: { code: "stale-epoch" } });
         },
       }),

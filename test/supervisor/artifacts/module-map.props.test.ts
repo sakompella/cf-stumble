@@ -18,6 +18,7 @@ const moduleMaps = gs
 
 function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
   const parsed = MainHarnessArtifact.parse(input);
+
   if (parsed.isErr()) {
     throw new Error(`the generated module map must parse: ${parsed.error.code}`);
   }
@@ -27,6 +28,7 @@ function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
 
 function rotated<T>(values: readonly T[], by: number): readonly T[] {
   const offset = by % values.length;
+
   return [...values.slice(offset), ...values.slice(0, offset)];
 }
 

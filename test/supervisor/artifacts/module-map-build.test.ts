@@ -34,6 +34,7 @@ const commit = harnessCommit("2000000000000000000000000000000000000001");
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -70,6 +71,7 @@ class FakeBuildWorkspace implements BuildWorkspace {
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
     this.commands.push({ source, cwd });
+
     if (this.unavailable) {
       return Promise.reject(new Error("the build workspace is gone"));
     }
@@ -84,6 +86,7 @@ class FakeBuildWorkspace implements BuildWorkspace {
   readFile(path: string): Promise<string> {
     const output = this.outputs[this.reads];
     this.reads += 1;
+
     if (output === undefined) {
       return Promise.reject(new Error(`no build output at ${path}`));
     }
@@ -97,6 +100,7 @@ function moduleMapFile(modules: readonly Readonly<{ name: string; source: string
 }
 
 const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
+
 const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
 
 test("plans an isolated build directory outside the project workspace", () => {
@@ -112,6 +116,7 @@ test("plans an isolated build directory outside the project workspace", () => {
     "build-pi",
     "build-module-map",
   ]);
+
   for (const phase of configuration.buildPhases) {
     const step = plan.steps.find((planned) => planned.name === phase.name);
     expect(step?.cwd).toBe(WORKSPACE_ROOT);
@@ -122,6 +127,7 @@ test("plans an isolated build directory outside the project workspace", () => {
       "each phase's own output is bounded, and its exit code survives the pipe",
     ).toContain("set -o pipefail");
   }
+
   expect(
     plan.steps.every((step) => !step.source.includes(PROJECTS_DIRECTORY)),
     "a harness build must not name a project directory",
@@ -152,6 +158,7 @@ test("reports a failed archive extraction as the checkout step, not as a build f
   if (built.isOk()) {
     throw new Error("a failed archive must not produce a module map");
   }
+
   expect(built.error).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
@@ -168,6 +175,7 @@ test("reports the failing build phase and its exit code", async () => {
   if (built.isOk()) {
     throw new Error("a failing build phase must not produce a module map");
   }
+
   expect(built.error).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
@@ -184,15 +192,18 @@ test("reports an unavailable build workspace", async () => {
   if (built.isOk()) {
     throw new Error("an unavailable workspace must not produce a module map");
   }
+
   expect(built.error).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
 });
 
 test("reports missing and invalid build output", async () => {
   const missing = new WorkspaceModuleMapBuilder(new FakeBuildWorkspace(), configuration);
+
   const unparsable = new WorkspaceModuleMapBuilder(
     new FakeBuildWorkspace({ outputs: ["{"] }),
     configuration,
   );
+
   const withoutEntry = new WorkspaceModuleMapBuilder(
     new FakeBuildWorkspace({ outputs: [moduleMapFile([helperModule])] }),
     configuration,
@@ -213,6 +224,7 @@ test("reports missing and invalid build output", async () => {
 
 test("gives the built module map the commit the Supervisor asked to build", async () => {
   const foreign = "3000000000000000000000000000000000000009";
+
   const workspace = new FakeBuildWorkspace({
     outputs: [
       JSON.stringify({ harnessCommit: foreign, entryModule: "main.js", modules: [entryModule] }),
@@ -224,5 +236,6 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
   if (built.isErr()) {
     throw new Error("a valid build output must produce a module map");
   }
+
   expect(built.value.harnessCommit).toBe(commit);
 });

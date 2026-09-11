@@ -17,10 +17,13 @@ import { abandonProjectTurn, finishProjectTurn, startProjectTurn } from "./turn-
  */
 
 const NOW = 1_700_000_000_000;
+
 const LEASE_MS = 30_000;
+
 const AFTER_LEASE = NOW + LEASE_MS;
 
 const turnA = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
+
 const turnB = [...turnA, THREAD_MESSAGE_SAMPLES.bashExecution];
 
 /** Admit a turn and keep the lease it returns, which is the only key its completion accepts. */
@@ -36,9 +39,11 @@ async function admit(
     now,
     LEASE_MS,
   );
+
   if (!started.ok) {
     throw new Error(`the turn must be admitted: ${started.problem.code}`);
   }
+
   return started.leaseId;
 }
 
@@ -48,6 +53,7 @@ async function takenOver(
 ): Promise<{ readonly leaseA: string; readonly leaseB: string }> {
   const leaseA = await admit(control, 0, NOW);
   const leaseB = await admit(control, 0, AFTER_LEASE);
+
   return { leaseA, leaseB };
 }
 
@@ -66,6 +72,7 @@ test("a finish presenting a lease the store never issued is refused", async () =
     turnA,
     NOW,
   );
+
   const admitted = await finishProjectTurn(control, "sample-project-one", lease, turnA, NOW);
 
   expect(invented).toEqual({
@@ -100,6 +107,7 @@ test("a late finish from the replaced turn cannot save into the turn that took o
     turnA,
     AFTER_LEASE,
   );
+
   const ownFinish = await finishProjectTurn(
     control,
     "sample-project-one",
@@ -124,6 +132,7 @@ test("a late abandon from the replaced turn cannot free the slot the takeover ho
 
   const lateAbandon = await abandonProjectTurn(control, "sample-project-one", leaseA);
   const stillHeld = await control.getProjectThread("sample-project-one");
+
   const ownFinish = await finishProjectTurn(
     control,
     "sample-project-one",

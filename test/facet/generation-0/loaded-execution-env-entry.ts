@@ -37,9 +37,11 @@ type ToolContentItem = { readonly type: string; readonly text?: string };
 
 function textOf(content: readonly ToolContentItem[]): string {
   const first = content[0];
+
   if (first === undefined || first.type !== "text" || first.text === undefined) {
     throw new Error("expected a text tool result, got none or a non-text content item");
   }
+
   return first.text;
 }
 
@@ -54,17 +56,22 @@ async function probeRawExecFrames(
   command = "probe",
 ): Promise<boolean> {
   const started = await target.startExec({ command });
+
   if (!started.ok) throw new Error(`${command} startExec failed: ${started.error.code}`);
 
   const reader = started.value.events.getReader();
   let allFramesAreBytes = true;
+
   for (;;) {
     // oxlint-disable-next-line no-await-in-loop -- Each physical read must be observed before the next is requested.
     const step = await reader.read();
+
     if (step.done) break;
     const frame: unknown = step.value;
+
     if (!(frame instanceof Uint8Array)) allFramesAreBytes = false;
   }
+
   return allFramesAreBytes;
 }
 
@@ -84,6 +91,7 @@ async function writeReadCheckpoint(
     undefined,
     { env },
   );
+
   const read = await createReadTool().execute(
     "read-1",
     { path: "notes.txt" },
@@ -91,7 +99,9 @@ async function writeReadCheckpoint(
     undefined,
     { env },
   );
+
   const checkpointFramesAreBytes = await probeRawExecFrames(projectTarget, "checkpoint");
+
   return { write, read, checkpointFramesAreBytes };
 }
 
@@ -104,6 +114,7 @@ async function editRereadBash(env: ReturnType<typeof createFacetExecutionEnv>) {
     undefined,
     { env },
   );
+
   const rereadAfterEdit = await createReadTool().execute(
     "read-2",
     { path: "notes.txt" },
@@ -111,6 +122,7 @@ async function editRereadBash(env: ReturnType<typeof createFacetExecutionEnv>) {
     undefined,
     { env },
   );
+
   const bash = await createBashTool().execute(
     "bash-1",
     { command: "echo hi" },
@@ -120,6 +132,7 @@ async function editRereadBash(env: ReturnType<typeof createFacetExecutionEnv>) {
       env,
     },
   );
+
   return { edit, rereadAfterEdit, bash };
 }
 
@@ -162,6 +175,7 @@ async function runStockTools(projectTarget: ProjectRpcTargetContract): Promise<S
 export default class LoadedExecutionEnvEntry extends WorkerEntrypoint {
   async pauseThenCancelExec(projectTarget: ProjectRpcTargetContract): Promise<void> {
     const started = await projectTarget.startExec({ command: "paused" });
+
     if (!started.ok) throw new Error(`paused startExec failed: ${started.error.code}`);
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 20);
@@ -172,6 +186,7 @@ export default class LoadedExecutionEnvEntry extends WorkerEntrypoint {
   async exercise(projectTarget: ProjectRpcTargetContract): Promise<PlainToolEvidence> {
     const rawExecFramesAreBytes = await probeRawExecFrames(projectTarget);
     const { checkpointFramesAreBytes, ...evidence } = await runStockTools(projectTarget);
+
     return {
       ...evidence,
       rawExecFramesAreBytes: rawExecFramesAreBytes && checkpointFramesAreBytes,

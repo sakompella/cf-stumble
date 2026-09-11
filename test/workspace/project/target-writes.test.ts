@@ -17,6 +17,7 @@ test("100 concurrent appends preserve every framed payload exactly once", async 
 
   const read = await target.readFile("/log.txt");
   expect(read.ok).toBe(true);
+
   if (read.ok) {
     const written = new TextDecoder().decode(read.value).split("\n").filter(Boolean);
     expect(written.length).toBe(100);
@@ -27,6 +28,7 @@ test("100 concurrent appends preserve every framed payload exactly once", async 
 
 test("concurrent exclusive creates yield exactly one success", async () => {
   const { target } = makeTarget();
+
   const results = await Promise.all(
     Array.from({ length: 20 }, () =>
       target.writeFile("/claim.txt", encode("x"), "create-exclusive"),
@@ -34,9 +36,11 @@ test("concurrent exclusive creates yield exactly one success", async () => {
   );
 
   const successes = results.filter((result) => result.ok);
+
   const conflicts = results.filter(
     (result) => !result.ok && result.error.code === "already-exists",
   );
+
   expect(successes.length).toBe(1);
   expect(conflicts.length).toBe(19);
 });
@@ -57,6 +61,7 @@ function throwingProvider(code: string): FakeProjectFilesystemProvider {
   provider.lstatSync = () => {
     throw Object.assign(new Error(code), { code });
   };
+
   return provider;
 }
 
@@ -98,11 +103,13 @@ test.each<readonly [string, string]>([
   ["EWEIRD", "backend-unavailable"],
 ])("provider error %s maps to %s", async (rawCode, expected) => {
   const provider = throwingProvider(rawCode);
+
   const target = new ProjectRpcTarget(
     provider,
     new FakeProjectTransactions(),
     new FakeExecBackend(),
   );
+
   const result = await target.lstat("/anything");
   expect(result).toEqual({ ok: false, error: { code: expected, path: "/anything" } });
 });
@@ -113,11 +120,13 @@ test("a thrown non-error value is backend-unavailable", async () => {
     // oxlint-disable-next-line typescript/only-throw-error, eslint/no-throw-literal -- Intentionally exercising a non-Error throw from an untrusted backend.
     throw "boom";
   };
+
   const target = new ProjectRpcTarget(
     provider,
     new FakeProjectTransactions(),
     new FakeExecBackend(),
   );
+
   await expect(target.lstat("/anything")).resolves.toEqual({
     ok: false,
     error: { code: "backend-unavailable", path: "/anything" },

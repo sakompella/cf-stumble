@@ -1,4 +1,5 @@
 import type { Deadline } from "./deadline.js";
+
 export type StartupCheckStage =
   | "ready"
   | "mount-failed"
@@ -27,6 +28,7 @@ export function drainResponseBody(
   maxBodyBytes: number,
 ): Promise<StartupCheckOutcome> {
   const declaredLength = responseLength(response);
+
   if (declaredLength !== undefined && declaredLength > maxBodyBytes) {
     return Promise.resolve({
       stage: "body-failed",
@@ -65,6 +67,7 @@ async function drainBody(
 
       if (result.kind === "deadline") {
         void reader.cancel("startup-check deadline expired");
+
         return { stage: "deadline-expired", reason: "response body exceeded the deadline" };
       }
 
@@ -81,8 +84,10 @@ async function drainBody(
       }
 
       bodyBytes += result.chunk.value.byteLength;
+
       if (bodyBytes > maxBodyBytes) {
         void reader.cancel("startup-check body exceeded byte bound");
+
         return {
           stage: "body-failed",
           reason: `response body exceeded the ${maxBodyBytes}-byte bound`,
@@ -96,6 +101,7 @@ async function drainBody(
 
 function responseLength(response: Response): number | undefined {
   const value = response.headers.get("content-length");
+
   if (value === null || !/^\d+$/u.test(value)) {
     return undefined;
   }

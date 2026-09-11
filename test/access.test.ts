@@ -37,12 +37,14 @@ async function validToken(
   identity = "user-1",
 ): Promise<{ token: string; key: SigningKey }> {
   const key = await signingKey(`${algorithm}-key`, algorithm);
+
   const tokenValue = await signAccessToken(key, {
     iss: issuer,
     aud: [audience],
     exp: now + 60,
     sub: identity,
   });
+
   return { token: tokenValue, key };
 }
 
@@ -70,12 +72,14 @@ describe("Cloudflare Access JWT verification", () => {
 
   test("rejects a wrong issuer", async () => {
     const signed = await validToken("RS256");
+
     const wrongIssuer = await signAccessToken(signed.key, {
       iss: "https://other.cloudflareaccess.com",
       aud: audience,
       exp: now + 60,
       sub: "user-1",
     });
+
     await expect(verifyAccessToken(input(wrongIssuer, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "wrong-issuer",
@@ -84,12 +88,14 @@ describe("Cloudflare Access JWT verification", () => {
 
   test("rejects a wrong audience", async () => {
     const signed = await validToken("RS256");
+
     const wrongAudience = await signAccessToken(signed.key, {
       iss: issuer,
       aud: ["other-application"],
       exp: now + 60,
       sub: "user-1",
     });
+
     await expect(verifyAccessToken(input(wrongAudience, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "wrong-audience",
@@ -98,12 +104,14 @@ describe("Cloudflare Access JWT verification", () => {
 
   test("rejects an expired token", async () => {
     const signed = await validToken("RS256");
+
     const expired = await signAccessToken(signed.key, {
       iss: issuer,
       aud: audience,
       exp: now,
       sub: "user-1",
     });
+
     await expect(verifyAccessToken(input(expired, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "expired",
@@ -112,11 +120,13 @@ describe("Cloudflare Access JWT verification", () => {
 
   test("rejects a token without the stable identity claim", async () => {
     const signed = await validToken("RS256");
+
     const missingIdentity = await signAccessToken(signed.key, {
       iss: issuer,
       aud: audience,
       exp: now + 60,
     });
+
     await expect(verifyAccessToken(input(missingIdentity, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "missing-identity",

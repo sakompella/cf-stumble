@@ -48,6 +48,7 @@ export type FacetTurnFrame =
 
 function assistantText(message: AgentMessage): string {
   if (message.role !== "assistant") return "";
+
   return message.content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
@@ -81,6 +82,7 @@ export class TurnFrames {
     switch (event.type) {
       case "message_start":
         this.#publishedTextLength = 0;
+
         return [];
       case "message_update":
         return this.#update(event.assistantMessageEvent);
@@ -106,6 +108,7 @@ export class TurnFrames {
         // oxlint-disable-next-line eslint/no-underscore-dangle -- Exhaustiveness guard: underscore signals the value is never reached.
         const _exhaustive: never = event;
         void _exhaustive;
+
         return [];
       }
     }
@@ -116,6 +119,7 @@ export class TurnFrames {
   ) {
     if (assistantEvent.type !== "text_delta" || assistantEvent.delta === "") return [];
     this.#publishedTextLength += assistantEvent.delta.length;
+
     return [{ kind: "text", text: assistantEvent.delta } as const];
   }
 
@@ -125,6 +129,7 @@ export class TurnFrames {
         maxLines: TOOL_RESULT_DISPLAY_MAX_LINES,
         maxBytes: TOOL_RESULT_DISPLAY_MAX_BYTES,
       });
+
       return [
         {
           kind: "tool-result",
@@ -140,6 +145,7 @@ export class TurnFrames {
     const text = assistantText(message);
     const remainder = text.slice(this.#publishedTextLength);
     this.#publishedTextLength = 0;
+
     return remainder === "" ? [] : [{ kind: "text", text: remainder }];
   }
 }

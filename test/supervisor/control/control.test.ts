@@ -38,6 +38,7 @@ async function readyGeneration(
 ): Promise<number> {
   const label = await submitCandidate(control, harnessCommit);
   await prepareGeneration(control, label, harnessCommit);
+
   return label;
 }
 
@@ -77,6 +78,7 @@ test("resubmitting the same harness commit returns the existing generation", asy
 
 test("an invalid harness generation label cannot submit before activation", async () => {
   const control = supervisor("control-invalid-harness-label-before-activation");
+
   const requestWithInvalidLabel = request(
     { kind: "harness", generationLabel: -1 },
     { kind: "submit-candidate", harnessCommit: commits.first },
@@ -116,6 +118,7 @@ test("a replaced harness cannot submit a candidate through its revoked capabilit
   await activateGeneration(control, replacement);
 
   const before = await control.getActiveGeneration();
+
   const result = await control.controlGeneration(
     request(
       { kind: "harness", generationLabel: 0 },
@@ -177,6 +180,7 @@ test("activation rejects unknown and unchecked generation targets with distinct 
   const unknown = await control.controlGeneration(
     request(user, { kind: "activate", label: 99, observedEpoch: epoch + 1 }),
   );
+
   const unchecked = await control.controlGeneration(
     request(user, {
       kind: "activate",
@@ -202,6 +206,7 @@ test("rollback requires a target generation that has been active before", async 
       observedEpoch: beforeActivation.epoch,
     }),
   );
+
   const activated = await control.controlGeneration(
     request(user, {
       kind: "activate",
@@ -209,6 +214,7 @@ test("rollback requires a target generation that has been active before", async 
       observedEpoch: beforeActivation.epoch,
     }),
   );
+
   if (!activated.ok) {
     throw new Error("a ready generation must accept an activation request");
   }
@@ -233,6 +239,7 @@ test("activating the active generation with its current epoch is a no-op, but a 
   await activateFixtureGeneration(control);
   const target = await readyGeneration(control, commits.first);
   const active = await control.getActiveGeneration();
+
   const activation = request(user, {
     kind: "activate",
     label: target,
@@ -240,10 +247,13 @@ test("activating the active generation with its current epoch is a no-op, but a 
   });
 
   const first = await control.controlGeneration(activation);
+
   if (!first.ok) {
     throw new Error("a ready generation must accept its first activation");
   }
+
   const staleRepeat = await control.controlGeneration(activation);
+
   const currentRepeat = await control.controlGeneration(
     request(user, { kind: "activate", label: target, observedEpoch: first.outcome.epoch }),
   );
@@ -268,6 +278,7 @@ test("activating the active generation with its current epoch is a no-op, but a 
 
 test("repeating a rejected command against unchanged state returns the same rejection", async () => {
   const control = supervisor("control-repeat-rejection");
+
   const rejectedRequest = request(user, {
     kind: "activate",
     label: 99,
@@ -283,6 +294,7 @@ test("repeating a rejected command against unchanged state returns the same reje
 
 test("resubmitting the same harness commit still returns the existing generation after Durable Object eviction", async () => {
   const control = supervisor("control-resubmit-after-eviction");
+
   const submission = request(user, {
     kind: "submit-candidate",
     harnessCommit: commits.third,

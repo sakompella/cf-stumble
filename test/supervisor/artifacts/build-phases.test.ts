@@ -22,11 +22,14 @@ import type { WorkspaceResult } from "../../../src/workspace/index.js";
  */
 
 const commit = harnessCommit("6000000000000000000000000000000000000003");
+
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
+
 const phaseNames = HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name);
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -46,6 +49,7 @@ class PhaseFailingHost implements BuildWorkspaceHost {
   build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     if (request.kind === "build-output") {
       this.steps.push("build-output");
+
       return Promise.resolve({
         ok: true,
         result: { kind: "command", stdout: "{}", stderr: "", exitCode: 0 },
@@ -54,6 +58,7 @@ class PhaseFailingHost implements BuildWorkspaceHost {
 
     this.steps.push(request.step);
     const failed = request.step === this.failing;
+
     return Promise.resolve({
       ok: true,
       result: {
@@ -87,6 +92,7 @@ test("plans each build phase as its own step, in the order the phases depend on"
     "checkout",
     ...phaseNames,
   ]);
+
   for (const phase of HARNESS_BUILD_CONFIGURATION.buildPhases) {
     const own = plan.steps.filter((step) => step.source.includes(phase.command));
     expect(
@@ -100,10 +106,12 @@ test("a failing phase names that phase, and the phases after it never run", asyn
   const outcomes = await Promise.all(
     phaseNames.map(async (failing) => {
       const host = new PhaseFailingHost(failing);
+
       const built = await new WorkspaceHostModuleMapBuilder(
         new OneHostNamespace(host),
         workspaceName,
       ).build(commit);
+
       return { failing, error: built.isErr() ? built.error : undefined, steps: host.steps };
     }),
   );

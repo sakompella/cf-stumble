@@ -10,25 +10,31 @@ import {
 
 function makeTarget() {
   const execBackend = new FakeExecBackend();
+
   const target = new ProjectRpcTarget(
     new FakeProjectFilesystemProvider(),
     new FakeProjectTransactions(),
     execBackend,
   );
+
   return { execBackend, target };
 }
 
 function outputData(frame: Uint8Array): string | undefined {
   const value: unknown = JSON.parse(new TextDecoder().decode(frame));
+
   if (typeof value !== "object" || value === null) return undefined;
   const data: unknown = Object.getOwnPropertyDescriptor(value, "data")?.value;
+
   return typeof data === "string" ? data : undefined;
 }
 
 async function frames(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array[]> {
   const output: Uint8Array[] = [];
+
   for (;;) {
     const next = await reader.read();
+
     if (next.done) return output;
     output.push(next.value);
   }
@@ -37,10 +43,13 @@ async function frames(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<
 test("a frame at the shared byte limit is accepted exactly", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
+
   const emptyFrame = new TextEncoder().encode(
     `${JSON.stringify({ kind: "stdout", seq: 0, data: "" })}\n`,
   );
+
   const data = "x".repeat(MAX_EXEC_FRAME_BYTES - emptyFrame.byteLength);
   const handle = execBackend.handles[0]!;
   handle.push({ name: "stdout", data: new TextEncoder().encode(data) });
@@ -57,6 +66,7 @@ test("a frame at the shared byte limit is accepted exactly", async () => {
 test("an output chunk over the frame limit splits into valid frames without losing bytes", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const data = "x".repeat(MAX_EXEC_FRAME_BYTES);
   const handle = execBackend.handles[0]!;

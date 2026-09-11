@@ -12,7 +12,9 @@ import type {
 // adapter stays pure and separately testable.
 
 export type PiTextContent = Readonly<{ type: "text"; text: string }>;
+
 export type PiThinkingContent = Readonly<{ type: "thinking"; thinking: string }>;
+
 export type PiToolCall = Readonly<{
   type: "toolCall";
   id: string;
@@ -20,6 +22,7 @@ export type PiToolCall = Readonly<{
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Boundary: Pi tool call arguments are an open object from the model; the vendored type is Record<string, any>.
   arguments: Record<string, unknown>;
 }>;
+
 export type PiContentBlock = PiTextContent | PiThinkingContent | PiToolCall;
 
 export type PiUserMessage = Readonly<{
@@ -67,6 +70,7 @@ export type PiUsage = Readonly<{
 
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Boundary: Pi tool parameter schemas are open JSON Schema objects from the vendored package.
 export type PiToolParameters = Readonly<Record<string, unknown>>;
+
 export type PiTool = Readonly<{
   name: string;
   description: string;
@@ -100,6 +104,7 @@ export function isResponseError(value: PiAssistantMessage | AdapterError): value
 function userContentToString(content: PiUserMessage["content"]): string {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: Pi UserMessage.content is a union of string and array; typeof is the narrowing required by the union.
   if (typeof content === "string") return content;
+
   return content.map((block) => block.text).join("");
 }
 
@@ -129,6 +134,7 @@ function piAssistantToRoute(msg: PiAssistantMessage): RouteAssistantMessage {
   }
 
   const content = texts.length > 0 ? texts.join("") : null;
+
   return { role: "assistant", content, tool_calls: toolCalls };
 }
 
@@ -147,6 +153,7 @@ function piMessageToRoute(msg: PiMessage): RouteMessage {
     default: {
       // oxlint-disable-next-line eslint/no-underscore-dangle -- Exhaustiveness guard: underscore signals the value is never reached.
       const _exhaustive: never = msg;
+
       return _exhaustive;
     }
   }
@@ -183,6 +190,7 @@ export function piContextToRouteRequest(context: PiContext): ModelRouteRequest {
   if (context.tools !== undefined && context.tools.length > 0) {
     return { messages, tools: context.tools.map(piToolToRoute) };
   }
+
   return { messages };
 }
 
@@ -200,8 +208,10 @@ const ZERO_USAGE: PiUsage = {
 function routeToolCallToPi(tc: RouteAssistantMessage["tool_calls"][number]): PiToolCall {
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Boundary: JSON.parse of tool arguments returns an unvalidated object from the model route.
   let parsed: Record<string, unknown>;
+
   try {
     const raw: unknown = JSON.parse(tc.function.arguments);
+
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: parsed JSON from the model route needs typeof to confirm object before use.
     if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: typeof + null + array guard confirmed a plain object; Record<string, unknown> is the correct representation for parsed JSON tool arguments.
@@ -212,6 +222,7 @@ function routeToolCallToPi(tc: RouteAssistantMessage["tool_calls"][number]): PiT
   } catch {
     parsed = {};
   }
+
   return { type: "toolCall", id: tc.id, name: tc.function.name, arguments: parsed };
 }
 
@@ -230,9 +241,11 @@ export function routeResponseToPiAssistant(
   }
 
   const content: PiContentBlock[] = [];
+
   if (response.message.content !== null) {
     content.push({ type: "text", text: response.message.content });
   }
+
   for (const tc of response.message.tool_calls) {
     content.push(routeToolCallToPi(tc));
   }

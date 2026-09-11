@@ -52,6 +52,7 @@ interface BuiltFixtureFile {
 
 function builtFixture(): Promise<BuiltFixtureFile> {
   expect(builtFile, "run pnpm build:loaded-execution-env-fixture before the tests").toBeDefined();
+
   return new Response(builtFile ?? "").json<BuiltFixtureFile>();
 }
 
@@ -63,6 +64,7 @@ async function loadFacet(
   answers: readonly ModelRouteResponse[],
 ): Promise<Fetcher<LoadedFacetTurnEntry>> {
   const fixture = await builtFixture();
+
   const worker = env.LOADER.load({
     compatibilityDate: "2025-01-01",
     mainModule: fixture.entryModule,
@@ -70,6 +72,7 @@ async function loadFacet(
     env: { MODEL_SCRIPT: JSON.stringify(answers) },
     globalOutbound: null,
   });
+
   return worker.getEntrypoint<LoadedFacetTurnEntry>();
 }
 
@@ -92,6 +95,7 @@ function makeWorkspace() {
   // command itself; every other command still waits for the test to drive it.
   const execBackend = new GitDiffExecBackend(provider);
   const target = new DisposableProjectTarget(provider, new FakeProjectTransactions(), execBackend);
+
   return { provider, execBackend, target };
 }
 
@@ -104,6 +108,7 @@ afterEach(async () => {
 test("a loaded isolate runs a turn against a capability passed as an RPC argument", async () => {
   const workspace = makeWorkspace();
   workspace.provider.addFile("/workspace/notes.txt", encode("hello world"));
+
   const facet = await loadFacet([
     calls("read", { path: "notes.txt" }),
     says("The file says hello world."),
@@ -131,6 +136,7 @@ test("a loaded isolate runs a turn against a capability passed as an RPC argumen
 
 test("the turn's tool writes reach the originating workspace across the RPC hop", async () => {
   const workspace = makeWorkspace();
+
   const facet = await loadFacet([
     calls("write", { path: "made-by-the-turn.txt", content: "across the hop" }),
     says("Wrote it."),
@@ -182,6 +188,7 @@ test("the loaded isolate's environment holds no capability, only the plain model
  */
 test("no stub for the workspace outlives a finished turn", async () => {
   const workspace = makeWorkspace();
+
   const facet = await loadFacet([
     calls("write", { path: "released.txt", content: "done" }),
     says("Wrote it."),

@@ -46,14 +46,17 @@ export async function tabUntil(
   limit = 40,
 ): Promise<readonly FocusSnapshot[]> {
   const stops: FocusSnapshot[] = [];
+
   for (let pressed = 0; pressed < limit; pressed += 1) {
     await page.press("Tab");
     const stop = await readFocus(page);
     stops.push(stop);
+
     if (wanted(stop)) {
       return stops;
     }
   }
+
   throw new Error(
     `pressed Tab ${limit} times without reaching the wanted stop; visited ${stops
       .map((stop) => (stop.id === "" ? stop.tag : stop.id))

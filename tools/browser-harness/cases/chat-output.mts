@@ -37,6 +37,7 @@ export const CASES: readonly HarnessCase[] = [
     allowedRequestFailures: [`POST /api/projects/${HARNESS_PROJECT_ID}/turn`],
     run: async ({ page, reopen }) => {
       const observed: string[] = [];
+
       for (const refusal of REFUSALS) {
         await reopen(refusal.scenario);
         const saved = await readConversation(page);
@@ -68,6 +69,7 @@ export const CASES: readonly HarnessCase[] = [
         assertSame(turn.sendDisabled, false, `Send after a ${refusal.scenario} refusal`);
         observed.push(`${refusal.scenario} → "${turn.turnState}"`);
       }
+
       return `${observed.join("; ")}, each with the saved conversation and the typed prompt still visible`;
     },
   },

@@ -25,6 +25,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value).toSorted();
+
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 

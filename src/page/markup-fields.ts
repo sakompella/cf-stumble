@@ -21,6 +21,7 @@ export function control(input: {
     input.inputType === "number"
       ? `type="number" min="0" step="1"`
       : `type="text" autocomplete="off" spellcheck="false"`;
+
   return `<div class="row">
         <label class="field-label" for="${input.inputId}">${input.label}</label>
         <input id="${input.inputId}" ${attributes} />

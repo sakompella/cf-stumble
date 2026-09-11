@@ -30,6 +30,7 @@ export function parseJsonRecordText(text: string): JsonRecord | undefined {
   try {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: JSON.parse returns only JSON, which JsonValue describes exactly, and isJsonRecord then proves this one is an object.
     const parsed = JSON.parse(text) as JsonValue;
+
     return isJsonRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;

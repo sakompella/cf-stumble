@@ -20,6 +20,7 @@ import type LoadedProjectWorkspacesEntry from "./loaded-project-workspaces-entry
  * second name.
  */
 export const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-one");
+
 export const otherTenantWorkspaceName = tenantWorkspaceName("supervisor-name-of-tenant-two");
 
 const OPENING = { prompt: "do the work", state: null };
@@ -47,11 +48,13 @@ export async function turnRecordingProvisioning(
   projectId: string,
 ): Promise<RecordedTurn> {
   const reconciled: string[] = [];
+
   const start = await streamProjectTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
     provision: (project) => {
       reconciled.push(project.id);
+
       return Promise.resolve(true);
     },
     catalog: sampleSelectableCatalog,
@@ -60,6 +63,7 @@ export async function turnRecordingProvisioning(
     request: OPENING,
     signal: runningTurn(),
   });
+
   return { start, provisioned: reconciled };
 }
 
@@ -83,6 +87,7 @@ export async function projectWorkspaces(): Promise<ProjectWorkspaces> {
   const host = await loadFixtureEntrypoint<LoadedProjectWorkspacesEntry>(
     "loaded-project-workspaces-fixture.json",
   );
+
   return {
     namespace: { getByName: (name) => ({ project: () => host.project(name) }) },
     fileText: (name, path) => host.fileText(name, path),
@@ -139,8 +144,10 @@ export async function completedTurn(
   tenantWorkspace: string = workspaceName,
 ): Promise<FacetTurnFrame[]> {
   const started = await turnFor(workspaces, facet, projectId, tenantWorkspace);
+
   if (!started.ok) {
     throw new Error(`the turn must start; it was refused with ${started.reason}`);
   }
+
   return readFrames(started.frames);
 }

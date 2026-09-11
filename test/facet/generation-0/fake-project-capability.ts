@@ -51,6 +51,7 @@ export class FakeProjectCapability implements ProjectRpcTargetContract, Disposab
     const provider = new FakeProjectFilesystemProvider();
     const execBackend = new GitDiffExecBackend(provider);
     const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
+
     return new FakeProjectCapability(target, provider, execBackend, {
       dups: 0,
       disposals: 0,
@@ -60,6 +61,7 @@ export class FakeProjectCapability implements ProjectRpcTargetContract, Disposab
 
   dup(): FakeProjectCapability {
     this.ledger.dups += 1;
+
     return new FakeProjectCapability(this.#target, this.provider, this.execBackend, this.ledger);
   }
 
@@ -110,6 +112,7 @@ export class FakeProjectCapability implements ProjectRpcTargetContract, Disposab
 
   #live(): ProjectRpcTarget {
     if (this.#disposed) throw new Error("RPC stub used after being disposed.");
+
     return this.#target;
   }
 }

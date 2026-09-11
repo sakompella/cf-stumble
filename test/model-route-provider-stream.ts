@@ -13,13 +13,17 @@ import type { ModelStreamEvent } from "../src/model-route.js";
  * across `ReadableStream` reads — including splitting a multi-byte UTF-8 character in half. */
 export function rawByteStream(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
   let i = 0;
+
   return new ReadableStream<Uint8Array>({
     pull(controller) {
       const chunk = chunks[i];
+
       if (chunk === undefined) {
         controller.close();
+
         return;
       }
+
       controller.enqueue(chunk);
       i += 1;
     },
@@ -52,6 +56,7 @@ export async function collectEvents(
 ): Promise<ModelStreamEvent[]> {
   const text = await new Response(stream).text();
   const lines = text.split("\n").filter((line) => line !== "");
+
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: every line came from the model route, which encodes exactly one ModelStreamEvent per line.
   return lines.map((line) => JSON.parse(line) as ModelStreamEvent);
 }

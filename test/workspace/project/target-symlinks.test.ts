@@ -15,14 +15,17 @@ function withSymlinks() {
   context.provider.addSymlink("/workspace/escape-abs", "/etc/passwd");
   context.provider.addSymlink("/workspace/loop-a", "loop-b");
   context.provider.addSymlink("/workspace/loop-b", "loop-a");
+
   return context;
 }
 
 test("relative and absolute in-root symlinks read through to their target", async () => {
   const { target } = withSymlinks();
+
   for (const path of ["/rel-link", "/abs-link"]) {
     const result = await target.readFile(path);
     expect(result.ok).toBe(true);
+
     if (result.ok) expect(new TextDecoder().decode(result.value)).toBe("hello");
   }
 });
@@ -34,6 +37,7 @@ test("writing through a symlink writes the real target, not the link", async () 
   expect(provider.nodes.get("/workspace/dir/file.txt")).toMatchObject({ type: "file" });
   const real = await target.readFile("/dir/file.txt");
   expect(real.ok).toBe(true);
+
   if (real.ok) expect(new TextDecoder().decode(real.value)).toBe("changed");
 });
 
@@ -41,6 +45,7 @@ test("listFiles through a symlinked directory lists the real directory", async (
   const { target } = withSymlinks();
   const listing = await target.listFiles("/dir-link");
   expect(listing.ok).toBe(true);
+
   if (listing.ok) expect(listing.value.map((entry) => entry.name)).toEqual(["a.txt"]);
 });
 
@@ -48,6 +53,7 @@ test("lstat's canonicalPath resolves the full symlink chain", async () => {
   const { target } = withSymlinks();
   const info = await target.lstat("/rel-link");
   expect(info.ok).toBe(true);
+
   if (info.ok) {
     expect(info.value.kind).toBe("symlink");
     expect(info.value.canonicalPath).toEqual({ ok: true, value: "/dir/file.txt" });
@@ -72,6 +78,7 @@ test("a dangling symlink target is not-found", async () => {
   });
   const info = await target.lstat("/dangling");
   expect(info.ok).toBe(true);
+
   if (info.ok) {
     expect(info.value.kind).toBe("symlink");
     expect(info.value.canonicalPath).toEqual({

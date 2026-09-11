@@ -107,6 +107,7 @@ export class GitHubConnection {
    */
   status(now: number): Promise<GitHubConnectionStatus> {
     const pending = this.store.pendingAuthorization(now);
+
     return pending === undefined
       ? this.observed()
       : Promise.resolve({
@@ -128,11 +129,13 @@ export class GitHubConnection {
    */
   async ensureCredential(now: number): Promise<GitHubConnectionStatus> {
     const current = await this.status(now);
+
     if (current.state === "connected" || current.state === "tooling-missing") {
       return current;
     }
 
     const token = parseGitHubToken(this.environment.fallbackToken);
+
     if (token === undefined) {
       return current;
     }
@@ -149,11 +152,13 @@ export class GitHubConnection {
     now: number,
   ): Promise<GitHubAuthorizationOutcome> {
     const clientId = this.environment.clientId;
+
     if (clientId === undefined || clientId.trim().length === 0) {
       return { ok: false, problem: "not-configured" };
     }
 
     const started = await requestDeviceAuthorization(clientId, this.environment.fetcher);
+
     if (!started.ok) {
       return { ok: false, problem: "provider-unavailable" };
     }
@@ -186,12 +191,15 @@ export class GitHubConnection {
   ): Promise<GitHubAuthorizationOutcome> {
     const clientId = this.environment.clientId;
     const pending = this.store.pendingAuthorization(now);
+
     if (clientId === undefined) {
       return { ok: false, problem: "not-configured" };
     }
+
     if (pending === undefined) {
       return { ok: false, problem: "no-pending-authorization" };
     }
+
     if (!sameOwner(scope, pending.identity, pending.audience)) {
       return { ok: false, problem: "not-the-initiating-owner" };
     }
@@ -200,27 +208,33 @@ export class GitHubConnection {
       { clientId, deviceCode: pending.deviceCode },
       this.environment.fetcher,
     );
+
     switch (redeemed.kind) {
       case "authorized": {
         this.store.clearAuthorization();
+
         return {
           ok: true,
           status: await this.install(redeemed.token, "device-authorization", now),
         };
       }
+
       case "pending":
       case "slow-down":
         return { ok: true, status: await this.status(now) };
       case "expired":
         this.store.clearAuthorization();
+
         return { ok: false, problem: "authorization-expired" };
       case "denied":
         this.store.clearAuthorization();
+
         return { ok: false, problem: "authorization-denied" };
       case "unavailable":
         return { ok: false, problem: "provider-unavailable" };
       default: {
         const exhaustive: never = redeemed;
+
         return exhaustive;
       }
     }
@@ -237,6 +251,7 @@ export class GitHubConnection {
       namespace: this.namespace,
       token,
     });
+
     if (installed.isErr()) {
       return reconnect(
         installed.error.code === "credential-install-failed"
@@ -244,6 +259,7 @@ export class GitHubConnection {
           : "workspace-unavailable",
       );
     }
+
     if (installed.value === "tooling-missing") {
       return { state: "tooling-missing" };
     }
@@ -257,6 +273,7 @@ export class GitHubConnection {
       workspaceName: this.workspaceName,
       namespace: this.namespace,
     });
+
     if (read.isErr()) {
       return reconnect("workspace-unavailable");
     }
@@ -270,6 +287,7 @@ export class GitHubConnection {
     at: number | undefined,
   ): GitHubConnectionStatus {
     const previous = this.store.connection();
+
     switch (status.state) {
       case "connected": {
         const login = status.login ?? previous?.login ?? "";
@@ -279,18 +297,23 @@ export class GitHubConnection {
           source: credentialSource,
           connectedAt: at ?? previous?.connectedAt ?? 0,
         });
+
         return { state: "connected", login, source: credentialSource };
       }
+
       case "tooling-missing":
         return { state: "tooling-missing" };
       case "missing":
         this.store.clearConnection();
+
         return previous === undefined ? { state: "disconnected" } : reconnect("credential-missing");
       case "unusable":
         this.store.clearConnection();
+
         return reconnect("credential-rejected");
       default: {
         const exhaustive: never = status.state;
+
         return exhaustive;
       }
     }

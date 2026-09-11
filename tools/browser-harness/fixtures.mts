@@ -48,10 +48,15 @@ export function parseScenario(value: string | null | undefined): HarnessScenario
 
 /** The connected repository, and the harness checkout. The two working directories v0 allows. */
 export const HARNESS_PROJECT_ID = "octocat-hello-world";
+
 export const HARNESS_PROJECT_URL = "https://github.com/octocat/hello-world";
+
 export const HARNESS_SELF_PROJECT_ID = "harness";
+
 export const CONNECTED_PROJECT_ID = "octocat-new-repo";
+
 export const CONNECTED_PROJECT_URL = "https://github.com/octocat/new-repo";
+
 export const HARNESS_LOCATION = HARNESS_DIRECTORY;
 
 export type ProjectEntry = Readonly<{
@@ -92,6 +97,7 @@ export function github(scenario: HarnessScenario): JsonValue {
   if (scenario === "github-disconnected") {
     return { state: "disconnected" };
   }
+
   if (scenario === "github-awaiting-authorization") {
     return {
       state: "awaiting-authorization",
@@ -101,6 +107,7 @@ export function github(scenario: HarnessScenario): JsonValue {
       intervalSeconds: 5,
     };
   }
+
   return CONNECTED_GITHUB;
 }
 

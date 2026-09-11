@@ -25,6 +25,7 @@ function candidateSubmission() {
 /** Label and pass startup checking for `harnessCommit`, returning its generation label. */
 async function readyCandidateLabel(control: DurableObjectStub<Supervisor>): Promise<number> {
   const submission = await control.controlGeneration(candidateSubmission());
+
   if (!submission.ok) {
     throw new Error("a valid candidate submission must succeed");
   }
@@ -33,6 +34,7 @@ async function readyCandidateLabel(control: DurableObjectStub<Supervisor>): Prom
     submission.outcome.generation.label,
     readyArtifact(harnessCommit),
   );
+
   if (!startup.ok) {
     throw new Error("a valid candidate must complete startup checking");
   }
@@ -70,13 +72,16 @@ test("the real stub applies epoch-checked activation directly: stale epochs reje
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: active.epoch - 1 },
   });
+
   const firstActivation = await control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: active.epoch },
   });
+
   if (!firstActivation.ok) {
     throw new Error("a checked candidate must accept activation");
   }
+
   const noOpActivation = await control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: firstActivation.outcome.epoch },
@@ -92,10 +97,12 @@ test("the real stub applies epoch-checked activation directly: stale epochs reje
 
 test("startup checking maps TaggedErrors to plain RPC values", async () => {
   const control = supervisor("plain-startup-check-result");
+
   const submission = await control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "submit-candidate", harnessCommit: deadlineCommit },
   });
+
   if (!submission.ok || submission.outcome.kind !== "candidate-submitted") {
     throw new Error("a valid candidate submission must succeed");
   }

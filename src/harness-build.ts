@@ -87,6 +87,7 @@ export function harnessBuildConfiguration(
   repositoryUrl: string | undefined,
 ): HarnessBuildConfiguration {
   const trimmed = repositoryUrl?.trim();
+
   return trimmed === undefined || trimmed.length === 0
     ? HARNESS_BUILD_CONFIGURATION
     : { ...HARNESS_BUILD_CONFIGURATION, harnessGitRemote: trimmed };
@@ -210,6 +211,7 @@ export function planHarnessBuild(
     !`${configuration.harnessRepositoryRoot}/`.startsWith(`${directory}/`),
     "build scratch must never contain the harness checkout",
   );
+
   return {
     directory,
     steps: [
@@ -241,5 +243,6 @@ export function harnessBuildStep(
 ): HarnessBuildStep {
   const step = plan.steps.find((planned) => planned.name === name);
   invariant(step !== undefined, `the build plan must contain its own ${name} step`);
+
   return step;
 }

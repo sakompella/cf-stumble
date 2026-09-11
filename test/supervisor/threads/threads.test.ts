@@ -20,11 +20,13 @@ import {
 } from "./turn-slot.js";
 
 const NOW = 1_700_000_000_000;
+
 const LEASE_MS = 30_000;
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
 const firstTurn = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
+
 const secondTurn = [...firstTurn, THREAD_MESSAGE_SAMPLES.bashExecution];
 
 /**
@@ -36,13 +38,17 @@ async function conversationOf(
   projectId: string,
 ): Promise<readonly AgentMessage[]> {
   const result = await control.getProjectThread(projectId);
+
   if (!result.ok) {
     throw new Error(`the ${projectId} thread must be readable: ${result.problem.code}`);
   }
+
   const messages = parseThreadMessages(result.thread.conversation);
+
   if (messages.isErr()) {
     throw new Error(`the ${projectId} conversation must parse: ${messages.error.reason}`);
   }
+
   return messages.value;
 }
 
@@ -190,9 +196,11 @@ test("the two catalog projects run their turns at the same time without interfer
     startProjectTurn(control, "sample-project-one", 0, NOW, LEASE_MS),
     startProjectTurn(control, "sample-project-two", 0, NOW, LEASE_MS),
   ]);
+
   if (!startedOne.ok || !startedTwo.ok) {
     throw new Error("both projects must be admitted to a turn of their own");
   }
+
   await Promise.all([
     finishProjectTurn(control, "sample-project-one", startedOne.leaseId, firstTurn, NOW),
     finishProjectTurn(control, "sample-project-two", startedTwo.leaseId, secondTurn, NOW),
@@ -208,6 +216,7 @@ test("the two catalog projects run their turns at the same time without interfer
 test("a thread survives a generation change and names no generation in its stored shape", async () => {
   const control = await supervisor("thread-survives-generation-change");
   const lease = await admit(control, "sample-project-one", 0);
+
   const beforeChange = await finishProjectTurn(
     control,
     "sample-project-one",
@@ -215,6 +224,7 @@ test("a thread survives a generation change and names no generation in its store
     firstTurn,
     NOW,
   );
+
   if (!beforeChange.ok) {
     throw new Error("the first finish must succeed");
   }
@@ -224,6 +234,7 @@ test("a thread survives a generation change and names no generation in its store
   await activateGeneration(control, label);
 
   const afterChange = await control.getProjectThread("sample-project-one");
+
   if (!afterChange.ok) {
     throw new Error("the thread must survive the generation change");
   }
@@ -250,6 +261,7 @@ test("a turn whose deadline has passed is taken over by the next start", async (
     NOW + LEASE_MS - 1,
     LEASE_MS,
   );
+
   const afterLease = await startProjectTurn(
     control,
     "sample-project-one",

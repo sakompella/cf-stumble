@@ -36,6 +36,7 @@ import type { FacetTurnFrame } from "../../../src/facet/generation-0/index.js";
  */
 
 const projectOne = sampleProjectOne;
+
 const projectTwo = sampleProjectTwo;
 
 /**
@@ -49,7 +50,9 @@ function toolResultFrame(frames: readonly FacetTurnFrame[]): FacetTurnFrame | un
 /** The turn's own diff of what it changed, which no model asked for. */
 function diffFrame(frames: readonly FacetTurnFrame[]): Extract<FacetTurnFrame, { kind: "diff" }> {
   const frame = frames.find((candidate) => candidate.kind === "diff");
+
   if (frame?.kind !== "diff") throw new Error("a turn that wrote a file must publish its diff");
+
   return frame;
 }
 
@@ -59,6 +62,7 @@ afterEach(async () => {
 
 test("a turn writes into the selected project's own directory in the tenant's workspace", async () => {
   const workspaces = await projectWorkspaces();
+
   const facet = await facetRunning([
     calls("write", { path: "notes.txt", content: "written by the turn" }),
     says("Wrote it."),
@@ -75,6 +79,7 @@ test("a turn writes into the selected project's own directory in the tenant's wo
 
 test("a turn shows what it changed without the model asking for a diff", async () => {
   const workspaces = await projectWorkspaces();
+
   const facet = await facetRunning([
     calls("write", { path: "notes.txt", content: "written by the turn" }),
     says("Wrote it."),
@@ -103,11 +108,14 @@ test("selecting another project selects another directory, not another workspace
     calls("write", { path: "who.txt", content: "project one" }),
     says("Wrote it."),
   ]);
+
   await completedTurn(workspaces, first, projectOne.id);
+
   const second = await facetRunning([
     calls("write", { path: "who.txt", content: "project two" }),
     says("Wrote it."),
   ]);
+
   await completedTurn(workspaces, second, projectTwo.id);
 
   expect(
@@ -124,6 +132,7 @@ test("selecting another project selects another directory, not another workspace
 
 test("a turn on the harness entry runs in the harness checkout", async () => {
   const workspaces = await projectWorkspaces();
+
   const facet = await facetRunning([
     calls("write", { path: "notes.txt", content: "the agent edited its own harness" }),
     says("Wrote it."),
@@ -162,6 +171,7 @@ test("the harness entry needs no clone, and a repository still gets one", async 
 
 test("a turn on the harness entry cannot address anything outside the workspace root", async () => {
   const workspaces = await projectWorkspaces();
+
   const facet = await facetRunning([
     calls("read", { path: "../../etc/passwd" }),
     says("Tried it."),
@@ -186,6 +196,7 @@ test("a turn may read a sibling repository, because the workspace is one machine
     calls("write", { path: "shared.txt", content: "project one wrote this" }),
     says("Wrote it."),
   ]);
+
   const wrote = await completedTurn(workspaces, writer, projectOne.id);
   expect(wrote.at(-1), "project one's write must land before project two reads").toMatchObject({
     kind: "completed",
@@ -195,6 +206,7 @@ test("a turn may read a sibling repository, because the workspace is one machine
     calls("read", { path: `../${projectOne.id}/shared.txt` }),
     says("Read it."),
   ]);
+
   const read = await completedTurn(workspaces, reader, projectTwo.id);
 
   expect(
@@ -205,6 +217,7 @@ test("a turn may read a sibling repository, because the workspace is one machine
 
 test("a turn cannot address anything outside the workspace root", async () => {
   const workspaces = await projectWorkspaces();
+
   const facet = await facetRunning([
     calls("read", { path: "../../../etc/passwd" }),
     says("Tried it."),
@@ -225,6 +238,7 @@ test("another tenant's workspace is a different name that no request can reach",
     calls("write", { path: "tenant.txt", content: "tenant one" }),
     says("Wrote it."),
   ]);
+
   await completedTurn(workspaces, writer, projectOne.id);
   const other = await facetRunning([calls("read", { path: "tenant.txt" }), says("Read it.")]);
   const read = await completedTurn(workspaces, other, projectOne.id, otherTenantWorkspaceName);

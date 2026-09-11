@@ -14,6 +14,7 @@ const propertyTests = import.meta.glob("../**/*.props.test.ts", {
   query: "?raw",
   import: "default",
 });
+
 const allTests = import.meta.glob("../**/*.test.ts", {
   eager: true,
   query: "?raw",
@@ -33,6 +34,7 @@ describe("Node property-test coverage", () => {
     const workerdTests = new Set(
       Object.keys(allTests).filter((path) => !path.endsWith(".props.test.ts")),
     );
+
     const orphans = Object.keys(propertyTests)
       .filter((path) => !workerdTests.has(siblingPath(path)))
       .toSorted();

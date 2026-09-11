@@ -31,11 +31,14 @@ export function parseEnvelope<T>(
   isValue: (value: unknown) => value is T,
 ): ParsedEnvelope<T> {
   if (!isRecord(raw) || typeof raw.ok !== "boolean") return { kind: "malformed" };
+
   if (raw.ok) {
     return isValue(raw.value) ? { kind: "ok", value: raw.value } : { kind: "malformed" };
   }
+
   if (!isRecord(raw.error) || typeof raw.error.code !== "string") return { kind: "malformed" };
   const { code } = raw.error;
+
   return typeof raw.error.path === "string"
     ? { kind: "failure", error: { code, path: raw.error.path } }
     : { kind: "failure", error: { code } };
@@ -64,7 +67,9 @@ export type ParsedCanonicalPath =
 
 function isParsedCanonicalPath(value: unknown): value is ParsedCanonicalPath {
   if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+
   if (value.ok) return typeof value.value === "string";
+
   return isRecord(value.error) && typeof value.error.code === "string";
 }
 
@@ -106,16 +111,21 @@ export type ParsedExecEvent =
 /** Parses one raw exec-stream event, or `undefined` if its shape does not match a known event. */
 export function parseExecEvent(value: unknown): ParsedExecEvent | undefined {
   if (!isRecord(value) || typeof value.kind !== "string") return undefined;
+
   if (value.kind === "stdout" || value.kind === "stderr")
     return { kind: value.kind, data: value.data };
+
   if (value.kind !== "terminal" || typeof value.outcome !== "string") return undefined;
+
   if (value.outcome === "exited") {
     return typeof value.exitCode === "number"
       ? { kind: "terminal", outcome: "exited", exitCode: value.exitCode }
       : undefined;
   }
+
   if (value.outcome === "killed" || value.outcome === "timed-out" || value.outcome === "failed") {
     return { kind: "terminal", outcome: value.outcome };
   }
+
   return undefined;
 }

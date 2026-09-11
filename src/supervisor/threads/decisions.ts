@@ -47,6 +47,7 @@ export function decideStartTurn(
       problem: { code: "turn-conflict", projectId, deadlineAt: current.turnDeadlineAt ?? 0 },
     };
   }
+
   if (expectedRevision !== current.revision) {
     return {
       kind: "rejected",
@@ -70,9 +71,11 @@ export function decideFinishTurn(
   if (!current.turnActive) {
     return { kind: "rejected", problem: { code: "turn-not-active", projectId } };
   }
+
   if (!ownsTurn(claim)) {
     return { kind: "rejected", problem: { code: "turn-lease-lost", projectId } };
   }
+
   if (!holdsTurn(current, now)) {
     return {
       kind: "rejected",
@@ -99,6 +102,7 @@ export function decideAbandonTurn(
   if (!current.turnActive) {
     return { kind: "rejected", problem: { code: "turn-not-active", projectId } };
   }
+
   if (!ownsTurn(claim)) {
     return { kind: "rejected", problem: { code: "turn-lease-lost", projectId } };
   }

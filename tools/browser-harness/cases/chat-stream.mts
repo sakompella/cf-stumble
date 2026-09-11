@@ -82,11 +82,13 @@ export const CASES: readonly HarnessCase[] = [
       assertIncludes(heldTranscript.allText, PROMPT, "the transcript at the barrier");
 
       server.release();
+
       const samples = await sampleWhile(
         () => readTurn(page),
         (sample) => sample.turnState === "running",
         100,
       );
+
       const running = samples.filter((sample) => sample.turnState === "running");
       assertAtLeast(running.length, 3, "samples taken while the turn was running");
       assertNonDecreasing(
@@ -118,20 +120,24 @@ export const CASES: readonly HarnessCase[] = [
     scenario: "ready",
     run: async ({ page }) => {
       await sendPrompt(page, PROMPT);
+
       const progress = await sampleWhile(
         () => readTools(page),
         (tools) => tools.length < 3 || tools.some((tool) => tool.output === "running…"),
         50,
       );
+
       assert(
         progress.some((tools) => tools.some((tool) => tool.output === "running…")),
         "no sample caught a tool while it was still running, so the page may render tools only when they finish",
       );
 
       await waitForTurnEnded(page);
+
       for (const index of [0, 1, 2]) {
         await openTool(page, index);
       }
+
       const tools = await readTools(page);
       const diffs = await readDiffs(page);
       const kinds = (await readTranscript(page)).map((entry) => entry.kind);
@@ -176,13 +182,16 @@ export const CASES: readonly HarnessCase[] = [
 
       await waitForText(page, ID.threadRevision, "4");
       const requests = server.requests();
+
       const turnAt = requests.findLastIndex(
         (request) => request.method === "POST" && request.path.endsWith("/turn"),
       );
+
       const rereadAt = requests.findIndex(
         (request, index) =>
           index > turnAt && request.method === "GET" && request.path.endsWith("/thread"),
       );
+
       assertAtLeast(rereadAt, turnAt + 1, "a thread read following the turn POST");
 
       const beforeReload = await readThread(page);

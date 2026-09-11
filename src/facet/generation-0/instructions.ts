@@ -25,6 +25,7 @@ async function readOptional(
   signal: AbortSignal | undefined,
 ): Promise<string | undefined> {
   const read = await env.readTextFile(path, signal);
+
   return read.ok ? read.value : undefined;
 }
 
@@ -34,6 +35,7 @@ async function absoluteOrPath(
   signal: AbortSignal | undefined,
 ): Promise<string> {
   const resolved = await env.absolutePath(path, signal);
+
   return resolved.ok ? resolved.value : path;
 }
 
@@ -54,7 +56,9 @@ export async function loadTurnInstructions(
 ): Promise<TurnInstructions> {
   const managed = await readOptional(env, MANAGED_AGENT_INSTRUCTIONS_PATH, signal);
   const repositoryPath = await absoluteOrPath(env, REPOSITORY_INSTRUCTIONS_FILE, signal);
+
   if (repositoryPath === MANAGED_AGENT_INSTRUCTIONS_PATH) return { managed, repository: undefined };
+
   return { managed, repository: await readOptional(env, REPOSITORY_INSTRUCTIONS_FILE, signal) };
 }
 

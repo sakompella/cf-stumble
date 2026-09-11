@@ -11,9 +11,11 @@ import {
 function makeTarget() {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
+
   const target = withDecodedEvents(
     new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend),
   );
+
   return { execBackend, target };
 }
 
@@ -28,6 +30,7 @@ test("a backend handle stuck pending past the timeout still returns an operation
   execBackend.deferNextExec(deferred);
 
   const started = await target.startExec({ command: "x", timeoutMs: 50 });
+
   if (!started.ok)
     throw new Error("expected startExec to succeed even while the handle is pending");
   expect(started.value.operationId.length).toBeGreaterThan(0);
@@ -57,6 +60,7 @@ test("a backend start rejection before the deadline is one failed terminal outco
   execBackend.deferNextExec(deferred);
 
   const started = await target.startExec({ command: "x", timeoutMs: 1_000 });
+
   if (!started.ok)
     throw new Error("expected startExec to succeed even while the handle is pending");
   const reader = started.value.events.getReader();
@@ -80,6 +84,7 @@ test("a manual kill while the backend handle is still pending emits killed, then
   execBackend.deferNextExec(deferred);
 
   const started = await target.startExec({ command: "x", timeoutMs: 1_000 });
+
   if (!started.ok)
     throw new Error("expected startExec to succeed even while the handle is pending");
   const reader = started.value.events.getReader();
@@ -104,6 +109,7 @@ test("a timeout, a manual kill, and the handle resolving all racing together set
   execBackend.deferNextExec(deferred);
 
   const started = await target.startExec({ command: "x", timeoutMs: 50 });
+
   if (!started.ok)
     throw new Error("expected startExec to succeed even while the handle is pending");
   const reader = started.value.events.getReader();

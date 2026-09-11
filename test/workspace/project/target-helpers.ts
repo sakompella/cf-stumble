@@ -14,5 +14,6 @@ export function makeTarget() {
   const transactions = new FakeProjectTransactions();
   const execBackend = new FakeExecBackend();
   const target = new ProjectRpcTarget(provider, transactions, execBackend);
+
   return { provider, transactions, execBackend, target };
 }

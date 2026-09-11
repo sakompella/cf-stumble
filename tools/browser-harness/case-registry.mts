@@ -25,9 +25,11 @@ async function loadModule(fileName: string): Promise<readonly HarnessCase[]> {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the shape is checked below, and a module in cases/ that does not export CASES fails by name rather than travelling further.
   const loaded = (await import(specifier)) as CaseModule;
   const cases = loaded.CASES;
+
   if (cases === undefined) {
     throw new TypeError(`cases/${fileName} does not export CASES: readonly HarnessCase[]`);
   }
+
   return cases;
 }
 
@@ -35,22 +37,29 @@ export async function loadCases(): Promise<readonly HarnessCase[]> {
   const fileNames = (await readdir(fileURLToPath(CASES_DIRECTORY)))
     .filter((name) => isCaseFile(name))
     .toSorted();
+
   const found: HarnessCase[] = [];
+
   for (const fileName of fileNames) {
     found.push(...(await loadModule(fileName)));
   }
+
   const ids = new Set<string>();
+
   for (const entry of found) {
     if (ids.has(entry.id)) {
       throw new Error(`two cases claim the id ${entry.id}`);
     }
+
     ids.add(entry.id);
   }
+
   return found.toSorted((left, right) => order(left.id).localeCompare(order(right.id)));
 }
 
 /** `CHAT-2` before `CHAT-10`: the case list numbers its cases, so the run reads in that order. */
 function order(caseId: string): string {
   const [surface, number] = caseId.split("-");
+
   return `${surface ?? caseId}-${(number ?? "").padStart(3, "0")}`;
 }

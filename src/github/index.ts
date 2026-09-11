@@ -9,6 +9,7 @@ export {
   type GitHubCredentialStatus,
   type RepositoryAccess,
 } from "./credential-commands.js";
+
 export {
   parseDeviceAuthorization,
   parseDeviceRedemption,
@@ -25,4 +26,5 @@ export {
   type GitHubFetch,
   type GitHubToken,
 } from "./device-flow.js";
+
 export { containsCredential, redactCredentials, REDACTED } from "./redaction.js";

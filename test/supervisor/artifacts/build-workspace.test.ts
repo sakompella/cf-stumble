@@ -15,12 +15,16 @@ import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
 const commit = harnessCommit("6000000000000000000000000000000000000001");
+
 const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
+
 const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
+
 const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -44,6 +48,7 @@ class FakeBuildHost implements BuildWorkspaceHost {
 
   build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
+
     if (request.kind === "build-output") {
       return Promise.resolve(
         this.output === undefined
@@ -56,6 +61,7 @@ class FakeBuildHost implements BuildWorkspaceHost {
     }
 
     const failed = request.step === this.failingStep;
+
     return Promise.resolve({
       ok: true,
       result: {
@@ -78,6 +84,7 @@ class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
 
   getByName(name: string): BuildWorkspaceHost {
     this.names.push(name);
+
     return this.host;
   }
 }
@@ -86,6 +93,7 @@ const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 function builderFor(host: FakeBuildHost) {
   const namespace = new FakeWorkspaceNamespace(host);
+
   return { builder: new WorkspaceHostModuleMapBuilder(namespace, workspaceName), namespace };
 }
 
@@ -98,6 +106,7 @@ test("builds a labeled commit through the named build workspace", async () => {
   if (built.isErr()) {
     throw new Error(`a successful build must produce a module map: ${built.error.code}`);
   }
+
   expect(built.value.harnessCommit).toBe(commit);
   expect(encodeModuleMap(built.value)).toBe(
     encodeModuleMap({
@@ -166,6 +175,7 @@ test("offline fake workspace retries provisioning after an interrupted labeled c
   if (interrupted.isOk() || resumed.isErr()) {
     throw new Error("the fake checkout interruption must recover on the next build request");
   }
+
   expect(interrupted.error).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
@@ -191,6 +201,7 @@ test("offline fake workspace refuses an unexpected origin before the labeled che
   if (built.isOk()) {
     throw new Error("a refused provision must not reach checkout");
   }
+
   expect(plan.steps[0]?.source).toContain(
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
   );
@@ -213,6 +224,7 @@ test("reports the failing build phase with its exit code, and asks for nothing a
   if (built.isOk()) {
     throw new Error("a failing build phase must not produce a module map");
   }
+
   expect(built.error).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
@@ -257,6 +269,7 @@ test("a refused build workspace stays a typed failure", async () => {
   const host = new FakeBuildHost();
   host.build = (request: HarnessBuildRequest): Promise<WorkspaceResult> => {
     host.requests.push(request);
+
     return Promise.resolve({ ok: false, error: { code: "unknown-command" } });
   };
 
@@ -265,6 +278,7 @@ test("a refused build workspace stays a typed failure", async () => {
   if (built.isOk()) {
     throw new Error("a refused build must not produce a module map");
   }
+
   expect(built.error).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
 });
 
@@ -292,6 +306,7 @@ test("refuses a read that escapes the commit's build directory", async () => {
   ]) {
     await expect(workspace.readFile(path)).rejects.toThrow(/its own module map/u);
   }
+
   expect(host.requests, "a refused read never reaches the workspace host").toEqual([]);
   await expect(workspace.readFile(plan.moduleMapPath)).resolves.toBe(moduleMapFile());
 });

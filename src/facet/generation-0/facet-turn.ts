@@ -12,6 +12,7 @@ import type { FacetTurnFrame } from "./turn-frames.js";
 import type { WorkspaceDiff } from "./workspace-diff.js";
 
 export type { FacetTurnRequest } from "./facet-turn-request.js";
+
 export type { FacetTurnFrame } from "./turn-frames.js";
 
 const encoder = new TextEncoder();
@@ -43,6 +44,7 @@ async function pumpTurn(
   const frames = new TurnFrames();
   const env = createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability });
   let touchedFiles = false;
+
   const outcome = await runPiAgentTurn({
     prompt: request.prompt,
     // The conversation arrives from the host's saved thread; everything else about the state is
@@ -66,6 +68,7 @@ async function pumpTurn(
   if (touchedFiles && !signal.aborted) {
     publish(diffFrame(await readWorkspaceDiff(env, signal)));
   }
+
   publish(outcomeFrame(outcome));
 }
 
@@ -99,20 +102,26 @@ export function startFacetTurn(
         if (cancellation.signal.aborted) return;
         controller.enqueue(encodeFrame(frame));
       };
+
       const close = () => {
         if (!cancellation.signal.aborted) controller.close();
       };
 
       const parsed = parseFacetTurnRequest(request);
+
       if (parsed === undefined) {
         publish({ kind: "rejected", code: "invalid-turn-request" });
         close();
+
         return;
       }
+
       lease = leaseProjectCapability(received);
+
       if (lease === undefined) {
         publish({ kind: "rejected", code: "invalid-project-capability" });
         close();
+
         return;
       }
 

@@ -24,6 +24,7 @@ import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/i
  */
 
 const conversation = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
+
 const completed = { kind: "completed", state: { messages: conversation } };
 
 afterEach(async () => {

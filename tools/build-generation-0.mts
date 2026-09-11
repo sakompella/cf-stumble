@@ -16,6 +16,7 @@ import { build } from "esbuild";
  */
 
 const repoRoot = resolve(import.meta.dirname, "..");
+
 const entryPoint = resolve(repoRoot, "src/facet/generation-0/main-facet.ts");
 
 /** The module name inside the map, and the entry module the Worker Loader starts. */
@@ -49,6 +50,7 @@ const bundled = await build({
 });
 
 const output = bundled.outputFiles.at(0);
+
 if (output === undefined) {
   throw new Error("esbuild produced no output for the Generation 0 entry module");
 }
@@ -59,7 +61,9 @@ const moduleMap: BuiltModuleMapFile = {
 };
 
 const outputPath = resolve(repoRoot, MODULE_MAP_PATH);
+
 await mkdir(dirname(outputPath), { recursive: true });
+
 await writeFile(outputPath, `${JSON.stringify(moduleMap, undefined, 2)}\n`);
 
 console.log(`Wrote ${MODULE_MAP_PATH} (${output.text.length} bytes of module source)`);

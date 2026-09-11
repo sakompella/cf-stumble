@@ -54,6 +54,7 @@ interface BuiltFixtureFile {
 
 function builtFixture(): Promise<BuiltFixtureFile> {
   expect(builtFile, "run pnpm build:loaded-execution-env-fixture before the tests").toBeDefined();
+
   return new Response(builtFile ?? "").json<BuiltFixtureFile>();
 }
 
@@ -64,10 +65,12 @@ function encode(text: string): Uint8Array {
 /** Polls a host-side condition driven by RPC calls the loaded isolate makes asynchronously. */
 async function waitUntil(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
   const start = Date.now();
+
   while (!predicate()) {
     if (Date.now() - start > timeoutMs) {
       throw new Error("timed out waiting for the loaded isolate's exec request");
     }
+
     // oxlint-disable-next-line no-await-in-loop -- Each poll must observe the previous one's result before the next.
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 5);
@@ -81,6 +84,7 @@ function moduleEntry(module: BuiltFixtureFile["modules"][number]): [string, Work
 
 async function loadEntrypoint(): Promise<Fetcher<LoadedExecutionEnvEntry>> {
   const fixture = await builtFixture();
+
   const worker = env.LOADER.load({
     compatibilityDate: "2025-01-01",
     mainModule: fixture.entryModule,
@@ -88,6 +92,7 @@ async function loadEntrypoint(): Promise<Fetcher<LoadedExecutionEnvEntry>> {
     env: {},
     globalOutbound: null,
   });
+
   return worker.getEntrypoint<LoadedExecutionEnvEntry>();
 }
 
@@ -160,11 +165,13 @@ test("a loaded isolate runs Pi's stock tools against a ProjectRpcTarget passed a
 
 test("a loaded isolate can pause and cancel a remote exec byte stream", async () => {
   const execBackend = new FakeExecBackend();
+
   const projectTarget = new ProjectRpcTarget(
     new FakeProjectFilesystemProvider(),
     new FakeProjectTransactions(),
     execBackend,
   );
+
   const entrypoint = await loadEntrypoint();
 
   const paused = entrypoint.pauseThenCancelExec(projectTarget);

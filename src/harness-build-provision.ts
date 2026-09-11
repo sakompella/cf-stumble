@@ -84,6 +84,7 @@ export function provisionHarnessRepository(
   harnessCommit: HarnessCommit,
 ): string {
   const lock = `${configuration.harnessRepositoryRoot}.provision-lock`;
+
   return [
     "set -eu",
     `mkdir -p ${shellQuote(WORKSPACE_ROOT)}`,

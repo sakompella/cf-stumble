@@ -32,14 +32,19 @@ const MAX_SYMLINK_FOLLOWS = 40;
 export function parseAddressedPath(input: unknown): ProjectResult<readonly string[]> {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC path argument is untrusted.
   if (typeof input !== "string") return fail("invalid-request");
+
   if (input.includes("\\") || input.includes("\0")) return fail("invalid-request");
+
   if (!input.startsWith("/")) return fail("invalid-request");
+
   if (input === "/") return ok([]);
   const segments: string[] = [];
+
   for (const segment of input.slice(1).split("/")) {
     if (segment === "" || segment === "." || segment === "..") return fail("invalid-request");
     segments.push(segment);
   }
+
   return ok(segments);
 }
 
@@ -93,8 +98,10 @@ function stepPastMissing(
   if (!place.isLast) {
     if (!options.createMissingDirs) return { kind: "settle", result: fail("not-found", addressed) };
     provider.mkdirSync(place.candidate);
+
     return { kind: "continue", resolved: place.candidate };
   }
+
   return {
     kind: "settle",
     result: ok({ kind: "missing", parentPath: place.resolved, name: place.segment }),
@@ -112,6 +119,7 @@ function stepPastSymlink(
     return { kind: "settle", result: fail("symlink-loop", addressed) };
   const target = provider.readlinkSync(place.candidate);
   queue.unshift(...splitTarget(target));
+
   // An absolute target restarts from the filesystem root; a relative one resolves against the
   // symlink's own containing directory, which is `place.resolved` (the position before this step).
   return { kind: "continue", resolved: target.startsWith("/") ? "/" : place.resolved };
@@ -129,13 +137,16 @@ function stepPastNode(
   if (place.stat.isSymbolicLink() && (!place.isLast || options.followFinalSymlink)) {
     return stepPastSymlink(provider, queue, place, linkFollows, addressed);
   }
+
   if (place.isLast)
     return {
       kind: "settle",
       result: ok({ kind: "resolved", path: place.candidate, stat: place.stat }),
     };
+
   if (!place.stat.isDirectory())
     return { kind: "settle", result: fail("not-directory", addressed) };
+
   return { kind: "continue", resolved: place.candidate };
 }
 
@@ -150,10 +161,13 @@ function stepOneSegment(
 ): SegmentStep {
   try {
     const stat = provider.lstatSync(place.candidate);
+
     return stepPastNode(provider, options, queue, { ...place, stat }, linkFollows + 1, addressed);
   } catch (error) {
     const code = mapProviderError(error);
+
     if (code !== "not-found") return { kind: "settle", result: fail(code, addressed) };
+
     return stepPastMissing(provider, options, place, addressed);
   }
 }
@@ -182,14 +196,18 @@ export function resolveAddressedPath(
   while (queue.length > 0) {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the loop guard proves the queue is non-empty.
     const segment = queue.shift()!;
+
     if (segment === ".") continue;
+
     if (segment === "..") {
       resolved = resolved === "/" ? "/" : resolved.slice(0, resolved.lastIndexOf("/")) || "/";
+
       if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
       continue;
     }
 
     const candidate = joinOne(resolved, segment);
+
     if (!isWithinRoot(candidate)) return fail("path-outside-root", addressed);
     const isLast = queue.length === 0;
 
@@ -201,7 +219,9 @@ export function resolveAddressedPath(
       linkFollows,
       addressed,
     );
+
     if (step.kind === "settle") return step.result;
+
     if (step.resolved !== candidate) linkFollows += 1;
     resolved = step.resolved;
   }
@@ -209,6 +229,7 @@ export function resolveAddressedPath(
   // Only reachable via a symlink target that fully consumes the queue without leaving a final
   // component to settle on, e.g. a target of "." or "/".
   if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
+
   return statAt(provider, resolved, addressed);
 }
 
@@ -226,6 +247,7 @@ function statAt(
 
 function kindOf(stat: ProjectStat): ProjectFileKind {
   if (stat.isSymbolicLink()) return "symlink";
+
   return stat.isDirectory() ? "directory" : "file";
 }
 
@@ -236,6 +258,7 @@ function byteAccurateSize(
   stat: ProjectStat,
 ): number {
   if (!stat.isSymbolicLink()) return stat.size;
+
   return new TextEncoder().encode(provider.readlinkSync(path)).length;
 }
 
@@ -264,8 +287,11 @@ export function resolveCanonicalPath(
     followFinalSymlink: true,
     createMissingDirs: false,
   });
+
   if (!outcome.ok) return outcome;
+
   if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments));
+
   return ok(addressedFromProviderPath(outcome.value.path));
 }
 

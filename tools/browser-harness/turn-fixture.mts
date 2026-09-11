@@ -84,13 +84,17 @@ const VARIANTS = new Map<HarnessScenario, TurnScript>([
 
 export function turnScript(scenario: HarnessScenario): TurnScript {
   const variant = VARIANTS.get(scenario);
+
   if (variant !== undefined) {
     return variant;
   }
+
   const terminal = ENDINGS.get(scenario) ?? SAVED;
+
   const frames =
     scenario === "diff-unavailable"
       ? [...readyFrames(terminal).slice(0, -2), DIFF_UNAVAILABLE_FRAME, terminal]
       : readyFrames(terminal);
+
   return { frames, hold: 0 };
 }

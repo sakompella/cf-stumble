@@ -35,11 +35,13 @@ function pathParts(path: string): string[] {
   const parts = path.split("/");
   const prefixes: string[] = [];
   let current = "";
+
   for (const part of parts) {
     if (part === "") continue;
     current += `/${part}`;
     prefixes.push(current);
   }
+
   return prefixes;
 }
 
@@ -47,6 +49,7 @@ async function isSymlinkFree(operations: WorkspaceOperations, path: string): Pro
   for (const prefix of pathParts(path)) {
     if ((await operations.lstat(prefix)) === "symbolic-link") return false;
   }
+
   return true;
 }
 
@@ -59,21 +62,29 @@ async function executePlan(
       if (!(await isSymlinkFree(operations, plan.path))) {
         return { ok: false, error: { code: "path-outside-root" } };
       }
+
       return { ok: true, result: { kind: "file", content: await operations.readFile(plan.path) } };
     }
+
     case "write-file": {
       if (!(await isSymlinkFree(operations, plan.path))) {
         return { ok: false, error: { code: "path-outside-root" } };
       }
+
       await operations.writeFile(plan.path, plan.content);
+
       return { ok: true, result: { kind: "written" } };
     }
+
     case "run-command": {
       const output = await operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
+
       return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } };
     }
+
     default: {
       const exhaustive: never = plan;
+
       return exhaustive;
     }
   }
@@ -97,6 +108,7 @@ export async function executeHarnessBuildRequest(
   }>,
 ): Promise<WorkspaceResult> {
   const parsed = parseHarnessBuildRequest(input.request);
+
   if ("ok" in parsed) return parsed;
 
   try {
@@ -123,6 +135,7 @@ export async function executeProjectProvisionRequest(
   }>,
 ): Promise<WorkspaceResult> {
   const parsed = parseProjectProvisionRequest(input.request);
+
   if ("ok" in parsed) return parsed;
 
   try {

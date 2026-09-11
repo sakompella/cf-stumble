@@ -106,6 +106,7 @@ describe("Access cookie authentication", () => {
 
   test("rejects an expired cookie token", async () => {
     const key = await signingKey("cookie-expiry-key");
+
     const expired = await signAccessToken(key, {
       iss: accessIssuer,
       aud: accessAudience,
@@ -130,6 +131,7 @@ describe("Access cookie authentication", () => {
 
   test("rejects a cookie token issued for another Access application", async () => {
     const key = await signingKey("cookie-audience-key");
+
     const wrongAudience = await signAccessToken(key, {
       iss: accessIssuer,
       aud: "other-application",
@@ -144,6 +146,7 @@ describe("Access cookie authentication", () => {
 
   test("rejects a cookie token from another team domain", async () => {
     const key = await signingKey("cookie-issuer-key");
+
     const wrongIssuer = await signAccessToken(key, {
       iss: "https://other.cloudflareaccess.com",
       aud: accessAudience,
@@ -158,9 +161,11 @@ describe("Access cookie authentication", () => {
 
   test("treats a malformed cookie value exactly like a malformed header", async () => {
     const key = await signingKey("cookie-malformed-key");
+
     const fromCookie = await authenticate({ cookie: "CF_Authorization=not-a-token" }, [
       key.publicJwk,
     ]);
+
     const fromHeader = await authenticate({ "cf-access-jwt-assertion": "not-a-token" }, [
       key.publicJwk,
     ]);
@@ -221,6 +226,7 @@ describe("Access cookie authentication", () => {
   test("rejects a request whose header fails even though its cookie would pass", async () => {
     const key = await signingKey("cookie-no-fallback-key");
     const valid = await ownerToken(key, "owner-1");
+
     const expired = await signAccessToken(key, {
       iss: accessIssuer,
       aud: accessAudience,

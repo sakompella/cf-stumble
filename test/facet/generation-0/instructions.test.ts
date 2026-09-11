@@ -22,12 +22,16 @@ import type { ExecutionEnv } from "@cf-stumble/pi";
 /** The clone directory of one catalog project, named the way `workspace-layout.ts` names it. */
 function projectCwd(id: string): string {
   const projectId = parseProjectId(id);
+
   if (projectId === undefined) throw new Error(`${id} is not a project id`);
+
   return projectDirectory(projectId);
 }
 
 const MANAGED = "Never print or commit authentication tokens.";
+
 const PROJECT_ONE = "Run ./one-check before you finish.";
+
 const PROJECT_TWO = "Never mention the second project's secret plan.";
 
 /**
@@ -38,11 +42,13 @@ const PROJECT_TWO = "Never mention the second project's secret plan.";
  */
 async function sharedWorkspace(): Promise<Readonly<Record<"one" | "two", ExecutionEnv>>> {
   const provider = new FakeProjectFilesystemProvider();
+
   const projectTarget = new ProjectRpcTarget(
     provider,
     new FakeProjectTransactions(),
     new FakeExecBackend(),
   );
+
   const environments = {
     one: createFacetExecutionEnv({ cwd: projectCwd("project-one"), projectTarget }),
     two: createFacetExecutionEnv({ cwd: projectCwd("project-two"), projectTarget }),
@@ -51,6 +57,7 @@ async function sharedWorkspace(): Promise<Readonly<Record<"one" | "two", Executi
   await environments.one.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED);
   await environments.one.writeFile("AGENTS.md", PROJECT_ONE);
   await environments.two.writeFile("AGENTS.md", PROJECT_TWO);
+
   return environments;
 }
 
@@ -94,12 +101,14 @@ test("both instruction files reach the prompt of the turn that runs in that proj
 test("a project's own conversation is the only one its turn sends", async () => {
   const environments = await sharedWorkspace();
   const first = scriptedStream([assistant([{ type: "text", text: "Noted for one." }], "stop")]);
+
   const opening = await runPiAgentTurn({
     prompt: "Remember the first project's login bug.",
     state: createPiAgentTurnState(model),
     env: environments.one,
     streamFn: first.streamFn,
   });
+
   expect(opening.ok).toBe(true);
 
   const second = scriptedStream([assistant([{ type: "text", text: "Noted for two." }], "stop")]);
@@ -118,11 +127,13 @@ test("a project's own conversation is the only one its turn sends", async () => 
 
 test("a project without its own instruction file still runs, with the managed file alone", async () => {
   const provider = new FakeProjectFilesystemProvider();
+
   const projectTarget = new ProjectRpcTarget(
     provider,
     new FakeProjectTransactions(),
     new FakeExecBackend(),
   );
+
   const env = createFacetExecutionEnv({ cwd: projectCwd("project-one"), projectTarget });
   await env.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED);
 
@@ -135,6 +146,7 @@ test("an unprovisioned workspace loads no instructions rather than failing the t
     new FakeProjectTransactions(),
     new FakeExecBackend(),
   );
+
   const env = createFacetExecutionEnv({ cwd: projectCwd("project-one"), projectTarget });
 
   expect(await loadTurnInstructions(env)).toEqual({ managed: undefined, repository: undefined });

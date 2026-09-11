@@ -76,6 +76,7 @@ async function runStep(
   step: ProjectProvisionStepName,
 ): Promise<Result<ProjectProvisionStepName, ProjectProvisionProblem>> {
   const projectId = project.id;
+
   const unavailable: Result<ProjectProvisionStepName, ProjectProvisionProblem> = Result.err({
     code: "provision-workspace-unavailable",
     projectId,
@@ -83,6 +84,7 @@ async function runStep(
   });
 
   let result: WorkspaceResult;
+
   try {
     result = await host.provision({
       kind: "provision-project",
@@ -97,6 +99,7 @@ async function runStep(
   if (!result.ok || result.result.kind !== STEP_RESULT_KIND[step]) {
     return unavailable;
   }
+
   if (result.result.kind === "command" && result.result.exitCode !== 0) {
     return Result.err({
       code: "provision-step-failed",
@@ -127,6 +130,7 @@ export function provisionProjectWorkspace(
   input: ProvisionProjectWorkspaceInput,
 ): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
   const resolved = resolveProject(input.projectId, input.catalog);
+
   if (!resolved.ok) {
     return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
   }
@@ -139,8 +143,10 @@ async function provisionResolvedProject(
   project: Project,
 ): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
   const host = input.namespace.getByName(input.workspaceName);
+
   for (const step of PROJECT_PROVISION_STEP_NAMES) {
     const ran = await runStep(host, project, step);
+
     if (ran.isErr()) {
       return Result.err(ran.error);
     }

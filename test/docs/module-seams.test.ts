@@ -35,14 +35,17 @@ function directoryOf(path: string): string {
 function resolveImport(fromDirectory: string, specifier: string): string {
   const segments = [...fromDirectory.split("/"), ...specifier.split("/")];
   const resolved: string[] = [];
+
   for (const segment of segments) {
     if (segment === "." || segment === "") {
       continue;
     }
+
     if (segment === "..") {
       resolved.pop();
       continue;
     }
+
     resolved.push(segment);
   }
 
@@ -62,18 +65,23 @@ const publicEntrypoints = new Set(["src/workspace/project/protocol.ts"]);
 
 function violations(): string[] {
   const found: string[] = [];
+
   for (const [globKey, contents] of Object.entries(sourceFiles)) {
     const importer = repoPath(globKey);
     const importerDirectory = directoryOf(importer);
+
     for (const specifier of importsOf(contents)) {
       const target = resolveImport(importerDirectory, specifier);
+
       for (const group of groupDirectories) {
         const insideGroup =
           importerDirectory === group || importerDirectory.startsWith(`${group}/`);
+
         const reachesIn =
           target.startsWith(`${group}/`) &&
           target !== `${group}/index.ts` &&
           !publicEntrypoints.has(target);
+
         if (reachesIn && !insideGroup) {
           found.push(`${importer} imports ${target}, not ${group}/index.ts`);
         }

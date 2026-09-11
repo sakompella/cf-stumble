@@ -151,6 +151,7 @@ test("createAssistantMessageEventStream resolves a terminal done event through i
     stopReason: "stop",
     timestamp: 0,
   } satisfies AssistantMessage;
+
   const doneEvent = { type: "done", reason: "stop", message: finalMessage } satisfies AssistantMessageEvent;
 
   const stream = createAssistantMessageEventStream();
@@ -159,9 +160,11 @@ test("createAssistantMessageEventStream resolves a terminal done event through i
   stream.push(doneEvent);
 
   const seen: AssistantMessageEvent[] = [];
+
   for await (const event of stream) {
     seen.push(event);
   }
+
   expect(seen).toEqual([doneEvent]);
 
   await expect(stream.result()).resolves.toEqual(finalMessage);

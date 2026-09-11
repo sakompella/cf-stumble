@@ -30,6 +30,7 @@ export const CASES: readonly HarnessCase[] = [
         `performance.getEntriesByType("resource").some((entry) => entry.name.includes("/api/"))`,
         10_000,
       );
+
       return "the document loaded, declared its root element, and its inline script called the owner API";
     },
   },

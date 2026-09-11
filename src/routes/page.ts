@@ -13,6 +13,7 @@ function acceptsHtmlDocument(accept: string | null): boolean {
   if (accept === null) {
     return false;
   }
+
   return accept
     .split(",")
     .some((entry) => (entry.split(";")[0] ?? "").trim().toLowerCase() === "text/html");

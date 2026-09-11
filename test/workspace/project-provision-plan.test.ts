@@ -25,6 +25,7 @@ import {
  */
 
 const projectOne = sampleProjectOne;
+
 const projectTwo = sampleProjectTwo;
 
 function planFor(project: Project) {
@@ -33,6 +34,7 @@ function planFor(project: Project) {
 
 function cloneSource(project: Project): string {
   const step = projectProvisionStep(planFor(project), "clone");
+
   if (step.name !== "clone") {
     throw new Error("the clone step must be the command step");
   }
@@ -61,6 +63,7 @@ test("quotes an interpolated repository URL the catalog would accept", () => {
   // The catalog's URL checks accept an embedded single quote, so the planner cannot be the place
   // that assumes a URL is shell-safe. A later configuration edit is all it would take.
   const hostile = parsePublicRepositoryUrl("https://example.invalid/'; rm -rf /; '.git");
+
   if (hostile === undefined) {
     throw new Error("this test needs a URL the catalog accepts and the shell would misread");
   }
@@ -111,17 +114,20 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
 
 test("writes the managed instructions above every repository in the workspace", () => {
   const step = projectProvisionStep(planFor(projectOne), "instructions");
+
   if (step.name !== "instructions") {
     throw new Error("the instructions step must be the file step");
   }
 
   expect(step.path).toBe(MANAGED_AGENT_INSTRUCTIONS_PATH);
+
   for (const repository of [projectDirectory(projectOne.id), HARNESS_DIRECTORY]) {
     expect(
       step.path.startsWith(`${repository}/`),
       "a managed file inside a clone would overwrite that repository's own instructions",
     ).toBe(false);
   }
+
   expect(step.content).toBe(MANAGED_AGENT_INSTRUCTIONS);
   expect(step.content).toContain("Never print or commit authentication tokens.");
 });

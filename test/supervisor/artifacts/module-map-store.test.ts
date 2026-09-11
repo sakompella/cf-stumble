@@ -37,6 +37,7 @@ const commits = {
  */
 function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
   const filler = "\u2603".repeat(200_000);
+
   return {
     harnessCommit,
     entryModule: "main.js",
@@ -49,6 +50,7 @@ function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
 
 function commit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -58,6 +60,7 @@ function commit(value: string): HarnessCommit {
 
 function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
   const artifactValue = MainHarnessArtifact.parse(input);
+
   if (artifactValue.isErr()) {
     throw new Error(`the test module map must parse: ${artifactValue.error.code}`);
   }
@@ -76,6 +79,7 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
  */
 function refusingSecondChunk(storage: DurableObjectStorage): ModuleMapStorage {
   let chunkWrites = 0;
+
   return {
     sql: {
       exec: <T extends Record<string, SqlStorageValue>>(
@@ -84,6 +88,7 @@ function refusingSecondChunk(storage: DurableObjectStorage): ModuleMapStorage {
       ): SqlStorageCursor<T> => {
         if (query.includes("INSERT INTO module_map_chunks")) {
           chunkWrites += 1;
+
           if (chunkWrites > 1) {
             throw new Error("the storage refused a chunk");
           }
@@ -102,6 +107,7 @@ function storedKind(
 ): Promise<string> {
   return runInDurableObject(control, (_instance, state) => {
     const found = new ModuleMapStore(state.storage).read(commit(harnessCommit));
+
     return found.isErr() ? `problem:${found.error.code}` : found.value.kind;
   });
 }
@@ -119,6 +125,7 @@ test("keeps a stored module map across a Durable Object eviction", async () => {
 
   const found = await runInDurableObject(control, (_instance, state) => {
     const read = new ModuleMapStore(state.storage).read(commit(commits.evicted));
+
     if (read.isErr() || read.value.kind === "absent") {
       throw new Error("an evicted Supervisor must still hold its stored module map");
     }
@@ -136,11 +143,13 @@ test("stores a module map larger than one chunk and reads back the same bytes", 
   const stored = await runInDurableObject(control, (_instance, state) => {
     const store = new ModuleMapStore(state.storage);
     const written = store.write(parsedArtifact(input));
+
     if (written.isErr()) {
       throw new Error(`a large module map must be written: ${written.error.code}`);
     }
 
     const read = store.read(commit(commits.large));
+
     if (read.isErr() || read.value.kind === "absent") {
       throw new Error("a large module map must read back");
     }
@@ -185,6 +194,7 @@ test("a write that fails part way through leaves no partial module map", async (
     const written = new ModuleMapStore(refusingSecondChunk(state.storage)).write(
       parsedArtifact(input),
     );
+
     const store = new ModuleMapStore(state.storage);
     const read = store.read(commit(commits.atomic));
 
@@ -268,17 +278,21 @@ export class MainFacet extends DurableObject {
 
   await evictDurableObject(control);
   const active = await control.getActiveGeneration();
+
   const rolledBack = await control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "rollback", label: 0, observedEpoch: active.epoch },
   });
+
   const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));
 
   expect(rolledBack).toMatchObject({ ok: true, outcome: { kind: "rolled-back" } });
   expect(await response.text()).toBe("pong");
+
   const unbuildable = await control.prepareGeneration(
     await submitCandidate(control, commits.unbuildable),
   );
+
   expect(
     unbuildable,
     "the rollback above served with a builder that cannot build anything",

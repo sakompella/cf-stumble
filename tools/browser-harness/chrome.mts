@@ -72,9 +72,11 @@ export class BrowserPage {
     targetId: string,
   ): Promise<BrowserPage> {
     const page = new BrowserPage(connection, sessionId, targetId);
+
     for (const domain of ["Page", "Runtime", "Log", "DOM", "Accessibility"]) {
       await page.command(`${domain}.enable`);
     }
+
     return page;
   }
 
@@ -103,11 +105,14 @@ export class BrowserPage {
       returnByValue: true,
       userGesture: true,
     });
+
     const thrown =
       result.text("exceptionDetails.exception.description") ?? result.text("exceptionDetails.text");
+
     if (thrown !== undefined) {
       throw new Error(`the page threw while evaluating ${expression}: ${thrown}`);
     }
+
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: returnByValue makes this the JSON the caller's own expression produced, and the caller states the shape it asked that expression for.
     return result.value("result.value") as T;
   }
@@ -115,12 +120,15 @@ export class BrowserPage {
   /** Wait until a boolean expression holds. A timeout names the expression, not a numeric code. */
   async waitFor(expression: string, timeoutMs = 10_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
+
     while (Date.now() < deadline) {
       if (await this.evaluate<boolean>(`Boolean(${expression})`)) {
         return;
       }
+
       await sleep(50);
     }
+
     throw new Error(`waited ${timeoutMs}ms for ${expression}, which never became true`);
   }
 
@@ -155,12 +163,15 @@ export class BrowserPage {
         return { x: r.x + r.width / 2, y: r.y + r.height / 2, visible: shown };
       })()`,
     );
+
     if (box === null) {
       throw new Error(`no element matched ${selector} at index ${index}`);
     }
+
     if (!box.visible) {
       throw new Error(`${selector} has no visible box, so a real click cannot reach it`);
     }
+
     for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
       await this.command("Input.dispatchMouseEvent", {
         type,
@@ -184,9 +195,11 @@ export class BrowserPage {
         return document.activeElement === el;
       })()`,
     );
+
     if (!focused) {
       throw new Error(`could not focus ${selector} to type into it`);
     }
+
     await this.command("Input.insertText", { text });
   }
 
@@ -205,6 +218,7 @@ export class BrowserPage {
   async press(key: HarnessKey, held: readonly HarnessModifier[] = []): Promise<void> {
     const descriptor = KEYS[key];
     const modifiers = held.reduce((mask, modifier) => mask | MODIFIERS[modifier], 0);
+
     for (const type of ["keyDown", "keyUp"]) {
       await this.command("Input.dispatchKeyEvent", {
         type,

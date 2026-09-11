@@ -77,11 +77,13 @@ export async function installWorkspaceCredential(
     step: "install",
     token: input.token,
   });
+
   if (answered.isErr()) {
     return Result.err(answered.error);
   }
 
   const result = answered.value;
+
   if (!result.ok) {
     return Result.err(
       result.error.code === "credential-command-failed"
@@ -89,9 +91,11 @@ export async function installWorkspaceCredential(
         : unavailable(result.error.detail),
     );
   }
+
   if (result.result.kind === "credential-installed") {
     return Result.ok("installed");
   }
+
   return result.result.kind === "credential-status" && result.result.state === "tooling-missing"
     ? Result.ok("tooling-missing")
     : Result.err(unavailable(""));
@@ -102,14 +106,17 @@ export async function readWorkspaceCredentialStatus(
   input: WorkspaceCredentialInput,
 ): Promise<Result<GitHubCredentialStatus, WorkspaceCredentialProblem>> {
   const answered = await ask(input, { kind: "github-credential", step: "status" });
+
   if (answered.isErr()) {
     return Result.err(answered.error);
   }
 
   const result = answered.value;
+
   if (!result.ok) {
     return Result.err(unavailable(result.error.detail));
   }
+
   return result.result.kind === "credential-status"
     ? Result.ok({ state: result.result.state, login: result.result.login })
     : Result.err(unavailable(""));
@@ -124,17 +131,21 @@ export async function checkRepositoryAccess(
     step: "verify-repository",
     repositoryUrl: input.repositoryUrl,
   });
+
   if (answered.isErr()) {
     return Result.err(answered.error);
   }
 
   const result = answered.value;
+
   if (!result.ok) {
     return Result.err(unavailable(result.error.detail));
   }
+
   if (result.result.kind !== "repository-access") {
     return Result.err(unavailable(""));
   }
+
   return Result.ok(
     result.result.granted ? { granted: true } : { granted: false, detail: result.result.detail },
   );
