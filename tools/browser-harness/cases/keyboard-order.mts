@@ -16,13 +16,17 @@ async function readAx(page: BrowserPage): Promise<Ax> {
     expression: "document.activeElement",
     returnByValue: false,
   });
+
   const objectId = evaluated.text("result.objectId");
+
   if (objectId === undefined) return { role: "", name: "", ignored: true };
+
   try {
     const tree = await page.command("Accessibility.getPartialAXTree", {
       objectId,
       fetchRelatives: false,
     });
+
     return {
       role: tree.text("nodes.0.role.value") ?? "",
       name: tree.text("nodes.0.name.value") ?? "",
@@ -57,6 +61,7 @@ export const CASES: readonly HarnessCase[] = [
     run: async ({ page }) => {
       await focusDocument(page);
       const seen: string[] = [];
+
       for (const [index, expected] of EXPECTED.entries()) {
         await page.press("Tab");
         const focus = await readFocus(page);
@@ -66,6 +71,7 @@ export const CASES: readonly HarnessCase[] = [
           focus.outlineStyle !== "none" && focus.outlineWidth >= 2,
           `tab stop ${expected.name} has no visible focus outline`,
         );
+
         if (expected.id === "octocat-hello-world" || expected.id === "harness") {
           assertSame(focus.projectId, expected.id, `project at tab stop ${index + 1}`);
           assert(
@@ -74,11 +80,15 @@ export const CASES: readonly HarnessCase[] = [
           );
         } else {
           assertSame(ax.name, expected.name, `accessible name at tab stop ${index + 1}`);
+
           if (expected.id !== "") assertSame(focus.id, expected.id, `${expected.name} focused id`);
         }
+
         seen.push(expected.name);
       }
+
       assertAtLeast(seen.length, 12, "primary keyboard stops");
+
       return `${seen.length} primary controls were reached in order with a visible 2px focus outline`;
     },
   },

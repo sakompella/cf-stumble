@@ -45,6 +45,7 @@ function unavailableStream(model: Model<Api>): AssistantMessageEventStream {
       timestamp: Date.now(),
     },
   });
+
   return stream;
 }
 
@@ -67,6 +68,7 @@ function unavailableStream(model: Model<Api>): AssistantMessageEventStream {
 export function createRouteModels(streamFn: StreamFn): Models {
   const call = async (...request: Parameters<StreamFn>): Promise<AssistantMessage> => {
     const stream = await streamFn(...request);
+
     return stream.result();
   };
 

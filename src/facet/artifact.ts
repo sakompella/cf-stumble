@@ -62,11 +62,13 @@ export class MainHarnessArtifact {
     }
 
     const moduleMap = parseModuleMap(input.entryModule, input.modules);
+
     if (moduleMap.isErr()) {
       return Result.err(moduleMap.error);
     }
 
     const harnessCommit = parseHarnessCommit(input.harnessCommit);
+
     if (harnessCommit === undefined) {
       return Result.err({
         code: "invalid-harness-commit",
@@ -96,16 +98,21 @@ function isMainHarnessArtifactInput(value: unknown): value is MainHarnessArtifac
   if (typeof value !== "object" || value === null) {
     return false;
   }
+
   if (!("harnessCommit" in value) || typeof value.harnessCommit !== "string") {
     return false;
   }
+
   if (!("entryModule" in value) || typeof value.entryModule !== "string") {
     return false;
   }
+
   if (!("modules" in value)) {
     return false;
   }
+
   const modules: unknown = value.modules;
+
   return Array.isArray(modules) && modules.every((module) => isHarnessModuleInput(module));
 }
 

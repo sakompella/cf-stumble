@@ -34,6 +34,7 @@ export async function waitForSettledReads(page: BrowserPage, timeoutMs = 15_000)
   const still = READ_STATES.map(
     (elementId) => `${textExpression(elementId)} === ${JSON.stringify(READING)}`,
   ).join(" || ");
+
   await page.waitFor(`!(${still})`, timeoutMs);
   await sleep(120);
 }
@@ -57,6 +58,7 @@ export function waitForThreadOk(page: BrowserPage, timeoutMs = 15_000): Promise<
 /** A turn has ended when the page has written something other than its running wording. */
 export function waitForTurnEnded(page: BrowserPage, timeoutMs = 30_000): Promise<void> {
   const state = textExpression(ID.turnState);
+
   return page.waitFor(
     `${state} !== "" && ${state} !== "running" && ${state} !== "cancelling"`,
     timeoutMs,
@@ -110,15 +112,19 @@ export async function sampleWhile<T>(
 ): Promise<readonly T[]> {
   const samples: T[] = [];
   const deadline = Date.now() + timeoutMs;
+
   for (;;) {
     const sample = await read();
     samples.push(sample);
+
     if (!keep(sample)) {
       return samples;
     }
+
     if (Date.now() > deadline) {
       throw new Error(`sampled ${samples.length} times in ${timeoutMs}ms without settling`);
     }
+
     await sleep(intervalMs);
   }
 }

@@ -28,20 +28,25 @@ import {
  */
 function valueAtPath(root: JsonRecord, path: string): JsonValue | undefined {
   let current: JsonValue | undefined = root;
+
   for (const step of path.split(".")) {
     if (current === undefined) {
       return undefined;
     }
+
     if (isJsonArray(current)) {
       const index = Math.trunc(Number(step));
       current = Number.isInteger(index) ? current[index] : undefined;
       continue;
     }
+
     if (!isJsonRecord(current)) {
       return undefined;
     }
+
     current = current[step];
   }
+
   return current;
 }
 
@@ -55,14 +60,17 @@ export type CdpResult = Readonly<{
 
 function cdpResult(raw: JsonRecord): CdpResult {
   const value = (path: string): JsonValue | undefined => valueAtPath(raw, path);
+
   return {
     value,
     text: (path) => {
       const found = value(path);
+
       return found !== undefined && isJsonString(found) ? found : undefined;
     },
     count: (path) => {
       const found = value(path);
+
       return found !== undefined && isJsonNumber(found) ? found : undefined;
     },
     json: () => JSON.stringify(raw),
@@ -72,6 +80,7 @@ function cdpResult(raw: JsonRecord): CdpResult {
 /** The same reader over a JSON document that arrived some other way (a DevTools HTTP endpoint). */
 export function parseJsonRecord(text: string): CdpResult | undefined {
   const parsed = parseJsonRecordText(text);
+
   return parsed === undefined ? undefined : cdpResult(parsed);
 }
 
@@ -130,6 +139,7 @@ export class CdpConnection {
   send(method: string, params: JsonRecord = {}, sessionId?: string): Promise<CdpResult> {
     const id = this.nextId;
     this.nextId += 1;
+
     const message =
       sessionId === undefined ? { id, method, params } : { id, method, params, sessionId };
 
@@ -140,6 +150,7 @@ export class CdpConnection {
           new Error(`DevTools command ${method} did not answer in ${this.commandTimeoutMs}ms`),
         );
       }, this.commandTimeoutMs);
+
       this.pending.set(id, { resolve, reject, timer });
       this.socket.send(JSON.stringify(message));
     });
@@ -148,10 +159,13 @@ export class CdpConnection {
   onEvent(method: string, listener: CdpEventListener, sessionId?: string): void {
     const subscription: Subscription = { listener, sessionId };
     const existing = this.listeners.get(method);
+
     if (existing === undefined) {
       this.listeners.set(method, [subscription]);
+
       return;
     }
+
     existing.push(subscription);
   }
 
@@ -162,46 +176,60 @@ export class CdpConnection {
 
   private dispatch(text: string): void {
     const message = parseJsonRecordText(text);
+
     if (message === undefined) {
       return;
     }
+
     const result = cdpResult(message);
     const id = result.count("id");
+
     if (id === undefined) {
       this.dispatchEvent(result);
+
       return;
     }
+
     this.settle(id, result);
   }
 
   private dispatchEvent(result: CdpResult): void {
     const method = result.text("method");
+
     if (method === undefined) {
       return;
     }
+
     const session = result.text("sessionId");
     const params = result.value("params");
     const payload = params !== undefined && isJsonRecord(params) ? params : {};
+
     for (const subscription of this.listeners.get(method) ?? []) {
       if (subscription.sessionId !== undefined && subscription.sessionId !== session) {
         continue;
       }
+
       subscription.listener(cdpResult(payload));
     }
   }
 
   private settle(id: number, result: CdpResult): void {
     const pending = this.pending.get(id);
+
     if (pending === undefined) {
       return;
     }
+
     this.pending.delete(id);
     clearTimeout(pending.timer);
     const errorMessage = result.text("error.message");
+
     if (errorMessage !== undefined) {
       pending.reject(new Error(`DevTools rejected the command: ${errorMessage}`));
+
       return;
     }
+
     const value = result.value("result");
     pending.resolve(cdpResult(value !== undefined && isJsonRecord(value) ? value : {}));
   }
@@ -211,6 +239,7 @@ export class CdpConnection {
       clearTimeout(pending.timer);
       pending.reject(error);
     }
+
     this.pending.clear();
   }
 }

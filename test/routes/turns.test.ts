@@ -13,7 +13,9 @@ import type { ProjectTurnRunProblemCode } from "../../src/supervisor/projects/in
  */
 
 const ORIGIN = "https://cf-stumble.test";
+
 const TURN_PATH = `/api/projects/${sampleProjectOne.id}/turn`;
+
 const SECRET = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 type TurnBody = Readonly<{
@@ -38,6 +40,7 @@ function streamingSupervisor(sent: unknown[]) {
   return supervisor({
     runProjectTurn: (projectId, prompt) => {
       sent.push(projectId, prompt);
+
       return Promise.resolve({
         ok: true,
         frames: new ReadableStream<Uint8Array>({
@@ -84,6 +87,7 @@ test.each([
     supervisor({
       runProjectTurn: (projectId) => {
         reached.push(projectId);
+
         return Promise.reject(new Error("this body must not reach the Supervisor"));
       },
     }),
@@ -150,6 +154,7 @@ test("a turn started by another site is refused before the Supervisor sees it", 
     supervisor({
       runProjectTurn: (projectId) => {
         reached.push(projectId);
+
         return Promise.reject(new Error("a cross-origin turn must not reach the Supervisor"));
       },
     }),
@@ -166,11 +171,13 @@ test("a turn started by another site is refused before the Supervisor sees it", 
 
 test("the turn route keeps to its method and its path", async () => {
   const sent: unknown[] = [];
+
   const read = await routeOwnerApiRequest(
     new Request(`${ORIGIN}${TURN_PATH}`),
     streamingSupervisor(sent),
     ownerScope,
   );
+
   const nested = await routeOwnerApiRequest(
     post(`/api/projects/${sampleProjectOne.id}/turn/fresh`, { prompt: "do it" }),
     streamingSupervisor(sent),
@@ -189,6 +196,7 @@ test("the project id in the path reaches the Supervisor as the client wrote it",
     supervisor({
       runProjectTurn: (projectId, prompt) => {
         sent.push(projectId, prompt);
+
         return Promise.resolve({ ok: false, problem: { code: "unknown-project-id" } });
       },
     }),

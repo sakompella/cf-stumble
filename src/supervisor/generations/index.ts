@@ -23,6 +23,7 @@ import { generationFromRow, generationLabelFromPersistence } from "./row.js";
 import type { GenerationRow } from "./row.js";
 
 export { parseGenerationLabel } from "./generation.js";
+
 export type {
   ActivationResult,
   ActiveGeneration,
@@ -33,6 +34,7 @@ export type {
   PreparationCheckOutcome,
   PreparationCheckResult,
 } from "./generation.js";
+
 export type { PreparationCheck } from "./preparation-checks.js";
 
 type StateRow = {
@@ -80,6 +82,7 @@ export class Generations {
   labelInTransaction(harnessCommit: HarnessCommit) {
     const existing = this.generationByCommit(harnessCommit);
     const state = this.readState();
+
     if (existing !== undefined) {
       return { generation: existing, epoch: state.epoch };
     }
@@ -94,6 +97,7 @@ export class Generations {
     this.writeEpoch(epoch);
 
     const generation: Generation = { label, harnessCommit, status: "candidate" };
+
     return { generation, epoch };
   }
 
@@ -108,11 +112,13 @@ export class Generations {
         this.generationByLabel(label),
         this.readState(),
       );
+
       switch (decision.kind) {
         case "rejected":
           return Result.err(decision.problem);
         case "record":
           this.preparationChecks.record(label, decision.outcome);
+
           if (decision.statusUpdate !== undefined) {
             this.sql.exec(
               "UPDATE generations SET status = ? WHERE label = ?",
@@ -120,7 +126,9 @@ export class Generations {
               label,
             );
           }
+
           this.writeEpoch(decision.nextEpoch);
+
           return Result.ok({
             generation: decision.generation,
             epoch: decision.nextEpoch,
@@ -134,6 +142,7 @@ export class Generations {
 
   activateInTransaction(label: GenerationLabel): ActivationResult {
     const decision = decideActivation(label, this.generationByLabel(label), this.readState());
+
     switch (decision.kind) {
       case "rejected":
         return Result.err(decision.problem);
@@ -145,6 +154,7 @@ export class Generations {
         });
       case "activate":
         this.applyActivation(label, decision.nextEpoch, decision.nextActivationId);
+
         return Result.ok({
           generation: decision.generation,
           epoch: decision.nextEpoch,
@@ -157,6 +167,7 @@ export class Generations {
 
   active(): ActiveGeneration {
     const state = this.readState();
+
     return {
       generation:
         state.activeLabel === undefined ? undefined : this.generationByLabel(state.activeLabel),

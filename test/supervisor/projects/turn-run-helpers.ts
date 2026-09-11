@@ -29,6 +29,7 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
  */
 
 export const NOW = 1_700_000_000_000;
+
 export const DEADLINE_MS = 60_000;
 
 const encoder = new TextEncoder();
@@ -46,6 +47,7 @@ export interface ScriptedGeneration {
 function scriptedGeneration(): ScriptedGeneration {
   const state = { cancelled: false, closed: false };
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+
   const stream = new ReadableStream<Uint8Array>({
     start(streamController) {
       controller = streamController;
@@ -58,6 +60,7 @@ function scriptedGeneration(): ScriptedGeneration {
   const write = (text: string) => {
     if (!state.cancelled && !state.closed) controller?.enqueue(encoder.encode(text));
   };
+
   return {
     stream,
     line: (text) => {
@@ -118,6 +121,7 @@ async function readFrames(
   const decoder = new TextDecoder();
   const frames: unknown[] = [];
   let buffer = "";
+
   for (;;) {
     if (cancelAfter !== undefined && frames.length >= cancelAfter) {
       await reader.cancel();
@@ -128,22 +132,29 @@ async function readFrames(
     }
 
     const chunk = await reader.read();
+
     if (chunk.done) break;
     buffer += decoder.decode(chunk.value, { stream: true });
+
     for (;;) {
       const newline = buffer.indexOf("\n");
+
       if (newline < 0) break;
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
+
       if (line !== "") frames.push(JSON.parse(line));
     }
   }
+
   return frames;
 }
 
 function writeScript(generation: ScriptedGeneration, script: TurnScript): void {
   for (const frame of script.frames ?? []) generation.frame(frame);
+
   for (const line of script.lines ?? []) generation.line(line);
+
   if (script.keepOpen !== true) generation.close();
 }
 
@@ -168,6 +179,7 @@ export function runScriptedTurn(
 
     script.whileRunning?.(state, generation);
     const frames = run.ok ? await readFrames(run.frames, script.cancelAfter) : [];
+
     return observation(stores, projectId, run.ok ? undefined : run.problem.code, frames);
   });
 }
@@ -198,9 +210,11 @@ function turnInput(
     attribution: () => ({ active: stores.generations.active() }),
     start: (_project, request) => {
       script.handoff?.(request);
+
       if (script.stallStart === true) {
         return new Promise<ProjectTurnStart>(() => {});
       }
+
       return Promise.resolve(script.refuseStart ?? { ok: true, frames: generation.stream });
     },
     now: () => NOW,
@@ -217,6 +231,7 @@ function observation(
   frames: readonly unknown[],
 ): TurnObservation {
   const thread = stores.threads.read(projectId);
+
   return {
     refused,
     frames,

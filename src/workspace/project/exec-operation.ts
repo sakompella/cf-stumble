@@ -1,4 +1,6 @@
-// oxlint-disable max-lines
+// oxlint-disable max-lines -- One exec operation owns framing, backend settlement, timeout,
+// cancellation, and one terminal event as one stream state machine. Splitting those transitions
+// would expose mutable settlement state and weaken the single-terminal-event invariant.
 
 import type {
   BackendExecEvent,
@@ -34,9 +36,11 @@ function enqueueEvent(
   event: ExecEvent,
 ): void {
   const frame = encodeEvent(event);
+
   if (frame.byteLength > MAX_EXEC_FRAME_BYTES) {
     throw new Error("exec event exceeds the protocol frame limit");
   }
+
   controller.enqueue(frame);
 }
 
@@ -52,12 +56,16 @@ function largestFrameEnd(
 
   while (low <= high) {
     let middle = Math.floor((low + high) / 2);
+
     if (middle > start && isHighSurrogate(data.codePointAt(middle - 1) ?? 0)) middle -= 1;
+
     if (middle <= start) {
       low = start + 1;
       continue;
     }
+
     const frame = encodeEvent({ kind, seq, data: data.slice(start, middle) });
+
     if (frame.byteLength <= MAX_EXEC_FRAME_BYTES) {
       result = middle;
       low = middle + 1;
@@ -67,6 +75,7 @@ function largestFrameEnd(
   }
 
   if (result === start) throw new Error("exec frame limit cannot encode one character");
+
   return result;
 }
 
@@ -82,6 +91,7 @@ function enqueueOutput(
 ): void {
   if (data === "") {
     enqueueEvent(controller, { kind, seq: state.seq++, data });
+
     return;
   }
 
@@ -114,18 +124,22 @@ function settle(
 ): void {
   if (state.settled) return;
   state.settled = true;
+
   if (state.timer !== undefined) clearTimeout(state.timer);
   resumePump(state);
+
   try {
     enqueueEvent(controller, outcome);
     controller.close();
   } catch {
     // The consumer already cancelled the stream; the terminal outcome still counts as sent.
   }
+
   if (killBackend && state.handle !== undefined) {
     void state.handle.reader.cancel().catch(() => {});
     void state.handle.kill().catch(() => {});
   }
+
   onSettle();
 }
 
@@ -164,9 +178,12 @@ function applyBackendRead(
 ): boolean {
   if (read.done) {
     settleWith(failed(state), true);
+
     return true;
   }
+
   const { value } = read;
+
   if (value.name === "stdout") {
     enqueueOutput(
       state,
@@ -174,8 +191,10 @@ function applyBackendRead(
       "stdout",
       decoders.stdout.decode(value.data, { stream: true }),
     );
+
     return false;
   }
+
   if (value.name === "stderr") {
     enqueueOutput(
       state,
@@ -183,12 +202,15 @@ function applyBackendRead(
       "stderr",
       decoders.stderr.decode(value.data, { stream: true }),
     );
+
     return false;
   }
+
   settleWith(
     { kind: "terminal", seq: state.seq++, outcome: "exited", exitCode: value.exitCode },
     false,
   );
+
   return true;
 }
 
@@ -197,7 +219,9 @@ function waitForDemand(
   controller: ReadableStreamDefaultController<Uint8Array>,
 ): Promise<void> {
   const desiredSize = controller.desiredSize;
+
   if (desiredSize !== null && desiredSize > 0) return Promise.resolve();
+
   return new Promise((resolve) => {
     state.resumePump = resolve;
   });
@@ -211,6 +235,7 @@ async function pumpBackendEvents(
   onSettle: () => void,
 ): Promise<void> {
   const decoders: Decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+
   const settleWith = (outcome: ExecEvent, killBackend: boolean): void => {
     settle(state, controller, onSettle, outcome, killBackend);
   };
@@ -220,10 +245,13 @@ async function pumpBackendEvents(
     while (!state.settled) {
       // oxlint-disable-next-line no-await-in-loop -- The stream's pull handler resumes each output read.
       await waitForDemand(state, controller);
+
       if (state.settled) return;
       // oxlint-disable-next-line no-await-in-loop -- Each read must observe `state.settled` before the next.
       const read = await handle.reader.read();
+
       if (state.settled) return;
+
       if (applyBackendRead(state, controller, settleWith, decoders, read)) return;
     }
   } catch {
@@ -281,8 +309,10 @@ function watchBackendExec(
     (handle) => {
       if (state.settled) {
         disposeLateHandle(handle);
+
         return;
       }
+
       state.handle = handle;
       void pumpBackendEvents(state, controller, handle, onSettle);
     },
@@ -324,6 +354,7 @@ export function startExecOperation(
     handle: undefined,
     resumePump: undefined,
   };
+
   let requestKillImpl: (() => void) | undefined;
 
   const events = new ReadableStream<Uint8Array>(
@@ -339,6 +370,7 @@ export function startExecOperation(
             true,
           );
         };
+
         watchBackendExec(state, controller, execBackend, input, onSettle);
       },
       pull() {

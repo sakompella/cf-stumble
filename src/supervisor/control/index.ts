@@ -38,8 +38,10 @@ export class GenerationControl {
 
   private decide(request: GenerationRequest): ControlDecision {
     const active = this.generations.active();
+
     if (request.principal.kind === "harness") {
       const generationLabel = parseGenerationLabel(request.principal.generationLabel);
+
       if (generationLabel === undefined || generationLabel !== active.generation?.label) {
         return rejected("revoked-capability");
       }
@@ -59,16 +61,19 @@ export class GenerationControl {
 
   private submit(harnessCommit: string): ControlDecision {
     const parsedHarnessCommit = parseHarnessCommit(harnessCommit);
+
     if (parsedHarnessCommit === undefined) {
       return rejected("invalid-harness-commit");
     }
 
     const result = this.generations.labelInTransaction(parsedHarnessCommit);
+
     const outcome: ControlOutcome = {
       kind: "candidate-submitted",
       generation: result.generation,
       epoch: result.epoch,
     };
+
     return Result.ok(outcome);
   }
 
@@ -78,6 +83,7 @@ export class GenerationControl {
     }
 
     const generationLabel = parseGenerationLabel(label);
+
     if (generationLabel === undefined) {
       return rejected("invalid-generation-label");
     }
@@ -99,11 +105,13 @@ export class GenerationControl {
     }
 
     const generationLabel = parseGenerationLabel(label);
+
     if (generationLabel === undefined) {
       return rejected("invalid-generation-label");
     }
 
     const target = this.generations.byLabel(generationLabel);
+
     if (target === undefined) {
       return rejected("unknown-generation");
     }

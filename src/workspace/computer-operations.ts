@@ -5,6 +5,7 @@ import type { CommandOutput, WorkspaceOperations, WorkspacePathKind } from "./ex
 function isNotFound(error: unknown): boolean {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: Computer errors are untrusted implementation values.
   if (error === null || typeof error !== "object" || !("code" in error)) return false;
+
   return error.code === "ENOENT";
 }
 
@@ -19,7 +20,9 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
   async lstat(path: string): Promise<WorkspacePathKind | undefined> {
     try {
       const entry = await this.workspace.fs.lstat(path);
+
       if (entry.isSymbolicLink) return "symbolic-link";
+
       return entry.isDirectory ? "directory" : "file";
     } catch (error) {
       if (isNotFound(error)) return undefined;
@@ -47,11 +50,13 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
       encoding: "utf8",
       timeoutMs,
     };
+
     // Only set when there is one: `exactOptionalPropertyTypes` makes an explicit `undefined` a
     // different thing from an absent option, and a command with no standard input wants absent.
     if (stdin !== undefined) options.stdin = stdin;
     const execution = await this.workspace.runtime.exec(source, options);
     const result = await execution.result();
+
     return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
   }
 }

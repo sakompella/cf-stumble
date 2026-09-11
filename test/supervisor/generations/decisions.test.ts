@@ -18,9 +18,11 @@ import {
 
 function testCommit(): HarnessCommit {
   const parsed = parseHarnessCommit("a".repeat(40));
+
   if (parsed === undefined) {
     throw new Error("test commit must be valid");
   }
+
   return parsed;
 }
 
@@ -28,9 +30,11 @@ const COMMIT = testCommit();
 
 function label(value: number): GenerationLabel {
   const parsed = parseGenerationLabel(value);
+
   if (parsed === undefined) {
     throw new Error(`invalid test label ${value}`);
   }
+
   return parsed;
 }
 

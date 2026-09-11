@@ -59,6 +59,7 @@ export class PreparationChecks {
     const id = this.sql
       .exec<{ readonly id: number | null }>("SELECT MAX(id) AS id FROM preparation_checks")
       .one().id;
+
     return id ?? 0;
   }
 
@@ -78,6 +79,7 @@ export class PreparationChecks {
 
 function preparationCheckFromRow(row: PreparationCheckRow): PreparationCheck {
   const generationLabel = parseGenerationLabel(row.generation_label);
+
   if (generationLabel === undefined || (row.outcome !== "passed" && row.outcome !== "failed")) {
     throw new Error(`invalid persisted preparation check ${row.id}`);
   }

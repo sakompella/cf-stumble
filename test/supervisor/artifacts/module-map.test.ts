@@ -9,6 +9,7 @@ const harnessCommit = "5000000000000000000000000000000000000001";
 
 function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
   const parsed = MainHarnessArtifact.parse(input);
+
   if (parsed.isErr()) {
     throw new Error(`the test module map must parse: ${parsed.error.code}`);
   }
@@ -49,6 +50,7 @@ test("encodes one module map to the same bytes whatever order it arrived in", ()
 
 test("separates module maps that differ in a module source", () => {
   const original = canonical(moduleMap("main.js", modules));
+
   const edited = canonical(
     moduleMap("main.js", [
       { name: "main.js", source: "export default {};\n" },

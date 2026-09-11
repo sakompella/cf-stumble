@@ -76,8 +76,10 @@ function canonical(value: JsonValue): string {
   if (!isJsonRecord(value)) {
     return JSON.stringify(value);
   }
+
   const keys = Object.keys(value).toSorted();
   const fields = keys.map((key) => `${JSON.stringify(key)}:${canonical(value[key] ?? null)}`);
+
   return `{${fields.join(",")}}`;
 }
 
@@ -127,5 +129,6 @@ export async function assertClickRefused(
   } catch {
     return;
   }
+
   throw new Error(`${what}: a real click on ${selector} succeeded, so it is still hit-testable`);
 }

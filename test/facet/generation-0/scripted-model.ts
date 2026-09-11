@@ -52,6 +52,7 @@ type ScriptedContext = Readonly<{
 export function scriptedStream(messages: readonly AssistantMessage[]) {
   const remaining = [...messages];
   const contexts: ScriptedContext[] = [];
+
   const streamFn: StreamFn = (_model, context) => {
     contexts.push(context);
     const message = remaining.shift() ?? assistant([], "stop");
@@ -61,8 +62,10 @@ export function scriptedStream(messages: readonly AssistantMessage[]) {
       reason: message.stopReason === "toolUse" ? "toolUse" : "stop",
       message,
     });
+
     return stream;
   };
+
   return { contexts, streamFn };
 }
 
@@ -78,14 +81,18 @@ export function deltaStream(chunks: readonly string[]) {
     const partial = (): AssistantMessage => assistant([{ type: "text", text }], "stop");
     stream.push({ type: "start", partial: partial() });
     stream.push({ type: "text_start", contentIndex: 0, partial: partial() });
+
     for (const chunk of chunks) {
       text += chunk;
       stream.push({ type: "text_delta", contentIndex: 0, delta: chunk, partial: partial() });
     }
+
     stream.push({ type: "text_end", contentIndex: 0, content: text, partial: partial() });
     stream.push({ type: "done", reason: "stop", message: partial() });
+
     return stream;
   };
+
   return { streamFn };
 }
 

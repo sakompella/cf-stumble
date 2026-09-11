@@ -74,12 +74,15 @@ export async function compactThread(
   signal?: AbortSignal,
 ): Promise<readonly AgentMessage[] | undefined> {
   const prepared = prepareCompaction(sessionEntries(messages), policy.settings);
+
   if (!prepared.ok || prepared.value === undefined) return undefined;
 
   // oxlint-disable-next-line typescript/no-unsafe-argument -- Pi declares `AgentState.model` as `Model<any>` and `compact` as `Model<Api>`; this passes one Pi value between two Pi declarations of it.
   const compacted = await compact(prepared.value, models, model, undefined, signal);
+
   if (!compacted.ok) return undefined;
 
   const { summary, tokensBefore, retainedTail } = compacted.value;
+
   return [createCompactionSummaryMessage(summary, tokensBefore, Date.now()), ...retainedTail];
 }

@@ -20,17 +20,22 @@ import type { GitHubFetch } from "../../../src/github/index.js";
  */
 
 const NOW = 1_700_000_000_000;
+
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+
 const CLIENT_ID = "Iv1.cfstumbleFAKE";
+
 const REPOSITORY = "https://github.com/sample/repo-1";
 
 type Reply = Readonly<{ [field: string]: string | number }>;
 
 function githubReplying(replies: readonly Reply[]): GitHubFetch {
   let index = 0;
+
   return () => {
     const reply = replies[Math.min(index, replies.length - 1)] ?? {};
     index += 1;
+
     return Promise.resolve(Response.json(reply));
   };
 }
@@ -62,6 +67,7 @@ function tenant(
   }> = {},
 ): Tenant {
   const workspace = options.workspace ?? new FakeTenantWorkspace();
+
   return {
     workspace,
     connections: (use) =>
@@ -92,6 +98,7 @@ test("connects a repository once the workspace credential works, and provisions 
   const connected = await subject.connections((connections) =>
     connections.connect(REPOSITORY, "Repo one", NOW),
   );
+
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   expect(connected).toMatchObject({
@@ -114,8 +121,10 @@ test("a third repository joins the same one workspace, not a workspace of its ow
     const connected = await subject.connections((connections) =>
       connections.connect(`https://github.com/sample/repo-${suffix}`, undefined, NOW),
     );
+
     expect(connected).toMatchObject({ ok: true });
   }
+
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   expect(listed.projects.map((project) => project.id)).toEqual([
@@ -138,6 +147,7 @@ test("keeps a repository the workspace cannot read out of the catalog", async ()
   const refused = await subject.connections((connections) =>
     connections.connect(REPOSITORY, undefined, NOW),
   );
+
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "repository-not-accessible" } });
@@ -158,6 +168,7 @@ test("takes a project back out when its clone fails, so a listed project has fil
   const refused = await subject.connections((connections) =>
     connections.connect(REPOSITORY, undefined, NOW),
   );
+
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
@@ -187,6 +198,7 @@ test("refuses a repository whose id the harness entry already owns", async () =>
   const refused = await subject.connections((connections) =>
     connections.connect("https://github.com/-/harness", undefined, NOW),
   );
+
   const listed = await subject.connections((connections) => connections.list(NOW));
 
   // `projectIdForRepository` reduces this URL to `harness`. Storing it would put a row in the
@@ -202,6 +214,7 @@ test("provisions again every time a project is used", async () => {
   const used = await subject.connections((connections) =>
     connections.ensureProvisioned("sample-repo-1"),
   );
+
   const unknown = await subject.connections((connections) =>
     connections.ensureProvisioned("not-connected"),
   );
@@ -224,9 +237,11 @@ test("asks for a reconnection after a restart left the workspace without a crede
   // has no credential and cf-stumble's record of one is the only thing left.
   workspace.credentialState = "missing";
   const withoutFallback = tenant("credential-after-restart", { workspace });
+
   const reported = await withoutFallback.connections((connections) =>
     connections.connectionStatus(NOW + 1),
   );
+
   const repaired = await subject.connections((connections) =>
     connections.ensureCredential(NOW + 2),
   );

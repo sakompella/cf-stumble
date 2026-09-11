@@ -19,10 +19,12 @@ export function isWriteMode(value: unknown): value is WriteMode {
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the RPC `timeoutMs` field is untrusted; this parses it.
 function resolveTimeout(input: unknown): ProjectResult<number> {
   if (input === undefined) return ok(MAX_EXEC_TIMEOUT_MS);
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `timeoutMs` field is untrusted.
   if (typeof input !== "number" || !Number.isFinite(input) || input <= 0) {
     return fail("invalid-request");
   }
+
   return ok(Math.min(input, MAX_EXEC_TIMEOUT_MS));
 }
 
@@ -41,13 +43,17 @@ export function parseStartExecInput(input: unknown): ProjectResult<ParsedStartEx
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     return fail("invalid-request");
   }
+
   for (const key of Object.keys(input))
     if (!START_EXEC_KEYS.has(key)) return fail("invalid-request");
+
   if (!("command" in input)) return fail("invalid-request");
 
   const { command } = input;
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `command` field is untrusted.
   if (typeof command !== "string") return fail("invalid-request");
+
   if (
     command.length === 0 ||
     new TextEncoder().encode(command).byteLength > MAX_EXEC_COMMAND_BYTES
@@ -56,13 +62,16 @@ export function parseStartExecInput(input: unknown): ProjectResult<ParsedStartEx
   }
 
   const cwd = "cwd" in input ? input.cwd : undefined;
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `cwd` field is untrusted.
   if (cwd !== undefined && typeof cwd !== "string") return fail("invalid-request");
 
   const cwdSegments = parseAddressedPath(cwd ?? "/");
+
   if (!cwdSegments.ok) return cwdSegments;
 
   const timeoutMs = resolveTimeout("timeoutMs" in input ? input.timeoutMs : undefined);
+
   if (!timeoutMs.ok) return timeoutMs;
 
   return ok({ command, cwdSegments: cwdSegments.value, timeoutMs: timeoutMs.value });

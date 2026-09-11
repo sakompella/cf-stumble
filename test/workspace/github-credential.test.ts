@@ -37,6 +37,7 @@ class FakeCredentialOperations implements WorkspaceOperations {
 
   writeFile(path: string, content: string): Promise<void> {
     this.writes.push([path, content]);
+
     return Promise.resolve();
   }
 
@@ -48,6 +49,7 @@ class FakeCredentialOperations implements WorkspaceOperations {
   ): Promise<CommandOutput> {
     this.sources.push(source);
     this.stdins.push(stdin);
+
     return Promise.resolve({ stdout: this.stdout, stderr: this.stderr, exitCode: this.exitCode });
   }
 }
@@ -88,6 +90,7 @@ class FilesystemlessOperations implements WorkspaceOperations {
     if (this.commandFails) return Promise.reject(new Error("workspace is unavailable"));
     this.sources.push(source);
     this.stdins.push(stdin);
+
     return Promise.resolve({ stdout: this.stdout, stderr: this.stderr, exitCode: this.exitCode });
   }
 }
@@ -192,6 +195,7 @@ test("redacts a token a tool printed back before it leaves the workspace", async
   if (failed.ok) {
     throw new Error("a failing install must report a failure");
   }
+
   expect(failed.error.detail).not.toContain(FAKE_TOKEN);
   expect(failed.error.detail).toContain(REDACTED);
 });
@@ -236,6 +240,7 @@ test("asks git whether a repository is readable, and redacts what git says when 
     step: "verify-repository",
     repositoryUrl: "https://github.com/owner/repo.git",
   });
+
   const refused = await credential(denied, {
     kind: "github-credential",
     step: "verify-repository",
@@ -251,9 +256,11 @@ test("asks git whether a repository is readable, and redacts what git says when 
     granted.sources[0],
     "the URL is canonical, so both spellings check one repository",
   ).toContain("'https://github.com/owner/repo'");
+
   if (!refused.ok || refused.result.kind !== "repository-access") {
     throw new Error("a denied repository must still be a result");
   }
+
   expect(refused.result.granted).toBe(false);
   expect(refused.result.detail).not.toContain(FAKE_TOKEN);
   expect(refused.result.detail).toContain(REDACTED);

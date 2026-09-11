@@ -18,6 +18,7 @@ const READY_BODY = "generation-0 main facet ready";
  */
 export function handleGeneration0Request(request: Request): Promise<Response> {
   const path = new URL(request.url).pathname;
+
   if (path === "/") {
     return Promise.resolve(new Response(READY_BODY));
   }

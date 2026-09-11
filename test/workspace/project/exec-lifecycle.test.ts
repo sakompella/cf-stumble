@@ -10,9 +10,11 @@ import {
 function makeTarget() {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
+
   const target = withDecodedEvents(
     new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend),
   );
+
   return { execBackend, target };
 }
 
@@ -23,6 +25,7 @@ afterEach(() => {
 test("forwards stdout as it arrives, before the terminal exit event", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "echo hi" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   const reader = started.value.events.getReader();
@@ -67,6 +70,7 @@ test("two staggered operations time out independently", async () => {
   const { execBackend, target } = makeTarget();
   const first = await target.startExec({ command: "a", timeoutMs: 100 });
   const second = await target.startExec({ command: "b", timeoutMs: 300 });
+
   if (!first.ok || !second.ok) throw new Error("expected both operations to start");
   const firstReader = first.value.events.getReader();
   const secondReader = second.value.events.getReader();
@@ -90,6 +94,7 @@ test("a timeout settles and closes even when the backend kill call hangs forever
   vi.useFakeTimers();
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x", timeoutMs: 50 });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   handle.killBehavior = () => new Promise(() => {});
@@ -108,6 +113,7 @@ test("a timeout settles even when the backend kill call rejects", async () => {
   vi.useFakeTimers();
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x", timeoutMs: 50 });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   handle.killBehavior = () => Promise.reject(new Error("kill failed"));
@@ -124,6 +130,7 @@ test("an exit before the deadline suppresses the later timeout", async () => {
   vi.useFakeTimers();
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x", timeoutMs: 100 });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   const reader = started.value.events.getReader();
@@ -143,6 +150,7 @@ test("a manual kill before the deadline suppresses the later timeout", async () 
   vi.useFakeTimers();
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x", timeoutMs: 100 });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const reader = started.value.events.getReader();
 
@@ -160,6 +168,7 @@ test("a manual kill before the deadline suppresses the later timeout", async () 
 test("stops reading backend output while one event is buffered", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
 
@@ -185,6 +194,7 @@ test("stops reading backend output while one event is buffered", async () => {
 test("cancelling the consumer stream kills the running command", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   const reader = started.value.events.getReader();
@@ -197,6 +207,7 @@ test("cancelling the consumer stream kills the running command", async () => {
 test("EOF without an exit event is a failed terminal outcome", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   const reader = started.value.events.getReader();
@@ -212,6 +223,7 @@ test("EOF without an exit event is a failed terminal outcome", async () => {
 test("a backend read failure is a failed terminal outcome", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   handle.fail(new Error("stream broke"));
@@ -227,6 +239,7 @@ test("a backend read failure is a failed terminal outcome", async () => {
 test("kill on a stale, already-settled operation id is a successful no-op", async () => {
   const { execBackend, target } = makeTarget();
   const started = await target.startExec({ command: "x" });
+
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
   const reader = started.value.events.getReader();

@@ -34,6 +34,7 @@ export const MAX_MODEL_CALLS = 8;
  * cannot make one frame unbounded.
  */
 export const TOOL_RESULT_DISPLAY_MAX_LINES = 2_000;
+
 export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
 
 /**
@@ -52,6 +53,7 @@ export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
  * criterion 4 asks for.
  */
 export const TURN_DIFF_COMMAND = "git --no-pager diff HEAD";
+
 export const TURN_DIFF_TIMEOUT_SECONDS = 30;
 
 /**

@@ -64,6 +64,7 @@ async function submission(
 ): Promise<GenerationSubmissionResult> {
   const response = await submit(control, harnessCommit);
   expect(response.status).toBe(200);
+
   return response.json<GenerationSubmissionResult>();
 }
 
@@ -71,6 +72,7 @@ function submittedLabel(result: GenerationSubmissionResult): number {
   if (!result.ok) {
     throw new Error(`a valid harness commit must receive a label: ${result.problem.code}`);
   }
+
   return result.outcome.generation.label;
 }
 

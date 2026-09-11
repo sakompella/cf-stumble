@@ -70,6 +70,7 @@ test("records a parse-invalid candidate as failed before headers", async () => {
   );
 
   expect(result).toMatchObject({ ok: true, report: { stage: "headers-not-received" } });
+
   if (!result.ok) {
     throw new Error("a labeled generation must produce a startup-check report");
   }
@@ -257,6 +258,7 @@ test("rejects an invalid artifact without changing the labeled generation", asyn
 test("remounts a checked generation instead of reusing its warm candidate instance", async () => {
   const control = await activeSupervisor("startup-check-fresh-instance");
   const label = await labelCandidate(control, commits.fresh);
+
   const candidate = artifact(
     commits.fresh,
     `

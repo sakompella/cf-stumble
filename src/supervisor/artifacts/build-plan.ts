@@ -61,6 +61,7 @@ export function moduleMapFromBuildOutput(
     entryModule: output.entryModule,
     modules: output.modules,
   });
+
   if (parsed.isErr()) {
     return Result.err({ code: "build-output-invalid", harnessCommit, reason: parsed.error.code });
   }

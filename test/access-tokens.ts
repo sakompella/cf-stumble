@@ -7,8 +7,11 @@
  */
 
 export const accessIssuer = "https://team.cloudflareaccess.com";
+
 export const accessAudience = "access-application-id";
+
 export const accessNow = 1_700_000_000;
+
 /** The `sub` claim every Access test environment configures as `CF_ACCESS_OWNER_SUB`. */
 export const accessOwnerSubject = "owner-1";
 
@@ -30,9 +33,11 @@ export type TestClaims = {
 
 function encodeBytes(bytes: Uint8Array): string {
   let binary = "";
+
   for (const byte of bytes) {
     binary += String.fromCodePoint(byte);
   }
+
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
@@ -61,9 +66,11 @@ async function generateSigningPair(algorithm: SigningAlgorithm): Promise<CryptoK
           "sign",
           "verify",
         ]);
+
   if (!isKeyPair(generated)) {
     throw new Error("test key generation did not return a key pair");
   }
+
   return generated;
 }
 
@@ -73,9 +80,11 @@ export async function signingKey(
 ): Promise<SigningKey> {
   const pair = await generateSigningPair(algorithm);
   const exported = await crypto.subtle.exportKey("jwk", pair.publicKey);
+
   if (exported instanceof ArrayBuffer) {
     throw new TypeError("test key export did not return a JWK");
   }
+
   return {
     algorithm,
     privateKey: pair.privateKey,
@@ -86,10 +95,12 @@ export async function signingKey(
 export async function signAccessToken(key: SigningKey, claims: TestClaims): Promise<string> {
   const encodedHeader = encode(JSON.stringify({ alg: key.algorithm, kid: key.publicJwk.kid }));
   const encodedClaims = encode(JSON.stringify(claims));
+
   const signature = await crypto.subtle.sign(
     key.algorithm === "RS256" ? { name: "RSASSA-PKCS1-v1_5" } : { name: "ECDSA", hash: "SHA-256" },
     key.privateKey,
     new TextEncoder().encode(`${encodedHeader}.${encodedClaims}`),
   );
+
   return `${encodedHeader}.${encodedClaims}.${encodeBytes(new Uint8Array(signature))}`;
 }

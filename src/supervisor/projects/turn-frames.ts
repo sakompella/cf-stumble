@@ -111,7 +111,9 @@ function terminalMessages(value: unknown): readonly unknown[] | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
+
   const messages: unknown = value.messages;
+
   return Array.isArray(messages) ? messages : undefined;
 }
 
@@ -121,9 +123,11 @@ function parseText(frame: Record<string, unknown>): ParsedFacetFrame {
 
 function parseToolStart(frame: Record<string, unknown>): ParsedFacetFrame {
   const args = toolArguments(frame.arguments);
+
   if (!isString(frame.toolCallId) || !isString(frame.toolName) || args === undefined) {
     return malformed;
   }
+
   return forwarded({
     kind: "tool-start",
     toolCallId: frame.toolCallId,
@@ -142,6 +146,7 @@ function parseToolResult(frame: Record<string, unknown>): ParsedFacetFrame {
   ) {
     return malformed;
   }
+
   return forwarded({
     kind: "tool-result",
     toolCallId: frame.toolCallId,
@@ -156,6 +161,7 @@ function parseDiff(frame: Record<string, unknown>): ParsedFacetFrame {
   if (!isString(frame.content) || typeof frame.truncated !== "boolean") {
     return malformed;
   }
+
   return forwarded({ kind: "diff", content: frame.content, truncated: frame.truncated });
 }
 
@@ -167,17 +173,20 @@ function parseDiffUnavailable(frame: Record<string, unknown>): ParsedFacetFrame 
 
 function parseCompleted(frame: Record<string, unknown>): ParsedFacetFrame {
   const messages = terminalMessages(frame.state);
+
   return messages === undefined ? malformed : terminal({ kind: "completed", messages });
 }
 
 function parseFailed(frame: Record<string, unknown>): ParsedFacetFrame {
   const messages = terminalMessages(frame.state);
+
   if (
     messages === undefined ||
     (frame.code !== "model-call-limit" && frame.code !== "model-error")
   ) {
     return malformed;
   }
+
   return terminal({ kind: "failed", code: frame.code, messages });
 }
 
@@ -185,6 +194,7 @@ function parseRejected(frame: Record<string, unknown>): ParsedFacetFrame {
   if (frame.code !== "invalid-project-capability" && frame.code !== "invalid-turn-request") {
     return malformed;
   }
+
   return terminal({ kind: "rejected", code: frame.code });
 }
 
@@ -197,11 +207,13 @@ function parseRejected(frame: Record<string, unknown>): ParsedFacetFrame {
  */
 export function parseFacetFrameLine(line: string): ParsedFacetFrame {
   let decoded: unknown;
+
   try {
     decoded = JSON.parse(line);
   } catch {
     return malformed;
   }
+
   if (!isRecord(decoded)) {
     return malformed;
   }

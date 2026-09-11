@@ -21,6 +21,7 @@ function tick(): Promise<void> {
 function fullOutputPathOf(details: { fullOutputPath?: string } | undefined): string {
   if (details?.fullOutputPath === undefined)
     throw new Error("expected a fullOutputPath in bash tool details");
+
   return details.fullOutputPath;
 }
 
@@ -37,9 +38,11 @@ test("createWriteTool, createReadTool, and createEditTool round-trip a file thro
     undefined,
     { env },
   );
+
   const read = await readTool.execute("call-2", { path: "notes.txt" }, undefined, undefined, {
     env,
   });
+
   expect(read.content).toEqual([{ type: "text", text: "hello world" }]);
 
   await editTool.execute(
@@ -49,9 +52,11 @@ test("createWriteTool, createReadTool, and createEditTool round-trip a file thro
     undefined,
     { env },
   );
+
   const reread = await readTool.execute("call-4", { path: "notes.txt" }, undefined, undefined, {
     env,
   });
+
   expect(reread.content).toEqual([{ type: "text", text: "hello there" }]);
 });
 
@@ -67,14 +72,17 @@ test("createBashTool output over 50KiB is captured whole to a create-exclusive t
   const execPromise = tool.execute("call-1", { command: "produce-bytes" }, undefined, undefined, {
     env,
   });
+
   await tick();
   const handle = execBackend.handles[0]!;
+
   const events = [
     { name: "stdout" as const, data: new TextEncoder().encode(chunk1) },
     { name: "stdout" as const, data: new TextEncoder().encode(filler) },
     { name: "stdout" as const, data: new TextEncoder().encode(chunk3) },
     { name: "exit" as const, exitCode: 0 },
   ];
+
   for (const event of events) handle.push(event);
 
   const result = await execPromise;
@@ -91,12 +99,15 @@ test("createBashTool output over 2000 lines is captured whole to a temp file", a
   const execPromise = tool.execute("call-1", { command: "produce-lines" }, undefined, undefined, {
     env,
   });
+
   await tick();
   const handle = execBackend.handles[0]!;
+
   const events = [
     { name: "stdout" as const, data: new TextEncoder().encode(manyLines) },
     { name: "exit" as const, exitCode: 0 },
   ];
+
   for (const event of events) handle.push(event);
 
   const result = await execPromise;

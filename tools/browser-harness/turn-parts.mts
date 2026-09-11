@@ -43,11 +43,17 @@ export const WORKSPACE_DIFF = [
 ].join("\n");
 
 export const EXTERNAL_LATE_MARKER = "EXTERNAL-LATE";
+
 export const LONG_LINE_START_MARKER = "LONG-START";
+
 export const LONG_LINE_END_MARKER = "LONG-END";
+
 export const LONG_LINE_CHARACTERS = 200_000;
+
 export const MARKUP_IMAGE_TEXT = "<img src=x onerror=";
+
 export const MARKUP_SCRIPT_TEXT = "<script>document.title=";
+
 export const RETAINED_EDIT_MARKER = "EARLIER-EDIT-KEPT";
 
 export function text(value: string): ProjectTurnFrame {
@@ -101,6 +107,7 @@ export function longSingleLine(): string {
   const filler = "x".repeat(
     LONG_LINE_CHARACTERS - LONG_LINE_START_MARKER.length - LONG_LINE_END_MARKER.length,
   );
+
   return `${LONG_LINE_START_MARKER}${filler}${LONG_LINE_END_MARKER}`;
 }
 
@@ -125,5 +132,7 @@ export const COMMAND_TOOL_FRAMES: readonly ProjectTurnFrame[] = [
 ];
 
 export const OPENING_TEXT = "Reading the repository before I change anything.";
+
 export const EDIT_TEXT = "The owner page needs a sidebar, so here is the edit.";
+
 export const CLOSING_TEXT = `Verification passed, and ${RETAINED_EDIT_MARKER} is still in the workspace.`;

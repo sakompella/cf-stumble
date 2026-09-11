@@ -18,9 +18,11 @@ import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 /** The script the browser actually receives, taken out of the one inline `<script>` element. */
 function inlinePageScript(html: string): string {
   const found = /<script nonce="[^"]*">([\s\S]*?)<\/script>/u.exec(html);
+
   if (found?.[1] === undefined) {
     throw new Error("the owner page carries no inline script");
   }
+
   return found[1];
 }
 
@@ -30,6 +32,7 @@ test("the page markup carries every stable element id", () => {
   for (const id of OWNER_PAGE_ELEMENT_IDS) {
     expect(html, `missing id ${id}`).toContain(`id="${id}"`);
   }
+
   expect(OWNER_PAGE_ELEMENT_IDS.length).toBe(new Set(OWNER_PAGE_ELEMENT_IDS).size);
 });
 
@@ -108,6 +111,7 @@ test("the streaming client reads the frames the turn route emits", () => {
   ]) {
     expect(script, `no handling for frame kind ${kind}`).toContain(`"${kind}"`);
   }
+
   // Reading the body while it arrives is what makes the conversation stream rather than appear in
   // one block when the turn ends (ADR-0037).
   expect(script).toContain("getReader()");
@@ -198,13 +202,16 @@ test("the page asks for no credential and stores none", () => {
 /** The delivered script's own label check, extracted and run rather than matched as text. */
 function controlLabelFrom(script: string): (raw: string) => number | null {
   const found = /\n {2}function controlLabel\(raw\) \{[\s\S]*?\n {2}\}\n/u.exec(script);
+
   if (found === null) {
     throw new Error("the owner page carries no controlLabel function");
   }
+
   // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: the constructed function is the extracted source above, whose only added statement returns `controlLabel`.
   const made = new Function(`${found[0]}\nreturn controlLabel;`) as () => (
     raw: string,
   ) => number | null;
+
   return made();
 }
 

@@ -32,6 +32,7 @@ export const HARNESS_PROJECT_ID: ProjectId = harnessProjectId();
 function harnessProjectId(): ProjectId {
   const parsed = parseProjectId("harness");
   invariant(parsed !== undefined, "the harness project id must be a project id");
+
   return parsed;
 }
 
@@ -104,11 +105,13 @@ export function resolveSelectableProject(
   catalog: SelectableCatalog,
 ): SelectableResolution {
   const parsedProjectId = parseProjectId(projectId);
+
   if (parsedProjectId === undefined) {
     return { ok: false, reason: "invalid-project-id" };
   }
 
   const project = catalog.find((candidate) => candidate.id === parsedProjectId);
+
   return project === undefined
     ? { ok: false, reason: "unknown-project-id" }
     : { ok: true, project };

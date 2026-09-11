@@ -2,7 +2,9 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 
 const repoRoot = resolve(import.meta.dirname, "..");
+
 const entryPoint = resolve(repoRoot, "src/workspace/project/protocol.ts");
+
 const forbidden = [
   "src/workspace/host.ts",
   "src/workspace/project/computer-adapter.ts",
@@ -22,8 +24,10 @@ const result = await build({
 });
 
 const inputs = Object.entries(result.metafile.inputs);
+
 const violations = inputs.flatMap(([path, input]) => {
   const paths = [path, ...input.imports.map((entry) => entry.path)];
+
   return paths.filter((candidate) => forbidden.some((prefix) => candidate.includes(prefix)));
 });
 

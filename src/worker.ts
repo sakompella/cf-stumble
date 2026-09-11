@@ -5,7 +5,9 @@ import { Supervisor } from "./supervisor/supervisor.js";
 import { WorkspaceHost } from "./workspace/index.js";
 
 export { Supervisor, WorkspaceHost };
+
 export { WorkspaceProxy } from "@cloudflare/computer";
+
 export { ModelRoute } from "./model-route.js";
 
 /**
@@ -19,6 +21,7 @@ function refusal(reason: Exclude<AccessRequestResult, { ok: true }>["reason"]): 
 export default {
   async fetch(request: Request, env: Cloudflare.Env): Promise<Response> {
     const access = await authenticateAccessRequest(request, env);
+
     if (!access.ok) {
       return refusal(access.reason);
     }
@@ -35,11 +38,13 @@ export default {
     // A browser navigation to `GET /` receives the owner page. Every other request for that path,
     // including the Supervisor's own relayed startup check, keeps its current behavior.
     const page = ownerPageResponse(request);
+
     if (page !== undefined) {
       return page;
     }
 
     const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
+
     if (new URL(request.url).pathname.startsWith("/api/")) {
       return routeOwnerApiRequest(request, supervisor, access.scope);
     }

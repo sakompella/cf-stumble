@@ -26,6 +26,7 @@ test("delivers incremental text deltas and a final assembled message", async () 
     encoder.encode(sseLine({ response: "Hel" })),
     encoder.encode(sseLine({ response: "lo" }) + DONE_LINE),
   ]);
+
   const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
   expect(events.filter((e) => e.type === "text-delta")).toEqual([
     { type: "text-delta", delta: "Hel" },
@@ -51,6 +52,7 @@ test("assembles a tool call whose arguments arrive split across several chunks",
     encoder.encode(toolCallChunk('d":"l')),
     encoder.encode(toolCallChunk('s"}') + DONE_LINE),
   ]);
+
   const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
   const deltas = events.filter((e) => e.type === "tool-call-delta");
   expect(deltas).toHaveLength(3);
@@ -89,6 +91,7 @@ test("a provider call that rejects before any bytes arrive becomes an error even
       return Promise.reject(new Error("network reset"));
     },
   };
+
   const events = await collectEvents(streamModelEvents(ai, REQUEST));
   expect(events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
 });
@@ -101,6 +104,7 @@ test("carries real provider usage through instead of estimating it", async () =>
         DONE_LINE,
     ),
   ]);
+
   const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
   expect(events.at(-1)).toMatchObject({
     type: "done",
@@ -112,9 +116,11 @@ test("estimates non-zero usage, and marks it as an estimate, when the provider r
   const provider = rawByteStream([
     encoder.encode(sseLine({ response: "hello there" }) + DONE_LINE),
   ]);
+
   const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
   const done = events.at(-1);
   expect(done?.type).toBe("done");
+
   if (done?.type !== "done") throw new Error("expected done");
   expect(done.usage.estimated).toBe(true);
   expect(done.usage.inputTokens).toBeGreaterThan(0);

@@ -1,9 +1,13 @@
 // oxlint-disable anti-slop/no-unknown-parameters -- This is the RPC contract itself: a Durable Object stub can be called with any value, so every argument here is unproven until ProjectRpcTarget parses it.
 
 export const MAX_FILE_BYTES = 1_000_000;
+
 export const MAX_EXEC_TIMEOUT_MS = 10 * 60 * 1_000;
+
 export const MAX_EXEC_COMMAND_BYTES = 65_536;
+
 export const MAX_CONCURRENT_EXECS = 8;
+
 export const MAX_EXEC_FRAME_BYTES = 65_536;
 
 export type ProjectErrorCode =
@@ -20,6 +24,7 @@ export type ProjectErrorCode =
   | "too-many-operations";
 
 export type ProjectFailure = { ok: false; error: { code: ProjectErrorCode; path?: string } };
+
 export type ProjectResult<T> = { ok: true; value: T } | ProjectFailure;
 
 export type ProjectFileKind = "file" | "directory" | "symlink";

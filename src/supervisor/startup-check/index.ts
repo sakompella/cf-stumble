@@ -1,13 +1,17 @@
 import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 import type { StartupCheckOutcome } from "./body.js";
+
 export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
+
 import { parseGenerationLabel } from "../generations/index.js";
 import type { GenerationLabel } from "../generations/index.js";
 import type { HarnessArtifacts } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
 import { startupModuleMap } from "./module-map.js";
 import type { StartupModuleMapProblem, StartupModuleMapSource } from "./module-map.js";
+
 export type { StartupModuleMapSource } from "./module-map.js";
+
 import type {
   Generation,
   Generations,
@@ -20,6 +24,7 @@ import type {
  * Object start. Nothing local can measure what production needs, so tests pass their own.
  */
 export const STARTUP_CHECK_DEADLINE_MS = 5_000;
+
 export const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
 
 export type StartupCheckOptions = {
@@ -102,11 +107,13 @@ function checkGenerationStartupFrom(
   options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
   const generationLabel = parseGenerationLabel(label);
+
   if (generationLabel === undefined) {
     return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label } });
   }
 
   const generation = generations.byLabel(generationLabel);
+
   if (generation === undefined) {
     return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label } });
   }
@@ -141,6 +148,7 @@ async function checkKnownGenerationStartup(
   options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
   const moduleMap = await startupModuleMap(artifacts, generation, generationLabel, source);
+
   if (moduleMap.isErr()) {
     return { ok: false, problem: moduleMap.error };
   }
@@ -156,6 +164,7 @@ async function checkKnownGenerationStartup(
       maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
     },
   );
+
   const recorded = generations.recordPreparationCheck(
     generationLabel,
     outcome.stage === "ready" ? "passed" : "failed",

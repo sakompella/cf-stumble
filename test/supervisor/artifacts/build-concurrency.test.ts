@@ -20,12 +20,16 @@ import type { WorkspaceResult } from "../../../src/workspace/index.js";
  */
 
 const commit = harnessCommit("6000000000000000000000000000000000000002");
+
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
+
 const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
+
 const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -43,6 +47,7 @@ class CountingBuildHost implements BuildWorkspaceHost {
 
   build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
+
     if (request.kind === "build-output") {
       return Promise.resolve({
         ok: true,
@@ -67,6 +72,7 @@ class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
 
   getByName(name: string): BuildWorkspaceHost {
     this.names.push(name);
+
     return this.host;
   }
 }
@@ -90,6 +96,7 @@ class GatedBuildHost implements BuildWorkspaceHost {
 
   async build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     await this.#gate;
+
     return this.inner.build(request);
   }
 }
@@ -107,6 +114,7 @@ test("admits one build per commit, so a concurrent request joins it instead of r
   if (left.isErr() || right.isErr()) {
     throw new Error("both callers must receive the one build's result");
   }
+
   expect(encodeModuleMap(left.value)).toBe(encodeModuleMap(right.value));
   expect(
     host.inner.requests.filter((request) => request.kind === "build-step"),
@@ -117,6 +125,7 @@ test("admits one build per commit, so a concurrent request joins it instead of r
 
 test("builds again once the build in flight has settled", async () => {
   const host = new CountingBuildHost();
+
   const builder = new WorkspaceHostModuleMapBuilder(
     new FakeWorkspaceNamespace(host),
     workspaceName,

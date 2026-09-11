@@ -17,6 +17,7 @@ export function makeFacetExecutionEnv(cwd = "/workspace") {
   const execBackend = new FakeExecBackend();
   const projectTarget = new ProjectRpcTarget(provider, transactions, execBackend);
   const env = createFacetExecutionEnv({ cwd, projectTarget });
+
   return { provider, transactions, execBackend, projectTarget, env };
 }
 

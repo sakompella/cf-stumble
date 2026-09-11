@@ -21,7 +21,9 @@ import {
 } from "./verification.js";
 
 export { presentedAccessToken, withoutAccessCredentials } from "./credentials.js";
+
 export { deriveSupervisorName, verifyAccessToken } from "./verification.js";
+
 export type {
   AccessIdentity,
   AccessVerificationReason,
@@ -61,7 +63,9 @@ function configuredOwnerSubject(env: AccessWorkerEnvironment): string | undefine
   if (typeof env.CF_ACCESS_OWNER_SUB !== "string") {
     return undefined;
   }
+
   const subject = env.CF_ACCESS_OWNER_SUB.trim();
+
   return subject.length > 0 ? subject : undefined;
 }
 
@@ -72,21 +76,26 @@ function ownerVerificationFailure(
   identity: string,
 ): { readonly ok: false; readonly reason: "invalid-configuration" | "not-owner" } | undefined {
   const ownerSubject = configuredOwnerSubject(env);
+
   if (ownerSubject === undefined) {
     return { ok: false, reason: "invalid-configuration" };
   }
+
   return identity === ownerSubject ? undefined : { ok: false, reason: "not-owner" };
 }
 
 function tokenKeyId(token: string): string | undefined {
   const encodedHeader = token.split(".")[0];
+
   if (encodedHeader === undefined) {
     return undefined;
   }
+
   try {
     const base64 = encodedHeader.replaceAll("-", "+").replaceAll("_", "/");
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
     const decoded: unknown = JSON.parse(atob(padded));
+
     return isRecord(decoded) && typeof decoded.kid === "string" ? decoded.kid : undefined;
   } catch {
     return undefined;
@@ -105,22 +114,27 @@ async function verifyUsingAccessKeys(
   webCrypto: Crypto,
 ): Promise<BoundaryVerificationResult> {
   const parsed = await verifyAccessToken(input, webCrypto);
+
   if (!parsed.ok && parsed.reason !== "invalid-signature") {
     return parsed;
   }
 
   let publicKeys = explicitKeys;
+
   if (publicKeys === undefined) {
     if (url === undefined) {
       return { ok: false, reason: "invalid-configuration" };
     }
+
     publicKeys = await fetchPublicKeys(url, fetcher, false);
   }
+
   if (publicKeys === undefined) {
     return { ok: false, reason: "invalid-signature" };
   }
 
   let verified = await verifyAccessToken({ ...input, publicKeys }, webCrypto);
+
   if (
     !verified.ok &&
     explicitKeys === undefined &&
@@ -129,16 +143,20 @@ async function verifyUsingAccessKeys(
     !hasMatchingKid(publicKeys, input.token)
   ) {
     const refreshedKeys = await fetchPublicKeys(url, fetcher, true);
+
     if (refreshedKeys === undefined) {
       return { ok: false, reason: "invalid-signature" };
     }
+
     verified = await verifyAccessToken({ ...input, publicKeys: refreshedKeys }, webCrypto);
   }
+
   return verified;
 }
 
 function hasMatchingKid(publicKeys: readonly AccessPublicKey[], token: string): boolean {
   const kid = tokenKeyId(token);
+
   return kid !== undefined && publicKeys.some((key) => key.kid === kid);
 }
 
@@ -157,17 +175,22 @@ function accessConfiguration(env: AccessWorkerEnvironment): AccessConfiguration 
   ) {
     return undefined;
   }
+
   const issuer = issuerForTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
+
   if (issuer === undefined) {
     return undefined;
   }
+
   const explicitKeys =
     env.CF_ACCESS_PUBLIC_KEYS === undefined
       ? undefined
       : parseSerializedPublicKeys(env.CF_ACCESS_PUBLIC_KEYS);
+
   if (env.CF_ACCESS_PUBLIC_KEYS !== undefined && explicitKeys === undefined) {
     return undefined;
   }
+
   return {
     issuer,
     audience: env.CF_ACCESS_AUD,
@@ -207,10 +230,13 @@ export async function authenticateAccessRequest(
 ): Promise<AccessRequestResult> {
   // An absent credential and an unusable one are the same failure: no verified identity.
   const token = presentedAccessToken(request);
+
   if (token === undefined) {
     return { ok: false, reason: "malformed-token" };
   }
+
   const configuration = accessConfiguration(env);
+
   if (configuration === undefined) {
     return { ok: false, reason: "invalid-configuration" };
   }
@@ -228,11 +254,13 @@ export async function authenticateAccessRequest(
     fetcher,
     webCrypto,
   );
+
   if (!verified.ok) {
     return verified;
   }
 
   const ownerFailure = ownerVerificationFailure(env, verified.identity);
+
   if (ownerFailure !== undefined) {
     return ownerFailure;
   }

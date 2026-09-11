@@ -45,11 +45,13 @@ test.each([1, 2, 3])("holds %i connected repositories and resolves every one", a
         { repositoryUrl: `https://github.com/sample/repo-${index}` },
         NOW + index,
       );
+
       expect(connected).toMatchObject({ ok: true, alreadyConnected: false });
     }
 
     const catalog = projects.catalog();
     expect(catalog).toHaveLength(count);
+
     for (const project of catalog) {
       expect(resolveProject(project.id, catalog)).toEqual({ ok: true, project });
     }
@@ -62,6 +64,7 @@ test("connecting the same repository again converges on the project already ther
       { repositoryUrl: "https://github.com/Sample/Repo-1", displayName: "first name" },
       NOW,
     );
+
     const again = projects.connect(
       { repositoryUrl: "https://github.com/Sample/Repo-1.git/", displayName: "second name" },
       NOW + 1_000,
@@ -88,14 +91,17 @@ test("identity survives the order of connection and the name a project is shown 
       { repositoryUrl: "https://github.com/sample/beta", displayName: "B" },
       NOW + 1,
     );
+
     return projects.catalog().map((project) => project.id);
   });
+
   const reversed = await withProjects("catalog-order-reversed", (projects) => {
     projects.connect({ repositoryUrl: "https://github.com/sample/beta" }, NOW);
     projects.connect(
       { repositoryUrl: "https://github.com/sample/alpha", displayName: "A" },
       NOW + 1,
     );
+
     return projects
       .catalog()
       .map((project) => project.id)
@@ -168,6 +174,7 @@ test("one tenant's project is unknown to another tenant", async () => {
 test("a disconnected project leaves the catalog and stops resolving", async () => {
   await withProjects("catalog-disconnect", (projects) => {
     const connected = projects.connect({ repositoryUrl: "https://github.com/sample/repo-1" }, NOW);
+
     if (!connected.ok) {
       throw new Error("this repository must connect");
     }

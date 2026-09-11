@@ -56,6 +56,7 @@ function errnoCode(error: unknown): string | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: narrowing an untrusted thrown value to check for a `code` field.
   if (error === null || typeof error !== "object" || !("code" in error)) return undefined;
   const { code } = error;
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the narrowed `code` field is still untrusted until its type is checked.
   return typeof code === "string" ? code : undefined;
 }
@@ -70,10 +71,12 @@ function errnoCode(error: unknown): string | undefined {
 export function mapProviderError(error: unknown): ProjectErrorCode {
   const code = errnoCode(error);
   const mapped = code === undefined ? undefined : ERROR_CODE_MAP.get(code);
+
   if (mapped !== undefined) return mapped;
   // `backend-unavailable` is the one code that says nothing about what happened, and a deployed
   // write reached the agent as exactly that with the cause thrown away. What the provider actually
   // threw exists nowhere else.
   console.error("unmapped project provider error", code ?? "no code", String(error));
+
   return "backend-unavailable";
 }

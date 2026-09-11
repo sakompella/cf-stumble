@@ -14,6 +14,7 @@ afterEach(async () => {
 
 test("relays an ordinary request and response without changing either side", async () => {
   const control = await activeSupervisor("relay-preserves-http");
+
   const response = await control.fetch(
     relayRequest("/facet/relay/echo?query=preserved", {
       method: "POST",

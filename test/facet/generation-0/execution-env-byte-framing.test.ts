@@ -16,20 +16,26 @@ test("a single JSON frame split across two physical byte chunks still decodes as
   const frame = `${JSON.stringify({ kind: "stdout", data: "hi\n" })}\n`;
   const splitAt = Math.floor(frame.length / 2);
   const chunks = [encoder.encode(frame.slice(0, splitAt)), encoder.encode(frame.slice(splitAt))];
+
   const terminal = encoder.encode(
     `${JSON.stringify({ kind: "terminal", outcome: "exited", exitCode: 0 })}\n`,
   );
+
   const events = readableFromChunks([...chunks, terminal]);
+
   const target = {
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
+
   const seen: string[] = [];
+
   const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: (chunk) => {
       seen.push(chunk);
     },
   });
+
   expect(seen).toEqual(["hi\n"]);
   expect(result).toEqual({ ok: true, value: { stdout: "hi\n", stderr: "", exitCode: 0 } });
 });
@@ -39,16 +45,20 @@ test("two frames concatenated into a single physical byte chunk both decode in o
   const stdoutFrame = `${JSON.stringify({ kind: "stdout", data: "a" })}\n`;
   const terminalFrame = `${JSON.stringify({ kind: "terminal", outcome: "exited", exitCode: 0 })}\n`;
   const events = readableFromChunks([encoder.encode(stdoutFrame + terminalFrame)]);
+
   const target = {
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
+
   const seen: string[] = [];
+
   const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: (chunk) => {
       seen.push(chunk);
     },
   });
+
   expect(seen).toEqual(["a"]);
   expect(result).toEqual({ ok: true, value: { stdout: "a", stderr: "", exitCode: 0 } });
 });
@@ -57,30 +67,38 @@ test("a multibyte UTF-8 character split across two physical byte chunks decodes 
   const encoder = new TextEncoder();
   const frame = encoder.encode(`${JSON.stringify({ kind: "stdout", data: "caf\u00E9\n" })}\n`);
   const splitAt = frame.length - 2;
+
   const terminal = encoder.encode(
     `${JSON.stringify({ kind: "terminal", outcome: "exited", exitCode: 0 })}\n`,
   );
+
   const events = readableFromChunks([frame.slice(0, splitAt), frame.slice(splitAt), terminal]);
+
   const target = {
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
+
   const seen: string[] = [];
+
   const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
     onStdout: (chunk) => {
       seen.push(chunk);
     },
   });
+
   expect(seen).toEqual(["caf\u00E9\n"]);
   expect(result).toEqual({ ok: true, value: { stdout: "caf\u00E9\n", stderr: "", exitCode: 0 } });
 });
 
 test("a byte chunk that is not valid JSON resolves ExecutionError('unknown')", async () => {
   const events = readableFromChunks([new TextEncoder().encode("not json at all\n")]);
+
   const target = {
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
+
   const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
@@ -88,10 +106,12 @@ test("a byte chunk that is not valid JSON resolves ExecutionError('unknown')", a
 test("a truncated final frame with no closing newline resolves ExecutionError('unknown')", async () => {
   const partial = JSON.stringify({ kind: "stdout", data: "partial" }).slice(0, -3);
   const events = readableFromChunks([new TextEncoder().encode(partial)]);
+
   const target = {
     startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
     kill: () => Promise.resolve(),
   };
+
   const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });

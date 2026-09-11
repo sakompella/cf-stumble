@@ -20,10 +20,12 @@ export function deferredExec(): DeferredExec {
   let resolveImpl!: (handle: ManualExecHandle) => void;
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a real backend's `exec()` rejection would carry.
   let rejectImpl!: (error: unknown) => void;
+
   const promise = new Promise<ExecBackendHandle>((resolve, reject) => {
     resolveImpl = resolve;
     rejectImpl = reject;
   });
+
   return {
     handle,
     promise,

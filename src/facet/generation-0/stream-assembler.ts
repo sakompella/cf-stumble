@@ -81,6 +81,7 @@ export function assistantShell(
 function parseToolArgs(text: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(text);
+
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: best-effort parse of accumulated tool call argument text.
     if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: typeof + null + array guard confirmed a plain object.
@@ -89,10 +90,12 @@ function parseToolArgs(text: string): Record<string, unknown> {
   } catch {
     // fall through to the empty-object recovery below
   }
+
   return {};
 }
 
 type OpenTextBlock = Readonly<{ kind: "text"; contentIndex: number; text: string }>;
+
 type OpenToolBlock = Readonly<{
   kind: "toolCall";
   contentIndex: number;
@@ -101,6 +104,7 @@ type OpenToolBlock = Readonly<{
   name: string;
   args: string;
 }>;
+
 type OpenBlock = OpenTextBlock | OpenToolBlock;
 
 /**
@@ -125,6 +129,7 @@ export class TurnAssembler {
             arguments: parseToolArgs(block.args),
           },
     );
+
     return assistantShell(stopReason, content);
   }
 
@@ -136,19 +141,23 @@ export class TurnAssembler {
 
   private openText(stream: AssistantMessageEventStream): OpenTextBlock {
     const last = this.blocks.at(-1);
+
     if (last !== undefined && last.kind === "text") return last;
     const contentIndex = this.blocks.length;
     const block: OpenTextBlock = { kind: "text", contentIndex, text: "" };
     this.blocks.push(block);
     stream.push({ type: "text_start", contentIndex, partial: this.snapshot() });
+
     return block;
   }
 
   private openTool(delta: ToolCallDelta, stream: AssistantMessageEventStream): OpenToolBlock {
     const existingAt = this.toolIndexToBlock.get(delta.index);
     const existing = existingAt === undefined ? undefined : this.blocks[existingAt];
+
     if (existing !== undefined && existing.kind === "toolCall") return existing;
     const contentIndex = this.blocks.length;
+
     const block: OpenToolBlock = {
       kind: "toolCall",
       contentIndex,
@@ -157,9 +166,11 @@ export class TurnAssembler {
       name: delta.name ?? "",
       args: "",
     };
+
     this.blocks.push(block);
     this.toolIndexToBlock.set(delta.index, contentIndex);
     stream.push({ type: "toolcall_start", contentIndex, partial: this.snapshot() });
+
     return block;
   }
 
@@ -184,6 +195,7 @@ export class TurnAssembler {
       name: delta.name ?? block.name,
       args: block.args + (delta.argumentsDelta ?? ""),
     };
+
     if (delta.argumentsDelta === undefined || delta.argumentsDelta === "") return;
     stream.push({
       type: "toolcall_delta",

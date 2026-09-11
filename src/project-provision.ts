@@ -108,6 +108,7 @@ function cloneProjectRepository(
 ): string {
   const lock = `${configuration.projectRoot}.provision-lock`;
   const staging = `${configuration.projectRoot}.provisioning`;
+
   return [
     "set -eu",
     `projects=${shellQuote(PROJECTS_DIRECTORY)}`,
@@ -180,5 +181,6 @@ export function projectProvisionStep(
 ): ProjectProvisionStep {
   const step = plan.steps.find((planned) => planned.name === name);
   invariant(step !== undefined, `the provisioning plan must contain its own ${name} step`);
+
   return step;
 }

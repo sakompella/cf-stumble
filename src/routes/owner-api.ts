@@ -30,11 +30,14 @@ function threadRoute(
 ): { readonly projectId: string; readonly isReset: boolean } | undefined {
   const matched = /^\/api\/projects\/([^/]+)\/thread(\/fresh)?$/u.exec(pathname);
   const encodedProjectId = matched?.[1];
+
   if (encodedProjectId === undefined) {
     return undefined;
   }
+
   try {
     const projectId = decodeURIComponent(encodedProjectId);
+
     return projectId.length === 0 ? undefined : { projectId, isReset: matched?.[2] === "/fresh" };
   } catch {
     return undefined;
@@ -55,6 +58,7 @@ function notFound(): Promise<Response> {
 async function statusResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
   try {
     const active = await supervisor.getActiveGeneration();
+
     return Response.json({
       activeGeneration: {
         generation: active.generation ?? null,
@@ -74,10 +78,13 @@ async function threadResponse(
 ): Promise<Response> {
   try {
     const result = await read();
+
     if (result.ok) {
       return Response.json({ ok: true, thread: result.thread });
     }
+
     const status = result.problem.code === "unreadable-thread" ? 500 : 404;
+
     return Response.json({ ok: false, problem: result.problem }, { status });
   } catch {
     return jsonError(500, "internal-error");
@@ -100,10 +107,13 @@ export function routeOwnerApiRequest(
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
   const projectRoute = routeProjectApiRequest(request, supervisor, scope);
+
   if (projectRoute !== undefined) {
     return projectRoute;
   }
+
   const turnRoute = routeProjectTurnRequest(request, supervisor);
+
   if (turnRoute !== undefined) {
     return turnRoute;
   }
@@ -114,23 +124,29 @@ export function routeOwnerApiRequest(
   if (isGet && pathname === "/api/status") {
     return statusResponse(supervisor);
   }
+
   if (isPost && pathname === "/api/generations/submit") {
     return handleGenerationSubmission(request, supervisor);
   }
+
   if (isPost && pathname === "/api/generations/activate") {
     return handleGenerationControl(request, supervisor, "activate");
   }
+
   if (isPost && pathname === "/api/generations/rollback") {
     return handleGenerationControl(request, supervisor, "rollback");
   }
 
   const thread = threadRoute(pathname);
+
   if (thread === undefined) {
     return notFound();
   }
+
   if (isGet && !thread.isReset) {
     return threadResponse(() => supervisor.getProjectThread(thread.projectId));
   }
+
   if (isPost && thread.isReset) {
     return threadResponse(() => supervisor.startFreshProjectThread(thread.projectId));
   }

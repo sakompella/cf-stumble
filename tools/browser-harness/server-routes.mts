@@ -62,11 +62,13 @@ function field(body: JsonValue, key: string): JsonValue | undefined {
 
 function readString(body: JsonValue, key: string): string | undefined {
   const value = field(body, key);
+
   return value !== undefined && isJsonString(value) ? value : undefined;
 }
 
 function readNumber(body: JsonValue, key: string): number | undefined {
   const value = field(body, key);
+
   return value !== undefined && isJsonNumber(value) ? value : undefined;
 }
 
@@ -77,23 +79,30 @@ const INVALID_REQUEST: RouteAnswer = {
 
 function connect(state: ScenarioState, body: JsonValue): RouteAnswer {
   const repositoryUrl = readString(body, "repositoryUrl");
+
   if (repositoryUrl === undefined || repositoryUrl === "") {
     return INVALID_REQUEST;
   }
+
   const already = state.projects.some((project) => project.id === NEW_PROJECT.id);
+
   if (!already) {
     state.projects = [...state.projects, NEW_PROJECT];
   }
+
   return { status: 200, payload: connectPayload(state.scenario, already) };
 }
 
 function submit(state: ScenarioState, body: JsonValue): RouteAnswer {
   const harnessCommit = readString(body, "harnessCommit");
+
   if (harnessCommit === undefined || harnessCommit === "") {
     return INVALID_REQUEST;
   }
+
   const answer = submitGeneration(state.generation, harnessCommit);
   state.generation = answer.next;
+
   return { status: answer.status, payload: answer.payload };
 }
 
@@ -103,11 +112,14 @@ function command(
   return (state, body) => {
     const observedEpoch = readNumber(body, "observedEpoch");
     const label = readNumber(body, "label");
+
     if (observedEpoch === undefined || label === undefined) {
       return INVALID_REQUEST;
     }
+
     const answer = runGenerationCommand(state.generation, kind, observedEpoch, label);
     state.generation = answer.next;
+
     return { status: answer.status, payload: answer.payload };
   };
 }
@@ -161,10 +173,12 @@ export function serveJsonRoute(
   const route = JSON_ROUTES.find(
     (candidate) => candidate.method === req.method && candidate.path === path,
   );
+
   return route === undefined ? undefined : route.answer(state, body);
 }
 
 const THREAD_PATH = /^\/api\/projects\/([^/]+)\/thread$/u;
+
 const FRESH_THREAD_PATH = /^\/api\/projects\/([^/]+)\/thread\/fresh$/u;
 
 /**
@@ -177,16 +191,22 @@ export function serveThreadRoutes(
   state: ScenarioState,
 ): RouteAnswer | undefined {
   const read = THREAD_PATH.exec(path)?.[1];
+
   if (req.method === "GET" && read !== undefined) {
     const projectId = decodeURIComponent(read);
+
     return { status: 200, payload: threadPayload(projectId, threadOf(state, projectId)) };
   }
+
   const fresh = FRESH_THREAD_PATH.exec(path)?.[1];
+
   if (req.method === "POST" && fresh !== undefined) {
     const projectId = decodeURIComponent(fresh);
     const replaced = { revision: threadOf(state, projectId).revision + 1, messageCount: 0 };
     state.threads.set(projectId, replaced);
+
     return { status: 200, payload: threadPayload(projectId, replaced) };
   }
+
   return undefined;
 }

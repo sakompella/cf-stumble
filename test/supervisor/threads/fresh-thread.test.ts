@@ -9,6 +9,7 @@ import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 import { abandonProjectTurn, finishProjectTurn, startProjectTurn } from "./turn-slot.js";
 
 const NOW = 1_700_000_000_000;
+
 const LEASE_MS = 30_000;
 
 const savedConversation = [
@@ -29,6 +30,7 @@ const savedConversation = [
 async function workspaceWithTurnOutput(): Promise<FakeWorkspace> {
   const workspace = new FakeWorkspace({ files: { "/workspace/notes.md": "written before" } });
   await workspace.project().writeFile("/workspace/plan.md", "the agent wrote this during a turn");
+
   return workspace;
 }
 
@@ -43,9 +45,11 @@ async function admit(
   expectedRevision: number,
 ): Promise<string> {
   const started = await startProjectTurn(control, projectId, expectedRevision, NOW, LEASE_MS);
+
   if (!started.ok) {
     throw new Error(`the ${projectId} turn must be admitted: ${started.problem.code}`);
   }
+
   return started.leaseId;
 }
 
@@ -55,6 +59,7 @@ async function threadWithConversation(
 ): Promise<void> {
   const lease = await admit(control, projectId, 0);
   const finished = await finishProjectTurn(control, projectId, lease, savedConversation, NOW);
+
   if (!finished.ok) {
     throw new Error(`the ${projectId} thread must accept a first turn`);
   }
@@ -108,6 +113,7 @@ test("a fresh thread frees the turn slot the replaced conversation held", async 
     savedConversation,
     NOW,
   );
+
   const restarted = await startProjectTurn(control, "sample-project-one", 2, NOW, LEASE_MS);
 
   expect(lateFinish).toEqual({
@@ -126,6 +132,7 @@ test("a delayed start cannot enter a replaced thread by presenting its old revis
   await control.startFreshProjectThread("sample-project-one");
 
   const delayedStart = await startProjectTurn(control, "sample-project-one", 0, NOW + 1, LEASE_MS);
+
   const lateFinish = await finishProjectTurn(
     control,
     "sample-project-one",
@@ -133,6 +140,7 @@ test("a delayed start cannot enter a replaced thread by presenting its old revis
     savedConversation,
     NOW + 1,
   );
+
   const lateAbandon = await abandonProjectTurn(control, "sample-project-one", staleLease);
 
   expect(delayedStart).toEqual({
@@ -161,6 +169,7 @@ test("the replaced thread's lease cannot save into the turn that replaced it", a
   // The coordinator of the later turn holds a lease of its own on a thread the replaced turn
   // cannot name: its predecessor's save is refused while its own succeeds.
   const freshLease = await admit(control, "sample-project-one", 1);
+
   const staleSave = await finishProjectTurn(
     control,
     "sample-project-one",
@@ -168,6 +177,7 @@ test("the replaced thread's lease cannot save into the turn that replaced it", a
     savedConversation,
     NOW,
   );
+
   const freshSave = await finishProjectTurn(
     control,
     "sample-project-one",

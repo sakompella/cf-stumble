@@ -43,14 +43,17 @@ function directoryOf(path: string): string {
 
 function resolveImport(fromDirectory: string, specifier: string): string {
   const resolved: string[] = [];
+
   for (const segment of [...fromDirectory.split("/"), ...specifier.split("/")]) {
     if (segment === "." || segment === "") {
       continue;
     }
+
     if (segment === "..") {
       resolved.pop();
       continue;
     }
+
     resolved.push(segment);
   }
 
@@ -59,12 +62,16 @@ function resolveImport(fromDirectory: string, specifier: string): string {
 
 function importersOfFixture(files: Record<string, string>, prefix: string): string[] {
   const found: string[] = [];
+
   for (const [globKey, contents] of Object.entries(files)) {
     const importer = repoPath(globKey, prefix);
+
     if (importer === FIXTURE_PATH) {
       continue;
     }
+
     const specifiers = [...contents.matchAll(importPattern)].map((match) => match[1] ?? "");
+
     if (
       specifiers.some(
         (specifier) => resolveImport(directoryOf(importer), specifier) === FIXTURE_PATH,

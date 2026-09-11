@@ -62,13 +62,17 @@ class TurnReader {
    */
   async read(cancelled: () => boolean, expired: () => boolean): Promise<StreamEnding> {
     const decoder = new TextDecoder();
+
     try {
       for (;;) {
         const chunk = await this.#reader.read();
+
         if (chunk.done) {
           break;
         }
+
         const ending = this.#consume(decoder.decode(chunk.value, { stream: true }));
+
         if (ending !== undefined) {
           return ending;
         }
@@ -81,6 +85,7 @@ class TurnReader {
     }
 
     if (cancelled()) return { kind: "cancelled" };
+
     return expired()
       ? { kind: "timed-out" }
       : { kind: "invalid", problem: "missing-terminal-frame" };
@@ -89,19 +94,23 @@ class TurnReader {
   /** Add decoded text and publish every whole frame it completed, or end the stream. */
   #consume(text: string): StreamEnding | undefined {
     this.#buffer += text;
+
     for (;;) {
       const newline = this.#buffer.indexOf("\n");
+
       if (newline < 0) {
         return this.#endOfChunk();
       }
 
       const line = this.#buffer.slice(0, newline);
       this.#buffer = this.#buffer.slice(newline + 1);
+
       if (line.trim() === "") {
         continue;
       }
 
       const ending = this.#accept(line);
+
       if (ending !== undefined) {
         return ending;
       }
@@ -124,11 +133,14 @@ class TurnReader {
     }
 
     const parsed = parseFacetFrameLine(line);
+
     if (parsed.kind === "invalid") {
       return { kind: "invalid", problem: parsed.problem };
     }
+
     if (parsed.kind === "forwarded") {
       this.#publish(parsed.frame);
+
       return undefined;
     }
 
@@ -155,15 +167,19 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
       const publish: Publish = (frame) => {
         if (!state.cancelled) controller.enqueue(encodeFrame(frame));
       };
+
       const reader = new TurnReader(input.frames, publish);
       turn = reader;
+
       // The turn's own bound, not a second one: when the instant admission fixed arrives, the
       // signal aborts and the generation's stream is cancelled, whether the start left the turn
       // four minutes or four seconds.
       const stopReading = () => {
         void reader.stop();
       };
+
       input.bound.signal.addEventListener("abort", stopReading, { once: true });
+
       if (input.bound.signal.aborted) stopReading();
 
       try {
@@ -171,10 +187,12 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
           () => state.cancelled,
           () => input.bound.timedOut(),
         );
+
         publish(endTurn(input, ending).frame);
       } finally {
         input.bound.signal.removeEventListener("abort", stopReading);
         input.bound.stop();
+
         if (!state.cancelled) controller.close();
       }
     },
@@ -183,6 +201,7 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
       // The browser going away ends the whole turn and not only its frames, so the one signal
       // every step of the turn holds is aborted here too.
       input.bound.stop();
+
       return turn === undefined ? input.frames.cancel() : turn.stop();
     },
   });

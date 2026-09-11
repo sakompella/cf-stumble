@@ -45,10 +45,13 @@ function parseGenerationControlBody(value: unknown): GenerationControlBody | und
   if (!isRecord(value) || !hasExactKeys(value, ["label", "observedEpoch"])) {
     return undefined;
   }
+
   const { observedEpoch, label } = value;
+
   if (!isCount(observedEpoch) || !isCount(label)) {
     return undefined;
   }
+
   return { observedEpoch, label };
 }
 
@@ -65,11 +68,15 @@ function parseGenerationSubmissionBody(value: unknown): GenerationSubmissionBody
   if (!isRecord(value) || !hasExactKeys(value, ["harnessCommit"])) {
     return undefined;
   }
+
   const { harnessCommit } = value;
+
   if (typeof harnessCommit !== "string") {
     return undefined;
   }
+
   const parsedHarnessCommit = parseHarnessCommit(harnessCommit);
+
   return parsedHarnessCommit === undefined ? undefined : { harnessCommit: parsedHarnessCommit };
 }
 
@@ -94,6 +101,7 @@ export async function handleGenerationControl(
   kind: ControlCommandKind,
 ): Promise<Response> {
   const body = parseGenerationControlBody(await readJson(request));
+
   if (body === undefined) {
     return jsonError(
       400,
@@ -136,6 +144,7 @@ export async function handleGenerationSubmission(
   supervisor: GenerationSubmissionSupervisor,
 ): Promise<Response> {
   const body = parseGenerationSubmissionBody(await readJson(request));
+
   if (body === undefined) {
     return jsonError(400, "invalid-submission-request");
   }
@@ -145,6 +154,7 @@ export async function handleGenerationSubmission(
       principal: { kind: "user" },
       command: { kind: "submit-candidate", harnessCommit: body.harnessCommit },
     });
+
     if (!submitted.ok) {
       return Response.json(submitted);
     }
@@ -154,6 +164,7 @@ export async function handleGenerationSubmission(
       outcome: submitted.outcome,
       preparation: await supervisor.prepareGeneration(submitted.outcome.generation.label),
     };
+
     return Response.json(result);
   } catch {
     return jsonError(500, "internal-error");

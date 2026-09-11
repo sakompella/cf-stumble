@@ -33,6 +33,7 @@ function failedStream() {
     reason: "error",
     error: { ...assistant([], "stop"), stopReason: "error", errorMessage: "the route is down" },
   });
+
   return stream;
 }
 
@@ -89,6 +90,7 @@ test("a turn over the budget compacts through Pi and saves the compacted context
   });
 
   expect(outcome.ok).toBe(true);
+
   if (!outcome.ok) return;
 
   // The summary came from Pi's own summarization call, not from a second summarizer written here.
@@ -111,11 +113,13 @@ test("a turn over the budget compacts through Pi and saves the compacted context
 test("a replacement facet continues from the saved compacted context, and a fresh state drops it", async () => {
   const workspace = makeFacetExecutionEnv();
   await workspace.env.writeFile("/workspace/notes.md", "written before compaction");
+
   const compacting = scriptedStream([
     assistant([{ type: "text", text: SUMMARY }], "stop"),
     assistant([{ type: "text", text: SUMMARY }], "stop"),
     assistant([{ type: "text", text: "Continuing." }], "stop"),
   ]);
+
   const compacted = await runPiAgentTurn({
     prompt: "What did we decide?",
     state: { ...createPiAgentTurnState(model), messages: conversation() },
@@ -123,14 +127,17 @@ test("a replacement facet continues from the saved compacted context, and a fres
     streamFn: compacting.streamFn,
     compaction: FORCED,
   });
+
   if (!compacted.ok) throw new Error("the compacting turn must complete");
 
   // A replacement generation: a new execution environment over the same workspace and a new route,
   // handed nothing but the saved state.
   const replacement = makeFacetExecutionEnv();
+
   const afterReplacement = scriptedStream([
     assistant([{ type: "text", text: "Still here." }], "stop"),
   ]);
+
   const continued = await runPiAgentTurn({
     prompt: "Remind me.",
     state: compacted.state,
@@ -153,10 +160,13 @@ test("a route that cannot summarize leaves the conversation intact instead of lo
   const script = scriptedStream([
     assistant([{ type: "text", text: "Carrying on uncompacted." }], "stop"),
   ]);
+
   let summarizationRefused = false;
+
   const streamFn: StreamFn = (routeModel, context, options) => {
     if (summarizationRefused) return script.streamFn(routeModel, context, options);
     summarizationRefused = true;
+
     return failedStream();
   };
 
@@ -169,6 +179,7 @@ test("a route that cannot summarize leaves the conversation intact instead of lo
   });
 
   expect(outcome.ok).toBe(true);
+
   if (!outcome.ok) return;
   expect(summarizationRefused).toBe(true);
   expect(

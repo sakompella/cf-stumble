@@ -17,6 +17,7 @@ export type AccessVerificationReason =
   | "expired"
   | "not-yet-valid"
   | "missing-identity";
+
 export type AccessVerificationResult =
   | { readonly ok: true; readonly identity: AccessIdentity }
   | { readonly ok: false; readonly reason: AccessVerificationReason };
@@ -54,8 +55,10 @@ function decodePart(part: string): Uint8Array | undefined {
 
   const base64 = part.replaceAll("-", "+").replaceAll("_", "/");
   const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+
   try {
     const decoded = atob(padded);
+
     return Uint8Array.from(decoded, (character) => character.codePointAt(0) ?? 0);
   } catch {
     return undefined;
@@ -64,6 +67,7 @@ function decodePart(part: string): Uint8Array | undefined {
 
 function decodeJson(part: string): unknown | undefined {
   const bytes = decodePart(part);
+
   if (bytes === undefined) {
     return undefined;
   }
@@ -79,6 +83,7 @@ function parseHeader(value: unknown): JwtHeader | undefined {
   if (!isRecord(value) || (value.alg !== "RS256" && value.alg !== "ES256")) {
     return undefined;
   }
+
   if (value.kid !== undefined && typeof value.kid !== "string") {
     return undefined;
   }
@@ -98,15 +103,19 @@ function parseClaims(
   if (!isRecord(value) || typeof value.iss !== "string") {
     return { ok: false, reason: "wrong-issuer" };
   }
+
   if (typeof value.aud !== "string" && !isStringArray(value.aud)) {
     return { ok: false, reason: "wrong-audience" };
   }
+
   if (!isFiniteNumber(value.exp)) {
     return { ok: false, reason: "invalid-expiry" };
   }
+
   if (value.nbf !== undefined && !isFiniteNumber(value.nbf)) {
     return { ok: false, reason: "not-yet-valid" };
   }
+
   if (typeof value.sub !== "string" || value.sub.length === 0) {
     return { ok: false, reason: "missing-identity" };
   }
@@ -128,12 +137,15 @@ function keyMatches(key: AccessPublicKey, header: JwtHeader): boolean {
   if (key.kid !== undefined && key.kid !== header.kid) {
     return false;
   }
+
   if (key.alg !== undefined && key.alg !== header.alg) {
     return false;
   }
+
   if (key.use !== undefined && key.use !== "sig") {
     return false;
   }
+
   return header.alg === "RS256" ? key.kty === "RSA" : key.kty === "EC" && key.crv === "P-256";
 }
 
@@ -153,6 +165,7 @@ async function verifiesKey(
         false,
         ["verify"],
       );
+
       return await crypto.subtle.verify(
         { name: "RSASSA-PKCS1-v1_5" },
         key,
@@ -168,6 +181,7 @@ async function verifiesKey(
       false,
       ["verify"],
     );
+
     return await crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       key,
@@ -195,6 +209,7 @@ async function verifiesSignature(
       return true;
     }
   }
+
   return false;
 }
 
@@ -211,6 +226,7 @@ type TokenParsingResult =
 
 function parseToken(token: string): TokenParsingResult {
   const parts = token.split(".");
+
   if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
     return { ok: false, reason: "malformed-token" };
   }
@@ -218,11 +234,14 @@ function parseToken(token: string): TokenParsingResult {
   const encodedHeader = parts[0];
   const claimsPart = parts[1];
   const encodedSignature = parts[2];
+
   if (encodedHeader === undefined || claimsPart === undefined || encodedSignature === undefined) {
     return { ok: false, reason: "malformed-token" };
   }
+
   const decodedHeader = decodeJson(encodedHeader);
   const header = parseHeader(decodedHeader);
+
   if (header === undefined) {
     return {
       ok: false,
@@ -232,7 +251,9 @@ function parseToken(token: string): TokenParsingResult {
           : "malformed-token",
     };
   }
+
   const signature = decodePart(encodedSignature);
+
   return signature === undefined
     ? { ok: false, reason: "malformed-token" }
     : {
@@ -246,9 +267,11 @@ export async function verifyAccessToken(
   webCrypto: Crypto = crypto,
 ): Promise<AccessVerificationResult> {
   const parsedToken = parseToken(input.token);
+
   if (!parsedToken.ok) {
     return parsedToken;
   }
+
   if (
     !(await verifiesSignature(
       parsedToken.token.header,
@@ -262,23 +285,31 @@ export async function verifyAccessToken(
   }
 
   const parsedClaims = parseClaims(decodeJson(parsedToken.token.claimsPart));
+
   if (!parsedClaims.ok) {
     return parsedClaims;
   }
+
   const { claims } = parsedClaims;
+
   if (claims.iss !== input.issuer) {
     return { ok: false, reason: "wrong-issuer" };
   }
+
   const audiences = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
+
   if (!audiences.includes(input.audience)) {
     return { ok: false, reason: "wrong-audience" };
   }
+
   if (input.now >= claims.exp) {
     return { ok: false, reason: "expired" };
   }
+
   if (claims.nbf !== undefined && input.now < claims.nbf) {
     return { ok: false, reason: "not-yet-valid" };
   }
+
   return { ok: true, identity: claims.sub };
 }
 
@@ -295,5 +326,6 @@ export async function deriveSupervisorName(
   const digest = await webCrypto.subtle.digest("SHA-256", value);
   const bytes = new Uint8Array(digest);
   const hash = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
   return `access:${hash}`;
 }

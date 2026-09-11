@@ -9,6 +9,7 @@ test("reflection exposes exactly six methods and no forbidden backing capability
     ["constructor", "kill", "listFiles", "lstat", "readFile", "startExec", "writeFile"].toSorted(),
   );
   expect(Object.keys(target)).toEqual([]);
+
   for (const forbidden of [
     "build",
     "fetch",
@@ -34,9 +35,11 @@ test.each<readonly [string, unknown]>([
   ["a trailing slash", "/a/"],
 ])("lstat/readFile/listFiles reject a malformed path: %s", async (_label, path) => {
   const { provider, target } = makeTarget();
+
   for (const call of [target.lstat(path), target.readFile(path), target.listFiles(path)]) {
     await expect(call).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
   }
+
   expect(provider.calls).toEqual([]);
 });
 
@@ -66,9 +69,11 @@ test("startExec limits commands by UTF-8 byte length", async () => {
 
 test("startExec limits concurrent operations and releases a settled slot", async () => {
   const { execBackend, target } = makeTarget();
+
   const started = await Promise.all(
     Array.from({ length: 8 }, () => target.startExec({ command: "x" })),
   );
+
   expect(started.every((result) => result.ok)).toBe(true);
 
   await expect(target.startExec({ command: "x" })).resolves.toEqual({
@@ -78,6 +83,7 @@ test("startExec limits concurrent operations and releases a settled slot", async
   expect(execBackend.requests).toHaveLength(8);
 
   const first = started[0]!;
+
   if (!first.ok) throw new Error("expected startExec to succeed");
   await first.value.events.cancel();
 
@@ -95,6 +101,7 @@ test.each<readonly [string, unknown]>([
   ["a string timeout", { command: "true", timeoutMs: "10" }],
 ])("startExec rejects %s and starts no timer", async (_label, input) => {
   vi.useFakeTimers();
+
   try {
     const { execBackend, target } = makeTarget();
     await expect(target.startExec(input)).resolves.toEqual({

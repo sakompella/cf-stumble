@@ -43,11 +43,14 @@ export class GitDiffExecBackend implements ExecBackend {
 
   exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
     this.requests.push(input);
+
     if (input.command === TURN_DIFF_COMMAND) return Promise.resolve(this.#diffHandle(input.cwd));
 
     const effect = this.effects.get(input.command);
+
     if (effect === undefined) return this.commands.exec(input);
     effect(this.#provider);
+
     return Promise.resolve(new ScriptedExecHandle([{ name: "exit", exitCode: 0 }]));
   }
 
@@ -58,8 +61,10 @@ export class GitDiffExecBackend implements ExecBackend {
         { name: "exit", exitCode: this.failure.exitCode },
       ]);
     }
+
     const diff = workspaceDiff(this.#committed, snapshot(this.#provider), cwd);
     const events: BackendExecEvent[] = diff === "" ? [] : [{ name: "stdout", data: encode(diff) }];
+
     return new ScriptedExecHandle([...events, { name: "exit", exitCode: 0 }]);
   }
 }
@@ -76,6 +81,7 @@ class ScriptedExecHandle implements ExecBackendHandle {
   readonly reader = {
     read: (): Promise<{ done: false; value: BackendExecEvent } | { done: true }> => {
       const next = this.#events.shift();
+
       return Promise.resolve(next === undefined ? { done: true } : { done: false, value: next });
     },
     cancel: (): Promise<void> => Promise.resolve(),
@@ -83,6 +89,7 @@ class ScriptedExecHandle implements ExecBackendHandle {
 
   kill(): Promise<void> {
     this.killCalls += 1;
+
     return Promise.resolve();
   }
 }
@@ -94,10 +101,12 @@ function encode(text: string): Uint8Array {
 /** Every file the provider holds right now, read through its own read path. */
 function snapshot(provider: FakeProjectFilesystemProvider): ReadonlyMap<string, string> {
   const files = new Map<string, string>();
+
   for (const [path, node] of provider.nodes) {
     if (node.type !== "file") continue;
     files.set(path, new TextDecoder().decode(provider.readFileSync(path)));
   }
+
   return files;
 }
 
@@ -105,7 +114,9 @@ const CONTEXT_LINES = 3;
 
 function splitLines(text: string): string[] {
   const lines = text.split("\n");
+
   if (lines.at(-1) === "") lines.pop();
+
   return lines;
 }
 
@@ -118,28 +129,37 @@ function fileDiff(label: string, before: string | undefined, after: string): str
   const from = before === undefined ? [] : splitLines(before);
   const to = splitLines(after);
   let start = 0;
+
   while (start < from.length && start < to.length && from[start] === to[start]) start += 1;
   let endFrom = from.length;
   let endTo = to.length;
+
   while (endFrom > start && endTo > start && from[endFrom - 1] === to[endTo - 1]) {
     endFrom -= 1;
     endTo -= 1;
   }
+
   if (endFrom === start && endTo === start) return "";
 
   const head = Math.max(0, start - CONTEXT_LINES);
   const tailFrom = Math.min(from.length, endFrom + CONTEXT_LINES);
   const tailTo = Math.min(to.length, endTo + CONTEXT_LINES);
+
   const lines = [
     `diff --git a/${label} b/${label}`,
     before === undefined ? "--- /dev/null" : `--- a/${label}`,
     `+++ b/${label}`,
     `@@ -${from.length === 0 ? 0 : head + 1},${tailFrom - head} +${head + 1},${tailTo - head} @@`,
   ];
+
   for (const line of from.slice(head, start)) lines.push(` ${line}`);
+
   for (const line of from.slice(start, endFrom)) lines.push(`-${line}`);
+
   for (const line of to.slice(start, endTo)) lines.push(`+${line}`);
+
   for (const line of from.slice(endFrom, tailFrom)) lines.push(` ${line}`);
+
   return `${lines.join("\n")}\n`;
 }
 
@@ -152,9 +172,11 @@ function workspaceDiff(
   const paths = [...new Set([...committed.keys(), ...current.keys()])].toSorted();
   const prefix = cwd.endsWith("/") ? cwd : `${cwd}/`;
   let diff = "";
+
   for (const path of paths) {
     if (!path.startsWith(prefix)) continue;
     diff += fileDiff(path.slice(prefix.length), committed.get(path), current.get(path) ?? "");
   }
+
   return diff;
 }

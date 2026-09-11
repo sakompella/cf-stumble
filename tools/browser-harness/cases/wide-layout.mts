@@ -152,6 +152,7 @@ export const CASES: readonly HarnessCase[] = [
       assertAtMost(layout.sidebarRight, layout.conversationLeft, "the desktop column boundary");
 
       await page.click(`${byId(ID.generationDrawer)} summary`);
+
       const controls = [
         ID.candidateCommitInput,
         ID.submitCandidateButton,
@@ -160,11 +161,13 @@ export const CASES: readonly HarnessCase[] = [
         ID.rollbackLabelInput,
         ID.rollbackButton,
       ];
+
       for (const control of controls) {
         const box = await readBox(page, byId(control));
         assertVisible(box, control);
         assertAtMost(box.right, metrics.viewportWidth, `${control} within the page width`);
       }
+
       const closed = await readGeneration(page);
       await page.click(`${byId(ID.generationDrawer)} summary`);
       assertSame(closed.drawerOpen, true, "the open generation drawer");

@@ -32,6 +32,7 @@ export function parseGitHubToken(value: unknown): GitHubToken | undefined {
 }
 
 export const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
+
 export const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 /**
@@ -97,6 +98,7 @@ export function parseDeviceAuthorization(value: unknown): DeviceAuthorization | 
   const deviceCode = value.device_code;
   const userCode = value.user_code;
   const verificationUri = value.verification_uri;
+
   if (
     typeof deviceCode !== "string" ||
     deviceCode.length === 0 ||
@@ -124,6 +126,7 @@ export function parseDeviceRedemption(value: unknown): DeviceRedemption {
   }
 
   const token = parseGitHubToken(value.access_token);
+
   if (token !== undefined) {
     return { kind: "authorized", token };
   }
@@ -155,11 +158,13 @@ async function postForm(
     headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(body).toString(),
   });
+
   if (!response.ok) {
     throw new Error("the GitHub device endpoint refused the request");
   }
 
   const payload: unknown = await response.json();
+
   return isRecord(payload) ? payload : undefined;
 }
 
@@ -176,6 +181,7 @@ export async function requestDeviceAuthorization(
   }
 
   let payload: GitHubDeviceReply | undefined;
+
   try {
     payload = await postForm(
       GITHUB_DEVICE_CODE_URL,
@@ -187,6 +193,7 @@ export async function requestDeviceAuthorization(
   }
 
   const authorization = parseDeviceAuthorization(payload);
+
   return authorization === undefined
     ? { ok: false, problem: "provider-refused" }
     : { ok: true, authorization };

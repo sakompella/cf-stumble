@@ -11,9 +11,13 @@ function isExecEvent(value: unknown): value is ExecEvent {
   if (typeof value !== "object" || value === null) return false;
   const kind = property(value, "kind");
   const outcome = property(value, "outcome");
+
   if (typeof kind !== "string" || typeof property(value, "seq") !== "number") return false;
+
   if (kind === "stdout" || kind === "stderr") return typeof property(value, "data") === "string";
+
   if (kind !== "terminal" || typeof outcome !== "string") return false;
+
   return (
     outcome === "killed" ||
     outcome === "timed-out" ||
@@ -31,22 +35,30 @@ function decodeEvents(events: ReadableStream<Uint8Array>): ReadableStream<ExecEv
     {
       async pull(controller) {
         reader ??= events.getReader();
+
         for (;;) {
           const newline = buffer.indexOf("\n");
+
           if (newline >= 0) {
             const frame = buffer.slice(0, newline);
             buffer = buffer.slice(newline + 1);
             const event: unknown = JSON.parse(frame);
+
             if (!isExecEvent(event)) throw new Error("invalid exec frame");
             controller.enqueue(event);
+
             return;
           }
+
           const next = await reader.read();
+
           if (next.done) {
             buffer += decoder.decode();
             controller.close();
+
             return;
           }
+
           buffer += decoder.decode(next.value, { stream: true });
         }
       },
@@ -64,6 +76,7 @@ export function withDecodedEvents(target: ProjectRpcTarget) {
   return {
     async startExec(...input: Parameters<ProjectRpcTarget["startExec"]>): Promise<DecodedStart> {
       const started = await target.startExec(...input);
+
       return started.ok
         ? { ok: true, value: { ...started.value, events: decodeEvents(started.value.events) } }
         : started;

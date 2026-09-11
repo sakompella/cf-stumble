@@ -3,6 +3,7 @@ export {
   computerFilesystemProvider,
   durableObjectTransactions,
 } from "./computer-adapter.js";
+
 export type {
   BackendExecEvent,
   ExecBackend,
@@ -10,15 +11,20 @@ export type {
   ExecBackendInput,
   ExecBackendReader,
 } from "./exec-backend.js";
+
 export type {
   ProjectDirent,
   ProjectFilesystemProvider,
   ProjectStat,
   ProjectTransactions,
 } from "./provider.js";
+
 export { mapProviderError } from "./provider.js";
+
 export { parseAddressedPath } from "./resolve.js";
+
 export { ProjectRpcTarget } from "./target.js";
+
 export {
   MAX_CONCURRENT_EXECS,
   MAX_EXEC_COMMAND_BYTES,

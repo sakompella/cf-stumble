@@ -50,6 +50,7 @@ export type HarnessCase = Readonly<{
 }>;
 
 export const DEFAULT_VIEWPORT: CaseViewport = { width: 1280, height: 900 };
+
 export const DEFAULT_CASE_TIMEOUT_MS = 60_000;
 
 export function surfaceOf(caseId: string): string {

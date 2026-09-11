@@ -28,12 +28,14 @@ const workspaces = new Map<string, FakeProjectFilesystemProvider>();
 
 function workspaceFor(name: string): FakeProjectFilesystemProvider {
   const existing = workspaces.get(name);
+
   if (existing !== undefined) {
     return existing;
   }
 
   const created = new FakeProjectFilesystemProvider();
   workspaces.set(name, created);
+
   return created;
 }
 
@@ -41,6 +43,7 @@ export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
   /** The project capability for one workspace name, as `WorkspaceHost.project()` hands it out. */
   project(name: string): ProjectRpcTarget {
     const provider = workspaceFor(name);
+
     // A turn asks its workspace for a diff when it ends, and this backend answers that command by
     // diffing the files the turn wrote here rather than by replaying a scripted string.
     return new ProjectRpcTarget(
@@ -56,6 +59,7 @@ export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
    */
   fileText(name: string, path: string): string | null {
     const workspace = workspaces.get(name);
+
     if (workspace === undefined) {
       return null;
     }

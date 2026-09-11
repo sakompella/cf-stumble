@@ -107,11 +107,14 @@ export class GitHubConnectionStore {
          FROM github_authorization WHERE id = 1`,
       )
       .toArray()[0];
+
     if (row === undefined) {
       return undefined;
     }
+
     if (row.expires_at <= now) {
       this.clearAuthorization();
+
       return undefined;
     }
 
@@ -155,12 +158,14 @@ export class GitHubConnectionStore {
         `SELECT login, credential_source, connected_at FROM github_connection WHERE id = 1`,
       )
       .toArray()[0];
+
     if (row === undefined) {
       return undefined;
     }
 
     const source: CredentialSource =
       row.credential_source === "configured-token" ? "configured-token" : "device-authorization";
+
     return { login: row.login, source, connectedAt: row.connected_at };
   }
 }

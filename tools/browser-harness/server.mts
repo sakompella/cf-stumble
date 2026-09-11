@@ -92,17 +92,23 @@ function serveHarnessRoute(
 ): number | undefined {
   if (req.method === "GET" && url.pathname === "/__harness/requests") {
     sendJson(res, 200, { ok: true, requests: [...state.requests] });
+
     return 200;
   }
+
   if (req.method !== "POST" || url.pathname !== "/__harness/scenario") {
     return undefined;
   }
+
   const requested = parseScenario(url.searchParams.get("name"));
+
   if (requested !== undefined) {
     state.scenario = requested;
   }
+
   const status = requested === undefined ? 400 : 200;
   sendJson(res, status, { ok: requested !== undefined, scenario: state.scenario });
+
   return status;
 }
 
@@ -119,27 +125,37 @@ async function handle(
   state.requests.push(record);
 
   const turn = TURN_PATH.exec(path)?.[1];
+
   if (req.method === "POST" && turn !== undefined) {
     await serveTurn(res, state, decodeURIComponent(turn), record);
+
     return;
   }
+
   const harnessStatus = serveHarnessRoute(req, res, url, state);
+
   if (harnessStatus !== undefined) {
     record.status = harnessStatus;
+
     return;
   }
+
   if (req.method === "GET" && path === "/" && acceptsHtml(req.headers.accept)) {
     record.status = 200;
     sendOwnerPage(res);
+
     return;
   }
+
   if (req.method === "GET" && path === "/favicon.ico") {
     // A browser asks for this on every navigation and the owner API does not serve it. Answering
     // 204 keeps that request out of the browser's error log, where it would hide a real 404.
     record.status = 204;
     res.writeHead(204).end();
+
     return;
   }
+
   const answer = serveJsonRoute(req, path, state, parsed) ?? serveThreadRoutes(req, path, state);
   record.status = answer?.status ?? 404;
   sendJson(res, record.status, answer?.payload ?? { ok: false, error: { code: "not-found" } });
@@ -206,10 +222,13 @@ export function startHarnessServer(initialScenario?: HarnessScenario): Promise<H
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
+
       if (!isAddressInfo(address)) {
         reject(new Error("the harness server did not report a TCP port"));
+
         return;
       }
+
       const close = (): Promise<void> =>
         new Promise((closed) => {
           server.closeAllConnections();
@@ -217,6 +236,7 @@ export function startHarnessServer(initialScenario?: HarnessScenario): Promise<H
             closed();
           });
         });
+
       started(controls(state, `http://127.0.0.1:${address.port}`, close));
     });
   });

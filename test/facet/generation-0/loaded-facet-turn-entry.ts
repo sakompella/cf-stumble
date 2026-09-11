@@ -28,9 +28,11 @@ function scriptedRoute(script: string): ModelCapability {
   // this array, and nothing else can set a loaded worker's environment.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const answers = JSON.parse(script) as ModelRouteResponse[];
+
   function next(): ModelRouteResponse {
     return answers.shift() ?? NOTHING_MORE;
   }
+
   return {
     run(_request: ModelRouteRequest): Promise<ModelRouteResponse> {
       return Promise.resolve(next());
@@ -82,12 +84,14 @@ export default class LoadedFacetTurnEntry extends WorkerEntrypoint<LoadedFacetTu
           setTimeout(resolve, 20);
         });
         let outcome: string;
+
         try {
           await projectTarget.lstat("/");
           outcome = "reached the workspace";
         } catch (error) {
           outcome = String(error);
         }
+
         controller.enqueue(new TextEncoder().encode(outcome));
         controller.close();
       },
