@@ -23,6 +23,15 @@ export default {
       return refusal(access.reason);
     }
 
+    // Liveness, answered by this Worker alone. Everything else that is not an owner API route is
+    // relayed to the active generation, so before the first generation exists it answers 503
+    // `no-active-generation`, and a deployment had no way to say "I am running" while that was
+    // true. It stays behind Access, because the Worker refuses every route until Access is
+    // configured and a liveness hole would be the one exception.
+    if (request.method === "GET" && new URL(request.url).pathname === "/health") {
+      return Response.json({ ok: true });
+    }
+
     // A browser navigation to `GET /` receives the owner page. Every other request for that path,
     // including the Supervisor's own relayed startup check, keeps its current behavior.
     const page = ownerPageResponse(request);

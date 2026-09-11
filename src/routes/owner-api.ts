@@ -46,9 +46,22 @@ function notFound(): Promise<Response> {
 }
 
 /** The active generation and the epoch a control request must observe. */
+/**
+ * `generation` and `activationId` are written out as `null` when there is none, rather than left
+ * off. `Response.json` drops an undefined field, so an instance with nothing active answered
+ * `{"activeGeneration":{"epoch":0}}`, which reads like an active generation at epoch 0 to anyone
+ * who has not read this file. The epoch is the control epoch and legitimately starts at 0.
+ */
 async function statusResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
   try {
-    return Response.json({ activeGeneration: await supervisor.getActiveGeneration() });
+    const active = await supervisor.getActiveGeneration();
+    return Response.json({
+      activeGeneration: {
+        generation: active.generation ?? null,
+        epoch: active.epoch,
+        activationId: active.activationId ?? null,
+      },
+    });
   } catch {
     return jsonError(500, "internal-error");
   }

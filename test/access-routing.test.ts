@@ -126,3 +126,47 @@ test("serves a browser navigation without calling Supervisor.fetch", async () =>
   expect(spy.fetch).not.toHaveBeenCalled();
   expect(spy.getReceived()).toBeUndefined();
 });
+
+test("answers liveness without a generation, a Supervisor, or a hole in Access", async () => {
+  const key = await signingKey("routing-health-key");
+  const token = await ownerToken(key);
+  const spy = await supervisorSpy();
+
+  const response = await worker.fetch(
+    new Request("https://cf-stumble.test/health", {
+      headers: { "cf-access-jwt-assertion": token },
+    }),
+    workerEnvironment(key),
+  );
+
+  expect(response.status, "a Worker with no active generation is still running").toBe(200);
+  await expect(response.json()).resolves.toEqual({ ok: true });
+  expect(
+    spy.fetch,
+    "liveness never relays, so it cannot inherit no-active-generation",
+  ).not.toHaveBeenCalled();
+
+  const refused = await worker.fetch(
+    new Request("https://cf-stumble.test/health"),
+    workerEnvironment(key),
+  );
+  expect(refused.status, "liveness is not an exception to the Access boundary").toBe(401);
+});
+
+test("says plainly when no generation is active, rather than reporting epoch 0 as one", async () => {
+  const key = await signingKey("routing-status-shape-key");
+  const token = await ownerToken(key);
+  await supervisorSpy();
+
+  const response = await worker.fetch(
+    new Request("https://cf-stumble.test/api/status", {
+      headers: { "cf-access-jwt-assertion": token },
+    }),
+    workerEnvironment(key),
+  );
+
+  const body: unknown = await response.json();
+  expect(body, "an absent generation is null, not a missing field").toEqual({
+    activeGeneration: { generation: null, epoch: 0, activationId: null },
+  });
+});
