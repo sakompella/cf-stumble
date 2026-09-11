@@ -1189,3 +1189,31 @@ has no special case: anything that is not `/api/...` and is not a browser naviga
 active generation, so before the first generation exists `/health` answers the same 503. There is
 no generation-independent way to check that a deployed Worker is alive. Both recorded, neither
 changed, because a health route is new behavior and this run does not add features.
+
+## D92 — the readable-spacing branch was regenerated, not rebased
+
+Its 261-file commit is generated output, so rebasing it across four release commits would have
+meant hand-resolving whitespace in 261 files. Its author said to regenerate instead, and that is
+what happened: cherry-pick the three judgment commits, turn the rule on temporarily, run
+`oxlint --fix` twice and `pnpm format`, restore the config, commit the source, then cherry-pick the
+commit that enables the rule.
+
+Checked what the gate cannot see. Zero deleted lines in the generated commit,
+`git diff --ignore-blank-lines` empty, and all 229 `oxlint-disable-next-line` comments still
+directly above their statements, which is the one failure mode that would pass lint and change
+behavior. The only deletions in the whole merge are nine lines of lint configuration and two
+suppression comments the ceiling change made unnecessary.
+
+## D93 — one entry point, on purpose
+
+`workers.dev` is off, stated in both wrangler configs rather than inherited from wrangler's default
+once a route exists. A `workers.dev` address is reachable without Cloudflare Access, so keeping it
+would put a second unwatched door on the same Worker with only the Worker's own `CF_ACCESS_*` check
+behind it. `docs/deploy.md` says what turning it back on costs.
+
+## D94 — release artifacts are tracked, `.audit/` is not an artifact home
+
+Criterion 1 wants notes at the release commit and criterion 9 wants the paid probe output kept with
+them. `.audit/` is gitignored, so anything there fails a fresh clone. Release text now lives in
+`docs/release/v0/`, the release is the tag `v0`, and the notes name the release by tag because they
+ship inside the commit they describe.

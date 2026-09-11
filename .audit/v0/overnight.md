@@ -250,6 +250,24 @@ removed so the Worker fetches the real signing keys.
       `checkout`, `install`, `build-pi`, `build-module-map`, each its own RPC with its own exit
       code, bounded log and time budget, so a failure names the phase.
 
+- [x] K7 Criterion 3, one connected GitHub repository. done deployed:
+      `sakompella-emaily-demo` beside the harness, `connected / sakompella / configured-token`, both
+      clones in one workspace. The blocker was a real bug: the token was staged at
+      `/tmp/cf-stumble-gh-token` through Computer's workspace filesystem, which has no `/tmp`, so
+      every install threw and both credential routes were dead. It now goes to
+      `gh auth login --with-token` on standard input and touches no filesystem (`7e49078`).
+- [x] K8 The two D91 surfaces. done, both mutation-checked: `/health` is answered by the Worker
+      alone so it works with no generation, and `/api/status` writes `generation` and
+      `activationId` as null instead of omitting them (`ab8b0af`).
+- [x] K9 Release artifacts. done: `docs/release/v0/release-notes.md` plus the four evidence
+      documents, tracked, tagged `v0` at `82321c4`. Criterion 1 is met.
+- [x] K10 One entry point. done: `"workers_dev": false` in both configs with the reason, the
+      subdomain returns 404, and `docs/deploy.md` says what choosing otherwise costs.
+- [x] K11 Readable spacing integrated. done: regenerated from the release base rather than rebased,
+      as its author asked. 261 files of inserted blank lines with zero deletions, all 229
+      `oxlint-disable-next-line` comments still attached to their statements, `pnpm lint` clean,
+      gate green, browser harness 41 of 41.
+
 ## Where this run ends
 
 Done, and proved against the real paid account: the whole seven-step demo path except the parts
