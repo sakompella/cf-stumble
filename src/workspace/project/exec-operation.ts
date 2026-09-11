@@ -1,4 +1,6 @@
-// oxlint-disable max-lines
+// oxlint-disable max-lines -- One exec operation owns framing, backend settlement, timeout,
+// cancellation, and one terminal event as one stream state machine. Splitting those transitions
+// would expose mutable settlement state and weaken the single-terminal-event invariant.
 
 import type {
   BackendExecEvent,
