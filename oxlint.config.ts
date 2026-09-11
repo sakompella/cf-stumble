@@ -26,6 +26,18 @@ export default defineConfig({
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
     "typescript/prefer-readonly-parameter-types": "off",
+    // `anti-slop/require-readable-spacing` mandates blank lines. At 541a484, turning it on
+    // pushed 15 files and 12 functions over their physical-line limits without adding content; all
+    // 23 affected paths stay within these budgets when blank lines do not count. Splitting them
+    // would add interfaces and imports without hiding complexity. The measured 275/48 alternative
+    // would reproduce the snapshot's tightest content budget, but changing the maxima is a separate
+    // decision and would leave almost no headroom. `skipComments` stays false because comments are
+    // content a reader must understand. See ADR-0041.
+    "eslint/max-lines": ["warn", { max: 300, skipBlankLines: true, skipComments: false }],
+    "eslint/max-lines-per-function": [
+      "warn",
+      { max: 50, skipBlankLines: true, skipComments: false },
+    ],
     "eslint/no-console": "off",
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off",
