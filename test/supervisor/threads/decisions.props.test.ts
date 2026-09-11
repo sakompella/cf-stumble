@@ -19,8 +19,11 @@ import { sampleProjectOne } from "../../project-fixtures.js";
 // comparison that happens to separate "lease-a" from "lease-b".
 
 const projectId = sampleProjectOne.id;
+
 const clock = gs.integers({ minValue: 1, maxValue: 2 ** 40 });
+
 const revisions = gs.integers({ minValue: 0, maxValue: 2 ** 20 });
+
 const leaseIds = gs.text({ alphabet: "ab", maxSize: 4 });
 
 function thread(overrides: Partial<ProjectThread>): ProjectThread {
@@ -36,6 +39,7 @@ test("an active turn holds the thread until its deadline, and holds nothing with
     // A row that says a turn is active while naming no deadline is the case the deciders default
     // to zero, so it is drawn here rather than assumed away.
     const namesDeadline = tc.draw(gs.booleans());
+
     const current = namesDeadline
       ? thread({ revision, turnActive: true, turnDeadlineAt: deadline })
       : thread({ revision, turnActive: true });
@@ -47,6 +51,7 @@ test("an active turn holds the thread until its deadline, and holds nothing with
         kind: "rejected",
         problem: { code: "turn-conflict", projectId, deadlineAt: deadline },
       });
+
       return;
     }
 
@@ -66,11 +71,13 @@ test("only the lease the row holds can finish or abandon the turn it admitted", 
     const held = tc.draw(leaseIds);
     const presented = tc.draw(leaseIds);
     const now = tc.draw(clock);
+
     const current = thread({
       revision: tc.draw(revisions),
       turnActive: true,
       turnDeadlineAt: now + 1,
     });
+
     const claim = { held, presented };
 
     const finish = decideFinishTurn(projectId, current, claim, now);
@@ -79,6 +86,7 @@ test("only the lease the row holds can finish or abandon the turn it admitted", 
     if (presented === held) {
       expect(finish).toEqual({ kind: "finished", nextRevision: current.revision + 1 });
       expect(abandon).toEqual({ kind: "abandoned" });
+
       return;
     }
 

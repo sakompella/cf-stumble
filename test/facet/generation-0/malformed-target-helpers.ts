@@ -40,13 +40,16 @@ export function readableFrom(
 ): ReadableStream<Uint8Array> {
   const frames = values.map((value) => encodeFrame(value));
   let index = 0;
+
   return new ReadableStream({
     pull(controller) {
       if (index >= frames.length) {
         onLastRead?.();
         controller.close();
+
         return;
       }
+
       controller.enqueue(frames[index]);
       index += 1;
     },
@@ -64,12 +67,15 @@ export function rejectingReadable(): ReadableStream<Uint8Array> {
 /** Delivers exactly the byte chunks given, letting a test control how frames are physically cut. */
 export function readableFromChunks(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
   let index = 0;
+
   return new ReadableStream({
     pull(controller) {
       if (index >= chunks.length) {
         controller.close();
+
         return;
       }
+
       controller.enqueue(chunks[index]);
       index += 1;
     },

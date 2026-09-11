@@ -43,28 +43,34 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
 
   writeFile(path: string, content: string): Promise<void> {
     this.writes.push([path, content]);
+
     return Promise.resolve();
   }
 
   runCommand(source: string): Promise<CommandOutput> {
     this.commands.push(source);
+
     if (source.includes("gh auth login")) {
       this.credentialState =
         this.credentialState === "tooling-missing" ? "tooling-missing" : "connected";
+
       return this.output(
         this.credentialState === "tooling-missing" ? "tooling-missing" : "installed",
       );
     }
+
     if (source.includes("gh auth status")) {
       return this.output(
         this.credentialState === "connected" ? `connected ${this.login}` : this.credentialState,
       );
     }
+
     if (source.includes("git ls-remote")) {
       return this.output(
         this.repositoryAccess === "granted" ? "granted" : "denied fatal: repository not found",
       );
     }
+
     return Promise.resolve({ stdout: "", stderr: "", exitCode: this.cloneExitCode });
   }
 
@@ -77,7 +83,9 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
+
     this.credentialRequests.push(JSON.stringify(request));
+
     return executeGitHubCredentialRequest({ operations: this, request });
   }
 
@@ -86,6 +94,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
+
     return executeProjectProvisionRequest({ operations: this, request });
   }
 
@@ -94,6 +103,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return {
       getByName: (name: string) => {
         this.names.push(name);
+
         return this;
       },
     };

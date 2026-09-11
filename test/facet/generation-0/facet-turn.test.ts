@@ -15,6 +15,7 @@ import {
 test("streams the turn's text, tool results, and terminal state as byte frames", async () => {
   const received = FakeProjectCapability.create();
   received.provider.addFile("/workspace/readme.md", encode("first line"));
+
   const route = new ScriptedRoute([
     calls("read", { path: "readme.md" }),
     says("The file says: first line"),
@@ -49,9 +50,11 @@ test("continues from the conversation the host sends back with the next prompt",
   const received = FakeProjectCapability.create();
   const opening = await readFrames(turnStream(new ScriptedRoute([says("Noted.")]), received));
   const completed = opening.at(-1);
+
   if (completed?.kind !== "completed") throw new Error("the opening turn must complete");
 
   const route = new ScriptedRoute([says("Still noted.")]);
+
   const continued = await readFrames(
     turnStream(route, received, { prompt: "and again", messages: completed.state.messages }),
   );

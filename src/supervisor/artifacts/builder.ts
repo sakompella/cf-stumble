@@ -39,8 +39,10 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 
   async build(harnessCommit: HarnessCommit): Promise<HarnessBuildResult> {
     const plan = planHarnessBuild(this.configuration, harnessCommit);
+
     for (const step of plan.steps) {
       const ran = await this.runStep(step, harnessCommit);
+
       if (ran.isErr()) {
         return Result.err(ran.error);
       }
@@ -54,6 +56,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     harnessCommit: HarnessCommit,
   ): Promise<Result<CommandOutput, HarnessBuildProblem>> {
     let output: CommandOutput;
+
     try {
       output = await this.workspace.runCommand(step.source, step.cwd);
     } catch (error) {
@@ -61,6 +64,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       // the connection to them gave way, and each of those failed at least once during this
       // project's deployed builds.
       console.error(`harness build step ${step.name} could not run`, String(error));
+
       return Result.err({ code: "build-workspace-unavailable", harnessCommit });
     }
 
@@ -73,6 +77,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
         stdout: output.stdout.slice(-2000),
         stderr: output.stderr.slice(-2000),
       });
+
       return Result.err({
         code: "build-step-failed",
         harnessCommit,
@@ -89,14 +94,17 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     harnessCommit: HarnessCommit,
   ): Promise<HarnessBuildResult> {
     let encoded: string;
+
     try {
       encoded = await this.workspace.readFile(path);
     } catch (error) {
       console.error(`harness build wrote no module map at ${path}`, String(error));
+
       return Result.err({ code: "build-output-missing", harnessCommit });
     }
 
     let decoded: BuiltModuleMapFile;
+
     try {
       // `Response.json` decodes without asserting a type the build has not proved yet;
       // `moduleMapFromBuildOutput` validates the decoded value.

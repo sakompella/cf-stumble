@@ -14,7 +14,9 @@ export function byId(elementId: string): string {
 }
 
 export const TOOL_DISCLOSURE = `details.${CLASS.toolCall}`;
+
 export const TOOL_SUMMARY = `details.${CLASS.toolCall} summary`;
+
 export const PROJECT_BUTTON = `.${CLASS.projectButton}`;
 
 export function projectButton(projectId: string): string {

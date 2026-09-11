@@ -44,27 +44,35 @@ export type ChromeProcess = Readonly<{
  */
 async function readDebuggerUrl(userDataDir: string, deadline: number): Promise<string> {
   const portFile = join(userDataDir, "DevToolsActivePort");
+
   while (Date.now() < deadline) {
     const lines = (await readFile(portFile, "utf8").catch(() => "")).split("\n");
     const port = lines[0];
+
     if (lines.length > 1 && port !== undefined && port.length > 0) {
       const response = await fetch(`http://127.0.0.1:${port}/json/version`);
       const url = parseJsonRecord(await response.text())?.text("webSocketDebuggerUrl");
+
       if (url !== undefined) {
         return url;
       }
     }
+
     await sleep(50);
   }
+
   throw new Error("Chrome did not publish a DevTools port within the launch timeout");
 }
 
 export async function launchChromeProcess(): Promise<ChromeProcess> {
   const executable = await resolveChromePath();
   const userDataDir = await mkdtemp(join(tmpdir(), "cf-stumble-harness-"));
+
   const chromeProcess = spawn(executable, [...LAUNCH_ARGS, `--user-data-dir=${userDataDir}`], {
     stdio: "ignore",
   });
+
   const debuggerUrl = await readDebuggerUrl(userDataDir, Date.now() + 30_000);
+
   return { process: chromeProcess, debuggerUrl, userDataDir, executable };
 }

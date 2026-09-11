@@ -73,8 +73,10 @@ export async function admitProjectTurn(
   leaseMs: number,
 ): Promise<string> {
   const started = await startProjectTurn(control, projectId, expectedRevision, now, leaseMs);
+
   if (!started.ok) {
     throw new Error(`the ${projectId} turn must be admitted: ${started.problem.code}`);
   }
+
   return started.leaseId;
 }

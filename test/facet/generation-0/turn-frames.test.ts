@@ -42,6 +42,7 @@ class DeltaRoute implements ModelCapability {
   runStream(request: ModelRouteRequest): Promise<ReadableStream<Uint8Array>> {
     this.requests.push(request);
     const text = this.#chunks.join("");
+
     const events: ModelStreamEvent[] = [
       ...this.#chunks.map((delta): ModelStreamEvent => ({ type: "text-delta", delta })),
       {
@@ -50,13 +51,16 @@ class DeltaRoute implements ModelCapability {
         usage: { inputTokens: 12, outputTokens: 34, estimated: false },
       },
     ];
+
     const encoder = new TextEncoder();
+
     return Promise.resolve(
       new ReadableStream<Uint8Array>({
         start(controller) {
           for (const event of events) {
             controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
           }
+
           controller.close();
         },
       }),
@@ -99,6 +103,7 @@ test("a successful turn ends in exactly one completed frame carrying the next tu
   const completed = terminal[0];
   expect(terminal.length).toBe(1);
   expect(completed?.kind).toBe("completed");
+
   if (completed?.kind !== "completed") return;
   expect(
     completed.state.messages.map((message) => message.role),
@@ -112,6 +117,7 @@ test("a failed turn keeps the conversation, and a rejected one has none to keep"
       turnStream(new ScriptedRoute([routeUnavailable]), FakeProjectCapability.create()),
     ),
   );
+
   const rejected = terminalFrames(
     await readFrames(
       startFacetTurn(
@@ -126,6 +132,7 @@ test("a failed turn keeps the conversation, and a rejected one has none to keep"
   const failure = failed[0];
   expect(failed.length).toBe(1);
   expect(failure).toMatchObject({ kind: "failed", code: "model-error" });
+
   if (failure?.kind !== "failed") return;
   expect(
     failure.state.messages.map((message) => message.role),

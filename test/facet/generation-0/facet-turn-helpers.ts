@@ -40,6 +40,7 @@ export class ScriptedRoute implements ModelCapability {
 
   run(request: ModelRouteRequest): Promise<ModelRouteResponse> {
     this.requests.push(request);
+
     return Promise.resolve(this.#answers.shift() ?? says(""));
   }
 
@@ -58,6 +59,7 @@ export function calls(
   id = `${name}-1`,
 ): ModelRouteResponse {
   const toolCall: ToolCall = { id, function: { name, arguments: JSON.stringify(args) } };
+
   return { ok: true, message: { role: "assistant", content: null, tool_calls: [toolCall] } };
 }
 
@@ -84,6 +86,7 @@ export function turnStream(
 export async function readFrames(stream: ReadableStream<Uint8Array>): Promise<FacetTurnFrame[]> {
   const text = await new Response(stream).text();
   const lines = text.split("\n").filter((line) => line !== "");
+
   // SAFETY: every line came from startFacetTurn, which encodes exactly one FacetTurnFrame per line.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return lines.map((line) => JSON.parse(line) as FacetTurnFrame);

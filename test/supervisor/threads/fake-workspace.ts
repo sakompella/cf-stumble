@@ -24,17 +24,20 @@ export class FakeWorkspace {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
   build(request: unknown): Promise<WorkspaceResult> {
     this.requests.push(`build:${JSON.stringify(request)}`);
+
     return Promise.reject(new Error("no thread test builds a harness commit"));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
   provision(request: unknown): Promise<WorkspaceResult> {
     this.requests.push(`provision:${JSON.stringify(request)}`);
+
     return Promise.reject(new Error("no thread test provisions a project"));
   }
 
   project(): FakeProjectCapability {
     this.requests.push("project");
+
     return new FakeProjectCapability(this.files, this.requests);
   }
 }
@@ -56,6 +59,7 @@ export class FakeProjectCapability {
   writeFile(path: string, content: string): Promise<ProjectResult<null>> {
     this.#requests.push(`write-file:${path}`);
     this.#files.set(path, content);
+
     return Promise.resolve({ ok: true, value: null });
   }
 }

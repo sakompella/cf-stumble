@@ -14,9 +14,11 @@ const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 function candidate(status: GenerationStatus): Generation {
   const label = parseGenerationLabel(1);
   const commit = parseHarnessCommit(harnessCommit);
+
   if (label === undefined || commit === undefined) {
     throw new Error("test fixture must contain a valid label and harness commit");
   }
+
   return { label, harnessCommit: commit, status };
 }
 
@@ -74,11 +76,13 @@ function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
     controlGeneration(request) {
       record.steps.push("control");
       record.received.push(request);
+
       return Promise.resolve(labeled);
     },
     prepareGeneration(label) {
       record.steps.push("prepare");
       record.preparedLabels.push(label);
+
       return Promise.resolve(readyCheck);
     },
   });
@@ -164,6 +168,7 @@ test("returns a build failure as a preparation problem rather than a transport e
 
 test("prepares nothing when the control operation rejects the submission", async () => {
   let prepared = false;
+
   const response = await routeOwnerApiRequest(
     submitRequest(submissionBody()),
     supervisor({
@@ -172,6 +177,7 @@ test("prepares nothing when the control operation rejects the submission", async
       },
       prepareGeneration() {
         prepared = true;
+
         return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label: 1 } });
       },
     }),
@@ -188,11 +194,13 @@ test("prepares nothing when the control operation rejects the submission", async
 
 test("resubmitting the same harness commit returns the existing generation, not a new label", async () => {
   let submissions = 0;
+
   const response = await routeOwnerApiRequest(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
         submissions += 1;
+
         // Generations.labelInTransaction returns the existing generation for a commit that is
         // already labeled (ADR-0030): the control layer never sees a second submission as new.
         return Promise.resolve(labeled);
@@ -230,15 +238,18 @@ test.each(malformedBodies)(
   "rejects a submission carrying %s without reaching the Supervisor",
   async (_description, body) => {
     let invoked = false;
+
     const response = await routeOwnerApiRequest(
       submitRequest(body),
       supervisor({
         controlGeneration() {
           invoked = true;
+
           return Promise.resolve(labeled);
         },
         prepareGeneration() {
           invoked = true;
+
           return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label: 1 } });
         },
       }),

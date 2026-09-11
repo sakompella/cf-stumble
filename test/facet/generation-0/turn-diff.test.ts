@@ -32,12 +32,15 @@ function workspace(seed: (provider: FakeProjectFilesystemProvider) => void): Fak
   const received = FakeProjectCapability.create();
   seed(received.provider);
   received.execBackend.commit();
+
   return received;
 }
 
 function diffFrame(frames: readonly FacetTurnFrame[]): Extract<FacetTurnFrame, { kind: "diff" }> {
   const frame = frames.find((candidate) => candidate.kind === "diff");
+
   if (frame?.kind !== "diff") throw new Error("the turn must publish its diff");
+
   return frame;
 }
 
@@ -48,6 +51,7 @@ function byteLength(text: string): number {
 /** A file of numbered lines, and the same file with every fourth line changed. */
 function numberedLines(count: number, changed: boolean): string {
   const lines: string[] = [];
+
   for (let line = 0; line < count; line++) {
     lines.push(
       changed && line % 4 === 0
@@ -55,6 +59,7 @@ function numberedLines(count: number, changed: boolean): string {
         : `  const before${line} = ${line};`,
     );
   }
+
   return `${lines.join("\n")}\n`;
 }
 
@@ -62,6 +67,7 @@ test("a turn that edits a file shows the diff even though the model never asks f
   const received = workspace((provider) => {
     provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
   });
+
   const route = new ScriptedRoute([
     calls("edit", {
       path: "app.ts",
@@ -96,7 +102,9 @@ test("a command that changes nothing produces an empty diff", async () => {
   const received = workspace((provider) => {
     provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
   });
+
   received.execBackend.effects.set("./check", () => {});
+
   const route = new ScriptedRoute([
     calls("bash", { command: "./check" }),
     says("The check passed."),
@@ -112,6 +120,7 @@ test("a turn that only reads publishes no diff at all", async () => {
   const received = workspace((provider) => {
     provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
   });
+
   const route = new ScriptedRoute([calls("read", { path: "app.ts" }), says("That is the file.")]);
 
   const frames = await readFrames(turnStream(route, received));
@@ -153,13 +162,16 @@ async function rewriteTurn(count: number): Promise<Extract<FacetTurnFrame, { kin
   const received = workspace((provider) => {
     provider.addFile("/workspace/lines.ts", encode(numberedLines(count, false)));
   });
+
   received.execBackend.effects.set("./rewrite", (provider) => {
     provider.addFile("/workspace/lines.ts", encode(numberedLines(count, true)));
   });
+
   const route = new ScriptedRoute([
     calls("bash", { command: "./rewrite" }),
     says("Rewrote the file."),
   ]);
+
   return diffFrame(await readFrames(turnStream(route, received)));
 }
 
@@ -167,10 +179,12 @@ test("a workspace that cannot answer says so instead of pretending the turn chan
   const received = workspace((provider) => {
     provider.addFile("/workspace/app.ts", encode(APP_BEFORE));
   });
+
   received.execBackend.failure = {
     stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
     exitCode: 128,
   };
+
   const route = new ScriptedRoute([
     calls("write", { path: "app.ts", content: "changed" }),
     says("Wrote it."),

@@ -20,9 +20,11 @@ export function collectBrowserErrors(
     "Runtime.consoleAPICalled",
     (params) => {
       const level = params.text("type");
+
       if (level !== "error" && level !== "assert") {
         return;
       }
+
       const first = params.text("args.0.value") ?? params.text("args.0.description") ?? "";
       errors.push(`console.${level}: ${first}`);
     },
@@ -36,6 +38,7 @@ export function collectBrowserErrors(
         params.text("exceptionDetails.exception.description") ??
         params.text("exceptionDetails.text") ??
         "unnamed exception";
+
       errors.push(`uncaught: ${description}`);
     },
     sessionId,
@@ -46,9 +49,11 @@ export function collectBrowserErrors(
     (params) => {
       const level = params.text("entry.level");
       const source = params.text("entry.source");
+
       if (level !== "error" && source !== "security") {
         return;
       }
+
       const text = params.text("entry.text") ?? "";
       const url = params.text("entry.url");
       const at = url === undefined ? "" : ` (${url})`;

@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../src/harness-commit.js";
 
 const validSha1Commit = "0123456789abcdef0123456789abcdef01234567";
+
 const validSha256Commit = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 test.each([validSha1Commit, validSha256Commit])(

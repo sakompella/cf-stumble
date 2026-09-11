@@ -52,15 +52,18 @@ export const CASES: readonly HarnessCase[] = [
       assertNonEmpty(results.submitStatus, "submission result");
       assertNonEmpty(results.activateStatus, "activation result");
       assertNonEmpty(results.rollbackStatus, "rollback result");
+
       for (let count = 0; count < 6; count += 1) {
         await page.press("Tab", ["Shift"]);
       }
+
       assertSame((await readFocus(page)).tag, "summary", "focus returned to generation summary");
       await page.press("Space");
       assertSame((await readGeneration(page)).drawerOpen, false, "drawer after Space");
       await page.press("Tab");
       assertSame((await readFocus(page)).id, ID.sidebarToggle, "next stop after closed drawer");
       assertIncludes((await readFocus(page)).text, "Hide", "closed-drawer next focus");
+
       return "six generation controls were reached and operated by keyboard, then Space closed the drawer";
     },
   },

@@ -17,11 +17,14 @@ import {
 import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 
 const commit = harnessCommit("5000000000000000000000000000000000000001");
+
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
+
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -38,14 +41,18 @@ class FakeBuildOperations implements WorkspaceOperations {
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.calls.push(`lstat:${path}`);
+
     if (this.symlinks.has(path)) return Promise.resolve("symbolic-link");
+
     if (this.files.has(path)) return Promise.resolve("file");
+
     return Promise.resolve(path.startsWith("/") ? "directory" : undefined);
   }
 
   readFile(path: string): Promise<string> {
     this.calls.push(`read:${path}`);
     const content = this.files.get(path);
+
     return content === undefined
       ? Promise.reject(new Error("missing file"))
       : Promise.resolve(content);
@@ -53,6 +60,7 @@ class FakeBuildOperations implements WorkspaceOperations {
 
   writeFile(path: string): Promise<void> {
     this.calls.push(`write:${path}`);
+
     return Promise.reject(new Error("a build never writes through the workspace surface"));
   }
 
@@ -60,6 +68,7 @@ class FakeBuildOperations implements WorkspaceOperations {
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
     this.calls.push(`command:${source}:${cwd}`);
+
     return Promise.resolve({
       stdout: this.exitCode === 0 ? (this.stdout ?? `${source} output`) : "",
       stderr: "",
@@ -83,7 +92,9 @@ test("plans one planned step, or the build output, from a validated commit", () 
     harnessCommit: commit,
     step: "checkout",
   });
+
   const output = parseHarnessBuildRequest({ kind: "build-output", harnessCommit: commit });
+
   if ("ok" in step || "ok" in output) {
     throw new Error("valid build requests must parse");
   }
@@ -201,6 +212,7 @@ test("refuses a module map reached through a symbolic link", () => {
     kind: "build-output",
     harnessCommit: commit,
   });
+
   const source = planned.kind === "run-command" ? planned.source : "";
 
   expect(source, "a symbolic link is refused before anything is read").toContain(

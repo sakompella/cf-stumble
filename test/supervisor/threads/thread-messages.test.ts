@@ -9,9 +9,11 @@ import { THREAD_MESSAGE_SAMPLE_LIST, THREAD_MESSAGE_SAMPLES } from "./message-sa
 
 function roundTrip(messages: readonly AgentMessage[]): readonly AgentMessage[] {
   const parsed = parseThreadMessages(serializeThreadMessages(messages));
+
   if (parsed.isErr()) {
     throw new Error(`the stored thread must read back: ${parsed.error.reason}`);
   }
+
   return parsed.value;
 }
 
@@ -22,6 +24,7 @@ function fieldsOf(message: AgentMessage): ReadonlyMap<string, unknown> {
 test("every AgentMessage variant survives a write and a read with all of its fields", () => {
   for (const [role, sample] of Object.entries(THREAD_MESSAGE_SAMPLES)) {
     const [restored] = roundTrip([sample]);
+
     if (restored === undefined) {
       throw new Error(`the ${role} message did not come back at all`);
     }
@@ -42,6 +45,7 @@ test("every AgentMessage variant survives a write and a read with all of its fie
 test("every sample populates every field its variant declares", () => {
   for (const [role, fields] of Object.entries(THREAD_MESSAGE_FIELDS)) {
     const sample = Object.entries(THREAD_MESSAGE_SAMPLES).find(([key]) => key === role)?.[1];
+
     if (sample === undefined) {
       throw new Error(`no sample exists for the ${role} message`);
     }

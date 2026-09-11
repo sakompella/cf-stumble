@@ -50,7 +50,9 @@ async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number>
     stub,
     ownerScope,
   );
+
   const body = await response.json<{ readonly activeGeneration: { readonly epoch: number } }>();
+
   return body.activeGeneration.epoch;
 }
 
@@ -58,12 +60,14 @@ async function readyFixture(name: string): Promise<DurableObjectStub<Supervisor>
   const stub = supervisor(name);
   const label = await prepareFixtureGeneration(stub);
   await control(stub, "activate", { observedEpoch: await statusEpoch(stub), label });
+
   return stub;
 }
 
 async function readySecond(stub: DurableObjectStub<Supervisor>, commit: string): Promise<number> {
   const label = await submitCandidate(stub, commit);
   await prepareGeneration(stub, label, commit);
+
   return label;
 }
 
@@ -161,6 +165,7 @@ test("refuses to roll back to a generation that never ran or is not ready", asyn
     observedEpoch: await statusEpoch(stub),
     label: neverActive,
   });
+
   const notReady = await control(stub, "rollback", {
     observedEpoch: await statusEpoch(stub),
     label: candidate,

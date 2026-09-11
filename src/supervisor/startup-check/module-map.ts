@@ -32,10 +32,12 @@ export async function startupModuleMap(
 ): Promise<Result<MainHarnessArtifactInput, StartupModuleMapProblem>> {
   if (source.kind === "prepared") {
     const prepared = await artifacts.prepare(generation.harnessCommit);
+
     return prepared.isErr() ? Result.err(prepared.error) : Result.ok(prepared.value);
   }
 
   const parsed = MainHarnessArtifact.parse(source.input);
+
   if (parsed.isErr()) {
     return Result.err(parsed.error);
   }
@@ -50,5 +52,6 @@ export async function startupModuleMap(
   }
 
   const retained = artifacts.retain(source.input);
+
   return retained.isErr() ? Result.err(retained.error) : Result.ok(retained.value);
 }

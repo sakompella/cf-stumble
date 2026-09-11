@@ -13,6 +13,7 @@ import type { VerifiedAccessScope } from "../../src/access/index.js";
  */
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+
 const ORIGIN = "https://cf-stumble.test";
 
 /** One connected project, as the Supervisor would hand it to a route. */
@@ -69,6 +70,7 @@ test("lists the tenant's projects and its connection status", async () => {
 
 test("connects the repository the body names, and nothing else it carries", async () => {
   const sent: unknown[] = [];
+
   const response = await routeOwnerApiRequest(
     post("/api/projects/connect", {
       repositoryUrl: connectedProject.repositoryUrl,
@@ -77,6 +79,7 @@ test("connects the repository the body names, and nothing else it carries", asyn
     supervisor({
       connectProject: (repositoryUrl, displayName) => {
         sent.push(repositoryUrl, displayName);
+
         return Promise.resolve({
           ok: true,
           alreadyConnected: false,
@@ -139,11 +142,13 @@ test.each([
 
 test("starts an authorization for the verified owner, not for one the body names", async () => {
   const scopes: VerifiedAccessScope[] = [];
+
   const response = await routeOwnerApiRequest(
     post("/api/github/authorization", { identity: "someone-else" }),
     supervisor({
       startGitHubAuthorization: (scope) => {
         scopes.push(scope);
+
         return Promise.resolve({
           ok: true,
           status: {
@@ -215,6 +220,7 @@ test("refuses a state-changing request from another site before the Supervisor s
 
 test("keeps the project routes to their methods", async () => {
   const postList = await routeOwnerApiRequest(post("/api/projects", {}), supervisor(), ownerScope);
+
   const getConnect = await routeOwnerApiRequest(
     get("/api/projects/connect"),
     supervisor(),

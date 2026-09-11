@@ -22,9 +22,13 @@ interface CachedPublicKeys {
 }
 
 const publicKeyCacheTtlMs = 5 * 60 * 1000;
+
 const publicKeyRefreshCooldownMs = 30 * 1000;
+
 let publicKeyCache: CachedPublicKeys | undefined;
+
 let publicKeyRefreshAllowedAt = 0;
+
 let publicKeyFetchInFlight: Promise<readonly AccessPublicKey[] | undefined> | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,12 +39,15 @@ function isPublicJwk(value: unknown): value is AccessPublicKey {
   if (!isRecord(value) || typeof value.kty !== "string") {
     return false;
   }
+
   if (value.alg !== undefined && value.alg !== "RS256" && value.alg !== "ES256") {
     return false;
   }
+
   if (value.use !== undefined && value.use !== "sig") {
     return false;
   }
+
   if (value.kid !== undefined && (typeof value.kid !== "string" || value.kid.length === 0)) {
     return false;
   }
@@ -53,6 +60,7 @@ function isPublicJwk(value: unknown): value is AccessPublicKey {
       value.e.length > 0
     );
   }
+
   if (value.kty === "EC") {
     return (
       value.crv === "P-256" &&
@@ -62,6 +70,7 @@ function isPublicJwk(value: unknown): value is AccessPublicKey {
       value.y.length > 0
     );
   }
+
   return false;
 }
 
@@ -71,6 +80,7 @@ export function parsePublicKeys(value: unknown): readonly AccessPublicKey[] | un
     : isRecord(value) && Array.isArray(value.keys)
       ? value.keys
       : undefined;
+
   return keys !== undefined && keys.length > 0 && keys.every((item) => isPublicJwk(item))
     ? keys
     : undefined;
@@ -88,6 +98,7 @@ export function parseSerializedPublicKeys(
 
 export function issuerForTeamDomain(teamDomain: string): string | undefined {
   const domain = teamDomain.trim().replace(/\/+$/u, "");
+
   if (domain.length === 0 || domain.startsWith("http://")) {
     return undefined;
   }
@@ -95,8 +106,10 @@ export function issuerForTeamDomain(teamDomain: string): string | undefined {
   // Trust keys are fetched from this origin, so an unauthenticated transport would let an
   // on-path attacker supply a signing key.
   const candidate = domain.startsWith("https://") ? domain : `https://${domain}`;
+
   try {
     const url = new URL(candidate);
+
     return url.protocol === "https:" && url.hostname.includes(".") ? url.origin : undefined;
   } catch {
     return undefined;
@@ -130,14 +143,19 @@ async function loadPublicKeys(
 ): Promise<readonly AccessPublicKey[] | undefined> {
   try {
     const response = await fetcher(url);
+
     if (!response.ok) {
       return undefined;
     }
+
     const keys = parsePublicKeys(await response.json());
+
     if (keys === undefined) {
       return undefined;
     }
+
     publicKeyCache = { fetcher, url, expiresAt: Date.now() + publicKeyCacheTtlMs, keys };
+
     return keys;
   } catch {
     return undefined;
@@ -155,6 +173,7 @@ export function fetchPublicKeys(
 ): Promise<readonly AccessPublicKey[] | undefined> {
   const now = Date.now();
   const cached = cachedPublicKeys(url, fetcher, now);
+
   if (cached !== undefined && (!forceRefresh || now < publicKeyRefreshAllowedAt)) {
     return Promise.resolve(cached);
   }
@@ -163,6 +182,7 @@ export function fetchPublicKeys(
     if (forceRefresh) {
       publicKeyRefreshAllowedAt = now + publicKeyRefreshCooldownMs;
     }
+
     publicKeyFetchInFlight = loadPublicKeys(url, fetcher).finally(() => {
       publicKeyFetchInFlight = undefined;
     });

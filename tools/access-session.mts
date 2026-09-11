@@ -12,10 +12,15 @@ import { webcrypto } from "node:crypto";
  */
 
 const TEAM_DOMAIN = process.env.LOCAL_ACCESS_TEAM_DOMAIN ?? "local-dev.cloudflareaccess.com";
+
 const AUDIENCE = process.env.LOCAL_ACCESS_AUD ?? "local-development-audience";
+
 const SUBJECT = process.env.LOCAL_ACCESS_SUB ?? "local-owner";
+
 const LIFETIME_SECONDS = 8 * 60 * 60;
+
 const KEY_ID = "local-dev-key";
+
 const OUTPUT_PATH = ".audit/local/access-session.json";
 
 function base64Url(bytes: Uint8Array): string {
@@ -43,6 +48,7 @@ const keyPair = await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: 
 ]);
 
 const publicJwk = await webcrypto.subtle.exportKey("jwk", keyPair.publicKey);
+
 const publicKeys = {
   keys: [
     {
@@ -58,7 +64,9 @@ const publicKeys = {
 };
 
 const issuedAt = Math.floor(Date.now() / 1000);
+
 const header = encodeSegment({ alg: "ES256", kid: KEY_ID, typ: "JWT" });
+
 const claims = encodeSegment({
   iss: `https://${TEAM_DOMAIN}`,
   aud: [AUDIENCE],
@@ -67,6 +75,7 @@ const claims = encodeSegment({
   nbf: issuedAt,
   exp: issuedAt + LIFETIME_SECONDS,
 });
+
 const signature = await webcrypto.subtle.sign(
   { name: "ECDSA", hash: "SHA-256" },
   keyPair.privateKey,
@@ -83,11 +92,17 @@ const session = {
 };
 
 await mkdir(".audit/local", { recursive: true });
+
 await writeFile(OUTPUT_PATH, `${JSON.stringify(session, undefined, 2)}\n`);
 
 console.log(`Wrote ${OUTPUT_PATH}`);
+
 console.log(`Team domain: ${session.teamDomain}`);
+
 console.log(`Audience:    ${session.audience}`);
+
 console.log(`Subject:     ${session.subject}`);
+
 console.log("The token stays in that ignored file. Send it as the Cf-Access-Jwt-Assertion header,");
+
 console.log("or as the CF_Authorization cookie once the Worker accepts the cookie.");

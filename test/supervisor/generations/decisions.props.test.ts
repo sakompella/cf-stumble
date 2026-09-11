@@ -19,9 +19,11 @@ import {
 
 function testCommit(): HarnessCommit {
   const parsed = parseHarnessCommit("a".repeat(40));
+
   if (parsed === undefined) {
     throw new Error("test commit must be valid");
   }
+
   return parsed;
 }
 
@@ -29,9 +31,11 @@ const COMMIT = testCommit();
 
 function label(value: number): GenerationLabel {
   const parsed = parseGenerationLabel(value);
+
   if (parsed === undefined) {
     throw new Error(`invalid test label ${value}`);
   }
+
   return parsed;
 }
 
@@ -40,6 +44,7 @@ function generation(labelValue: number, status: GenerationStatus): Generation {
 }
 
 const count = gs.integers({ minValue: 0, maxValue: 2 ** 40 });
+
 const labelValue = gs.integers({ minValue: 0, maxValue: 2 ** 39 });
 
 test("activation always rejects an unknown generation, whatever the clocks say", () => {
@@ -73,8 +78,10 @@ test("a ready generation advances both clocks by exactly one, and only when it i
     const epoch = tc.draw(count);
     const activationId = tc.draw(count);
     const active = tc.draw(gs.sampledFrom(["none", "same", "other"] as const));
+
     const activeLabel =
       active === "none" ? undefined : label(active === "same" ? target : target + 1);
+
     const ready = generation(target, "ready");
 
     const decision = decideActivation(label(target), ready, { activeLabel, epoch, activationId });
@@ -96,9 +103,11 @@ test("a preparation check with an invalid outcome is rejected for any generation
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const status = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
+
     const outcome = tc.draw(
       gs.sampledFrom(["", "pass", "PASSED", "Passed", "failed ", "bogus", "ready"] as const),
     );
+
     const state = { activeLabel: undefined, epoch: tc.draw(count), activationId: tc.draw(count) };
 
     expect(

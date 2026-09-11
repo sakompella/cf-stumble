@@ -15,6 +15,7 @@ function completeLargeBashOutput(
     | undefined,
 ): void {
   if (handle === undefined) throw new Error("expected the bash tool to start an execution");
+
   for (const event of [
     { name: "stdout" as const, data: new TextEncoder().encode("x".repeat(60 * 1024)) },
     { name: "exit" as const, exitCode: 0 },
@@ -25,6 +26,7 @@ function completeLargeBashOutput(
 
 test("hands Pi state to the next turn", async () => {
   const first = scriptedStream([assistant([{ type: "text", text: "Noted." }], "stop")]);
+
   const opening = await runPiAgentTurn({
     prompt: "Remember the login bug.",
     state: createPiAgentTurnState(model),
@@ -33,9 +35,11 @@ test("hands Pi state to the next turn", async () => {
   });
 
   expect(opening.ok).toBe(true);
+
   if (!opening.ok) return;
 
   const second = scriptedStream([assistant([{ type: "text", text: "Fixing it." }], "stop")]);
+
   const continued = await runPiAgentTurn({
     prompt: "Fix it.",
     state: opening.state,
@@ -54,6 +58,7 @@ test("hands Pi state to the next turn", async () => {
 test("reaches every supported execution operation through the four stock tools", async () => {
   const { env: base, execBackend } = makeFacetExecutionEnv();
   await base.writeFile("/workspace/data.txt", "before");
+
   const operationSpies = [
     vi.spyOn(base, "absolutePath"),
     vi.spyOn(base, "readTextFile"),
@@ -66,6 +71,7 @@ test("reaches every supported execution operation through the four stock tools",
     vi.spyOn(base, "createTempFile"),
     vi.spyOn(base, "exec"),
   ];
+
   const script = scriptedStream([
     assistant(
       [
@@ -95,16 +101,19 @@ test("reaches every supported execution operation through the four stock tools",
     env: base,
     streamFn: script.streamFn,
   });
+
   await tick();
   completeLargeBashOutput(execBackend.handles[0]);
 
   await expect(turn).resolves.toMatchObject({ ok: true });
+
   for (const spy of operationSpies) expect(spy).toHaveBeenCalled();
 });
 
 test("reaches canonicalPath through the write tool alone, with no bash call", async () => {
   const { env: base, execBackend } = makeFacetExecutionEnv();
   const canonicalPath = vi.spyOn(base, "canonicalPath");
+
   const script = scriptedStream([
     assistant(
       [
@@ -166,6 +175,7 @@ test("reports call-limit exhaustion as a failure and makes no ninth model call",
       ),
     ),
   );
+
   const { env } = makeFacetExecutionEnv();
   await env.writeFile("/workspace/data.txt", "data");
 

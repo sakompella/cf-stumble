@@ -39,12 +39,14 @@ const manifest = Object.values(manifestFiles).at(0) ?? "";
 function scriptNames(): readonly string[] {
   const start = manifest.indexOf('"scripts": {');
   const block = manifest.slice(start, manifest.indexOf("\n  },", start));
+
   return [...block.matchAll(/^ {4}"([^"]+)":/gmu)].map((match) => match[1] ?? "");
 }
 
 /** The command line `package.json` gives one script name. */
 function scriptCommand(name: string): string {
   const line = new RegExp(`^ {4}"${name}": "(.*)",?$`, "mu").exec(manifest);
+
   if (line === null) {
     throw new Error(`package.json defines no ${name} script`);
   }

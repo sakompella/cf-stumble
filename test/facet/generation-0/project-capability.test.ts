@@ -15,6 +15,7 @@ test("leases a duplicate rather than the received capability", () => {
 test("releases the duplicate exactly once however many callers ask", () => {
   const received = FakeProjectCapability.create();
   const lease = leaseProjectCapability(received);
+
   if (lease === undefined) throw new Error("a duplicable capability must lease");
 
   expect(lease.released).toBe(false);
@@ -29,6 +30,7 @@ test("releases the duplicate exactly once however many callers ask", () => {
 test("leaves the received capability usable after the lease is released", async () => {
   const received = FakeProjectCapability.create();
   const lease = leaseProjectCapability(received);
+
   if (lease === undefined) throw new Error("a duplicable capability must lease");
 
   lease.release();

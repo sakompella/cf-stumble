@@ -22,24 +22,31 @@ import {
 
 function waitFor(predicate: () => boolean, whatFor: string, timeoutMs = 2_000): Promise<void> {
   const start = Date.now();
+
   return new Promise((resolve, reject) => {
     const poll = () => {
       if (predicate()) {
         resolve();
+
         return;
       }
+
       if (Date.now() - start > timeoutMs) {
         reject(new Error(`timed out waiting for ${whatFor}`));
+
         return;
       }
+
       setTimeout(poll, 5);
     };
+
     poll();
   });
 }
 
 test("releases the duplicate when the turn completes", async () => {
   const received = FakeProjectCapability.create();
+
   const route = new ScriptedRoute([
     calls("write", { path: "notes.txt", content: "written by the turn" }),
     says("Wrote it."),

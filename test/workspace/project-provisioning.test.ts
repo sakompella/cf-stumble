@@ -36,6 +36,7 @@ import {
  */
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-1");
+
 const projectOne = sampleProjectOne;
 
 /**
@@ -50,12 +51,14 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
     const parsed = parseProjectProvisionRequest(request);
+
     if ("ok" in parsed) {
       return Promise.resolve(parsed);
     }
 
     const plan = planProjectProvisionRequest(parsed);
     this.plans.push(plan);
+
     if (request.step === this.failingStep) {
       // A clone reports failure through its exit code; a write has none, so the host redacts it
       // into a refusal, which is what the real surface returns when Computer throws.
@@ -92,12 +95,14 @@ class FakeProvisionNamespace {
 
   getByName(name: string): FakeProvisionHost {
     this.names.push(name);
+
     return this.host;
   }
 }
 
 function provisionerFor(host: FakeProvisionHost) {
   const namespace = new FakeProvisionNamespace(host);
+
   return {
     namespace,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
@@ -119,6 +124,7 @@ test("clones and then writes the managed instructions into the tenant's workspac
   if (provisioned.isErr()) {
     throw new Error(`provisioning a catalog project must succeed: ${provisioned.error.code}`);
   }
+
   expect(provisioned.value).toEqual({ projectId: projectOne.id, workspaceName });
   expect(host.requests).toEqual([
     {
@@ -179,6 +185,7 @@ test("an interrupted provision and its resumption ask for the same state", async
   if (interrupted.isOk() || resumed.isErr()) {
     throw new Error("an interrupted clone must recover on the next provision request");
   }
+
   expect(interrupted.error).toEqual({
     code: "provision-step-failed",
     projectId: projectOne.id,
@@ -211,6 +218,7 @@ test("repeats the clone after the instructions step failed, rather than resuming
   if (interrupted.isOk() || resumed.isErr()) {
     throw new Error("a failed instructions write must recover on the next provision request");
   }
+
   expect(interrupted.error).toEqual({
     code: "provision-workspace-unavailable",
     projectId: projectOne.id,
@@ -258,8 +266,10 @@ test("keeps a refused or unreachable workspace a plain typed failure", async () 
   const refusing = new FakeProvisionHost();
   refusing.provision = (request: ProjectProvisionRequest): Promise<WorkspaceResult> => {
     refusing.requests.push(request);
+
     return Promise.resolve({ ok: false, error: { code: "unknown-command" } });
   };
+
   const throwing = new FakeProvisionHost();
   throwing.provision = (): Promise<WorkspaceResult> =>
     Promise.reject(new Error("fake workspace host failure"));

@@ -68,11 +68,13 @@ export class HarnessArtifacts {
    */
   async prepare(harnessCommit: string): Promise<ModuleMapResult> {
     const validatedCommit = parseHarnessCommit(harnessCommit);
+
     if (validatedCommit === undefined) {
       return Result.err({ code: "invalid-harness-commit", harnessCommit });
     }
 
     const stored = this.store.read(validatedCommit);
+
     if (stored.isErr()) {
       return Result.err(stored.error);
     }
@@ -82,17 +84,20 @@ export class HarnessArtifacts {
     }
 
     const built = await this.builder.build(validatedCommit);
+
     if (built.isErr()) {
       return Result.err(built.error);
     }
 
     const validated = validatedBuild(validatedCommit, built.value);
+
     return validated.isErr() ? Result.err(validated.error) : this.store.write(validated.value);
   }
 
   /** Store a module map the caller already holds, replacing whatever that commit had stored. */
   retain(input: MainHarnessArtifactInput): ModuleMapResult {
     const parsed = MainHarnessArtifact.parse(input);
+
     return parsed.isErr() ? Result.err(parsed.error) : this.store.write(parsed.value);
   }
 
@@ -107,12 +112,14 @@ export class HarnessArtifacts {
     modelRoute: MainFacetCapabilities["MODEL"],
   ): Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem> {
     const moduleMap = this.load(active);
+
     if (moduleMap.isErr()) {
       return Result.err(moduleMap.error);
     }
 
     const artifact = moduleMap.value;
     const loadedFacet = loadMainFacet(loader, artifact, { MODEL: modelRoute });
+
     if (loadedFacet.isErr()) {
       return Result.err(loadedFacet.error);
     }
@@ -140,6 +147,7 @@ export class HarnessArtifacts {
     }
 
     const harnessCommit = parseHarnessCommit(active.generation.harnessCommit);
+
     if (harnessCommit === undefined) {
       return Result.err({
         code: "invalid-harness-commit",
@@ -148,6 +156,7 @@ export class HarnessArtifacts {
     }
 
     const stored = this.store.read(harnessCommit);
+
     if (stored.isErr()) {
       return Result.err(stored.error);
     }
@@ -167,6 +176,7 @@ function validatedBuild(
   built: MainHarnessArtifactInput,
 ): Result<MainHarnessArtifact, ModuleMapProblem> {
   const parsed = MainHarnessArtifact.parse(built);
+
   if (parsed.isErr()) {
     return Result.err({
       code: "build-output-invalid",
@@ -192,9 +202,13 @@ function validatedBuild(
  * `facet/index.js` for the parameter types of a method it is calling here.
  */
 export type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
+
 export { mainFacetName } from "./facet-name.js";
+
 export { MODULE_MAP_CHUNK_BYTES, ModuleMapStore } from "./store.js";
+
 export type { ModuleMapStorage, StoredModuleMap, StoredModuleMapProblem } from "./store.js";
+
 export {
   absentModuleMapBuilder,
   WorkspaceModuleMapBuilder,
@@ -202,12 +216,14 @@ export {
   type HarnessBuildResult,
   type HarnessModuleMapBuilder,
 } from "./builder.js";
+
 export {
   CommitBuildWorkspace,
   WorkspaceHostModuleMapBuilder,
   type BuildWorkspaceHost,
   type BuildWorkspaceNamespace,
 } from "./build-workspace.js";
+
 export {
   HARNESS_BUILD_CONFIGURATION,
   moduleMapFromBuildOutput,
@@ -218,4 +234,5 @@ export {
   type HarnessBuildProblem,
   type HarnessBuildStepName,
 } from "./build-plan.js";
+
 export { canonicalModuleMap, encodeModuleMap } from "./module-map.js";

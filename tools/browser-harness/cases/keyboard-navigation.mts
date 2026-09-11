@@ -77,6 +77,7 @@ export const CASES: readonly HarnessCase[] = [
       const fresh = await readThread(page);
       assertSame(fresh.messageCount, "0", "messages after confirmed fresh thread");
       assertSame(fresh.revision, "4", "revision after confirmed fresh thread");
+
       return "harness selection, sidebar restore, and two-step fresh thread confirmation were driven with keyboard input";
     },
   },

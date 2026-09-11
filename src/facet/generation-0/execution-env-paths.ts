@@ -24,21 +24,27 @@ type FileErrorCode = FileError["code"];
 export function resolveAbsolute(cwd: string, path: string): Result<string, FileError> {
   const base = path.startsWith("/") ? path : `${cwd}/${path}`;
   const segments: string[] = [];
+
   for (const segment of base.split("/")) {
     if (segment === "" || segment === ".") continue;
+
     if (segment === "..") {
       segments.pop();
       continue;
     }
+
     segments.push(segment);
   }
+
   const absolute = segments.length === 0 ? "/" : `/${segments.join("/")}`;
+
   if (absolute !== WORKSPACE_ROOT && !absolute.startsWith(`${WORKSPACE_ROOT}/`)) {
     return {
       ok: false,
       error: new FileError("invalid", `path escapes ${WORKSPACE_ROOT}: ${path}`, path),
     };
   }
+
   return { ok: true, value: absolute };
 }
 
@@ -78,5 +84,6 @@ const PROJECT_ERROR_TO_FILE_ERROR_CODE = new Map<string, FileErrorCode>([
 /** Maps one project RPC target failure code to a local `FileError`, carrying Pi's own addressed path. */
 export function mapProjectError(code: string, path?: string): FileError {
   const mapped = PROJECT_ERROR_TO_FILE_ERROR_CODE.get(code) ?? "unknown";
+
   return new FileError(mapped, `the project target reported "${code}"`, path);
 }

@@ -85,6 +85,7 @@ export class ThreadStore {
            turn_lease_id = NULL`,
         project.id,
       );
+
       return succeeded({ ...emptyThread(project.id), revision: this.revisionOf(project) });
     });
   }
@@ -104,11 +105,13 @@ export class ThreadStore {
 
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
+
       if (!current.ok) {
         return leaseRejected(current.problem);
       }
 
       const decision = decideStartTurn(project.id, current.thread, expectedRevision, now);
+
       switch (decision.kind) {
         case "rejected":
           return leaseRejected(decision.problem);
@@ -126,8 +129,10 @@ export class ThreadStore {
             leaseId,
           );
           const thread = { ...current.thread, turnActive: true, turnDeadlineAt: deadlineAt };
+
           return leaseSucceeded({ thread, leaseId });
         }
+
         default:
           return assertNever(decision);
       }
@@ -149,12 +154,14 @@ export class ThreadStore {
 
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
+
       if (!current.ok) {
         return rejected(current.problem);
       }
 
       const claim = this.leaseClaim(project, leaseId);
       const decision = decideFinishTurn(project.id, current.thread, claim, now);
+
       switch (decision.kind) {
         case "rejected":
           return rejected(decision.problem);
@@ -167,6 +174,7 @@ export class ThreadStore {
             decision.nextRevision,
             project.id,
           );
+
           return succeeded({
             projectId: project.id,
             messages,
@@ -175,6 +183,7 @@ export class ThreadStore {
             turnDeadlineAt: undefined,
           });
         }
+
         default:
           return assertNever(decision);
       }
@@ -185,12 +194,14 @@ export class ThreadStore {
   abandonTurn(project: SelectableProject, leaseId: string): ThreadResult {
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
+
       if (!current.ok) {
         return rejected(current.problem);
       }
 
       const claim = this.leaseClaim(project, leaseId);
       const decision = decideAbandonTurn(project.id, current.thread, claim);
+
       switch (decision.kind) {
         case "rejected":
           return rejected(decision.problem);
@@ -201,12 +212,14 @@ export class ThreadStore {
              WHERE project_id = ?`,
             project.id,
           );
+
           return succeeded({
             ...current.thread,
             turnActive: false,
             turnDeadlineAt: undefined,
           });
         }
+
         default:
           return assertNever(decision);
       }
@@ -220,6 +233,7 @@ export class ThreadStore {
         project.id,
       )
       .toArray()[0];
+
     return { held: row?.turn_lease_id ?? undefined, presented };
   }
 
@@ -230,6 +244,7 @@ export class ThreadStore {
         project.id,
       )
       .toArray()[0];
+
     return row?.revision ?? 0;
   }
 
@@ -241,11 +256,13 @@ export class ThreadStore {
         project.id,
       )
       .toArray()[0];
+
     if (row === undefined) {
       return succeeded(emptyThread(project.id));
     }
 
     const thread = threadFromRow(project, row);
+
     return thread.isErr()
       ? rejected({ code: "unreadable-thread", projectId: project.id, reason: thread.error.reason })
       : succeeded(thread.value);

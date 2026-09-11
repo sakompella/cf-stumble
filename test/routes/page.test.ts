@@ -54,6 +54,7 @@ function workerEnvironment(key: SigningKey) {
 
 test("a browser request for GET / receives the owner page", async () => {
   const key = await signingKey("page-browser-key");
+
   const request = pageRequest({
     accept: BROWSER_ACCEPT,
     cookie: `CF_Authorization=${await ownerToken(key)}`,
@@ -81,6 +82,7 @@ test("only GET / is the owner page", () => {
     method: "POST",
     headers: { accept: BROWSER_ACCEPT },
   });
+
   const other = new Request("https://cf-stumble.test/api/status", {
     headers: { accept: BROWSER_ACCEPT },
   });
@@ -102,6 +104,7 @@ test("an unauthenticated browser request never receives the owner page", async (
 test("a request with an unusable Access credential never receives the owner page", async () => {
   const configured = await signingKey("page-configured-key");
   const attacker = await signingKey("page-attacker-key");
+
   const request = pageRequest({
     accept: BROWSER_ACCEPT,
     cookie: `CF_Authorization=${await ownerToken(attacker)}`,
@@ -116,6 +119,7 @@ test("a request with an unusable Access credential never receives the owner page
 
 test("the page policy allows only inline code from this response and this origin", async () => {
   const key = await signingKey("page-policy-key");
+
   const request = pageRequest({
     accept: BROWSER_ACCEPT,
     cookie: `CF_Authorization=${await ownerToken(key)}`,
@@ -134,6 +138,7 @@ test("the page policy allows only inline code from this response and this origin
 
 test("a machine request for GET / still reaches the Supervisor relay", async () => {
   const key = await signingKey("page-relay-key");
+
   const request = pageRequest({
     accept: "*/*",
     cookie: `CF_Authorization=${await ownerToken(key)}`,

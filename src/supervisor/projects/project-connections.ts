@@ -156,11 +156,13 @@ export class ProjectConnections {
     now: number,
   ): Promise<ConnectRepositoryResult> {
     const github = await this.github.ensureCredential(now);
+
     if (github.state === "tooling-missing") {
       return this.refused({ code: "tooling-missing", detail: "" }, github);
     }
 
     const canonical = canonicalRepositoryUrl(repositoryUrl);
+
     if (canonical === undefined) {
       return this.refused({ code: "invalid-repository-url", detail: "" }, github);
     }
@@ -170,6 +172,7 @@ export class ProjectConnections {
       namespace: this.namespace,
       repositoryUrl: canonical,
     });
+
     if (access.isErr()) {
       return this.refused(
         {
@@ -182,6 +185,7 @@ export class ProjectConnections {
         github,
       );
     }
+
     if (!access.value.granted) {
       return this.refused(
         { code: "repository-not-accessible", detail: access.value.detail },
@@ -205,6 +209,7 @@ export class ProjectConnections {
     // entry has none. A turn on the harness never reaches here (`project-turn.ts`).
     const catalog: ProjectCatalog = this.projects.catalog();
     const resolved = resolveProject(projectId, catalog);
+
     if (!resolved.ok) {
       return { ok: false, problem: { code: resolved.reason } };
     }
@@ -215,6 +220,7 @@ export class ProjectConnections {
       catalog,
       namespace: this.namespace,
     });
+
     return provisioned.isErr()
       ? { ok: false, problem: { code: "provisioning-failed" } }
       : { ok: true, project: resolved.project };
@@ -228,15 +234,18 @@ export class ProjectConnections {
     now: number,
   ): Promise<ConnectRepositoryResult> {
     const connected = this.projects.connect({ repositoryUrl, displayName }, now);
+
     if (!connected.ok) {
       return this.refused({ code: connected.problem.code, detail: "" }, github);
     }
 
     const provisioned = await this.ensureProvisioned(connected.project.id);
+
     if (!provisioned.ok) {
       if (!connected.alreadyConnected) {
         this.projects.disconnect(connected.project.id);
       }
+
       return this.refused({ code: "provisioning-failed", detail: "" }, github);
     }
 

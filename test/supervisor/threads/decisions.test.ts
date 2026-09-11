@@ -10,14 +10,17 @@ import { sampleProjectOne } from "../../project-fixtures.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 
 const NOW = 1_000_000;
+
 const LEASE_MS = 30_000;
 
 const firstProject = sampleProjectOne;
+
 const projectId = firstProject.id;
 
 const conversation = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];
 
 const ADMITTED_LEASE = "lease-a";
+
 const REPLACEMENT_LEASE = "lease-b";
 
 function thread(overrides: Partial<ProjectThread> = {}): ProjectThread {

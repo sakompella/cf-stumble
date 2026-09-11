@@ -35,6 +35,7 @@ export async function runStartupCheck(
 
   try {
     const loadedFacet = mountCandidateFacet(ctx, loader, input, harnessCommit, modelRoute);
+
     if (loadedFacet.isErr()) {
       return loadedFacet.error.match({
         MainFacetMountFailed: (error): StartupCheckOutcome => ({
@@ -56,6 +57,7 @@ async function classifyCandidateResponse(
   maxBodyBytes: number,
 ): Promise<StartupCheckOutcome> {
   const response = await responseBeforeDeadline(fetcher, deadline);
+
   if (response.isErr()) {
     return response.error.match({
       StartupHeadersNotReceived: (error): StartupCheckOutcome => ({
@@ -106,8 +108,10 @@ function mountCandidateFacet(
 ): Result<Fetcher, MainFacetMountFailed> {
   try {
     const loadedFacet = loadMainFacet(loader, input, { MODEL: modelRoute });
+
     if (loadedFacet.isErr()) {
       const reason = loadedFacet.error.code;
+
       return Result.err(
         new MainFacetMountFailed({
           reason,
@@ -118,9 +122,11 @@ function mountCandidateFacet(
 
     const name = mainFacetName(harnessCommit, "candidate");
     ctx.facets.abort(name, "discard prior startup-check candidate");
+
     return Result.ok(ctx.facets.get(name, () => ({ class: loadedFacet.value.facetClass })));
   } catch {
     const reason = "candidate facet could not mount";
+
     return Result.err(new MainFacetMountFailed({ reason, message: reason }));
   }
 }
@@ -134,6 +140,7 @@ function responseBeforeDeadline(
       (response) => Result.ok<Response, HeaderFailure>(response),
       (error: ThrownValue) => {
         const reason = errorReason(error);
+
         return Result.err<Response, HeaderFailure>(
           new StartupHeadersNotReceived({
             reason,
@@ -144,6 +151,7 @@ function responseBeforeDeadline(
     ),
     deadline.elapsed.then(() => {
       const reason = "response headers exceeded the deadline";
+
       return Result.err<Response, HeaderFailure>(
         new StartupHeaderDeadlineExceeded({ reason, message: reason }),
       );

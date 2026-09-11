@@ -18,5 +18,6 @@ export function field(value: UntrustedObject, key: string): unknown {
 /** A request must carry exactly the fields its kind names, so an extra field is a rejection. */
 export function fieldsAreExactly(value: UntrustedObject, names: readonly string[]): boolean {
   const keys = Object.keys(value);
+
   return keys.length === names.length && keys.every((key) => names.includes(key));
 }

@@ -37,6 +37,7 @@ export type StoredModuleMap =
 export type StoredModuleMapResult = Result<StoredModuleMap, StoredModuleMapProblem>;
 
 type ManifestRow = { readonly chunk_count: number; readonly byte_count: number };
+
 type ChunkRow = { readonly chunk_index: number; readonly bytes: ArrayBuffer };
 
 /**
@@ -77,6 +78,7 @@ export class ModuleMapStore {
         harnessCommit,
       )
       .toArray()[0];
+
     if (manifest === undefined) {
       return Result.ok({ kind: "absent" });
     }
@@ -87,7 +89,9 @@ export class ModuleMapStore {
         harnessCommit,
       )
       .toArray();
+
     const bytes = assembled(manifest, chunks);
+
     if (bytes === undefined) {
       return Result.err({ code: "stored-module-map-incomplete", harnessCommit });
     }
@@ -131,6 +135,7 @@ export class ModuleMapStore {
       chunks.length,
       byteCount,
     );
+
     for (const [index, chunk] of chunks.entries()) {
       this.storage.sql.exec(
         "INSERT INTO module_map_chunks (harness_commit, chunk_index, bytes) VALUES (?, ?, ?)",
@@ -144,6 +149,7 @@ export class ModuleMapStore {
 
 function chunked(bytes: Uint8Array): readonly Uint8Array[] {
   const chunks: Uint8Array[] = [];
+
   for (let offset = 0; offset < bytes.byteLength; offset += MODULE_MAP_CHUNK_BYTES) {
     // `slice`, so each chunk is its own copy and a row holds no more than the bytes it names.
     chunks.push(bytes.slice(offset, offset + MODULE_MAP_CHUNK_BYTES));
@@ -160,6 +166,7 @@ function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Arr
 
   const bytes = new Uint8Array(manifest.byte_count);
   let offset = 0;
+
   for (const [index, chunk] of chunks.entries()) {
     if (chunk.chunk_index !== index || offset + chunk.bytes.byteLength > manifest.byte_count) {
       return undefined;
@@ -174,6 +181,7 @@ function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Arr
 
 function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleMapResult {
   let value: unknown;
+
   try {
     value = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
   } catch {
@@ -181,6 +189,7 @@ function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleM
   }
 
   const parsed = MainHarnessArtifact.parse(value);
+
   if (parsed.isErr() || parsed.value.harnessCommit !== harnessCommit) {
     return Result.err({ code: "corrupt-artifact", harnessCommit });
   }

@@ -38,6 +38,7 @@ export const CASES: readonly HarnessCase[] = [
     timeoutMs: 120_000,
     run: async ({ page, server, reopen }) => {
       const observed: string[] = [];
+
       for (const ending of NON_SUCCESS_ENDINGS) {
         await reopen(ending.scenario);
         await completeTurn(page, PROMPT);
@@ -51,6 +52,7 @@ export const CASES: readonly HarnessCase[] = [
         );
         assertSame(turn.sendDisabled, false, `Send after a ${ending.scenario} ending`);
         assertSame(turn.cancelDisabled, true, `Cancel after a ${ending.scenario} ending`);
+
         if (ending.scenario === "save-failed") {
           assertSame(
             server.thread(HARNESS_PROJECT_ID).revision,
@@ -58,6 +60,7 @@ export const CASES: readonly HarnessCase[] = [
             "the stored revision after a failed save",
           );
         }
+
         observed.push(`${ending.scenario} → "${turn.turnState}"`);
       }
 

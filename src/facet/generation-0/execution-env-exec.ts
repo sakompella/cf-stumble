@@ -15,7 +15,9 @@ type ExecResult = Result<{ stdout: string; stderr: string; exitCode: number }, E
 export type ExecTarget = Pick<ProjectRpcTargetContract, "startExec" | "kill">;
 
 type MutableExecState = { aborted: boolean; stdout: string; stderr: string };
+
 type Decoders = { readonly stdout: TextDecoder; readonly stderr: TextDecoder };
+
 type StepOutcome = { readonly done: true; readonly result: ExecResult } | { readonly done: false };
 
 function isOptionAborted(options: ShellExecOptions | undefined): boolean {
@@ -24,6 +26,7 @@ function isOptionAborted(options: ShellExecOptions | undefined): boolean {
 
 function hasEnvOverride(options: ShellExecOptions | undefined): boolean {
   if (options?.inheritEnv === false) return true;
+
   return options?.env !== undefined && Object.keys(options.env).length > 0;
 }
 
@@ -31,6 +34,7 @@ function hasEnvOverride(options: ShellExecOptions | undefined): boolean {
 function timeoutMsFrom(timeoutSeconds: number | undefined): number | undefined {
   if (timeoutSeconds === undefined) return undefined;
   const ms = Math.round(timeoutSeconds * 1_000);
+
   return Math.min(Math.max(ms, 1), MAX_EXEC_TIMEOUT_MS);
 }
 
@@ -56,7 +60,9 @@ function stopAbnormalStream(
 function decodeChannel(decoder: TextDecoder, data: unknown): string | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: narrowing an untrusted exec event payload.
   if (typeof data === "string") return data;
+
   if (data instanceof Uint8Array) return decoder.decode(data, { stream: true });
+
   return undefined;
 }
 
@@ -78,19 +84,23 @@ function handleChannelEvent(
 ): StepOutcome {
   const decoder = event.kind === "stdout" ? decoders.stdout : decoders.stderr;
   const text = decodeChannel(decoder, event.data);
+
   if (text === undefined) {
     stopAbnormalStream(target, operationId, frames);
+
     return { done: true, result: malformedEventResult() };
   }
 
   if (event.kind === "stdout") state.stdout = truncateTail(state.stdout + text).content;
   else state.stderr = truncateTail(state.stderr + text).content;
   const callback = event.kind === "stdout" ? options?.onStdout : options?.onStderr;
+
   try {
     callback?.(text);
   } catch (error) {
     stopAbnormalStream(target, operationId, frames);
     const cause = error instanceof Error ? error : undefined;
+
     return {
       done: true,
       result: {
@@ -99,6 +109,7 @@ function handleChannelEvent(
       },
     };
   }
+
   return { done: false };
 }
 
@@ -110,8 +121,10 @@ function terminalResult(
 ): ExecResult {
   if (event.outcome === "exited")
     return { ok: true, value: { stdout, stderr, exitCode: event.exitCode } };
+
   if (event.outcome === "timed-out")
     return { ok: false, error: new ExecutionError("timeout", "the command timed out") };
+
   if (event.outcome === "killed") {
     return {
       ok: false,
@@ -120,6 +133,7 @@ function terminalResult(
         : new ExecutionError("unknown", "the command was killed for an unexplained reason"),
     };
   }
+
   return {
     ok: false,
     error: new ExecutionError("unknown", "the backend command execution failed"),
@@ -135,37 +149,48 @@ async function readNextEvent(
   options: ShellExecOptions | undefined,
 ): Promise<StepOutcome> {
   const frame = await frames.next();
+
   if (state.aborted) {
     return {
       done: true,
       result: { ok: false, error: new ExecutionError("aborted", "the command was aborted") },
     };
   }
+
   if (frame.kind === "stream-error") {
     stopAbnormalStream(target, operationId, frames);
+
     return {
       done: true,
       result: { ok: false, error: new ExecutionError("unknown", "the exec event stream rejected") },
     };
   }
+
   if (frame.kind === "eof") {
     stopAbnormalStream(target, operationId, frames);
     const message = "the exec event stream ended without a terminal event";
+
     return { done: true, result: { ok: false, error: new ExecutionError("unknown", message) } };
   }
+
   if (frame.kind === "malformed") {
     stopAbnormalStream(target, operationId, frames);
+
     return { done: true, result: malformedEventResult() };
   }
 
   const event = parseExecEvent(frame.value);
+
   if (event === undefined) {
     stopAbnormalStream(target, operationId, frames);
+
     return { done: true, result: malformedEventResult() };
   }
+
   if (event.kind === "stdout" || event.kind === "stderr") {
     return handleChannelEvent(target, operationId, frames, event, decoders, state, options);
   }
+
   return {
     done: true,
     result: terminalResult(event, state.aborted, state.stdout, state.stderr),
@@ -180,17 +205,21 @@ async function consumeExecStream(
   const { operationId, events } = started;
   const state: MutableExecState = { aborted: false, stdout: "", stderr: "" };
   const frames = new NdjsonFrameReader(events.getReader());
+
   const onAbort = (): void => {
     state.aborted = true;
     stopAbnormalStream(target, operationId, frames);
   };
+
   options?.abortSignal?.addEventListener("abort", onAbort);
 
   const decoders: Decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+
   try {
     for (;;) {
       // oxlint-disable-next-line no-await-in-loop -- Each event must be handled before the next is read.
       const outcome = await readNextEvent(target, operationId, frames, decoders, state, options);
+
       if (outcome.done) return outcome.result;
     }
   } finally {
@@ -209,6 +238,7 @@ function startExecFailure(code: string): ExecResult {
     code === "too-many-operations"
       ? "startExec failed: too many operations are already running"
       : `startExec failed: ${code}`;
+
   return { ok: false, error: new ExecutionError("spawn_error", message) };
 }
 
@@ -232,12 +262,15 @@ export async function execViaProjectTarget(
       error: new ExecutionError("aborted", "the abort signal was already aborted"),
     };
   }
+
   if (hasEnvOverride(options)) {
     const message = "environment overrides are not supported by the project target";
+
     return { ok: false, error: new ExecutionError("unknown", message) };
   }
 
   const resolvedCwd = resolveAbsolute(cwd, options?.cwd ?? cwd);
+
   if (!resolvedCwd.ok)
     return { ok: false, error: new ExecutionError("spawn_error", resolvedCwd.error.message) };
 
@@ -246,7 +279,9 @@ export async function execViaProjectTarget(
     toAddressedPath(resolvedCwd.value),
     timeoutMsFrom(options?.timeout),
   );
+
   let started: unknown;
+
   try {
     started = await target.startExec(input);
   } catch {
@@ -254,12 +289,15 @@ export async function execViaProjectTarget(
   }
 
   const envelope = parseEnvelope(started, isStartExecValue);
+
   if (envelope.kind === "malformed") {
     return {
       ok: false,
       error: new ExecutionError("unknown", "startExec returned a malformed response"),
     };
   }
+
   if (envelope.kind === "failure") return startExecFailure(envelope.error.code);
+
   return consumeExecStream(target, envelope.value, options);
 }

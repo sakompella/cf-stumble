@@ -12,6 +12,7 @@ export function generationFromRow(row: GenerationRow): Generation {
   const label = generationLabelFromPersistence(row.label, `generation ${row.label} label`);
   const harnessCommit = parseHarnessCommit(row.harness_commit);
   const status = generationStatusFromPersistence(row.status);
+
   if (harnessCommit === undefined || status === undefined) {
     throw new Error(`invalid persisted generation ${row.label}`);
   }
@@ -24,6 +25,7 @@ export function generationLabelFromPersistence(
   description: string,
 ): GenerationLabel {
   const label = parseGenerationLabel(value);
+
   if (label === undefined) {
     throw new Error(`invalid persisted ${description}`);
   }

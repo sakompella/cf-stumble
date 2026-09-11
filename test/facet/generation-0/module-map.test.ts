@@ -36,6 +36,7 @@ const GENERATION_0_COMMIT = "c0de00000000000000000000000000000000c0de";
 
 function builtModuleMap(): Promise<BuiltModuleMapFile> {
   expect(builtFile, "run pnpm build:module-map before the tests").toBeDefined();
+
   // `Response.json` decodes the build output without asserting a shape it has not proved yet.
   return new Response(builtFile ?? "").json<BuiltModuleMapFile>();
 }
@@ -56,10 +57,12 @@ test("the build writes an entry module and its modules, and no harness commit", 
 test("the written file parses into a module map the Supervisor build path accepts", async () => {
   const harnessCommit = parseHarnessCommit(GENERATION_0_COMMIT);
   expect(harnessCommit).toBeDefined();
+
   if (harnessCommit === undefined) return;
 
   const validated = moduleMapFromBuildOutput(harnessCommit, await builtModuleMap());
   expect(validated.isOk()).toBe(true);
+
   if (validated.isErr()) return;
 
   expect(validated.value.harnessCommit).toBe(GENERATION_0_COMMIT);
@@ -71,8 +74,10 @@ test("the written file parses into a module map the Supervisor build path accept
 
 test("a cold facet from the built module map passes the GET / startup check", async () => {
   const harnessCommit = parseHarnessCommit(GENERATION_0_COMMIT);
+
   if (harnessCommit === undefined) throw new Error("the test commit must be a Git object ID");
   const validated = moduleMapFromBuildOutput(harnessCommit, await builtModuleMap());
+
   if (validated.isErr())
     throw new Error(`the built module map must validate: ${validated.error.code}`);
 
@@ -81,6 +86,7 @@ test("a cold facet from the built module map passes the GET / startup check", as
   const checked = await control.checkGenerationStartup(label, validated.value);
 
   expect(checked.ok).toBe(true);
+
   if (!checked.ok) return;
   expect(checked.report.stage).toBe("ready");
   expect(checked.report.stage === "ready" && checked.report.status).toBeLessThan(400);

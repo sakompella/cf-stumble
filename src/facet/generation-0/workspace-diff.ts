@@ -34,8 +34,10 @@ function unavailable(detail: string): WorkspaceDiff {
 function firstLine(text: string): string | undefined {
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
+
     if (trimmed !== "") return trimmed;
   }
+
   return undefined;
 }
 
@@ -62,6 +64,7 @@ export async function readWorkspaceDiff(
   signal: AbortSignal,
 ): Promise<WorkspaceDiff> {
   let printedBytes = 0;
+
   const result = await env.exec(TURN_DIFF_COMMAND, {
     abortSignal: signal,
     timeout: TURN_DIFF_TIMEOUT_SECONDS,
@@ -69,9 +72,11 @@ export async function readWorkspaceDiff(
       printedBytes += utf8Length(chunk);
     },
   });
+
   if (!result.ok) return unavailable(result.error.message);
 
   const { stdout, stderr, exitCode } = result.value;
+
   if (exitCode !== 0) {
     return unavailable(firstLine(stderr) ?? `${TURN_DIFF_COMMAND} exited ${exitCode}`);
   }
@@ -80,6 +85,8 @@ export async function readWorkspaceDiff(
     maxLines: TOOL_RESULT_DISPLAY_MAX_LINES,
     maxBytes: TOOL_RESULT_DISPLAY_MAX_BYTES,
   });
+
   const truncated = truncation.truncated || printedBytes > utf8Length(truncation.content);
+
   return { available: true, content: truncation.content, truncated };
 }

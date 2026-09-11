@@ -74,16 +74,19 @@ export function parseGitHubCredentialRequest(
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
   if (value === null || typeof value !== "object") return invalidRequest();
   const request = asUntrusted(value);
+
   if (field(request, "kind") !== "github-credential") return invalidRequest();
 
   switch (field(request, "step")) {
     case "install": {
       if (!fieldsAreExactly(request, ["kind", "step", "token"])) return invalidRequest();
       const token = parseGitHubToken(field(request, "token"));
+
       return token === undefined
         ? invalidRequest()
         : { kind: "github-credential", step: "install", token };
     }
+
     case "status":
       return fieldsAreExactly(request, ["kind", "step"])
         ? { kind: "github-credential", step: "status" }
@@ -91,10 +94,12 @@ export function parseGitHubCredentialRequest(
     case "verify-repository": {
       if (!fieldsAreExactly(request, ["kind", "step", "repositoryUrl"])) return invalidRequest();
       const repositoryUrl = canonicalRepositoryUrl(field(request, "repositoryUrl"));
+
       return repositoryUrl === undefined
         ? invalidRequest()
         : { kind: "github-credential", step: "verify-repository", repositoryUrl };
     }
+
     default:
       return invalidRequest();
   }
@@ -113,15 +118,18 @@ async function installCredential(
   token: string,
 ): Promise<GitHubCredentialResult> {
   await operations.writeFile(GITHUB_TOKEN_STAGING_PATH, `${token}\n`);
+
   try {
     const output = await operations.runCommand(
       installCredentialSource(),
       "/",
       WORKSPACE_COMMAND_TIMEOUT_MS,
     );
+
     if (output.exitCode !== 0) {
       return failed("credential-command-failed", output.stderr);
     }
+
     return output.stdout.trim() === "tooling-missing"
       ? { ok: true, result: { kind: "credential-status", state: "tooling-missing", login: void 0 } }
       : { ok: true, result: { kind: "credential-installed" } };
@@ -149,7 +157,9 @@ async function credentialStatus(operations: WorkspaceOperations): Promise<GitHub
     "/",
     WORKSPACE_COMMAND_TIMEOUT_MS,
   );
+
   const status = parseCredentialStatus(output.stdout);
+
   return {
     ok: true,
     result: { kind: "credential-status", state: status.state, login: status.login },
@@ -165,7 +175,9 @@ async function repositoryAccess(
     "/",
     WORKSPACE_COMMAND_TIMEOUT_MS,
   );
+
   const access = parseRepositoryAccess(output.stdout);
+
   return {
     ok: true,
     result: {
@@ -185,6 +197,7 @@ export async function executeGitHubCredentialRequest(
   }>,
 ): Promise<GitHubCredentialResult> {
   const parsed = parseGitHubCredentialRequest(input.request);
+
   if ("ok" in parsed) return parsed;
 
   try {
@@ -197,6 +210,7 @@ export async function executeGitHubCredentialRequest(
         return await repositoryAccess(input.operations, parsed.repositoryUrl);
       default: {
         const exhaustive: never = parsed;
+
         return exhaustive;
       }
     }

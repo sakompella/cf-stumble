@@ -60,6 +60,7 @@ export class CommitBuildWorkspace implements BuildWorkspace {
     const step = this.plan.steps.find(
       (planned) => planned.source === source && planned.cwd === cwd,
     );
+
     if (step === undefined) {
       throw unreachable("a build workspace runs only the planned steps of its own commit");
     }
@@ -69,9 +70,11 @@ export class CommitBuildWorkspace implements BuildWorkspace {
       harnessCommit: this.harnessCommit,
       step: step.name,
     });
+
     if (!result.ok) {
       throw unreachable(`the build workspace refused the ${step.name} step: ${result.error.code}`);
     }
+
     if (result.result.kind !== "command") {
       throw unreachable(`the ${step.name} step returned ${result.result.kind}, not a command`);
     }
@@ -92,12 +95,15 @@ export class CommitBuildWorkspace implements BuildWorkspace {
       kind: "build-output",
       harnessCommit: this.harnessCommit,
     });
+
     if (!result.ok) {
       throw unreachable(`the build output could not be read: ${result.error.code}`);
     }
+
     if (result.result.kind !== "command") {
       throw unreachable(`the build output returned ${result.result.kind}, not a command`);
     }
+
     if (result.result.exitCode !== 0) {
       // A build that wrote no module map, or wrote it through a symbolic link, is an ordinary
       // build failure rather than an impossible state, so this throws for the builder to report
@@ -142,6 +148,7 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
 
   build(harnessCommit: HarnessCommit): Promise<HarnessBuildResult> {
     const building = this.inFlight.get(harnessCommit);
+
     if (building !== undefined) {
       return building;
     }
@@ -149,7 +156,9 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
     const started = this.runBuild(harnessCommit).finally(() => {
       this.inFlight.delete(harnessCommit);
     });
+
     this.inFlight.set(harnessCommit, started);
+
     return started;
   }
 
@@ -160,6 +169,7 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
       this.configuration,
       harnessCommit,
     );
+
     return new WorkspaceModuleMapBuilder(workspace, this.configuration).build(harnessCommit);
   }
 }

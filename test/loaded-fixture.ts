@@ -39,11 +39,13 @@ export async function loadFixtureEntrypoint<T extends Rpc.WorkerEntrypointBrande
   environment: Readonly<Record<string, string>> = {},
 ): Promise<Fetcher<T>> {
   const found = Object.entries(builtFixtures).find(([path]) => path.endsWith(fileName));
+
   if (found === undefined) {
     throw new Error(`missing ${fileName}; run pnpm build:loaded-execution-env-fixture`);
   }
 
   const fixture = await new Response(found[1]).json<BuiltFixtureFile>();
+
   const worker = env.LOADER.load({
     compatibilityDate: "2025-01-01",
     mainModule: fixture.entryModule,
@@ -51,5 +53,6 @@ export async function loadFixtureEntrypoint<T extends Rpc.WorkerEntrypointBrande
     env: environment,
     globalOutbound: null,
   });
+
   return worker.getEntrypoint<T>();
 }

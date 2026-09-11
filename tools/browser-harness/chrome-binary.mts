@@ -39,6 +39,7 @@ const SYSTEM_PATHS = [
 async function isExecutableFile(path: string): Promise<boolean> {
   try {
     await access(path);
+
     return true;
   } catch {
     return false;
@@ -62,27 +63,33 @@ async function playwrightCacheCandidates(): Promise<readonly string[]> {
 
   for (const root of roots) {
     const entries = await readdir(root).catch(() => []);
+
     const browsers = entries
       .filter((entry) => entry.startsWith("chromium"))
       .toSorted((left, right) => {
         const byKind = Number(isFullBrowser(right)) - Number(isFullBrowser(left));
+
         return byKind === 0 ? buildNumber(right) - buildNumber(left) : byKind;
       });
+
     for (const browser of browsers) {
       for (const relative of CACHE_RELATIVE_PATHS) {
         candidates.push(join(root, browser, relative));
       }
     }
   }
+
   return candidates;
 }
 
 export async function resolveChromePath(): Promise<string> {
   const configured = process.env.CF_STUMBLE_CHROME;
+
   if (configured !== undefined && configured.length > 0) {
     if (await isExecutableFile(configured)) {
       return configured;
     }
+
     throw new Error(`CF_STUMBLE_CHROME is set to ${configured}, which is not a file`);
   }
 

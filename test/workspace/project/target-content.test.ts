@@ -11,6 +11,7 @@ test("arbitrary bytes round-trip exactly", async () => {
   });
   const read = await target.readFile("/weird.bin");
   expect(read.ok).toBe(true);
+
   if (read.ok) expect(Array.from(read.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
 });
 
@@ -22,6 +23,7 @@ test("multibyte file content reports a byte size, not a character count", async 
 
   const info = await target.lstat("/greeting.txt");
   expect(info.ok).toBe(true);
+
   if (info.ok) expect(info.value.size).toBe(6);
 });
 
@@ -33,6 +35,7 @@ test("a symlink's size is the byte length of its target, not the string length",
 
   const info = await target.lstat("/link");
   expect(info.ok).toBe(true);
+
   if (info.ok) {
     expect(info.value.kind).toBe("symlink");
     expect(info.value.size).toBe(new TextEncoder().encode(targetText).length);
@@ -48,6 +51,7 @@ test("lstat reports kind, size, mtimeMs, and the addressed path", async () => {
 
   const info = await target.lstat("/dir/file.txt");
   expect(info.ok).toBe(true);
+
   if (info.ok) {
     expect(info.value).toMatchObject({
       name: "file.txt",

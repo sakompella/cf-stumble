@@ -57,6 +57,7 @@ class CountingBuilder implements HarnessModuleMapBuilder {
 
   build(harnessCommit: string): Promise<HarnessBuildResult> {
     this.builds += 1;
+
     return Promise.resolve(Result.ok(builtModuleMap(harnessCommit)));
   }
 }
@@ -90,6 +91,7 @@ function refusingStorage(storage: DurableObjectStorage): ModuleMapStorage {
 
 function commit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commits must be valid harness commits");
   }
@@ -111,11 +113,13 @@ test("builds, validates, stores, then loads a module map when nothing is stored"
 
   const prepared = await runInDurableObject(control, async (_instance, state) => {
     const moduleMap = await new HarnessArtifacts(state.storage, builder).prepare(commits.built);
+
     if (moduleMap.isErr()) {
       throw new Error(`a successful build must prepare: ${moduleMap.error.code}`);
     }
 
     const stored = new ModuleMapStore(state.storage).read(commit(commits.built));
+
     return {
       moduleMap: moduleMap.value,
       storedSameBytes:
@@ -131,9 +135,11 @@ test("builds, validates, stores, then loads a module map when nothing is stored"
   expect(prepared.moduleMap.modules.map((module) => module.name)).toEqual(["body.js", "main.js"]);
 
   const loaded = loadMainFacet(env.LOADER, prepared.moduleMap, { MODEL: modelRoute });
+
   if (loaded.isErr()) {
     throw new Error(`the built module map must load: ${loaded.error.code}`);
   }
+
   const response = await loaded.value.worker.getEntrypoint().fetch("https://main-facet.invalid/");
 
   expect(response.status).toBe(200);
@@ -146,10 +152,12 @@ test("prepares a stored module map without rebuilding it", async () => {
 
   const prepared = await runInDurableObject(control, async (_instance, state) => {
     const first = await new HarnessArtifacts(state.storage, builder).prepare(commits.stored);
+
     // A second preparation with no build workspace: only the store can answer this one.
     const second = await new HarnessArtifacts(state.storage, absentModuleMapBuilder).prepare(
       commits.stored,
     );
+
     if (first.isErr() || second.isErr()) {
       throw new Error("a stored module map must prepare twice");
     }
@@ -221,6 +229,7 @@ test("refuses a commit that is not a harness commit without building", async () 
 
   const problem = await runInDurableObject(control, async (_instance, state) => {
     const prepared = await new HarnessArtifacts(state.storage, builder).prepare(commits.invalid);
+
     return prepared.isErr() ? prepared.error : undefined;
   });
 

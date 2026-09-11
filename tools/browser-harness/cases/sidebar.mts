@@ -117,6 +117,7 @@ export const CASES: readonly HarnessCase[] = [
       assertSame(thread.project, "hello-world", "the default conversation heading");
       assertNonEmpty(transcript, "the default conversation");
       assertIncludes(transcript, HARNESS_PROJECT_ID, "the default conversation project");
+
       return `two project buttons show ${HARNESS_PROJECT_URL} and ${HARNESS_LOCATION}; the count named 1 connected repository beside the harness checkout, and hello-world is the sole current project with a nonempty thread`;
     },
   },
@@ -149,6 +150,7 @@ export const CASES: readonly HarnessCase[] = [
         before.map((entry) => entry.text).join("\n"),
         "the external transcript before selection",
       );
+
       return `the harness button loaded ${HARNESS_LOCATION}, left only harness current, and issued ${harnessReads.length} harness thread read(s)`;
     },
   },
@@ -181,6 +183,7 @@ export const CASES: readonly HarnessCase[] = [
       assertSame(turn.sendDisabled, false, "Send after switching projects");
       assertSame(turn.cancelDisabled, true, "Cancel after switching projects");
       assertSame(thread.prompt, "", "the harness composer value");
+
       return `switching at the held frame kept HARNESS-THREAD across 2 projects, excluded EXTERNAL-LATE, and restored an enabled composer for harness`;
     },
   },
@@ -219,6 +222,7 @@ export const CASES: readonly HarnessCase[] = [
         !requests.some((request) => /null|undefined/u.test(request.path)),
         `request paths had null or undefined: ${requests.map((request) => request.path).join(", ")}`,
       );
+
       return `an empty catalog rendered a safe no-project state; both actions said select a project first and sent no turn or fresh request`;
     },
   },
@@ -230,6 +234,7 @@ export const CASES: readonly HarnessCase[] = [
     run: async ({ page, server, reopen }) => {
       await inspectGithubStates(page, reopen);
       await connectRepository(page, server, reopen);
+
       return `connected, awaiting, and disconnected GitHub states exposed 0 credential inputs; connecting ${CONNECTED_PROJECT_URL} reread projects and preserved ${HARNESS_PROJECT_ID}`;
     },
   },
@@ -260,6 +265,7 @@ export const CASES: readonly HarnessCase[] = [
         before.allText,
         "conversation after collapse and restore",
       );
+
       return `the sidebar collapsed to width 0 and restored to ${restored.sidebarWidth}px without changing its conversation`;
     },
   },

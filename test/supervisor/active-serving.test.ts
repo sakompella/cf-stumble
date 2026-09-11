@@ -40,6 +40,7 @@ async function activateServingCandidate(
 ): Promise<void> {
   const candidate = await submitCandidate(control, harnessCommit);
   const startup = await control.checkGenerationStartup(candidate, servingArtifact(harnessCommit));
+
   if (!startup.ok || startup.report.stage !== "ready") {
     throw new Error("the candidate must pass startup before activation");
   }
@@ -92,23 +93,28 @@ test("serves the active retained artifact after Durable Object eviction", async 
 test("keeps the active retained artifact when a failed candidate cannot activate", async () => {
   const control = await activeSupervisor("failed-candidate-keeps-active-artifact");
   await activateServingCandidate(control, "e123456789abcdef0123456789abcdef01234567");
+
   const failedCandidate = await submitCandidate(
     control,
     "f123456789abcdef0123456789abcdef01234567",
   );
+
   const failedStartup = await control.checkGenerationStartup(
     failedCandidate,
     failingArtifact("f123456789abcdef0123456789abcdef01234567"),
   );
+
   if (!failedStartup.ok || failedStartup.report.stage !== "response-rejected") {
     throw new Error("the candidate must fail its startup check");
   }
 
   const active = await control.getActiveGeneration();
+
   const activation = await control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "activate", label: failedCandidate, observedEpoch: active.epoch },
   });
+
   const response = await control.fetch(new Request("https://cf-stumble.test/"));
 
   expect(activation).toEqual({ ok: false, problem: { code: "not-ready" } });

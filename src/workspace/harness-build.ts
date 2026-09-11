@@ -23,12 +23,14 @@ function invalidRequest(): WorkspaceFailure {
 
 function parsedCommit(value: UntrustedObject): HarnessCommit | undefined {
   const harnessCommit = field(value, "harnessCommit");
+
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC commit is untrusted.
   return typeof harnessCommit === "string" ? parseHarnessCommit(harnessCommit) : undefined;
 }
 
 function parsedStep(value: UntrustedObject): HarnessBuildStepName | undefined {
   const step = field(value, "step");
+
   return HARNESS_BUILD_STEP_NAMES.find((name) => name === step);
 }
 
@@ -44,20 +46,27 @@ export function parseHarnessBuildRequest(
   if (value === null || typeof value !== "object") return invalidRequest();
   const request = asUntrusted(value);
   const kind = field(request, "kind");
+
   switch (kind) {
     case "build-step": {
       if (!fieldsAreExactly(request, ["kind", "harnessCommit", "step"])) return invalidRequest();
       const harnessCommit = parsedCommit(request);
+
       if (harnessCommit === undefined) return invalidRequest();
       const step = parsedStep(request);
+
       if (step === undefined) return { ok: false, error: { code: "unknown-command" } };
+
       return { kind, harnessCommit, step };
     }
+
     case "build-output": {
       if (!fieldsAreExactly(request, ["kind", "harnessCommit"])) return invalidRequest();
       const harnessCommit = parsedCommit(request);
+
       return harnessCommit === undefined ? invalidRequest() : { kind, harnessCommit };
     }
+
     default:
       return invalidRequest();
   }
@@ -94,6 +103,7 @@ export function planHarnessBuildRequest(
   request: ParsedHarnessBuildRequest,
 ): WorkspacePlan {
   const plan = planHarnessBuild(configuration, request.harnessCommit);
+
   if (request.kind === "build-output") {
     return {
       kind: "run-command",
@@ -104,6 +114,7 @@ export function planHarnessBuildRequest(
   }
 
   const step = harnessBuildStep(plan, request.step);
+
   return {
     kind: "run-command",
     source: step.source,

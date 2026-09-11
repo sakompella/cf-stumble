@@ -14,6 +14,7 @@ import {
 
 test("processes a multi-turn request with tool calls and tool results", async () => {
   const tcId = "call_abc123";
+
   const request: ModelRouteRequest = {
     messages: [
       { role: "system", content: "You are a coding assistant." },
@@ -38,13 +39,17 @@ test("processes a multi-turn request with tool calls and tool results", async ()
       },
     ],
   };
+
   const calls: Array<{ model: string; input: unknown }> = [];
+
   const ai: ModelInference = {
     run(model, input) {
       calls.push({ model, input });
+
       return Promise.resolve({ response: "Here are the file contents." });
     },
   };
+
   const result = await invokeModel(ai, request);
   expect(result).toEqual({
     ok: true,
@@ -65,6 +70,7 @@ test("builds provider payload with fixed model and low reasoning effort", () => 
       { role: "user", content: "Hello" },
     ],
   };
+
   expect(buildProviderPayload(request)).toEqual({
     messages: [
       { role: "system", content: "System" },
@@ -85,6 +91,7 @@ test("includes tools in the provider payload when present", () => {
       },
     ],
   };
+
   expect(buildProviderPayload(request)).toHaveProperty("tools");
   expect(buildProviderPayload(request)).toHaveProperty("max_tokens", 4096);
 });
@@ -96,6 +103,7 @@ test("rejects a message with an unknown role", () => {
       { role: "function", content: "bad" },
     ],
   });
+
   expect(r).toEqual({
     ok: false,
     error: { code: "invalid-request", reason: 'unknown role "function" at messages[1]' },
@@ -123,6 +131,7 @@ test("rejects malformed tool call: missing id", () => {
       },
     ],
   });
+
   expect(r).toEqual({
     ok: false,
     error: {
@@ -142,6 +151,7 @@ test("rejects tool call missing function.name", () => {
       },
     ],
   });
+
   expect(r).toEqual({
     ok: false,
     error: {
@@ -161,6 +171,7 @@ test("rejects tool call missing function.arguments", () => {
       },
     ],
   });
+
   expect(r).toEqual({
     ok: false,
     error: {
@@ -174,6 +185,7 @@ test("rejects oversized input exceeding 1 MiB", () => {
   const r = validateRequest({
     messages: [{ role: "user", content: "x".repeat(2_000_000) }],
   });
+
   expect(r).toEqual({
     ok: false,
     error: { code: "invalid-request", reason: "request exceeds 1 MiB size limit" },
@@ -187,6 +199,7 @@ test.each(["model", "reasoning_effort", "credentials", "endpoint", "provider"] a
       messages: [{ role: "user", content: "Hi" }],
       [field]: "forbidden",
     });
+
     expect(r).toEqual({
       ok: false,
       error: {
@@ -238,6 +251,7 @@ test("redacts inference failures to a stable safe error", async () => {
       return Promise.reject(new Error("provider secret leaked"));
     },
   };
+
   const r = await invokeModel(ai, { messages: [{ role: "user", content: "Hi" }] });
   expect(r).toEqual({
     ok: false,

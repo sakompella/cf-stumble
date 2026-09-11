@@ -14,6 +14,7 @@ import type { ProjectDirent, ProjectFilesystemProvider, ProjectTransactions } fr
  */
 export function computerFilesystemProvider(workspace: Workspace): ProjectFilesystemProvider {
   const provider = workspace.provider();
+
   return {
     lstatSync: (path) => provider.lstatSync(path),
     readlinkSync: (path) => provider.readlinkSync(path),
@@ -30,6 +31,7 @@ export function computerFilesystemProvider(workspace: Workspace): ProjectFilesys
     },
     readFileSync: (path) => {
       const content = provider.readFileSync(path);
+
       return content instanceof Uint8Array ? content : new TextEncoder().encode(content);
     },
   };
@@ -66,12 +68,16 @@ export function computerExecBackend(
         timeoutMs: input.timeoutMs,
         encoding: undefined,
       });
+
       const reader = handle.getReader();
+
       return {
         reader: {
           async read() {
             const next = await reader.read();
+
             if (next.done) return { done: true };
+
             return { done: false, value: toBackendEvent(next.value) };
           },
           cancel: () => reader.cancel(),
@@ -84,5 +90,6 @@ export function computerExecBackend(
 
 function toBackendEvent(event: WorkspaceRuntimeEvent): BackendExecEvent {
   if (event.name === "exit") return { name: "exit", exitCode: event.code };
+
   return { name: event.name, data: event.value };
 }

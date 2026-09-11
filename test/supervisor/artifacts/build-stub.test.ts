@@ -7,6 +7,7 @@ import { fixtureMainHarnessArtifact } from "../../../src/facet/fixture.js";
 
 function harnessCommit(value: string): HarnessCommit {
   const parsed = parseHarnessCommit(value);
+
   if (parsed === undefined) {
     throw new Error("the test commit must be a valid harness commit");
   }
@@ -29,6 +30,7 @@ class OneCallHost {
 
   build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
+
     return Promise.resolve({
       ok: true,
       result: {
@@ -43,11 +45,13 @@ class OneCallHost {
 
 test("takes a fresh workspace stub for every call in one build", async () => {
   const hosts: OneCallHost[] = [];
+
   const builder = new WorkspaceHostModuleMapBuilder(
     {
       getByName: () => {
         const host = new OneCallHost();
         hosts.push(host);
+
         return host;
       },
     },

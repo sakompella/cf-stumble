@@ -31,6 +31,7 @@ export const FIRST_GENERATION: GenerationRecord = {
 };
 
 export const READY_CANDIDATE_COMMIT = "def456";
+
 export const BROKEN_CANDIDATE_COMMIT = "broken456";
 
 export const INITIAL_GENERATION: GenerationState = {
@@ -62,6 +63,7 @@ export function statusPayload(state: GenerationState, scenario: HarnessScenario)
       next: state,
     };
   }
+
   return {
     status: 200,
     payload: {
@@ -79,6 +81,7 @@ function preparation(record: GenerationRecord): JsonValue {
   if (record.status === "failed") {
     return { ok: false, problem: { code: "startup-check-failed" } };
   }
+
   return {
     ok: true,
     report: {
@@ -109,15 +112,19 @@ function submitted(state: GenerationState, record: GenerationRecord): Generation
 
 export function submitGeneration(state: GenerationState, harnessCommit: string): GenerationAnswer {
   const existing = state.generations.find((record) => record.harnessCommit === harnessCommit);
+
   if (existing !== undefined) {
     return submitted(state, existing);
   }
+
   const labels = state.generations.map((record) => record.label);
+
   const record: GenerationRecord = {
     label: Math.max(0, ...labels) + 1,
     harnessCommit,
     status: harnessCommit === BROKEN_CANDIDATE_COMMIT ? "failed" : "ready",
   };
+
   return submitted({ ...state, generations: [...state.generations, record] }, record);
 }
 
@@ -134,18 +141,24 @@ export function runGenerationCommand(
   if (observedEpoch !== state.epoch) {
     return refused(state, 409, "stale-epoch");
   }
+
   const record = state.generations.find((candidate) => candidate.label === label);
+
   if (record === undefined) {
     return refused(state, 404, "unknown-generation");
   }
+
   if (record.status !== "ready") {
     return refused(state, 409, "generation-not-ready");
   }
+
   const changed = record.label !== state.activeLabel;
   const outcome = kind === "activate" ? "activated" : "rolled-back";
+
   const next: GenerationState = changed
     ? { ...state, activeLabel: record.label, epoch: state.epoch + 1 }
     : state;
+
   return {
     status: 200,
     payload: {

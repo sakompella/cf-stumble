@@ -100,6 +100,7 @@ function handoffState(agent: Agent): PiAgentTurnState {
  */
 async function turnSystemPrompt(request: PiAgentTurnRequest): Promise<string> {
   const instructions = await loadTurnInstructions(request.env, request.signal);
+
   return composeSystemPrompt(GENERATION_0_SYSTEM_PROMPT, instructions);
 }
 
@@ -112,6 +113,7 @@ async function turnSystemPrompt(request: PiAgentTurnRequest): Promise<string> {
 async function startingMessages(request: PiAgentTurnRequest): Promise<readonly AgentMessage[]> {
   const messages = request.state.messages;
   const policy = request.compaction ?? GENERATION_0_COMPACTION;
+
   if (!needsCompaction(messages, policy)) return messages;
 
   const compacted = await compactThread(
@@ -121,6 +123,7 @@ async function startingMessages(request: PiAgentTurnRequest): Promise<readonly A
     policy,
     request.signal,
   );
+
   return compacted ?? messages;
 }
 
@@ -128,6 +131,7 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
   const context = { env: request.env } satisfies ExecutionToolContext;
   let reachedCallLimit = false;
   let modelCalls = 0;
+
   const agent = new Agent({
     initialState: {
       ...request.state,
@@ -143,15 +147,19 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
     shouldStopAfterTurn: ({ toolResults }) => {
       modelCalls += 1;
       reachedCallLimit = modelCalls === MAX_MODEL_CALLS && toolResults.length > 0;
+
       return reachedCallLimit;
     },
   });
 
   const unsubscribe = request.onEvent === undefined ? undefined : agent.subscribe(request.onEvent);
+
   const abort = () => {
     agent.abort();
   };
+
   request.signal?.addEventListener("abort", abort);
+
   try {
     await agent.prompt(request.prompt);
   } finally {
@@ -160,9 +168,11 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
   }
 
   const state = handoffState(agent);
+
   if (reachedCallLimit) {
     return { ok: false, problem: { code: "model-call-limit" }, state };
   }
+
   return agent.state.errorMessage === undefined
     ? { ok: true, state }
     : { ok: false, problem: { code: "model-error" }, state };

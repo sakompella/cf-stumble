@@ -43,6 +43,7 @@ export function serializeThreadMessages(messages: readonly AgentMessage[]): stri
 function storedMessage(message: AgentMessage) {
   const rules = storedFieldRules(message.role);
   const declared: readonly (readonly [string, unknown])[] = Object.entries(message);
+
   const kept = declared.filter(
     ([field, value]) => value !== undefined && Object.hasOwn(rules, field),
   );
@@ -66,6 +67,7 @@ function matchesRule(value: unknown, rule: StoredFieldRule): boolean {
       return true;
     default: {
       const exhaustive: never = rule;
+
       return exhaustive;
     }
   }
@@ -89,6 +91,7 @@ function restoredMessage(
   fields: readonly (readonly [string, unknown])[],
 ): AgentMessage {
   const restored: RestoredMessage = { ...Object.fromEntries(fields), role };
+
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the caller supplied every field the role declares, of the kind THREAD_MESSAGE_FIELDS names for it, and no field it does not declare.
   return restored as AgentMessage;
 }
@@ -97,31 +100,39 @@ function parseThreadMessage(value: unknown): Result<AgentMessage, ThreadMessages
   if (!isPlainObject(value)) {
     return unreadable("a stored thread entry is not an object");
   }
+
   if (!isThreadMessageRole(value.role)) {
     return unreadable(`a stored thread entry has the unknown role ${JSON.stringify(value.role)}`);
   }
 
   const role = value.role;
   const rules = storedFieldRules(role);
+
   const unknownField = Object.keys(value).find(
     (field) => field !== "role" && !Object.hasOwn(rules, field),
   );
+
   if (unknownField !== undefined) {
     return unreadable(`a stored ${role} message carries the unknown field ${unknownField}`);
   }
 
   const fields: [string, unknown][] = [];
+
   for (const [field, rule] of Object.entries(rules)) {
     const stored = value[field];
+
     if (stored === undefined) {
       if (!isOptional(rule)) {
         return unreadable(`a stored ${role} message has no ${field}`);
       }
+
       continue;
     }
+
     if (!matchesRule(stored, rule)) {
       return unreadable(`a stored ${role} message has a ${field} of the wrong kind`);
     }
+
     fields.push([field, stored]);
   }
 
@@ -141,11 +152,14 @@ export function parseAgentMessages(
 
   const entries: readonly unknown[] = value;
   const messages: AgentMessage[] = [];
+
   for (const entry of entries) {
     const message = parseThreadMessage(entry);
+
     if (message.isErr()) {
       return Result.err(message.error);
     }
+
     messages.push(message.value);
   }
 
@@ -165,6 +179,7 @@ export function parseThreadMessages(
   }
 
   let decoded: unknown;
+
   try {
     decoded = JSON.parse(stored);
   } catch {

@@ -78,6 +78,7 @@ export class TurnBound {
       clearTimeout(this.#timer);
       this.#timer = undefined;
     }
+
     this.#cancellation.abort();
   }
 }

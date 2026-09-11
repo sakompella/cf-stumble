@@ -32,11 +32,14 @@ test("loads keys from the team certs URL and uses the cache", async () => {
   const key = await signingKey("cache-key");
   const signed = await token(key, accessOwnerSubject);
   let fetches = 0;
+
   const fetcher: typeof fetch = (url) => {
     fetches += 1;
     expect(url).toBe("https://team.cloudflareaccess.com/cdn-cgi/access/certs");
+
     return Promise.resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
   };
+
   const env = {
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: audience,
@@ -62,11 +65,14 @@ test("refreshes keys once when rotation introduces an unknown kid", async () => 
   const oldToken = await token(oldKey, accessOwnerSubject);
   const newToken = await token(newKey, accessOwnerSubject);
   let fetches = 0;
+
   const fetcher: typeof fetch = () => {
     fetches += 1;
     const key = fetches === 1 ? oldKey.publicJwk : newKey.publicJwk;
+
     return Promise.resolve(new Response(JSON.stringify({ keys: [key] })));
   };
+
   const env = {
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: audience,
@@ -90,6 +96,7 @@ test("rejects when fetching the JWKS fails without exposing token material", asy
   const key = await signingKey("failure-key");
   const signed = await token(key, "failure-user");
   const fetcher: typeof fetch = () => Promise.reject(new Error(`JWKS unavailable for ${signed}`));
+
   const result = await authenticateAccessRequest(
     request(signed),
     {
@@ -109,10 +116,12 @@ test("rejects when fetching the JWKS fails without exposing token material", asy
 test("rejects malformed JWKS without exposing token material", async () => {
   const key = await signingKey("malformed-key");
   const signed = await token(key, "malformed-user");
+
   const fetcher: typeof fetch = () =>
     Promise.resolve(
       new Response(JSON.stringify({ keys: [{ kty: "RSA" }], tokenLength: signed.length })),
     );
+
   const result = await authenticateAccessRequest(
     request(signed),
     {
@@ -134,10 +143,13 @@ test("does not refetch keys for repeated unknown key ids", async () => {
   const unknown = await signingKey("cooldown-unknown");
   const unknownToken = await token(unknown, "attacker");
   let fetches = 0;
+
   const fetcher: typeof fetch = () => {
     fetches += 1;
+
     return Promise.resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
   };
+
   const env = {
     CF_ACCESS_TEAM_DOMAIN: "cooldown.cloudflareaccess.com",
     CF_ACCESS_AUD: audience,
@@ -157,14 +169,17 @@ test("shares one key fetch across concurrent cold requests", async () => {
   const key = await signingKey("concurrent-key");
   const signed = await token(key, accessOwnerSubject, "https://concurrent.cloudflareaccess.com");
   let fetches = 0;
+
   const fetcher: typeof fetch = () => {
     fetches += 1;
+
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve(new Response(JSON.stringify({ keys: [key.publicJwk] })));
       }, 5);
     });
   };
+
   const env = {
     CF_ACCESS_TEAM_DOMAIN: "concurrent.cloudflareaccess.com",
     CF_ACCESS_AUD: audience,

@@ -8,6 +8,7 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { artifact, prepareGeneration, submitCandidate } from "../helpers.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
+
 const thirdHarnessCommit = "1123456789abcdef0123456789abcdef01234567";
 
 function stagedPreparationArtifact(harnessCommit: string) {
@@ -43,6 +44,7 @@ function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string) {
 
 async function activate(control: DurableObjectStub<Supervisor>, label: number) {
   const active = await control.getActiveGeneration();
+
   return control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: active.epoch },
@@ -164,6 +166,7 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   const prepared = await control.getGeneration(label);
   const activated = await activate(control, label);
   const repeated = await activate(control, label);
+
   if (!activated.ok || !repeated.ok || prepared === undefined) {
     throw new Error("a ready generation must be activatable");
   }

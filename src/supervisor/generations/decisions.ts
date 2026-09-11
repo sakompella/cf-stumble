@@ -42,12 +42,15 @@ export function decideActivation(
   if (generation === undefined) {
     return { kind: "rejected", problem: { code: "unknown-generation", label } };
   }
+
   if (generation.status !== "ready") {
     return { kind: "rejected", problem: { code: "not-ready", label } };
   }
+
   if (state.activeLabel === label) {
     return { kind: "no-op", generation, epoch: state.epoch };
   }
+
   return {
     kind: "activate",
     generation,
@@ -80,6 +83,7 @@ export function decidePreparationCheck(
   if (outcome !== "passed" && outcome !== "failed") {
     return { kind: "rejected", problem: { code: "invalid-preparation-check-outcome" } };
   }
+
   if (generation === undefined) {
     return { kind: "rejected", problem: { code: "unknown-generation", label } };
   }
@@ -94,6 +98,7 @@ export function decidePreparationCheck(
         problem: { code: "contradicts-recorded-outcome", label, recorded: generation.status },
       };
     }
+
     return {
       kind: "record",
       outcome,

@@ -17,6 +17,7 @@ test("invokes onStdout/onStderr before the terminal event resolves exec, and kee
   const { execBackend, env } = makeFacetExecutionEnv();
   const stdoutSeen: string[] = [];
   const stderrSeen: string[] = [];
+
   const execPromise = env.exec("build", {
     onStdout: (chunk) => {
       stdoutSeen.push(chunk);
@@ -25,6 +26,7 @@ test("invokes onStdout/onStderr before the terminal event resolves exec, and kee
       stderrSeen.push(chunk);
     },
   });
+
   await tick();
   const handle = execBackend.handles[0]!;
 

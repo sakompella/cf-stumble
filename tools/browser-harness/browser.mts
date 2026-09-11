@@ -35,23 +35,29 @@ export class HarnessChrome {
   static async launch(): Promise<HarnessChrome> {
     const chrome = await launchChromeProcess();
     const connection = await CdpConnection.open(chrome.debuggerUrl);
+
     return new HarnessChrome(chrome.process, connection, chrome.userDataDir, chrome.executable);
   }
 
   async openPage(): Promise<BrowserPage> {
     const target = await this.connection.send("Target.createTarget", { url: "about:blank" });
     const targetId = target.text("targetId");
+
     if (targetId === undefined) {
       throw new Error(`Chrome did not return a target id: ${target.json()}`);
     }
+
     const attached = await this.connection.send("Target.attachToTarget", {
       targetId,
       flatten: true,
     });
+
     const sessionId = attached.text("sessionId");
+
     if (sessionId === undefined) {
       throw new Error(`Chrome did not return a session id: ${attached.json()}`);
     }
+
     return BrowserPage.attach(this.connection, sessionId, targetId);
   }
 
@@ -62,9 +68,11 @@ export class HarnessChrome {
   async close(): Promise<void> {
     this.connection.close();
     this.process.kill("SIGKILL");
+
     if (this.process.exitCode === null && this.process.signalCode === null) {
       await once(this.process, "exit");
     }
+
     await rm(this.userDataDir, {
       recursive: true,
       force: true,

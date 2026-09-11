@@ -32,11 +32,13 @@ function quotedInstruction(adr: string): string {
   const quoted = adr
     .split("\n")
     .filter((line) => line.startsWith("> `git`") || line.startsWith("> and the repository"));
+
   return unwrapped(quoted.map((line) => line.slice(2)).join(" "));
 }
 
 test("the managed instructions still carry the instruction ADR-0039 requires", () => {
   const adr = Object.values(adrFiles)[0];
+
   if (adr === undefined) {
     throw new Error("ADR-0039 must exist for this check to mean anything");
   }

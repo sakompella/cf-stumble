@@ -61,11 +61,13 @@ export function storeModuleMap(
 ): Promise<void> {
   return runInDurableObject(control, (_instance, state) => {
     const parsed = MainHarnessArtifact.parse(input);
+
     if (parsed.isErr()) {
       throw new Error(`a stored module map must parse: ${parsed.error.code}`);
     }
 
     const written = new ModuleMapStore(state.storage).write(parsed.value);
+
     if (written.isErr()) {
       throw new Error(`a stored module map must be written: ${written.error.code}`);
     }
@@ -83,6 +85,7 @@ export function storeModuleMap(
 export function connectSampleProjects(control: DurableObjectStub<Supervisor>): Promise<void> {
   return runInDurableObject(control, (_instance, state) => {
     const projects = new ConnectedProjects(state.storage);
+
     for (const project of sampleCatalog) {
       projects.connect(
         { repositoryUrl: project.repositoryUrl, displayName: project.displayName },
@@ -99,12 +102,14 @@ export function connectSampleProjects(control: DurableObjectStub<Supervisor>): P
 export async function connectedSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = env.SUPERVISOR.getByName(name);
   await connectSampleProjects(control);
+
   return control;
 }
 
 export async function activeSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = env.SUPERVISOR.getByName(name);
   await activateFixtureGeneration(control);
+
   return control;
 }
 
@@ -122,6 +127,7 @@ export async function prepareFixtureGeneration(
   const label = await submitCandidate(control, fixtureMainHarnessCommit);
   expect(label, "the first submitted commit must take generation label 0").toBe(0);
   await prepareGeneration(control, label, fixtureMainHarnessCommit);
+
   return label;
 }
 
@@ -134,6 +140,7 @@ export async function activateFixtureGeneration(
   control: DurableObjectStub<Supervisor>,
 ): Promise<number> {
   const label = await prepareFixtureGeneration(control);
+
   return activateGeneration(control, label);
 }
 
@@ -145,6 +152,7 @@ export async function submitCandidate(
     principal: { kind: "user" },
     command: { kind: "submit-candidate", harnessCommit },
   });
+
   if (!result.ok || result.outcome.kind !== "candidate-submitted") {
     throw new Error("a valid harness commit must receive a generation label");
   }
@@ -165,6 +173,7 @@ export async function prepareGeneration(
   harnessCommit: string,
 ): Promise<void> {
   const result = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
+
   if (!result.ok || result.report.stage !== "ready") {
     throw new Error("a valid generation must pass startup checking");
   }
@@ -175,10 +184,12 @@ export async function activateGeneration(
   label: number,
 ): Promise<number> {
   const active = await control.getActiveGeneration();
+
   const result = await control.controlGeneration({
     principal: { kind: "user" },
     command: { kind: "activate", label, observedEpoch: active.epoch },
   });
+
   if (!result.ok || result.outcome.kind !== "activated") {
     throw new Error("a ready generation must become active");
   }

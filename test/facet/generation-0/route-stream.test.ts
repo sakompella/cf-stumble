@@ -27,6 +27,7 @@ const encoder = new TextEncoder();
 function pushableModelStream() {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
+
   return {
     readable,
     push(event: ModelStreamEvent): Promise<void> {
@@ -43,6 +44,7 @@ function fakeModel(
   answer: () => Promise<ReadableStream<Uint8Array> | ValidationFailure>,
 ): ModelCapability & { readonly calls: ModelRouteRequest[] } {
   const calls: ModelRouteRequest[] = [];
+
   return {
     calls,
     run(): Promise<ModelRouteResponse | ValidationFailure> {
@@ -50,6 +52,7 @@ function fakeModel(
     },
     runStream(request: ModelRouteRequest) {
       calls.push(request);
+
       return answer();
     },
   };
@@ -66,8 +69,10 @@ test("streams incremental text and a final assembled message", async () => {
       }),
     ),
   );
+
   const stream = await createRouteStreamFn(model)(ROUTE_MODEL, CONTEXT);
   const events: string[] = [];
+
   for await (const event of stream) events.push(event.type);
   expect(events).toContain("start");
   expect(events.at(-1)).toBe("done");
@@ -92,10 +97,13 @@ test("streams a tool call and assembles its parsed arguments", async () => {
       }),
     ),
   );
+
   const stream = await createRouteStreamFn(model)(ROUTE_MODEL, CONTEXT);
+
   for await (const event of stream) {
     void event;
   }
+
   const finalMessage = await stream.result();
   expect(finalMessage).toMatchObject({
     stopReason: "toolUse",
@@ -105,6 +113,7 @@ test("streams a tool call and assembles its parsed arguments", async () => {
 
 test("rejects a conversation holding non-text content before ever calling the model", async () => {
   const model = fakeModel(() => Promise.reject(new Error("must not be called")));
+
   const imageContext: Context = {
     messages: [
       {
@@ -114,6 +123,7 @@ test("rejects a conversation holding non-text content before ever calling the mo
       },
     ],
   };
+
   const stream = await createRouteStreamFn(model)(ROUTE_MODEL, imageContext);
   const finalMessage = await stream.result();
   expect(finalMessage).toMatchObject({ stopReason: "error" });
@@ -125,6 +135,7 @@ test("a model-route validation failure becomes an error event with its reason", 
     ok: false,
     error: { code: "invalid-request", reason: "messages must be a non-empty array" },
   };
+
   const model = fakeModel(() => Promise.resolve(rejection));
   const stream = await createRouteStreamFn(model)(ROUTE_MODEL, CONTEXT);
   const finalMessage = await stream.result();
@@ -166,6 +177,7 @@ test("aborting mid-stream releases the reader and stops applying further events"
   const stream = await createRouteStreamFn(model, controller.signal)(ROUTE_MODEL, CONTEXT);
 
   const seen: string[] = [];
+
   const draining = (async () => {
     for await (const event of stream) seen.push(event.type);
   })();
@@ -190,6 +202,7 @@ test("a provider call that throws synchronously becomes a single error event", a
   const model = fakeModel(() => {
     throw new Error("network reset");
   });
+
   const stream = await createRouteStreamFn(model)(ROUTE_MODEL, CONTEXT);
   const finalMessage = await stream.result();
   expect(finalMessage).toMatchObject({ stopReason: "error" });

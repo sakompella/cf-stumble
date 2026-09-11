@@ -5,6 +5,7 @@ export type Deadline = {
 
 export function deadlineAfter(durationMs: number): Deadline {
   let timer: ReturnType<typeof setTimeout> | undefined;
+
   const elapsed = new Promise<"elapsed">((resolve) => {
     timer = setTimeout(() => {
       resolve("elapsed");

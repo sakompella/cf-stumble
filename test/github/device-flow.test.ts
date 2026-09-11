@@ -18,6 +18,7 @@ import {
  */
 
 const CLIENT_ID = "Iv1.cfstumbleFAKE";
+
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 type Call = Readonly<{ url: string; body: string }>;
@@ -34,15 +35,19 @@ function bodyText(body: RequestInit["body"]): string {
 function provider(replies: readonly DeviceReply[]) {
   const calls: Call[] = [];
   let index = 0;
+
   const fetcher: GitHubFetch = (url, init) => {
     calls.push({ url, body: bodyText(init.body) });
     const reply = replies[Math.min(index, replies.length - 1)];
     index += 1;
+
     if (reply === undefined || reply === "error") {
       return Promise.resolve(new Response("nope", { status: 500 }));
     }
+
     return Promise.resolve(Response.json(reply));
   };
+
   return { fetcher, calls };
 }
 

@@ -44,20 +44,25 @@ export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider 
   lstatSync(path: string): ProjectStat {
     this.calls.push(`lstat:${path}`);
     const node = this.nodes.get(path);
+
     if (node === undefined) throw new FakeFsError("ENOENT", `no such path: ${path}`);
+
     return this.#stat(node);
   }
 
   readlinkSync(path: string): string {
     this.calls.push(`readlink:${path}`);
     const node = this.nodes.get(path);
+
     if (node === undefined || node.type !== "symlink")
       throw new FakeFsError("EINVAL", "not a symlink");
+
     return node.target;
   }
 
   mkdirSync(path: string): void {
     this.calls.push(`mkdir:${path}`);
+
     if (this.nodes.has(path)) throw new FakeFsError("EEXIST", `path exists: ${path}`);
     this.nodes.set(path, { type: "dir", mtimeMs: this.now });
   }
@@ -65,56 +70,73 @@ export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider 
   readdirSync(path: string, _options: { withFileTypes: true }): ProjectDirent[] {
     this.calls.push(`readdir:${path}`);
     const node = this.nodes.get(path);
+
     if (node === undefined) throw new FakeFsError("ENOENT", `no such path: ${path}`);
+
     if (node.type !== "dir") throw new FakeFsError("ENOTDIR", `not a directory: ${path}`);
     const prefix = path === "/" ? "/" : `${path}/`;
     const entries: ProjectDirent[] = [];
+
     for (const [candidate, candidateNode] of this.nodes) {
       if (!candidate.startsWith(prefix) || candidate === path) continue;
       const relative = candidate.slice(prefix.length);
+
       if (relative.includes("/")) continue;
       entries.push(direntOf(relative, candidateNode));
     }
+
     return entries;
   }
 
   openSync(path: string, flags: "w" | "a" | "wx"): number {
     this.calls.push(`open:${path}:${flags}`);
     const existing = this.nodes.get(path);
+
     if (existing !== undefined) {
       if (flags === "wx") throw new FakeFsError("EEXIST", `path exists: ${path}`);
+
       if (existing.type === "dir") throw new FakeFsError("EISDIR", `path is a directory: ${path}`);
     }
+
     if (flags !== "a" || existing === undefined) {
       this.nodes.set(path, { type: "file", data: new Uint8Array(0), mtimeMs: this.now });
     }
+
     const fd = this.#nextFd++;
     this.fds.set(fd, { path, append: flags === "a" });
+
     return fd;
   }
 
   writeSync(fd: number, buffer: Uint8Array): number {
     this.calls.push(`write:${fd}`);
     const state = this.fds.get(fd);
+
     if (state === undefined) throw new FakeFsError("EBADF", `unknown fd ${fd}`);
     const node = this.nodes.get(state.path);
+
     if (node === undefined || node.type !== "file")
       throw new FakeFsError("EBADF", "fd is not a file");
     const next = state.append ? concat(node.data, buffer) : buffer.slice();
     this.nodes.set(state.path, { type: "file", data: next, mtimeMs: this.now });
+
     return buffer.byteLength;
   }
 
   closeSync(fd: number): void {
     this.calls.push(`close:${fd}`);
+
     if (!this.fds.delete(fd)) throw new FakeFsError("EBADF", `unknown fd ${fd}`);
   }
 
   readFileSync(path: string): Uint8Array {
     this.calls.push(`read:${path}`);
     const node = this.nodes.get(path);
+
     if (node === undefined) throw new FakeFsError("ENOENT", `no such file: ${path}`);
+
     if (node.type !== "file") throw new FakeFsError("EISDIR", `path is a directory: ${path}`);
+
     return node.data.slice();
   }
 
@@ -137,6 +159,7 @@ export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider 
         : node.type === "symlink"
           ? node.target.length
           : 0;
+
     return {
       size,
       mtimeMs: node.mtimeMs,
@@ -160,6 +183,7 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const result = new Uint8Array(a.byteLength + b.byteLength);
   result.set(a, 0);
   result.set(b, a.byteLength);
+
   return result;
 }
 
@@ -168,15 +192,18 @@ export class FakeProjectTransactions implements ProjectTransactions {
   calls = 0;
   transactionSync<T>(closure: () => T): T {
     this.calls += 1;
+
     return closure();
   }
 }
 
 type ReadResult = { done: false; value: BackendExecEvent } | { done: true };
+
 type QueueItem =
   | { kind: "event"; event: BackendExecEvent }
   | { kind: "end" }
   | { kind: "error"; error: unknown };
+
 interface Waiter {
   resolve: (result: ReadResult) => void;
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a broken backend stream would throw.
@@ -201,14 +228,18 @@ export class ManualExecHandle implements ExecBackendHandle {
     read: (): Promise<ReadResult> => {
       this.readCalls += 1;
       const next = this.#queue.shift();
+
       if (next !== undefined) return this.#settle(next);
+
       if (this.#ended) return Promise.resolve({ done: true });
+
       return new Promise((resolve, reject) => {
         this.#waiters.push({ resolve, reject });
       });
     },
     cancel: (): Promise<void> => {
       this.#ended = true;
+
       return Promise.resolve();
     },
   };
@@ -231,15 +262,19 @@ export class ManualExecHandle implements ExecBackendHandle {
 
   kill(): Promise<void> {
     this.killCalls += 1;
+
     return this.killBehavior();
   }
 
   #deliver(item: QueueItem): void {
     const waiter = this.#waiters.shift();
+
     if (waiter === undefined) {
       this.#queue.push(item);
+
       return;
     }
+
     if (item.kind === "error") waiter.reject(item.error);
     else if (item.kind === "end") waiter.resolve({ done: true });
     else waiter.resolve({ done: false, value: item.event });
@@ -248,7 +283,9 @@ export class ManualExecHandle implements ExecBackendHandle {
   #settle(item: QueueItem): Promise<ReadResult> {
     // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Test fake: `item.error` is deliberately whatever value `fail()` was given.
     if (item.kind === "error") return Promise.reject(item.error);
+
     if (item.kind === "end") return Promise.resolve({ done: true });
+
     return Promise.resolve({ done: false, value: item.event });
   }
 }
@@ -273,9 +310,11 @@ export class FakeExecBackend implements ExecBackend {
     this.requests.push(input);
     this.onExec?.(input);
     const deferred = this.#deferredQueue.shift();
+
     if (deferred !== undefined) return deferred;
     const handle = new ManualExecHandle();
     this.handles.push(handle);
+
     return Promise.resolve(handle);
   }
 }

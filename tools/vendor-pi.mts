@@ -23,8 +23,11 @@ type LocalOverride = {
 };
 
 const repoRoot = resolve(import.meta.dirname, "..");
+
 const vendorRoot = resolve(repoRoot, "vendor/pi-v0.84.4");
+
 const defaultSource = process.env.CF_STUMBLE_PI_SOURCE ?? "/tmp/cf-stumble-pi-v0.84.4";
+
 const upstreamPinSchema = Type.Object({
   repository: Type.String(),
   tag: Type.String(),
@@ -559,18 +562,25 @@ async function declarationFiles(path: string): Promise<string[]> {
 
 async function main(): Promise<void> {
   const [mode, ...arguments_] = process.argv.slice(2);
+
   if (mode === "--check" && arguments_.length === 0) {
     await checkVendorTree();
+
     return;
   }
+
   if (mode === "--refresh-generated" && arguments_.length === 0) {
     await refreshGeneratedFiles();
+
     return;
   }
+
   if (mode === "--update") {
     await updateVendorTree(sourceArgument(arguments_));
+
     return;
   }
+
   throw new Error(
     "Usage: pnpm exec tsx tools/vendor-pi.mts --check | --refresh-generated | --update [--source <path>]",
   );
@@ -580,9 +590,11 @@ function sourceArgument(arguments_: readonly string[]): string {
   if (arguments_.length === 0) {
     return defaultSource;
   }
+
   if (arguments_.length === 2 && arguments_[0] === "--source" && arguments_[1] !== undefined) {
     return resolve(arguments_[1]);
   }
+
   throw new Error("Usage: --update [--source <path>]");
 }
 
@@ -594,9 +606,11 @@ async function updateVendorTree(sourceRoot: string): Promise<void> {
   for (const copiedPath of pin.copiedPaths) {
     await copyUpstreamPath(sourceRoot, copiedPath);
   }
+
   for (const [path, contents] of generatedFiles) {
     await writeManagedFile(path, contents);
   }
+
   await writeManagedFile("UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`);
   await writeChecksums();
 }
@@ -605,6 +619,7 @@ async function refreshGeneratedFiles(): Promise<void> {
   for (const [path, contents] of generatedFiles) {
     await writeManagedFile(path, contents);
   }
+
   await writeManagedFile("UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`);
   await writeChecksums();
 }
@@ -615,12 +630,15 @@ async function verifySourceCheckout(sourceRoot: string): Promise<void> {
     runGit(sourceRoot, ["rev-parse", "HEAD"]),
     runGit(sourceRoot, ["describe", "--exact-match", "--tags", "HEAD"]),
   ]);
+
   if (status !== "") {
     throw new Error(`Pi source checkout is dirty: ${sourceRoot}`);
   }
+
   if (commit.trim() !== pin.commit) {
     throw new Error(`Pi source checkout is ${commit.trim()}, expected ${pin.commit}`);
   }
+
   if (tag.trim() !== pin.tag) {
     throw new Error(`Pi source checkout has tag ${tag.trim()}, expected ${pin.tag}`);
   }
@@ -631,8 +649,10 @@ function runGit(sourceRoot: string, arguments_: readonly string[]): Promise<stri
     execFile("git", ["-C", sourceRoot, ...arguments_], (error, stdout) => {
       if (error) {
         reject(new Error("Unable to inspect the Pi source checkout", { cause: error }));
+
         return;
       }
+
       resolveOutput(stdout);
     });
   });
@@ -642,9 +662,11 @@ async function copyUpstreamPath(sourceRoot: string, copiedPath: string): Promise
   const sourcePath = resolve(sourceRoot, copiedPath);
   const destinationPath = resolve(vendorRoot, copiedPath);
   const sourceStats = await stat(sourcePath);
+
   if (!sourceStats.isDirectory()) {
     await mkdir(dirname(destinationPath), { recursive: true });
     await cp(sourcePath, destinationPath, { force: true });
+
     return;
   }
 
@@ -660,6 +682,7 @@ async function checkVendorTree(): Promise<void> {
   await verifyGeneratedFilesMatchTemplates();
 
   const manifest = await readChecksums();
+
   const managedPaths = (await filesUnder(vendorRoot))
     .map((file) => relative(vendorRoot, file))
     .filter(
@@ -667,18 +690,23 @@ async function checkVendorTree(): Promise<void> {
         path !== "SHA256SUMS" && !path.startsWith("dist/") && !path.startsWith("node_modules/"),
     )
     .toSorted();
+
   const manifestPaths = [...manifest.keys()].toSorted();
+
   if (managedPaths.join("\n") !== manifestPaths.join("\n")) {
     throw new Error("SHA256SUMS does not match the managed vendor tree");
   }
+
   for (const [path, expected] of manifest) {
     const actual = await sha256(resolve(vendorRoot, path));
+
     if (actual !== expected) {
       throw new Error(`SHA256 mismatch for ${path}`);
     }
   }
 
   const upstream = await readUpstreamPin();
+
   if (
     upstream.repository !== pin.repository ||
     upstream.tag !== pin.tag ||
@@ -686,11 +714,15 @@ async function checkVendorTree(): Promise<void> {
   ) {
     throw new Error("UPSTREAM.json does not match the Pi pin");
   }
+
   const licence = await readFile(resolve(vendorRoot, "LICENSE"), "utf8");
+
   if (!licence.startsWith("MIT License\n")) {
     throw new Error("Vendored Pi LICENSE is not the expected MIT license");
   }
+
   const output = await readFile(resolve(vendorRoot, "dist/index.js"), "utf8");
+
   if (/\b(?:from|import)\s*["']node:/u.test(output) || /\brequire\s*\(\s*["']node:/u.test(output)) {
     throw new Error("Pi bundle contains a static node: import");
   }
@@ -701,11 +733,14 @@ async function verifyGeneratedFilesMatchTemplates(): Promise<void> {
     ...generatedFiles,
     ["UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`],
   ]);
+
   for (const [path, expected] of expectedFiles) {
     const destination = resolve(vendorRoot, path);
+
     const actual = await readFile(destination, "utf8").catch((cause: unknown) => {
       throw new Error(`Generated file is missing: ${path}`, { cause });
     });
+
     if (actual !== expected) {
       throw new Error(
         `Generated file ${path} does not match its template. Run \`pnpm exec tsx tools/vendor-pi.mts --refresh-generated\` and inspect the diff.`,
@@ -717,10 +752,13 @@ async function verifyGeneratedFilesMatchTemplates(): Promise<void> {
 async function readUpstreamPin(): Promise<UpstreamPin> {
   const contents = await readFile(resolve(vendorRoot, "UPSTREAM.json"), "utf8");
   const value: unknown = JSON.parse(contents);
+
   if (!Value.Check(upstreamPinSchema, value)) {
     throw new Error("UPSTREAM.json is not a valid Pi pin");
   }
+
   const parsed: ParsedUpstreamPin = value;
+
   return {
     repository: parsed.repository,
     tag: parsed.tag,
@@ -739,38 +777,47 @@ async function writeChecksums(): Promise<void> {
         path !== "SHA256SUMS" && !path.startsWith("dist/") && !path.startsWith("node_modules/"),
     )
     .toSorted();
+
   const lines = await Promise.all(
     paths.map(async (path) => `${await sha256(resolve(vendorRoot, path))}  ${path}`),
   );
+
   await writeManagedFile("SHA256SUMS", `${lines.join("\n")}\n`);
 }
 
 async function readChecksums(): Promise<Map<string, string>> {
   const contents = await readFile(resolve(vendorRoot, "SHA256SUMS"), "utf8");
+
   const entries = contents
     .trim()
     .split("\n")
     .map((line) => {
       const match = /^(?<hash>[a-f0-9]{64})  (?<path>.+)$/u.exec(line);
+
       if (match?.groups?.hash === undefined || match.groups.path === undefined) {
         throw new Error(`Invalid SHA256SUMS entry: ${line}`);
       }
+
       return [match.groups.path, match.groups.hash] as const;
     });
+
   return new Map(entries);
 }
 
 async function filesUnder(path: string): Promise<string[]> {
   const entries = await readdir(path, { withFileTypes: true });
   const files: string[] = [];
+
   for (const entry of entries) {
     const entryPath = resolve(path, entry.name);
+
     if (entry.isDirectory()) {
       files.push(...(await filesUnder(entryPath)));
     } else if (entry.isFile()) {
       files.push(entryPath);
     }
   }
+
   return files;
 }
 

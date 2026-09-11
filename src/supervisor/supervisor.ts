@@ -107,12 +107,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     super(ctx, env);
     this.generations = new Generations(ctx.storage);
     const supervisorName = ctx.id.name;
+
     if (supervisorName === undefined) {
       // A Supervisor reached by raw id has no verified tenant behind it, and its one workspace is
       // named from this object's name. Falling back to the id would mint a valid workspace name
       // for a request that never proved whose workspace it is.
       throw new Error("a Supervisor must be reached by name, not by id");
     }
+
     this.workspaceName = tenantWorkspaceName(supervisorName);
     this.artifacts = HarnessArtifacts.forWorkspace(
       ctx.storage,
@@ -185,6 +187,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   getGeneration(label: number): Generation | undefined {
     const generationLabel = parseGenerationLabel(label);
+
     return generationLabel === undefined ? undefined : this.generations.byLabel(generationLabel);
   }
 
@@ -198,6 +201,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   getPreparationCheckHistory(label: number): readonly PreparationCheck[] {
     const generationLabel = parseGenerationLabel(label);
+
     return generationLabel === undefined
       ? []
       : this.generations.preparationCheckHistory(generationLabel);

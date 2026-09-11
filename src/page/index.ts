@@ -3,6 +3,7 @@ import { OWNER_PAGE_SCRIPT } from "./script.js";
 import { OWNER_PAGE_STYLES } from "./styles.js";
 
 export { OWNER_PAGE_CLASSES, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "./element-ids.js";
+
 export type { OwnerPageId } from "./element-ids.js";
 
 /**
