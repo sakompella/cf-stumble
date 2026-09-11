@@ -69,20 +69,17 @@ export default defineConfig({
     "anti-slop/no-unknown-type-aliases": "error",
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
+    // At 541a484, all 2,325 sites across 261 files were fixed by inserting blank lines only. Six
+    // independent readers reviewed every insertion and objected to 78, or 3.4 percent, all in
+    // compact groups that the rule spread out. None is suppressed: the rule has no options, the
+    // vendored plugin stays verbatim, and a disable comment with a reason is louder than the blank
+    // line it would remove. ADR-0041 records the measured cost and decision.
+    "anti-slop/require-readable-spacing": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
 
     // A `typeof` check inside a type guard is the guard's whole job. The parsers that read
     // untrusted JSON keep their checks; everywhere else the rule stays on.
     "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
-
-    // Off, with the count from the re-vendor run.
-    //
-    // 2322 violations across 261 files. This rule inserts blank lines, and `--fix` clears every
-    // one of them, but the result puts 27 files over eslint(max-lines) and
-    // eslint(max-lines-per-function), which are errors under `--max-warnings=0`. Enforcing it
-    // therefore means splitting 27 files, and a 261-file whitespace diff during a release
-    // collides with every branch in flight. Formatting here belongs to oxfmt.
-    "anti-slop/require-readable-spacing": "off",
   },
 
   // The vendored copy also ships an opt-in `anti-slop-effect` plugin: no-manual-effect-error-tag,
