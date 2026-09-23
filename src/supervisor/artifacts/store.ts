@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { Result } from "better-result";
+import { logRedactedCause } from "../../diagnostics.js";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
@@ -113,7 +114,12 @@ export class ModuleMapStore {
       this.storage.transactionSync(() => {
         this.replace(artifact.harnessCommit, bytes.byteLength, chunks);
       });
-    } catch {
+    } catch (cause) {
+      logRedactedCause(
+        `artifact-store.write ${artifact.harnessCommit}: artifact-write-failed`,
+        cause,
+      );
+
       return Result.err({ code: "artifact-write-failed", harnessCommit: artifact.harnessCommit });
     }
 

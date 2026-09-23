@@ -2,7 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
@@ -28,6 +28,7 @@ const commits = {
   incomplete: "7100000000000000000000000000000000000004",
   rolledForward: "7100000000000000000000000000000000000005",
   unbuildable: "7100000000000000000000000000000000000006",
+  loggedFailure: "7100000000000000000000000000000000000007",
 } as const;
 
 /**
@@ -218,6 +219,35 @@ test("a write that fails part way through leaves no partial module map", async (
     read: "absent",
     rows: { manifests: 0, chunks: 0 },
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/**
+ * The write shell's catch used to discard the SQLite exception it caught and answer
+ * `artifact-write-failed` with nothing logged. The public code is unchanged; an operator can now
+ * read the cause that transaction raised.
+ */
+test("logs a redacted cause instead of discarding it when the transaction throws", async () => {
+  const control = supervisor("module-map-write-logs-its-cause");
+  const input = largeModuleMap(commits.loggedFailure);
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const outcome = await runInDurableObject(control, (_instance, state) => {
+    const written = new ModuleMapStore(refusingSecondChunk(state.storage)).write(
+      parsedArtifact(input),
+    );
+
+    return written.isErr() ? written.error.code : "written";
+  });
+
+  expect(outcome).toBe("artifact-write-failed");
+  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("artifact-write-failed");
+  expect(logged).toContain("the storage refused a chunk");
 });
 
 test("reports an incomplete stored module map instead of rebuilding the commit", async () => {

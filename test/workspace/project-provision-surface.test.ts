@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
@@ -74,6 +74,9 @@ class FakeProjectOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
   readonly symlinks = new Set<string>();
   exitCode = 0;
+  /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
+   * the provision shell's catch-all logs a redacted cause instead of discarding it. */
+  commandFailure: Error | undefined;
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.calls.push(`lstat:${path}`);
@@ -96,6 +99,8 @@ class FakeProjectOperations implements WorkspaceOperations {
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
     this.calls.push(`command:${cwd}`);
     this.sources.push(source);
+
+    if (this.commandFailure !== undefined) return Promise.reject(this.commandFailure);
 
     return Promise.resolve({ stdout: "", stderr: "", exitCode: this.exitCode });
   }
@@ -172,6 +177,31 @@ test("reports a failing clone with its exit code instead of continuing", async (
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 128 },
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/**
+ * The provision shell's catch-all used to discard whatever Computer threw and answer
+ * `workspace-unavailable` with nothing logged, same as the build shell's. The public code stays
+ * generic; an operator can now read the cause the catch-all just swallowed.
+ */
+test("logs a redacted cause instead of discarding it when the clone command cannot run", async () => {
+  const operations = new FakeProjectOperations();
+  operations.commandFailure = new Error("econnrefused while dialing the container");
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await expect(provision(operations, provisionRequest(projectOne, "clone"))).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-unavailable" },
+  });
+
+  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("workspace-unavailable");
+  expect(logged).toContain("econnrefused while dialing the container");
 });
 
 test("refuses a caller supplied repository URL, command, or project", async () => {

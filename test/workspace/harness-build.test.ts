@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
@@ -65,9 +65,14 @@ class FakeBuildOperations implements WorkspaceOperations {
   }
 
   stdout: string | undefined;
+  /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
+   * the build shell's catch-all logs a redacted cause instead of discarding it. */
+  commandFailure: Error | undefined;
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
     this.calls.push(`command:${source}:${cwd}`);
+
+    if (this.commandFailure !== undefined) return Promise.reject(this.commandFailure);
 
     return Promise.resolve({
       stdout: this.exitCode === 0 ? (this.stdout ?? `${source} output`) : "",
@@ -134,6 +139,31 @@ test("runs a planned build phase and returns its exit code", async () => {
   expect(operations.calls).toHaveLength(1);
   expect(operations.calls.at(0)).toContain(`cd '${buildDirectory}'`);
   expect(operations.calls.at(0)).toContain(HARNESS_BUILD_CONFIGURATION.buildPhases[0].command);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/**
+ * The build shell's catch-all used to discard whatever Computer threw and answer
+ * `workspace-unavailable` with nothing logged. The public code is unchanged — a caller still
+ * cannot tell a thrown container failure from a thrown filesystem failure — but an operator can
+ * now read the cause the catch-all just swallowed.
+ */
+test("logs a redacted cause instead of discarding it when a build step cannot run", async () => {
+  const operations = new FakeBuildOperations();
+  operations.commandFailure = new Error("container exited before the command could run");
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await expect(
+    build(operations, { kind: "build-step", harnessCommit: commit, step: "install" }),
+  ).resolves.toEqual({ ok: false, error: { code: "workspace-unavailable" } });
+
+  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("workspace-unavailable");
+  expect(logged).toContain("container exited before the command could run");
 });
 
 test("reads the module map the build wrote, through the shell that wrote it", async () => {
