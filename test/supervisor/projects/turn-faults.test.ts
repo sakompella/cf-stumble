@@ -234,3 +234,17 @@ test("a rejected start abandons the exact lease before the error reaches the cal
     thread: { revision: 0, turnActive: false },
   });
 });
+
+test("an attribution snapshot failure abandons the admitted lease", async () => {
+  const control = await supervisor("turn-attribution-fails");
+  await activateFixtureGeneration(control);
+
+  await expect(runScriptedTurn(control, { throwAttribution: true })).rejects.toThrow(
+    "attribution failed",
+  );
+
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { revision: 0, turnActive: false },
+  });
+});

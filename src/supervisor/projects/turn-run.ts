@@ -137,6 +137,7 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
     return refused("unreadable-thread");
   }
 
+  const attribution = input.attribution();
   const admittedAt = input.now();
 
   const admitted = input.threads.startTurn(
@@ -153,7 +154,7 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
   const turn: AdmittedTurn = {
     projectId: admitted.thread.projectId,
     leaseId: admitted.leaseId,
-    attribution: input.attribution(),
+    attribution,
     bound: TurnBound.forTurn(admittedAt, input.leaseMs, input.deadlineMs, input.now),
   };
 
