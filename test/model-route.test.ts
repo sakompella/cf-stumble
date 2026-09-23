@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
 import {
-  MODEL,
   validateRequest,
   buildProviderPayload,
   normalizeResponse,
@@ -60,7 +59,7 @@ test("processes a multi-turn request with tool calls and tool results", async ()
     },
   } satisfies ModelRouteResponse);
   expect(calls).toHaveLength(1);
-  expect(calls[0]!.model).toBe(MODEL);
+  expect(calls[0]!.model).toBe("@cf/zai-org/glm-5.3-flash");
 });
 
 test("builds provider payload with fixed model and low reasoning effort", () => {
