@@ -1,8 +1,14 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
+import { Result } from "better-result";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { sampleProjectOne, sampleProjectTwo } from "../../project-fixtures.js";
+import {
+  sampleProjectOne,
+  sampleProjectTwo,
+  sampleSelectableCatalog,
+} from "../../project-fixtures.js";
+import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
 import { HARNESS_DIRECTORY, projectDirectory } from "../../../src/workspace-layout.js";
 import { calls, says } from "../../facet/generation-0/facet-turn-helpers.js";
@@ -151,6 +157,32 @@ test("a turn on the harness entry runs in the harness checkout", async () => {
     "the harness entry is not one of the project directories",
   ).toBeNull();
   expect(await workspaces.requestedNames()).toEqual([workspaceName]);
+});
+
+test("passes the turn cancellation signal into provisioning", async () => {
+  const workspaces = await projectWorkspaces();
+  const facet = await facetRunning([says("Nothing to do.")]);
+  const controller = new AbortController();
+  let received: AbortSignal | undefined;
+
+  const start = await streamProjectTurn({
+    namespace: workspaces.namespace,
+    mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
+    provision: (_project, signal) => {
+      received = signal;
+      controller.abort();
+
+      return Promise.resolve(true);
+    },
+    catalog: sampleSelectableCatalog,
+    workspaceName,
+    projectId: projectOne.id,
+    request: { prompt: "do the work", state: null },
+    signal: controller.signal,
+  });
+
+  expect(received).toBe(controller.signal);
+  expect(start).toEqual({ ok: false, reason: "turn-not-started" });
 });
 
 test("the harness entry needs no clone, and a repository still gets one", async () => {

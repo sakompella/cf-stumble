@@ -101,6 +101,8 @@ export interface TurnScript {
   readonly refuseStart?: ProjectTurnStart;
   /** Never answer the start call, as a lost facet or an interrupted host does. */
   readonly stallStart?: boolean;
+  /** Reject the start call, as a workspace or facet RPC may do. */
+  readonly throwStart?: boolean;
   /** Runs inside the object before the turn is admitted, to leave a record behind. */
   readonly beforeRun?: (state: DurableObjectState) => void;
   readonly deadlineMs?: number;
@@ -213,6 +215,10 @@ function turnInput(
 
       if (script.stallStart === true) {
         return new Promise<ProjectTurnStart>(() => {});
+      }
+
+      if (script.throwStart === true) {
+        return Promise.reject(new Error("start failed"));
       }
 
       return Promise.resolve(script.refuseStart ?? { ok: true, frames: generation.stream });

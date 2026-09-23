@@ -204,6 +204,7 @@ export class ProjectConnections {
   async ensureProvisioned(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
     projectId: unknown,
+    signal?: AbortSignal,
   ): Promise<ProjectUseResult> {
     // The connected repositories alone: provisioning clones a repository URL, and the harness
     // entry has none. A turn on the harness never reaches here (`project-turn.ts`).
@@ -219,6 +220,7 @@ export class ProjectConnections {
       projectId: resolved.project.id,
       catalog,
       namespace: this.namespace,
+      signal,
     });
 
     return provisioned.isErr()

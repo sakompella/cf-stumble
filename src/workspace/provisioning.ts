@@ -1,4 +1,5 @@
 import { Result } from "better-result";
+import { redactCredentials } from "../github/index.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
@@ -59,6 +60,8 @@ export interface ProvisionProjectWorkspaceInput {
   readonly projectId: unknown;
   readonly catalog?: ProjectCatalog;
   readonly namespace: ProvisionWorkspaceNamespace;
+  /** Stops the plan before another workspace RPC when the owning turn has ended. */
+  readonly signal?: AbortSignal | undefined;
 }
 
 /**
@@ -70,10 +73,18 @@ const STEP_RESULT_KIND = {
   instructions: "written",
 } as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Workspace Host RPC may reject with any thrown value.
+function redactedCause(error: unknown): string {
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+
+  return redactCredentials(detail).slice(0, 400);
+}
+
 async function runStep(
   host: ProvisionWorkspaceHost,
   project: Project,
   step: ProjectProvisionStepName,
+  signal: AbortSignal | undefined,
 ): Promise<Result<ProjectProvisionStepName, ProjectProvisionProblem>> {
   const projectId = project.id;
 
@@ -82,6 +93,10 @@ async function runStep(
     projectId,
     step,
   });
+
+  if (signal !== undefined && signal.aborted) {
+    return unavailable;
+  }
 
   let result: WorkspaceResult;
 
@@ -92,7 +107,17 @@ async function runStep(
       repositoryUrl: project.repositoryUrl,
       step,
     });
-  } catch {
+  } catch (error) {
+    console.error("project provision RPC failed", {
+      projectId,
+      step,
+      cause: redactedCause(error),
+    });
+
+    return unavailable;
+  }
+
+  if (signal !== undefined && signal.aborted) {
     return unavailable;
   }
 
@@ -112,6 +137,23 @@ async function runStep(
   return Result.ok(step);
 }
 
+type ProvisioningOutcome = Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>;
+
+/** Active plans keyed by tenant workspace and project, so a timed-out turn cannot overlap a retry. */
+const activeProvisions = new Map<string, Promise<ProvisioningOutcome>>();
+
+function provisioningKey(workspaceName: string, project: Project): string {
+  return `${workspaceName}:${project.id}`;
+}
+
+function abortedProvision(project: Project): ProvisioningOutcome {
+  return Result.err({
+    code: "provision-workspace-unavailable",
+    projectId: project.id,
+    step: "clone",
+  });
+}
+
 /**
  * Provision one project inside the tenant's workspace: reconcile its clone, then rewrite the
  * managed instructions.
@@ -128,14 +170,44 @@ async function runStep(
  */
 export function provisionProjectWorkspace(
   input: ProvisionProjectWorkspaceInput,
-): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
+): Promise<ProvisioningOutcome> {
   const resolved = resolveProject(input.projectId, input.catalog);
 
   if (!resolved.ok) {
     return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
   }
 
-  return provisionResolvedProject(input, resolved.project);
+  const project = resolved.project;
+  const key = provisioningKey(input.workspaceName, project);
+  const previous = activeProvisions.get(key);
+  const operation = provisionAfter(previous, input, project);
+  activeProvisions.set(key, operation);
+
+  return operation.finally(() => {
+    if (activeProvisions.get(key) === operation) {
+      activeProvisions.delete(key);
+    }
+  });
+}
+
+async function provisionAfter(
+  previous: Promise<ProvisioningOutcome> | undefined,
+  input: ProvisionProjectWorkspaceInput,
+  project: Project,
+): Promise<ProvisioningOutcome> {
+  if (previous !== undefined) {
+    try {
+      await previous;
+    } catch {
+      // A replacement retries after an unexpected failure, once the old plan has settled.
+    }
+  }
+
+  if (input.signal !== undefined && input.signal.aborted) {
+    return abortedProvision(project);
+  }
+
+  return provisionResolvedProject(input, project);
 }
 
 async function provisionResolvedProject(
@@ -145,7 +217,7 @@ async function provisionResolvedProject(
   const host = input.namespace.getByName(input.workspaceName);
 
   for (const step of PROJECT_PROVISION_STEP_NAMES) {
-    const ran = await runStep(host, project, step);
+    const ran = await runStep(host, project, step, input.signal);
 
     if (ran.isErr()) {
       return Result.err(ran.error);

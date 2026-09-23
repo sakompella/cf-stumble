@@ -323,7 +323,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       mount: () => Promise.resolve(this.mountServing(context.attribution.active)),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
-      provision: async (project) => (await this.connections.ensureProvisioned(project.id)).ok,
+      provision: async (project, signal) =>
+        (await this.connections.ensureProvisioned(project.id, signal)).ok,
     });
   }
 
