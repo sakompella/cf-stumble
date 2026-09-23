@@ -12,7 +12,7 @@ import {
 } from "../project-catalog.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
-import { MAX_EXEC_TIMEOUT_MS } from "./project/protocol.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
 export type ProvisionWorkspaceHost = Readonly<{
@@ -140,7 +140,13 @@ type ActiveProvision = Readonly<{
 /** The host kills a command at its ceiling; this margin covers the RPC's final settling turn. */
 export const PROVISION_STALE_MARGIN_MS = 1_000;
 
-export const PROVISION_STALE_AFTER_MS = MAX_EXEC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
+const PROVISION_COMMAND_BUDGET_MS = PROJECT_PROVISION_STEP_NAMES.reduce(
+  (budget, step) =>
+    budget + (STEP_RESULT_KIND[step] === "command" ? WORKSPACE_COMMAND_TIMEOUT_MS : 0),
+  0,
+);
+
+export const PROVISION_STALE_AFTER_MS = PROVISION_COMMAND_BUDGET_MS + PROVISION_STALE_MARGIN_MS;
 
 /**
  * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn

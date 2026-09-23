@@ -1,13 +1,19 @@
 import { expect, test, vi } from "vitest";
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
+import { PROJECT_PROVISION_STEP_NAMES } from "../../src/project-provision.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
   provisionProjectWorkspace,
   PROVISION_STALE_AFTER_MS,
+  PROVISION_STALE_MARGIN_MS,
   type ProvisionWorkspaceHost,
   type ProvisionWorkspaceNamespace,
 } from "../../src/workspace/index.js";
-import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
+import {
+  planProjectProvisionRequest,
+  type ProjectProvisionRequest,
+} from "../../src/workspace/project-provision.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 
 class FakeProvisionHost implements ProvisionWorkspaceHost {
@@ -265,6 +271,22 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("provision stale ceiling covers the plan command budget", () => {
+  const commandStepCount = PROJECT_PROVISION_STEP_NAMES.filter(
+    (step) =>
+      planProjectProvisionRequest({
+        kind: "provision-project",
+        project: sampleProjectOne,
+        step,
+      }).kind === "run-command",
+  ).length;
+
+  expect(commandStepCount).toBeGreaterThan(0);
+  expect(PROVISION_STALE_AFTER_MS).toBe(
+    commandStepCount * WORKSPACE_COMMAND_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS,
+  );
 });
 
 test("drops an in-flight provision after the Workspace Host command ceiling", async () => {
