@@ -105,6 +105,8 @@ export interface TurnScript {
   readonly throwStart?: boolean;
   /** Runs inside the object before the turn is admitted, to leave a record behind. */
   readonly beforeRun?: (state: DurableObjectState) => void;
+  /** Makes the generation attribution snapshot throw after the lease has been persisted. */
+  readonly throwAttribution?: boolean;
   readonly deadlineMs?: number;
   /** Stop reading after this many frames, as a browser that goes away mid-turn does. */
   readonly cancelAfter?: number;
@@ -209,7 +211,11 @@ function turnInput(
     projectId,
     prompt: script.prompt ?? "do the work",
     threads: stores.threads,
-    attribution: () => ({ active: stores.generations.active() }),
+    attribution: () => {
+      if (script.throwAttribution === true) throw new Error("attribution failed");
+
+      return { active: stores.generations.active() };
+    },
     start: (_project, request) => {
       script.handoff?.(request);
 

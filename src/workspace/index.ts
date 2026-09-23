@@ -45,6 +45,9 @@ export {
 
 export {
   provisionProjectWorkspace,
+  waitForWorkspaceProvision,
+  PROVISION_STALE_AFTER_MS,
+  PROVISION_STALE_MARGIN_MS,
   type ProjectProvisionProblem,
   type ProvisionedProjectWorkspace,
   type ProvisionProjectWorkspaceInput,

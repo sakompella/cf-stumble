@@ -12,6 +12,7 @@ import {
 } from "../project-catalog.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
+import { MAX_EXEC_TIMEOUT_MS } from "./project/protocol.js";
 
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
 export type ProvisionWorkspaceHost = Readonly<{
@@ -131,11 +132,28 @@ async function runStep(
 
 type ProvisioningOutcome = Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>;
 
-/** Active plans keyed by tenant workspace and project, so a timed-out turn cannot overlap a retry. */
-const activeProvisions = new Map<string, Promise<ProvisioningOutcome>>();
+type ActiveProvision = Readonly<{
+  operation: Promise<ProvisioningOutcome>;
+  startedAt: number;
+}>;
 
-function provisioningKey(workspaceName: string, project: Project): string {
-  return `${workspaceName}:${project.id}`;
+/** The host kills a command at its ceiling; this margin covers the RPC's final settling turn. */
+export const PROVISION_STALE_MARGIN_MS = 1_000;
+
+export const PROVISION_STALE_AFTER_MS = MAX_EXEC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
+
+/**
+ * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn
+ * can reach sibling repositories and the managed instructions, and a harness turn has the same
+ * capability, so neither may enter while another project's orphaned provision can still write.
+ *
+ * This is an isolate-local exclusion. The Workspace Host remains the real filesystem owner; after
+ * this Supervisor is evicted, only a Workspace Host-side protocol can prove that an old RPC stopped.
+ */
+const activeProvisions = new Map<string, ActiveProvision>();
+
+function provisionIsStale(active: ActiveProvision, now: number): boolean {
+  return now - active.startedAt > PROVISION_STALE_AFTER_MS;
 }
 
 function abortedProvision(project: Project): ProvisioningOutcome {
@@ -169,37 +187,109 @@ export function provisionProjectWorkspace(
     return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
   }
 
-  const project = resolved.project;
-  const key = provisioningKey(input.workspaceName, project);
-  const previous = activeProvisions.get(key);
-  const operation = provisionAfter(previous, input, project);
-  activeProvisions.set(key, operation);
-
-  return operation.finally(() => {
-    if (activeProvisions.get(key) === operation) {
-      activeProvisions.delete(key);
-    }
-  });
+  return provisionInWorkspace(input, resolved.project);
 }
 
-async function provisionAfter(
-  previous: Promise<ProvisioningOutcome> | undefined,
+/** Wait for the current workspace provision, without joining it or starting a replacement. */
+export function waitForWorkspaceProvision(
+  workspaceName: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const active = activeProvisions.get(workspaceName);
+
+  if (active === undefined) return Promise.resolve(signal?.aborted !== true);
+
+  if (provisionIsStale(active, Date.now())) {
+    activeProvisions.delete(workspaceName);
+
+    return Promise.resolve(signal?.aborted !== true);
+  }
+
+  return waitForActiveProvision(active.operation, signal);
+}
+
+async function provisionInWorkspace(
   input: ProvisionProjectWorkspaceInput,
   project: Project,
 ): Promise<ProvisioningOutcome> {
-  if (previous !== undefined) {
-    try {
-      await previous;
-    } catch {
-      // A replacement retries after an unexpected failure, once the old plan has settled.
+  for (;;) {
+    const active = activeProvisions.get(input.workspaceName);
+
+    if (active !== undefined && !provisionIsStale(active, Date.now())) {
+      const settled = await waitForActiveProvision(active.operation, input.signal);
+
+      if (!settled) return abortedProvision(project);
+
+      // The old operation has settled and removed itself. Reconcile this caller's project now.
+      continue;
     }
-  }
 
-  if (input.signal !== undefined && input.signal.aborted) {
-    return abortedProvision(project);
-  }
+    if (active !== undefined) {
+      activeProvisions.delete(input.workspaceName);
+    }
 
-  return provisionResolvedProject(input, project);
+    if (input.signal?.aborted === true) return abortedProvision(project);
+
+    const operation = provisionResolvedProject(input, project);
+    const tracked: ActiveProvision = { operation, startedAt: Date.now() };
+    activeProvisions.set(input.workspaceName, tracked);
+
+    operation.then(
+      () => {
+        removeActiveProvision(input.workspaceName, tracked);
+      },
+      () => {
+        removeActiveProvision(input.workspaceName, tracked);
+      },
+    );
+
+    return operation;
+  }
+}
+
+function removeActiveProvision(workspaceName: string, active: ActiveProvision): void {
+  if (activeProvisions.get(workspaceName) === active) {
+    activeProvisions.delete(workspaceName);
+  }
+}
+
+function waitForActiveProvision(
+  operation: Promise<ProvisioningOutcome>,
+  signal: AbortSignal | undefined,
+): Promise<boolean> {
+  if (signal?.aborted === true) return Promise.resolve(false);
+
+  if (signal === undefined)
+    return operation.then(
+      () => true,
+      () => true,
+    );
+
+  return new Promise((resolve) => {
+    let finished = false;
+
+    const finish = (settled: boolean) => {
+      if (finished) return;
+      finished = true;
+      signal.removeEventListener("abort", onAbort);
+      resolve(settled);
+    };
+
+    const onAbort = () => {
+      finish(false);
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    operation.then(
+      () => {
+        finish(true);
+      },
+      () => {
+        finish(true);
+      },
+    );
+  });
 }
 
 async function provisionResolvedProject(
