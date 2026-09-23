@@ -5,5 +5,8 @@ build/
 *.log
 .DS_Store
 .dev.vars
+.dev.vars.*
+.env
+.env.*
 .audit/
 .hegel/
