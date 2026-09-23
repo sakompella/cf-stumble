@@ -1,7 +1,7 @@
 // oxlint-disable anti-slop/no-runtime-typeof -- The frames under test come back across the RPC boundary, so this file narrows them before it asserts on them.
 
 import { expect, test } from "vitest";
-import { MAX_EXEC_FRAME_BYTES, ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -50,14 +50,14 @@ test("a frame at the shared byte limit is accepted exactly", async () => {
     `${JSON.stringify({ kind: "stdout", seq: 0, data: "" })}\n`,
   );
 
-  const data = "x".repeat(MAX_EXEC_FRAME_BYTES - emptyFrame.byteLength);
+  const data = "x".repeat(65_536 - emptyFrame.byteLength);
   const handle = execBackend.handles[0]!;
   handle.push({ name: "stdout", data: new TextEncoder().encode(data) });
   // oxlint-disable-next-line unicorn/prefer-single-call
   handle.push({ name: "exit", exitCode: 0 });
 
   const output = await frames(started.value.events.getReader());
-  expect(output[0]?.byteLength).toBe(MAX_EXEC_FRAME_BYTES);
+  expect(output[0]?.byteLength).toBe(65_536);
   expect(JSON.parse(new TextDecoder().decode(output[0] ?? new Uint8Array(0)))).toMatchObject({
     data,
   });
@@ -68,13 +68,13 @@ test("an output chunk over the frame limit splits into valid frames without losi
   const started = await target.startExec({ command: "x" });
 
   if (!started.ok) throw new Error("expected startExec to succeed");
-  const data = "x".repeat(MAX_EXEC_FRAME_BYTES);
+  const data = "x".repeat(65_536);
   const handle = execBackend.handles[0]!;
   handle.push({ name: "stdout", data: new TextEncoder().encode(data) });
   // oxlint-disable-next-line unicorn/prefer-single-call
   handle.push({ name: "exit", exitCode: 0 });
 
   const output = await frames(started.value.events.getReader());
-  expect(output.every((frame) => frame.byteLength <= MAX_EXEC_FRAME_BYTES)).toBe(true);
+  expect(output.every((frame) => frame.byteLength <= 65_536)).toBe(true);
   expect(output.flatMap((frame) => outputData(frame) ?? []).join("")).toBe(data);
 });

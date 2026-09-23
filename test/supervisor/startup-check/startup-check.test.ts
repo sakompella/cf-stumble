@@ -2,7 +2,6 @@
 
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { STARTUP_CHECK_MAX_BODY_BYTES } from "../../../src/supervisor/startup-check/index.js";
 import {
   activeSupervisor,
   artifact,
@@ -200,7 +199,7 @@ test("records a body above the byte bound as failed at the body stage", async ()
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  fetch() { return new Response("x".repeat(${STARTUP_CHECK_MAX_BODY_BYTES + 1})); }
+  fetch() { return new Response("x".repeat(${1_024 + 1})); }
 }
 `,
     ),

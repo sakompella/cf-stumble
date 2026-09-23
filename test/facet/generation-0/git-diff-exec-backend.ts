@@ -1,4 +1,3 @@
-import { TURN_DIFF_COMMAND } from "../../../src/facet/generation-0/turn-policy.js";
 import { FakeExecBackend } from "../../workspace/project/fakes.js";
 import type {
   BackendExecEvent,
@@ -44,7 +43,8 @@ export class GitDiffExecBackend implements ExecBackend {
   exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
     this.requests.push(input);
 
-    if (input.command === TURN_DIFF_COMMAND) return Promise.resolve(this.#diffHandle(input.cwd));
+    if (input.command === "git --no-pager diff HEAD")
+      return Promise.resolve(this.#diffHandle(input.cwd));
 
     const effect = this.effects.get(input.command);
 

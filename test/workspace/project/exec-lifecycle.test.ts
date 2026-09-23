@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { MAX_EXEC_TIMEOUT_MS, ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import { withDecodedEvents } from "./decoded-events.js";
 import {
   FakeExecBackend,
@@ -50,7 +50,7 @@ test("forwards stdout as it arrives, before the terminal exit event", async () =
 test("an omitted timeout defaults to the host maximum", async () => {
   const { execBackend, target } = makeTarget();
   await target.startExec({ command: "sleep 1" });
-  expect(execBackend.requests[0]?.timeoutMs).toBe(MAX_EXEC_TIMEOUT_MS);
+  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
 });
 
 test("a short timeout is used exactly as given", async () => {
@@ -61,8 +61,8 @@ test("a short timeout is used exactly as given", async () => {
 
 test("an oversized timeout clamps to the host maximum", async () => {
   const { execBackend, target } = makeTarget();
-  await target.startExec({ command: "sleep 1", timeoutMs: MAX_EXEC_TIMEOUT_MS * 10 });
-  expect(execBackend.requests[0]?.timeoutMs).toBe(MAX_EXEC_TIMEOUT_MS);
+  await target.startExec({ command: "sleep 1", timeoutMs: 600_000 * 10 });
+  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
 });
 
 test("two staggered operations time out independently", async () => {
