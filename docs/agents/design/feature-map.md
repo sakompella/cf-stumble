@@ -1,8 +1,8 @@
 # Version 0 feature map
 
-Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account feature. The front door is a "Deploy to Cloudflare" button. The deployed instance remains owner-only through Cloudflare Access. This document defines the work that remains and the cut line.
+Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account feature. The front door is a "Deploy to Cloudflare" button. The deployed instance remains owner-only through Cloudflare Access. The `v0` tag includes this completed scope and cut line.
 
-## What version 0 still needs
+## Version 0 scope
 
 1. Keep one connected GitHub project. Show it in the sidebar with the harness as a second sidebar entry. The harness entry selects `/workspace/harness` as the working directory. It does not create another project or another session.
 2. Keep one current Pi thread for each project. Starting a fresh thread replaces that project conversation and compacted context. It keeps the repository files.
@@ -38,8 +38,8 @@ The demo defines the feature cut line. Delete code only when none of these steps
 
 1. The deployed Worker serves requests until a generation exists. The Supervisor performs bootstrap without an active main facet.
 2. The harness repository URL comes from one Wrangler variable. The deploy button creates the user's fork, or the user sets the URL manually.
-3. On the first authenticated owner request, or an explicit owner bootstrap action, the Supervisor provisions the workspace and clones that URL into `/workspace/harness`.
-4. The Supervisor labels the clone HEAD commit as the first candidate and uses the normal submission path. It runs the `build:artifact` phases, one build step each, stores the module map in SQLite, cold-checks `GET /`, and activates a passing candidate.
+3. The owner submits the first candidate with `POST /api/generations/submit` and a caller-supplied `harnessCommit`. The Supervisor provisions the workspace and clones that URL as part of that submission.
+4. The Supervisor never bootstraps on a request or labels clone HEAD automatically. It uses the supplied commit in the normal submission path, runs the `build:artifact` phases one step at a time, stores the module map in SQLite, and cold-checks `GET /`. See [First run](../../deploy.md#first-run).
 5. Repeating a submission for a known commit returns its existing generation. A failed bootstrap build leaves the deployed Worker serving and reports the failure.
 6. With `CF_ACCESS_*` unset or only partly configured, every Worker route fails closed with `invalid-configuration`. The deploy documentation must state this because the button deploys before the user configures Access.
 7. Remove the production fixture from application construction.

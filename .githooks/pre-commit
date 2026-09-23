@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs the full gate before every commit: typecheck, format, lint, tests (~11s combined).
+# Runs the full gate before every commit: build:pi, vendor and protocol checks, typecheck, format, lint, module-map and fixture builds, tests (~50s on the Mac).
 # That order is deliberate. Type errors make the type-aware lint rules report "error type"
 # noise instead of the real fault, and formatting changes what lint sees at all — wrapping a
 # long line has pushed a file over max-lines here before.

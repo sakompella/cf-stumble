@@ -7,7 +7,8 @@ Use this file to find the repository's agent-authored domain documentation. cf-s
 1. Read `docs/agents/design/overview.md` for the product and its authority boundaries.
 2. Read `docs/agents/CONTEXT.md` in full for the project's terms.
 3. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change.
-4. Read `docs/agents/design/feature-map.md` for the version 0 completion scope, `docs/agents/design/slices.md` for earlier implementation status, and `docs/agents/design/computer-integration.md` for the pinned Computer integration.
+4. Read `docs/release/v0/release-notes.md` for what version 0 shipped and the deployed evidence.
+5. Read `docs/agents/design/feature-map.md` for the version 0 completion scope, `docs/agents/design/slices.md` for earlier implementation status, and `docs/agents/design/computer-integration.md` for the pinned Computer integration.
 
 The ignored files `docs/agents/_original-vision-audit.md` and `docs/agents/_cloudflare-viability.md` are evidence notes. They provide historical and platform research, not current decisions.
 

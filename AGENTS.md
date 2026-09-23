@@ -16,7 +16,7 @@ When you create or edit prose documentation, read `docs/agents/writing-style.md`
 
 ### Verification
 
-Run `pnpm verify` before you claim anything works. It runs typecheck, format check, lint and the full test suite in that order, in about eleven seconds. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
+Run `pnpm verify` before you claim anything works. It runs `build:pi`, `verify:vendor`, `verify:project-protocol`, typecheck, format check, lint, `build:module-map`, `build:loaded-execution-env-fixture`, and the full test suite in that order. It takes about 50 seconds on the Mac. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
 
 A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
 

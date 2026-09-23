@@ -43,7 +43,7 @@ The evidence records these results from the paid deployment:
 - A real coding turn read a file, wrote through the product tool, ran a command, streamed a diff, and saved its thread in 9.8 seconds. [The deployed generation loop](evidence/deployed-generation-loop.md) contains the stream frames and output.
 - A deliberately broken candidate failed its startup check while the active generation continued to answer. The failed submission took 510 seconds. The same evidence records the result.
 - Rollback activated a stored module map in 0.26 seconds without a build or Workspace Host call. [The deployed generation loop](evidence/deployed-generation-loop.md) contains the tail evidence.
-- Cloudflare Access admitted the owner's real identity at `stumble.akompella.dev`, and `workers.dev` is off. One GitHub repository was connected beside the harness clone in one workspace. [Access and route evidence](evidence/access-and-route.md) contains the Access result. [The deployed generation loop](evidence/deployed-generation-loop.md) contains the workspace result.
+- Cloudflare Access admitted the owner's real identity at `stumble.akompella.dev`, and `workers.dev` is off. One GitHub repository was connected beside the harness clone in one workspace. [Access and route evidence](evidence/access-and-route.md) contains the Access result. [GitHub connection evidence](evidence/github-connection.md) records the connected repository and workspace.
 
 ## Limits and unproven areas
 
