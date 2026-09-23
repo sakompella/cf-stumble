@@ -61,8 +61,9 @@ Three rules protect the flow:
 - Every state-changing project route refuses a request whose `Origin` header is not cf-stumble's
   own origin.
 
-The live owner-run authorization is task T6b. Everything above is tested against a scripted GitHub
-provider and a fake workspace.
+The owner completed the live authorization on the deployment on 2026-09-11. [GitHub connection
+evidence](../../release/v0/evidence/github-connection.md) records the result. Everything above is
+also tested against a scripted GitHub provider and a fake workspace.
 
 ## Configuration
 
@@ -113,7 +114,8 @@ token and then searches every one of those surfaces for it.
 
 ## What the pinned image must provide
 
-ADR-0039 expects the Computer image to carry the development tools. E8 records Git on the pinned
-pair. If `gh` is missing, the credential commands report `tooling-missing`, and cf-stumble neither
-installs a package nor reports a connection. Confirming `gh` on the pinned image needs a paid
-probe, which task T6b covers.
+ADR-0039 expects the Computer image to carry the development tools. Git is present on the pinned
+Computer source and image pair. If `gh` is missing, the credential commands report
+`tooling-missing`, and cf-stumble neither installs a package nor reports a connection. The
+2026-09-11 deployment observation confirmed that `git` worked in both workspace repositories. See
+[GitHub connection evidence](../../release/v0/evidence/github-connection.md).

@@ -81,16 +81,17 @@ The main open questions are:
 
 - the supervisor-to-facet interface, including whether normal `fetch` is sufficient;
 - what the main harness can request and how the supervisor authenticates and checks it;
-- the cold-start check and what counts as success;
 - what makes a generation known good;
 - what happens to a running turn when its browser disconnects;
-- model egress or gateway;
-- UI transport;
 - recovery limits and timeouts; and
 - how executable Worker modules are produced, identified, and retained.
+
+The cold-start check is settled by ADR-0029. ADR-0037 settles UI transport. The host selects the
+Workers AI model through its binding. A caller cannot select the model, effort, or endpoint, as the
+[version 0 release notes](../../release/v0/release-notes.md) record.
 
 A successful HTTP status does not prove that a streamed turn completed. A stream can fail after sending headers, and a disconnect can leave work unresolved. The implementation should measure those cases before using them as evidence that a generation is reliable.
 
 ## Reading the design
 
-Read this overview first. Read `../CONTEXT.md` for precise terms, `../adr/README.md` for settled decisions, `computer-integration.md` for verified Computer evidence, and `slices.md` only when planning implementation work.
+See [`../domain.md`](../domain.md) for the required reading order.
