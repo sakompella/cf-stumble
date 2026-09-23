@@ -27,15 +27,26 @@ const TIMEOUT_MESSAGE_PATTERN = /\btime(?:d)?[ -]?out\b/iu;
  * generic code it always did.
  */
 export function isTimeoutFailure(cause: unknown): boolean {
-  if (!(cause instanceof Error)) return false;
+  try {
+    if (!(cause instanceof Error)) return false;
 
-  return cause.name === "TimeoutError" || TIMEOUT_MESSAGE_PATTERN.test(cause.message);
+    return cause.name === "TimeoutError" || TIMEOUT_MESSAGE_PATTERN.test(cause.message);
+  } catch {
+    return false;
+  }
 }
 
-function causeText(cause: unknown, knownToken: string | undefined): string {
-  const message = cause instanceof Error ? cause.message : String(cause);
+/** The fixed fallback logged when rendering a thrown cause itself throws. */
+const UNPRINTABLE_CAUSE = "[unprintable cause]";
 
-  return redactCredentials(message, knownToken).slice(0, CAUSE_TEXT_LIMIT);
+function causeText(cause: unknown, knownToken: string | undefined): string {
+  try {
+    const message = cause instanceof Error ? cause.message : String(cause);
+
+    return redactCredentials(message, knownToken).slice(0, CAUSE_TEXT_LIMIT);
+  } catch {
+    return UNPRINTABLE_CAUSE;
+  }
 }
 
 /**
