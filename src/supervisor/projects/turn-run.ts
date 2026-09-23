@@ -157,22 +157,36 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
     bound: TurnBound.forTurn(admittedAt, input.leaseMs, input.deadlineMs, input.now),
   };
 
-  const started = await boundedStart(input, turn, { prompt, messages: history.value });
+  let started: ProjectTurnStart | "timed-out";
+
+  try {
+    started = await boundedStart(input, turn, { prompt, messages: history.value });
+  } catch (error) {
+    // A lost RPC rejects instead of returning a refusal. The route deliberately turns that
+    // exception into `internal-error`, but this lease still belongs to this turn and must be
+    // released before the exception crosses the boundary.
+    abandonTurn(input, turn);
+    throw error;
+  }
 
   if (started === "timed-out") {
-    input.threads.abandonTurn(turn.projectId, turn.leaseId);
+    abandonTurn(input, turn);
 
     return refused("turn-not-started");
   }
 
   if (!started.ok) {
-    turn.bound.stop();
-    input.threads.abandonTurn(turn.projectId, turn.leaseId);
+    abandonTurn(input, turn);
 
     return refused(started.reason);
   }
 
   return { ok: true, frames: streamAdmittedTurn(input, turn, started.frames) };
+}
+
+function abandonTurn(input: RunProjectTurnInput, turn: AdmittedTurn): void {
+  turn.bound.stop();
+  input.threads.abandonTurn(turn.projectId, turn.leaseId);
 }
 
 /**

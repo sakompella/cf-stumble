@@ -222,3 +222,15 @@ test("a start that never answers is bounded, and the project does not stay held"
   expect(observed.refused).toBe("turn-not-started");
   expect(observed.thread).toMatchObject({ revision: 0, turnActive: false });
 });
+
+test("a rejected start abandons the exact lease before the error reaches the caller", async () => {
+  const control = await supervisor("turn-start-rejects");
+  await activateFixtureGeneration(control);
+
+  await expect(runScriptedTurn(control, { throwStart: true })).rejects.toThrow("start failed");
+
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { revision: 0, turnActive: false },
+  });
+});
