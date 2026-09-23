@@ -1,5 +1,5 @@
 import { Result } from "better-result";
-import { redactCredentials } from "../github/index.js";
+import { logRedactedCause } from "../diagnostics.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
@@ -73,13 +73,6 @@ const STEP_RESULT_KIND = {
   instructions: "written",
 } as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Workspace Host RPC may reject with any thrown value.
-function redactedCause(error: unknown): string {
-  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-
-  return redactCredentials(detail).slice(0, 400);
-}
-
 async function runStep(
   host: ProvisionWorkspaceHost,
   project: Project,
@@ -108,11 +101,10 @@ async function runStep(
       step,
     });
   } catch (error) {
-    console.error("project provision RPC failed", {
-      projectId,
-      step,
-      cause: redactedCause(error),
-    });
+    logRedactedCause(
+      `project-provision.${step}: provision-workspace-unavailable (${projectId})`,
+      error,
+    );
 
     return unavailable;
   }
