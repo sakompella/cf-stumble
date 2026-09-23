@@ -90,7 +90,7 @@ The build was fixed after these notes were written. The cause was the command's 
 Computer holds it in memory, and an unbounded `pnpm install` log made the container exit 1. The
 install now reports silently and the step keeps only the last 4000 bytes (`a199797`), the pnpm
 store is a layer of the image (`2efcb75`), and the whole loop runs end to end. See
-`.audit/v0/evidence/deployed-generation-loop.md`. The three experiments below were not needed.
+`deployed-generation-loop.md`. The three experiments below were not needed.
 
 ## The three experiments this note had planned, in order
 
