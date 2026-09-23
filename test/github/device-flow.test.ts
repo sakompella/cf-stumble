@@ -5,9 +5,6 @@ import {
   parseGitHubToken,
   redeemDeviceAuthorization,
   requestDeviceAuthorization,
-  GITHUB_ACCESS_TOKEN_URL,
-  GITHUB_DEVICE_CODE_URL,
-  GITHUB_DEVICE_SCOPE,
   type GitHubFetch,
 } from "../../src/github/index.js";
 
@@ -74,10 +71,8 @@ test("asks GitHub for a device code and keeps the codes apart", async () => {
       intervalSeconds: 5,
     },
   });
-  expect(calls[0]?.url).toBe(GITHUB_DEVICE_CODE_URL);
-  expect(calls[0]?.body).toBe(
-    `client_id=${CLIENT_ID}&scope=${encodeURIComponent(GITHUB_DEVICE_SCOPE)}`,
-  );
+  expect(calls[0]?.url).toBe("https://github.com/login/device/code");
+  expect(calls[0]?.body).toBe(`client_id=${CLIENT_ID}&scope=repo`);
 });
 
 test("refuses to start without a configured client id, and never calls the provider", async () => {
@@ -111,7 +106,7 @@ test("redeems one device code and returns the token to its caller only", async (
   );
 
   expect(redeemed).toEqual({ kind: "authorized", token: FAKE_TOKEN });
-  expect(calls[0]?.url).toBe(GITHUB_ACCESS_TOKEN_URL);
+  expect(calls[0]?.url).toBe("https://github.com/login/oauth/access_token");
   expect(calls[0]?.body).toContain("device_code=device-code-secret");
 });
 
