@@ -1,5 +1,4 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { MAX_EXEC_TIMEOUT_MS } from "../../../src/workspace/project/index.js";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
 
 /** Waits for the microtask queue this test's promises are chained on to drain. */
@@ -77,7 +76,7 @@ test("an omitted timeout defaults to the target's own maximum", async () => {
   const { execBackend, env } = makeFacetExecutionEnv();
   const execPromise = env.exec("sleep 1");
   await tick();
-  expect(execBackend.requests[0]?.timeoutMs).toBe(MAX_EXEC_TIMEOUT_MS);
+  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
   execBackend.handles[0]!.push({ name: "exit", exitCode: 0 });
   await execPromise;
 });
@@ -93,9 +92,9 @@ test("a timeout in seconds converts to milliseconds", async () => {
 
 test("an oversized timeout clamps to the target's maximum", async () => {
   const { execBackend, env } = makeFacetExecutionEnv();
-  const execPromise = env.exec("sleep 1", { timeout: MAX_EXEC_TIMEOUT_MS });
+  const execPromise = env.exec("sleep 1", { timeout: 600 });
   await tick();
-  expect(execBackend.requests[0]?.timeoutMs).toBe(MAX_EXEC_TIMEOUT_MS);
+  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
   execBackend.handles[0]!.push({ name: "exit", exitCode: 0 });
   await execPromise;
 });
