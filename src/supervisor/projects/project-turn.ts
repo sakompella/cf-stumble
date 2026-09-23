@@ -1,4 +1,5 @@
 import type { Project } from "../../project-catalog.js";
+import { waitForWorkspaceProvision } from "../../workspace/index.js";
 import { resolveSelectableProject, type SelectableCatalog } from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
 import type { Result } from "better-result";
@@ -125,6 +126,8 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return NOT_STARTED;
   }
 
+  if (!(await workspaceIsAvailable(input))) return NOT_STARTED;
+
   const mounted = await input.mount();
 
   if (mounted.isErr()) {
@@ -157,6 +160,8 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return NOT_STARTED;
   }
 
+  if (!(await workspaceIsAvailable(input))) return NOT_STARTED;
+
   try {
     const frames = await mounted.value.fetcher.startTurn(
       capability,
@@ -168,6 +173,11 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
   } catch {
     return NOT_STARTED;
   }
+}
+
+/** Wait for provision before generation or capability admission, including harness turns. */
+function workspaceIsAvailable(input: ProjectTurnInput): Promise<boolean> {
+  return waitForWorkspaceProvision(input.workspaceName, input.signal);
 }
 
 /**
