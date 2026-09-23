@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js";
 import {
   executeGitHubCredentialRequest,
@@ -68,6 +68,8 @@ class FilesystemlessOperations implements WorkspaceOperations {
   stderr = "";
   exitCode = 0;
   commandFails = false;
+  /** What the rejected `runCommand` promise carries; a test overrides this. */
+  commandFailure = new Error("workspace is unavailable");
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     return Promise.reject(new Error(`parent directory missing: ${path}`));
@@ -87,7 +89,7 @@ class FilesystemlessOperations implements WorkspaceOperations {
     _timeoutMs: number,
     stdin?: string,
   ): Promise<CommandOutput> {
-    if (this.commandFails) return Promise.reject(new Error("workspace is unavailable"));
+    if (this.commandFails) return Promise.reject(this.commandFailure);
     this.sources.push(source);
     this.stdins.push(stdin);
 
@@ -179,6 +181,40 @@ test("reports an unavailable workspace when the install command cannot run", asy
   });
 
   expect(failed).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
+});
+
+// A thrown cause used to vanish behind `workspace-unavailable` with nothing logged. The public
+// code stays generic, but the cause now reaches an operator log, redacted like any other text.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+test("logs a redacted, kind-distinguishing cause instead of discarding it", async () => {
+  const operations = new FilesystemlessOperations();
+  operations.commandFails = true;
+  operations.commandFailure = new Error(`workspace transport carried ${FAKE_TOKEN} in its cause`);
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const failed = await credential(operations, {
+    kind: "github-credential",
+    step: "install",
+    token: FAKE_TOKEN,
+  });
+
+  expect(failed).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
+  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
+  let logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("workspace-unavailable");
+  expect(logged, "a token in the thrown cause must never reach the log").not.toContain(FAKE_TOKEN);
+  expect(logged).toContain(REDACTED);
+
+  operations.commandFailure = new DOMException("the command exceeded its budget", "TimeoutError");
+  loggedErrors.mockClear();
+  await credential(operations, { kind: "github-credential", step: "install", token: FAKE_TOKEN });
+  logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged, "a timeout is distinguishable in the log though the code is not").toContain(
+    "timeout",
+  );
 });
 
 test("redacts a token a tool printed back before it leaves the workspace", async () => {

@@ -2,7 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { containsCredential } from "../../src/github/index.js";
 import { ProjectConnections } from "../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
@@ -95,6 +95,7 @@ function storedText(storage: DurableObjectStorage): string {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await reset();
 });
 
@@ -112,13 +113,61 @@ test("no tracked source file or agent document contains a credential", () => {
   ).toEqual([]);
 });
 
-test("no module on the credential path writes to a log", () => {
+/**
+ * A credential module no longer writes to a log directly: it hands whatever it caught to
+ * `logRedactedCause` in `src/diagnostics.ts`, which is the one place that redacts a cause and
+ * calls `console.error`. Checking for a bare `console.` call still catches a module that bypassed
+ * that helper and logged something unredacted itself.
+ */
+test("a credential module logs only through the shared redacting helper, never console directly", () => {
   const logging = credentialModules()
     .filter(([, contents]) => /\bconsole\s*\./u.test(contents))
     .map(([path]) => path);
 
   expect(credentialModules().length).toBeGreaterThan(5);
-  expect(logging, "an application log is one of the surfaces criterion 3 names").toEqual([]);
+  expect(
+    logging,
+    "a bare console call on this path would bypass the helper that redacts a cause",
+  ).toEqual([]);
+});
+
+test("an RPC failure during authorization logs a redacted cause and never the token or device code", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const name = "credential-surfaces-rpc-failure";
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const completed = await runInDurableObject(
+    env.SUPERVISOR.getByName(name),
+    async (_instance, state) => {
+      const connections = new ProjectConnections({
+        storage: state.storage,
+        workspaceName: tenantWorkspaceName(name),
+        namespace: workspace.namespace,
+        environment: {
+          clientId: "Iv1.cfstumbleFAKE",
+          fallbackToken: undefined,
+          fetcher: githubReplying(),
+        },
+      });
+
+      await connections.startAuthorization(owner, NOW);
+      workspace.unavailable = true;
+
+      return connections.completeAuthorization(owner, NOW + 1_000);
+    },
+  );
+
+  expect(
+    completed,
+    "an RPC failure is a status, not a thrown error, at every caller above the workspace",
+  ).toEqual({ ok: true, status: { state: "reconnect-required", reason: "workspace-unavailable" } });
+  expect(
+    loggedErrors,
+    "the RPC failure that reached credential-access.ts must be logged",
+  ).toHaveBeenCalled();
+  const logged = loggedErrors.mock.calls.map((call) => call.join(" ")).join("\n");
+  expect(logged, "the redemption's own token must never reach the log").not.toContain(FAKE_TOKEN);
+  expect(logged, "the device code must never reach the log").not.toContain("device-code-secret");
 });
 
 // One test drives the whole flow, because the point is what the flow as a whole leaves behind.
