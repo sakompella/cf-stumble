@@ -2,8 +2,20 @@
 
 // The JWKS document is untrusted input, so keys are parsed before the verifier ever sees them.
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type
+import { Result } from "better-result";
+import { logRedactedCause } from "../diagnostics.js";
 
 export type AccessFetch = typeof fetch;
+
+/**
+ * Why a JWKS load produced no keys: the certs endpoint rejected, answered a non-2xx status, or
+ * answered a body that did not parse into a usable key set. A caller cannot and should not tell
+ * these apart (ADR-0035); every one of them is Cloudflare Access's key service, not the presented
+ * token, so `verifyUsingAccessKeys` turns this into a public `key-service-unavailable` reason
+ * rather than folding it into `invalid-signature`. The cause itself is logged for operators at the
+ * point it is discarded, not carried on this value.
+ */
+export type KeyLoadFailure = Readonly<{ code: "key-service-unavailable" }>;
 
 /**
  * A signing key this module accepted. `JsonWebKey` in workers-types has no `kid`, and Access
@@ -29,7 +41,7 @@ let publicKeyCache: CachedPublicKeys | undefined;
 
 let publicKeyRefreshAllowedAt = 0;
 
-let publicKeyFetchInFlight: Promise<readonly AccessPublicKey[] | undefined> | undefined;
+let publicKeyFetchInFlight: Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -140,25 +152,37 @@ function cachedPublicKeys(
 async function loadPublicKeys(
   url: string,
   fetcher: AccessFetch,
-): Promise<readonly AccessPublicKey[] | undefined> {
+): Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> {
   try {
     const response = await fetcher(url);
 
     if (!response.ok) {
-      return undefined;
+      logRedactedCause(
+        "access-keys.load: key-service-unavailable",
+        `unexpected JWKS response status ${response.status}`,
+      );
+
+      return Result.err({ code: "key-service-unavailable" });
     }
 
     const keys = parsePublicKeys(await response.json());
 
     if (keys === undefined) {
-      return undefined;
+      logRedactedCause(
+        "access-keys.load: key-service-unavailable",
+        "JWKS response body did not parse into a usable key set",
+      );
+
+      return Result.err({ code: "key-service-unavailable" });
     }
 
     publicKeyCache = { fetcher, url, expiresAt: Date.now() + publicKeyCacheTtlMs, keys };
 
-    return keys;
-  } catch {
-    return undefined;
+    return Result.ok(keys);
+  } catch (cause) {
+    logRedactedCause("access-keys.load: key-service-unavailable", cause);
+
+    return Result.err({ code: "key-service-unavailable" });
   }
 }
 
@@ -170,12 +194,12 @@ export function fetchPublicKeys(
   url: string,
   fetcher: AccessFetch,
   forceRefresh: boolean,
-): Promise<readonly AccessPublicKey[] | undefined> {
+): Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> {
   const now = Date.now();
   const cached = cachedPublicKeys(url, fetcher, now);
 
   if (cached !== undefined && (!forceRefresh || now < publicKeyRefreshAllowedAt)) {
-    return Promise.resolve(cached);
+    return Promise.resolve(Result.ok(cached));
   }
 
   if (publicKeyFetchInFlight === undefined) {
