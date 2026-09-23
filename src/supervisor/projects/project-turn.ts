@@ -29,7 +29,7 @@ export type ProjectTurnFacet = Readonly<{
  * checkout is provisioned by the bootstrap that clones it and has no repository URL to reconcile
  * against.
  */
-export type ProvisionSelectedProject = (project: Project) => Promise<boolean>;
+export type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Promise<boolean>;
 
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
 export type MountServingGeneration = () => Promise<
@@ -137,7 +137,7 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
 
   // Only a connected repository has a clone to reconcile. The harness checkout is already in the
   // workspace, so selecting it asks the workspace for nothing before the turn starts.
-  if (selected.kind === "repository" && !(await input.provision(selected))) {
+  if (selected.kind === "repository" && !(await input.provision(selected, input.signal))) {
     return { ok: false, reason: "workspace-unavailable" };
   }
 
