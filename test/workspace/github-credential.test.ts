@@ -236,6 +236,28 @@ test("redacts a token a tool printed back before it leaves the workspace", async
   expect(failed.error.detail).toContain(REDACTED);
 });
 
+// A device-flow token need not look like `ghp_...`, so the fixed redaction patterns cannot
+// recognize it; only the caller holding the exact value can strip it.
+test("redacts an opaque token a tool echoed back, even though it matches no known prefix", async () => {
+  const opaqueToken = "s3cr3t-opaque-installer-token-0123456789";
+  const operations = new FakeCredentialOperations();
+  operations.exitCode = 1;
+  operations.stderr = `gh: unexpected response, saw token ${opaqueToken} in the request`;
+
+  const failed = await credential(operations, {
+    kind: "github-credential",
+    step: "install",
+    token: opaqueToken,
+  });
+
+  if (failed.ok) {
+    throw new Error("a failing install must report a failure");
+  }
+
+  expect(failed.error.detail).not.toContain(opaqueToken);
+  expect(failed.error.detail).toContain(REDACTED);
+});
+
 test("reports a workspace image without gh instead of pretending to install", async () => {
   const operations = new FakeCredentialOperations();
   operations.stdout = "tooling-missing";

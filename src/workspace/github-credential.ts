@@ -132,7 +132,7 @@ async function installCredential(
   );
 
   if (output.exitCode !== 0) {
-    return failed("credential-command-failed", output.stderr);
+    return failed("credential-command-failed", output.stderr, token);
   }
 
   return output.stdout.trim() === "tooling-missing"
