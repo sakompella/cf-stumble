@@ -1,6 +1,6 @@
 # cf-stumble
 
-cf-stumble is a personal agent whose mutable main harness is kept separate from its immutable recovery harness. This glossary names concepts that must remain distinct; implementation choices belong in design documents and ADRs.
+cf-stumble is a personal agent with a mutable main harness. This glossary names concepts that must remain distinct; implementation choices belong in design documents and ADRs.
 
 ## Harness and execution
 
@@ -9,23 +9,23 @@ The mutable agent harness that performs the user's work. A generation supplies o
 _Avoid_: supervisor, recovery harness
 
 **Recovery harness**:
-The immutable, Pi-derived agent code that diagnoses failures and restores a usable main harness. It stays close to the Pi base but omits the main harness's connector for requesting Supervisor capabilities. It runs in the Supervisor Durable Object but is not itself a generation.
+Version 0 has no recovery harness. The owner recovers by rolling back to a generation that already ran. That loads its stored module map without rebuilding and does not use a second Pi-derived fork.
 _Avoid_: Generation 0, main harness
 
 **Supervisor Durable Object**:
-The primary Durable Object for a cf-stumble instance. It contains the recovery harness, manages main-harness facets, protects generation state, and decides whether requested generation changes may occur. It is not a facet.
+The primary Durable Object for a cf-stumble instance. It manages main-harness facets, protects generation state, and decides whether requested generation changes may occur. It is not a facet.
 _Avoid_: main facet, workspace
 
 **Main facet**:
 A Dynamic Worker facet that runs one generation of the main harness.
-_Avoid_: supervisor, recovery harness
+_Avoid_: supervisor
 
 **Generation**:
 A specific, labeled Git commit in the harness repository. The Supervisor records preparation checks and activation against it.
 _Avoid_: ordinary commit, revision, version
 
 **Generation 0**:
-The first labeled mutable main-harness commit, initially based closely on Pi. It is neither the recovery harness nor a special recovery target.
+The first labeled mutable main-harness commit, initially based closely on Pi. It is not a special recovery target.
 
 **Active generation**:
 The generation currently selected and running as the main harness.
