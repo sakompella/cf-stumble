@@ -1,3 +1,4 @@
+import { isTimeoutFailure, logRedactedCause } from "../../diagnostics.js";
 import type { MainFacetMountProblem } from "../artifacts/index.js";
 
 /**
@@ -13,7 +14,18 @@ export class FacetRelay {
   async forward(request: Request, fetcher: Pick<Fetcher, "fetch">): Promise<Response> {
     try {
       return await fetcher.fetch(request);
-    } catch {
+    } catch (cause) {
+      // The caller sees only the generic 502 below, on purpose (ADR-0035): a broken generation
+      // and a Loader or RPC transport failure must look identical from outside. An operator
+      // still needs to tell them apart, so the discarded cause is logged, redacted, with the
+      // request line, which is all the activation context this module receives.
+      logRedactedCause(
+        `supervisor.relay.forward ${request.method} ${new URL(request.url).pathname}: ${
+          isTimeoutFailure(cause) ? "timeout" : "main-facet-failed-before-headers"
+        }`,
+        cause,
+      );
+
       return new Response("Main facet failed before response headers", { status: 502 });
     }
   }
