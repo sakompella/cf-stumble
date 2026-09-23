@@ -61,7 +61,7 @@ export interface ProvisionProjectWorkspaceInput {
   readonly catalog?: ProjectCatalog;
   readonly namespace: ProvisionWorkspaceNamespace;
   /** Stops the plan before another workspace RPC when the owning turn has ended. */
-  readonly signal?: AbortSignal;
+  readonly signal?: AbortSignal | undefined;
 }
 
 /**

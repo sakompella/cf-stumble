@@ -6,7 +6,6 @@
 // that owns the work.
 
 import { DurableObject } from "cloudflare:workers";
-import { provisionProjectWorkspace } from "../workspace/index.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -325,17 +324,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: async (project, signal) =>
-        (
-          await provisionProjectWorkspace({
-            workspaceName: this.workspaceName,
-            projectId: project.id,
-            catalog: this.connections
-              .catalog()
-              .filter((candidate) => candidate.kind === "repository"),
-            namespace: this.env.WORKSPACE_HOST,
-            signal,
-          })
-        ).isOk(),
+        (await this.connections.ensureProvisioned(project.id, signal)).ok,
     });
   }
 
