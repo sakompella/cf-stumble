@@ -1,3 +1,4 @@
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
@@ -116,7 +117,12 @@ export async function executeHarnessBuildRequest(
       input.operations,
       planHarnessBuildRequest(input.configuration, parsed),
     );
-  } catch {
+  } catch (cause) {
+    logRedactedCause(
+      `workspace.harness-build.${parsed.kind}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
+      cause,
+    );
+
     return unavailable();
   }
 }
@@ -140,7 +146,12 @@ export async function executeProjectProvisionRequest(
 
   try {
     return await executePlan(input.operations, planProjectProvisionRequest(parsed));
-  } catch {
+  } catch (cause) {
+    logRedactedCause(
+      `workspace.provision-project.${parsed.step}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
+      cause,
+    );
+
     return unavailable();
   }
 }

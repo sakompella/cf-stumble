@@ -27,8 +27,19 @@ const TOKEN_PATTERN = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{1
 /** The userinfo prefix of an HTTPS URL, which is how a credential reaches a message `git` prints. */
 const URL_CREDENTIAL_PATTERN = /(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gu;
 
-export function redactCredentials(text: string): string {
-  return text
+/**
+ * `knownToken`, when a caller is holding the exact value that reached a command, is stripped
+ * first. The two patterns above are last-line defenses for a value whose shape they recognize;
+ * an opaque token accepted by `parseGitHubToken` is not one of those shapes, and the caller that
+ * just sent it is the only place that still knows what to look for.
+ */
+export function redactCredentials(text: string, knownToken?: string): string {
+  const withKnownToken =
+    knownToken !== undefined && knownToken.length > 0
+      ? text.split(knownToken).join(REDACTED)
+      : text;
+
+  return withKnownToken
     .replaceAll(TOKEN_PATTERN, REDACTED)
     .replaceAll(URL_CREDENTIAL_PATTERN, `$1${REDACTED}@`);
 }

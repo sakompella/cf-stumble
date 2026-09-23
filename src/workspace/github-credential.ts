@@ -1,3 +1,4 @@
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import {
   credentialStatusSource,
   installCredentialSource,
@@ -57,8 +58,15 @@ function invalidRequest(): GitHubCredentialResult {
   return { ok: false, error: { code: "invalid-request", detail: "" } };
 }
 
-function failed(code: "workspace-unavailable" | "credential-command-failed", detail: string) {
-  return { ok: false, error: { code, detail: redactCredentials(detail).slice(0, 400) } } as const;
+function failed(
+  code: "workspace-unavailable" | "credential-command-failed",
+  detail: string,
+  knownToken?: string,
+) {
+  return {
+    ok: false,
+    error: { code, detail: redactCredentials(detail, knownToken).slice(0, 400) },
+  } as const;
 }
 
 /**
@@ -124,7 +132,7 @@ async function installCredential(
   );
 
   if (output.exitCode !== 0) {
-    return failed("credential-command-failed", output.stderr);
+    return failed("credential-command-failed", output.stderr, token);
   }
 
   return output.stdout.trim() === "tooling-missing"
@@ -195,7 +203,13 @@ export async function executeGitHubCredentialRequest(
         return exhaustive;
       }
     }
-  } catch {
+  } catch (cause) {
+    logRedactedCause(
+      `github-credential.${parsed.step}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
+      cause,
+      parsed.step === "install" ? parsed.token : undefined,
+    );
+
     return failed("workspace-unavailable", "");
   }
 }

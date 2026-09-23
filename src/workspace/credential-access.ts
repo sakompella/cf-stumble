@@ -1,4 +1,5 @@
 import { Result } from "better-result";
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
 
@@ -53,7 +54,13 @@ async function ask(
 ): Promise<Result<GitHubCredentialResult, WorkspaceCredentialProblem>> {
   try {
     return Result.ok(await input.namespace.getByName(input.workspaceName).credential(request));
-  } catch {
+  } catch (cause) {
+    logRedactedCause(
+      `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,
+      cause,
+      request.step === "install" ? request.token : undefined,
+    );
+
     return Result.err({ code: "credential-workspace-unavailable", detail: "" });
   }
 }
