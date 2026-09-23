@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
   projectProvisionConfiguration,
@@ -273,11 +273,14 @@ test("keeps a refused or unreachable workspace a plain typed failure", async () 
   const throwing = new FakeProvisionHost();
   throwing.provision = (): Promise<WorkspaceResult> =>
     Promise.reject(new Error("fake workspace host failure"));
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
   const results = [
     await provisionerFor(refusing).provision(),
     await provisionerFor(throwing).provision(),
   ];
+
+  logged.mockRestore();
 
   expect(results.map((result) => (result.isErr() ? result.error : "ok"))).toEqual([
     { code: "provision-workspace-unavailable", projectId: projectOne.id, step: "clone" },
@@ -289,4 +292,23 @@ test("keeps a refused or unreachable workspace a plain typed failure", async () 
     ),
     "a provisioning failure stays a value a caller can return over RPC",
   ).toBe(true);
+});
+
+test("logs a redacted cause when the workspace provision RPC rejects", async () => {
+  const throwing = new FakeProvisionHost();
+  const secret = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+  throwing.provision = (): Promise<WorkspaceResult> =>
+    Promise.reject(new Error(`clone failed ${secret} https://${secret}@github.com/sample/repo`));
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  try {
+    await provisionerFor(throwing).provision();
+
+    const output = JSON.stringify(logged.mock.calls);
+    expect(output).toContain("[redacted]");
+    expect(output).not.toContain(secret);
+    expect(output).not.toContain(`https://${secret}@github.com`);
+  } finally {
+    logged.mockRestore();
+  }
 });
