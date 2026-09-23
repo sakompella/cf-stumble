@@ -12,10 +12,17 @@ export { ModelRoute } from "./model-route.js";
 
 /**
  * What the boundary answers a refused request. A missing or unusable Access configuration is this
- * Worker's own fault and says nothing about the caller, so it answers 500 rather than 401.
+ * Worker's own fault and says nothing about the caller, so it answers 500 rather than 401. A
+ * Cloudflare Access key-service failure is likewise this Worker's dependency failing, not a bad
+ * credential, so it answers 503; the caller cannot tell it apart from `invalid-configuration` or
+ * `invalid-signature` from the body alone, and the operator evidence lives in the log
+ * `logRedactedCause` wrote when the key load failed, not in this response.
  */
 function refusal(reason: Exclude<AccessRequestResult, { ok: true }>["reason"]): Response {
-  return new Response("Unauthorized", { status: reason === "invalid-configuration" ? 500 : 401 });
+  const status =
+    reason === "invalid-configuration" ? 500 : reason === "key-service-unavailable" ? 503 : 401;
+
+  return new Response("Unauthorized", { status });
 }
 
 export default {

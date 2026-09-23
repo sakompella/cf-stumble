@@ -1,7 +1,9 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { expect, test } from "vitest";
+import { env as workerTestEnv } from "cloudflare:test";
+import { afterEach, expect, test, vi } from "vitest";
 import { authenticateAccessRequest } from "../src/access/index.js";
+import worker from "../src/worker.js";
 
 import {
   accessAudience as audience,
@@ -27,6 +29,17 @@ function request(tokenValue: string): Request {
     headers: { "cf-access-jwt-assertion": tokenValue },
   });
 }
+
+/** A JWKS endpoint that answers, but refuses: no thrown cause, just an unusable status. */
+const nonOkJwksFetcher: typeof fetch = () => Promise.resolve(new Response("nope", { status: 503 }));
+
+/** A JWKS endpoint that answers 200 with a body that is not JSON at all. */
+const nonJsonJwksFetcher: typeof fetch = () => Promise.resolve(new Response("not json"));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 test("loads keys from the team certs URL and uses the cache", async () => {
   const key = await signingKey("cache-key");
@@ -92,10 +105,11 @@ test("refreshes keys once when rotation introduces an unknown kid", async () => 
   expect(fetches).toBe(2);
 });
 
-test("rejects when fetching the JWKS fails without exposing token material", async () => {
+test("reports a key-service failure when fetching the JWKS rejects, without exposing token material", async () => {
   const key = await signingKey("failure-key");
   const signed = await token(key, "failure-user");
   const fetcher: typeof fetch = () => Promise.reject(new Error(`JWKS unavailable for ${signed}`));
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
   const result = await authenticateAccessRequest(
     request(signed),
@@ -109,11 +123,59 @@ test("rejects when fetching the JWKS fails without exposing token material", asy
     fetcher,
   );
 
-  expect(result).toEqual({ ok: false, reason: "invalid-signature" });
+  expect(result).toEqual({ ok: false, reason: "key-service-unavailable" });
   expect(JSON.stringify(result)).not.toContain(signed);
+  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("key-service-unavailable");
+  expect(logged).not.toContain(signed);
 });
 
-test("rejects malformed JWKS without exposing token material", async () => {
+test("reports a key-service failure when the JWKS endpoint answers a non-2xx status", async () => {
+  const key = await signingKey("status-key");
+  const signed = await token(key, "status-user");
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await authenticateAccessRequest(
+    request(signed),
+    {
+      CF_ACCESS_TEAM_DOMAIN: "statuscode.cloudflareaccess.com",
+      CF_ACCESS_AUD: audience,
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
+    now,
+    crypto,
+    nonOkJwksFetcher,
+  );
+
+  expect(result).toEqual({ ok: false, reason: "key-service-unavailable" });
+  expect(loggedErrors).toHaveBeenCalledTimes(1);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("503");
+});
+
+test("reports a key-service failure when the JWKS response body is not JSON", async () => {
+  const key = await signingKey("malformed-json-key");
+  const signed = await token(key, "malformed-json-user");
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await authenticateAccessRequest(
+    request(signed),
+    {
+      CF_ACCESS_TEAM_DOMAIN: "malformedjson.cloudflareaccess.com",
+      CF_ACCESS_AUD: audience,
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
+    now,
+    crypto,
+    nonJsonJwksFetcher,
+  );
+
+  expect(result).toEqual({ ok: false, reason: "key-service-unavailable" });
+  expect(loggedErrors).toHaveBeenCalledTimes(1);
+});
+
+test("reports a key-service failure for malformed JWKS shapes, without exposing token material", async () => {
   const key = await signingKey("malformed-key");
   const signed = await token(key, "malformed-user");
 
@@ -121,6 +183,8 @@ test("rejects malformed JWKS without exposing token material", async () => {
     Promise.resolve(
       new Response(JSON.stringify({ keys: [{ kty: "RSA" }], tokenLength: signed.length })),
     );
+
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
   const result = await authenticateAccessRequest(
     request(signed),
@@ -134,8 +198,68 @@ test("rejects malformed JWKS without exposing token material", async () => {
     fetcher,
   );
 
-  expect(result).toEqual({ ok: false, reason: "invalid-signature" });
+  expect(result).toEqual({ ok: false, reason: "key-service-unavailable" });
   expect(JSON.stringify(result)).not.toContain(signed);
+  expect(loggedErrors).toHaveBeenCalledTimes(1);
+});
+
+test("the Worker answers 503 for a JWKS key-service failure, not 401", async () => {
+  const key = await signingKey("worker-outage-key");
+  const signed = await token(key, accessOwnerSubject);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network unreachable"));
+
+  const response = await worker.fetch(request(signed), {
+    // oxlint-disable-next-line typescript/no-deprecated -- The Worker test environment is supplied by the Cloudflare Vitest plugin.
+    ...workerTestEnv,
+    CF_ACCESS_TEAM_DOMAIN: "workeroutage.cloudflareaccess.com",
+    CF_ACCESS_AUD: audience,
+    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+  });
+
+  expect(response.status).toBe(503);
+  expect(await response.text()).toBe("Unauthorized");
+});
+
+test("reports a key-service failure when a forced refresh fails after an unknown kid", async () => {
+  // Advances past any refresh cooldown a prior test in this file left behind: the cooldown gate
+  // is module-global, not scoped to a domain (see "does not refetch keys for repeated unknown key
+  // ids"), so this test's own forced refresh must not be swallowed by someone else's.
+  vi.useFakeTimers();
+  vi.setSystemTime(Date.now() + 120_000);
+
+  const knownKey = await signingKey("refresh-outage-known");
+  const unknownKey = await signingKey("refresh-outage-unknown");
+  const signed = await token(unknownKey, "refresh-outage-user");
+  let fetches = 0;
+
+  const fetcher: typeof fetch = () => {
+    fetches += 1;
+
+    if (fetches === 1) {
+      return Promise.resolve(new Response(JSON.stringify({ keys: [knownKey.publicJwk] })));
+    }
+
+    return Promise.reject(new Error("JWKS refresh unavailable"));
+  };
+
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const result = await authenticateAccessRequest(
+    request(signed),
+    {
+      CF_ACCESS_TEAM_DOMAIN: "refresh-outage.cloudflareaccess.com",
+      CF_ACCESS_AUD: audience,
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
+    now,
+    crypto,
+    fetcher,
+  );
+
+  expect(result).toEqual({ ok: false, reason: "key-service-unavailable" });
+  expect(fetches).toBe(2);
+  expect(loggedErrors).toHaveBeenCalledTimes(1);
 });
 
 test("does not refetch keys for repeated unknown key ids", async () => {

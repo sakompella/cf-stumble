@@ -54,7 +54,11 @@ export type AccessRequestResult =
   | { readonly ok: true; readonly supervisorName: string; readonly scope: VerifiedAccessScope }
   | {
       readonly ok: false;
-      readonly reason: AccessVerificationReason | "invalid-configuration" | "not-owner";
+      readonly reason:
+        | AccessVerificationReason
+        | "invalid-configuration"
+        | "not-owner"
+        | "key-service-unavailable";
     };
 
 // A missing, empty, or whitespace-only secret is indistinguishable from misconfiguration: this
@@ -104,7 +108,7 @@ function tokenKeyId(token: string): string | undefined {
 
 type BoundaryVerificationResult =
   | AccessVerificationResult
-  | { readonly ok: false; readonly reason: "invalid-configuration" };
+  | { readonly ok: false; readonly reason: "invalid-configuration" | "key-service-unavailable" };
 
 async function verifyUsingAccessKeys(
   input: VerifyAccessTokenInput,
@@ -126,11 +130,13 @@ async function verifyUsingAccessKeys(
       return { ok: false, reason: "invalid-configuration" };
     }
 
-    publicKeys = await fetchPublicKeys(url, fetcher, false);
-  }
+    const loaded = await fetchPublicKeys(url, fetcher, false);
 
-  if (publicKeys === undefined) {
-    return { ok: false, reason: "invalid-signature" };
+    if (loaded.isErr()) {
+      return { ok: false, reason: "key-service-unavailable" };
+    }
+
+    publicKeys = loaded.value;
   }
 
   let verified = await verifyAccessToken({ ...input, publicKeys }, webCrypto);
@@ -142,13 +148,13 @@ async function verifyUsingAccessKeys(
     verified.reason === "invalid-signature" &&
     !hasMatchingKid(publicKeys, input.token)
   ) {
-    const refreshedKeys = await fetchPublicKeys(url, fetcher, true);
+    const refreshed = await fetchPublicKeys(url, fetcher, true);
 
-    if (refreshedKeys === undefined) {
-      return { ok: false, reason: "invalid-signature" };
+    if (refreshed.isErr()) {
+      return { ok: false, reason: "key-service-unavailable" };
     }
 
-    verified = await verifyAccessToken({ ...input, publicKeys: refreshedKeys }, webCrypto);
+    verified = await verifyAccessToken({ ...input, publicKeys: refreshed.value }, webCrypto);
   }
 
   return verified;
