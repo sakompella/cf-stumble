@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
@@ -17,6 +17,10 @@ const ORIGIN = "https://cf-stumble.test";
 const TURN_PATH = `/api/projects/${sampleProjectOne.id}/turn`;
 
 const SECRET = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 type TurnBody = Readonly<{
   prompt?: string | number;
@@ -144,6 +148,29 @@ test("a turn that throws answers a bare fault, carrying nothing from the excepti
   expect(JSON.parse(body)).toEqual({ ok: false, error: { code: "internal-error" } });
   expect(body).not.toContain(SECRET);
   expect(body).not.toContain("git-credentials");
+});
+
+test("logs a redacted cause when a turn throws while keeping the public fault", async () => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await routeOwnerApiRequest(
+    post(TURN_PATH, { prompt: "do it" }),
+    supervisor({
+      runProjectTurn: () =>
+        Promise.reject(new Error(`container timed out with ${SECRET} in /root/.git-credentials`)),
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(500);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "internal-error" },
+  });
+  expect(loggedErrors).toHaveBeenCalledOnce();
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("internal-error");
+  expect(logged).not.toContain(SECRET);
 });
 
 test("a turn started by another site is refused before the Supervisor sees it", async () => {

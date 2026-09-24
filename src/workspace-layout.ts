@@ -53,6 +53,9 @@ export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
  */
 export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 
+/** Container-local dependency trees linked from each project's durable checkout. */
+export const PROJECT_MODULES_SCRATCH_ROOT = "/tmp/cf-stumble-project-modules";
+
 /**
  * The instructions cf-stumble manages for the whole workspace.
  *

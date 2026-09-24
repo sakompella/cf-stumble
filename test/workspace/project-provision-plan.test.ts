@@ -13,6 +13,7 @@ import { shellQuote } from "../../src/shell-quote.js";
 import {
   HARNESS_DIRECTORY,
   MANAGED_AGENT_INSTRUCTIONS_PATH,
+  PROJECT_MODULES_SCRATCH_ROOT,
   projectDirectory,
 } from "../../src/workspace-layout.js";
 
@@ -41,6 +42,70 @@ function cloneSource(project: Project): string {
 
   return step.source;
 }
+
+test("plans a container-local modules step after the clone", () => {
+  const step = projectProvisionStep(planFor(projectOne), "modules");
+
+  if (step.name !== "modules") {
+    throw new Error("the modules step must be the command step");
+  }
+
+  expect(step.source).toContain(
+    `target='${PROJECT_MODULES_SCRATCH_ROOT}/${projectOne.id}/node_modules'`,
+  );
+  expect(step.source).toContain('mkdir -p "$target"');
+  expect(step.source).toContain("ln -s");
+  expect(step.source).toContain("node_modules");
+  expect(step.source).toContain(".git/info/exclude");
+});
+
+test("reports creation when node_modules is absent", () => {
+  const source = projectProvisionStep(planFor(projectOne), "modules");
+
+  if (source.name !== "modules") {
+    throw new Error("the modules step must be the command step");
+  }
+
+  expect(source.source).toContain('else\n  mkdir -p "$target"\n  ln -s "$target" "$link"');
+  expect(source.source).toContain('printf "%s\\n" "modules-created"');
+  expect(source.source).not.toContain('rm -rf "$link"');
+});
+
+test("reports an existing node_modules symlink without replacing it", () => {
+  const source = projectProvisionStep(planFor(projectOne), "modules");
+
+  if (source.name !== "modules") {
+    throw new Error("the modules step must be the command step");
+  }
+
+  expect(source.source).toContain('if test -L "$link"; then');
+  expect(source.source).toContain('printf "%s\\n" "modules-already-symlink"');
+  expect(source.source).not.toContain('rm -rf "$link"');
+});
+
+test("reports a real node_modules directory and leaves it in place", () => {
+  const source = projectProvisionStep(planFor(projectOne), "modules");
+
+  if (source.name !== "modules") {
+    throw new Error("the modules step must be the command step");
+  }
+
+  expect(source.source).toContain('elif test -e "$link"; then');
+  expect(source.source).toContain('printf "%s\\n" "modules-real-directory-present"');
+  expect(source.source).not.toContain('rm -rf "$link"');
+});
+
+test("adds node_modules to git info exclude only when it is not already ignored", () => {
+  const source = projectProvisionStep(planFor(projectOne), "modules");
+
+  if (source.name !== "modules") {
+    throw new Error("the modules step must be the command step");
+  }
+
+  expect(source.source).toContain('git -C "$repository"');
+  expect(source.source).toContain("check-ignore");
+  expect(source.source).toContain("/node_modules/");
+});
 
 test("plans the clone before the managed instructions, and nothing else", () => {
   const plan = planFor(projectOne);

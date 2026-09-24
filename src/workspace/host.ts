@@ -4,6 +4,8 @@ import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
 import {
   CloudflareContainerBackend,
   type CloudflareContainerBackendOptions,
+  type ContainerLaunchSpec,
+  type ContainerRuntimeInfo,
   WorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
@@ -21,6 +23,40 @@ import {
   ProjectRpcTarget,
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
+
+export type WorkspaceResetResult = Readonly<{
+  ok: true;
+  reset: "workspace";
+}>;
+
+type WorkspaceStorageReset = Readonly<{
+  deleteAll(): Promise<void>;
+}>;
+
+type WorkspaceContainerReset = Readonly<{
+  restart(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo>;
+}>;
+
+/** The same launch settings the container backend uses for a fresh workspace connection. */
+export const WORKSPACE_CONTAINER_RESET_SPEC = {
+  env: { PORT: "8080", MOUNT_POINT: "/workspace" },
+  enableInternet: true,
+} as const satisfies ContainerLaunchSpec;
+
+/**
+ * Clear the authoritative workspace rows before replacing the container that mirrors them. The
+ * storage belongs to this Workspace Host, and the restart destroys the old container replica so it
+ * cannot push the deleted files back on a later workspace operation.
+ */
+export async function resetWorkspaceStorage(
+  storage: WorkspaceStorageReset,
+  container: WorkspaceContainerReset,
+): Promise<WorkspaceResetResult> {
+  await storage.deleteAll();
+  await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
+
+  return { ok: true, reset: "workspace" };
+}
 
 interface WorkspaceHostEnv {
   /** The harness repository this deployment builds from. See `harness-build.ts`. */
@@ -52,12 +88,13 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
+  readonly #container: WorkspaceContainerAPI;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
-    const container = new WorkspaceContainerAPI(ctx);
+    this.#container = new WorkspaceContainerAPI(ctx);
     this.#containerBackend = new CloudflareContainerBackend({
-      container: () => ({ getWorkspaceContainer: () => container }),
+      container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
     this.#workspace = new Workspace({
@@ -134,6 +171,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * Loader environment entry, which is cached per harness commit and shared by every project the
    * generation serves.
    */
+  reset(): Promise<WorkspaceResetResult> {
+    return resetWorkspaceStorage(this.ctx.storage, this.#container);
+  }
+
   project(): ProjectRpcTarget {
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),

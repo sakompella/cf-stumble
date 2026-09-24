@@ -1,3 +1,5 @@
+// oxlint-disable max-lines -- This file covers the connection workflow and reset regression.
+
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { env } from "cloudflare:workers";
@@ -67,7 +69,7 @@ class DelayedProvisionWorkspace extends FakeTenantWorkspace {
   }
 
   override provision(
-    request: Readonly<{ step: "clone" | "instructions" }>,
+    request: Readonly<{ step: "clone" | "modules" | "instructions" }>,
   ): Promise<WorkspaceResult> {
     this.provisionSteps.push(request.step);
 
@@ -287,7 +289,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
 
   expect((await first).isErr()).toBe(true);
   expect((await replacement).isOk()).toBe(true);
-  expect(workspace.provisionSteps).toEqual(["clone", "clone", "instructions"]);
+  expect(workspace.provisionSteps).toEqual(["clone", "clone", "modules", "instructions"]);
 });
 
 test("provisions again every time a project is used", async () => {
@@ -335,6 +337,27 @@ test("asks for a reconnection after a restart left the workspace without a crede
     state: "connected",
     source: "configured-token",
   });
+});
+
+test("clears cached GitHub status after resetting the workspace", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("reset-clears-connection", { workspace, fallbackToken: FAKE_TOKEN });
+
+  await subject.connections((connections) => connections.ensureCredential(NOW));
+  await subject.connections((connections) => {
+    connections.resetWorkspace();
+
+    return Promise.resolve();
+  });
+  workspace.credentialState = "missing";
+
+  await expect(
+    subject.connections((connections) => connections.connectionStatus(NOW + 1)),
+  ).resolves.toEqual({ state: "disconnected" });
+
+  await expect(
+    subject.connections((connections) => connections.ensureCredential(NOW + 2)),
+  ).resolves.toMatchObject({ state: "connected", source: "configured-token" });
 });
 
 test("reports a reconnect requirement rather than a connection it cannot use", async () => {

@@ -72,6 +72,12 @@ Use a Worker route when a proxied record already covers the hostname. Add a rout
 
 Use a custom domain when the hostname has no record and you want Cloudflare to create one. A custom domain writes a DNS record for the hostname.
 
+## Troubleshooting a wedged workspace
+
+If workspace operations hang, turns end with `turn-not-started` or `internal-error`, or GitHub status times out after a large `npm install`, the dependency tree may be inside the durable workspace. Workspace files live in Durable Object storage, so many `node_modules` files can make every command too slow.
+
+As the owner, send `POST /api/workspace/reset`. Projects and the harness re-clone on the next use. The reset loses uncommitted work in the workspace.
+
 ## One entry point
 
 `wrangler.jsonc` sets `"workers_dev": false`. Your instance answers on the hostname you gave the

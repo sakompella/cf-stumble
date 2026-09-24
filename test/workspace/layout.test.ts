@@ -12,6 +12,7 @@ import {
   HARNESS_DIRECTORY,
   HARNESS_GIT_DIRECTORY,
   MANAGED_AGENT_INSTRUCTIONS_PATH,
+  PROJECT_MODULES_SCRATCH_ROOT,
   PROJECTS_DIRECTORY,
   projectDirectory,
   projectGitDirectory,
@@ -60,6 +61,11 @@ test("gives the harness, each project, and build scratch separate directories", 
   expect(projectGitDirectory(projectOne.id)).toBe(`${projectDirectory(projectOne.id)}/.git`);
   expect(HARNESS_GIT_DIRECTORY).toBe(`${HARNESS_DIRECTORY}/.git`);
   expect(projectDirectory(projectOne.id).startsWith(`${PROJECTS_DIRECTORY}/`)).toBe(true);
+});
+
+test("keeps project dependency scratch outside durable workspace storage", () => {
+  expect(PROJECT_MODULES_SCRATCH_ROOT.startsWith(`${WORKSPACE_ROOT}/`)).toBe(false);
+  expect(PROJECT_MODULES_SCRATCH_ROOT).toContain("cf-stumble-project-modules");
 });
 
 test("the build configuration and project provisioning read this layout", () => {

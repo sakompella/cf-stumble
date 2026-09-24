@@ -71,6 +71,7 @@ export interface ProvisionProjectWorkspaceInput {
  */
 const STEP_RESULT_KIND = {
   clone: "command",
+  modules: "command",
   instructions: "written",
 } as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
 
@@ -157,6 +158,11 @@ export const PROVISION_STALE_AFTER_MS = PROVISION_COMMAND_BUDGET_MS + PROVISION_
  * this Supervisor is evicted, only a Workspace Host-side protocol can prove that an old RPC stopped.
  */
 const activeProvisions = new Map<string, ActiveProvision>();
+
+/** Forget a tenant's in-flight plan after its Workspace Host has been reset. */
+export function clearWorkspaceProvision(workspaceName: string): void {
+  activeProvisions.delete(workspaceName);
+}
 
 function provisionIsStale(active: ActiveProvision, now: number): boolean {
   return now - active.startedAt > PROVISION_STALE_AFTER_MS;

@@ -18,6 +18,7 @@ import {
 import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
 import {
   checkRepositoryAccess,
+  clearWorkspaceProvision,
   provisionProjectWorkspace,
   type CredentialWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
@@ -194,6 +195,12 @@ export class ProjectConnections {
     }
 
     return this.store(canonical, displayName, github, now);
+  }
+
+  /** Forget workspace-owned transient state after the owner resets the workspace. */
+  resetWorkspace(): void {
+    clearWorkspaceProvision(this.workspaceName);
+    this.github.resetWorkspace();
   }
 
   /**

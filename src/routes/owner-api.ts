@@ -8,8 +8,17 @@ import {
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
 import { jsonError } from "./json.js";
-import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
+import {
+  isCrossOriginMutation,
+  routeProjectApiRequest,
+  type ProjectApiSupervisor,
+} from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
+
+type WorkspaceResetResult = Readonly<{
+  ok: true;
+  reset: "workspace";
+}>;
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
@@ -18,6 +27,7 @@ export type OwnerApiSupervisor = GenerationControlSupervisor &
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
     readonly getProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
     readonly startFreshProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
+    readonly resetWorkspace: () => Promise<WorkspaceResetResult>;
   };
 
 /**
@@ -46,6 +56,21 @@ function threadRoute(
 
 function notFound(): Promise<Response> {
   return Promise.resolve(jsonError(404, "not-found"));
+}
+
+async function workspaceResetResponse(
+  request: Request,
+  supervisor: OwnerApiSupervisor,
+): Promise<Response> {
+  if (isCrossOriginMutation(request)) {
+    return jsonError(403, "cross-origin-request");
+  }
+
+  try {
+    return Response.json(await supervisor.resetWorkspace());
+  } catch {
+    return jsonError(500, "internal-error");
+  }
 }
 
 /** The active generation and the epoch a control request must observe. */
@@ -135,6 +160,10 @@ export function routeOwnerApiRequest(
 
   if (isPost && pathname === "/api/generations/rollback") {
     return handleGenerationControl(request, supervisor, "rollback");
+  }
+
+  if (isPost && pathname === "/api/workspace/reset") {
+    return workspaceResetResponse(request, supervisor);
   }
 
   const thread = threadRoute(pathname);

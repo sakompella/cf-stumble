@@ -46,6 +46,7 @@ export {
 export {
   provisionProjectWorkspace,
   waitForWorkspaceProvision,
+  clearWorkspaceProvision,
   PROVISION_STALE_AFTER_MS,
   PROVISION_STALE_MARGIN_MS,
   type ProjectProvisionProblem,
@@ -55,6 +56,11 @@ export {
   type ProvisionWorkspaceNamespace,
 } from "./provisioning.js";
 
-export { WorkspaceHost } from "./host.js";
+export {
+  WorkspaceHost,
+  resetWorkspaceStorage,
+  type WorkspaceResetResult,
+  WORKSPACE_CONTAINER_RESET_SPEC,
+} from "./host.js";
 
 export * from "./project/index.js";
