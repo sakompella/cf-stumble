@@ -4,29 +4,53 @@ import { expect, test } from "vitest";
 
 import { withoutAccessCredentials } from "../src/access/index.js";
 
-const cookieName = gs.sampledFrom(["theme", "session", "prefs", "trace"]);
+const ordinaryCookieName = gs.sampledFrom([
+  "theme",
+  "session",
+  "prefs",
+  "trace",
+  "CF_AuthorizationX",
+  "XCF_Authorization",
+  "cf_authorization",
+]);
 
-const cookieValue = gs.text({ alphabet: "abcXYZ012_-", maxSize: 12 });
+const cookieValue = gs.text({ alphabet: "abcXYZ012_-", minSize: 1, maxSize: 12 });
 
-/** The Access cookie can occur at any position; every unrelated cookie must survive verbatim. */
-test("strips the Access header and cookie while preserving generated ordinary cookies", () => {
+const separator = gs.sampledFrom([";", "; ", " ;", " ; "]);
+
+/** The Access cookie can occur repeatedly and at any position; every near-miss survives in order. */
+test("strips repeated Access cookies while preserving generated ordinary cookies", () => {
   hegel.test((tc) => {
-    const names = tc.draw(gs.arrays(cookieName, { maxSize: 5 }));
+    const names = tc.draw(gs.arrays(ordinaryCookieName, { maxSize: 5 }));
     const pairs = names.map((name) => `${name}=${tc.draw(cookieValue)}`);
-    const insertion = tc.draw(gs.integers({ minValue: 0, maxValue: pairs.length }));
-    const withAccess = [...pairs];
-    withAccess.splice(insertion, 0, "CF_Authorization=generated-access-token");
+    const accessCount = tc.draw(gs.integers({ minValue: 1, maxValue: 3 }));
+
+    const accessPairs = Array.from(
+      { length: accessCount },
+      () => `CF_Authorization=${tc.draw(cookieValue)}`,
+    );
+
+    const allParts = [...pairs, ...accessPairs];
+    const rotation = tc.draw(gs.integers({ minValue: 0, maxValue: allParts.length - 1 }));
+    const rotated = [...allParts.slice(rotation), ...allParts.slice(0, rotation)];
+    const withAccess = rotated.join(tc.draw(separator));
+
+    const expectedCookies = rotated
+      .filter((part) => !part.startsWith("CF_Authorization="))
+      .join("; ");
 
     const stripped = withoutAccessCredentials(
       new Request("https://stumble.example/chat", {
         headers: {
           "cf-access-jwt-assertion": "generated-header-token",
-          cookie: withAccess.join("; "),
+          cookie: withAccess,
         },
       }),
     );
 
     expect(stripped.headers.get("cf-access-jwt-assertion")).toBeNull();
-    expect(stripped.headers.get("cookie")).toBe(pairs.length === 0 ? null : pairs.join("; "));
+    expect(stripped.headers.get("cookie")).toBe(
+      expectedCookies.length === 0 ? null : expectedCookies,
+    );
   });
 });
