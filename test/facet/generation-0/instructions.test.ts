@@ -85,6 +85,7 @@ test("both instruction files reach the prompt of the turn that runs in that proj
   const systemPrompt = script.contexts[0]?.systemPrompt ?? "";
   expect(systemPrompt).toContain(MANAGED);
   expect(systemPrompt).toContain(PROJECT_ONE);
+  expect(systemPrompt).toContain(projectCwd("project-one"));
   expect(systemPrompt).toContain(MANAGED_AGENT_INSTRUCTIONS_PATH);
   expect(
     systemPrompt,
