@@ -8,4 +8,4 @@ The Supervisor Durable Object is the primary Durable Object for a cf-stumble ins
 
 The user or mutable main harness may request creation, activation, or rollback and may name a specific target generation. The supervisor validates each request and alone performs or rejects the state change. Mutable code cannot write protected generation state directly or bypass the Supervisor's checks.
 
-The interface between the supervisor and a main facet, the transport for generation requests, and the detailed activation and rollback policy remain open. Ordinary Worker `fetch` forwarding is a tested option, not part of this decision.
+The interface between the supervisor and a main facet and the transport for generation requests remain open. Ordinary Worker `fetch` forwarding is a tested option, not part of this decision.
