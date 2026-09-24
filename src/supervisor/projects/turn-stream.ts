@@ -78,8 +78,14 @@ class TurnReader {
         }
       }
     } catch {
-      // The generation's stream failed part way through, so the turn has no ending of its own.
-      return cancelled() ? { kind: "cancelled" } : { kind: "invalid", problem: "malformed-frame" };
+      // Browser cancellation wins. A deadline can also reject a pending RPC read when cancelling
+      // the generation stream, so classify it as a timeout before treating the rejection as bad
+      // input.
+      if (cancelled()) return { kind: "cancelled" };
+
+      if (expired()) return { kind: "timed-out" };
+
+      return { kind: "invalid", problem: "malformed-frame" };
     } finally {
       await this.stop();
     }
