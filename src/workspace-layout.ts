@@ -21,6 +21,13 @@ import type { SelectableProject } from "./selectable-projects.js";
 /** The root of the tenant's shared workspace. Every addressed path lives beneath it. */
 export const WORKSPACE_ROOT = "/workspace";
 
+/**
+ * Durable workspace rows live in the Workspace Host's SQLite. A dependency tree of tens of
+ * thousands of files wedges every later sync. computerd honors `ignore` as a per-call path-segment
+ * filter, so this keeps `node_modules` out of synchronization.
+ */
+export const WORKSPACE_SYNC_IGNORES = ["node_modules"] as const;
+
 /** The owner's harness repository: an ordinary editable checkout, not build scratch. */
 export const HARNESS_DIRECTORY = `${WORKSPACE_ROOT}/harness`;
 
