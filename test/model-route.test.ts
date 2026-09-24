@@ -120,63 +120,50 @@ test("rejects a tool-result message without tool_call_id", () => {
   } satisfies ValidationFailure);
 });
 
-test("rejects malformed tool call: missing id", () => {
-  const r = validateRequest({
-    messages: [
-      {
-        role: "assistant",
-        content: null,
-        tool_calls: [{ function: { name: "r", arguments: "{}" } }],
-      },
-    ],
-  });
-
-  expect(r).toEqual({
-    ok: false,
-    error: {
-      code: "invalid-request",
-      reason: "tool_calls[0] at messages[0] missing non-empty id",
+test.each([
+  {
+    name: "missing id",
+    request: {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ function: { name: "r", arguments: "{}" } }],
+        },
+      ],
     },
-  } satisfies ValidationFailure);
-});
-
-test("rejects tool call missing function.name", () => {
-  const r = validateRequest({
-    messages: [
-      {
-        role: "assistant",
-        content: null,
-        tool_calls: [{ id: "c1", function: { arguments: "{}" } }],
-      },
-    ],
-  });
-
-  expect(r).toEqual({
-    ok: false,
-    error: {
-      code: "invalid-request",
-      reason: "tool_calls[0] at messages[0] missing function.name",
+    reason: "tool_calls[0] at messages[0] missing non-empty id",
+  },
+  {
+    name: "missing function.name",
+    request: {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", function: { arguments: "{}" } }],
+        },
+      ],
     },
-  } satisfies ValidationFailure);
-});
-
-test("rejects tool call missing function.arguments", () => {
-  const r = validateRequest({
-    messages: [
-      {
-        role: "assistant",
-        content: null,
-        tool_calls: [{ id: "c1", function: { name: "r" } }],
-      },
-    ],
-  });
-
-  expect(r).toEqual({
-    ok: false,
-    error: {
-      code: "invalid-request",
-      reason: "tool_calls[0] at messages[0] missing function.arguments",
+    reason: "tool_calls[0] at messages[0] missing function.name",
+  },
+  {
+    name: "missing function.arguments",
+    request: {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", function: { name: "r" } }],
+        },
+      ],
     },
+    reason: "tool_calls[0] at messages[0] missing function.arguments",
+  },
+])("rejects a tool call with $name", ({ request, reason }) => {
+  expect(validateRequest(request)).toEqual({
+    ok: false,
+    error: { code: "invalid-request", reason },
   } satisfies ValidationFailure);
 });
 
@@ -209,15 +196,11 @@ test.each(["model", "reasoning_effort", "credentials", "endpoint", "provider"] a
   },
 );
 
-test("rejects a request with no messages", () => {
-  expect(validateRequest({})).toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: "messages must be a non-empty array" },
-  } satisfies ValidationFailure);
-});
-
-test("rejects empty messages array", () => {
-  expect(validateRequest({ messages: [] })).toEqual({
+test.each([
+  { name: "no messages", request: {} },
+  { name: "an empty messages array", request: { messages: [] } },
+])("rejects a request with $name", ({ request }) => {
+  expect(validateRequest(request)).toEqual({
     ok: false,
     error: { code: "invalid-request", reason: "messages must be a non-empty array" },
   } satisfies ValidationFailure);

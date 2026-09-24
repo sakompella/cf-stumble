@@ -47,22 +47,18 @@ test("forwards stdout as it arrives, before the terminal exit event", async () =
   await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
 });
 
-test("an omitted timeout defaults to the host maximum", async () => {
+test.each([
+  { name: "omitted timeout defaults to the host maximum", input: {}, expected: 600_000 },
+  { name: "short timeout is used exactly as given", input: { timeoutMs: 50 }, expected: 50 },
+  {
+    name: "oversized timeout clamps to the host maximum",
+    input: { timeoutMs: 600_000 * 10 },
+    expected: 600_000,
+  },
+])("$name", async ({ input, expected }) => {
   const { execBackend, target } = makeTarget();
-  await target.startExec({ command: "sleep 1" });
-  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
-});
-
-test("a short timeout is used exactly as given", async () => {
-  const { execBackend, target } = makeTarget();
-  await target.startExec({ command: "sleep 1", timeoutMs: 50 });
-  expect(execBackend.requests[0]?.timeoutMs).toBe(50);
-});
-
-test("an oversized timeout clamps to the host maximum", async () => {
-  const { execBackend, target } = makeTarget();
-  await target.startExec({ command: "sleep 1", timeoutMs: 600_000 * 10 });
-  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
+  await target.startExec({ command: "sleep 1", ...input });
+  expect(execBackend.requests[0]?.timeoutMs).toBe(expected);
 });
 
 test("two staggered operations time out independently", async () => {

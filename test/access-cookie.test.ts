@@ -243,36 +243,34 @@ describe("Access cookie authentication", () => {
 });
 
 describe("locating the presented Access token", () => {
-  test("prefers the header value over the cookie value", () => {
-    expect(
-      presentedAccessToken(
-        requestWith({
-          "cf-access-jwt-assertion": "header-token",
-          cookie: "CF_Authorization=cookie-token",
-        }),
-      ),
-    ).toBe("header-token");
-  });
-
-  test("reads the cookie value when no header arrives", () => {
-    expect(
-      presentedAccessToken(requestWith({ cookie: "a=1; CF_Authorization=cookie-token; b=2" })),
-    ).toBe("cookie-token");
-  });
-
-  test("reads the cookie value when the header is empty", () => {
-    expect(
-      presentedAccessToken(
-        requestWith({
-          "cf-access-jwt-assertion": "",
-          cookie: "CF_Authorization=cookie-token",
-        }),
-      ),
-    ).toBe("cookie-token");
-  });
-
-  test("returns nothing for a request with no Access credential", () => {
-    expect(presentedAccessToken(requestWith({ cookie: "theme=dark" }))).toBeUndefined();
-    expect(presentedAccessToken(requestWith({}))).toBeUndefined();
+  test.each([
+    {
+      name: "prefers the header value over the cookie value",
+      headers: {
+        "cf-access-jwt-assertion": "header-token",
+        cookie: "CF_Authorization=cookie-token",
+      },
+      expected: "header-token",
+    },
+    {
+      name: "reads the cookie value when no header arrives",
+      headers: { cookie: "a=1; CF_Authorization=cookie-token; b=2" },
+      expected: "cookie-token",
+    },
+    {
+      name: "reads the cookie value when the header is empty",
+      headers: {
+        "cf-access-jwt-assertion": "",
+        cookie: "CF_Authorization=cookie-token",
+      },
+      expected: "cookie-token",
+    },
+    {
+      name: "returns nothing for a request with an unrelated cookie",
+      headers: { cookie: "theme=dark" },
+    },
+    { name: "returns nothing for a request with no Access credential", headers: {} },
+  ])("$name", ({ headers, expected }) => {
+    expect(presentedAccessToken(requestWith(headers))).toBe(expected);
   });
 });
