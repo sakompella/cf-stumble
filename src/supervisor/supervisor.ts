@@ -55,13 +55,18 @@ import {
 
 // `WORKSPACE_HOST` is one namespace, seen through narrow views of the tenant's one shared
 // workspace (ADR-0038). No view can perform another's operations.
+/** The owner reset view: wipe one tenant workspace (see `WorkspaceHost.reset`). */
+type ResetWorkspaceNamespace = Readonly<{
+  getByName(name: string): Readonly<{ reset(): Promise<WorkspaceResetResult> }>;
+}>;
+
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
   readonly WORKSPACE_HOST: BuildWorkspaceNamespace &
     ProjectWorkspaceNamespace &
     CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
-    Readonly<{ reset: () => Promise<WorkspaceResetResult> }>;
+    ResetWorkspaceNamespace;
   /** The GitHub OAuth app the device flow belongs to. Public configuration, not a secret. */
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   /** The documented test and development credential source. See `docs/agents/design/github-connection.md`. */
@@ -197,7 +202,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
   async resetWorkspace(): Promise<WorkspaceResetResult> {
-    const result = await this.env.WORKSPACE_HOST.reset();
+    const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
+    const result = await namespace.getByName(this.workspaceName).reset();
     this.connections.resetWorkspace();
 
     return result;
