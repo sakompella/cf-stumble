@@ -117,6 +117,51 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
   expect(wrongMethod.status).toBe(404);
 });
 
+test("resets the workspace only for the owner and reports what it reset", async () => {
+  let calls = 0;
+
+  const response = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/workspace/reset", { method: "POST" }),
+    supervisor({
+      resetWorkspace() {
+        calls += 1;
+
+        return Promise.resolve({ ok: true, reset: "workspace" });
+      },
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(200);
+  expect(calls).toBe(1);
+  await expect(response.json()).resolves.toEqual({ ok: true, reset: "workspace" });
+
+  const foreign = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/workspace/reset", {
+      method: "POST",
+      headers: { origin: "https://evil.test" },
+    }),
+    supervisor(),
+    ownerScope,
+  );
+
+  expect(foreign.status).toBe(403);
+  await expect(foreign.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "cross-origin-request" },
+  });
+});
+
+test("an unauthenticated workspace reset cannot reach the owner API", async () => {
+  // oxlint-disable-next-line typescript/no-deprecated
+  const response = await SELF.fetch(
+    new Request("https://cf-stumble.test/api/workspace/reset", { method: "POST" }),
+  );
+
+  expect(response.status).toBe(401);
+  expect(await response.text()).toBe("Unauthorized");
+});
+
 test("returns JSON 404 for unknown route and method pairs", async () => {
   const unknownPath = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/unknown"),

@@ -158,6 +158,11 @@ export const PROVISION_STALE_AFTER_MS = PROVISION_COMMAND_BUDGET_MS + PROVISION_
  */
 const activeProvisions = new Map<string, ActiveProvision>();
 
+/** Forget a tenant's in-flight plan after its Workspace Host has been reset. */
+export function clearWorkspaceProvision(workspaceName: string): void {
+  activeProvisions.delete(workspaceName);
+}
+
 function provisionIsStale(active: ActiveProvision, now: number): boolean {
   return now - active.startedAt > PROVISION_STALE_AFTER_MS;
 }

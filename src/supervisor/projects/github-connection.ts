@@ -100,6 +100,11 @@ export class GitHubConnection {
     this.environment = input.environment;
   }
 
+  /** Clear the cached status because a workspace reset removed its credential. */
+  resetWorkspace(): void {
+    this.store.clearConnection();
+  }
+
   /**
    * What the connection is doing, read and not repaired. A pending authorization outranks the
    * workspace's own answer, because the owner is mid-flow and the credential legitimately is not

@@ -45,6 +45,7 @@ import {
   type MainFacetCapabilities,
   type MainHarnessArtifactInput,
 } from "./artifacts/index.js";
+import type { WorkspaceResetResult } from "../workspace/index.js";
 import {
   checkGenerationStartup,
   prepareGenerationStartup,
@@ -59,7 +60,8 @@ type SupervisorEnv = {
   readonly WORKSPACE_HOST: BuildWorkspaceNamespace &
     ProjectWorkspaceNamespace &
     CredentialWorkspaceNamespace &
-    ProvisionWorkspaceNamespace;
+    ProvisionWorkspaceNamespace &
+    Readonly<{ reset: () => Promise<WorkspaceResetResult> }>;
   /** The GitHub OAuth app the device flow belongs to. Public configuration, not a secret. */
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   /** The documented test and development credential source. See `docs/agents/design/github-connection.md`. */
@@ -191,6 +193,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   getGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionStatus> {
     return this.connections.connectionStatus(now);
+  }
+
+  /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
+  async resetWorkspace(): Promise<WorkspaceResetResult> {
+    const result = await this.env.WORKSPACE_HOST.reset();
+    this.connections.resetWorkspace();
+
+    return result;
   }
 
   /**
