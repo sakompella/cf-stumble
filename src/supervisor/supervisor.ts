@@ -37,6 +37,7 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { FacetRelay } from "./relay/index.js";
+import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
 import {
   HarnessArtifacts,
@@ -64,33 +65,6 @@ type SupervisorEnv = {
   /** The documented test and development credential source. See `docs/agents/design/github-connection.md`. */
   readonly GH_TOKEN?: string;
 };
-
-/** How long one turn may hold a project's thread before another caller may take the slot over. */
-export const PROJECT_TURN_LEASE_MS = 5 * 60 * 1_000;
-
-/**
- * How long the Supervisor waits for a generation to start and then finish one turn.
- *
- * The bound exists because a disconnect signal may never arrive and a facet or its host may be
- * lost mid-turn: without it, a turn holds its lease until the lease expires and the browser waits
- * on a stream nobody will write to. It sits below {@link PROJECT_TURN_LEASE_MS} so the deadline
- * fires while the turn still owns the lease it must release, rather than after a later admission
- * has taken the slot over.
- *
- * The number is four minutes, and it is a choice made from the timings that exist rather than a
- * measurement of a turn. A turn does not build a harness: it mounts the active generation's
- * stored module map, so the cold-build figures apply to preparing a generation and not to this
- * bound. What applies is the workspace cold start, which paid evidence E8 recorded at 2.6-2.9 s
- * on the pinned Computer pair, plus the turn's own work, which is bounded by `MAX_MODEL_CALLS`
- * model calls with tool execution between them. Four minutes leaves room for that and still fails
- * fast enough to give the project back while a person is waiting.
- *
- * T1a measured the harness build chain locally at 12-15 s with an empty store and recommends 900 s
- * as its container ceiling until measured; T1b is the paid probe that would replace both that
- * ceiling and this bound with observed numbers, and T1b has not run. So this stands as a stated
- * choice, and the disconnect and deadline measurement remains open (T9 criterion 10).
- */
-export const PROJECT_TURN_DEADLINE_MS = 4 * 60 * 1_000;
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
