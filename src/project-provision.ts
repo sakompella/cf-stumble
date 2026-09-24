@@ -3,6 +3,7 @@ import { shellQuote } from "./shell-quote.js";
 import {
   MANAGED_AGENT_INSTRUCTIONS_PATH,
   PROJECTS_DIRECTORY,
+  PROJECT_MODULES_SCRATCH_ROOT,
   projectDirectory,
   projectGitDirectory,
 } from "./workspace-layout.js";
@@ -52,7 +53,7 @@ export const MANAGED_AGENT_INSTRUCTIONS = [
   "",
 ].join("\n");
 
-export type ProjectProvisionStepName = "clone" | "instructions";
+export type ProjectProvisionStepName = "clone" | "modules" | "instructions";
 
 /**
  * One provisioning step. The two steps do different kinds of work: cloning needs a shell, and the
@@ -61,6 +62,7 @@ export type ProjectProvisionStepName = "clone" | "instructions";
  */
 export type ProjectProvisionStep =
   | Readonly<{ name: "clone"; source: string; cwd: string }>
+  | Readonly<{ name: "modules"; source: string; cwd: string }>
   | Readonly<{ name: "instructions"; path: string; content: string }>;
 
 export type ProjectProvisionPlan = Readonly<{
@@ -71,6 +73,7 @@ export type ProjectProvisionPlan = Readonly<{
 /** Ordered, because a caller runs the whole plan and a reader should see the order in one place. */
 export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] = [
   "clone",
+  "modules",
   "instructions",
 ];
 
@@ -146,6 +149,38 @@ function cloneProjectRepository(
   ].join("\n");
 }
 
+/** Link dependency files to container-local scratch without replacing owner work. */
+function projectModulesSource(
+  configuration: ProjectProvisionConfiguration,
+  projectId: ProjectId,
+): string {
+  const link = `${configuration.projectRoot}/node_modules`;
+  const target = `${PROJECT_MODULES_SCRATCH_ROOT}/${projectId}/node_modules`;
+  const exclude = `${configuration.projectGitDir}/info/exclude`;
+
+  return [
+    "set -eu",
+    `repository=${shellQuote(configuration.projectRoot)}`,
+    `git_dir=${shellQuote(configuration.projectGitDir)}`,
+    `link=${shellQuote(link)}`,
+    `target=${shellQuote(target)}`,
+    `exclude=${shellQuote(exclude)}`,
+    'if test -L "$link"; then',
+    '  mkdir -p "$target"',
+    '  printf "%s\\n" "modules-already-symlink"',
+    'elif test -e "$link"; then',
+    '  printf "%s\\n" "modules-real-directory-present"',
+    "else",
+    '  mkdir -p "$target"',
+    '  ln -s "$target" "$link"',
+    '  printf "%s\\n" "modules-created"',
+    "fi",
+    'if ! git -C "$repository" check-ignore --no-index -q -- node_modules; then',
+    '  printf "%s\\n" "/node_modules/" >> "$exclude"',
+    "fi",
+  ].join("\n");
+}
+
 /**
  * Plan the whole of one project's provisioning. The plan is derived from the configuration and the
  * catalog project alone, so two runs for one project produce the same steps and a resumed run asks
@@ -163,6 +198,11 @@ export function planProjectProvision(
         source: cloneProjectRepository(configuration, project.repositoryUrl),
         // The clone moves the project root into place, so it cannot run inside it, and the
         // workspace root may not exist yet on a cold container.
+        cwd: "/",
+      },
+      {
+        name: "modules",
+        source: projectModulesSource(configuration, project.id),
         cwd: "/",
       },
       {

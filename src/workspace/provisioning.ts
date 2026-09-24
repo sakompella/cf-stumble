@@ -71,6 +71,7 @@ export interface ProvisionProjectWorkspaceInput {
  */
 const STEP_RESULT_KIND = {
   clone: "command",
+  modules: "command",
   instructions: "written",
 } as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
 

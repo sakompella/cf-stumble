@@ -69,7 +69,7 @@ class DelayedProvisionWorkspace extends FakeTenantWorkspace {
   }
 
   override provision(
-    request: Readonly<{ step: "clone" | "instructions" }>,
+    request: Readonly<{ step: "clone" | "modules" | "instructions" }>,
   ): Promise<WorkspaceResult> {
     this.provisionSteps.push(request.step);
 
@@ -289,7 +289,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
 
   expect((await first).isErr()).toBe(true);
   expect((await replacement).isOk()).toBe(true);
-  expect(workspace.provisionSteps).toEqual(["clone", "clone", "instructions"]);
+  expect(workspace.provisionSteps).toEqual(["clone", "clone", "modules", "instructions"]);
 });
 
 test("provisions again every time a project is used", async () => {

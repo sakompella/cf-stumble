@@ -110,6 +110,7 @@ export function planProjectProvisionRequest(request: ParsedProjectProvisionReque
 
   switch (step.name) {
     case "clone":
+    case "modules":
       return {
         kind: "run-command",
         source: step.source,

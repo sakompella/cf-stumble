@@ -58,9 +58,9 @@ function delayedWorkspace(): DelayedWorkspace {
       }
 
       return Promise.resolve(
-        request.step === "clone"
-          ? { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } }
-          : { ok: true, result: { kind: "written" } },
+        request.step === "instructions"
+          ? { ok: true, result: { kind: "written" } }
+          : { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } },
       );
     },
     project: () => {
