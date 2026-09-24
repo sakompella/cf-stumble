@@ -1,6 +1,8 @@
 import { expect, test, vi } from "vitest";
 import { createPiAgentTurnState, runPiAgentTurn } from "../../../src/facet/generation-0/index.js";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
+import { HARNESS_DIRECTORY } from "../../../src/workspace-layout.js";
+import { PROJECT_TURN_DEADLINE_MINUTES } from "../../../src/turn-budget.js";
 import { assistant, scriptedModel as model, scriptedStream, tick } from "./scripted-model.js";
 
 function completeLargeBashOutput(
@@ -23,6 +25,21 @@ function completeLargeBashOutput(
     handle.push(event);
   }
 }
+
+test("states the selected working directory and turn budget", async () => {
+  const script = scriptedStream([assistant([{ type: "text", text: "Ready." }], "stop")]);
+
+  await runPiAgentTurn({
+    prompt: "What is this workspace?",
+    state: createPiAgentTurnState(model),
+    env: makeFacetExecutionEnv(HARNESS_DIRECTORY).env,
+    streamFn: script.streamFn,
+  });
+
+  const systemPrompt = script.contexts[0]?.systemPrompt ?? "";
+  expect(systemPrompt).toContain(`working directory is ${HARNESS_DIRECTORY}`);
+  expect(systemPrompt).toContain(`${PROJECT_TURN_DEADLINE_MINUTES} minutes`);
+});
 
 test("hands Pi state to the next turn", async () => {
   const first = scriptedStream([assistant([{ type: "text", text: "Noted." }], "stop")]);

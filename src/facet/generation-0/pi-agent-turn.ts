@@ -16,6 +16,7 @@ import type {
   ExecutionToolContext,
   StreamFn,
 } from "@cf-stumble/pi";
+import { PROJECT_TURN_DEADLINE_MINUTES } from "../../turn-budget.js";
 import { compactThread, needsCompaction } from "./compaction.js";
 import { composeSystemPrompt, loadTurnInstructions } from "./instructions.js";
 import { createRouteModels } from "./route-models.js";
@@ -101,7 +102,13 @@ function handoffState(agent: Agent): PiAgentTurnState {
 async function turnSystemPrompt(request: PiAgentTurnRequest): Promise<string> {
   const instructions = await loadTurnInstructions(request.env, request.signal);
 
-  return composeSystemPrompt(GENERATION_0_SYSTEM_PROMPT, instructions);
+  const turnContext = [
+    `The selected project working directory is ${request.env.cwd}.`,
+    "Commands and relative paths run there.",
+    `This turn has a time budget of ${PROJECT_TURN_DEADLINE_MINUTES} minutes. Prefer focused checks that fit within it.`,
+  ].join(" ");
+
+  return composeSystemPrompt(`${GENERATION_0_SYSTEM_PROMPT} ${turnContext}`, instructions);
 }
 
 /**
