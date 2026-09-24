@@ -22,7 +22,7 @@ export const REDACTED = "[redacted]";
  * fine-grained `github_pat_` form. The length floor keeps the pattern from eating an ordinary
  * word that happens to start with one of the prefixes.
  */
-const TOKEN_PATTERN = /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})\b/gu;
+const TOKEN_PATTERN = /(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})/gu;
 
 /** The userinfo prefix of an HTTPS URL, which is how a credential reaches a message `git` prints. */
 const URL_CREDENTIAL_PATTERN = /(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gu;

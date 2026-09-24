@@ -10,6 +10,13 @@ import { containsCredential, redactCredentials, REDACTED } from "../../src/githu
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 test.each([
+  ["x_ghp_1234567890123456=", `x_${REDACTED}=`],
+  ["ghp_1234567890123456_x", `${REDACTED}_x`],
+])("redacts a token glued to word characters: %s", (message, expected) => {
+  expect(redactCredentials(message)).toBe(expected);
+});
+
+test.each([
   ["ghp_cfstumbleFAKEtokenFAKEtoken0123456789", "a personal access token"],
   ["gho_cfstumbleFAKEtokenFAKEtoken0123456789", "an OAuth token"],
   ["ghu_cfstumbleFAKEtokenFAKEtoken0123456789", "a user-to-server token"],
