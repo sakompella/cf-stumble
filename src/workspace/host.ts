@@ -1,6 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
+import {
+  Workspace,
+  type DurableObjectStorageLike,
+  type WorkspaceBackend,
+} from "@cloudflare/computer";
 import {
   CloudflareContainerBackend,
   type CloudflareContainerBackendOptions,
@@ -23,6 +27,7 @@ import {
   ProjectRpcTarget,
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
+import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
 
 export type WorkspaceResetResult = Readonly<{
   ok: true;
@@ -77,6 +82,11 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
   return storage as DurableObjectStorageLike;
 }
 
+/** Keep the backend decoration at the Workspace Host construction seam. */
+export function workspaceBackendForHost(backend: WorkspaceBackend): WorkspaceBackend {
+  return withWorkspaceSyncIgnore(backend);
+}
+
 /**
  * The one durable Computer workspace a tenant owns (ADR-0038). It holds the harness repository,
  * every connected project repository, and the build scratch subtree as separate directories, and
@@ -88,6 +98,7 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
+  readonly #workspaceBackend: WorkspaceBackend;
   readonly #container: WorkspaceContainerAPI;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
@@ -97,6 +108,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
+    this.#workspaceBackend = workspaceBackendForHost(this.#containerBackend);
     this.#workspace = this.#newWorkspace();
   }
 
@@ -105,7 +117,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return new Workspace({
       storage: computerStorage(this.ctx.storage),
       sessionId: this.ctx.id.toString(),
-      backends: [this.#containerBackend],
+      backends: [this.#workspaceBackend],
     });
   }
 
