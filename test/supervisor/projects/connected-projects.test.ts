@@ -17,9 +17,12 @@ import { projectIdForRepository, resolveProject } from "../../../src/project-cat
 
 const NOW = 1_700_000_000_000;
 
-function withProjects<T>(name: string, use: (projects: ConnectedProjects) => T): Promise<T> {
+function withProjects<T>(
+  name: string,
+  use: (projects: ConnectedProjects, state: DurableObjectState) => T,
+): Promise<T> {
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
-    use(new ConnectedProjects(state.storage)),
+    use(new ConnectedProjects(state.storage), state),
   );
 }
 
@@ -112,18 +115,73 @@ test("identity survives the order of connection and the name a project is shown 
   expect(reversed).toEqual(forward);
 });
 
-test("refuses to repoint an existing project at a different repository", async () => {
-  await withProjects("catalog-conflict", (projects) => {
-    projects.connect({ repositoryUrl: "https://github.com/sample/my-repo" }, NOW);
+test("connects repositories that differ only in punctuation as separate projects", async () => {
+  await withProjects("catalog-punctuation", (projects) => {
+    const urls = [
+      "https://github.com/sample/my-repo",
+      "https://github.com/sample/my.repo",
+      "https://github.com/sample/my_repo",
+    ];
 
-    const conflicting = projects.connect(
-      { repositoryUrl: "https://github.com/sample/my.repo" },
-      NOW + 1,
+    for (const [index, repositoryUrl] of urls.entries()) {
+      expect(projects.connect({ repositoryUrl }, NOW + index)).toMatchObject({
+        ok: true,
+        alreadyConnected: false,
+      });
+    }
+
+    expect(projects.list().map((project) => [project.id, project.repositoryUrl])).toEqual([
+      ["sample-my-repo", urls[0]],
+      ["sample-my-repo--2d", urls[1]],
+      ["sample-my-repo--2u", urls[2]],
+    ]);
+  });
+});
+
+test("converges on one project when the same repository is written in another case", async () => {
+  await withProjects("catalog-case", (projects) => {
+    projects.connect({ repositoryUrl: "https://github.com/Sample/My.Repo" }, NOW);
+
+    const again = projects.connect({ repositoryUrl: "https://github.com/sample/my.repo" }, NOW + 1);
+
+    expect(again).toMatchObject({
+      ok: true,
+      alreadyConnected: true,
+      project: { repositoryUrl: "https://github.com/Sample/My.Repo" },
+    });
+    expect(projects.list()).toHaveLength(1);
+  });
+});
+
+/**
+ * Before ids were injective, `sample/my.repo` was stored as `sample-my-repo`. Such a row still
+ * owns its id and its URL, so neither `sample/my-repo`, which now derives that id, nor
+ * `sample/my.repo` itself, which now derives a new one, may take over its thread and directory.
+ */
+test("refuses to repoint a project an earlier id rule stored", async () => {
+  await withProjects("catalog-conflict", (projects, state) => {
+    state.storage.sql.exec(
+      `INSERT INTO connected_projects (project_id, display_name, repository_url, connected_at)
+       VALUES (?, ?, ?, ?)`,
+      "sample-my-repo",
+      "sample/my.repo",
+      "https://github.com/sample/my.repo",
+      NOW,
     );
 
-    expect(conflicting).toEqual({ ok: false, problem: { code: "project-id-conflict" } });
-    expect(projects.list().map((project) => project.repositoryUrl)).toEqual([
+    for (const repositoryUrl of [
       "https://github.com/sample/my-repo",
+      "https://github.com/sample/my.repo",
+      "https://github.com/Sample/My.Repo.git",
+    ]) {
+      expect(projects.connect({ repositoryUrl }, NOW + 1)).toEqual({
+        ok: false,
+        problem: { code: "project-id-conflict" },
+      });
+    }
+
+    expect(projects.list().map((project) => [project.id, project.repositoryUrl])).toEqual([
+      ["sample-my-repo", "https://github.com/sample/my.repo"],
     ]);
   });
 });

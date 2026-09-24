@@ -1,6 +1,19 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof -- Catalog configuration and project selection are parsed at these boundaries.
 
-const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+/**
+ * A project id: lower-case words joined by single hyphens, optionally followed by `--` and a
+ * punctuation key (see {@link projectIdForRepository}). The alphabet is letters, digits, and `-`
+ * alone, so an id is the same string as a path segment, as a URL path segment, and as a key.
+ */
+const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--(?:[1-9][0-9]*[dhsu]+)+)?$/u;
+
+/**
+ * The longest id {@link projectIdForRepository} gives out. A directory name may have 255 bytes, and
+ * provisioning names `<id>.provision-lock.stale.<pid>` beside a project's directory, so an id has
+ * to leave room for that suffix. Only a repository name with dozens of dots or underscores comes
+ * near it: plain GitHub names give at most 140 characters.
+ */
+export const PROJECT_ID_LIMIT = 200;
 
 declare const projectIdBrand: unique symbol;
 
@@ -41,7 +54,11 @@ export type ProjectConfiguration = Readonly<{
 }>;
 
 export function parseProjectId(value: unknown): ProjectId | undefined {
-  if (typeof value !== "string" || !projectIdPattern.test(value)) {
+  if (
+    typeof value !== "string" ||
+    value.length > PROJECT_ID_LIMIT ||
+    !projectIdPattern.test(value)
+  ) {
     return undefined;
   }
 
@@ -115,6 +132,21 @@ export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | un
   return parsePublicRepositoryUrl(`https://${url.host}/${segments.join("/")}`);
 }
 
+/** GitHub owner names, compared lower case. Legacy accounts may hold runs of hyphens. */
+const githubOwnerPattern = /^[a-z0-9][a-z0-9-]{0,38}$/u;
+
+/** GitHub repository names, compared lower case. */
+const githubRepositoryPattern = /^[a-z0-9._-]{1,100}$/u;
+
+/** The letters a separator has in a punctuation key: one per character, and never the character. */
+function separatorCode(separator: string): string {
+  return separator
+    .replaceAll("/", "s")
+    .replaceAll("-", "h")
+    .replaceAll(".", "d")
+    .replaceAll("_", "u");
+}
+
 /**
  * The stable identity of a connected repository: derived from its canonical URL and from nothing
  * else.
@@ -122,13 +154,36 @@ export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | un
  * Identity has to survive a rename of the display name and a change in list position, and
  * connecting the same repository twice has to converge on the project that is already there. A
  * counter or an insertion index would give the same repository two identities when it is
- * connected twice, and a display name would give it a new one when the user renames it. The owner
- * and repository segments are the part of the URL a person recognizes, so the id reads as the
- * repository it names rather than as an opaque key.
+ * connected twice, and a display name would give it a new one when the user renames it.
  *
- * Two different repositories can reduce to one id — `owner/my-repo` and `owner/my.repo` both give
- * `owner-my-repo`. The caller settles that collision by comparing the stored URL, because this
- * function decides identity and not membership.
+ * The id is also a directory name under `/workspace/projects`, a URL path segment, and the key of
+ * the project's thread, so it has to be injective: two different repositories that shared an id
+ * would share one thread and one clone directory. GitHub compares owner and repository names
+ * without regard to case, but `a-b`, `a.b`, and `a_b` are three repositories. The id is built in
+ * two parts from the lower-case `owner/repository`:
+ *
+ * - The words: every run of letters and digits, joined by single hyphens. This is the part a
+ *   person reads, and it is the whole id when the name holds nothing else to record.
+ * - The punctuation key, after `--`: every separator between two words that is not the expected
+ *   one. The expected separator is `/` after the first word and `-` after every later word, with
+ *   nothing after the last. Each entry is the separator's position (1 is the one after the first
+ *   word) and one letter per character: `s` for `/`, `h` for `-`, `d` for `.`, `u` for `_`.
+ *
+ * So `sakompella/emaily-demo` is `sakompella-emaily-demo`, `owner/a.b` is `owner-a-b--2d`, and
+ * `owner-a/b` is `owner-a-b--1h2s`. The words and the key together give back every character of
+ * the lower-case name, so distinct repositories get distinct ids. An id without `--` is exactly
+ * the id the earlier rule gave, so repositories whose owner has no hyphen and whose name has no
+ * `.` or `_` keep the ids, threads, and directories they already had.
+ *
+ * An escape was chosen over a hash suffix. A hash is shorter for heavily punctuated names, but it
+ * can collide, and a colliding repository could be crafted on purpose. The key is exact, and for
+ * the names people use (`.github`, `my_repo`, `site.github.io`) it adds four to six characters.
+ * The price is a length limit: a name with dozens of separators would give an id longer than
+ * {@link PROJECT_ID_LIMIT}, and it is refused rather than shortened into an id another
+ * repository could have.
+ *
+ * Only GitHub repositories get an id, because the naming rules above are GitHub's. Another host,
+ * or a path that is not exactly `owner/repository`, derives nothing.
  */
 export function projectIdForRepository(repositoryUrl: unknown): ProjectId | undefined {
   const canonical = canonicalRepositoryUrl(repositoryUrl);
@@ -137,17 +192,40 @@ export function projectIdForRepository(repositoryUrl: unknown): ProjectId | unde
     return undefined;
   }
 
-  const segments = new URL(canonical).pathname.split("/").filter((segment) => segment.length > 0);
+  const url = new URL(canonical);
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const [owner, repository] = segments.map((segment) => segment.toLowerCase());
 
-  const slug = segments
-    .slice(-2)
-    .join("-")
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+/u, "")
-    .replace(/-+$/u, "");
+  if (
+    url.hostname !== "github.com" ||
+    segments.length !== 2 ||
+    owner === undefined ||
+    repository === undefined ||
+    !githubOwnerPattern.test(owner) ||
+    !githubRepositoryPattern.test(repository)
+  ) {
+    return undefined;
+  }
 
-  return parseProjectId(slug);
+  const name = `${owner}/${repository}`;
+  const words = name.match(/[a-z0-9]+/gu) ?? [];
+  // `separators[i]` is what stands before word `i`. The owner starts with a letter or digit, so
+  // `separators[0]` is always empty, and `separators[words.length]` is whatever ends the name.
+  const separators = name.split(/[a-z0-9]+/u);
+  let key = "";
+
+  for (let position = 1; position <= words.length; position += 1) {
+    const separator = separators[position] ?? "";
+    const expected = position === words.length ? "" : position === 1 ? "/" : "-";
+
+    if (separator !== expected) {
+      key += `${position}${separatorCode(separator)}`;
+    }
+  }
+
+  const slug = words.join("-");
+
+  return parseProjectId(key.length === 0 ? slug : `${slug}--${key}`);
 }
 
 /** The name a project is shown under when the person connecting it does not choose one. */

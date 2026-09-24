@@ -10,6 +10,7 @@ import {
 import { GitHubConnectionStore } from "./github-connection-store.js";
 import {
   canonicalRepositoryUrl,
+  projectIdForRepository,
   resolveProject,
   type Project,
   type ProjectCatalog,
@@ -164,7 +165,9 @@ export class ProjectConnections {
 
     const canonical = canonicalRepositoryUrl(repositoryUrl);
 
-    if (canonical === undefined) {
+    // A URL that derives no project id could never be stored, so it is refused before the
+    // workspace is asked to reach it.
+    if (canonical === undefined || projectIdForRepository(canonical) === undefined) {
       return this.refused({ code: "invalid-repository-url", detail: "" }, github);
     }
 
