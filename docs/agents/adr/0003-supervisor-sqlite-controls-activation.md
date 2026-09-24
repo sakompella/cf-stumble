@@ -2,10 +2,10 @@
 
 > **Review:** Human-approved
 
-> **Superseded in part:** Handoff decision 7 removed the recovery harness. `docs/agents/design/overview.md` records the owner rollback used in version 0.
+> **Amendment (2026-09-23):** Recovery-harness removal under handoff decision 7, owner-approved 2026-09-08.
 
-The Supervisor Durable Object is the primary Durable Object for a cf-stumble instance. It contains the immutable recovery harness and protects the state that records generations and recovery.
+The Supervisor Durable Object is the primary Durable Object for a cf-stumble instance. It protects the state that records generations and their activation.
 
-The user or mutable main harness may request creation, activation, or rollback and may name a specific target generation. The supervisor validates each request and alone performs or rejects the state change. Mutable code cannot write protected generation state directly, replace the recovery harness, or bypass its checks.
+The user or mutable main harness may request creation, activation, or rollback and may name a specific target generation. The supervisor validates each request and alone performs or rejects the state change. Mutable code cannot write protected generation state directly or bypass the Supervisor's checks.
 
-The interface between the supervisor and a main facet, the transport for generation requests, and the detailed recovery policy remain open. Ordinary Worker `fetch` forwarding is a tested option, not part of this decision.
+The interface between the supervisor and a main facet, the transport for generation requests, and the detailed activation and rollback policy remain open. Ordinary Worker `fetch` forwarding is a tested option, not part of this decision.
