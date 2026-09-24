@@ -137,12 +137,6 @@ test("clones and then writes the managed instructions into the tenant's workspac
       kind: "provision-project",
       projectId: projectOne.id,
       repositoryUrl: projectOne.repositoryUrl,
-      step: "modules",
-    },
-    {
-      kind: "provision-project",
-      projectId: projectOne.id,
-      repositoryUrl: projectOne.repositoryUrl,
       step: "instructions",
     },
   ]);
@@ -198,10 +192,9 @@ test("an interrupted provision and its resumption ask for the same state", async
     step: "clone",
     exitCode: 128,
   });
-  expect(stepsOf(host), "a failed clone stops before the modules step").toEqual([
+  expect(stepsOf(host), "a failed clone stops before the instructions step").toEqual([
     "clone",
     "clone",
-    "modules",
     "instructions",
   ]);
   expect(
@@ -231,14 +224,7 @@ test("repeats the clone after the instructions step failed, rather than resuming
     projectId: projectOne.id,
     step: "instructions",
   });
-  expect(stepsOf(host)).toEqual([
-    "clone",
-    "modules",
-    "instructions",
-    "clone",
-    "modules",
-    "instructions",
-  ]);
+  expect(stepsOf(host)).toEqual(["clone", "instructions", "clone", "instructions"]);
   expect(host.plans.at(-1)).toEqual({
     kind: "write-file",
     path: projectProvisionConfiguration(projectOne.id).agentInstructionsPath,
@@ -253,15 +239,8 @@ test("reconciles again on a plain repeat, holding no memory of the last run", as
   await provision();
   await provision();
 
-  expect(stepsOf(host)).toEqual([
-    "clone",
-    "modules",
-    "instructions",
-    "clone",
-    "modules",
-    "instructions",
-  ]);
-  expect(host.plans.slice(3)).toEqual(host.plans.slice(0, 3));
+  expect(stepsOf(host)).toEqual(["clone", "instructions", "clone", "instructions"]);
+  expect(host.plans.slice(2)).toEqual(host.plans.slice(0, 2));
 });
 
 test("refuses a project the catalog does not resolve before naming a workspace", async () => {

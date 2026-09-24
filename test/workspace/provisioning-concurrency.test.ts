@@ -121,8 +121,6 @@ test("serializes different projects in one shared workspace", async () => {
   expect(delayed.host.requests.map((request) => request.projectId)).toEqual([
     sampleProjectOne.id,
     sampleProjectOne.id,
-    sampleProjectOne.id,
-    sampleProjectTwo.id,
     sampleProjectTwo.id,
     sampleProjectTwo.id,
   ]);
@@ -331,7 +329,6 @@ test("drops an in-flight provision after the Workspace Host command ceiling", as
     expect(host.requests.map((request) => request.step)).toEqual([
       "clone",
       "clone",
-      "modules",
       "instructions",
     ]);
   } finally {
