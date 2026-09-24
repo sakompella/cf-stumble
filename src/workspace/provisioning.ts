@@ -12,7 +12,7 @@ import {
 } from "../project-catalog.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
-import { MAX_EXEC_TIMEOUT_MS } from "./project/protocol.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
 export type ProvisionWorkspaceHost = Readonly<{
@@ -140,7 +140,13 @@ type ActiveProvision = Readonly<{
 /** The host kills a command at its ceiling; this margin covers the RPC's final settling turn. */
 export const PROVISION_STALE_MARGIN_MS = 1_000;
 
-export const PROVISION_STALE_AFTER_MS = MAX_EXEC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
+const PROVISION_COMMAND_BUDGET_MS = PROJECT_PROVISION_STEP_NAMES.reduce(
+  (budget, step) =>
+    budget + (STEP_RESULT_KIND[step] === "command" ? WORKSPACE_COMMAND_TIMEOUT_MS : 0),
+  0,
+);
+
+export const PROVISION_STALE_AFTER_MS = PROVISION_COMMAND_BUDGET_MS + PROVISION_STALE_MARGIN_MS;
 
 /**
  * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn
@@ -191,21 +197,27 @@ export function provisionProjectWorkspace(
 }
 
 /** Wait for the current workspace provision, without joining it or starting a replacement. */
-export function waitForWorkspaceProvision(
+export async function waitForWorkspaceProvision(
   workspaceName: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const active = activeProvisions.get(workspaceName);
+  for (;;) {
+    const active = activeProvisions.get(workspaceName);
 
-  if (active === undefined) return Promise.resolve(signal?.aborted !== true);
+    if (active === undefined) return signal?.aborted !== true;
 
-  if (provisionIsStale(active, Date.now())) {
-    activeProvisions.delete(workspaceName);
+    if (provisionIsStale(active, Date.now())) {
+      activeProvisions.delete(workspaceName);
 
-    return Promise.resolve(signal?.aborted !== true);
+      continue;
+    }
+
+    const wait = await waitForActiveProvision(active, signal);
+
+    if (wait === "aborted") return false;
+
+    if (wait === "settled") return true;
   }
-
-  return waitForActiveProvision(active.operation, signal);
 }
 
 async function provisionInWorkspace(
@@ -216,11 +228,11 @@ async function provisionInWorkspace(
     const active = activeProvisions.get(input.workspaceName);
 
     if (active !== undefined && !provisionIsStale(active, Date.now())) {
-      const settled = await waitForActiveProvision(active.operation, input.signal);
+      const wait = await waitForActiveProvision(active, input.signal);
 
-      if (!settled) return abortedProvision(project);
+      if (wait === "aborted") return abortedProvision(project);
 
-      // The old operation has settled and removed itself. Reconcile this caller's project now.
+      // The old operation has settled or gone stale. Reconcile this caller's project now.
       continue;
     }
 
@@ -253,40 +265,44 @@ function removeActiveProvision(workspaceName: string, active: ActiveProvision): 
   }
 }
 
-function waitForActiveProvision(
-  operation: Promise<ProvisioningOutcome>,
-  signal: AbortSignal | undefined,
-): Promise<boolean> {
-  if (signal?.aborted === true) return Promise.resolve(false);
+type ProvisionWait = "settled" | "aborted" | "stale";
 
-  if (signal === undefined)
-    return operation.then(
-      () => true,
-      () => true,
-    );
+function waitForActiveProvision(
+  active: ActiveProvision,
+  signal: AbortSignal | undefined,
+): Promise<ProvisionWait> {
+  if (signal?.aborted === true) return Promise.resolve("aborted");
+
+  const remaining = Math.max(0, PROVISION_STALE_AFTER_MS - (Date.now() - active.startedAt) + 1);
 
   return new Promise((resolve) => {
     let finished = false;
+    let staleTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const finish = (settled: boolean) => {
+    const finish = (result: ProvisionWait) => {
       if (finished) return;
       finished = true;
-      signal.removeEventListener("abort", onAbort);
-      resolve(settled);
+
+      if (staleTimer !== undefined) clearTimeout(staleTimer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
     };
 
     const onAbort = () => {
-      finish(false);
+      finish("aborted");
     };
 
-    signal.addEventListener("abort", onAbort, { once: true });
+    staleTimer = setTimeout(() => {
+      finish("stale");
+    }, remaining);
+    signal?.addEventListener("abort", onAbort, { once: true });
 
-    operation.then(
+    active.operation.then(
       () => {
-        finish(true);
+        finish("settled");
       },
       () => {
-        finish(true);
+        finish("settled");
       },
     );
   });
