@@ -160,6 +160,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
+  /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
+  reset(): Promise<WorkspaceResetResult> {
+    return resetWorkspaceStorage(this.ctx.storage, this.#container);
+  }
+
   /**
    * Hand out this workspace's project capability. `build` and `provision` each answer one request
    * and return plain values, which suits a caller that asks for one thing; a turn instead makes
@@ -171,10 +176,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * Loader environment entry, which is cached per harness commit and shared by every project the
    * generation serves.
    */
-  reset(): Promise<WorkspaceResetResult> {
-    return resetWorkspaceStorage(this.ctx.storage, this.#container);
-  }
-
   project(): ProjectRpcTarget {
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),
