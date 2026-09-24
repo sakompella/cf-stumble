@@ -46,6 +46,9 @@
     {
       "class_name": "WorkspaceHost",
       "image": "./containers/computerd.Dockerfile",
+      // The Dockerfile copies the lockfile and the vendored Computer tarball from the repository
+      // root, so the build context is the root, not the Dockerfile's directory.
+      "image_build_context": ".",
       "max_instances": 1,
       "instance_type": "basic",
     },

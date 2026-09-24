@@ -1,0 +1,7 @@
+# The container build context is the repository root (see `wrangler.jsonc`). Send only what
+# `containers/computerd.Dockerfile` copies, never node_modules, .git or local secrets.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!vendor/cloudflare-computer-0.3.0.tgz
