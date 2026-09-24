@@ -74,9 +74,9 @@ Use a custom domain when the hostname has no record and you want Cloudflare to c
 
 ## Troubleshooting a wedged workspace
 
-If workspace operations hang, turns end with `turn-not-started` or `internal-error`, or GitHub status times out after a large `npm install`, the dependency tree may be inside the durable workspace. Workspace files live in Durable Object storage, so many `node_modules` files can make every command too slow.
+If workspace operations hang, turns end with `turn-not-started` or `internal-error`, or GitHub status times out after a large `npm install`, a large dependency tree may be inside the durable workspace. Installing one there makes the workspace unresponsive because its files live in Durable Object storage. The managed instructions steer the agent to copy projects to container-local scratch before installing dependencies or running checks.
 
-As the owner, send `POST /api/workspace/reset`. Projects and the harness re-clone on the next use. The reset loses uncommitted work in the workspace.
+As the owner, send `POST /api/workspace/reset` to recover. Projects and the harness re-clone on the next use. The reset loses uncommitted work in the workspace.
 
 ## One entry point
 

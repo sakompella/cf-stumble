@@ -60,6 +60,7 @@ anything. Without that secret, a person has to authorize again through the devic
 relying on the interactive route alone should expect that.
 
 On the measured half-CPU container, a first build takes five to eight minutes. A cold container request can add 10 to 60 seconds. See [the deployment guide](../../deploy.md).
+Installing a large dependency tree inside the durable workspace can make it unresponsive; run project checks in container-local scratch and use `POST /api/workspace/reset` to recover.
 
 ## Demo recording
 
