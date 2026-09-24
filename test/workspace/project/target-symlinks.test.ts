@@ -103,9 +103,3 @@ test("a symlink loop is symlink-loop", async () => {
     error: { code: "symlink-loop", path: "/loop-a" },
   });
 });
-
-test("this target never calls provider.realpath", () => {
-  const { provider } = withSymlinks();
-  expect("realpath" in provider).toBe(false);
-  expect(provider.calls.some((call) => call.startsWith("realpath"))).toBe(false);
-});

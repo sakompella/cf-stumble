@@ -19,75 +19,76 @@ import {
  * truncated at an arbitrary physical chunk boundary.
  */
 
-test("a malformed startExec envelope resolves ExecutionError('unknown')", async () => {
-  const target = {
-    startExec: () => Promise.resolve({ nonsense: true }),
-    kill: () => Promise.resolve(),
-  };
+type MalformedTargetFactory = () => object;
 
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
+const unknownExecFailures: readonly { name: string; target: MalformedTargetFactory }[] = [
+  {
+    name: "a malformed startExec envelope",
+    target: () => ({
+      startExec: () => Promise.resolve({ nonsense: true }),
+      kill: () => Promise.resolve(),
+    }),
+  },
+  {
+    name: "a rejected startExec RPC call",
+    target: () => ({
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Test double: simulating an arbitrary RPC rejection value.
+      startExec: () => Promise.reject(new Error("rpc down")),
+      kill: () => Promise.resolve(),
+    }),
+  },
+  {
+    name: "a malformed exec event",
+    target: () => {
+      const events = readableFrom([{ kind: "not-a-real-event" }]);
+
+      return {
+        startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
+        kill: () => Promise.resolve(),
+      };
+    },
+  },
+  {
+    name: "a stream ending without a terminal event",
+    target: () => {
+      const events = readableFrom([{ kind: "stdout", data: "partial" }]);
+
+      return {
+        startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
+        kill: () => Promise.resolve(),
+      };
+    },
+  },
+  {
+    name: "a rejecting exec event stream",
+    target: () => ({
+      startExec: () =>
+        Promise.resolve({ ok: true, value: { operationId: "op-1", events: rejectingReadable() } }),
+      kill: () => Promise.resolve(),
+    }),
+  },
+  {
+    name: "an unexplained killed event without an abort request",
+    target: () => {
+      const events = readableFrom([{ kind: "terminal", outcome: "killed" }]);
+
+      return {
+        startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
+        kill: () => Promise.resolve(),
+      };
+    },
+  },
+];
+
+test.each(unknownExecFailures)("$name resolves ExecutionError('unknown')", async ({ target }) => {
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target()), "x");
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
 });
 
-test("a rejected startExec RPC call resolves ExecutionError('unknown')", async () => {
-  // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Test double: simulating an arbitrary RPC rejection value.
-  const target = {
-    startExec: () => Promise.reject(new Error("rpc down")),
-    kill: () => Promise.resolve(),
-  };
-
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
-  expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
-});
-
-test("a malformed exec event resolves ExecutionError('unknown')", async () => {
-  const events = readableFrom([{ kind: "not-a-real-event" }]);
-
-  const target = {
-    startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
-    kill: () => Promise.resolve(),
-  };
-
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
-  expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
-});
-
-test("the stream ending without a terminal event resolves ExecutionError('unknown')", async () => {
-  const events = readableFrom([{ kind: "stdout", data: "partial" }]);
-
-  const target = {
-    startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
-    kill: () => Promise.resolve(),
-  };
-
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
-  expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
-});
-
-test("a rejecting exec event stream resolves ExecutionError('unknown')", async () => {
-  const target = {
-    startExec: () =>
-      Promise.resolve({ ok: true, value: { operationId: "op-1", events: rejectingReadable() } }),
-    kill: () => Promise.resolve(),
-  };
-
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
-  expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
-});
-
-test("an unexplained 'killed' event, with no abort requested, resolves ExecutionError('unknown')", async () => {
-  const events = readableFrom([{ kind: "terminal", outcome: "killed" }]);
-
-  const target = {
-    startExec: () => Promise.resolve({ ok: true, value: { operationId: "op-1", events } }),
-    kill: () => Promise.resolve(),
-  };
-
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x");
-  expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
-});
-
-test("a non-empty env override is rejected before startExec is ever called", async () => {
+test.each([
+  { name: "a non-empty env override", options: { env: { FOO: "bar" } } },
+  { name: "inheritEnv: false", options: { inheritEnv: false } },
+])("$name is rejected before startExec is ever called", async ({ options }) => {
   let started = false;
 
   const target = {
@@ -102,32 +103,7 @@ test("a non-empty env override is rejected before startExec is ever called", asy
     kill: () => Promise.resolve(),
   };
 
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
-    env: { FOO: "bar" },
-  });
-
-  expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
-  expect(started).toBe(false);
-});
-
-test("inheritEnv: false is rejected before startExec is ever called", async () => {
-  let started = false;
-
-  const target = {
-    startExec: () => {
-      started = true;
-
-      return Promise.resolve({
-        ok: true,
-        value: { operationId: "op-1", events: readableFrom([]) },
-      });
-    },
-    kill: () => Promise.resolve(),
-  };
-
-  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", {
-    inheritEnv: false,
-  });
+  const result = await execViaProjectTarget("/workspace", asExecTarget(target), "x", options);
 
   expect(result).toMatchObject({ ok: false, error: { code: "unknown" } });
   expect(started).toBe(false);
