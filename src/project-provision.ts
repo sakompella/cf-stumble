@@ -49,7 +49,7 @@ export const MANAGED_AGENT_INSTRUCTIONS = [
   "",
   "Never install dependencies or create large generated trees (node_modules, build output, virtualenvs) inside /workspace.",
   "To run a project's checks, copy the project without its dependency directories to container-local scratch such as /tmp/cf-stumble-checks/<project>, then install dependencies and run the checks there.",
-  "For example: rsync -a --exclude node_modules /workspace/projects/<project>/ /tmp/cf-stumble-checks/<project>/ && cd /tmp/cf-stumble-checks/<project> && npm install && npm test",
+  "For example: mkdir -p /tmp/cf-stumble-checks/<project> && tar -C /workspace/projects/<project> --exclude=node_modules -cf - . | tar -C /tmp/cf-stumble-checks/<project> -xf - && cd /tmp/cf-stumble-checks/<project> && npm install && npm test",
   "The workspace is durable storage, and large trees make it unresponsive.",
   "",
   "`git`, `gh`, and internet access are available. Use them as needed, following the user's request",

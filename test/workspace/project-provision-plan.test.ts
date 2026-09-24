@@ -131,7 +131,7 @@ test("writes the managed instructions above every repository in the workspace", 
 
   expect(step.content).toBe(MANAGED_AGENT_INSTRUCTIONS);
   expect(step.content).toContain("Never install dependencies or create large generated trees");
-  expect(step.content).toContain("rsync -a --exclude node_modules");
+  expect(step.content).toContain("--exclude=node_modules -cf - . | tar -C /tmp/cf-stumble-checks/");
   expect(step.content).toContain("durable storage");
   expect(step.content).toContain("Never print or commit authentication tokens.");
 });

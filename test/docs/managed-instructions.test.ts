@@ -52,7 +52,7 @@ test("the managed instructions still carry the instruction ADR-0039 requires", (
   expect(managed).toContain("node_modules");
   expect(managed).toContain("build output");
   expect(managed).toContain("virtualenvs");
-  expect(managed).toContain("rsync -a --exclude node_modules");
+  expect(managed).toContain("--exclude=node_modules -cf - . | tar -C /tmp/cf-stumble-checks/");
   expect(managed).toContain("/tmp/cf-stumble-checks/<project>");
   expect(managed).toContain("durable storage");
   expect(managed).toContain("make it unresponsive");
