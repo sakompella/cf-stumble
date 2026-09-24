@@ -238,7 +238,7 @@ test("lists the harness with no connection, and clones nothing for it", async ()
   ).toHaveLength(1);
 });
 
-test("refuses a repository whose id the harness entry already owns", async () => {
+test("refuses a repository URL that once reduced to the harness entry's id", async () => {
   const subject = tenant("harness-id-taken", { fallbackToken: FAKE_TOKEN });
 
   const refused = await subject.connections((connections) =>
@@ -247,10 +247,15 @@ test("refuses a repository whose id the harness entry already owns", async () =>
 
   const listed = await subject.connections((connections) => connections.list(NOW));
 
-  // `projectIdForRepository` reduces this URL to `harness`. Storing it would put a row in the
-  // catalog that no selection could ever reach, because the harness entry answers to that id.
-  expect(refused).toMatchObject({ ok: false, problem: { code: "project-id-conflict" } });
+  // The earlier id rule reduced this URL to `harness`, the harness entry's id. `-` is no GitHub
+  // owner, so it now derives no id at all, and no GitHub repository derives an id without a
+  // hyphen. The explicit refusal in `ConnectedProjects.connect` stays as a second line.
+  expect(refused).toMatchObject({ ok: false, problem: { code: "invalid-repository-url" } });
   expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(
+    subject.workspace.commands.filter((command) => command.includes("https://github.com/-/")),
+    "a URL that derives no project id is never handed to the workspace",
+  ).toEqual([]);
 });
 
 test("serializes replacement provisioning until an aborted run has finished", async () => {

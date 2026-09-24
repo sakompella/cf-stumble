@@ -25,9 +25,50 @@ trailing slash all reduce to `https://github.com/Owner/Repo`, and that reduces t
 project that is already there instead of creating a second one. Renaming a project or connecting a
 third repository changes no other project's id, so threads and directories stay where they were.
 
-If two different repositories reduce to one id, cf-stumble refuses the second connection with
-`project-id-conflict`. It does not repoint an existing project at a different clone, because the
-project's thread and files belong to the first repository.
+The id is also the project's directory name under `/workspace/projects/`, a URL path segment, and
+the key of its thread, so two different repositories must never share one. GitHub compares owner
+and repository names without regard to case, but punctuation is part of the name: `owner/a-b`,
+`owner/a.b`, and `owner/a_b` are three repositories. `projectIdForRepository` in
+`src/project-catalog.ts` builds the id from the lower-case `owner/repository` in two parts:
+
+- The words: every run of letters and digits, joined by single hyphens. `owner/a.b` gives
+  `owner-a-b`.
+- A punctuation key after `--`, present only when a separator is not the expected one. The
+  expected separator is `/` after the first word, `-` after every later word, and nothing after the
+  last word. Each key entry is the separator's position, counted from 1 for the separator after
+  the first word, followed by one letter per character: `s` for `/`, `h` for `-`, `d` for `.`, and
+  `u` for `_`.
+
+| Repository                        | Project id                              |
+| --------------------------------- | --------------------------------------- |
+| `sakompella/emaily-demo`          | `sakompella-emaily-demo`                |
+| `owner/a.b`                       | `owner-a-b--2d`                         |
+| `owner/a_b`                       | `owner-a-b--2u`                         |
+| `owner/.github`                   | `owner-github--1sd`                     |
+| `owner-a/b`                       | `owner-a-b--1h2s`                       |
+| `sakompella/sakompella.github.io` | `sakompella-sakompella-github-io--2d3d` |
+
+The words and the key together restore every character of the lower-case name, so the rule is
+injective. An id without a key is exactly the id the earlier rule gave, which kept every project
+whose owner has no hyphen and whose name has no `.` or `_`, including the owner's
+`sakompella-emaily-demo`, in its directory and thread. A repository whose owner has a hyphen gets a
+key, because otherwise `a-b/c` and `a/b-c` would share `a-b-c`.
+
+An exact key was chosen over a short hash suffix. A hash is shorter for heavily punctuated names,
+but distinct repositories could share one, and a colliding name could be made on purpose. The key
+adds four to six characters for the names people use and keeps the directory name readable. Its
+cost is a length limit: an id longer than `PROJECT_ID_LIMIT` (200 characters) is refused, which
+only a name with dozens of dots or underscores reaches. An id uses only lower-case letters, digits,
+and hyphens, so no id can name the `<id>.provisioning` or `<id>.provision-lock` directories that
+provisioning keeps beside a clone. Only `github.com` URLs of exactly `owner/repository` derive an
+id, because these naming rules are GitHub's.
+
+If a repository's id is already stored for a different repository, or the repository is already
+stored under a different id, cf-stumble refuses the connection with `project-id-conflict`. With
+injective ids, only a row that the earlier rule stored can cause this. cf-stumble does not repoint
+an existing project at a different clone, because the project's thread and files belong to the
+repository it was stored for. The same repository written in another case converges on the
+existing project.
 
 ## Connecting a repository
 

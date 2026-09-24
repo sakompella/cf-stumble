@@ -40,9 +40,9 @@ type ConnectedProjectRow = {
 };
 
 /**
- * Why a repository did not become a project. A conflict is the honest answer when two different
- * repositories reduce to one id: cf-stumble will not quietly point an existing project at a
- * different clone.
+ * Why a repository did not become a project. Ids are injective, so two different repositories no
+ * longer reduce to one id; a conflict now means a row that an earlier id rule stored. cf-stumble
+ * will not quietly point an existing project at a different clone.
  */
 export type ConnectProjectProblem = Readonly<{
   code: "invalid-repository-url" | "project-id-conflict";
@@ -70,6 +70,11 @@ function chosenDisplayName(value: unknown, repositoryUrl: PublicRepositoryUrl): 
   return trimmed.length === 0
     ? defaultProjectDisplayName(repositoryUrl)
     : trimmed.slice(0, DISPLAY_NAME_LIMIT);
+}
+
+/** GitHub compares owner and repository names without regard to case. */
+function sameRepository(stored: PublicRepositoryUrl, requested: PublicRepositoryUrl): boolean {
+  return stored.toLowerCase() === requested.toLowerCase();
 }
 
 function projectFromRow(row: ConnectedProjectRow): ConnectedProject {
@@ -132,10 +137,11 @@ export class ConnectedProjects {
   /**
    * Connect one repository, or converge on the project that already holds it.
    *
-   * A repeat of the same URL returns the existing project with `alreadyConnected`, so a caller
-   * that retries after a lost response gets the same project rather than a second one. A URL that
-   * reduces to an id another repository already owns is refused, because the alternative is
-   * repointing a project's clone from underneath its thread and its files.
+   * A repeat of the same repository, in any spelling or case, returns the existing project with
+   * `alreadyConnected`, so a caller that retries after a lost response gets the same project
+   * rather than a second one. A URL whose id another repository's row already owns is refused,
+   * because the alternative is repointing a project's clone from underneath its thread and its
+   * files. Ids are injective, so only a row stored by an earlier id rule can cause that.
    */
   connect(input: ConnectProjectInput, now: number): ConnectProjectResult {
     const repositoryUrl = canonicalRepositoryUrl(input.repositoryUrl);
@@ -158,7 +164,10 @@ export class ConnectedProjects {
       const existing = this.byId(id);
 
       if (existing !== undefined) {
-        return existing.repositoryUrl === repositoryUrl
+        // Ids are injective, so a row with this id holds this repository, perhaps written in
+        // another case. A row holding a different repository was stored by an earlier id rule,
+        // and it keeps its thread and its directory.
+        return sameRepository(existing.repositoryUrl, repositoryUrl)
           ? {
               ok: true,
               project: {
@@ -169,6 +178,12 @@ export class ConnectedProjects {
               alreadyConnected: true,
             }
           : { ok: false, problem: { code: "project-id-conflict" } };
+      }
+
+      if (this.list().some((project) => sameRepository(project.repositoryUrl, repositoryUrl))) {
+        // An earlier id rule stored this repository under an id it no longer derives. A second
+        // row would give one repository two projects, so it is refused as a conflict too.
+        return { ok: false, problem: { code: "project-id-conflict" } };
       }
 
       this.sql.exec(

@@ -71,7 +71,10 @@ export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
  */
 export const MANAGED_AGENT_INSTRUCTIONS_PATH = `${WORKSPACE_ROOT}/AGENTS.md`;
 
-/** One project's clone. The id is a `ProjectId`, so it is one lower-case dash-separated segment. */
+/**
+ * One project's clone. The id is a `ProjectId`, so it is one segment of lower-case letters, digits,
+ * and hyphens, and it has no dot that could name a sibling staging directory.
+ */
 export function projectDirectory(projectId: ProjectId): string {
   return `${PROJECTS_DIRECTORY}/${projectId}`;
 }
