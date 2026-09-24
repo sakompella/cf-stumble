@@ -46,5 +46,14 @@ test("the managed instructions still carry the instruction ADR-0039 requires", (
   const instruction = quotedInstruction(adr);
 
   expect(instruction).toContain("Never print or commit authentication tokens.");
-  expect(unwrapped(MANAGED_AGENT_INSTRUCTIONS)).toContain(instruction);
+  const managed = unwrapped(MANAGED_AGENT_INSTRUCTIONS);
+  expect(managed).toContain(instruction);
+  expect(managed).toContain("Never install dependencies or create large generated trees");
+  expect(managed).toContain("node_modules");
+  expect(managed).toContain("build output");
+  expect(managed).toContain("virtualenvs");
+  expect(managed).toContain("rsync -a --exclude node_modules");
+  expect(managed).toContain("/tmp/cf-stumble-checks/<project>");
+  expect(managed).toContain("durable storage");
+  expect(managed).toContain("make it unresponsive");
 });
