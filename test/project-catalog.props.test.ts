@@ -28,6 +28,8 @@ test("all spellings of a generated owner and repository share one canonical URL"
       `https://GitHub.com/${owner}/${repository}.git`,
       `https://github.com/${owner}/${repository}/`,
       `https://GITHUB.COM/${owner}/${repository}.git/`,
+      `https://github.com/${owner}/${repository}.git.git`,
+      `https://github.com/${owner}/${repository}.git.git/`,
     ];
 
     for (const spelling of spellings) {

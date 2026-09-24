@@ -20,6 +20,12 @@ const fineGrainedTokenBody = gs.text({
 
 const boundary = gs.sampledFrom(["=", '"', "(", ")", ":", "/", "@", "\n"]);
 
+const wordGlue = gs.text({
+  alphabet: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_",
+  minSize: 1,
+  maxSize: 2,
+});
+
 const knownToken = gs.text({
   alphabet: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_",
   minSize: 1,
@@ -37,7 +43,7 @@ test("redacts documented tokens next to non-word delimiters and reaches a fixpoi
     const tokenPrefix = tc.draw(prefix);
     const body = tc.draw(tokenPrefix === "github_pat_" ? fineGrainedTokenBody : tokenBody);
     const token = `${tokenPrefix}${body}`;
-    const message = `${tc.draw(boundary)}${token}${tc.draw(boundary)}`;
+    const message = `${tc.draw(boundary)}${tc.draw(wordGlue)}${token}${tc.draw(wordGlue)}${tc.draw(boundary)}`;
     const redacted = redactCredentials(message);
 
     expect(redacted).not.toContain(token);

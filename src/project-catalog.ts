@@ -98,10 +98,14 @@ export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | un
 
   const url = new URL(parsed);
   const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
-  const last = segments.at(-1);
+  let last = segments.at(-1);
 
-  if (last !== undefined && last.endsWith(".git")) {
-    segments[segments.length - 1] = last.slice(0, -".git".length);
+  while (last !== undefined && last.endsWith(".git")) {
+    last = last.slice(0, -".git".length);
+  }
+
+  if (last !== undefined) {
+    segments[segments.length - 1] = last;
   }
 
   if (segments.some((segment) => segment.length === 0)) {
