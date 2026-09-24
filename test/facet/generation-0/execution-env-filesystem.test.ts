@@ -1,44 +1,34 @@
 import { expect, test } from "vitest";
+import type { ExecutionEnv } from "@cf-stumble/pi";
 import { encode, makeFacetExecutionEnv } from "./execution-env-target.js";
 
 const NOT_SUPPORTED = { ok: false, error: { code: "not_supported" } };
 
-test('joinPath resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.joinPath(["a"])).resolves.toMatchObject(NOT_SUPPORTED);
-});
+type FacetExecutionEnv = ExecutionEnv;
 
-test('readTextLines resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.readTextLines("/workspace/a.txt")).resolves.toMatchObject(NOT_SUPPORTED);
-});
+const unsupportedOperations = [
+  { name: "joinPath", call: (env: FacetExecutionEnv) => env.joinPath(["a"]) },
+  {
+    name: "readTextLines",
+    call: (env: FacetExecutionEnv) => env.readTextLines("/workspace/a.txt"),
+  },
+  {
+    name: "renameFile",
+    call: (env: FacetExecutionEnv) => env.renameFile("/workspace/a.txt", "/workspace/b.txt"),
+  },
+  { name: "listDir", call: (env: FacetExecutionEnv) => env.listDir("/workspace") },
+  { name: "createDir", call: (env: FacetExecutionEnv) => env.createDir("/workspace/a") },
+  { name: "remove", call: (env: FacetExecutionEnv) => env.remove("/workspace/a.txt") },
+  { name: "createTempDir", call: (env: FacetExecutionEnv) => env.createTempDir() },
+];
 
-test('renameFile resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.renameFile("/workspace/a.txt", "/workspace/b.txt")).resolves.toMatchObject(
-    NOT_SUPPORTED,
-  );
-});
-
-test('listDir resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.listDir("/workspace")).resolves.toMatchObject(NOT_SUPPORTED);
-});
-
-test('createDir resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.createDir("/workspace/a")).resolves.toMatchObject(NOT_SUPPORTED);
-});
-
-test('remove resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.remove("/workspace/a.txt")).resolves.toMatchObject(NOT_SUPPORTED);
-});
-
-test('createTempDir resolves local FileError("not_supported")', async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.createTempDir()).resolves.toMatchObject(NOT_SUPPORTED);
-});
+test.each(unsupportedOperations)(
+  '$name resolves local FileError("not_supported")',
+  async ({ call }) => {
+    const { env } = makeFacetExecutionEnv();
+    await expect(call(env)).resolves.toMatchObject(NOT_SUPPORTED);
+  },
+);
 
 test("cleanup always resolves", async () => {
   const { env } = makeFacetExecutionEnv();

@@ -72,29 +72,19 @@ test("aborting one of two concurrent commands kills only that operation", async 
   expect(handleB.killCalls).toBe(0);
 });
 
-test("an omitted timeout defaults to the target's own maximum", async () => {
+test.each([
+  { name: "omitted timeout defaults to the target's own maximum", options: {}, expected: 600_000 },
+  { name: "timeout in seconds converts to milliseconds", options: { timeout: 0.05 }, expected: 50 },
+  {
+    name: "oversized timeout clamps to the target's maximum",
+    options: { timeout: 600 },
+    expected: 600_000,
+  },
+])("$name", async ({ options, expected }) => {
   const { execBackend, env } = makeFacetExecutionEnv();
-  const execPromise = env.exec("sleep 1");
+  const execPromise = env.exec("sleep 1", options);
   await tick();
-  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
-  execBackend.handles[0]!.push({ name: "exit", exitCode: 0 });
-  await execPromise;
-});
-
-test("a timeout in seconds converts to milliseconds", async () => {
-  const { execBackend, env } = makeFacetExecutionEnv();
-  const execPromise = env.exec("sleep 1", { timeout: 0.05 });
-  await tick();
-  expect(execBackend.requests[0]?.timeoutMs).toBe(50);
-  execBackend.handles[0]!.push({ name: "exit", exitCode: 0 });
-  await execPromise;
-});
-
-test("an oversized timeout clamps to the target's maximum", async () => {
-  const { execBackend, env } = makeFacetExecutionEnv();
-  const execPromise = env.exec("sleep 1", { timeout: 600 });
-  await tick();
-  expect(execBackend.requests[0]?.timeoutMs).toBe(600_000);
+  expect(execBackend.requests[0]?.timeoutMs).toBe(expected);
   execBackend.handles[0]!.push({ name: "exit", exitCode: 0 });
   await execPromise;
 });
