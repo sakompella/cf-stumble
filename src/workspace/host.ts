@@ -86,7 +86,7 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
  * workspace, its container API, or a credential-bearing binding.
  */
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
-  readonly #workspace: Workspace;
+  #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #container: WorkspaceContainerAPI;
 
@@ -97,9 +97,14 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
-    this.#workspace = new Workspace({
-      storage: computerStorage(ctx.storage),
-      sessionId: ctx.id.toString(),
+    this.#workspace = this.#newWorkspace();
+  }
+
+  /** A Workspace creates its SQLite tables when constructed, so a wiped store needs a new one. */
+  #newWorkspace(): Workspace {
+    return new Workspace({
+      storage: computerStorage(this.ctx.storage),
+      sessionId: this.ctx.id.toString(),
       backends: [this.#containerBackend],
     });
   }
@@ -161,8 +166,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
-  reset(): Promise<WorkspaceResetResult> {
-    return resetWorkspaceStorage(this.ctx.storage, this.#container);
+  async reset(): Promise<WorkspaceResetResult> {
+    const result = await resetWorkspaceStorage(this.ctx.storage, this.#container);
+    // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
+    // deployment); rebuild it so the next operation recreates them instead of failing.
+    this.#workspace = this.#newWorkspace();
+
+    return result;
   }
 
   /**
