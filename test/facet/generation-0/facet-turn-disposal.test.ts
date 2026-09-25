@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { startFacetTurn } from "../../../src/facet/generation-0/facet-turn.js";
+import type { FacetTurnRequest } from "../../../src/facet/generation-0/facet-turn.js";
 import { FakeProjectCapability } from "./fake-project-capability.js";
 import {
   calls,
@@ -62,7 +63,7 @@ test("releases the duplicate when the turn completes", async () => {
   expect(received.ledger).toEqual({ dups: 1, disposals: 1, live: 1 });
 });
 
-test("releases the duplicate when the turn fails", async () => {
+test("releases the duplicate when the model fails", async () => {
   const received = FakeProjectCapability.create();
   const route = new ScriptedRoute([routeUnavailable]);
 
@@ -70,6 +71,23 @@ test("releases the duplicate when the turn fails", async () => {
 
   expect(frames.at(-1)).toMatchObject({ kind: "failed", code: "model-error" });
   expect(received.ledger).toEqual({ dups: 1, disposals: 1, live: 1 });
+});
+
+test("releases the duplicate when the turn throws", async () => {
+  const received = FakeProjectCapability.create();
+  const route = new ScriptedRoute([says("never reached")]);
+  const messages: FacetTurnRequest["messages"] = [];
+
+  Object.defineProperty(messages, Symbol.iterator, {
+    value: () => {
+      throw new Error("message iteration failed");
+    },
+  });
+
+  const reader = turnStream(route, received, { prompt: "go", messages }).getReader();
+  await expect(reader.read()).rejects.toThrow("message iteration failed");
+  expect(received.ledger).toEqual({ dups: 1, disposals: 1, live: 1 });
+  expect(route.requests).toEqual([]);
 });
 
 test("releases the duplicate when the caller cancels the frame stream", async () => {
