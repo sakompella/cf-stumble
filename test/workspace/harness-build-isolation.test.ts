@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
+import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
@@ -18,21 +18,11 @@ import {
  * for, not what `git` and `rm` then do with it.
  */
 
-const commit = harnessCommit("5000000000000000000000000000000000000002");
+const commit = testHarnessCommit("5000000000000000000000000000000000000002");
 
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
 
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 test("keeps build scratch apart from every repository in the workspace", () => {
   const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);

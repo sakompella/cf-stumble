@@ -4,9 +4,9 @@ import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { Result } from "better-result";
 import { afterEach, expect, test } from "vitest";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { loadMainFacet } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
 import {
   absentModuleMapBuilder,
   encodeModuleMap,
@@ -89,16 +89,6 @@ function refusingStorage(storage: DurableObjectStorage): ModuleMapStorage {
   };
 }
 
-function commit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
-
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
 }
@@ -118,7 +108,7 @@ test("builds, validates, stores, then loads a module map when nothing is stored"
       throw new Error(`a successful build must prepare: ${moduleMap.error.code}`);
     }
 
-    const stored = new ModuleMapStore(state.storage).read(commit(commits.built));
+    const stored = new ModuleMapStore(state.storage).read(testHarnessCommit(commits.built));
 
     return {
       moduleMap: moduleMap.value,

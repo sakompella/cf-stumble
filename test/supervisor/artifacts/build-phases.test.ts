@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
   planHarnessBuild,
@@ -21,21 +21,11 @@ import type { WorkspaceResult } from "../../../src/workspace/index.js";
  * code and its own bounded tail, and no one command has to survive eleven minutes.
  */
 
-const commit = harnessCommit("6000000000000000000000000000000000000003");
+const commit = testHarnessCommit("6000000000000000000000000000000000000003");
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 const phaseNames = HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name);
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 /** Fails the one step the test names and reports every step it was asked for. */
 class PhaseFailingHost implements BuildWorkspaceHost {

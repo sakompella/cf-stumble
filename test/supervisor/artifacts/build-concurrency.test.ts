@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   encodeModuleMap,
   WorkspaceHostModuleMapBuilder,
@@ -19,23 +19,13 @@ import type { WorkspaceResult } from "../../../src/workspace/index.js";
  * within the tenant whose workspace the build runs in.
  */
 
-const commit = harnessCommit("6000000000000000000000000000000000000002");
+const commit = testHarnessCommit("6000000000000000000000000000000000000002");
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
 
 const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 function moduleMapFile(): string {
   return JSON.stringify({ entryModule: "main.js", modules: [helperModule, entryModule] });

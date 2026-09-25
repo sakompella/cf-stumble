@@ -3,9 +3,9 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
 import { containsCredential } from "../../../src/github/index.js";
 import {
   encodeModuleMap,
@@ -48,16 +48,6 @@ function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
       { name: "helper.js", source: `export const helper = "${filler}";\n` },
     ],
   };
-}
-
-function commit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
 }
 
 function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
@@ -108,7 +98,7 @@ function storedKind(
   harnessCommit: string,
 ): Promise<string> {
   return runInDurableObject(control, (_instance, state) => {
-    const found = new ModuleMapStore(state.storage).read(commit(harnessCommit));
+    const found = new ModuleMapStore(state.storage).read(testHarnessCommit(harnessCommit));
 
     return found.isErr() ? `problem:${found.error.code}` : found.value.kind;
   });
@@ -126,7 +116,7 @@ test("keeps a stored module map across a Durable Object eviction", async () => {
   await evictDurableObject(control);
 
   const found = await runInDurableObject(control, (_instance, state) => {
-    const read = new ModuleMapStore(state.storage).read(commit(commits.evicted));
+    const read = new ModuleMapStore(state.storage).read(testHarnessCommit(commits.evicted));
 
     if (read.isErr() || read.value.kind === "absent") {
       throw new Error("an evicted Supervisor must still hold its stored module map");
@@ -150,7 +140,7 @@ test("stores a module map larger than one chunk and reads back the same bytes", 
       throw new Error(`a large module map must be written: ${written.error.code}`);
     }
 
-    const read = store.read(commit(commits.large));
+    const read = store.read(testHarnessCommit(commits.large));
 
     if (read.isErr() || read.value.kind === "absent") {
       throw new Error("a large module map must read back");
@@ -198,7 +188,7 @@ test("a write that fails part way through leaves no partial module map", async (
     );
 
     const store = new ModuleMapStore(state.storage);
-    const read = store.read(commit(commits.atomic));
+    const read = store.read(testHarnessCommit(commits.atomic));
 
     return {
       write: written.isErr() ? written.error.code : "written",

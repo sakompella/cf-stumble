@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   planHarnessBuild,
   WorkspaceModuleMapBuilder,
@@ -30,17 +30,7 @@ const configuration: HarnessBuildConfiguration = {
   stepTimeoutMs: 60_000,
 };
 
-const commit = harnessCommit("2000000000000000000000000000000000000001");
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
+const commit = testHarnessCommit("2000000000000000000000000000000000000001");
 
 function succeeded(): CommandOutput {
   return { stdout: "", stderr: "", exitCode: 0 };
