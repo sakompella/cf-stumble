@@ -39,9 +39,50 @@ test("canonicalizes one module map to the same bytes whatever order it arrived i
     const by = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length }));
 
     const first = canonical({ harnessCommit, entryModule, modules });
+
     const second = canonical({ harnessCommit, entryModule, modules: rotated(modules, by) });
 
     expect(encodeModuleMap(second)).toBe(encodeModuleMap(first));
+  });
+});
+
+test("distinguishes module maps when a source or entry module changes", () => {
+  hegel.test((tc) => {
+    const modules = tc.draw(moduleMaps);
+    const entryModule = modules[0]?.name ?? "";
+    const edit = tc.draw(gs.sampledFrom(["rotation", "source", "entry"] as const));
+    let otherModules = modules;
+    let otherEntryModule = entryModule;
+    let encodingsShouldMatch = true;
+
+    if (edit === "rotation") {
+      const by = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length }));
+      otherModules = [...rotated(modules, by)];
+    } else if (edit === "source") {
+      const index = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length - 1 }));
+      const suffix = tc.draw(gs.characters());
+      otherModules = modules.map((module, moduleIndex) =>
+        moduleIndex === index ? { ...module, source: module.source + suffix } : module,
+      );
+      encodingsShouldMatch = false;
+    } else if (modules.length > 1) {
+      otherEntryModule = modules[1]?.name ?? entryModule;
+      encodingsShouldMatch = false;
+    } else {
+      const suffix = tc.draw(gs.characters());
+      otherModules = [{ ...modules[0]!, source: modules[0]!.source + suffix }];
+      encodingsShouldMatch = false;
+    }
+
+    const first = canonical({ harnessCommit, entryModule, modules });
+
+    const second = canonical({
+      harnessCommit,
+      entryModule: otherEntryModule,
+      modules: otherModules,
+    });
+
+    expect(encodeModuleMap(second) === encodeModuleMap(first)).toBe(encodingsShouldMatch);
   });
 });
 
