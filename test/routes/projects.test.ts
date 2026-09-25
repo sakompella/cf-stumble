@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
@@ -15,6 +15,10 @@ import type { VerifiedAccessScope } from "../../src/access/index.js";
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const ORIGIN = "https://cf-stumble.test";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /** One connected project, as the Supervisor would hand it to a route. */
 const connectedProject = sampleProjectOne;
@@ -36,6 +40,48 @@ type RequestBody =
       token?: string;
     }>
   | string;
+
+test.each([
+  ["rejects", new Error("workspace RPC is unavailable")],
+  ["times out", new DOMException("workspace RPC timed out", "TimeoutError")],
+] as const)("maps a total connection Supervisor RPC that %s to 503", async (_kind, cause) => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await routeOwnerApiRequest(
+    get("/api/github/connection"),
+    supervisor({ getGitHubConnection: () => Promise.reject(cause) }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "internal-error" },
+  });
+  expect(loggedErrors).toHaveBeenCalledWith(
+    expect.stringContaining("routes.projects.connection: workspace-unavailable"),
+  );
+  expect(loggedErrors.mock.calls.join(" ")).toContain(cause.message);
+});
+
+test("maps a total project-list Supervisor RPC failure to 503", async () => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await routeOwnerApiRequest(
+    get("/api/projects"),
+    supervisor({ listProjects: () => Promise.reject(new Error("workspace is busy")) }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "internal-error" },
+  });
+  expect(loggedErrors).toHaveBeenCalledWith(
+    expect.stringContaining("routes.projects.list: workspace-unavailable"),
+  );
+});
 
 function post(path: string, body: RequestBody, origin: string | undefined = ORIGIN): Request {
   return new Request(`${ORIGIN}${path}`, {

@@ -4,8 +4,8 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
-import { ProjectConnections } from "../../../src/supervisor/projects/index.js";
+import { afterEach, expect, test, vi } from "vitest";
+import { GitHubConnection, ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
@@ -135,6 +135,7 @@ function tenant(
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await reset();
 });
 
@@ -428,6 +429,25 @@ test("reports a reconnect requirement rather than a connection it cannot use", a
   const status = await subject.connections((connections) => connections.connectionStatus(NOW));
 
   expect(status).toEqual({ state: "reconnect-required", reason: "credential-rejected" });
+});
+
+test.each([
+  ["rejects", new Error("status RPC is unavailable")],
+  ["times out", new DOMException("status RPC timed out", "TimeoutError")],
+] as const)("lists projects when the credential status call %s", async (_kind, cause) => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("status-rpc-failure", { workspace });
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(GitHubConnection.prototype, "status").mockRejectedValue(cause);
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed.github).toEqual({
+    state: "reconnect-required",
+    reason: "workspace-unavailable",
+  });
+  expect(loggedErrors.mock.calls.join(" ")).toContain(cause.message);
 });
 
 test("reports a workspace it cannot reach as a reconnect requirement, never as connected", async () => {

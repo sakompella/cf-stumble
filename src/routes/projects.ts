@@ -1,5 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
+import { logRedactedCause } from "../diagnostics.js";
 import type {
   ConnectRepositoryResult,
   GitHubAuthorizationOutcome,
@@ -71,16 +72,20 @@ async function listResponse(supervisor: ProjectApiSupervisor): Promise<Response>
     const view = await supervisor.listProjects();
 
     return Response.json({ ok: true, projects: view.projects, github: view.github });
-  } catch {
-    return jsonError(500, "internal-error");
+  } catch (cause) {
+    logRedactedCause("routes.projects.list: workspace-unavailable", cause);
+
+    return jsonError(503, "internal-error");
   }
 }
 
 async function connectionResponse(supervisor: ProjectApiSupervisor): Promise<Response> {
   try {
     return Response.json({ ok: true, github: await supervisor.getGitHubConnection() });
-  } catch {
-    return jsonError(500, "internal-error");
+  } catch (cause) {
+    logRedactedCause("routes.projects.connection: workspace-unavailable", cause);
+
+    return jsonError(503, "internal-error");
   }
 }
 
