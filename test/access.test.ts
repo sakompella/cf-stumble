@@ -118,6 +118,23 @@ describe("Cloudflare Access JWT verification", () => {
     });
   });
 
+  test("rejects a token that is not yet valid", async () => {
+    const signed = await validToken("RS256");
+
+    const notYetValid = await signAccessToken(signed.key, {
+      iss: issuer,
+      aud: audience,
+      exp: now + 60,
+      nbf: now + 1,
+      sub: "user-1",
+    });
+
+    await expect(verifyAccessToken(input(notYetValid, signed.key))).resolves.toMatchObject({
+      ok: false,
+      reason: "not-yet-valid",
+    });
+  });
+
   test("rejects a token without the stable identity claim", async () => {
     const signed = await validToken("RS256");
 
@@ -153,6 +170,21 @@ describe("Cloudflare Access JWT verification", () => {
     const response = await SELF.fetch(new Request("https://cf-stumble.test/"));
     expect(response.status).toBe(401);
   });
+});
+
+test("rejects an http team domain as invalid configuration", async () => {
+  const result = await authenticateAccessRequest(
+    new Request("https://stumble.example/", {
+      headers: { "cf-access-jwt-assertion": "header.payload.signature" },
+    }),
+    {
+      CF_ACCESS_TEAM_DOMAIN: "http://team.cloudflareaccess.com",
+      CF_ACCESS_AUD: "audience",
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
+  );
+
+  expect(result).toStrictEqual({ ok: false, reason: "invalid-configuration" });
 });
 
 describe("Access-derived Supervisor names", () => {
