@@ -317,6 +317,61 @@ test("provisions again every time a project is used", async () => {
   ).toHaveLength(2);
 });
 
+test("reinstalls the configured credential before repairing a repository after a reset", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("credential-before-use", { workspace, fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+
+  await subject.connections((connections) => {
+    connections.resetWorkspace();
+
+    return Promise.resolve();
+  });
+  workspace.credentialState = "missing";
+  const beforeUse = workspace.commands.length;
+
+  const used = await subject.connections((connections) =>
+    connections.ensureProvisioned("sample-repo-1"),
+  );
+
+  expect(used).toMatchObject({ ok: true });
+  const useCommands = workspace.commands.slice(beforeUse);
+  const install = useCommands.findIndex((command) => command.includes("gh auth login"));
+  const clone = useCommands.findIndex((command) => command.includes("git clone"));
+
+  expect(install).toBeGreaterThanOrEqual(0);
+  expect(clone).toBeGreaterThan(install);
+});
+
+test("refuses to repair a repository without a credential before attempting its clone", async () => {
+  const workspace = new FakeTenantWorkspace();
+
+  const subject = tenant("credential-required-before-use", {
+    workspace,
+    fallbackToken: FAKE_TOKEN,
+  });
+
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+
+  await subject.connections((connections) => {
+    connections.resetWorkspace();
+
+    return Promise.resolve();
+  });
+  workspace.credentialState = "missing";
+  const beforeUse = workspace.commands.length;
+  const withoutFallback = tenant("credential-required-before-use", { workspace });
+
+  const used = await withoutFallback.connections((connections) =>
+    connections.ensureProvisioned("sample-repo-1"),
+  );
+
+  expect(used).toEqual({ ok: false, problem: { code: "provisioning-failed" } });
+  expect(workspace.commands.slice(beforeUse).some((command) => command.includes("git clone"))).toBe(
+    false,
+  );
+});
+
 test("asks for a reconnection after a restart left the workspace without a credential", async () => {
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("credential-after-restart", { workspace, fallbackToken: FAKE_TOKEN });
