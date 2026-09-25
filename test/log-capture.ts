@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { vi, type MockInstance } from "vitest";
 import type { LogFields } from "../src/diagnostics.js";
 
 /**
@@ -31,4 +31,17 @@ function isLogFields(value: unknown): value is LogFields {
 /** The events of one name, in the order they were written at their level. */
 export function named(events: readonly LogFields[], event: string): LogFields[] {
   return events.filter((entry) => entry.event === event);
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A console argument can be anything; this guard is what proves it is text.
+function isText(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+/**
+ * The plain text lines a console spy received, which are what `logRedactedCause` writes. A
+ * structured event for the same failure is an object, so it is not one of them.
+ */
+export function textLines(spy: MockInstance<(...args: unknown[]) => void>): string[] {
+  return spy.mock.calls.filter(([first]) => isText(first)).map((call) => call.join(" "));
 }

@@ -5,6 +5,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import { activateFixtureGeneration, connectedSupervisor as supervisor } from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../threads/message-samples.js";
 import { runScriptedTurn } from "./turn-run-helpers.js";
+import { facetRunning, projectWorkspaces, turnFor } from "./project-turn-helpers.js";
+import { says } from "../../facet/generation-0/facet-turn-helpers.js";
+import { sampleProjectOne } from "../../project-fixtures.js";
 import { capturedEvents, named } from "../../log-capture.js";
 
 /**
@@ -174,4 +177,17 @@ test("a real Supervisor logs its mount and provisioning steps with durations", a
     lease: admitted?.lease,
   });
   expect(provisioned?.durationMs).toBeGreaterThanOrEqual(0);
+});
+
+test("obtaining the workspace capability is logged as a Workspace Host RPC", async () => {
+  const events = capturedEvents();
+  const workspaces = await projectWorkspaces();
+  const facet = await facetRunning([says("Nothing to do.")]);
+
+  const start = await turnFor(workspaces, facet, sampleProjectOne.id);
+
+  expect(start.ok).toBe(true);
+  expect(named(events(), "workspace.rpc")).toEqual([
+    expect.objectContaining({ level: "info", method: "project", outcome: "ok" }),
+  ]);
 });

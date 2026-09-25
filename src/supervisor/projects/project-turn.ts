@@ -1,4 +1,5 @@
 import type { Project } from "../../project-catalog.js";
+import { timed } from "../../diagnostics.js";
 import { waitForWorkspaceProvision } from "../../workspace/index.js";
 import {
   resolveSelectableProject,
@@ -182,11 +183,9 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return NOT_STARTED;
   }
 
-  let capability: ProjectRpcTargetContract;
+  const capability = await obtainCapability(input);
 
-  try {
-    capability = await input.namespace.getByName(input.workspaceName).project();
-  } catch {
+  if (capability === undefined) {
     return { ok: false, reason: "workspace-unavailable" };
   }
 
@@ -206,6 +205,22 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return endedBeforeItBegan(input, frames);
   } catch {
     return NOT_STARTED;
+  }
+}
+
+/** Ask the tenant's Workspace Host for the project capability, or learn that it cannot answer. */
+async function obtainCapability(
+  input: ProjectTurnInput,
+): Promise<ProjectRpcTargetContract | undefined> {
+  try {
+    return await timed(
+      "workspace.rpc",
+      { method: "project" },
+      () => input.namespace.getByName(input.workspaceName).project(),
+      () => ({ outcome: "ok" }),
+    );
+  } catch {
+    return undefined;
   }
 }
 

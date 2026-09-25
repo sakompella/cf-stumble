@@ -1,6 +1,6 @@
 // oxlint-disable max-lines -- Project and harness provisioning share one workspace exclusion.
 import { Result } from "better-result";
-import { logRedactedCause } from "../diagnostics.js";
+import { logEvent, logRedactedCause, timed, type TimedOutcome } from "../diagnostics.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
@@ -205,6 +205,21 @@ async function runHarnessStep(
   return Result.ok(step);
 }
 
+/** A step's log outcome: `ok`, or the problem code and, for a command, its exit code. */
+function stepOutcome<Step>(
+  ran: Result<Step, ProjectProvisionProblem | HarnessProvisionProblem>,
+): TimedOutcome {
+  if (ran.isOk()) return { outcome: "ok" };
+
+  const problem = ran.error;
+
+  return {
+    outcome: problem.code,
+    level: "warn",
+    fields: "exitCode" in problem ? { exitCode: problem.exitCode } : {},
+  };
+}
+
 type ProvisioningOutcome = Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>;
 
 type HarnessProvisioningOutcome = Result<ProvisionedHarnessWorkspace, HarnessProvisionProblem>;
@@ -273,13 +288,13 @@ function provisionInWorkspace<T>(
       const active = activeProvisions.get(input.workspaceName);
 
       if (active !== undefined && !provisionIsStale(active, Date.now())) {
-        const wait = await waitForActiveProvision(active, input.signal);
+        const wait = await waitForActiveProvision(active, input.signal, "provision");
 
         if (wait === "aborted") return input.aborted();
         continue;
       }
 
-      if (active !== undefined) activeProvisions.delete(input.workspaceName);
+      if (active !== undefined) clearStaleProvision(input.workspaceName, active);
 
       if (input.signal !== undefined && input.signal.aborted) return input.aborted();
 
@@ -304,9 +319,38 @@ function removeActiveProvision(workspaceName: string, active: ActiveProvision): 
   if (activeProvisions.get(workspaceName) === active) activeProvisions.delete(workspaceName);
 }
 
+/**
+ * A plan older than its whole command budget is presumed lost and forgotten. The Workspace Host
+ * may still be running it, which is why this is worth a warning.
+ */
+function clearStaleProvision(workspaceName: string, active: ActiveProvision): void {
+  activeProvisions.delete(workspaceName);
+  logEvent("warn", "workspace.exclusion-stale", { heldForMs: Date.now() - active.startedAt });
+}
+
 type ProvisionWait = "settled" | "aborted" | "stale";
 
-function waitForActiveProvision(
+/** Who is waiting: another provision plan, or a turn about to use the workspace. */
+type ProvisionWaiter = "provision" | "turn";
+
+async function waitForActiveProvision(
+  active: ActiveProvision,
+  signal: AbortSignal | undefined,
+  waiter: ProvisionWaiter,
+): Promise<ProvisionWait> {
+  const waitStartedAt = Date.now();
+  const result = await settleActiveProvision(active, signal);
+
+  logEvent(result === "stale" ? "warn" : "info", "workspace.exclusion-wait", {
+    waiter,
+    result,
+    waitedMs: Date.now() - waitStartedAt,
+  });
+
+  return result;
+}
+
+function settleActiveProvision(
   active: ActiveProvision,
   signal: AbortSignal | undefined,
 ): Promise<ProvisionWait> {
@@ -358,12 +402,12 @@ export async function waitForWorkspaceProvision(
     if (active === undefined) return signal?.aborted !== true;
 
     if (provisionIsStale(active, Date.now())) {
-      activeProvisions.delete(workspaceName);
+      clearStaleProvision(workspaceName, active);
 
       continue;
     }
 
-    const wait = await waitForActiveProvision(active, signal);
+    const wait = await waitForActiveProvision(active, signal, "turn");
 
     if (wait === "aborted") return false;
 
@@ -408,7 +452,12 @@ async function provisionResolvedProject(
   const host = input.namespace.getByName(input.workspaceName);
 
   for (const step of PROJECT_PROVISION_STEP_NAMES) {
-    const ran = await runProjectStep(host, project, step, input.signal);
+    const ran = await timed(
+      "workspace.provision-step",
+      { plan: "project", projectId: project.id, step, method: "provision" },
+      () => runProjectStep(host, project, step, input.signal),
+      stepOutcome,
+    );
 
     if (ran.isErr()) return Result.err(ran.error);
   }
@@ -422,7 +471,16 @@ async function provisionResolvedHarness(
   const host = input.namespace.getByName(input.workspaceName);
 
   for (const step of ["provision", "instructions"] as const) {
-    const ran = await runHarnessStep(host, input.harnessCommit, step, input.signal);
+    const ran = await timed(
+      "workspace.provision-step",
+      {
+        plan: "harness",
+        step,
+        method: step === "provision" ? "build" : "ensureManagedInstructions",
+      },
+      () => runHarnessStep(host, input.harnessCommit, step, input.signal),
+      stepOutcome,
+    );
 
     if (ran.isErr()) return Result.err(ran.error);
   }
