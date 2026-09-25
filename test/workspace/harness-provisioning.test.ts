@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
 import type { HarnessBuildRequest } from "../../src/harness-build.js";
 import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
@@ -7,9 +8,7 @@ import {
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
   type HarnessProvisionWorkspaceHost,
-  type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceHost,
-  type ProvisionWorkspaceNamespace,
 } from "../../src/workspace/provisioning.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 
@@ -66,18 +65,6 @@ class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
   }
 }
 
-class FakeHarnessNamespace implements HarnessProvisionWorkspaceNamespace {
-  readonly host: FakeHarnessHost;
-
-  constructor(host: FakeHarnessHost) {
-    this.host = host;
-  }
-
-  getByName(): HarnessProvisionWorkspaceHost {
-    return this.host;
-  }
-}
-
 class DelayedProjectHost implements ProvisionWorkspaceHost {
   readonly started: Promise<void>;
   private resolveStarted = () => {};
@@ -123,7 +110,7 @@ test("provisions the harness checkout and managed instructions on use", async ()
   const outcome = await provisionHarnessWorkspace({
     workspaceName,
     harnessCommit,
-    namespace: new FakeHarnessNamespace(host),
+    namespace: namespaceFor(host),
   });
 
   expect(outcome.isOk()).toBe(true);
@@ -139,7 +126,7 @@ test("stops harness provisioning after its turn signal aborts", async () => {
   const refused = await provisionHarnessWorkspace({
     workspaceName: tenantWorkspaceName("harness-provision-already-aborted"),
     harnessCommit,
-    namespace: new FakeHarnessNamespace(preHost),
+    namespace: namespaceFor(preHost),
     signal: preController.signal,
   });
 
@@ -153,7 +140,7 @@ test("stops harness provisioning after its turn signal aborts", async () => {
   const provisioning = provisionHarnessWorkspace({
     workspaceName: tenantWorkspaceName("harness-provision-abort"),
     harnessCommit,
-    namespace: new FakeHarnessNamespace(host),
+    namespace: namespaceFor(host),
     signal: controller.signal,
   });
 
@@ -176,9 +163,8 @@ test("excludes a harness provision while a project provision is in flight", asyn
     ensureManagedInstructions: harness.ensureManagedInstructions.bind(harness),
   } satisfies ProvisionWorkspaceHost & HarnessProvisionWorkspaceHost;
 
-  const namespace = {
-    getByName: () => host,
-  } satisfies ProvisionWorkspaceNamespace & HarnessProvisionWorkspaceNamespace;
+  const projectNamespace = namespaceFor<ProvisionWorkspaceHost>(host);
+  const harnessNamespace = namespaceFor<HarnessProvisionWorkspaceHost>(host);
 
   const workspaceName = tenantWorkspaceName("harness-provision-exclusion");
 
@@ -186,7 +172,7 @@ test("excludes a harness provision while a project provision is in flight", asyn
     workspaceName,
     projectId: sampleProjectOne.id,
     catalog: sampleCatalog,
-    namespace,
+    namespace: projectNamespace,
   });
 
   await delayed.started;
@@ -194,7 +180,7 @@ test("excludes a harness provision while a project provision is in flight", asyn
   const harnessRun = provisionHarnessWorkspace({
     workspaceName,
     harnessCommit,
-    namespace,
+    namespace: harnessNamespace,
   });
 
   await Promise.resolve();

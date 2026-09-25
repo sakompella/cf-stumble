@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
@@ -6,10 +7,7 @@ import {
   type HarnessBuildRequest,
 } from "../../../src/harness-build.js";
 import { WorkspaceHostModuleMapBuilder } from "../../../src/supervisor/artifacts/index.js";
-import type {
-  BuildWorkspaceHost,
-  BuildWorkspaceNamespace,
-} from "../../../src/supervisor/artifacts/index.js";
+import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
@@ -61,18 +59,6 @@ class PhaseFailingHost implements BuildWorkspaceHost {
   }
 }
 
-class OneHostNamespace implements BuildWorkspaceNamespace {
-  readonly host: BuildWorkspaceHost;
-
-  constructor(host: BuildWorkspaceHost) {
-    this.host = host;
-  }
-
-  getByName(): BuildWorkspaceHost {
-    return this.host;
-  }
-}
-
 test("plans each build phase as its own step, in the order the phases depend on", () => {
   const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
 
@@ -98,7 +84,7 @@ test("a failing phase names that phase, and the phases after it never run", asyn
       const host = new PhaseFailingHost(failing);
 
       const built = await new WorkspaceHostModuleMapBuilder(
-        new OneHostNamespace(host),
+        namespaceFor(host),
         workspaceName,
       ).build(commit);
 

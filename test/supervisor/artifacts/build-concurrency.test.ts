@@ -1,13 +1,11 @@
 import { expect, test } from "vitest";
+import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   encodeModuleMap,
   WorkspaceHostModuleMapBuilder,
 } from "../../../src/supervisor/artifacts/index.js";
-import type {
-  BuildWorkspaceHost,
-  BuildWorkspaceNamespace,
-} from "../../../src/supervisor/artifacts/index.js";
+import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { HarnessBuildRequest } from "../../../src/harness-build.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
@@ -52,21 +50,6 @@ class CountingBuildHost implements BuildWorkspaceHost {
   }
 }
 
-class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
-  readonly names: string[] = [];
-  readonly host: BuildWorkspaceHost;
-
-  constructor(host: BuildWorkspaceHost) {
-    this.host = host;
-  }
-
-  getByName(name: string): BuildWorkspaceHost {
-    this.names.push(name);
-
-    return this.host;
-  }
-}
-
 /**
  * A build host that answers nothing until it is released, so two builds of one commit can be in
  * flight at the same moment. Concurrency is the whole point of the test below: the build plan
@@ -93,7 +76,7 @@ class GatedBuildHost implements BuildWorkspaceHost {
 
 test("admits one build per commit, so a concurrent request joins it instead of racing it", async () => {
   const host = new GatedBuildHost();
-  const namespace = new FakeWorkspaceNamespace(host);
+  const namespace = namespaceFor(host);
   const builder = new WorkspaceHostModuleMapBuilder(namespace, workspaceName);
 
   const first = builder.build(commit);
@@ -116,10 +99,7 @@ test("admits one build per commit, so a concurrent request joins it instead of r
 test("builds again once the build in flight has settled", async () => {
   const host = new CountingBuildHost();
 
-  const builder = new WorkspaceHostModuleMapBuilder(
-    new FakeWorkspaceNamespace(host),
-    workspaceName,
-  );
+  const builder = new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName);
 
   await builder.build(commit);
   await builder.build(commit);

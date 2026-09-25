@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { namespaceFor } from "../workspace-namespace-fixture.js";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
   projectProvisionConfiguration,
@@ -85,23 +86,8 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
   }
 }
 
-class FakeProvisionNamespace {
-  readonly names: string[] = [];
-  readonly host: FakeProvisionHost;
-
-  constructor(host: FakeProvisionHost) {
-    this.host = host;
-  }
-
-  getByName(name: string): FakeProvisionHost {
-    this.names.push(name);
-
-    return this.host;
-  }
-}
-
 function provisionerFor(host: FakeProvisionHost) {
-  const namespace = new FakeProvisionNamespace(host);
+  const namespace = namespaceFor(host);
 
   return {
     namespace,
@@ -114,6 +100,18 @@ function provisionerFor(host: FakeProvisionHost) {
 function stepsOf(host: FakeProvisionHost): ProjectProvisionStepName[] {
   return host.requests.map((request) => request.step);
 }
+
+test("namespace fixtures record names independently", () => {
+  const host = new FakeProvisionHost();
+  const first = namespaceFor(host);
+  const second = namespaceFor(host);
+
+  first.getByName("first-workspace");
+  second.getByName("second-workspace");
+
+  expect(first.names).toEqual(["first-workspace"]);
+  expect(second.names).toEqual(["second-workspace"]);
+});
 
 test("clones and then writes the managed instructions into the tenant's workspace", async () => {
   const host = new FakeProvisionHost();
