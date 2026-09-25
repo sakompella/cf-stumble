@@ -84,6 +84,7 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
   const fresh = await routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh", {
       method: "POST",
+      headers: { origin: "https://cf-stumble.test" },
     }),
     supervisor({
       startFreshProjectThread(projectId) {
@@ -121,7 +122,10 @@ test("resets the workspace only for the owner and reports what it reset", async 
   let calls = 0;
 
   const response = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/workspace/reset", { method: "POST" }),
+    new Request("https://cf-stumble.test/api/workspace/reset", {
+      method: "POST",
+      headers: { origin: "https://cf-stumble.test" },
+    }),
     supervisor({
       resetWorkspace() {
         calls += 1;
