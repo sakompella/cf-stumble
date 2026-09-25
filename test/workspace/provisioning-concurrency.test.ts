@@ -9,7 +9,7 @@ import {
   PROVISION_STALE_MARGIN_MS,
   type ProvisionWorkspaceHost,
   type ProvisionWorkspaceNamespace,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/provisioning.js";
 import {
   planProjectProvisionRequest,
   type ProjectProvisionRequest,

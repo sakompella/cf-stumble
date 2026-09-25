@@ -1,13 +1,16 @@
 import { expect, test } from "vitest";
 import {
   executeHarnessBuildRequest,
-  WorkspaceHost,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/executor.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
-import { workspaceContainerBackendConfiguration } from "../../src/workspace/host.js";
+import {
+  ensureManagedInstructions,
+  WorkspaceHost,
+  workspaceContainerBackendConfiguration,
+} from "../../src/workspace/host.js";
 
 /**
  * What the Workspace Host offers as a Durable Object, rather than what any one of its surfaces
@@ -57,5 +60,54 @@ test("returns plain cloneable values and exposes no raw Computer RPC method", as
   expect(
     Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted(),
     "`project` hands out the narrow project capability; anything else added here is a new surface",
-  ).toEqual(["build", "constructor", "credential", "fetch", "project", "provision", "reset"]);
+  ).toEqual([
+    "build",
+    "constructor",
+    "credential",
+    "ensureManagedInstructions",
+    "fetch",
+    "project",
+    "provision",
+    "reset",
+  ]);
+});
+
+class ManagedInstructionsOperations implements WorkspaceOperations {
+  existing: WorkspacePathKind | undefined;
+  readonly writes: string[] = [];
+
+  lstat(path: string): Promise<WorkspacePathKind | undefined> {
+    return Promise.resolve(path === "/workspace/AGENTS.md" ? this.existing : "directory");
+  }
+
+  readFile(): Promise<string> {
+    return Promise.resolve("");
+  }
+
+  writeFile(_path: string, content: string): Promise<void> {
+    this.writes.push(content);
+
+    return Promise.resolve();
+  }
+
+  runCommand(): Promise<CommandOutput> {
+    return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+  }
+}
+
+test("writes managed instructions only when the workspace reset removed them", async () => {
+  const operations = new ManagedInstructionsOperations();
+
+  await expect(ensureManagedInstructions(operations)).resolves.toMatchObject({
+    ok: true,
+    result: { kind: "written" },
+  });
+  expect(operations.writes).toHaveLength(1);
+
+  operations.existing = "file";
+  await expect(ensureManagedInstructions(operations)).resolves.toMatchObject({
+    ok: true,
+    result: { kind: "written" },
+  });
+  expect(operations.writes).toHaveLength(1);
 });

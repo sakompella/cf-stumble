@@ -45,7 +45,10 @@ import {
   type MainFacetCapabilities,
   type MainHarnessArtifactInput,
 } from "./artifacts/index.js";
-import type { WorkspaceResetResult } from "../workspace/index.js";
+import type {
+  HarnessProvisionWorkspaceNamespace,
+  WorkspaceResetResult,
+} from "../workspace/index.js";
 import {
   checkGenerationStartup,
   prepareGenerationStartup,
@@ -66,6 +69,7 @@ type SupervisorEnv = {
     ProjectWorkspaceNamespace &
     CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
+    HarnessProvisionWorkspaceNamespace &
     ResetWorkspaceNamespace;
   /** The GitHub OAuth app the device flow belongs to. Public configuration, not a secret. */
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
@@ -300,6 +304,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     request: FacetTurnHandoff,
     context: TurnStartContext,
   ): Promise<ProjectTurnStart> {
+    const generation = context.attribution.active.generation;
+
     return streamProjectTurn({
       projectId,
       request,
@@ -311,6 +317,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       // on the same generation it was admitted against (`turn-run.ts`). Mounting is synchronous
       // now; the turn path keeps its asynchronous mount contract, so this adapts here.
       mount: () => Promise.resolve(this.mountServing(context.attribution.active)),
+      // The harness checkout is owned by the active generation's repository. Reconcile it before
+      // mounting so a reset cannot leave Computer with a missing working directory.
+      provisionHarness:
+        generation === undefined
+          ? undefined
+          : (signal) => this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: async (project, signal) =>

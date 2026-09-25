@@ -1,3 +1,4 @@
+// oxlint-disable import/max-dependencies -- Workspace Host owns the platform and all workspace surfaces.
 /// <reference types="@cloudflare/workers-types" />
 
 import {
@@ -14,6 +15,10 @@ import {
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceResult } from "./decisions.js";
+import type { WorkspacePathKind } from "./executor.js";
+import { logRedactedCause } from "../diagnostics.js";
+import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
+import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
 import { executeHarnessBuildRequest, executeProjectProvisionRequest } from "./executor.js";
 import {
@@ -87,6 +92,38 @@ export function workspaceBackendForHost(backend: WorkspaceBackend): WorkspaceBac
   return withWorkspaceSyncIgnore(backend);
 }
 
+/** Restore the managed instructions after reset, without replacing an existing file. */
+type ManagedInstructionOperations = Readonly<{
+  lstat(path: string): Promise<WorkspacePathKind | undefined>;
+  writeFile(path: string, content: string): Promise<void>;
+}>;
+
+export async function ensureManagedInstructions(
+  operations: ManagedInstructionOperations,
+): Promise<WorkspaceResult> {
+  try {
+    for (const path of [WORKSPACE_ROOT, MANAGED_AGENT_INSTRUCTIONS_PATH]) {
+      if ((await operations.lstat(path)) === "symbolic-link") {
+        return { ok: false, error: { code: "path-outside-root" } };
+      }
+    }
+
+    const existing = await operations.lstat(MANAGED_AGENT_INSTRUCTIONS_PATH);
+
+    if (existing === undefined) {
+      await operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS);
+    } else if (existing !== "file") {
+      return { ok: false, error: { code: "workspace-unavailable" } };
+    }
+
+    return { ok: true, result: { kind: "written" } };
+  } catch (cause) {
+    logRedactedCause("workspace.managed-instructions: workspace-unavailable", cause);
+
+    return { ok: false, error: { code: "workspace-unavailable" } };
+  }
+}
+
 /**
  * The one durable Computer workspace a tenant owns (ADR-0038). It holds the harness repository,
  * every connected project repository, and the build scratch subtree as separate directories, and
@@ -154,6 +191,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });
+  }
+
+  /** Restore the managed instructions after a workspace reset, without replacing an existing file. */
+  ensureManagedInstructions(): Promise<WorkspaceResult> {
+    return ensureManagedInstructions(new ComputerWorkspaceOperations(this.#workspace));
   }
 
   /**

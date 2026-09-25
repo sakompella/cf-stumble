@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { ConnectedProjects } from "./connected-projects.js";
+import type { HarnessCommit } from "../../harness-commit.js";
 import {
   GitHubConnection,
   type GitHubAuthorizationOutcome,
@@ -20,8 +21,10 @@ import { selectableCatalog, type SelectableCatalog } from "../../selectable-proj
 import {
   checkRepositoryAccess,
   clearWorkspaceProvision,
+  provisionHarnessWorkspace,
   provisionProjectWorkspace,
   type CredentialWorkspaceNamespace,
+  type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
@@ -74,7 +77,9 @@ export interface ProjectConnectionsInput {
   readonly storage: DurableObjectStorage;
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
-  readonly namespace: CredentialWorkspaceNamespace & ProvisionWorkspaceNamespace;
+  readonly namespace: CredentialWorkspaceNamespace &
+    ProvisionWorkspaceNamespace &
+    HarnessProvisionWorkspaceNamespace;
   readonly environment: GitHubConnectionEnvironment;
 }
 
@@ -82,7 +87,9 @@ export class ProjectConnections {
   private readonly projects: ConnectedProjects;
   private readonly github: GitHubConnection;
   private readonly workspaceName: string;
-  private readonly namespace: CredentialWorkspaceNamespace & ProvisionWorkspaceNamespace;
+  private readonly namespace: CredentialWorkspaceNamespace &
+    ProvisionWorkspaceNamespace &
+    HarnessProvisionWorkspaceNamespace;
 
   constructor(input: ProjectConnectionsInput) {
     this.projects = new ConnectedProjects(input.storage);
@@ -206,6 +213,21 @@ export class ProjectConnections {
     this.github.resetWorkspace();
   }
 
+  /** Reconcile the editable harness checkout before a harness turn starts. */
+  async ensureHarnessProvisioned(
+    harnessCommit: HarnessCommit,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const provisioned = await provisionHarnessWorkspace({
+      workspaceName: this.workspaceName,
+      harnessCommit,
+      namespace: this.namespace,
+      signal,
+    });
+
+    return provisioned.isOk();
+  }
+
   /**
    * Provision a project because it is about to be used. Every run performs every step, so this is
    * also what repairs a workspace the platform recreated: the state that matters is in the
@@ -216,8 +238,8 @@ export class ProjectConnections {
     projectId: unknown,
     signal?: AbortSignal,
   ): Promise<ProjectUseResult> {
-    // The connected repositories alone: provisioning clones a repository URL, and the harness
-    // entry has none. A turn on the harness never reaches here (`project-turn.ts`).
+    // Only connected repositories reach this path: harness turns use the generation-bound
+    // reconciler above because the harness entry has no catalog repository URL.
     const catalog: ProjectCatalog = this.projects.catalog();
     const resolved = resolveProject(projectId, catalog);
 

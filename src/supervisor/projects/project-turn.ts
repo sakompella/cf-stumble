@@ -1,6 +1,10 @@
 import type { Project } from "../../project-catalog.js";
 import { waitForWorkspaceProvision } from "../../workspace/index.js";
-import { resolveSelectableProject, type SelectableCatalog } from "../../selectable-projects.js";
+import {
+  resolveSelectableProject,
+  type SelectableCatalog,
+  type SelectableProject,
+} from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
 import type { Result } from "better-result";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
@@ -26,11 +30,13 @@ export type ProjectTurnFacet = Readonly<{
  * is ready. Provisioning is idempotent (`workspace/provisioning.ts`), so this runs on every turn
  * and is also what repairs a workspace the platform recreated between two turns.
  *
- * It takes a {@link Project}, so the harness selection cannot be handed to it: the harness
- * checkout is provisioned by the bootstrap that clones it and has no repository URL to reconcile
- * against.
+ * It takes a {@link Project}, so the harness selection uses the separate generation-bound
+ * provisioner instead of inventing a repository-less catalog project.
  */
 export type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Promise<boolean>;
+
+/** Reconciles the editable harness checkout before its working directory is mounted. */
+export type ProvisionHarness = (signal: AbortSignal) => Promise<boolean>;
 
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
 export type MountServingGeneration = () => Promise<
@@ -57,8 +63,10 @@ export interface ProjectTurnInput extends ProjectTurnRequest {
   readonly namespace: ProjectWorkspaceNamespace;
   readonly mount: MountServingGeneration;
   readonly provision: ProvisionSelectedProject;
+  /** The harness provisioner is bound to the admitted generation's validated commit. */
+  readonly provisionHarness?: ProvisionHarness | undefined;
   /**
-   * The admitted turn's one cancellation. Starting a turn is four calls that can each be lost, and
+   * The admitted turn's one cancellation. Starting a turn makes several calls that can each be lost, and
    * this is what stops the next one from being made once the turn is over.
    */
   readonly signal: AbortSignal;
@@ -81,7 +89,7 @@ export type ProjectTurnStart =
   | Readonly<{ ok: true; frames: ReadableStream<Uint8Array> }>
   | Readonly<{ ok: false; reason: ProjectTurnRefusal }>;
 
-/** A turn that did not begin. The four steps below all end here when the turn is already over. */
+/** A turn that did not begin. Every start step ends here when the turn is already over. */
 const NOT_STARTED = { ok: false, reason: "turn-not-started" } as const satisfies ProjectTurnStart;
 
 /** The mount problem arrives as a code because a project knows nothing about module maps. */
@@ -89,14 +97,34 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
   return problemCode === "no-active-generation" ? "no-active-generation" : "mount-failed";
 }
 
+type WorkspacePreparation = "ready" | "aborted" | "unavailable";
+
+async function prepareWorkspace(
+  input: ProjectTurnInput,
+  selected: SelectableProject,
+): Promise<WorkspacePreparation> {
+  if (!(await workspaceIsAvailable(input))) return "aborted";
+
+  if (
+    selected.kind === "harness" &&
+    input.provisionHarness !== undefined &&
+    !(await input.provisionHarness(input.signal))
+  ) {
+    return input.signal.aborted ? "aborted" : "unavailable";
+  }
+
+  return input.signal.aborted ? "aborted" : "ready";
+}
+
 /**
  * Start one streamed turn in the tenant's workspace, against the selected project's directory.
  *
  * The order of the steps is deliberate. The selected id is resolved against the catalog first, so a
  * working directory exists only for something the server recognizes and a client string never
- * becomes a path. The generation is mounted second, so a Supervisor with nothing serving refuses
- * before touching a workspace at all. A selected repository's clone is reconciled third, because a
- * turn that is about to edit files needs them to be there. The capability is obtained last and
+ * becomes a path. A harness checkout is reconciled before its generation mounts, while a Supervisor
+ * with nothing serving refuses before touching a workspace at all. A selected repository's clone is
+ * reconciled after mounting, because it is independent of whether a generation exists. The
+ * capability is obtained last and
  * reaches the generation as an argument of `startTurn`, never as a loader environment entry: the
  * Worker Loader caches its entry under the harness commit, so a capability placed there would be
  * whichever project warmed the cache and would then serve every other project.
@@ -126,7 +154,13 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return NOT_STARTED;
   }
 
-  if (!(await workspaceIsAvailable(input))) return NOT_STARTED;
+  const preparation = await prepareWorkspace(input, selected);
+
+  if (preparation === "aborted") return NOT_STARTED;
+
+  if (preparation === "unavailable") {
+    return { ok: false, reason: "workspace-unavailable" };
+  }
 
   const mounted = await input.mount();
 
@@ -138,8 +172,8 @@ export async function streamProjectTurn(input: ProjectTurnInput): Promise<Projec
     return NOT_STARTED;
   }
 
-  // Only a connected repository has a clone to reconcile. The harness checkout is already in the
-  // workspace, so selecting it asks the workspace for nothing before the turn starts.
+  // Connected repositories are reconciled after the generation is mounted. Their checkout does not
+  // determine whether this generation exists, while the harness checkout does.
   if (selected.kind === "repository" && !(await input.provision(selected, input.signal))) {
     return { ok: false, reason: "workspace-unavailable" };
   }

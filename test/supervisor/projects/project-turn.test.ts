@@ -18,7 +18,6 @@ import {
   otherTenantWorkspaceName,
   projectWorkspaces,
   turnFor,
-  turnRecordingProvisioning,
   turnWithNothingServing,
   workspaceName,
 } from "./project-turn-helpers.js";
@@ -183,22 +182,6 @@ test("passes the turn cancellation signal into provisioning", async () => {
 
   expect(received).toBe(controller.signal);
   expect(start).toEqual({ ok: false, reason: "turn-not-started" });
-});
-
-test("the harness entry needs no clone, and a repository still gets one", async () => {
-  const workspaces = await projectWorkspaces();
-  const harnessFacet = await facetRunning([says("Nothing to do.")]);
-  const projectFacet = await facetRunning([says("Nothing to do.")]);
-
-  const harness = await turnRecordingProvisioning(workspaces, harnessFacet, HARNESS_PROJECT_ID);
-  const project = await turnRecordingProvisioning(workspaces, projectFacet, projectOne.id);
-
-  // The harness checkout is already in the workspace and has no repository URL to reconcile
-  // against, so selecting it must not reach the provisioning path at all.
-  expect(harness.start).toMatchObject({ ok: true });
-  expect(harness.provisioned).toEqual([]);
-  expect(project.start).toMatchObject({ ok: true });
-  expect(project.provisioned).toEqual([projectOne.id]);
 });
 
 test("a turn on the harness entry cannot address anything outside the workspace root", async () => {
