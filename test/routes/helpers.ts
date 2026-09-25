@@ -76,7 +76,7 @@ function unknownProjectOr(projectId: string): ProjectThreadResult {
 export function controlRequest(path: string, body: string): Request {
   return new Request(`https://cf-stumble.test${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
     body,
   });
 }

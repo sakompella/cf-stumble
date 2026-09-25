@@ -50,7 +50,7 @@ function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): 
   return routeOwnerApiRequest(
     new Request("https://cf-stumble.test/api/generations/submit", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
       body: JSON.stringify({ harnessCommit }),
     }),
     control,

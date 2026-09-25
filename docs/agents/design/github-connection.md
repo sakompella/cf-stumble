@@ -99,8 +99,8 @@ Three rules protect the flow:
   redemption presented by any other verified owner is refused.
 - The device code is deleted when it is redeemed, denied, or expires, so the same request replayed
   finds nothing to redeem.
-- Every state-changing project route refuses a request whose `Origin` header is not cf-stumble's
-  own origin.
+- Every state-changing route under `/api/` requires an `Origin` header that exactly matches
+  cf-stumble's own request origin; a missing, `null`, or other value is refused.
 
 The owner completed the live authorization on the deployment on 2026-09-11. [GitHub connection
 evidence](../../release/v0/evidence/github-connection.md) records the result. Everything above is

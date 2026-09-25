@@ -38,14 +38,14 @@ export type ProjectApiSupervisor = Readonly<{
  *
  * Access sits in front of everything here, so a cross-site request cannot be a stranger's; it can
  * still be the owner's own browser driven by another site, which is what would let a page the
- * owner happens to visit start an authorization or connect a repository in their name. An absent
- * `Origin` is allowed because a same-origin `fetch` from the page and a command-line client both
- * omit it; a present one has to match.
+ * owner happens to visit start an authorization or connect a repository in their name. The
+ * browser must send an `Origin` that exactly matches the request URL's origin. A missing value,
+ * `null`, and every other value are refused.
  */
 export function isCrossOriginMutation(request: Request): boolean {
   const origin = request.headers.get("origin");
 
-  return origin !== null && origin !== new URL(request.url).origin;
+  return origin === null || origin !== new URL(request.url).origin;
 }
 
 const CONNECT_STATUS = {

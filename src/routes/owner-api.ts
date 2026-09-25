@@ -180,6 +180,10 @@ export function routeOwnerApiRequest(
   }
 
   if (isPost && thread.isReset) {
+    if (isCrossOriginMutation(request)) {
+      return Promise.resolve(jsonError(403, "cross-origin-request"));
+    }
+
     return threadResponse(() => supervisor.startFreshProjectThread(thread.projectId));
   }
 

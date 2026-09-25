@@ -35,7 +35,7 @@ function control(
   return routeOwnerApiRequest(
     new Request(`https://cf-stumble.test/api/generations/${command}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
       body: JSON.stringify(body),
     }),
     stub,
