@@ -174,32 +174,42 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
         if (!state.cancelled) controller.enqueue(encodeFrame(frame));
       };
 
-      const reader = new TurnReader(input.frames, publish);
-      turn = reader;
+      let reader: TurnReader | undefined;
+      let failed = false;
 
-      // The turn's own bound, not a second one: when the instant admission fixed arrives, the
-      // signal aborts and the generation's stream is cancelled, whether the start left the turn
-      // four minutes or four seconds.
       const stopReading = () => {
-        void reader.stop();
+        if (reader !== undefined) void reader.stop();
       };
 
-      input.bound.signal.addEventListener("abort", stopReading, { once: true });
-
-      if (input.bound.signal.aborted) stopReading();
-
       try {
+        reader = new TurnReader(input.frames, publish);
+        turn = reader;
+
+        // The turn's own bound, not a second one: when the instant admission fixed arrives, the
+        // signal aborts and the generation's stream is cancelled, whether the start left the turn
+        // four minutes or four seconds.
+        input.bound.signal.addEventListener("abort", stopReading, { once: true });
+
+        if (input.bound.signal.aborted) stopReading();
+
         const ending = await reader.read(
           () => state.cancelled,
           () => input.bound.timedOut(),
         );
 
         publish(endTurn(input, ending).frame);
+      } catch (cause) {
+        // A stream can fail before its reader exists, or while settling a terminal frame. Neither
+        // path reaches `endTurn`, so release the admitted lease before the stream error reaches its
+        // caller. A failed stream must not make the next turn wait for this one's deadline.
+        failed = true;
+        input.threads.abandonTurn(input.projectId, input.leaseId);
+        throw cause;
       } finally {
         input.bound.signal.removeEventListener("abort", stopReading);
         input.bound.stop();
 
-        if (!state.cancelled) controller.close();
+        if (!state.cancelled && !failed) controller.close();
       }
     },
     cancel() {

@@ -143,6 +143,7 @@ function cloneProjectRepository(
     "  fi",
     '  rm -rf "$staging"',
     '  git clone "$expected_remote" "$staging"',
+    '  git -C "$staging" config core.fileMode false',
     '  rmdir "$repository" 2>/dev/null || true',
     '  mv "$staging" "$repository"',
     "fi",

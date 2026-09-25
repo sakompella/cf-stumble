@@ -28,6 +28,7 @@ import {
   type ProvisionWorkspaceNamespace,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
+import { logRedactedCause } from "../../diagnostics.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
@@ -122,11 +123,17 @@ export class ProjectConnections {
    * this one is not a connection: there is nothing to authorize and nothing to clone.
    */
   async list(now: number): Promise<ProjectListView> {
-    return { projects: this.catalog(), github: await this.github.status(now) };
+    return { projects: this.catalog(), github: await this.connectionStatus(now) };
   }
 
-  connectionStatus(now: number): Promise<GitHubConnectionStatus> {
-    return this.github.status(now);
+  async connectionStatus(now: number): Promise<GitHubConnectionStatus> {
+    try {
+      return await this.github.status(now);
+    } catch (cause) {
+      logRedactedCause("project-connections.connection-status: workspace-unavailable", cause);
+
+      return { state: "reconnect-required", reason: "workspace-unavailable" };
+    }
   }
 
   /**

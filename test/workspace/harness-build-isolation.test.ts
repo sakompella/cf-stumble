@@ -87,6 +87,17 @@ test("a build never replaces the editable harness checkout", () => {
     provision.source,
     "a populated directory that is not a repository is reported, never deleted",
   ).toContain('    printf "%s is not a git repository and is not empty\\n" "$repository" >&2');
+  expect(provision.source).toContain(
+    [
+      '  git clone "$expected_remote" "$incoming"',
+      '  git -C "$incoming" config core.fileMode false',
+      '  rmdir "$repository" 2>/dev/null || true',
+    ].join("\n"),
+  );
+  expect(
+    provision.source,
+    "an existing harness checkout must not have unrelated config rewritten",
+  ).not.toContain('git -C "$repository" config core.fileMode false');
   expect(provision.source, "only an empty directory is removed").toContain(
     '  rmdir "$repository" 2>/dev/null || true',
   );

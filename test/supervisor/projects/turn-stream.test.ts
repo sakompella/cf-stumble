@@ -29,6 +29,38 @@ function rejectingFrames(reader: RejectingReader): ReadableStream<Uint8Array> {
   return frames;
 }
 
+test("a stream that cannot create a reader abandons its lease", async () => {
+  const frames = new ReadableStream<Uint8Array>();
+  Object.defineProperty(frames, "getReader", {
+    value: () => {
+      throw new Error("stream reader unavailable");
+    },
+  });
+  const projectId = parseProjectId("project-one");
+
+  if (projectId === undefined) throw new Error("expected a valid project id");
+
+  const abandonTurn = vi.fn((_projectId: string, _leaseId: string): ProjectThreadResult => ({
+    ok: false,
+    problem: { code: "turn-not-active", projectId },
+  }));
+
+  const bound = new TurnBound(Date.now() + 1_000, now);
+
+  const stream = projectTurnStream({
+    projectId,
+    leaseId: "lease-one",
+    threads: { finishTurn: vi.fn(), abandonTurn },
+    now,
+    bound,
+    frames,
+  });
+
+  await expect(stream.getReader().read()).rejects.toThrow("stream reader unavailable");
+  expect(abandonTurn).toHaveBeenCalledOnce();
+  bound.stop();
+});
+
 test("a deadline that rejects the pending RPC read is timed out", async () => {
   const reader = new RejectingReader();
   const projectId = parseProjectId("project-one");

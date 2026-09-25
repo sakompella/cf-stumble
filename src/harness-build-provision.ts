@@ -50,6 +50,7 @@ function reconcileHarnessRepository(): readonly string[] {
     '  incoming="${repository}.incoming.$$"',
     '  rm -rf "$incoming"',
     '  git clone "$expected_remote" "$incoming"',
+    '  git -C "$incoming" config core.fileMode false',
     '  rmdir "$repository" 2>/dev/null || true',
     '  mv "$incoming" "$repository"',
     "fi",

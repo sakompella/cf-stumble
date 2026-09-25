@@ -44,6 +44,17 @@ export interface ScriptedGeneration {
   close(): void;
 }
 
+function streamWithThrowingReader(): ReadableStream<Uint8Array> {
+  const frames = new ReadableStream<Uint8Array>();
+  Object.defineProperty(frames, "getReader", {
+    value: () => {
+      throw new Error("stream reader unavailable");
+    },
+  });
+
+  return frames;
+}
+
 function scriptedGeneration(): ScriptedGeneration {
   const state = { cancelled: false, closed: false };
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
@@ -103,6 +114,8 @@ export interface TurnScript {
   readonly stallStart?: boolean;
   /** Reject the start call, as a workspace or facet RPC may do. */
   readonly throwStart?: boolean;
+  /** Return a stream whose reader cannot be created, after the lease is admitted. */
+  readonly throwStreamReader?: boolean;
   /** Runs inside the object before the turn is admitted, to leave a record behind. */
   readonly beforeRun?: (state: DurableObjectState) => void;
   /** Makes the generation attribution snapshot throw after the lease has been persisted. */
@@ -225,6 +238,10 @@ function turnInput(
 
       if (script.throwStart === true) {
         return Promise.reject(new Error("start failed"));
+      }
+
+      if (script.throwStreamReader === true) {
+        return Promise.resolve({ ok: true, frames: streamWithThrowingReader() });
       }
 
       return Promise.resolve(script.refuseStart ?? { ok: true, frames: generation.stream });
