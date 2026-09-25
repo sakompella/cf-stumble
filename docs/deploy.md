@@ -22,7 +22,7 @@ Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this proje
 
 ## Container image
 
-`wrangler.jsonc` points to `containers/computerd.Dockerfile`, not to a registry image. The Dockerfile starts from the pinned public Cloudflare Computer image.
+`wrangler.jsonc` points to `containers/computerd.Dockerfile`, not to a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
 
 This indirection is required. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured. A direct reference to the public image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Workers Builds has Docker, so it builds this Dockerfile and pushes the result to the deploying account's managed registry.
 

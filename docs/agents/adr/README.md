@@ -26,6 +26,9 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0040](0040-harness-produces-the-turn-diff.md)**: the harness runs the repository's diff at the end of a turn that changed files, instead of asking the model to run one.
 - **[ADR-0041](0041-line-ceilings-measure-content.md)**: size ceilings count code and comments,
   while required blank lines do not consume their budgets.
+- **[ADR-0042](0042-build-computerd-from-source-with-walk-patch.md)**: the workspace image builds
+  computerd from the pinned source with a patch that stops its shim from following symlinks and
+  walking ignored trees.
 
 ## Adding a decision
 
