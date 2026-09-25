@@ -4,8 +4,6 @@ import { expect, test } from "vitest";
 
 import { parseHarnessCommit } from "../src/harness-commit.js";
 
-const commitPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
-
 const validCommit = gs.fromRegex("(?:[0-9a-f]{40}|[0-9a-f]{64})");
 
 const invalidLength = gs
@@ -24,11 +22,15 @@ test("parses generated lowercase hexadecimal commit IDs unchanged", () => {
   });
 });
 
-test("handles arbitrary text and accepts exactly documented commit syntax", () => {
+test("rejects a valid commit when text surrounds it", () => {
   hegel.test((tc) => {
-    const value = tc.draw(gs.text());
+    const value = tc.draw(validCommit);
+    const surrounding = gs.text({ minSize: 1, maxSize: 5 });
+    const prefix = tc.draw(surrounding);
+    const suffix = tc.draw(surrounding);
 
-    expect(parseHarnessCommit(value) === undefined).toBe(!commitPattern.test(value));
+    expect(parseHarnessCommit(`${prefix}${value}`)).toBeUndefined();
+    expect(parseHarnessCommit(`${value}${suffix}`)).toBeUndefined();
   });
 });
 

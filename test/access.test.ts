@@ -155,6 +155,21 @@ describe("Cloudflare Access JWT verification", () => {
   });
 });
 
+test("rejects an http team domain as invalid configuration", async () => {
+  const result = await authenticateAccessRequest(
+    new Request("https://stumble.example/", {
+      headers: { "cf-access-jwt-assertion": "header.payload.signature" },
+    }),
+    {
+      CF_ACCESS_TEAM_DOMAIN: "http://team.cloudflareaccess.com",
+      CF_ACCESS_AUD: "audience",
+      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
+    },
+  );
+
+  expect(result).toStrictEqual({ ok: false, reason: "invalid-configuration" });
+});
+
 describe("Access-derived Supervisor names", () => {
   test("gives distinct identities distinct names", async () => {
     await expect(deriveSupervisorName({ identity: "user-1", audience })).not.resolves.toBe(

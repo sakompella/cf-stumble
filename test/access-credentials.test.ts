@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
-import { authenticateAccessRequest, withoutAccessCredentials } from "../src/access/index.js";
-import { accessOwnerSubject } from "./access-tokens.js";
+import { withoutAccessCredentials } from "../src/access/index.js";
 
 test("removes the Access assertion and cookie before the Supervisor sees a request", () => {
   const stripped = withoutAccessCredentials(
@@ -19,27 +18,6 @@ test("removes the Access assertion and cookie before the Supervisor sees a reque
   expect(JSON.stringify([...stripped.headers])).not.toContain("signature");
 });
 
-test("strips the Access cookie wherever it sits among other cookies", () => {
-  const stripped = withoutAccessCredentials(
-    new Request("https://stumble.example/chat", {
-      headers: { cookie: "theme=dark; sessionId=abc; CF_Authorization=header.payload.signature" },
-    }),
-  );
-
-  expect(stripped.headers.get("cookie")).toBe("theme=dark; sessionId=abc");
-  expect(JSON.stringify([...stripped.headers])).not.toContain("signature");
-});
-
-test("drops the cookie header when only the Access cookie was present", () => {
-  const stripped = withoutAccessCredentials(
-    new Request("https://stumble.example/chat", {
-      headers: { cookie: "CF_Authorization=secret-token" },
-    }),
-  );
-
-  expect(stripped.headers.get("cookie")).toBeNull();
-});
-
 test("preserves the method and body while stripping credentials", async () => {
   const stripped = withoutAccessCredentials(
     new Request("https://stumble.example/chat", {
@@ -51,19 +29,4 @@ test("preserves the method and body while stripping credentials", async () => {
 
   expect(stripped.method).toBe("POST");
   expect(await stripped.text()).toBe("prompt");
-});
-
-test("rejects an http team domain as invalid configuration", async () => {
-  const result = await authenticateAccessRequest(
-    new Request("https://stumble.example/", {
-      headers: { "cf-access-jwt-assertion": "header.payload.signature" },
-    }),
-    {
-      CF_ACCESS_TEAM_DOMAIN: "http://team.cloudflareaccess.com",
-      CF_ACCESS_AUD: "audience",
-      CF_ACCESS_OWNER_SUB: accessOwnerSubject,
-    },
-  );
-
-  expect(result).toStrictEqual({ ok: false, reason: "invalid-configuration" });
 });

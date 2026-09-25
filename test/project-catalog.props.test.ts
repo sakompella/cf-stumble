@@ -4,9 +4,11 @@ import { expect, test } from "vitest";
 
 import {
   canonicalRepositoryUrl,
+  parseProjectCatalog,
   parseProjectId,
   PROJECT_ID_LIMIT,
   projectIdForRepository,
+  resolveProject,
 } from "../src/project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../src/selectable-projects.js";
 
@@ -167,5 +169,64 @@ test("keeps the earlier id of every owner without a hyphen and name without dots
     const earlier = `${owner}-${name}`.toLowerCase();
 
     expect(projectIdForRepository(`https://github.com/${owner}/${name}`)).toBe(earlier);
+  });
+});
+
+type RawProject = Readonly<{
+  id: string | undefined;
+  displayName: string;
+  repositoryUrl: string;
+}>;
+
+function drawRawCatalog(tc: hegel.TestCase): RawProject[] {
+  const count = tc.draw(gs.integers({ minValue: 2, maxValue: 6 }));
+
+  return Array.from({ length: count }, (_, index) => {
+    const repository = tc.draw(gs.fromRegex("[a-z]{1,6}"));
+    const repositoryUrl = `https://github.com/owner${index}/${repository}`;
+
+    return {
+      id: projectIdForRepository(repositoryUrl),
+      displayName: `project ${index}`,
+      repositoryUrl,
+    };
+  });
+}
+
+test("resolves each catalog id to its own project regardless of position", () => {
+  hegel.test((tc) => {
+    const raw = drawRawCatalog(tc);
+    const catalog = parseProjectCatalog(raw);
+    expect(catalog).toBeDefined();
+
+    if (catalog === undefined) throw new Error("generated catalog must be valid");
+
+    const absentId = "absent-project";
+    const expectedById = new Map(catalog.map((project) => [project.id, project]));
+    const rotation = tc.draw(gs.integers({ minValue: 0, maxValue: catalog.length - 1 }));
+    const permuted = [...catalog.slice(rotation), ...catalog.slice(0, rotation)];
+
+    for (const [id, expected] of expectedById) {
+      expect(resolveProject(id, catalog)).toEqual({ ok: true, project: expected });
+      expect(resolveProject(id, permuted)).toEqual({ ok: true, project: expected });
+    }
+
+    expect(resolveProject(absentId, catalog)).toEqual({
+      ok: false,
+      reason: "unknown-project-id",
+    });
+  });
+});
+
+test("rejects duplicate catalog ids even when duplicate rows are far apart", () => {
+  hegel.test((tc) => {
+    const raw = drawRawCatalog(tc);
+    const duplicate = raw[0];
+
+    if (duplicate === undefined) throw new Error("generated catalog must be non-empty");
+
+    expect(
+      parseProjectCatalog([...raw, { ...duplicate, displayName: "duplicate" }]),
+    ).toBeUndefined();
   });
 });

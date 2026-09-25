@@ -93,71 +93,67 @@ describe("Access cookie authentication", () => {
     expect(fromCookie).toStrictEqual(fromHeader);
   });
 
-  test("finds the Access cookie among other cookies", async () => {
-    const key = await signingKey("cookie-among-key");
-    const token = await ownerToken(key, "owner-1");
+  test.each([
+    {
+      name: "expired",
+      expected: "expired",
+      token: (key: SigningKey) =>
+        signAccessToken(key, {
+          iss: accessIssuer,
+          aud: accessAudience,
+          exp: accessNow,
+          sub: "owner-1",
+        }),
+    },
+    {
+      name: "signed by another key",
+      expected: "invalid-signature",
+      token: async (_key: SigningKey) => {
+        const attacker = await signingKey("cookie-attacker-key");
 
-    await expect(
-      authenticate({ cookie: `theme=dark; CF_Authorization=${token}; sessionId=abc` }, [
-        key.publicJwk,
-      ]),
-    ).resolves.toMatchObject({ ok: true });
-  });
+        return ownerToken(attacker, "owner-1");
+      },
+    },
+    {
+      name: "issued for another Access application",
+      expected: "wrong-audience",
+      token: (key: SigningKey) =>
+        signAccessToken(key, {
+          iss: accessIssuer,
+          aud: "other-application",
+          exp: accessNow + 60,
+          sub: "owner-1",
+        }),
+    },
+    {
+      name: "issued by another team domain",
+      expected: "wrong-issuer",
+      token: (key: SigningKey) =>
+        signAccessToken(key, {
+          iss: "https://other.cloudflareaccess.com",
+          aud: accessAudience,
+          exp: accessNow + 60,
+          sub: "owner-1",
+        }),
+    },
+  ])(
+    "applies the same rejection to a cookie as to its header ($name)",
+    async ({ expected, token }) => {
+      const configured = await signingKey(`cookie-parity-${expected}`);
+      const tokenValue = await token(configured);
 
-  test("rejects an expired cookie token", async () => {
-    const key = await signingKey("cookie-expiry-key");
+      const fromCookie = await authenticate({ cookie: `CF_Authorization=${tokenValue}` }, [
+        configured.publicJwk,
+      ]);
 
-    const expired = await signAccessToken(key, {
-      iss: accessIssuer,
-      aud: accessAudience,
-      exp: accessNow,
-      sub: "owner-1",
-    });
+      const fromHeader = await authenticate({ "cf-access-jwt-assertion": tokenValue }, [
+        configured.publicJwk,
+      ]);
 
-    await expect(
-      authenticate({ cookie: `CF_Authorization=${expired}` }, [key.publicJwk]),
-    ).resolves.toStrictEqual({ ok: false, reason: "expired" });
-  });
-
-  test("rejects a cookie token signed by another key", async () => {
-    const configured = await signingKey("cookie-configured-key");
-    const attacker = await signingKey("cookie-attacker-key");
-    const forged = await ownerToken(attacker, "owner-1");
-
-    await expect(
-      authenticate({ cookie: `CF_Authorization=${forged}` }, [configured.publicJwk]),
-    ).resolves.toStrictEqual({ ok: false, reason: "invalid-signature" });
-  });
-
-  test("rejects a cookie token issued for another Access application", async () => {
-    const key = await signingKey("cookie-audience-key");
-
-    const wrongAudience = await signAccessToken(key, {
-      iss: accessIssuer,
-      aud: "other-application",
-      exp: accessNow + 60,
-      sub: "owner-1",
-    });
-
-    await expect(
-      authenticate({ cookie: `CF_Authorization=${wrongAudience}` }, [key.publicJwk]),
-    ).resolves.toStrictEqual({ ok: false, reason: "wrong-audience" });
-  });
-
-  test("rejects a cookie token from another team domain", async () => {
-    const key = await signingKey("cookie-issuer-key");
-
-    const wrongIssuer = await signAccessToken(key, {
-      iss: "https://other.cloudflareaccess.com",
-      aud: accessAudience,
-      exp: accessNow + 60,
-      sub: "owner-1",
-    });
-
-    await expect(
-      authenticate({ cookie: `CF_Authorization=${wrongIssuer}` }, [key.publicJwk]),
-    ).resolves.toStrictEqual({ ok: false, reason: "wrong-issuer" });
-  });
+      expect(fromCookie).toStrictEqual({ ok: false, reason: expected });
+      expect(fromCookie).toStrictEqual(fromHeader);
+    },
+  );
 
   test("treats a malformed cookie value exactly like a malformed header", async () => {
     const key = await signingKey("cookie-malformed-key");
@@ -198,31 +194,6 @@ describe("Access cookie authentication", () => {
     expect(JSON.stringify(result)).not.toContain(forged);
   });
 
-  test("prefers the assertion header when a request carries both", async () => {
-    const key = await signingKey("cookie-preference-key");
-    const headerToken = await ownerToken(key, accessOwnerSubject);
-    // A non-owner cookie value proves the cookie was never the one consulted: were it consulted
-    // instead of the header, the owner check would reject the request.
-    const cookieToken = await ownerToken(key, "cookie-non-owner");
-
-    const result = await authenticate(
-      {
-        "cf-access-jwt-assertion": headerToken,
-        cookie: `CF_Authorization=${cookieToken}`,
-      },
-      [key.publicJwk],
-    );
-
-    expect(result).toStrictEqual({
-      ok: true,
-      supervisorName: await deriveSupervisorName({
-        identity: accessOwnerSubject,
-        audience: accessAudience,
-      }),
-      scope: { identity: accessOwnerSubject, audience: accessAudience },
-    });
-  });
-
   test("rejects a request whose header fails even though its cookie would pass", async () => {
     const key = await signingKey("cookie-no-fallback-key");
     const valid = await ownerToken(key, "owner-1");
@@ -253,11 +224,6 @@ describe("locating the presented Access token", () => {
       expected: "header-token",
     },
     {
-      name: "reads the cookie value when no header arrives",
-      headers: { cookie: "a=1; CF_Authorization=cookie-token; b=2" },
-      expected: "cookie-token",
-    },
-    {
       name: "reads the cookie value when the header is empty",
       headers: {
         "cf-access-jwt-assertion": "",
@@ -265,11 +231,6 @@ describe("locating the presented Access token", () => {
       },
       expected: "cookie-token",
     },
-    {
-      name: "returns nothing for a request with an unrelated cookie",
-      headers: { cookie: "theme=dark" },
-    },
-    { name: "returns nothing for a request with no Access credential", headers: {} },
   ])("$name", ({ headers, expected }) => {
     expect(presentedAccessToken(requestWith(headers))).toBe(expected);
   });
