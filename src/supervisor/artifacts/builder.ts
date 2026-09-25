@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import type { CommandOutput } from "../../workspace/index.js";
+import { redactCredentials } from "../../github/index.js";
 import {
   moduleMapFromBuildOutput,
   planHarnessBuild,
@@ -71,11 +72,13 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     if (output.exitCode !== 0) {
       // A build failure reaches the browser as a step name and an exit code, which says nothing
       // about what the command reported. The tail of the step's own output is the only account of
-      // why the build failed, and it exists nowhere else once the build directory is cleared.
+      // why the build failed, and it exists nowhere else once the build directory is cleared. A
+      // fetch prints the remote it used, so the tail is redacted before it is cut: cutting first
+      // could leave a partial token too short for redaction to recognize.
       console.error(`harness build step ${step.name} exited ${output.exitCode}`, {
         harnessCommit,
-        stdout: output.stdout.slice(-2000),
-        stderr: output.stderr.slice(-2000),
+        stdout: redactCredentials(output.stdout).slice(-2000),
+        stderr: redactCredentials(output.stderr).slice(-2000),
       });
 
       return Result.err({
