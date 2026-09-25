@@ -151,10 +151,9 @@ test("serializes replacement provisioning until an aborted run has finished", as
   await Promise.resolve();
 
   expect(
-    delayed.host.requests,
+    delayed.host.requests.map((request) => request.step),
     "a replacement must not enter the shared workspace while the aborted clone is in flight",
-  ).toHaveLength(1);
-  expect(delayed.host.requests[0]?.step).toBe("clone");
+  ).toEqual(["clone"]);
 
   delayed.release();
 
