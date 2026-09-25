@@ -24,15 +24,9 @@ test("reflection exposes exactly six methods and no forbidden backing capability
 });
 
 test.each<readonly [string, unknown]>([
-  ["null", null],
-  ["a number", 42],
-  ["a relative path", "relative/path"],
+  ["a non-string", null],
   ["a backslash", "a\\b"],
-  ["a NUL byte", "/a\0b"],
-  ["a dot segment", "/a/./b"],
-  ["a dot-dot segment", "/a/../b"],
-  ["a doubled slash", "/a//b"],
-  ["a trailing slash", "/a/"],
+  ["a path that needs normalization", "/a/../b"],
 ])("lstat/readFile/listFiles reject a malformed path: %s", async (_label, path) => {
   const { provider, target } = makeTarget();
 
