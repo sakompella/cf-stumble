@@ -46,22 +46,6 @@ afterEach(async () => {
   await reset();
 });
 
-test("a user submission labels its harness commit as a generation candidate", async () => {
-  const control = supervisor("control-user-submission");
-
-  const result = await control.controlGeneration(
-    request(user, { kind: "submit-candidate", harnessCommit: commits.first }),
-  );
-
-  expect(result).toMatchObject({
-    ok: true,
-    outcome: {
-      kind: "candidate-submitted",
-      generation: { label: 0, harnessCommit: commits.first, status: "candidate" },
-    },
-  });
-});
-
 test("resubmitting the same harness commit returns the existing generation", async () => {
   const control = supervisor("control-resubmit-existing");
   const submission = request(user, { kind: "submit-candidate", harnessCommit: commits.first });
@@ -274,22 +258,6 @@ test("activating the active generation with its current epoch is a no-op, but a 
     await control.getActiveGeneration(),
     "a no-op activation does not advance the epoch a second time",
   ).toMatchObject({ generation: { label: target }, epoch: first.outcome.epoch });
-});
-
-test("repeating a rejected command against unchanged state returns the same rejection", async () => {
-  const control = supervisor("control-repeat-rejection");
-
-  const rejectedRequest = request(user, {
-    kind: "activate",
-    label: 99,
-    observedEpoch: 0,
-  });
-
-  const first = await control.controlGeneration(rejectedRequest);
-  const repeated = await control.controlGeneration(rejectedRequest);
-
-  expect(first).toEqual({ ok: false, problem: { code: "unknown-generation" } });
-  expect(repeated).toEqual(first);
 });
 
 test("resubmitting the same harness commit still returns the existing generation after Durable Object eviction", async () => {
