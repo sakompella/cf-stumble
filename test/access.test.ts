@@ -118,6 +118,23 @@ describe("Cloudflare Access JWT verification", () => {
     });
   });
 
+  test("rejects a token that is not yet valid", async () => {
+    const signed = await validToken("RS256");
+
+    const notYetValid = await signAccessToken(signed.key, {
+      iss: issuer,
+      aud: audience,
+      exp: now + 60,
+      nbf: now + 1,
+      sub: "user-1",
+    });
+
+    await expect(verifyAccessToken(input(notYetValid, signed.key))).resolves.toMatchObject({
+      ok: false,
+      reason: "not-yet-valid",
+    });
+  });
+
   test("rejects a token without the stable identity claim", async () => {
     const signed = await validToken("RS256");
 
