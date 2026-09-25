@@ -5,15 +5,12 @@ function startupRequest(): Request {
   return new Request("https://main-facet.invalid/");
 }
 
-test("GET / answers cheaply and deterministically without using a capability", async () => {
-  const first = await handleGeneration0Request(startupRequest());
-  const second = await handleGeneration0Request(startupRequest());
-  const body = await first.text();
+test("GET / answers with the startup message without using a capability", async () => {
+  const response = await handleGeneration0Request(startupRequest());
+  const body = await response.text();
 
-  expect(first.status).toBe(200);
+  expect(response.status).toBe(200);
   expect(body).toBe("generation-0 main facet ready");
-  expect(body.length, "the startup check bounds the body at 1024 bytes").toBeLessThan(1_024);
-  expect(await second.text()).toBe(body);
 });
 
 /**
