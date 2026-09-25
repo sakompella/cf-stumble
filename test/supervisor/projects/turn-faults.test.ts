@@ -233,6 +233,22 @@ test("a rejected start abandons the exact lease before the error reaches the cal
     ok: true,
     thread: { revision: 0, turnActive: false },
   });
+  const next = await runScriptedTurn(control, { frames: [completed] });
+
+  expect(next.frames.at(-1)).toMatchObject({ kind: "saved", revision: 1 });
+});
+
+test("a stream failure releases the lease before the next turn is admitted", async () => {
+  const control = await supervisor("turn-stream-reader-fails");
+  await activateFixtureGeneration(control);
+
+  await expect(runScriptedTurn(control, { throwStreamReader: true })).rejects.toThrow(
+    "stream reader unavailable",
+  );
+  const next = await runScriptedTurn(control, { frames: [completed] });
+
+  expect(next.frames.at(-1)).toMatchObject({ kind: "saved", revision: 1 });
+  expect(next.thread).toMatchObject({ revision: 1, turnActive: false });
 });
 
 test("an attribution snapshot failure abandons the admitted lease", async () => {
