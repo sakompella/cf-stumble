@@ -41,6 +41,7 @@ function renderText(value: RenderText): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
+// The stubs mirror the renderer's free helper names, so renaming a helper should fail this test.
 // oxlint-disable-next-line eslint/max-lines-per-function
 function turnRenderer(visible: string[]): TurnRenderer {
   const node = (textContent = ""): StubNode => ({
@@ -62,7 +63,6 @@ function turnRenderer(visible: string[]): TurnRenderer {
   const toolBlock = () => visible.push("tool-start");
   const toolResult = () => visible.push("tool-result");
   const diffMessage = () => visible.push("diff");
-  const renderDiff = diffMessage;
   const diffUnavailableMessage = () => visible.push("diff-unavailable");
 
   // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: evaluate only the delivered turn renderer with the stubs above.
@@ -78,7 +78,6 @@ function turnRenderer(visible: string[]): TurnRenderer {
     "toolBlock",
     "toolResult",
     "diffMessage",
-    "renderDiff",
     "diffUnavailableMessage",
     `${OWNER_PAGE_SCRIPT_TURN}\nreturn applyFrame;`,
   ) as (...args: unknown[]) => TurnRenderer;
@@ -95,7 +94,6 @@ function turnRenderer(visible: string[]): TurnRenderer {
     toolBlock,
     toolResult,
     diffMessage,
-    renderDiff,
     diffUnavailableMessage,
   );
 }
