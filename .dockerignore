@@ -5,3 +5,4 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !vendor/cloudflare-computer-0.3.0.tgz
+!containers/computerd-walk.patch
