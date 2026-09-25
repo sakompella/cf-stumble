@@ -3,6 +3,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
 import { NdjsonFrameReader } from "../../../src/facet/generation-0/execution-env-frame-reader.js";
+import { byteChunkStream } from "../../byte-stream-fixture.js";
 
 type ExecFrame = Readonly<{
   readonly kind: "stdout" | "stderr";
@@ -29,22 +30,7 @@ function splitBytes(bytes: Uint8Array, points: readonly number[]): Uint8Array[] 
   });
 }
 
-function readableFromChunks(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
-  let index = 0;
-
-  return new ReadableStream({
-    pull(controller) {
-      if (index >= chunks.length) {
-        controller.close();
-
-        return;
-      }
-
-      controller.enqueue(chunks[index]);
-      index += 1;
-    },
-  });
-}
+const readableFromChunks = byteChunkStream;
 
 test("NdjsonFrameReader preserves generated exec frames under arbitrary byte partitioning", async () => {
   await hegel.testAsync(async (tc) => {

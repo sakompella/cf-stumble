@@ -1,3 +1,4 @@
+import { byteChunkStream } from "../../byte-stream-fixture.js";
 import type { ExecTarget } from "../../../src/facet/generation-0/execution-env-exec.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
 
@@ -39,21 +40,8 @@ export function readableFrom(
   onLastRead?: () => void,
 ): ReadableStream<Uint8Array> {
   const frames = values.map((value) => encodeFrame(value));
-  let index = 0;
 
-  return new ReadableStream({
-    pull(controller) {
-      if (index >= frames.length) {
-        onLastRead?.();
-        controller.close();
-
-        return;
-      }
-
-      controller.enqueue(frames[index]);
-      index += 1;
-    },
-  });
+  return byteChunkStream(frames, onLastRead);
 }
 
 export function rejectingReadable(): ReadableStream<Uint8Array> {
@@ -65,19 +53,4 @@ export function rejectingReadable(): ReadableStream<Uint8Array> {
 }
 
 /** Delivers exactly the byte chunks given, letting a test control how frames are physically cut. */
-export function readableFromChunks(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
-  let index = 0;
-
-  return new ReadableStream({
-    pull(controller) {
-      if (index >= chunks.length) {
-        controller.close();
-
-        return;
-      }
-
-      controller.enqueue(chunks[index]);
-      index += 1;
-    },
-  });
-}
+export const readableFromChunks = byteChunkStream;
