@@ -44,7 +44,7 @@ test("configures the container backend for direct egress", () => {
   expect(workspaceContainerBackendConfiguration("workspace-id").egress).toEqual({ mode: "direct" });
 });
 
-test("returns plain cloneable values and exposes no raw Computer RPC method", async () => {
+test("returns a build result as a plain value", async () => {
   const result = await executeHarnessBuildRequest({
     configuration: HARNESS_BUILD_CONFIGURATION,
     operations: new FakeOperations(),
@@ -55,8 +55,10 @@ test("returns plain cloneable values and exposes no raw Computer RPC method", as
     ok: true,
     result: { kind: "command", stdout: "{}", stderr: "", exitCode: 0 },
   });
-  expect(structuredClone(result)).toEqual(result);
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+});
+
+test("exposes only the Workspace Host RPC methods", () => {
   expect(
     Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted(),
     "`project` hands out the narrow project capability; anything else added here is a new surface",

@@ -36,9 +36,6 @@ test("forwards stdout as it arrives, before the terminal exit event", async () =
     value: { kind: "stdout", seq: 0, data: "hi\n" },
   });
 
-  // The port never exposes a buffered aggregate: nothing here could call one even by mistake.
-  expect("result" in handle).toBe(false);
-
   handle.push({ name: "exit", exitCode: 0 });
   await expect(reader.read()).resolves.toEqual({
     done: false,

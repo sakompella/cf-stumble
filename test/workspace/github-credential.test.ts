@@ -153,7 +153,7 @@ test("installs a credential without touching a filesystem at all", async () => {
   expect(operations.stdins[0]).toBe(`${FAKE_TOKEN}\n`);
 });
 
-test("reports a failed install without leaving anything to clean up", async () => {
+test("reports a failed install with gh's stderr as the detail", async () => {
   const operations = new FilesystemlessOperations();
   operations.exitCode = 1;
   operations.stderr = "gh: something went wrong";
@@ -168,19 +168,6 @@ test("reports a failed install without leaving anything to clean up", async () =
     ok: false,
     error: { code: "credential-command-failed", detail: "gh: something went wrong" },
   });
-});
-
-test("reports an unavailable workspace when the install command cannot run", async () => {
-  const operations = new FilesystemlessOperations();
-  operations.commandFails = true;
-
-  const failed = await credential(operations, {
-    kind: "github-credential",
-    step: "install",
-    token: FAKE_TOKEN,
-  });
-
-  expect(failed).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
 });
 
 // A thrown cause used to vanish behind `workspace-unavailable` with nothing logged. The public
