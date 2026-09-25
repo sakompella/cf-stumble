@@ -2,12 +2,17 @@
 
 import { Result } from "better-result";
 import { expect, test } from "vitest";
-import { sampleSelectableCatalog } from "../../project-fixtures.js";
+import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
 import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { says } from "../../facet/generation-0/facet-turn-helpers.js";
 
-import { facetRunning, projectWorkspaces, workspaceName } from "./project-turn-helpers.js";
+import {
+  facetRunning,
+  projectWorkspaces,
+  turnRecordingProvisioning,
+  workspaceName,
+} from "./project-turn-helpers.js";
 
 test("a harness turn reconciles before mounting the generation", async () => {
   const workspaces = await projectWorkspaces();
@@ -66,4 +71,13 @@ test("a harness provision that observes cancellation never mounts", async () => 
 
   expect(start).toEqual({ ok: false, reason: "turn-not-started" });
   expect(mounted).toBe(false);
+});
+
+test("a repository turn reconciles its own clone", async () => {
+  const workspaces = await projectWorkspaces();
+  const facet = await facetRunning([says("Nothing to do.")]);
+  const project = await turnRecordingProvisioning(workspaces, facet, sampleProjectOne.id);
+
+  expect(project.start).toMatchObject({ ok: true });
+  expect(project.provisioned).toEqual([sampleProjectOne.id]);
 });
