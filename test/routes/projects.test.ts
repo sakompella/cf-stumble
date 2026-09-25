@@ -242,28 +242,6 @@ test.each([
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code: problem } });
 });
 
-test("refuses a state-changing request from another site before the Supervisor sees it", async () => {
-  const paths = [
-    "/api/projects/connect",
-    "/api/github/authorization",
-    "/api/github/authorization/complete",
-  ];
-
-  for (const path of paths) {
-    const response = await routeOwnerApiRequest(
-      post(path, { repositoryUrl: "https://github.com/sample/repo-1" }, "https://evil.test"),
-      supervisor(),
-      ownerScope,
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      ok: false,
-      error: { code: "cross-origin-request" },
-    });
-  }
-});
-
 test("keeps the project routes to their methods", async () => {
   const postList = await routeOwnerApiRequest(post("/api/projects", {}), supervisor(), ownerScope);
 

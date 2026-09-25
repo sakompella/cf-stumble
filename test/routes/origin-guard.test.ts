@@ -238,9 +238,13 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
   }
 }
 
-test.each(mutations.flatMap((mutation) => origins.map((origin) => [mutation, origin] as const)))(
+test.each(
+  mutations.flatMap((mutation) =>
+    origins.map((origin) => [mutation.name, origin.name, mutation, origin] as const),
+  ),
+)(
   "requires an exact, present Origin for %s (%s)",
-  async (mutation, origin) => {
+  async (_mutationName, _originName, mutation, origin) => {
     const calls = { value: 0 };
 
     const response = await routeOwnerApiRequest(

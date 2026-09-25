@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { redactCredentials } from "../../src/github/index.js";
+import { redactCredentials, REDACTED } from "../../src/github/index.js";
 
 const prefix = gs.sampledFrom(["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]);
 
@@ -47,6 +47,7 @@ test("redacts documented tokens next to non-word delimiters and reaches a fixpoi
     const redacted = redactCredentials(message);
 
     expect(redacted).not.toContain(token);
+    expect(redacted.replaceAll(REDACTED, "")).not.toContain(body.slice(-6));
     expect(redactCredentials(redacted)).toBe(redacted);
   });
 });

@@ -118,7 +118,7 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
   expect(wrongMethod.status).toBe(404);
 });
 
-test("resets the workspace only for the owner and reports what it reset", async () => {
+test("resets the workspace and reports what it reset", async () => {
   let calls = 0;
 
   const response = await routeOwnerApiRequest(
@@ -139,21 +139,6 @@ test("resets the workspace only for the owner and reports what it reset", async 
   expect(response.status).toBe(200);
   expect(calls).toBe(1);
   await expect(response.json()).resolves.toEqual({ ok: true, reset: "workspace" });
-
-  const foreign = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/workspace/reset", {
-      method: "POST",
-      headers: { origin: "https://evil.test" },
-    }),
-    supervisor(),
-    ownerScope,
-  );
-
-  expect(foreign.status).toBe(403);
-  await expect(foreign.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "cross-origin-request" },
-  });
 });
 
 test("an unauthenticated workspace reset cannot reach the owner API", async () => {
