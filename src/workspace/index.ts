@@ -44,11 +44,18 @@ export {
 } from "./github-credential.js";
 
 export {
+  provisionHarnessWorkspace,
   provisionProjectWorkspace,
   waitForWorkspaceProvision,
   clearWorkspaceProvision,
   PROVISION_STALE_AFTER_MS,
   PROVISION_STALE_MARGIN_MS,
+  type HarnessProvisionProblem,
+  type HarnessProvisionStepName,
+  type HarnessProvisionWorkspaceHost,
+  type HarnessProvisionWorkspaceNamespace,
+  type ProvisionHarnessWorkspaceInput,
+  type ProvisionedHarnessWorkspace,
   type ProjectProvisionProblem,
   type ProvisionedProjectWorkspace,
   type ProvisionProjectWorkspaceInput,

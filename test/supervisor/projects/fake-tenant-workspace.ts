@@ -1,13 +1,17 @@
 import {
-  executeGitHubCredentialRequest,
+  executeHarnessBuildRequest,
   executeProjectProvisionRequest,
   type CommandOutput,
-  type GitHubCredentialResult,
   type WorkspaceOperations,
   type WorkspacePathKind,
-  type WorkspaceResult,
-} from "../../../src/workspace/index.js";
+} from "../../../src/workspace/executor.js";
+import {
+  executeGitHubCredentialRequest,
+  type GitHubCredentialResult,
+} from "../../../src/workspace/github-credential.js";
 import type { GitHubCredentialState } from "../../../src/github/index.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
+import type { WorkspaceResult } from "../../../src/workspace/decisions.js";
 
 /**
  * A stand-in for the tenant's Workspace Host that runs the real surfaces.
@@ -105,6 +109,27 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     }
 
     return executeProjectProvisionRequest({ operations: this, request });
+  }
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
+  build(request: unknown): Promise<WorkspaceResult> {
+    if (this.unavailable) {
+      return Promise.reject(new Error("fake workspace host is unavailable"));
+    }
+
+    return executeHarnessBuildRequest({
+      configuration: HARNESS_BUILD_CONFIGURATION,
+      operations: this,
+      request,
+    });
+  }
+
+  ensureManagedInstructions(): Promise<WorkspaceResult> {
+    if (this.unavailable) {
+      return Promise.reject(new Error("fake workspace host is unavailable"));
+    }
+
+    return Promise.resolve({ ok: true, result: { kind: "written" } });
   }
 
   /** The namespace view the Supervisor holds. One tenant, so every name reaches this host. */

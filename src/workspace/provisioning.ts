@@ -1,3 +1,4 @@
+// oxlint-disable max-lines -- Project and harness provisioning share one workspace exclusion.
 import { Result } from "better-result";
 import { logRedactedCause } from "../diagnostics.js";
 import {
@@ -10,6 +11,8 @@ import {
   type ProjectCatalog,
   type ProjectId,
 } from "../project-catalog.js";
+import type { HarnessCommit } from "../harness-commit.js";
+import type { HarnessBuildRequest } from "../harness-build.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
@@ -17,6 +20,12 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
 export type ProvisionWorkspaceHost = Readonly<{
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult>;
+}>;
+
+/** The harness's two operations use the build-side clone reconciler and the managed file writer. */
+export type HarnessProvisionWorkspaceHost = Readonly<{
+  build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
+  ensureManagedInstructions(): Promise<WorkspaceResult>;
 }>;
 
 /**
@@ -28,9 +37,13 @@ export type ProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): ProvisionWorkspaceHost;
 }>;
 
+export type HarnessProvisionWorkspaceNamespace = Readonly<{
+  getByName(name: string): HarnessProvisionWorkspaceHost;
+}>;
+
 /**
- * Why provisioning stopped. These stay plain values: a caller that has to report the outcome over
- * RPC can return one unchanged (ADR-0035).
+ * Why project provisioning stopped. These stay plain values: a caller that has to report the
+ * outcome over RPC can return one unchanged (ADR-0035).
  */
 export type ProjectProvisionProblem =
   | Readonly<{
@@ -54,6 +67,21 @@ export type ProvisionedProjectWorkspace = Readonly<{
   workspaceName: string;
 }>;
 
+export type HarnessProvisionStepName = "provision" | "instructions";
+
+export type HarnessProvisionProblem =
+  | Readonly<{
+      code: "harness-provision-step-failed";
+      step: HarnessProvisionStepName;
+      exitCode: number;
+    }>
+  | Readonly<{
+      code: "harness-provision-workspace-unavailable";
+      step: HarnessProvisionStepName;
+    }>;
+
+export type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
+
 export interface ProvisionProjectWorkspaceInput {
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
@@ -65,16 +93,20 @@ export interface ProvisionProjectWorkspaceInput {
   readonly signal?: AbortSignal | undefined;
 }
 
-/**
- * What each step's result must look like. A step that answers with the other shape means the host
- * surface changed under this caller, which is worth reporting rather than reading past.
- */
+export interface ProvisionHarnessWorkspaceInput {
+  readonly workspaceName: string;
+  /** The active generation's validated commit, which the build provisioner obtains if needed. */
+  readonly harnessCommit: HarnessCommit;
+  readonly namespace: HarnessProvisionWorkspaceNamespace;
+  readonly signal?: AbortSignal | undefined;
+}
+
 const STEP_RESULT_KIND = {
   clone: "command",
   instructions: "written",
 } as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
 
-async function runStep(
+async function runProjectStep(
   host: ProvisionWorkspaceHost,
   project: Project,
   step: ProjectProvisionStepName,
@@ -88,9 +120,7 @@ async function runStep(
     step,
   });
 
-  if (signal !== undefined && signal.aborted) {
-    return unavailable;
-  }
+  if (signal !== undefined && signal.aborted) return unavailable;
 
   let result: WorkspaceResult;
 
@@ -110,11 +140,11 @@ async function runStep(
     return unavailable;
   }
 
-  if (signal !== undefined && signal.aborted) {
-    return unavailable;
-  }
-
-  if (!result.ok || result.result.kind !== STEP_RESULT_KIND[step]) {
+  if (
+    (signal !== undefined && signal.aborted) ||
+    !result.ok ||
+    result.result.kind !== STEP_RESULT_KIND[step]
+  ) {
     return unavailable;
   }
 
@@ -130,10 +160,57 @@ async function runStep(
   return Result.ok(step);
 }
 
+async function runHarnessStep(
+  host: HarnessProvisionWorkspaceHost,
+  harnessCommit: HarnessCommit,
+  step: HarnessProvisionStepName,
+  signal: AbortSignal | undefined,
+): Promise<Result<HarnessProvisionStepName, HarnessProvisionProblem>> {
+  const unavailable: Result<HarnessProvisionStepName, HarnessProvisionProblem> = Result.err({
+    code: "harness-provision-workspace-unavailable",
+    step,
+  });
+
+  if (signal !== undefined && signal.aborted) return unavailable;
+
+  let result: WorkspaceResult;
+
+  try {
+    result =
+      step === "provision"
+        ? await host.build({ kind: "build-step", harnessCommit, step })
+        : await host.ensureManagedInstructions();
+  } catch (error) {
+    logRedactedCause(`harness-provision.${step}: workspace-unavailable`, error);
+
+    return unavailable;
+  }
+
+  if ((signal !== undefined && signal.aborted) || !result.ok) return unavailable;
+
+  if (step === "provision") {
+    if (result.result.kind !== "command") return unavailable;
+
+    if (result.result.exitCode !== 0) {
+      return Result.err({
+        code: "harness-provision-step-failed",
+        step,
+        exitCode: result.result.exitCode,
+      });
+    }
+  } else if (result.result.kind !== "written") {
+    return unavailable;
+  }
+
+  return Result.ok(step);
+}
+
 type ProvisioningOutcome = Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>;
 
+type HarnessProvisioningOutcome = Result<ProvisionedHarnessWorkspace, HarnessProvisionProblem>;
+
 type ActiveProvision = Readonly<{
-  operation: Promise<ProvisioningOutcome>;
+  operation: Promise<unknown>;
   startedAt: number;
 }>;
 
@@ -167,7 +244,7 @@ function provisionIsStale(active: ActiveProvision, now: number): boolean {
   return now - active.startedAt > PROVISION_STALE_AFTER_MS;
 }
 
-function abortedProvision(project: Project): ProvisioningOutcome {
+function abortedProject(project: Project): ProvisioningOutcome {
   return Result.err({
     code: "provision-workspace-unavailable",
     projectId: project.id,
@@ -175,30 +252,99 @@ function abortedProvision(project: Project): ProvisioningOutcome {
   });
 }
 
+function abortedHarness(): HarnessProvisioningOutcome {
+  return Result.err({ code: "harness-provision-workspace-unavailable", step: "provision" });
+}
+
 /**
- * Provision one project inside the tenant's workspace: reconcile its clone, then rewrite the
- * managed instructions.
- *
- * Every run performs every step. Nothing here remembers that a workspace was provisioned before,
- * because the state that matters lives in the workspace and not in the caller: the Workspace Host
- * can be evicted, and a Supervisor that skipped the clone on the strength of its own memory would
- * be deciding from the wrong place. Each step is written to converge, so a run after an
- * interrupted one asks for exactly what the interrupted one asked for.
- *
- * The project id is resolved against the catalog first, so only a project the server recognizes is
- * provisioned, and the repository URL is never a value this function carries. The workspace name
- * belongs to the tenant, not to the project: the id selects a directory inside that one workspace.
+ * Run one operation while sharing the workspace exclusion with project and harness provisioning.
+ * A caller waits for an older operation, then starts its own complete convergence plan.
  */
-export function provisionProjectWorkspace(
-  input: ProvisionProjectWorkspaceInput,
-): Promise<ProvisioningOutcome> {
-  const resolved = resolveProject(input.projectId, input.catalog);
+function provisionInWorkspace<T>(
+  input: Readonly<{
+    workspaceName: string;
+    signal?: AbortSignal | undefined;
+    run: () => Promise<T>;
+    aborted: () => T;
+  }>,
+): Promise<T> {
+  return (async () => {
+    for (;;) {
+      const active = activeProvisions.get(input.workspaceName);
 
-  if (!resolved.ok) {
-    return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
-  }
+      if (active !== undefined && !provisionIsStale(active, Date.now())) {
+        const wait = await waitForActiveProvision(active, input.signal);
 
-  return provisionInWorkspace(input, resolved.project);
+        if (wait === "aborted") return input.aborted();
+        continue;
+      }
+
+      if (active !== undefined) activeProvisions.delete(input.workspaceName);
+
+      if (input.signal !== undefined && input.signal.aborted) return input.aborted();
+
+      const operation = input.run();
+      const tracked: ActiveProvision = { operation, startedAt: Date.now() };
+      activeProvisions.set(input.workspaceName, tracked);
+      operation.then(
+        () => {
+          removeActiveProvision(input.workspaceName, tracked);
+        },
+        () => {
+          removeActiveProvision(input.workspaceName, tracked);
+        },
+      );
+
+      return operation;
+    }
+  })();
+}
+
+function removeActiveProvision(workspaceName: string, active: ActiveProvision): void {
+  if (activeProvisions.get(workspaceName) === active) activeProvisions.delete(workspaceName);
+}
+
+type ProvisionWait = "settled" | "aborted" | "stale";
+
+function waitForActiveProvision(
+  active: ActiveProvision,
+  signal: AbortSignal | undefined,
+): Promise<ProvisionWait> {
+  if (signal !== undefined && signal.aborted) return Promise.resolve("aborted");
+
+  const remaining = Math.max(0, PROVISION_STALE_AFTER_MS - (Date.now() - active.startedAt) + 1);
+
+  return new Promise((resolve) => {
+    let finished = false;
+    let staleTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (result: ProvisionWait) => {
+      if (finished) return;
+
+      finished = true;
+
+      if (staleTimer !== undefined) clearTimeout(staleTimer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+
+    const onAbort = () => {
+      finish("aborted");
+    };
+
+    staleTimer = setTimeout(() => {
+      finish("stale");
+    }, remaining);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    active.operation.then(
+      () => {
+        finish("settled");
+      },
+      () => {
+        finish("settled");
+      },
+    );
+  });
 }
 
 /** Wait for the current workspace provision, without joining it or starting a replacement. */
@@ -225,107 +371,61 @@ export async function waitForWorkspaceProvision(
   }
 }
 
-async function provisionInWorkspace(
+/** Provision one project inside the tenant's workspace, then rewrite its managed instructions. */
+export function provisionProjectWorkspace(
   input: ProvisionProjectWorkspaceInput,
-  project: Project,
 ): Promise<ProvisioningOutcome> {
-  for (;;) {
-    const active = activeProvisions.get(input.workspaceName);
+  const resolved = resolveProject(input.projectId, input.catalog);
 
-    if (active !== undefined && !provisionIsStale(active, Date.now())) {
-      const wait = await waitForActiveProvision(active, input.signal);
-
-      if (wait === "aborted") return abortedProvision(project);
-
-      // The old operation has settled or gone stale. Reconcile this caller's project now.
-      continue;
-    }
-
-    if (active !== undefined) {
-      activeProvisions.delete(input.workspaceName);
-    }
-
-    if (input.signal?.aborted === true) return abortedProvision(project);
-
-    const operation = provisionResolvedProject(input, project);
-    const tracked: ActiveProvision = { operation, startedAt: Date.now() };
-    activeProvisions.set(input.workspaceName, tracked);
-
-    operation.then(
-      () => {
-        removeActiveProvision(input.workspaceName, tracked);
-      },
-      () => {
-        removeActiveProvision(input.workspaceName, tracked);
-      },
-    );
-
-    return operation;
+  if (!resolved.ok) {
+    return Promise.resolve(Result.err({ code: "project-not-in-catalog", reason: resolved.reason }));
   }
+
+  return provisionInWorkspace({
+    workspaceName: input.workspaceName,
+    signal: input.signal,
+    aborted: () => abortedProject(resolved.project),
+    run: () => provisionResolvedProject(input, resolved.project),
+  });
 }
 
-function removeActiveProvision(workspaceName: string, active: ActiveProvision): void {
-  if (activeProvisions.get(workspaceName) === active) {
-    activeProvisions.delete(workspaceName);
-  }
-}
-
-type ProvisionWait = "settled" | "aborted" | "stale";
-
-function waitForActiveProvision(
-  active: ActiveProvision,
-  signal: AbortSignal | undefined,
-): Promise<ProvisionWait> {
-  if (signal?.aborted === true) return Promise.resolve("aborted");
-
-  const remaining = Math.max(0, PROVISION_STALE_AFTER_MS - (Date.now() - active.startedAt) + 1);
-
-  return new Promise((resolve) => {
-    let finished = false;
-    let staleTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const finish = (result: ProvisionWait) => {
-      if (finished) return;
-      finished = true;
-
-      if (staleTimer !== undefined) clearTimeout(staleTimer);
-      signal?.removeEventListener("abort", onAbort);
-      resolve(result);
-    };
-
-    const onAbort = () => {
-      finish("aborted");
-    };
-
-    staleTimer = setTimeout(() => {
-      finish("stale");
-    }, remaining);
-    signal?.addEventListener("abort", onAbort, { once: true });
-
-    active.operation.then(
-      () => {
-        finish("settled");
-      },
-      () => {
-        finish("settled");
-      },
-    );
+/** Reconcile the editable harness checkout before a harness turn uses its working directory. */
+export function provisionHarnessWorkspace(
+  input: ProvisionHarnessWorkspaceInput,
+): Promise<HarnessProvisioningOutcome> {
+  return provisionInWorkspace({
+    workspaceName: input.workspaceName,
+    signal: input.signal,
+    aborted: abortedHarness,
+    run: () => provisionResolvedHarness(input),
   });
 }
 
 async function provisionResolvedProject(
   input: ProvisionProjectWorkspaceInput,
   project: Project,
-): Promise<Result<ProvisionedProjectWorkspace, ProjectProvisionProblem>> {
+): Promise<ProvisioningOutcome> {
   const host = input.namespace.getByName(input.workspaceName);
 
   for (const step of PROJECT_PROVISION_STEP_NAMES) {
-    const ran = await runStep(host, project, step, input.signal);
+    const ran = await runProjectStep(host, project, step, input.signal);
 
-    if (ran.isErr()) {
-      return Result.err(ran.error);
-    }
+    if (ran.isErr()) return Result.err(ran.error);
   }
 
   return Result.ok({ projectId: project.id, workspaceName: input.workspaceName });
+}
+
+async function provisionResolvedHarness(
+  input: ProvisionHarnessWorkspaceInput,
+): Promise<HarnessProvisioningOutcome> {
+  const host = input.namespace.getByName(input.workspaceName);
+
+  for (const step of ["provision", "instructions"] as const) {
+    const ran = await runHarnessStep(host, input.harnessCommit, step, input.signal);
+
+    if (ran.isErr()) return Result.err(ran.error);
+  }
+
+  return Result.ok({ workspaceName: input.workspaceName });
 }

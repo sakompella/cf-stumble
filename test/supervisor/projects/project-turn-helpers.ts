@@ -57,6 +57,11 @@ export async function turnRecordingProvisioning(
 
       return Promise.resolve(true);
     },
+    provisionHarness: () => {
+      reconciled.push("harness");
+
+      return Promise.resolve(true);
+    },
     catalog: sampleSelectableCatalog,
     workspaceName,
     projectId,
