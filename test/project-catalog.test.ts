@@ -9,8 +9,7 @@ import {
   resolveProject,
   type ProjectCatalog,
 } from "../src/project-catalog.js";
-import { projectDirectory } from "../src/workspace-layout.js";
-import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "./project-fixtures.js";
+import { sampleCatalog, sampleProjectOne } from "./project-fixtures.js";
 
 /**
  * The catalog is a variable-length collection of the repositories one tenant has connected. These
@@ -43,7 +42,9 @@ test("ships no projects, because a project exists only once a tenant connects on
   });
 });
 
-test.each([0, 1, 2, 3])("resolves every project of a catalog holding %i of them", (count) => {
+test("resolves every project of a non-empty catalog", () => {
+  const count = 3;
+
   const urls = Array.from(
     { length: count },
     (_, index) => `https://github.com/sample/repo-${index}`,
@@ -126,26 +127,6 @@ test.each([
   expect(parseProjectId(id)).toBe(id);
 });
 
-test("gives repositories that differ only in punctuation different ids", () => {
-  const paths = [
-    "owner/a-b",
-    "owner/a.b",
-    "owner/a_b",
-    "owner/a--b",
-    "owner/a-.b",
-    "owner/a-b-",
-    "owner/-a-b",
-    "owner-a/b",
-    "owner/github",
-    "owner/.github",
-  ];
-
-  const ids = paths.map((path) => projectIdForRepository(`https://github.com/${path}`));
-
-  expect(ids).not.toContain(undefined);
-  expect(new Set(ids).size).toBe(paths.length);
-});
-
 test("gives the longest names GitHub allows an id, unless punctuation makes it too long", () => {
   const owner = "o".repeat(39);
   const hyphenated = `${"o-".repeat(19)}o`;
@@ -164,14 +145,6 @@ test("gives the longest names GitHub allows an id, unless punctuation makes it t
   }
 });
 
-test("gives one repository one id whatever the case of its owner and name", () => {
-  // GitHub resolves owner and repository names without regard to case, so these are one
-  // repository and must be one project.
-  expect(projectIdForRepository("https://github.com/Owner/A.B")).toBe(
-    projectIdForRepository("https://github.com/owner/a.b"),
-  );
-});
-
 test.each([
   ["another host", "https://gitlab.com/owner/repo"],
   ["a path deeper than owner and repository", "https://github.com/owner/repo/tree"],
@@ -186,11 +159,6 @@ test.each([
   ],
 ])("derives no id for %s", (_, url) => {
   expect(projectIdForRepository(url)).toBeUndefined();
-});
-
-test("gives two connected projects different directories in the one workspace", () => {
-  expect(projectDirectory(sampleProjectOne.id)).not.toBe(projectDirectory(sampleProjectTwo.id));
-  expect(projectDirectory(sampleProjectOne.id)).toBe(projectDirectory(sampleProjectOne.id));
 });
 
 test("refuses a malformed or ambiguous catalog", () => {

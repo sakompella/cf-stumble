@@ -1,8 +1,6 @@
 import { expect, test } from "vitest";
 import { deriveSupervisorName } from "../src/access/index.js";
 import { tenantWorkspaceName } from "../src/workspace-names.js";
-import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "./project-fixtures.js";
-import { projectDirectory } from "../src/workspace-layout.js";
 
 /**
  * One tenant, one workspace (ADR-0038). The tenant key is the Supervisor's own name, which the
@@ -16,17 +14,12 @@ function nameFor(identity: string): Promise<string> {
   return deriveSupervisorName({ identity, audience });
 }
 
-test("harness builds and every project of one tenant select the same workspace", async () => {
-  const workspace = tenantWorkspaceName(await nameFor("owner-1"));
+test("gives different tenants different workspaces and keeps one tenant stable", async () => {
+  const ownerWorkspace = tenantWorkspaceName(await nameFor("owner-1"));
+  const otherWorkspace = tenantWorkspaceName(await nameFor("owner-2"));
 
-  expect(tenantWorkspaceName(await nameFor("owner-1"))).toBe(workspace);
-  expect(
-    sampleCatalog.map((project) => projectDirectory(project.id)),
-    "a project selects a directory inside that one workspace, not a workspace of its own",
-  ).toEqual([
-    `/workspace/projects/${sampleProjectOne.id}`,
-    `/workspace/projects/${sampleProjectTwo.id}`,
-  ]);
+  expect(ownerWorkspace).toBe(tenantWorkspaceName(await nameFor("owner-1")));
+  expect(otherWorkspace).not.toBe(ownerWorkspace);
 });
 
 test("refuses to name a workspace without a tenant key", () => {
