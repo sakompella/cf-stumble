@@ -184,26 +184,6 @@ test("passes the turn cancellation signal into provisioning", async () => {
   expect(start).toEqual({ ok: false, reason: "turn-not-started" });
 });
 
-test("a turn on the harness entry cannot address anything outside the workspace root", async () => {
-  const workspaces = await projectWorkspaces();
-
-  const facet = await facetRunning([
-    calls("read", { path: "../../etc/passwd" }),
-    says("Tried it."),
-  ]);
-
-  const frames = await completedTurn(workspaces, facet, HARNESS_PROJECT_ID);
-
-  // The message names the guard, so this cannot pass merely because the file is absent from the
-  // stand-in: the read was refused for escaping `/workspace`, one level above the harness checkout.
-  expect(toolResultFrame(frames)).toMatchObject({
-    kind: "tool-result",
-    toolName: "read",
-    isError: true,
-    content: "path escapes /workspace: ../../etc/passwd",
-  });
-});
-
 test("a turn may read a sibling repository, because the workspace is one machine", async () => {
   const workspaces = await projectWorkspaces();
 
@@ -230,21 +210,24 @@ test("a turn may read a sibling repository, because the workspace is one machine
   ).toMatchObject({ kind: "tool-result", toolName: "read", isError: false });
 });
 
-test("a turn cannot address anything outside the workspace root", async () => {
-  const workspaces = await projectWorkspaces();
+test.each([
+  { entry: HARNESS_PROJECT_ID, path: "../../etc/passwd" },
+  { entry: projectOne.id, path: "../../../etc/passwd" },
+] satisfies readonly { entry: string; path: string }[])(
+  "a turn cannot address anything outside the workspace root (%s)",
+  async ({ entry, path }) => {
+    const workspaces = await projectWorkspaces();
+    const facet = await facetRunning([calls("read", { path }), says("Tried it.")]);
+    const frames = await completedTurn(workspaces, facet, entry);
 
-  const facet = await facetRunning([
-    calls("read", { path: "../../../etc/passwd" }),
-    says("Tried it."),
-  ]);
-
-  const frames = await completedTurn(workspaces, facet, projectOne.id);
-
-  expect(
-    toolResultFrame(frames),
-    "the path guard is the workspace root, not the project directory",
-  ).toMatchObject({ kind: "tool-result", toolName: "read", isError: true });
-});
+    expect(toolResultFrame(frames)).toMatchObject({
+      kind: "tool-result",
+      toolName: "read",
+      isError: true,
+      content: `path escapes /workspace: ${path}`,
+    });
+  },
+);
 
 test("another tenant's workspace is a different name that no request can reach", async () => {
   const workspaces = await projectWorkspaces();

@@ -68,32 +68,41 @@ test("an active turn holds the thread until its deadline, and holds nothing with
 
 test("only the lease the row holds can finish or abandon the turn it admitted", () => {
   hegel.test((tc) => {
-    const held = tc.draw(leaseIds);
+    const turnActive = tc.draw(gs.booleans());
+    const held = tc.draw(gs.optional(leaseIds));
     const presented = tc.draw(leaseIds);
     const now = tc.draw(clock);
+    const deadline = now + tc.draw(gs.integers({ minValue: -2, maxValue: 2 }));
 
     const current = thread({
       revision: tc.draw(revisions),
-      turnActive: true,
-      turnDeadlineAt: now + 1,
+      turnActive,
+      turnDeadlineAt: deadline,
     });
 
-    const claim = { held, presented };
+    const claim = { held: held ?? undefined, presented };
+    const owns = claim.held !== undefined && claim.held === claim.presented;
+    const expired = deadline <= now;
 
     const finish = decideFinishTurn(projectId, current, claim, now);
     const abandon = decideAbandonTurn(projectId, current, claim);
 
-    if (presented === held) {
-      expect(finish).toEqual({ kind: "finished", nextRevision: current.revision + 1 });
-      expect(abandon).toEqual({ kind: "abandoned" });
+    // The decider's documented priority is not-active, lease-lost, expired, then finished.
+    const expectedFinish = turnActive
+      ? owns
+        ? expired
+          ? { kind: "rejected", problem: { code: "turn-expired", projectId, deadlineAt: deadline } }
+          : { kind: "finished", nextRevision: current.revision + 1 }
+        : { kind: "rejected", problem: { code: "turn-lease-lost", projectId } }
+      : { kind: "rejected", problem: { code: "turn-not-active", projectId } };
 
-      return;
-    }
+    const expectedAbandon = turnActive
+      ? owns
+        ? { kind: "abandoned" }
+        : { kind: "rejected", problem: { code: "turn-lease-lost", projectId } }
+      : { kind: "rejected", problem: { code: "turn-not-active", projectId } };
 
-    const lost = { kind: "rejected", problem: { code: "turn-lease-lost", projectId } };
-    expect(finish, "a lease the row does not hold cannot complete a replacement turn").toEqual(
-      lost,
-    );
-    expect(abandon, "nor cancel it").toEqual(lost);
+    expect(finish).toEqual(expectedFinish);
+    expect(abandon).toEqual(expectedAbandon);
   });
 });

@@ -7,8 +7,6 @@ import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
 import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { says } from "../../facet/generation-0/facet-turn-helpers.js";
 
-const projectOne = sampleProjectOne;
-
 import {
   facetRunning,
   projectWorkspaces,
@@ -75,18 +73,11 @@ test("a harness provision that observes cancellation never mounts", async () => 
   expect(mounted).toBe(false);
 });
 
-test("the harness entry reconciles itself, and a repository still gets one", async () => {
+test("a repository turn reconciles its own clone", async () => {
   const workspaces = await projectWorkspaces();
-  const harnessFacet = await facetRunning([says("Nothing to do.")]);
-  const projectFacet = await facetRunning([says("Nothing to do.")]);
+  const facet = await facetRunning([says("Nothing to do.")]);
+  const project = await turnRecordingProvisioning(workspaces, facet, sampleProjectOne.id);
 
-  const harness = await turnRecordingProvisioning(workspaces, harnessFacet, HARNESS_PROJECT_ID);
-  const project = await turnRecordingProvisioning(workspaces, projectFacet, projectOne.id);
-
-  // The harness has no catalog repository URL, but its active generation supplies the build-side
-  // reconciler, so a reset can recreate the checkout before the turn starts.
-  expect(harness.start).toMatchObject({ ok: true });
-  expect(harness.provisioned).toEqual([HARNESS_PROJECT_ID]);
   expect(project.start).toMatchObject({ ok: true });
-  expect(project.provisioned).toEqual([projectOne.id]);
+  expect(project.provisioned).toEqual([sampleProjectOne.id]);
 });

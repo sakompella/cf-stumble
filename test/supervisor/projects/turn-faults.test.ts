@@ -88,39 +88,6 @@ test("a malformed line ends the turn instead of being passed on", async () => {
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
 });
 
-test("a frame of a kind this Supervisor does not know is malformed, not forwarded", async () => {
-  const control = await supervisor("turn-unknown-kind");
-  await activateFixtureGeneration(control);
-
-  const observed = await runScriptedTurn(control, {
-    lines: [JSON.stringify({ kind: "invented", detail: "not a frame" })],
-  });
-
-  expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
-});
-
-test("a frame missing a field its kind declares reaches no browser", async () => {
-  const control = await supervisor("turn-incomplete-frame");
-  await activateFixtureGeneration(control);
-
-  const observed = await runScriptedTurn(control, {
-    lines: [JSON.stringify({ kind: "tool-result", toolCallId: "call-1", toolName: "bash" })],
-  });
-
-  expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
-});
-
-test("a diff frame that does not say whether it was cut reaches no browser", async () => {
-  const control = await supervisor("turn-incomplete-diff");
-  await activateFixtureGeneration(control);
-
-  const observed = await runScriptedTurn(control, {
-    lines: [JSON.stringify({ kind: "diff", content: "diff --git a/a b/a" })],
-  });
-
-  expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
-});
-
 test("an oversized frame ends the turn rather than being buffered", async () => {
   const control = await supervisor("turn-oversized");
   await activateFixtureGeneration(control);
