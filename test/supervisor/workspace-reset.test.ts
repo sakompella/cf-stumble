@@ -1,29 +1,41 @@
-import { expect, test, vi } from "vitest";
-import { Supervisor } from "../../src/supervisor/supervisor.js";
+/// <reference types="@cloudflare/vitest-plugin/types" />
+
+import { env } from "cloudflare:workers";
+import { reset } from "cloudflare:test";
+import { afterEach, expect, test, vi } from "vitest";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import { connectSampleProjects, submitCandidate } from "./helpers.js";
 
-test("resets only the workspace and leaves thread and generation state intact", async () => {
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await reset();
+});
+
+test("resets the named workspace while preserving thread and generation state", async () => {
+  const control = env.SUPERVISOR.getByName("workspace-reset-preserves-supervisor-state");
+  await connectSampleProjects(control);
+  await control.startFreshProjectThread("sample-project-one");
+  await submitCandidate(control, "0123456789abcdef0123456789abcdef01234567");
+
+  const threadBeforeReset = await control.getProjectThread("sample-project-one");
+  const generationsBeforeReset = await control.getGenerations();
   const resetResult = { ok: true, reset: "workspace" } as const satisfies WorkspaceResetResult;
-  const reset = vi.fn(() => Promise.resolve(resetResult));
-  const getByName = vi.fn(() => ({ reset }));
-  const connections = { resetWorkspace: vi.fn() };
-  const threads = { revision: 4 };
-  const generations = { epoch: 7 };
+  const resetWorkspace = vi.fn(() => Promise.resolve(resetResult));
 
-  // SAFETY: only fields read by resetWorkspace are supplied.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  const subject = Object.assign(Object.create(Supervisor.prototype), {
-    env: { WORKSPACE_HOST: { getByName } },
-    workspaceName: "tenant-workspace",
-    connections,
-    threads,
-    generations,
-  }) as Supervisor;
+  // SAFETY: the fake implements the only RPC method resetWorkspace invokes.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
+  const workspace = { reset: resetWorkspace } as unknown as ReturnType<
+    typeof env.WORKSPACE_HOST.getByName
+  >;
 
-  await expect(subject.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
-  expect(getByName).toHaveBeenCalledExactlyOnceWith("tenant-workspace");
-  expect(reset).toHaveBeenCalledOnce();
-  expect(connections.resetWorkspace).toHaveBeenCalledOnce();
-  expect(threads).toEqual({ revision: 4 });
-  expect(generations).toEqual({ epoch: 7 });
+  const getByName = vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(workspace);
+
+  await expect(control.resetWorkspace()).resolves.toEqual(resetResult);
+
+  expect(getByName).toHaveBeenCalledExactlyOnceWith(
+    "tenant:workspace-reset-preserves-supervisor-state",
+  );
+  expect(resetWorkspace).toHaveBeenCalledOnce();
+  expect(await control.getProjectThread("sample-project-one")).toEqual(threadBeforeReset);
+  expect(await control.getGenerations()).toEqual(generationsBeforeReset);
 });
