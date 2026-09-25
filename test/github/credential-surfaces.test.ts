@@ -9,6 +9,7 @@ import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import type { GitHubFetch } from "../../src/github/index.js";
 import type { VerifiedAccessScope } from "../../src/access/index.js";
+import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 
 /**
  * Goal criterion 3, stated as a negative and checked: a credential appears in no tracked file, no
@@ -228,4 +229,78 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
     workspace.stdins.filter(([, input]) => input.includes(FAKE_TOKEN)).map(([source]) => source),
     "the token reaches exactly one command, on its standard input",
   ).toEqual([expect.stringContaining("gh auth login")]);
+});
+
+/**
+ * The structured log is a new place a value can land, so it is searched like every other: across
+ * every level, through a whole authorization, and through the unattended `GH_TOKEN` path. What
+ * the log does say is which source a credential came from and how the install ended.
+ */
+test("no log line at any level carries the token, and the install is logged with its source", async () => {
+  const events = capturedEvents();
+  const workspace = new FakeTenantWorkspace();
+  const name = "credential-surfaces-log";
+
+  await runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
+    const connections = new ProjectConnections({
+      storage: state.storage,
+      workspaceName: tenantWorkspaceName(name),
+      namespace: workspace.namespace,
+      environment: {
+        clientId: "Iv1.cfstumbleFAKE",
+        fallbackToken: undefined,
+        fetcher: githubReplying(),
+      },
+    });
+
+    await connections.startAuthorization(owner, NOW);
+    await connections.completeAuthorization(owner, NOW + 1_000);
+    await connections.connect(REPOSITORY, "Repo one", NOW + 2_000);
+  });
+
+  const logged = events();
+  expect(named(logged, "github-credential.install")).toEqual([
+    expect.objectContaining({ source: "device-authorization", outcome: "connected" }),
+  ]);
+  expect(named(logged, "github-authorization.complete")).toEqual([
+    expect.objectContaining({ outcome: "authorized" }),
+  ]);
+
+  const everything = everythingLogged();
+
+  expect(everything).not.toContain(FAKE_TOKEN);
+  expect(everything, "the device code redeems the authorization").not.toContain(
+    "device-code-secret",
+  );
+  expect(everything, "the user code is the owner's to type").not.toContain("WDJB-MJHT");
+});
+
+test("an unattended run logs that its credential came from the configured token", async () => {
+  const events = capturedEvents();
+  const workspace = new FakeTenantWorkspace();
+  const name = "credential-surfaces-configured-token";
+
+  await runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
+    const connections = new ProjectConnections({
+      storage: state.storage,
+      workspaceName: tenantWorkspaceName(name),
+      namespace: workspace.namespace,
+      environment: { clientId: undefined, fallbackToken: FAKE_TOKEN, fetcher: githubReplying() },
+    });
+
+    await connections.ensureCredential(NOW);
+  });
+
+  const logged = events();
+  expect(named(logged, "github-credential.ensure")).toEqual([
+    expect.objectContaining({
+      before: "disconnected",
+      fallbackConfigured: true,
+      outcome: "connected",
+    }),
+  ]);
+  expect(named(logged, "github-credential.install")).toEqual([
+    expect.objectContaining({ source: "configured-token", outcome: "connected" }),
+  ]);
+  expect(JSON.stringify(logged)).not.toContain(FAKE_TOKEN);
 });

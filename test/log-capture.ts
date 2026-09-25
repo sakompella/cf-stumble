@@ -45,3 +45,10 @@ function isText(value: unknown): value is string {
 export function textLines(spy: MockInstance<(...args: unknown[]) => void>): string[] {
   return spy.mock.calls.filter(([first]) => isText(first)).map((call) => call.join(" "));
 }
+
+/** Everything every console level received, as one string a test can search for a secret. */
+export function everythingLogged(): string {
+  return (["log", "warn", "error"] as const)
+    .map((level) => JSON.stringify(vi.spyOn(console, level).mock.calls))
+    .join("\n");
+}

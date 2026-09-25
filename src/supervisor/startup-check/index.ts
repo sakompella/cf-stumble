@@ -4,6 +4,7 @@ import type { StartupCheckOutcome } from "./body.js";
 export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
 
 import { parseGenerationLabel } from "../generations/index.js";
+import { timed, type TimedOutcome } from "../../diagnostics.js";
 import type { GenerationLabel } from "../generations/index.js";
 import type { HarnessArtifacts } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
@@ -96,7 +97,38 @@ export function prepareGenerationStartup(
   );
 }
 
+/** Log a check by label and source, with how long it took and the stage it reached. */
 function checkGenerationStartupFrom(
+  ctx: DurableObjectState,
+  loader: WorkerLoader,
+  artifacts: HarnessArtifacts,
+  generations: Generations,
+  label: number,
+  source: StartupModuleMapSource,
+  modelRoute: MainFacetCapabilities["MODEL"],
+  options: StartupCheckOptions,
+): Promise<StartupCheckResult> {
+  return timed(
+    "generation.preparation",
+    { label, source: source.kind },
+    () =>
+      checkLabeledStartup(ctx, loader, artifacts, generations, label, source, modelRoute, options),
+    preparationOutcome,
+  );
+}
+
+/** The stage the check reached, never its reason text: that is whatever the harness threw. */
+function preparationOutcome(result: StartupCheckResult): TimedOutcome {
+  if (!result.ok) return { outcome: result.problem.code, level: "warn" };
+
+  return {
+    outcome: result.report.stage,
+    level: result.report.stage === "ready" ? "info" : "warn",
+    fields: { effect: result.report.effect },
+  };
+}
+
+function checkLabeledStartup(
   ctx: DurableObjectState,
   loader: WorkerLoader,
   artifacts: HarnessArtifacts,

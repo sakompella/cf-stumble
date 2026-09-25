@@ -127,6 +127,11 @@ export function logEvent(level: LogLevel, event: string, fields: LogFields = {})
   WRITERS[level]({ event, level, ts: new Date().toISOString(), ...Object.fromEntries(caller) });
 }
 
+/** A commit as the log names it: the prefix `git` itself abbreviates to, long enough to be unique. */
+export function logCommit(commit: string): string {
+  return commit.slice(0, 12);
+}
+
 /** How a measured step ended: its outcome code, the level to log it at, and any extra fields. */
 export type TimedOutcome = Readonly<{
   outcome: string;

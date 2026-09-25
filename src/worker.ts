@@ -1,6 +1,7 @@
 import { authenticateAccessRequest, withoutAccessCredentials } from "./access/index.js";
 import type { AccessRequestResult } from "./access/index.js";
-import { ownerPageResponse, routeOwnerApiRequest } from "./routes/index.js";
+import { ownerPageResponse, routeOwnerApiRequest, routePattern } from "./routes/index.js";
+import { logEvent, type LogLevel } from "./diagnostics.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 import { WorkspaceHost } from "./workspace/index.js";
 
@@ -18,11 +19,32 @@ export { ModelRoute } from "./model-route.js";
  * `invalid-signature` from the body alone, and the operator evidence lives in the log
  * `logRedactedCause` wrote when the key load failed, not in this response.
  */
-function refusal(reason: Exclude<AccessRequestResult, { ok: true }>["reason"]): Response {
+function refusal(
+  reason: Exclude<AccessRequestResult, { ok: true }>["reason"],
+  request: Request,
+  pathname: string,
+): Response {
   const status =
     reason === "invalid-configuration" ? 500 : reason === "key-service-unavailable" ? 503 : 401;
 
+  logEvent(refusalLevel(reason, status), "access.refused", {
+    reason,
+    route: routePattern(pathname),
+    method: request.method,
+    status,
+  });
+
   return new Response("Unauthorized", { status });
+}
+
+/**
+ * A request with no usable credential is ordinary internet traffic. A verified stranger is worth
+ * a look, and a refusal this Worker caused itself is a fault.
+ */
+function refusalLevel(reason: string, status: number): LogLevel {
+  if (status !== 401) return "error";
+
+  return reason === "not-owner" ? "warn" : "info";
 }
 
 /** Re-wrap an owner response without consuming or buffering a streamed body. */
@@ -47,7 +69,7 @@ export default {
     const access = await authenticateAccessRequest(request, env);
 
     if (!access.ok) {
-      return ownerResponse(pathname, refusal(access.reason));
+      return ownerResponse(pathname, refusal(access.reason, request, pathname));
     }
 
     // Liveness, answered by this Worker alone. Everything else that is not an owner API route is
