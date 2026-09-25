@@ -1,8 +1,15 @@
 import { expect, test, vi } from "vitest";
-import { createPiAgentTurnState, runPiAgentTurn } from "../../../src/facet/generation-0/index.js";
+import {
+  createPiAgentTurnState,
+  MAX_MODEL_CALLS,
+  runPiAgentTurn,
+} from "../../../src/facet/generation-0/index.js";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
 import { HARNESS_DIRECTORY } from "../../../src/workspace-layout.js";
-import { PROJECT_TURN_DEADLINE_MINUTES } from "../../../src/turn-budget.js";
+import {
+  PROJECT_TURN_DEADLINE_MINUTES,
+  PROJECT_TURN_DEADLINE_MS,
+} from "../../../src/turn-budget.js";
 import { assistant, scriptedModel as model, scriptedStream, tick } from "./scripted-model.js";
 
 function completeLargeBashOutput(
@@ -183,9 +190,14 @@ test("preserves a tool error as a Pi result instead of rejecting the turn", asyn
   expect(outcome.state.messages.at(-2)).toMatchObject({ role: "toolResult", isError: true });
 });
 
-test("reports call-limit exhaustion as a failure and makes no ninth model call", async () => {
+test("keeps the model-call cap below a conservative wall-budget ceiling", () => {
+  expect(MAX_MODEL_CALLS).toBe(24);
+  expect(MAX_MODEL_CALLS * 10_000).toBeLessThan(PROJECT_TURN_DEADLINE_MS);
+});
+
+test("reports call-limit exhaustion as a failure and makes no 25th model call", async () => {
   const script = scriptedStream(
-    Array.from({ length: 8 }, (_, index) =>
+    Array.from({ length: 24 }, (_, index) =>
       assistant(
         [{ type: "toolCall", id: `read-${index}`, name: "read", arguments: { path: "data.txt" } }],
         "toolUse",
@@ -203,6 +215,6 @@ test("reports call-limit exhaustion as a failure and makes no ninth model call",
     streamFn: script.streamFn,
   });
 
-  expect(script.contexts).toHaveLength(8);
+  expect(script.contexts).toHaveLength(24);
   expect(outcome).toMatchObject({ ok: false, problem: { code: "model-call-limit" } });
 });

@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   TOOL_RESULT_DISPLAY_MAX_BYTES,
   TOOL_RESULT_DISPLAY_MAX_LINES,
+  TURN_DIFF_TIMEOUT_SECONDS,
 } from "../../../src/facet/generation-0/index.js";
 import { FakeProjectCapability } from "./fake-project-capability.js";
 import {
@@ -138,6 +139,10 @@ test("a turn that only reads publishes no diff at all", async () => {
  * apply to their output, so one frame is never unbounded and a diff that reaches the limit says it
  * was cut. Both diffs here are computed over real file contents a command rewrote.
  */
+test("pins the turn diff timeout to 90 seconds", () => {
+  expect(TURN_DIFF_TIMEOUT_SECONDS).toBe(90);
+});
+
 test("a diff under the frame budget arrives whole, and one over it is bounded and marked", async () => {
   expect(TOOL_RESULT_DISPLAY_MAX_BYTES).toBe(51_200);
   expect(TOOL_RESULT_DISPLAY_MAX_LINES).toBe(2_000);

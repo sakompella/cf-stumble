@@ -17,10 +17,10 @@ export const GENERATION_0_SYSTEM_PROMPT = [
 
 /**
  * How many model calls one turn may make. A turn holds a lease and a frame stream open while it
- * runs, so the bound is what keeps a tool-calling loop from holding both forever; it is a plainly
- * bounded value, not a measured one.
+ * runs. Twenty-four calls gives useful turns room to finish without making the call count the
+ * deadline: the turn's 8-minute wall budget remains the real bound.
  */
-export const MAX_MODEL_CALLS = 8;
+export const MAX_MODEL_CALLS = 24;
 
 /**
  * How much of one tool result reaches the browser in a frame, in the same two limits Pi's own
@@ -54,7 +54,8 @@ export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
  */
 export const TURN_DIFF_COMMAND = "git --no-pager diff HEAD";
 
-export const TURN_DIFF_TIMEOUT_SECONDS = 30;
+/** The 90-second command bound stays well below the turn's 8-minute wall budget. */
+export const TURN_DIFF_TIMEOUT_SECONDS = 90;
 
 /**
  * When this generation compacts one thread, and how much of it survives.
