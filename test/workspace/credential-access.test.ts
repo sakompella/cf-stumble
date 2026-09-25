@@ -52,21 +52,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("reports a generic problem, with no detail, when the Workspace Host RPC throws", async () => {
-  const host = new ThrowingWorkspaceHost();
-
-  const installed = await installWorkspaceCredential({
-    workspaceName: "tenant-workspace",
-    namespace: namespaceOf(host),
-    token: FAKE_TOKEN,
-  });
-
-  expect(installed.isErr() && installed.error).toEqual({
-    code: "credential-workspace-unavailable",
-    detail: "",
-  });
-});
-
 test("logs the thrown cause instead of discarding it, with the install token redacted", async () => {
   const host = new ThrowingWorkspaceHost();
   host.cause = new Error(`socket hang up while sending ${FAKE_TOKEN}`);

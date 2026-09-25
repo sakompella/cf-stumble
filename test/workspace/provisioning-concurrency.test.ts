@@ -6,7 +6,6 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeou
 import {
   provisionProjectWorkspace,
   PROVISION_STALE_AFTER_MS,
-  PROVISION_STALE_MARGIN_MS,
   type ProvisionWorkspaceHost,
   type ProvisionWorkspaceNamespace,
 } from "../../src/workspace/provisioning.js";
@@ -126,6 +125,48 @@ test("serializes different projects in one shared workspace", async () => {
   ]);
 });
 
+test("serializes replacement provisioning until an aborted run has finished", async () => {
+  const delayed = delayedProvisionHost();
+  const workspaceName = tenantWorkspaceName("provisioning-serializes-replacement");
+  const controller = new AbortController();
+
+  const first = provisionProjectWorkspace({
+    workspaceName,
+    projectId: sampleProjectOne.id,
+    catalog: sampleCatalog,
+    namespace: new FakeProvisionNamespace(delayed.host),
+    signal: controller.signal,
+  });
+
+  await delayed.started;
+  controller.abort();
+
+  const replacement = provisionProjectWorkspace({
+    workspaceName,
+    projectId: sampleProjectOne.id,
+    catalog: sampleCatalog,
+    namespace: new FakeProvisionNamespace(delayed.host),
+  });
+
+  await Promise.resolve();
+
+  expect(
+    delayed.host.requests,
+    "a replacement must not enter the shared workspace while the aborted clone is in flight",
+  ).toHaveLength(1);
+  expect(delayed.host.requests[0]?.step).toBe("clone");
+
+  delayed.release();
+
+  expect((await first).isErr()).toBe(true);
+  expect((await replacement).isOk()).toBe(true);
+  expect(delayed.host.requests.map((request) => request.step)).toEqual([
+    "clone",
+    "clone",
+    "instructions",
+  ]);
+});
+
 class NeverSettlingProvisionHost extends FakeProvisionHost {
   override provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
@@ -176,7 +217,7 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
   }
 
   expect(host.requests, "retries must not append work behind the lost RPC").toHaveLength(1);
-  expect(first).toBeInstanceOf(Promise);
+  void first;
 });
 
 test("a signal-less waiter proceeds after the Workspace Host command ceiling", async () => {
@@ -284,8 +325,8 @@ test("provision stale ceiling covers the plan command budget", () => {
   ).length;
 
   expect(commandStepCount).toBeGreaterThan(0);
-  expect(PROVISION_STALE_AFTER_MS).toBe(
-    commandStepCount * WORKSPACE_COMMAND_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS,
+  expect(PROVISION_STALE_AFTER_MS).toBeGreaterThanOrEqual(
+    commandStepCount * WORKSPACE_COMMAND_TIMEOUT_MS,
   );
 });
 

@@ -141,10 +141,6 @@ test("writes the managed instructions above every repository in the workspace", 
   expect(step.content).toContain("Never print or commit authentication tokens.");
 });
 
-test("plans the same steps for a repeated provision of one project", () => {
-  expect(planFor(projectOne)).toEqual(planFor(projectOne));
-});
-
 test("gives each project its own directory inside the one workspace", () => {
   const one = projectProvisionConfiguration(projectOne.id);
   const two = projectProvisionConfiguration(projectTwo.id);

@@ -9,9 +9,7 @@ import { GitHubConnection, ProjectConnections } from "../../../src/supervisor/pr
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
-import { sampleCatalog } from "../../project-fixtures.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
-import { provisionProjectWorkspace } from "../../../src/workspace/provisioning.js";
 
 /**
  * Connecting repositories, and the GitHub authorization behind it.
@@ -51,48 +49,6 @@ const deviceReply = {
   expires_in: 900,
   interval: 5,
 } satisfies Reply;
-
-type WorkspaceResult = Awaited<ReturnType<FakeTenantWorkspace["provision"]>>;
-
-class DelayedProvisionWorkspace extends FakeTenantWorkspace {
-  readonly provisionSteps: string[] = [];
-  delayNextClone = false;
-  private startedResolver: () => void = () => {};
-  readonly cloneStarted: Promise<void>;
-  private cloneResolver: ((result: WorkspaceResult) => void) | undefined;
-
-  constructor() {
-    super();
-    this.cloneStarted = new Promise((resolve) => {
-      this.startedResolver = resolve;
-    });
-  }
-
-  override provision(
-    request: Readonly<{ step: "clone" | "instructions" }>,
-  ): Promise<WorkspaceResult> {
-    this.provisionSteps.push(request.step);
-
-    if (this.delayNextClone) {
-      this.delayNextClone = false;
-      this.startedResolver();
-
-      return new Promise((resolve) => {
-        this.cloneResolver = resolve;
-      });
-    }
-
-    return super.provision(request);
-  }
-
-  releaseClone(): void {
-    this.cloneResolver?.({
-      ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-    });
-    this.cloneResolver = undefined;
-  }
-}
 
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
@@ -257,45 +213,6 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
     subject.workspace.commands.filter((command) => command.includes("https://github.com/-/")),
     "a URL that derives no project id is never handed to the workspace",
   ).toEqual([]);
-});
-
-test("serializes replacement provisioning until an aborted run has finished", async () => {
-  const workspace = new DelayedProvisionWorkspace();
-  const workspaceName = tenantWorkspaceName("provisioning-serializes-replacement");
-  workspace.delayNextClone = true;
-
-  const controller = new AbortController();
-
-  const first = provisionProjectWorkspace({
-    workspaceName,
-    projectId: "sample-project-one",
-    catalog: sampleCatalog,
-    namespace: workspace.namespace,
-    signal: controller.signal,
-  });
-
-  await workspace.cloneStarted;
-  controller.abort();
-
-  const replacement = provisionProjectWorkspace({
-    workspaceName,
-    projectId: "sample-project-one",
-    catalog: sampleCatalog,
-    namespace: workspace.namespace,
-  });
-
-  await Promise.resolve();
-
-  expect(
-    workspace.provisionSteps,
-    "a replacement must not enter the shared workspace while the aborted clone is in flight",
-  ).toEqual(["clone"]);
-
-  workspace.releaseClone();
-
-  expect((await first).isErr()).toBe(true);
-  expect((await replacement).isOk()).toBe(true);
-  expect(workspace.provisionSteps).toEqual(["clone", "clone", "instructions"]);
 });
 
 test("provisions again every time a project is used", async () => {
