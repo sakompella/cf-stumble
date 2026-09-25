@@ -30,11 +30,6 @@ test.each(unsupportedOperations)(
   },
 );
 
-test("cleanup always resolves", async () => {
-  const { env } = makeFacetExecutionEnv();
-  await expect(env.cleanup()).resolves.toBeUndefined();
-});
-
 test("enumerates all 18 ExecutionEnv methods without throwing, including every failure path", async () => {
   const { env } = makeFacetExecutionEnv();
 
@@ -63,6 +58,11 @@ test("enumerates all 18 ExecutionEnv methods without throwing, including every f
 
   const settled = await Promise.allSettled(calls);
   expect(settled.every((entry) => entry.status === "fulfilled")).toBe(true);
+
+  const cleanup = settled[16];
+  expect(cleanup?.status).toBe("fulfilled");
+
+  if (cleanup?.status === "fulfilled") expect(cleanup.value).toBeUndefined();
 });
 
 test("cwd is a synchronous, local absolute path", () => {
@@ -70,23 +70,13 @@ test("cwd is a synchronous, local absolute path", () => {
   expect(env.cwd).toBe("/workspace");
 });
 
-test("arbitrary bytes round-trip exactly through writeFile/readBinaryFile", async () => {
-  const { env } = makeFacetExecutionEnv();
-  const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28]);
-  await expect(env.writeFile("/workspace/weird.bin", bytes)).resolves.toEqual({
-    ok: true,
-    value: undefined,
-  });
-  const read = await env.readBinaryFile("/workspace/weird.bin");
-  expect(read.ok).toBe(true);
-
-  if (read.ok) expect(Array.from(read.value)).toEqual([0x00, 0xff, 0xc3, 0x28]);
-});
-
 test("readTextFile decodes with replacement, but readBinaryFile preserves the raw bytes", async () => {
   const { env } = makeFacetExecutionEnv();
   const invalidUtf8 = new Uint8Array([0x00, 0xff, 0xc3, 0x28]);
-  await env.writeFile("/workspace/weird.bin", invalidUtf8);
+  await expect(env.writeFile("/workspace/weird.bin", invalidUtf8)).resolves.toEqual({
+    ok: true,
+    value: undefined,
+  });
 
   const text = await env.readTextFile("/workspace/weird.bin");
   expect(text.ok).toBe(true);
@@ -117,10 +107,14 @@ test("multibyte text round-trips and reports a byte-counted size, not a characte
 });
 
 test("appendFile appends without reading the file first", async () => {
-  const { env } = makeFacetExecutionEnv();
+  const { provider, env } = makeFacetExecutionEnv();
   await env.writeFile("/workspace/log.txt", "a");
+  provider.calls.length = 0;
+
   await env.appendFile("/workspace/log.txt", "b");
   await env.appendFile("/workspace/log.txt", "c");
+
+  expect(provider.calls.filter((call) => call.startsWith("read:")).length).toBe(0);
   await expect(env.readTextFile("/workspace/log.txt")).resolves.toEqual({ ok: true, value: "abc" });
 });
 
@@ -268,9 +262,4 @@ test("the returned environment has no enumerable project target and no build/fet
       "writeFile",
     ].toSorted(),
   );
-  expect(keys).not.toContain("projectTarget");
-  expect(keys).not.toContain("build");
-  expect(keys).not.toContain("fetch");
-  expect(keys).not.toContain("container");
-  expect(keys).not.toContain("computer");
 });

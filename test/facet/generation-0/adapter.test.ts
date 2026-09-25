@@ -9,7 +9,7 @@ import {
   type PiUsage,
   type AdapterError,
 } from "../../../src/facet/generation-0/workers-ai-adapter.js";
-import type { ModelRouteRequest, ModelRouteResponse } from "../../../src/model-route.js";
+import type { ModelRouteResponse } from "../../../src/model-route.js";
 
 const ZERO: PiUsage = {
   input: 0,
@@ -33,24 +33,6 @@ function piAssistant(
     usage: ZERO,
     stopReason,
     timestamp: 1000,
-  };
-}
-
-function fakeRoute(responses: ReadonlyArray<ModelRouteResponse>) {
-  const calls: ModelRouteRequest[] = [];
-  let i = 0;
-
-  return {
-    calls,
-    run(req: ModelRouteRequest) {
-      calls.push(req);
-      const r = responses[i];
-
-      if (r === undefined) throw new Error("exhausted");
-      i += 1;
-
-      return r;
-    },
   };
 }
 
@@ -95,54 +77,6 @@ const TOOL: PiContext["tools"] = [
     parameters: { type: "object", properties: { path: { type: "string" } } },
   },
 ];
-
-// -- Two-call tool cycle ----------------------------------------------------
-
-test("cycle step 1: model returns a tool call from the initial request", () => {
-  const route = fakeRoute([tcRes("call_42", "read_file", '{"path":"a.txt"}')]);
-
-  const ctx: PiContext = {
-    systemPrompt: "Help.",
-    messages: [{ role: "user", content: "Read a.txt", timestamp: 100 }],
-    tools: TOOL,
-  };
-
-  const a = expectPi(routeResponseToPiAssistant(route.run(piContextToRouteRequest(ctx))));
-  expect(a.stopReason).toBe("toolUse");
-  const tc = a.content[0];
-
-  if (tc?.type === "toolCall") {
-    expect(tc.id).toBe("call_42");
-    expect(tc.arguments).toEqual({ path: "a.txt" });
-  } else {
-    expect.unreachable("expected toolCall");
-  }
-});
-
-test("cycle step 2: tool result fed back produces final text", () => {
-  const a1 = expectPi(
-    routeResponseToPiAssistant(tcRes("call_42", "read_file", '{"path":"a.txt"}')),
-  );
-
-  const route = fakeRoute([txtRes("File contents: hello")]);
-
-  const ctx: PiContext = {
-    systemPrompt: "Help.",
-    messages: [
-      { role: "user", content: "Read a.txt", timestamp: 100 },
-      a1,
-      piTr("call_42", "read_file", "hello"),
-    ],
-    tools: TOOL,
-  };
-
-  const req = piContextToRouteRequest(ctx);
-  expect(req.messages).toHaveLength(4);
-  expect(req.messages[3]?.role).toBe("tool");
-  const a2 = expectPi(routeResponseToPiAssistant(route.run(req)));
-  expect(a2.stopReason).toBe("stop");
-  expect(a2.content).toEqual([{ type: "text", text: "File contents: hello" }]);
-});
 
 // -- Round-trip stability per role ------------------------------------------
 
@@ -201,11 +135,25 @@ test("assistant tool call arguments serialised to JSON", () => {
   else expect.unreachable("expected assistant");
 });
 
-test("tool result maps role and id", () => {
-  expect(piContextToRouteRequest({ messages: [piTr("c99", "bash", "ok")] }).messages[0]).toEqual({
+test("tool result maps role and id within the ordered context", () => {
+  const assistant = expectPi(
+    routeResponseToPiAssistant(tcRes("call_42", "read_file", '{"path":"a.txt"}')),
+  );
+
+  const request = piContextToRouteRequest({
+    systemPrompt: "Help.",
+    messages: [
+      { role: "user", content: "Read a.txt", timestamp: 100 },
+      assistant,
+      piTr("call_42", "read_file", "hello"),
+    ],
+  });
+
+  expect(request.messages).toHaveLength(4);
+  expect(request.messages[3]).toEqual({
     role: "tool",
-    tool_call_id: "c99",
-    content: "ok",
+    tool_call_id: "call_42",
+    content: "hello",
   });
 });
 

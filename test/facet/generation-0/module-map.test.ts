@@ -93,9 +93,12 @@ test("a cold facet from the built module map passes the GET / startup check", as
   expect(checked.report.generation).toMatchObject({ label, status: "ready" });
 });
 
-test("the host model route satisfies the capability the facet declares", () => {
+test("the host model route satisfies the capability the facet declares", async () => {
   const modelRoute = workerExports.ModelRoute({});
   const capability: ModelCapability = modelRoute;
 
-  expect(capability.run).toBeTypeOf("function");
+  await expect(capability.run({ messages: [] })).resolves.toEqual({
+    ok: false,
+    error: { code: "invalid-request", reason: "messages must be a non-empty array" },
+  });
 });
