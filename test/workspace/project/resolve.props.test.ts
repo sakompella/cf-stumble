@@ -8,6 +8,8 @@ type AddressCandidate = string | number | boolean | null | Record<string, never>
 
 const arbitraryPath = gs.oneOf(
   gs.text({ alphabet: "ab/.\\\u0000", maxSize: 20 }),
+  gs.text({ alphabet: "ab", maxSize: 16 }).map((suffix) => `/a/${suffix}\\`),
+  gs.text({ alphabet: "ab", maxSize: 16 }).map((suffix) => `/a/${suffix}\u0000`),
   gs.text({ alphabet: "abc", maxSize: 16 }).map((suffix) => (suffix === "" ? "/" : `/a/${suffix}`)),
   gs.sampledFrom([null, 0, false, {}, "relative/path", "/a//b", "/a/../b", "/a/"]),
 );
@@ -30,11 +32,6 @@ test("parseAddressedPath accepts exactly clean absolute normalized paths", () =>
     (tc) => {
       const input = tc.draw(arbitraryPath);
       const parsed = parseAddressedPath(input);
-      const knownBackslashInput = "/a\\b";
-      const knownBackslash = parseAddressedPath(knownBackslashInput);
-
-      expect(knownBackslash.ok).toBe(isAcceptedByOracle(knownBackslashInput));
-
       const expected = isAcceptedByOracle(input);
 
       expect(parsed.ok).toBe(expected);
