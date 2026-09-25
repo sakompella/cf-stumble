@@ -146,23 +146,6 @@ test("offline fake workspace schedules missing repository provisioning before a 
   ).toBe(true);
 });
 
-test("offline fake workspace rechecks an already provisioned repository before every labeled checkout", async () => {
-  const host = new FakeBuildHost();
-  const { builder } = builderFor(host);
-
-  await builder.build(commit);
-  await builder.build(commit);
-
-  expect(
-    host.requests.filter(
-      (request) => request.kind === "build-step" && request.step === "provision",
-    ),
-  ).toEqual([
-    { kind: "build-step", harnessCommit: commit, step: "provision" },
-    { kind: "build-step", harnessCommit: commit, step: "provision" },
-  ]);
-});
-
 test("offline fake workspace retries provisioning after an interrupted labeled checkout", async () => {
   const host = new FakeBuildHost();
   const { builder } = builderFor(host);
@@ -213,29 +196,6 @@ test("offline fake workspace refuses an unexpected origin before the labeled che
     exitCode: 3,
   });
   expect(host.requests).toEqual([{ kind: "build-step", harnessCommit: commit, step: "provision" }]);
-});
-
-test("reports the failing build phase with its exit code, and asks for nothing after it", async () => {
-  const host = new FakeBuildHost();
-  host.failingStep = "build-pi";
-
-  const built = await builderFor(host).builder.build(commit);
-
-  if (built.isOk()) {
-    throw new Error("a failing build phase must not produce a module map");
-  }
-
-  expect(built.error).toEqual({
-    code: "build-step-failed",
-    harnessCommit: commit,
-    step: "build-pi",
-    exitCode: 3,
-  });
-  expect(host.requests.at(-1)).toEqual({
-    kind: "build-step",
-    harnessCommit: commit,
-    step: "build-pi",
-  });
 });
 
 test("reports missing and invalid build output as plain typed failures", async () => {

@@ -6,6 +6,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { containsCredential } from "../../../src/github/index.js";
 import {
   encodeModuleMap,
   MODULE_MAP_CHUNK_BYTES,
@@ -91,7 +92,7 @@ function refusingSecondChunk(storage: DurableObjectStorage): ModuleMapStorage {
           chunkWrites += 1;
 
           if (chunkWrites > 1) {
-            throw new Error("the storage refused a chunk");
+            throw new Error(`the storage refused a chunk ghp_${"a".repeat(36)}`);
           }
         }
 
@@ -248,6 +249,9 @@ test("logs a redacted cause instead of discarding it when the transaction throws
   const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
   expect(logged).toContain("artifact-write-failed");
   expect(logged).toContain("the storage refused a chunk");
+  expect(containsCredential(logged), "the operator log must redact token-shaped causes").toBe(
+    false,
+  );
 });
 
 test("reports an incomplete stored module map instead of rebuilding the commit", async () => {

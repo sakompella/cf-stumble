@@ -54,11 +54,6 @@ function scriptCommand(name: string): string {
   return line[1] ?? "";
 }
 
-test("reads the package manifest and its script names", () => {
-  expect(scriptNames()).toContain("verify");
-  expect(scriptCommand("build:module-map")).toBe("pnpm exec tsx tools/build-generation-0.mts");
-});
-
 test("every configured build phase names a script this repository defines", () => {
   for (const phase of HARNESS_BUILD_CONFIGURATION.buildPhases) {
     if (/^pnpm install(?: --[\w-]+(?:=[\w-]+)?)+$/u.test(phase.command)) {

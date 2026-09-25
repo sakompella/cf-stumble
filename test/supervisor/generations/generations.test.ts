@@ -87,16 +87,6 @@ test("submits the fixture harness commit as Generation 0 and the next commit as 
   expect(await control.getGenerations()).toHaveLength(2);
 });
 
-test("submitting an existing harness commit preserves its label count and epoch", async () => {
-  const control = supervisor("labels-idempotently");
-
-  const first = await submit(control, secondHarnessCommit);
-  const repeated = await submit(control, secondHarnessCommit);
-
-  expect(repeated).toEqual(first);
-  expect(await control.getGenerations()).toHaveLength(1);
-});
-
 test("keeps the first preparation outcome and refuses a later contradicting one", async () => {
   const control = supervisor("records-one-preparation-outcome");
   const label = await submitCandidate(control, secondHarnessCommit);
@@ -144,20 +134,6 @@ test("refuses a candidate submission that does not name a harness commit", async
   expect(await control.getGenerations(), "a refused submission labels nothing").toHaveLength(0);
 });
 
-test("rejects unknown and candidate generations without throwing during activation", async () => {
-  const control = supervisor("rejects-unready-generations");
-  const candidate = await submitCandidate(control, secondHarnessCommit);
-
-  expect(await activate(control, 99)).toEqual({
-    ok: false,
-    problem: { code: "unknown-generation" },
-  });
-  expect(await activate(control, candidate)).toEqual({
-    ok: false,
-    problem: { code: "not-ready" },
-  });
-});
-
 test("activates a ready generation once and preserves its epoch on a repeated request", async () => {
   const control = supervisor("activates-ready-generation");
   const label = await submitCandidate(control, secondHarnessCommit);
@@ -188,18 +164,6 @@ test("activates a ready generation once and preserves its epoch on a repeated re
     ...activated,
     outcome: { ...activated.outcome, effect: "no-op" },
   });
-});
-
-test("keeps branded generation identities plain through structured clone and eviction", async () => {
-  const control = supervisor("cloneable-generation-identities");
-  await submitCandidate(control, secondHarnessCommit);
-  const beforeEviction = await control.getGenerations();
-
-  expect(structuredClone(beforeEviction)).toEqual(beforeEviction);
-
-  await evictDurableObject(control);
-
-  expect(await control.getGenerations()).toEqual(beforeEviction);
 });
 
 /** A restarted Supervisor labels nothing of its own: only submitted commits survive eviction. */

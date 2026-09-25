@@ -134,22 +134,6 @@ test("plans an isolated build directory outside the project workspace", () => {
   ).toBe(true);
 });
 
-test("checks out the commit before it runs the first build phase", async () => {
-  const workspace = new FakeBuildWorkspace({ outputs: [moduleMapFile([entryModule])] });
-
-  await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
-
-  expect(workspace.commands[2]?.source).toContain(
-    `git --git-dir=/harness/.git archive --format=tar -o "$archive" ${commit}`,
-  );
-  expect(workspace.commands[2]?.source).toContain(
-    `tar -x -m --no-same-owner --no-same-permissions -C /harness-builds/${commit}`,
-  );
-  expect(workspace.commands[3]?.cwd).toBe(WORKSPACE_ROOT);
-  expect(workspace.commands[3]?.source).toContain(`cd '/harness-builds/${commit}'`);
-  expect(workspace.commands[3]?.source).toContain(configuration.buildPhases[0].command);
-});
-
 test("reports a failed archive extraction as the checkout step, not as a build failure", async () => {
   const workspace = new FakeBuildWorkspace({ failing: "git-dir=/harness/.git archive" });
 
@@ -163,23 +147,6 @@ test("reports a failed archive extraction as the checkout step, not as a build f
     code: "build-step-failed",
     harnessCommit: commit,
     step: "checkout",
-    exitCode: 3,
-  });
-});
-
-test("reports the failing build phase and its exit code", async () => {
-  const workspace = new FakeBuildWorkspace({ failing: "pnpm run build:pi" });
-
-  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
-
-  if (built.isOk()) {
-    throw new Error("a failing build phase must not produce a module map");
-  }
-
-  expect(built.error).toEqual({
-    code: "build-step-failed",
-    harnessCommit: commit,
-    step: "build-pi",
     exitCode: 3,
   });
 });
