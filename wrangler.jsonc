@@ -18,6 +18,8 @@
   // the only guard on a second door nobody watches. wrangler turns the subdomain off by default
   // once a route exists; this says so on purpose rather than relying on that.
   "workers_dev": false,
+  // Workers Cache would skip the Worker's Access check, and its key ignores identity.
+  "cache": { "enabled": false },
   "durable_objects": {
     "bindings": [
       {

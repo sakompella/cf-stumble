@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { isRecord } from "../../src/routes/json.js";
 
 /**
  * Declaring Workers AI opens a remote connection for every Workers test, so one network failure
@@ -40,6 +41,32 @@ function config(name: string): string {
   return withoutComments(found[1]);
 }
 
+type WranglerConfig = Readonly<{
+  cache?: Readonly<{ enabled?: boolean }>;
+}>;
+
+function isWranglerConfig(value: unknown): value is WranglerConfig {
+  if (!isRecord(value)) return false;
+
+  const cache = value.cache;
+
+  return (
+    cache === undefined ||
+    (isRecord(cache) && (cache.enabled === undefined || typeof cache.enabled === "boolean"))
+  );
+}
+
+function parsedConfig(name: string): WranglerConfig {
+  const json = config(name).replaceAll(/,\s*([}\]])/gu, "$1");
+  const parsed: unknown = JSON.parse(json);
+
+  if (!isWranglerConfig(parsed)) {
+    throw new Error(`invalid ${name}`);
+  }
+
+  return parsed;
+}
+
 test("the test Worker configuration differs from production only by name and the AI binding", () => {
   const production = config("wrangler.jsonc");
   const testing = config("wrangler.test.jsonc");
@@ -49,4 +76,9 @@ test("the test Worker configuration differs from production only by name and the
   expect(testing.replace('"cf-stumble-test"', '"cf-stumble"')).toBe(
     production.replace('  "ai": { "binding": "AI" },\n', ""),
   );
+});
+
+test("Workers Cache is explicitly disabled in both configurations", () => {
+  expect(parsedConfig("wrangler.jsonc").cache?.enabled).toBe(false);
+  expect(parsedConfig("wrangler.test.jsonc").cache?.enabled).toBe(false);
 });

@@ -60,6 +60,42 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const noStoreRoutes = [
+  ["GET", "/health"],
+  ["GET", "/api/status"],
+  ["GET", "/api/unknown"],
+  ["POST", "/api/projects/connect"],
+  ["POST", "/api/github/authorization"],
+  ["POST", "/api/github/authorization/complete"],
+  ["POST", "/api/generations/submit"],
+  ["POST", "/api/generations/activate"],
+  ["POST", "/api/generations/rollback"],
+  ["POST", "/api/workspace/reset"],
+  ["POST", "/api/projects/sample-project-one/thread/fresh"],
+  ["POST", "/api/projects/sample-project-one/turn"],
+] as const;
+
+test.each(noStoreRoutes)("does not store the %s %s route response", async (method, path) => {
+  const key = await signingKey(`no-store-${method}-${path}`);
+  const token = await ownerToken(key);
+  await supervisorSpy();
+
+  const headers = new Headers({ "cf-access-jwt-assertion": token });
+  const init: RequestInit = { method, headers };
+
+  if (method === "POST") {
+    headers.set("origin", "https://evil.test");
+    init.body = "{}";
+  }
+
+  const response = await worker.fetch(
+    new Request(`https://cf-stumble.test${path}`, init),
+    workerEnvironment(key),
+  );
+
+  expect(response.headers.get("cache-control")).toBe("no-store");
+});
+
 test("strips every Access credential before forwarding a non-API request", async () => {
   const key = await signingKey("routing-forward-key");
   const token = await ownerToken(key);

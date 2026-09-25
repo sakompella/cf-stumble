@@ -25,12 +25,29 @@ function refusal(reason: Exclude<AccessRequestResult, { ok: true }>["reason"]): 
   return new Response("Unauthorized", { status });
 }
 
+/** Re-wrap an owner response without consuming or buffering a streamed body. */
+function noStore(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function ownerResponse(pathname: string, response: Response): Response {
+  return pathname.startsWith("/api/") || pathname === "/health" ? noStore(response) : response;
+}
+
 export default {
   async fetch(request: Request, env: Cloudflare.Env): Promise<Response> {
+    const pathname = new URL(request.url).pathname;
     const access = await authenticateAccessRequest(request, env);
 
     if (!access.ok) {
-      return refusal(access.reason);
+      return ownerResponse(pathname, refusal(access.reason));
     }
 
     // Liveness, answered by this Worker alone. Everything else that is not an owner API route is
@@ -38,8 +55,8 @@ export default {
     // `no-active-generation`, and a deployment had no way to say "I am running" while that was
     // true. It stays behind Access, because the Worker refuses every route until Access is
     // configured and a liveness hole would be the one exception.
-    if (request.method === "GET" && new URL(request.url).pathname === "/health") {
-      return Response.json({ ok: true });
+    if (request.method === "GET" && pathname === "/health") {
+      return ownerResponse(pathname, Response.json({ ok: true }));
     }
 
     // A browser navigation to `GET /` receives the owner page. Every other request for that path,
@@ -52,8 +69,8 @@ export default {
 
     const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
 
-    if (new URL(request.url).pathname.startsWith("/api/")) {
-      return routeOwnerApiRequest(request, supervisor, access.scope);
+    if (pathname.startsWith("/api/")) {
+      return ownerResponse(pathname, await routeOwnerApiRequest(request, supervisor, access.scope));
     }
 
     return supervisor.fetch(withoutAccessCredentials(request));
