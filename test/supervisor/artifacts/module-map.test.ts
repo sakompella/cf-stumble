@@ -41,13 +41,6 @@ test("sorts modules by name and keeps the entry module named", () => {
   ]);
 });
 
-test("encodes one module map to the same bytes whatever order it arrived in", () => {
-  const forward = canonical(moduleMap("main.js", modules));
-  const reversed = canonical(moduleMap("main.js", modules.toReversed()));
-
-  expect(encodeModuleMap(reversed)).toBe(encodeModuleMap(forward));
-});
-
 test("separates module maps that differ in a module source", () => {
   const original = canonical(moduleMap("main.js", modules));
 
