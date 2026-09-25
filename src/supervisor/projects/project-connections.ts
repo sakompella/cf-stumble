@@ -248,13 +248,10 @@ export class ProjectConnections {
     }
 
     // A workspace reset removes the credential along with the checkout. Re-establish the same
-    // unattended credential that connection uses before handing the repository to the clone
-    // script; otherwise a private repository fails as an opaque provisioning error.
-    const github = await this.github.ensureCredential(Date.now());
-
-    if (github.state !== "connected") {
-      return { ok: false, problem: { code: "provisioning-failed" } };
-    }
+    // unattended credential that connection uses before handing the repository to the clone script.
+    // Best effort: a public repository clones without any credential, so a missing one must not
+    // block it. A private repository without a credential fails in the clone step itself.
+    await this.github.ensureCredential(Date.now());
 
     const provisioned = await provisionProjectWorkspace({
       workspaceName: this.workspaceName,

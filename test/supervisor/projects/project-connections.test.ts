@@ -343,7 +343,7 @@ test("reinstalls the configured credential before repairing a repository after a
   expect(clone).toBeGreaterThan(install);
 });
 
-test("refuses to repair a repository without a credential before attempting its clone", async () => {
+test("still attempts the clone without a credential, so a public repository re-clones after a reset", async () => {
   const workspace = new FakeTenantWorkspace();
 
   const subject = tenant("credential-required-before-use", {
@@ -366,10 +366,10 @@ test("refuses to repair a repository without a credential before attempting its 
     connections.ensureProvisioned("sample-repo-1"),
   );
 
-  expect(used).toEqual({ ok: false, problem: { code: "provisioning-failed" } });
   expect(workspace.commands.slice(beforeUse).some((command) => command.includes("git clone"))).toBe(
-    false,
+    true,
   );
+  expect(used.ok).toBe(true);
 });
 
 test("asks for a reconnection after a restart left the workspace without a credential", async () => {
