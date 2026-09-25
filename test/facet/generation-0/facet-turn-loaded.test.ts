@@ -2,7 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
   FakeProjectFilesystemProvider,
@@ -205,14 +205,18 @@ test("no stub for the workspace outlives a finished turn", async () => {
   });
 });
 
-test("a turn that kept the received stub instead of duplicating it would lose the workspace", async () => {
-  const workspace = makeWorkspace();
-  const facet = await loadFacet([]);
+describe("platform assumptions", () => {
+  test("a turn that kept the received stub instead of duplicating it would lose the workspace", async () => {
+    const workspace = makeWorkspace();
+    const facet = await loadFacet([]);
 
-  const reported = await new Response(await facet.reachWithoutDuplicating(workspace.target)).text();
+    const reported = await new Response(
+      await facet.reachWithoutDuplicating(workspace.target),
+    ).text();
 
-  expect(
-    reported,
-    "Workers RPC disposes a parameter stub when the call returns, which is why a turn leases a duplicate",
-  ).toContain("used after being disposed");
+    expect(
+      reported,
+      "Workers RPC disposes a parameter stub when the call returns, which is why a turn leases a duplicate",
+    ).toContain("used after being disposed");
+  });
 });

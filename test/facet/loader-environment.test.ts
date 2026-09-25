@@ -2,7 +2,7 @@
 
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { afterEach, expect, expectTypeOf, test } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, test } from "vitest";
 import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
 import {
   FakeExecBackend,
@@ -51,20 +51,22 @@ afterEach(async () => {
   await reset();
 });
 
-test("the Worker Loader refuses to carry a project capability in a facet's environment", () => {
-  const target = projectTarget();
+describe("platform assumptions", () => {
+  test("the Worker Loader refuses to carry a project capability in a facet's environment", () => {
+    const target = projectTarget();
 
-  expect(
-    () =>
-      env.LOADER.load({
-        compatibilityDate: "2025-01-01",
-        mainModule: "main.js",
-        modules: { "main.js": { js: reportEnvKeys() } },
-        env: { MODEL: modelRoute, PROJECT: target },
-        globalOutbound: null,
-      }),
-    "an RpcTarget is only serializable for an RPC call, so this cannot silently succeed",
-  ).toThrow("can only be serialized for RPC");
+    expect(
+      () =>
+        env.LOADER.load({
+          compatibilityDate: "2025-01-01",
+          mainModule: "main.js",
+          modules: { "main.js": { js: reportEnvKeys() } },
+          env: { MODEL: modelRoute, PROJECT: target },
+          globalOutbound: null,
+        }),
+      "an RpcTarget is only serializable for an RPC call, so this cannot silently succeed",
+    ).toThrow("can only be serialized for RPC");
+  });
 });
 
 test("the loader environment type has no project slot and the turn surface takes one per call", () => {
