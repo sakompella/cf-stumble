@@ -11,7 +11,7 @@ import {
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import type { WorkspaceOperations } from "./executor.js";
+import { runLoggedCommand, type WorkspaceOperations } from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly } from "./untrusted.js";
 
 /**
@@ -124,10 +124,10 @@ async function installCredential(
   operations: WorkspaceOperations,
   token: string,
 ): Promise<GitHubCredentialResult> {
-  const output = await operations.runCommand(
-    installCredentialSource(),
-    "/",
-    WORKSPACE_COMMAND_TIMEOUT_MS,
+  const output = await runLoggedCommand(
+    operations,
+    "github-credential.install",
+    { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
     `${token}\n`,
   );
 
@@ -141,11 +141,11 @@ async function installCredential(
 }
 
 async function credentialStatus(operations: WorkspaceOperations): Promise<GitHubCredentialResult> {
-  const output = await operations.runCommand(
-    credentialStatusSource(),
-    "/",
-    WORKSPACE_COMMAND_TIMEOUT_MS,
-  );
+  const output = await runLoggedCommand(operations, "github-credential.status", {
+    source: credentialStatusSource(),
+    cwd: "/",
+    timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+  });
 
   const status = parseCredentialStatus(output.stdout);
 
@@ -159,11 +159,11 @@ async function repositoryAccess(
   operations: WorkspaceOperations,
   repositoryUrl: string,
 ): Promise<GitHubCredentialResult> {
-  const output = await operations.runCommand(
-    repositoryAccessSource(repositoryUrl),
-    "/",
-    WORKSPACE_COMMAND_TIMEOUT_MS,
-  );
+  const output = await runLoggedCommand(operations, "github-credential.verify-repository", {
+    source: repositoryAccessSource(repositoryUrl),
+    cwd: "/",
+    timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+  });
 
   const access = parseRepositoryAccess(output.stdout);
 

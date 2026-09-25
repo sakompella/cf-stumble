@@ -16,7 +16,7 @@ import {
 import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logRedactedCause } from "../diagnostics.js";
+import { logRedactedCause, timed } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
@@ -62,8 +62,18 @@ export async function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
   container: WorkspaceContainerReset,
 ): Promise<WorkspaceResetResult> {
-  await storage.deleteAll();
-  await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
+  await timed(
+    "workspace.reset-step",
+    { step: "delete-all" },
+    () => storage.deleteAll(),
+    () => ({ outcome: "ok" }),
+  );
+  await timed(
+    "workspace.reset-step",
+    { step: "restart-container" },
+    () => container.restart(WORKSPACE_CONTAINER_RESET_SPEC),
+    (runtime) => ({ outcome: runtime.outcome }),
+  );
 
   return { ok: true, reset: "workspace" };
 }

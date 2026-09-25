@@ -1,5 +1,5 @@
 import { Result } from "better-result";
-import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause, timed } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
 
@@ -53,7 +53,14 @@ async function ask(
   request: GitHubCredentialRequest,
 ): Promise<Result<GitHubCredentialResult, WorkspaceCredentialProblem>> {
   try {
-    return Result.ok(await input.namespace.getByName(input.workspaceName).credential(request));
+    const answered = await timed(
+      "workspace.rpc",
+      { method: "credential", step: request.step },
+      () => input.namespace.getByName(input.workspaceName).credential(request),
+      (result) => (result.ok ? { outcome: "ok" } : { outcome: result.error.code, level: "warn" }),
+    );
+
+    return Result.ok(answered);
   } catch (cause) {
     logRedactedCause(
       `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,

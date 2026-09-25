@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { textLines } from "../log-capture.js";
 import { parseGitHubToken, REDACTED, type GitHubToken } from "../../src/github/index.js";
 import {
   checkRepositoryAccess,
@@ -67,8 +68,8 @@ test("logs the thrown cause instead of discarding it, with the install token red
     code: "credential-workspace-unavailable",
     detail: "",
   });
-  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(textLines(loggedErrors), "the discarded cause must reach an operator log").toHaveLength(1);
+  const logged = textLines(loggedErrors)[0] ?? "";
   expect(logged).toContain("credential-workspace-unavailable");
   expect(logged, "the install token must never reach the log").not.toContain(FAKE_TOKEN);
   expect(logged).toContain(REDACTED);
@@ -88,7 +89,7 @@ test("logs a status read's thrown cause the same way, without a token to redact"
     code: "credential-workspace-unavailable",
     detail: "",
   });
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  const logged = textLines(loggedErrors)[0] ?? "";
   expect(logged).toContain("credential-access.status");
 });
 
@@ -107,7 +108,7 @@ test("distinguishes a timeout from an ordinary RPC failure in the log alone", as
     code: "credential-workspace-unavailable",
     detail: "",
   });
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  const logged = textLines(loggedErrors)[0] ?? "";
   expect(logged, "a timeout is distinguishable in the log even though the code is not").toContain(
     "timeout",
   );

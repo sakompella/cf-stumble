@@ -8,6 +8,8 @@ export { isCrossOriginMutation, routeProjectApiRequest } from "./projects.js";
 
 export { routeProjectTurnRequest } from "./turns.js";
 
+export { routePattern } from "./route-pattern.js";
+
 export type { TurnApiSupervisor } from "./turns.js";
 
 export type { ProjectApiSupervisor } from "./projects.js";

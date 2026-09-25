@@ -1,4 +1,4 @@
-import { logRedactedCause } from "../diagnostics.js";
+import { logRedactedCause, timed } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
 import type { VerifiedAccessScope } from "../supervisor/projects/index.js";
 import type { ProjectThreadResult } from "../supervisor/threads/index.js";
@@ -68,7 +68,16 @@ async function workspaceResetResponse(
   }
 
   try {
-    return Response.json(await supervisor.resetWorkspace());
+    return Response.json(
+      await timed(
+        "workspace.reset",
+        {},
+        () => supervisor.resetWorkspace(),
+        () => ({
+          outcome: "reset",
+        }),
+      ),
+    );
   } catch (cause) {
     logRedactedCause("owner-api.workspace-reset: internal-error", cause);
 

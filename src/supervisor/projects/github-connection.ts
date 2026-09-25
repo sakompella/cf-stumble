@@ -13,6 +13,12 @@ import {
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 import type { CredentialSource, GitHubConnectionStore } from "./github-connection-store.js";
+import {
+  logAuthorization,
+  logCredentialEnsure,
+  logCredentialInstall,
+  redemptionOutcome,
+} from "./github-connection-log.js";
 
 /**
  * The workspace's GitHub authorization, as the rest of cf-stumble sees it.
@@ -141,11 +147,12 @@ export class GitHubConnection {
 
     const token = parseGitHubToken(this.environment.fallbackToken);
 
-    if (token === undefined) {
-      return current;
-    }
+    const repaired =
+      token === undefined ? current : await this.install(token, "configured-token", now);
 
-    return this.install(token, "configured-token", now);
+    logCredentialEnsure(current, token !== undefined, repaired);
+
+    return repaired;
   }
 
   /**
@@ -163,6 +170,8 @@ export class GitHubConnection {
     }
 
     const started = await requestDeviceAuthorization(clientId, this.environment.fetcher);
+
+    logAuthorization("start", started.ok ? "started" : "provider-unavailable");
 
     if (!started.ok) {
       return { ok: false, problem: "provider-unavailable" };
@@ -214,6 +223,8 @@ export class GitHubConnection {
       this.environment.fetcher,
     );
 
+    logAuthorization("complete", redemptionOutcome(redeemed.kind));
+
     switch (redeemed.kind) {
       case "authorized": {
         this.store.clearAuthorization();
@@ -258,18 +269,25 @@ export class GitHubConnection {
     });
 
     if (installed.isErr()) {
-      return reconnect(
+      const refused = reconnect(
         installed.error.code === "credential-install-failed"
           ? "credential-rejected"
           : "workspace-unavailable",
       );
+
+      logCredentialInstall(source, refused);
+
+      return refused;
     }
 
-    if (installed.value === "tooling-missing") {
-      return { state: "tooling-missing" };
-    }
+    const status: GitHubConnectionStatus =
+      installed.value === "tooling-missing"
+        ? { state: "tooling-missing" }
+        : await this.observed(source, now);
 
-    return this.observed(source, now);
+    logCredentialInstall(source, status);
+
+    return status;
   }
 
   /** Ask the workspace what its credential can do, and keep the record honest about the answer. */

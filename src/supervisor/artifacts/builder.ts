@@ -2,6 +2,8 @@ import { Result } from "better-result";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import type { CommandOutput } from "../../workspace/index.js";
+import { redactCredentials } from "../../github/index.js";
+import { logCommit, timed, type TimedOutcome } from "../../diagnostics.js";
 import {
   moduleMapFromBuildOutput,
   planHarnessBuild,
@@ -41,14 +43,24 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     const plan = planHarnessBuild(this.configuration, harnessCommit);
 
     for (const step of plan.steps) {
-      const ran = await this.runStep(step, harnessCommit);
+      const ran = await timed(
+        "harness-build.step",
+        { commit: logCommit(harnessCommit), step: step.name },
+        () => this.runStep(step, harnessCommit),
+        buildOutcome,
+      );
 
       if (ran.isErr()) {
         return Result.err(ran.error);
       }
     }
 
-    return this.readModuleMap(plan.moduleMapPath, harnessCommit);
+    return timed(
+      "harness-build.output",
+      { commit: logCommit(harnessCommit) },
+      () => this.readModuleMap(plan.moduleMapPath, harnessCommit),
+      buildOutcome,
+    );
   }
 
   private async runStep(
@@ -71,11 +83,13 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     if (output.exitCode !== 0) {
       // A build failure reaches the browser as a step name and an exit code, which says nothing
       // about what the command reported. The tail of the step's own output is the only account of
-      // why the build failed, and it exists nowhere else once the build directory is cleared.
+      // why the build failed, and it exists nowhere else once the build directory is cleared. A
+      // fetch prints the remote it used, so the tail is redacted before it is cut: cutting first
+      // could leave a partial token too short for redaction to recognize.
       console.error(`harness build step ${step.name} exited ${output.exitCode}`, {
         harnessCommit,
-        stdout: output.stdout.slice(-2000),
-        stderr: output.stderr.slice(-2000),
+        stdout: redactCredentials(output.stdout).slice(-2000),
+        stderr: redactCredentials(output.stderr).slice(-2000),
       });
 
       return Result.err({
@@ -119,6 +133,17 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 
     return moduleMapFromBuildOutput(harnessCommit, decoded);
   }
+}
+
+/** A build step's log outcome: `ok`, or the problem code and, for a failed command, its exit code. */
+function buildOutcome<Value>(ran: Result<Value, HarnessBuildProblem>): TimedOutcome {
+  if (ran.isOk()) return { outcome: "ok" };
+
+  return {
+    outcome: ran.error.code,
+    level: "warn",
+    fields: ran.error.code === "build-step-failed" ? { exitCode: ran.error.exitCode } : {},
+  };
 }
 
 /**

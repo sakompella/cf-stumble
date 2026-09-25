@@ -5,6 +5,7 @@ import {
 } from "./turn-frames.js";
 import { endTurn, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
 import type { TurnBound } from "./turn-bound.js";
+import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
 
 export type ProjectTurnStreamInput = TurnSettlement &
   Readonly<{
@@ -14,6 +15,8 @@ export type ProjectTurnStreamInput = TurnSettlement &
      * and the start already spent part of it, so what is left here is what is left of the turn.
      */
     bound: TurnBound;
+    /** Who this turn is in the operational log. */
+    trace: TurnTrace;
   }>;
 
 const encoder = new TextEncoder();
@@ -167,6 +170,7 @@ class TurnReader {
 export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream<Uint8Array> {
   const state = { cancelled: false };
   let turn: TurnReader | undefined;
+  const log = new TurnStreamLog(input.trace, input.now);
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -182,7 +186,7 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
       };
 
       try {
-        reader = new TurnReader(input.frames, publish);
+        reader = new TurnReader(input.frames, log.counting(publish));
         turn = reader;
 
         // The turn's own bound, not a second one: when the instant admission fixed arrives, the
@@ -197,13 +201,14 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
           () => input.bound.timedOut(),
         );
 
-        publish(endTurn(input, ending).frame);
+        publish(log.settled(endTurn(input, ending).frame));
       } catch (cause) {
         // A stream can fail before its reader exists, or while settling a terminal frame. Neither
         // path reaches `endTurn`, so release the admitted lease before the stream error reaches its
         // caller. A failed stream must not make the next turn wait for this one's deadline.
         failed = true;
         input.threads.abandonTurn(input.projectId, input.leaseId);
+        logLeaseAbandoned(input.trace, "stream-failed", "error");
         throw cause;
       } finally {
         input.bound.signal.removeEventListener("abort", stopReading);

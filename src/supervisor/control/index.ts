@@ -1,6 +1,7 @@
 import { Result } from "better-result";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
+import { logCommit, logEvent, type LogFields } from "../../diagnostics.js";
 import type { Generations } from "../generations/index.js";
 import type { ControlProblemCode, GenerationControlResult, GenerationRequest } from "./request.js";
 
@@ -33,7 +34,16 @@ export class GenerationControl {
   }
 
   execute(request: GenerationRequest): GenerationControlResult {
-    return this.generations.transaction(() => decisionToResult(this.decide(request)));
+    const epochBefore = this.generations.active().epoch;
+    const result = this.generations.transaction(() => decisionToResult(this.decide(request)));
+
+    logEvent(
+      result.ok ? "info" : "warn",
+      "generation.control",
+      controlLogFields(request, epochBefore, result),
+    );
+
+    return result;
   }
 
   private decide(request: GenerationRequest): ControlDecision {
@@ -134,6 +144,38 @@ export class GenerationControl {
       }))
       .mapError((problem) => problem.code);
   }
+}
+
+/** What one control request asked for and what it did to the epoch, as log fields. */
+function controlLogFields(
+  request: GenerationRequest,
+  epochBefore: number,
+  result: GenerationControlResult,
+): LogFields {
+  const { command } = request;
+
+  const asked: LogFields =
+    command.kind === "submit-candidate"
+      ? { commit: logCommit(command.harnessCommit) }
+      : { label: command.label };
+
+  const decided: LogFields = result.ok
+    ? {
+        label: result.outcome.generation.label,
+        commit: logCommit(result.outcome.generation.harnessCommit),
+        epochAfter: result.outcome.epoch,
+        outcome: result.outcome.kind,
+        effect: result.outcome.kind === "candidate-submitted" ? null : result.outcome.effect,
+      }
+    : { epochAfter: epochBefore, outcome: result.problem.code };
+
+  return {
+    command: command.kind,
+    principal: request.principal.kind,
+    epochBefore,
+    ...asked,
+    ...decided,
+  };
 }
 
 function rejected(code: ControlProblemCode): ControlDecision {

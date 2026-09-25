@@ -4,6 +4,8 @@ import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
 import { projectTurnStream } from "./turn-stream.js";
 import type { TurnThreadWrites } from "./turn-settle.js";
+import { logEvent, timed, type TimedOutcome } from "../../diagnostics.js";
+import { logLeaseAbandoned, turnFields, turnTrace, type TurnTrace } from "./turn-log.js";
 import type { ActiveGeneration } from "../generations/index.js";
 import type {
   ProjectThreadProblem,
@@ -50,6 +52,8 @@ export type FacetTurnHandoff = Readonly<{
 export type TurnStartContext = Readonly<{
   attribution: TurnAttribution;
   signal: AbortSignal;
+  /** Who this turn is in the operational log, so each start step can report under it. */
+  trace: TurnTrace;
 }>;
 
 /** The generation a turn runs on, read once at admission and never re-read. */
@@ -103,6 +107,7 @@ type AdmittedTurn = Readonly<{
   attribution: TurnAttribution;
   /** The instant the turn ends, and the cancellation every step of it honours. */
   bound: TurnBound;
+  trace: TurnTrace;
 }>;
 
 /**
@@ -119,6 +124,26 @@ type AdmittedTurn = Readonly<{
  * a request supplied.
  */
 export async function runProjectTurn(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
+  const run = await admitAndStart(input);
+
+  if (!run.ok) {
+    logEvent(INPUT_REFUSALS.has(run.problem.code) ? "info" : "warn", "turn.refused", {
+      projectId: typeof input.projectId === "string" ? input.projectId : null,
+      code: run.problem.code,
+    });
+  }
+
+  return run;
+}
+
+/** Refusals that describe the request rather than the Supervisor, so they are not degraded. */
+const INPUT_REFUSALS: ReadonlySet<ProjectTurnRunProblemCode> = new Set([
+  "invalid-prompt",
+  "invalid-project-id",
+  "unknown-project-id",
+]);
+
+async function admitAndStart(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
   const prompt = parsePrompt(input.prompt);
 
   if (prompt === undefined) {
@@ -151,13 +176,7 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
     return refused(admitted.problem.code);
   }
 
-  const turn: AdmittedTurn = {
-    projectId: admitted.thread.projectId,
-    leaseId: admitted.leaseId,
-    attribution,
-    bound: TurnBound.forTurn(admittedAt, input.leaseMs, input.deadlineMs, input.now),
-  };
-
+  const turn = admittedTurn(input, admitted, attribution, admittedAt);
   let started: ProjectTurnStart | "timed-out";
 
   try {
@@ -166,18 +185,18 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
     // A lost RPC rejects instead of returning a refusal. The route deliberately turns that
     // exception into `internal-error`, but this lease still belongs to this turn and must be
     // released before the exception crosses the boundary.
-    abandonTurn(input, turn);
+    abandonTurn(input, turn, "start-threw");
     throw error;
   }
 
   if (started === "timed-out") {
-    abandonTurn(input, turn);
+    abandonTurn(input, turn, "start-timed-out");
 
     return refused("turn-not-started");
   }
 
   if (!started.ok) {
-    abandonTurn(input, turn);
+    abandonTurn(input, turn, started.reason);
 
     return refused(started.reason);
   }
@@ -185,9 +204,32 @@ export async function runProjectTurn(input: RunProjectTurnInput): Promise<Projec
   return { ok: true, frames: streamAdmittedTurn(input, turn, started.frames) };
 }
 
-function abandonTurn(input: RunProjectTurnInput, turn: AdmittedTurn): void {
+/** Fix everything the rest of the turn is measured against, and log that it was admitted. */
+function admittedTurn(
+  input: RunProjectTurnInput,
+  admitted: Extract<ProjectTurnLeaseResult, { ok: true }>,
+  attribution: TurnAttribution,
+  admittedAt: number,
+): AdmittedTurn {
+  const projectId = admitted.thread.projectId;
+  const generation = attribution.active.generation?.label;
+  const trace = turnTrace(projectId, admitted.leaseId, generation, admittedAt);
+
+  logEvent("info", "turn.admitted", turnFields(trace));
+
+  return {
+    projectId,
+    leaseId: admitted.leaseId,
+    attribution,
+    bound: TurnBound.forTurn(admittedAt, input.leaseMs, input.deadlineMs, input.now),
+    trace,
+  };
+}
+
+function abandonTurn(input: RunProjectTurnInput, turn: AdmittedTurn, why: string): void {
   turn.bound.stop();
   input.threads.abandonTurn(turn.projectId, turn.leaseId);
+  logLeaseAbandoned(turn.trace, why, "warn");
 }
 
 /**
@@ -211,9 +253,20 @@ async function boundedStart(
   turn: AdmittedTurn,
   request: FacetTurnHandoff,
 ): Promise<ProjectTurnStart | "timed-out"> {
-  const context: TurnStartContext = { attribution: turn.attribution, signal: turn.bound.signal };
+  const context: TurnStartContext = {
+    attribution: turn.attribution,
+    signal: turn.bound.signal,
+    trace: turn.trace,
+  };
+
   const started = input.start(turn.projectId, request, context);
-  const outcome = await Promise.race([started, turn.bound.whenTimedOut()]);
+
+  const outcome = await timed(
+    "turn.started",
+    turnFields(turn.trace),
+    () => Promise.race([started, turn.bound.whenTimedOut()]),
+    startOutcome,
+  );
 
   if (outcome !== "timed-out") {
     return outcome;
@@ -224,6 +277,12 @@ async function boundedStart(
   });
 
   return "timed-out";
+}
+
+function startOutcome(outcome: ProjectTurnStart | "timed-out"): TimedOutcome {
+  if (outcome === "timed-out") return { outcome, level: "error" };
+
+  return outcome.ok ? { outcome: "started" } : { outcome: outcome.reason, level: "warn" };
 }
 
 /** Ends the work behind a start nobody is waiting for any more. */
@@ -249,5 +308,6 @@ function streamAdmittedTurn(
     threads: input.threads,
     now: input.now,
     bound: turn.bound,
+    trace: turn.trace,
   });
 }

@@ -1,4 +1,4 @@
-import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
+import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
@@ -54,9 +54,36 @@ async function isSymlinkFree(operations: WorkspaceOperations, path: string): Pro
   return true;
 }
 
+/** A command the server planned: its text, where it runs, and how long it may take. */
+export type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
+
+/**
+ * Run one planned command and log it by `command`, the planned step's name, with its exit code and
+ * duration. The command text and its output stay out of the log: the text names a repository and
+ * the output is whatever a tool printed.
+ */
+export async function runLoggedCommand(
+  operations: WorkspaceOperations,
+  command: string,
+  plan: PlannedCommand,
+  stdin?: string,
+): Promise<CommandOutput> {
+  const startedAt = Date.now();
+  const output = await operations.runCommand(plan.source, plan.cwd, plan.timeoutMs, stdin);
+
+  logEvent(output.exitCode === 0 ? "info" : "warn", "workspace.command", {
+    command,
+    exitCode: output.exitCode,
+    durationMs: Date.now() - startedAt,
+  });
+
+  return output;
+}
+
 async function executePlan(
   operations: WorkspaceOperations,
   plan: WorkspacePlan,
+  command: string,
 ): Promise<WorkspaceResult> {
   switch (plan.kind) {
     case "read-file": {
@@ -78,7 +105,7 @@ async function executePlan(
     }
 
     case "run-command": {
-      const output = await operations.runCommand(plan.source, plan.cwd, plan.timeoutMs);
+      const output = await runLoggedCommand(operations, command, plan);
 
       return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } };
     }
@@ -116,6 +143,7 @@ export async function executeHarnessBuildRequest(
     return await executePlan(
       input.operations,
       planHarnessBuildRequest(input.configuration, parsed),
+      `harness-build.${parsed.kind === "build-step" ? parsed.step : "output"}`,
     );
   } catch (cause) {
     logRedactedCause(
@@ -145,7 +173,11 @@ export async function executeProjectProvisionRequest(
   if ("ok" in parsed) return parsed;
 
   try {
-    return await executePlan(input.operations, planProjectProvisionRequest(parsed));
+    return await executePlan(
+      input.operations,
+      planProjectProvisionRequest(parsed),
+      `provision-project.${parsed.step}`,
+    );
   } catch (cause) {
     logRedactedCause(
       `workspace.provision-project.${parsed.step}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
