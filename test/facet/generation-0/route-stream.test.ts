@@ -60,7 +60,7 @@ function fakeModel(
 
 const CONTEXT: Context = { messages: [{ role: "user", content: "go", timestamp: 0 }] };
 
-test("streams incremental text and a final assembled message", async () => {
+test("a whole-reply stream assembles one text message", async () => {
   const model = fakeModel(() =>
     Promise.resolve(
       encodeModelRouteResponseAsStream({
