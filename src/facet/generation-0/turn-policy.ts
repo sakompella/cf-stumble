@@ -54,7 +54,8 @@ export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
  */
 export const TURN_DIFF_COMMAND = "git --no-pager diff HEAD";
 
-export const TURN_DIFF_TIMEOUT_SECONDS = 30;
+/** The 90-second command bound stays well below the turn's 8-minute wall budget. */
+export const TURN_DIFF_TIMEOUT_SECONDS = 90;
 
 /**
  * When this generation compacts one thread, and how much of it survives.
