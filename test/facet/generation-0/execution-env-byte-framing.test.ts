@@ -66,7 +66,9 @@ test("two frames concatenated into a single physical byte chunk both decode in o
 test("a multibyte UTF-8 character split across two physical byte chunks decodes intact", async () => {
   const encoder = new TextEncoder();
   const frame = encoder.encode(`${JSON.stringify({ kind: "stdout", data: "caf\u00E9\n" })}\n`);
-  const splitAt = frame.length - 2;
+  const splitAt = frame.indexOf(0xc3) + 1;
+  expect(frame[splitAt]).toBeGreaterThanOrEqual(0x80);
+  expect(frame[splitAt]).toBeLessThanOrEqual(0xbf);
 
   const terminal = encoder.encode(
     `${JSON.stringify({ kind: "terminal", outcome: "exited", exitCode: 0 })}\n`,
