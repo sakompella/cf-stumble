@@ -1,10 +1,9 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
-import { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { ProjectThreads } from "../../../src/supervisor/threads/index.js";
-import { sampleSelectableCatalog } from "../../project-fixtures.js";
+import { env } from "cloudflare:workers";
+import { reset } from "cloudflare:test";
+import { afterEach, expect, test, vi } from "vitest";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { connectedSupervisor as supervisor } from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 import { abandonProjectTurn, finishProjectTurn, startProjectTurn } from "./turn-slot.js";
@@ -50,55 +49,42 @@ async function threadWithConversation(
 test("starting a fresh thread removes the conversation without calling workspace reset", async () => {
   const control = await supervisor("fresh-thread");
   await threadWithConversation(control, "sample-project-one");
-  const workspaceCalls: string[] = [];
+  const resetWorkspace = vi.fn(() => Promise.resolve({ ok: true, reset: "workspace" } as const));
 
-  const fresh = await runInDurableObject(control, (_instance, state) => {
-    const resetWorkspaceCall = () => {
-      workspaceCalls.push("reset");
+  // SAFETY: this fake implements the only Workspace Host RPC this test observes.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
+  const workspace = { reset: resetWorkspace } as unknown as ReturnType<
+    typeof env.WORKSPACE_HOST.getByName
+  >;
 
-      return Promise.resolve({ ok: true, reset: "workspace" } as const);
-    };
+  const getByName = vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(workspace);
 
-    const getByName = () => {
-      workspaceCalls.push("getByName");
+  try {
+    const fresh = await control.startFreshProjectThread("sample-project-one");
 
-      return { reset: resetWorkspaceCall };
-    };
+    // `startFreshProjectThread` deliberately does not await workspace work. Let a queued reset run
+    // before checking the recording stub, so this test observes the fire-and-forget mutation too.
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
-    // SAFETY: this test invokes only `startFreshProjectThread`, which reads these three members; the fake environment records only the reset calls this method could make.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const subject = Object.assign(Object.create(Supervisor.prototype), {
-      env: { WORKSPACE_HOST: { getByName } },
-      workspaceName: "tenant-workspace",
-      connections: {
-        catalog: () => sampleSelectableCatalog,
-        resetWorkspace: () => workspaceCalls.push("connections-reset"),
+    expect(getByName).not.toHaveBeenCalled();
+    expect(resetWorkspace).not.toHaveBeenCalled();
+    expect(fresh).toEqual({
+      ok: true,
+      thread: {
+        projectId: "sample-project-one",
+        conversation: "[]",
+        messageCount: 0,
+        revision: 2,
+        turnActive: false,
+        turnDeadlineAt: undefined,
       },
-      threads: new ProjectThreads(state.storage, () => sampleSelectableCatalog),
-    }) as Supervisor;
-
-    return subject.startFreshProjectThread("sample-project-one");
-  });
-
-  // `startFreshProjectThread` deliberately does not await workspace work. Let a queued reset run
-  // before checking the recording stub, so this test observes the fire-and-forget mutation too.
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
-
-  expect(workspaceCalls, "a fresh thread must not reset the workspace").toEqual([]);
-  expect(fresh).toEqual({
-    ok: true,
-    thread: {
-      projectId: "sample-project-one",
-      conversation: "[]",
-      messageCount: 0,
-      revision: 2,
-      turnActive: false,
-      turnDeadlineAt: undefined,
-    },
-  });
-  expect(await control.getProjectThread("sample-project-one")).toEqual(fresh);
+    });
+    expect(await control.getProjectThread("sample-project-one")).toEqual(fresh);
+  } finally {
+    getByName.mockRestore();
+  }
 });
 
 test("a fresh thread frees the turn slot the replaced conversation held", async () => {
