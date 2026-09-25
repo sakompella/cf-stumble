@@ -92,6 +92,7 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
   expect(source, "a clone becomes the project root only after it succeeds").toContain(
     [
       '  git clone "$expected_remote" "$staging"',
+      '  git -C "$staging" config core.fileMode false',
       '  rmdir "$repository" 2>/dev/null || true',
       '  mv "$staging" "$repository"',
     ].join("\n"),
@@ -111,6 +112,10 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
     source.includes("git fetch") || source.includes("git reset") || source.includes("git checkout"),
     "reconciling must not move the working tree the user is working in",
   ).toBe(false);
+  expect(
+    source,
+    "core.fileMode belongs inside the fresh-clone branch, never on an existing checkout",
+  ).not.toContain('git -C "$repository" config core.fileMode false');
 });
 
 test("writes the managed instructions above every repository in the workspace", () => {
