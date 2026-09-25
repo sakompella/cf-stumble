@@ -39,8 +39,8 @@ export interface RecordedTurn {
 
 /**
  * Run a turn and watch the provisioning step. A connected repository is reconciled before its turn
- * starts; the harness checkout has no repository URL to reconcile against, so a harness turn must
- * leave this record empty.
+ * starts; the harness checkout uses the generation's build-side reconciler, so a harness turn records
+ * the harness project id as well.
  */
 export async function turnRecordingProvisioning(
   workspaces: ProjectWorkspaces,
