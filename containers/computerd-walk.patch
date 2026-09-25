@@ -1,0 +1,605 @@
+diff --git a/packages/computerd/src/cli/computerd.ts b/packages/computerd/src/cli/computerd.ts
+index 5036db4..862b6bc 100644
+--- a/packages/computerd/src/cli/computerd.ts
++++ b/packages/computerd/src/cli/computerd.ts
+@@ -73,6 +73,24 @@ function parsePort(value: string | undefined): number {
+   return port;
+ }
+ 
++// COMPUTERD_WALK_IGNORE: comma-separated path segments the userspace
++// shim never syncs (for example `node_modules`). Matched per segment,
++// like the sync protocol's `ignore`, so a pattern cannot hold a "/".
++function parseWalkIgnore(value: string | undefined): string[] {
++  const patterns = (value ?? "")
++    .split(",")
++    .map((p) => p.trim())
++    .filter((p) => p.length > 0);
++  for (const p of patterns) {
++    if (p.includes("/") || p === "." || p === "..") {
++      throw new Error(
++        `COMPUTERD_WALK_IGNORE entries must be single path segments, got ${JSON.stringify(p)}`,
++      );
++    }
++  }
++  return patterns;
++}
++
+ function parseMountPoint(value: string | undefined): string {
+   const mountPoint = value === undefined || value === "" ? DEFAULT_MOUNT_POINT : value;
+   if (!isAbsolute(mountPoint)) {
+@@ -613,7 +631,9 @@ async function main(): Promise<void> {
+     await mkdir(mountPoint, { recursive: true });
+ 
+     if (backend.kind === "shim") {
+-      shim = await mountShim({ vfs, mountPoint });
++      const ignore = parseWalkIgnore(process.env.COMPUTERD_WALK_IGNORE);
++      console.log(`[info] shim ignores path segments: ${JSON.stringify(ignore)}`);
++      shim = await mountShim({ vfs, mountPoint, ignore });
+       fuse = shim;
+     } else {
+       fuse = await mountFuse({
+diff --git a/packages/computerd/src/shim/shim.test.ts b/packages/computerd/src/shim/shim.test.ts
+index f92e8ae..bafb535 100644
+--- a/packages/computerd/src/shim/shim.test.ts
++++ b/packages/computerd/src/shim/shim.test.ts
+@@ -29,10 +29,15 @@ async function eventually(
+   throw new Error("eventually(): condition never became true");
+ }
+ 
+-async function setup() {
++async function setup(options: { ignore?: string[]; pollIntervalMs?: number } = {}) {
+   const mountPoint = await fs.mkdtemp(path.join(os.tmpdir(), "computerd-shim-"));
+   const { vfs } = await createNodeVirtualFileSystem();
+-  const shim = await mountShim({ vfs, mountPoint, pollIntervalMs: TICK_MS });
++  const shim = await mountShim({
++    vfs,
++    mountPoint,
++    pollIntervalMs: options.pollIntervalMs ?? TICK_MS,
++    ignore: options.ignore,
++  });
+   onTestFinished(async () => {
+     await shim.unmount();
+     await fs.rm(mountPoint, { recursive: true, force: true });
+@@ -239,3 +244,127 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
+   expect(await fs.readFile(path.join(mountPoint, "repo", "a.txt"), "utf8")).toBe("alpha");
+   await expect(fs.access(path.join(mountPoint, "outside.txt"))).rejects.toThrow(/ENOENT/);
+ });
++
++async function outsideTree(files: number): Promise<string> {
++  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "computerd-shim-outside-"));
++  onTestFinished(async () => {
++    await fs.rm(dir, { recursive: true, force: true });
++  });
++  await fs.mkdir(path.join(dir, "pkg"));
++  for (let i = 0; i < files; i++) {
++    await fs.writeFile(path.join(dir, "pkg", `f${i}.js`), `module.exports = ${i};`);
++  }
++  return dir;
++}
++
++function vfsHas(vfs: { lstatSync(path: string): unknown }, vfsPath: string): boolean {
++  try {
++    vfs.lstatSync(vfsPath);
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++test("shim syncs a disk symlink as a link and never walks its target", async (_ctx) => {
++  const { vfs, mountPoint, shim } = await setup({ pollIntervalMs: 60_000 });
++  const outside = await outsideTree(20);
++  await fs.symlink(outside, path.join(mountPoint, "modules"));
++  // A link back to the mount point: following it never terminates.
++  await fs.symlink(mountPoint, path.join(mountPoint, "loop"));
++  await fs.writeFile(path.join(mountPoint, "real.txt"), "real");
++
++  await shim.reconcileNow();
++
++  expect(vfs.readFileSync(`${mountPoint}/real.txt`).toString()).toBe("real");
++  expect(vfs.lstatSync(`${mountPoint}/modules`).isSymbolicLink()).toBe(true);
++  expect(String(vfs.readlinkSync(`${mountPoint}/modules`))).toBe(outside);
++  expect(String(vfs.readlinkSync(`${mountPoint}/loop`))).toBe(mountPoint);
++  expect(vfsHas(vfs, `${mountPoint}/modules/pkg/f0.js`)).toBe(false);
++  expect((vfs.readdirSync(mountPoint) as string[]).sort()).toStrictEqual([
++    "loop",
++    "modules",
++    "real.txt",
++  ]);
++});
++
++test("shim replaces a synced directory that becomes a symlink", async (_ctx) => {
++  const { vfs, mountPoint, shim } = await setup({ pollIntervalMs: 60_000 });
++  const outside = await outsideTree(1);
++  // The target holds a file at the same relative path as the synced one.
++  await fs.mkdir(path.join(outside, "old"));
++  await fs.writeFile(path.join(outside, "old", "a.js"), "target");
++  await fs.mkdir(path.join(mountPoint, "modules", "old"), { recursive: true });
++  await fs.writeFile(path.join(mountPoint, "modules", "old", "a.js"), "old");
++  await shim.reconcileNow();
++  expect(vfs.readFileSync(`${mountPoint}/modules/old/a.js`).toString()).toBe("old");
++
++  await fs.rm(path.join(mountPoint, "modules"), { recursive: true });
++  await fs.symlink(outside, path.join(mountPoint, "modules"));
++  await shim.reconcileNow();
++
++  expect(String(vfs.readlinkSync(`${mountPoint}/modules`))).toBe(outside);
++  expect(await fs.readlink(path.join(mountPoint, "modules"))).toBe(outside);
++  // Removing the old subtree from the VFS must not delete through the new link.
++  await new Promise((resolve) => setTimeout(resolve, TICK_MS * 6));
++  await shim.flush();
++  expect(await fs.readFile(path.join(outside, "old", "a.js"), "utf8")).toBe("target");
++});
++
++test("shim writes a VFS symlink to disk as a link and keeps it", async (_ctx) => {
++  const { vfs, mountPoint, shim } = await setup();
++  const outside = await outsideTree(1);
++  // The target is outside the VFS, so following the link finds nothing.
++  vfs.symlinkSync(outside, `${mountPoint}/modules`);
++
++  await shim.flush();
++  expect(await fs.readlink(path.join(mountPoint, "modules"))).toBe(outside);
++
++  // Later ticks in both directions leave the link in place.
++  await new Promise((resolve) => setTimeout(resolve, TICK_MS * 6));
++  await shim.reconcileNow();
++  await shim.flush();
++  expect(await fs.readlink(path.join(mountPoint, "modules"))).toBe(outside);
++  expect(String(vfs.readlinkSync(`${mountPoint}/modules`))).toBe(outside);
++});
++
++test("shim never syncs a path with an ignored segment", async (_ctx) => {
++  const { vfs, mountPoint, shim } = await setup({ ignore: ["node_modules"] });
++  const project = path.join(mountPoint, "proj");
++  await fs.mkdir(path.join(project, "node_modules", "pkg", "node_modules", "dep"), {
++    recursive: true,
++  });
++  await fs.writeFile(path.join(project, "node_modules", "pkg", "index.js"), "pkg");
++  await fs.writeFile(path.join(project, "index.js"), "app");
++
++  await shim.reconcileNow();
++
++  expect(vfs.readFileSync(`${mountPoint}/proj/index.js`).toString()).toBe("app");
++  expect(vfsHas(vfs, `${mountPoint}/proj/node_modules`)).toBe(false);
++
++  // A VFS write under an ignored segment stays out of the disk tree,
++  // and later ticks leave the container-local tree on disk alone.
++  vfs.mkdirSync(`${mountPoint}/other/node_modules`, { recursive: true });
++  vfs.writeFileSync(`${mountPoint}/other/node_modules/x.js`, Buffer.from("x"));
++  await shim.flush();
++  await new Promise((resolve) => setTimeout(resolve, TICK_MS * 6));
++  await shim.reconcileNow();
++  await expect(fs.access(path.join(mountPoint, "other", "node_modules"))).rejects.toThrow(
++    /ENOENT/,
++  );
++  expect(vfs.readFileSync(`${mountPoint}/other/node_modules/x.js`).toString()).toBe("x");
++  expect(await fs.readFile(path.join(project, "node_modules", "pkg", "index.js"), "utf8")).toBe(
++    "pkg",
++  );
++});
++
++test("shim ignore matches segments below the mount point only", async (_ctx) => {
++  const { vfs, mountPoint, shim } = await setup({
++    ignore: [path.basename(os.tmpdir()), "node_modules"],
++    pollIntervalMs: 60_000,
++  });
++  // `node_modules.txt` is a longer segment, not an ignored one.
++  await fs.writeFile(path.join(mountPoint, "node_modules.txt"), "kept");
++  await shim.reconcileNow();
++  expect(vfs.readFileSync(`${mountPoint}/node_modules.txt`).toString()).toBe("kept");
++});
+diff --git a/packages/computerd/src/shim/shim.ts b/packages/computerd/src/shim/shim.ts
+index 16ab794..2d0d080 100644
+--- a/packages/computerd/src/shim/shim.ts
++++ b/packages/computerd/src/shim/shim.ts
+@@ -8,7 +8,16 @@
+ // Model:
+ //
+ //   - A "shadow" snapshot records what we last successfully synced.
+-//     Map<path, { kind: "file" | "dir"; size: number; mtimeMs: number }>.
++//     Map<path, { kind: "file" | "dir" | "symlink"; size: number; mtimeMs: number }>.
++//
++//   - Symlinks are synced as symlinks, never followed. A link whose
++//     target is a large tree outside the mount point costs one
++//     readlink, not a walk of the target.
++//
++//   - Paths with a segment in `ignore` are not synced in either
++//     direction and the disk walk never descends into them. Matching
++//     is dofs's sync `isIgnored`: whole segment, anywhere below the
++//     mount point.
+ //
+ //   - VFS -> disk runs off vfs.watchAsync("/", { recursive: true }).
+ //     On each event we read the VFS, write the host fs, and update
+@@ -26,13 +35,17 @@
+ import { createHash } from "node:crypto";
+ import {
+   mkdir as fsMkdir,
++  lstat as fsLstat,
+   readdir as fsReaddir,
+   readFile as fsReadFile,
++  readlink as fsReadlink,
+   rm as fsRm,
+   stat as fsStat,
++  symlink as fsSymlink,
+   writeFile as fsWriteFile,
+ } from "node:fs/promises";
+ import { dirname, join, posix } from "node:path";
++import { isIgnored } from "@cloudflare/dofs";
+ import type { NodeVirtualFileSystem } from "../fuse/vfs.js";
+ 
+ export interface ShimMount {
+@@ -72,12 +85,18 @@ export interface MountShimOptions {
+   // save to surface in the VFS before the next exec command, slow
+   // enough that the recursive readdir stays in the noise.
+   pollIntervalMs?: number;
++  // Path segments the shim never syncs, in either direction. The
++  // disk walk skips them without a stat, so a dependency tree such
++  // as `node_modules` costs nothing per tick. Default: none.
++  ignore?: readonly string[];
+ }
+ 
+ interface ShadowEntry {
+-  kind: "file" | "dir";
++  kind: "file" | "dir" | "symlink";
+   size: number;
+   mtimeMs: number;
++  // Link target, for kind "symlink".
++  target?: string;
+   // sha1 of the file content the last time we synced. Used to
+   // detect "echo" events: when a disk→VFS write triggers the VFS
+   // watcher, the watcher reads the VFS and sees content that
+@@ -93,6 +112,7 @@ const DEFAULT_POLL_MS = 250;
+ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+   const { vfs, mountPoint } = options;
+   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_MS;
++  const skip = ignoreMatcher(mountPoint, options.ignore ?? []);
+ 
+   // VFS paths and host paths share the same absolute prefix:
+   // `${mountPoint}/foo.txt` lives at `${mountPoint}/foo.txt` in the
+@@ -127,7 +147,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+   // them into the VFS. That matches the "computerd is not the only
+   // writer" relaxation the shim explicitly takes on.
+   await run(async () => {
+-    await materialiseVfsToDisk(vfs, mountPoint, shadow);
++    await materialiseVfsToDisk(vfs, mountPoint, shadow, skip);
+   });
+ 
+   // The watcher is scoped to the mount point so any events outside
+@@ -157,7 +177,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+         // operations; the mount point itself is not materialised
+         // beneath itself.
+         if (vfsPath === mountPoint) continue;
+-        await run(() => syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow));
++        await run(() => syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow, skip));
+       }
+     } catch (error) {
+       if (!stopped) {
+@@ -171,7 +191,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+   // Shared by the periodic poll below and the on-demand
+   // reconcileNow() hook; both go through `run` so they serialise
+   // against the VFS watcher loop.
+-  const reconcile = (): Promise<void> => run(() => reconcileDiskToVfs(vfs, mountPoint, shadow));
++  const reconcile = (): Promise<void> => run(() => reconcileDiskToVfs(vfs, mountPoint, shadow, skip));
+   const pollTimer = setInterval(() => {
+     if (stopped) return;
+     void reconcile().catch((error) => {
+@@ -204,7 +224,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+       // of the chain — a concurrent watcher event can't sneak in a
+       // write between our walk and the resolve of `flush()`.
+       await run(async () => {
+-        await flushVfsToDisk(vfs, mountPoint, shadow);
++        await flushVfsToDisk(vfs, mountPoint, shadow, skip);
+       });
+     },
+     async reconcileNow(): Promise<void> {
+@@ -220,6 +240,7 @@ async function materialiseVfsToDisk(
+   vfs: NodeVirtualFileSystem,
+   mountPoint: string,
+   shadow: Shadow,
++  skip: Skip,
+ ): Promise<void> {
+   const queue: string[] = [mountPoint];
+   while (queue.length > 0) {
+@@ -232,10 +253,16 @@ async function materialiseVfsToDisk(
+     }
+     for (const name of entries) {
+       const vfsPath = `${current}/${name}`;
++      if (skip(vfsPath)) continue;
+       const stat = safeVfsStat(vfs, vfsPath);
+       if (stat === undefined) continue;
+       const hostPath = toHostPath(mountPoint, vfsPath);
+-      if (stat.isDirectory()) {
++      if (stat.isSymbolicLink()) {
++        const target = safeVfsReadlink(vfs, vfsPath);
++        if (target === undefined) continue;
++        await writeDiskSymlink(hostPath, target);
++        shadow.set(vfsPath, symlinkShadow(target));
++      } else if (stat.isDirectory()) {
+         await fsMkdir(hostPath, { recursive: true });
+         shadow.set(vfsPath, dirShadow(stat.mtimeMs));
+         queue.push(vfsPath);
+@@ -264,6 +291,7 @@ async function flushVfsToDisk(
+   vfs: NodeVirtualFileSystem,
+   mountPoint: string,
+   shadow: Shadow,
++  skip: Skip,
+ ): Promise<void> {
+   const queue: string[] = [mountPoint];
+   while (queue.length > 0) {
+@@ -276,9 +304,10 @@ async function flushVfsToDisk(
+     }
+     for (const name of entries) {
+       const vfsPath = `${current}/${name}`;
++      if (skip(vfsPath)) continue;
+       const stat = safeVfsStat(vfs, vfsPath);
+       if (stat === undefined) continue;
+-      await syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow);
++      await syncVfsPathToDisk(vfs, mountPoint, vfsPath, shadow, skip);
+       if (stat.isDirectory()) queue.push(vfsPath);
+     }
+   }
+@@ -289,9 +318,16 @@ async function syncVfsPathToDisk(
+   mountPoint: string,
+   vfsPath: string,
+   shadow: Shadow,
++  skip: Skip,
+ ): Promise<void> {
++  // An ignored path is container-local: a VFS event for it must not
++  // write, or delete, what is on disk.
++  if (skip(vfsPath)) return;
+   const stat = safeVfsStat(vfs, vfsPath);
+   const hostPath = toHostPath(mountPoint, vfsPath);
++  // Below a disk symlink, the host path names a file in the link's
++  // target, outside the mount point. Never write or delete there.
++  if (await underDiskSymlink(mountPoint, hostPath)) return;
+ 
+   if (stat === undefined) {
+     // VFS says it's gone. Remove from disk + shadow. Recursive rm
+@@ -302,6 +338,17 @@ async function syncVfsPathToDisk(
+     return;
+   }
+ 
++  if (stat.isSymbolicLink()) {
++    const target = safeVfsReadlink(vfs, vfsPath);
++    if (target === undefined) return;
++    // Echo guard, as for files below.
++    const prev = shadow.get(vfsPath);
++    if (prev?.kind === "symlink" && prev.target === target) return;
++    await writeDiskSymlink(hostPath, target);
++    shadow.set(vfsPath, symlinkShadow(target));
++    return;
++  }
++
+   if (stat.isDirectory()) {
+     await fsMkdir(hostPath, { recursive: true });
+     shadow.set(vfsPath, dirShadow(stat.mtimeMs));
+@@ -345,17 +392,46 @@ async function reconcileDiskToVfs(
+   vfs: NodeVirtualFileSystem,
+   mountPoint: string,
+   shadow: Shadow,
++  skip: Skip,
+ ): Promise<void> {
+   const seen = new Set<string>();
+-  await walkDisk(mountPoint, mountPoint, async (hostPath, vfsPath, stat) => {
++  await walkDisk(mountPoint, mountPoint, skip, async (hostPath, vfsPath, stat) => {
+     seen.add(vfsPath);
+     const prev = shadow.get(vfsPath);
++    if (stat.isSymbolicLink()) {
++      let target: string;
++      try {
++        target = await fsReadlink(hostPath);
++      } catch {
++        return;
++      }
++      if (prev?.kind === "symlink" && prev.target === target) return;
++      if (safeVfsReadlink(vfs, vfsPath) !== target) {
++        // Replace whatever the VFS holds at this path. A directory
++        // that became a link takes its synced subtree with it.
++        removeVfsTree(vfs, vfsPath);
++        deleteSubtreeFromShadow(shadow, vfsPath);
++        try {
++          vfs.mkdirSync(posix.dirname(vfsPath), { recursive: true });
++        } catch {
++          // ignore
++        }
++        try {
++          vfs.symlinkSync(target, vfsPath);
++        } catch (error) {
++          console.error(`[shim] failed to write symlink ${vfsPath} into VFS:`, error);
++          return;
++        }
++      }
++      shadow.set(vfsPath, symlinkShadow(target));
++      return;
++    }
+     if (stat.isDirectory()) {
+       if (prev?.kind === "dir") return;
+       // Either new directory or replaces a file. Make sure the VFS
+       // has it. mkdir with recursive matches mkdir -p semantics —
+       // safe when the path already exists.
+-      if (prev?.kind === "file") {
++      if (prev !== undefined) {
+         try {
+           vfs.unlinkSync(vfsPath);
+         } catch {
+@@ -376,6 +452,15 @@ async function reconcileDiskToVfs(
+     if (prev?.kind === "file" && prev.size === stat.size && prev.mtimeMs === stat.mtimeMs) {
+       return;
+     }
++    // A link that became a file: drop the link first, or the write
++    // below would go through it.
++    if (prev?.kind === "symlink") {
++      try {
++        vfs.unlinkSync(vfsPath);
++      } catch {
++        // ignore
++      }
++    }
+     let bytes: Buffer;
+     try {
+       bytes = await fsReadFile(hostPath);
+@@ -434,6 +519,7 @@ async function reconcileDiskToVfs(
+       if (entry.kind === "dir") {
+         vfs.rmdirSync(vfsPath);
+       } else {
++        // Files and symlinks alike; unlink removes a link, not its target.
+         vfs.unlinkSync(vfsPath);
+       }
+     } catch {
+@@ -445,13 +531,23 @@ async function reconcileDiskToVfs(
+   }
+ }
+ 
++// lstat, not stat: a symlink is visited as a symlink and never
++// descended into, so a link to a large tree outside the mount point
++// costs one readlink. Ignored paths are skipped before any stat.
+ async function walkDisk(
+   root: string,
+   current: string,
++  skip: Skip,
+   visit: (
+     hostPath: string,
+     vfsPath: string,
+-    stat: { isDirectory(): boolean; isFile(): boolean; size: number; mtimeMs: number },
++    stat: {
++      isDirectory(): boolean;
++      isFile(): boolean;
++      isSymbolicLink(): boolean;
++      size: number;
++      mtimeMs: number;
++    },
+   ) => Promise<void>,
+ ): Promise<void> {
+   let entries: string[];
+@@ -462,16 +558,17 @@ async function walkDisk(
+   }
+   for (const name of entries) {
+     const hostPath = join(current, name);
+-    let stat: Awaited<ReturnType<typeof fsStat>>;
++    const vfsPath = toVfsPath(root, hostPath);
++    if (skip(vfsPath)) continue;
++    let stat: Awaited<ReturnType<typeof fsLstat>>;
+     try {
+-      stat = await fsStat(hostPath);
++      stat = await fsLstat(hostPath);
+     } catch {
+       continue;
+     }
+-    const vfsPath = toVfsPath(root, hostPath);
+     await visit(hostPath, vfsPath, stat);
+     if (stat.isDirectory()) {
+-      await walkDisk(root, hostPath, visit);
++      await walkDisk(root, hostPath, skip, visit);
+     }
+   }
+ }
+@@ -506,6 +603,67 @@ function dirShadow(mtimeMs: number): ShadowEntry {
+   return { kind: "dir", size: 0, mtimeMs };
+ }
+ 
++function symlinkShadow(target: string): ShadowEntry {
++  return { kind: "symlink", size: 0, mtimeMs: 0, target };
++}
++
++// True when a path below the mount point has an ignored segment.
++// The mount point's own segments never count.
++type Skip = (vfsPath: string) => boolean;
++
++function ignoreMatcher(mountPoint: string, ignore: readonly string[]): Skip {
++  const patterns = [...ignore];
++  if (patterns.length === 0) return () => false;
++  const prefix = mountPoint === "/" ? "/" : `${mountPoint}/`;
++  return (vfsPath) =>
++    vfsPath.startsWith(prefix) && isIgnored(vfsPath.slice(prefix.length), patterns);
++}
++
++async function underDiskSymlink(mountPoint: string, hostPath: string): Promise<boolean> {
++  let current = dirname(hostPath);
++  while (current.length > mountPoint.length && current.startsWith(mountPoint)) {
++    try {
++      if ((await fsLstat(current)).isSymbolicLink()) return true;
++    } catch {
++      // missing: nothing below it can be reached through a link
++    }
++    current = dirname(current);
++  }
++  return false;
++}
++
++// Replace whatever is at `hostPath` with a symlink to `target`,
++// unless it already is one.
++async function writeDiskSymlink(hostPath: string, target: string): Promise<void> {
++  try {
++    if ((await fsReadlink(hostPath)) === target) return;
++  } catch {
++    // not a symlink, or missing
++  }
++  await fsRm(hostPath, { recursive: true, force: true });
++  await fsMkdir(dirname(hostPath), { recursive: true });
++  await fsSymlink(target, hostPath);
++}
++
++// Remove a VFS entry and, for a directory, everything under it.
++// Never follows a symlink.
++function removeVfsTree(vfs: NodeVirtualFileSystem, vfsPath: string): void {
++  const stat = safeVfsStat(vfs, vfsPath);
++  if (stat === undefined) return;
++  try {
++    if (stat.isDirectory()) {
++      for (const name of vfs.readdirSync(vfsPath) as string[]) {
++        removeVfsTree(vfs, `${vfsPath}/${name}`);
++      }
++      vfs.rmdirSync(vfsPath);
++    } else {
++      vfs.unlinkSync(vfsPath);
++    }
++  } catch {
++    // ignore — a concurrent writer; the next reconcile retries
++  }
++}
++
+ function depth(path: string): number {
+   let count = 0;
+   for (let i = 0; i < path.length; i++) if (path.charCodeAt(i) === 47) count++;
+@@ -526,20 +684,25 @@ function safeVfsStat(
+   | {
+       isFile(): boolean;
+       isDirectory(): boolean;
++      isSymbolicLink(): boolean;
+       size: number;
+       mtimeMs: number;
+     }
+   | undefined {
+   try {
+-    const s = vfs.statSync(path) as {
++    // lstat: a VFS symlink is synced as a link. Following it would
++    // miss a target outside the VFS and delete the link on disk.
++    const s = vfs.lstatSync(path) as {
+       isFile(): boolean;
+       isDirectory(): boolean;
++      isSymbolicLink(): boolean;
+       size: number;
+       mtime: Date;
+     };
+     return {
+       isFile: () => s.isFile(),
+       isDirectory: () => s.isDirectory(),
++      isSymbolicLink: () => s.isSymbolicLink(),
+       size: s.size,
+       mtimeMs: s.mtime.getTime(),
+     };
+@@ -548,6 +711,14 @@ function safeVfsStat(
+   }
+ }
+ 
++function safeVfsReadlink(vfs: NodeVirtualFileSystem, path: string): string | undefined {
++  try {
++    return String(vfs.readlinkSync(path));
++  } catch {
++    return undefined;
++  }
++}
++
+ function safeVfsRead(vfs: NodeVirtualFileSystem, path: string): Buffer | undefined {
+   try {
+     return Buffer.from(vfs.readFileSync(path) as Buffer);
