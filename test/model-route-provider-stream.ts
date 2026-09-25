@@ -8,27 +8,11 @@
  */
 
 import type { ModelStreamEvent } from "../src/model-route.js";
+import { byteChunkStream } from "./byte-stream-fixture.js";
 
 /** A provider stream built from raw byte chunks, so a test controls exactly how bytes split
  * across `ReadableStream` reads — including splitting a multi-byte UTF-8 character in half. */
-export function rawByteStream(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
-  let i = 0;
-
-  return new ReadableStream<Uint8Array>({
-    pull(controller) {
-      const chunk = chunks[i];
-
-      if (chunk === undefined) {
-        controller.close();
-
-        return;
-      }
-
-      controller.enqueue(chunk);
-      i += 1;
-    },
-  });
-}
+export const rawByteStream = byteChunkStream;
 
 const encoder = new TextEncoder();
 

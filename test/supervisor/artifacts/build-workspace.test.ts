@@ -1,36 +1,24 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { namespaceFor } from "../../workspace-namespace-fixture.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   CommitBuildWorkspace,
   encodeModuleMap,
   HARNESS_BUILD_CONFIGURATION,
   WorkspaceHostModuleMapBuilder,
 } from "../../../src/supervisor/artifacts/index.js";
-import type {
-  BuildWorkspaceHost,
-  BuildWorkspaceNamespace,
-} from "../../../src/supervisor/artifacts/index.js";
+import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
 import { planHarnessBuild, type HarnessBuildRequest } from "../../../src/harness-build.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
-const commit = harnessCommit("6000000000000000000000000000000000000001");
+const commit = testHarnessCommit("6000000000000000000000000000000000000001");
 
 const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
 
 const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
 
 const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 function moduleMapFile(): string {
   return JSON.stringify({ entryModule: "main.js", modules: [helperModule, entryModule] });
@@ -74,25 +62,10 @@ class FakeBuildHost implements BuildWorkspaceHost {
   }
 }
 
-class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
-  readonly names: string[] = [];
-  readonly host: BuildWorkspaceHost;
-
-  constructor(host: BuildWorkspaceHost) {
-    this.host = host;
-  }
-
-  getByName(name: string): BuildWorkspaceHost {
-    this.names.push(name);
-
-    return this.host;
-  }
-}
-
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 function builderFor(host: FakeBuildHost) {
-  const namespace = new FakeWorkspaceNamespace(host);
+  const namespace = namespaceFor(host);
 
   return { builder: new WorkspaceHostModuleMapBuilder(namespace, workspaceName), namespace };
 }

@@ -1,21 +1,11 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { WorkspaceHostModuleMapBuilder } from "../../../src/supervisor/artifacts/index.js";
 import { HARNESS_BUILD_STEP_NAMES, type HarnessBuildRequest } from "../../../src/harness-build.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 import { fixtureMainHarnessArtifact } from "../../../src/facet/fixture.js";
 
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commit must be a valid harness commit");
-  }
-
-  return parsed;
-}
-
-const commit = harnessCommit("30000000000000000000000000000000000000ab");
+const commit = testHarnessCommit("30000000000000000000000000000000000000ab");
 
 function moduleMapFile(): string {
   return JSON.stringify({

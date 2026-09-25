@@ -1,13 +1,11 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { namespaceFor } from "../../workspace-namespace-fixture.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   encodeModuleMap,
   WorkspaceHostModuleMapBuilder,
 } from "../../../src/supervisor/artifacts/index.js";
-import type {
-  BuildWorkspaceHost,
-  BuildWorkspaceNamespace,
-} from "../../../src/supervisor/artifacts/index.js";
+import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { HarnessBuildRequest } from "../../../src/harness-build.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
@@ -19,23 +17,13 @@ import type { WorkspaceResult } from "../../../src/workspace/index.js";
  * within the tenant whose workspace the build runs in.
  */
 
-const commit = harnessCommit("6000000000000000000000000000000000000002");
+const commit = testHarnessCommit("6000000000000000000000000000000000000002");
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
 
 const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 function moduleMapFile(): string {
   return JSON.stringify({ entryModule: "main.js", modules: [helperModule, entryModule] });
@@ -59,21 +47,6 @@ class CountingBuildHost implements BuildWorkspaceHost {
       ok: true,
       result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
     });
-  }
-}
-
-class FakeWorkspaceNamespace implements BuildWorkspaceNamespace {
-  readonly names: string[] = [];
-  readonly host: BuildWorkspaceHost;
-
-  constructor(host: BuildWorkspaceHost) {
-    this.host = host;
-  }
-
-  getByName(name: string): BuildWorkspaceHost {
-    this.names.push(name);
-
-    return this.host;
   }
 }
 
@@ -103,7 +76,7 @@ class GatedBuildHost implements BuildWorkspaceHost {
 
 test("admits one build per commit, so a concurrent request joins it instead of racing it", async () => {
   const host = new GatedBuildHost();
-  const namespace = new FakeWorkspaceNamespace(host);
+  const namespace = namespaceFor(host);
   const builder = new WorkspaceHostModuleMapBuilder(namespace, workspaceName);
 
   const first = builder.build(commit);
@@ -126,10 +99,7 @@ test("admits one build per commit, so a concurrent request joins it instead of r
 test("builds again once the build in flight has settled", async () => {
   const host = new CountingBuildHost();
 
-  const builder = new WorkspaceHostModuleMapBuilder(
-    new FakeWorkspaceNamespace(host),
-    workspaceName,
-  );
+  const builder = new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName);
 
   await builder.build(commit);
   await builder.build(commit);

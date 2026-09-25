@@ -1,15 +1,13 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { namespaceFor } from "../../workspace-namespace-fixture.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
   planHarnessBuild,
   type HarnessBuildRequest,
 } from "../../../src/harness-build.js";
 import { WorkspaceHostModuleMapBuilder } from "../../../src/supervisor/artifacts/index.js";
-import type {
-  BuildWorkspaceHost,
-  BuildWorkspaceNamespace,
-} from "../../../src/supervisor/artifacts/index.js";
+import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
@@ -21,21 +19,11 @@ import type { WorkspaceResult } from "../../../src/workspace/index.js";
  * code and its own bounded tail, and no one command has to survive eleven minutes.
  */
 
-const commit = harnessCommit("6000000000000000000000000000000000000003");
+const commit = testHarnessCommit("6000000000000000000000000000000000000003");
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 const phaseNames = HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name);
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 /** Fails the one step the test names and reports every step it was asked for. */
 class PhaseFailingHost implements BuildWorkspaceHost {
@@ -71,18 +59,6 @@ class PhaseFailingHost implements BuildWorkspaceHost {
   }
 }
 
-class OneHostNamespace implements BuildWorkspaceNamespace {
-  readonly host: BuildWorkspaceHost;
-
-  constructor(host: BuildWorkspaceHost) {
-    this.host = host;
-  }
-
-  getByName(): BuildWorkspaceHost {
-    return this.host;
-  }
-}
-
 test("plans each build phase as its own step, in the order the phases depend on", () => {
   const plan = planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit);
 
@@ -108,7 +84,7 @@ test("a failing phase names that phase, and the phases after it never run", asyn
       const host = new PhaseFailingHost(failing);
 
       const built = await new WorkspaceHostModuleMapBuilder(
-        new OneHostNamespace(host),
+        namespaceFor(host),
         workspaceName,
       ).build(commit);
 

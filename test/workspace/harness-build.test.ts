@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
+import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import {
   HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
@@ -16,21 +16,11 @@ import {
 import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { shellQuote } from "../../src/shell-quote.js";
 
-const commit = harnessCommit("5000000000000000000000000000000000000001");
+const commit = testHarnessCommit("5000000000000000000000000000000000000001");
 
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
 
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
-
-function harnessCommit(value: string): HarnessCommit {
-  const parsed = parseHarnessCommit(value);
-
-  if (parsed === undefined) {
-    throw new Error("the test commits must be valid harness commits");
-  }
-
-  return parsed;
-}
 
 /** A build workspace with no project files in it: the build root is all it contains. */
 class FakeBuildOperations implements WorkspaceOperations {
@@ -90,6 +80,12 @@ function build(operations: FakeBuildOperations, request: unknown) {
     request,
   });
 }
+
+test("rejects an invalid harness commit fixture", () => {
+  expect(() => testHarnessCommit("not-a-harness-commit")).toThrow(
+    "the test commit must be a valid harness commit",
+  );
+});
 
 test("plans one planned step, or the build output, from a validated commit", () => {
   const step = parseHarnessBuildRequest({

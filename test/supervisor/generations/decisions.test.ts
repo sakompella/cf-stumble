@@ -1,42 +1,21 @@
 import { expect, test } from "vitest";
 
-import { parseHarnessCommit, type HarnessCommit } from "../../../src/harness-commit.js";
+import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   decideActivation,
   decidePreparationCheck,
   type GenerationState,
 } from "../../../src/supervisor/generations/decisions.js";
 import {
-  parseGenerationLabel,
   type Generation,
-  type GenerationLabel,
   type GenerationStatus,
 } from "../../../src/supervisor/generations/index.js";
+import { label } from "./fixtures.js";
 
 // Workerd-native coverage for the pure deciders, sibling to decisions.props.test.ts (which runs
 // the same rules as Hegel properties under Node). These are example-based on purpose.
 
-function testCommit(): HarnessCommit {
-  const parsed = parseHarnessCommit("a".repeat(40));
-
-  if (parsed === undefined) {
-    throw new Error("test commit must be valid");
-  }
-
-  return parsed;
-}
-
-const COMMIT = testCommit();
-
-function label(value: number): GenerationLabel {
-  const parsed = parseGenerationLabel(value);
-
-  if (parsed === undefined) {
-    throw new Error(`invalid test label ${value}`);
-  }
-
-  return parsed;
-}
+const COMMIT = testHarnessCommit("a".repeat(40));
 
 function generation(labelValue: number, status: GenerationStatus): Generation {
   return { label: label(labelValue), harnessCommit: COMMIT, status };

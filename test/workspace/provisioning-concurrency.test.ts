@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { PROJECT_PROVISION_STEP_NAMES } from "../../src/project-provision.js";
@@ -7,7 +8,6 @@ import {
   provisionProjectWorkspace,
   PROVISION_STALE_AFTER_MS,
   type ProvisionWorkspaceHost,
-  type ProvisionWorkspaceNamespace,
 } from "../../src/workspace/provisioning.js";
 import {
   planProjectProvisionRequest,
@@ -26,18 +26,6 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
         ? { ok: true, result: { kind: "written" } }
         : { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } },
     );
-  }
-}
-
-class FakeProvisionNamespace implements ProvisionWorkspaceNamespace {
-  readonly host: ProvisionWorkspaceHost;
-
-  constructor(host: ProvisionWorkspaceHost) {
-    this.host = host;
-  }
-
-  getByName(): ProvisionWorkspaceHost {
-    return this.host;
   }
 }
 
@@ -90,7 +78,7 @@ function delayedProvisionHost(): DelayedProvision {
 
 test("serializes different projects in one shared workspace", async () => {
   const delayed = delayedProvisionHost();
-  const namespace = new FakeProvisionNamespace(delayed.host);
+  const namespace = namespaceFor(delayed.host);
   const sharedWorkspace = tenantWorkspaceName("different-projects-shared-workspace");
 
   const first = provisionProjectWorkspace({
@@ -134,7 +122,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
     workspaceName,
     projectId: sampleProjectOne.id,
     catalog: sampleCatalog,
-    namespace: new FakeProvisionNamespace(delayed.host),
+    namespace: namespaceFor(delayed.host),
     signal: controller.signal,
   });
 
@@ -145,7 +133,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
     workspaceName,
     projectId: sampleProjectOne.id,
     catalog: sampleCatalog,
-    namespace: new FakeProvisionNamespace(delayed.host),
+    namespace: namespaceFor(delayed.host),
   });
 
   await Promise.resolve();
@@ -176,7 +164,7 @@ class NeverSettlingProvisionHost extends FakeProvisionHost {
 
 test("does not queue retries behind a never-settling provision RPC", async () => {
   const host = new NeverSettlingProvisionHost();
-  const namespace = new FakeProvisionNamespace(host);
+  const namespace = namespaceFor(host);
 
   const first = provisionProjectWorkspace({
     workspaceName: tenantWorkspaceName("never-settling-original"),
@@ -238,7 +226,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
     }
   })();
 
-  const namespace = new FakeProvisionNamespace(host);
+  const namespace = namespaceFor(host);
   const workspaceName = tenantWorkspaceName("waits-through-stale-provision");
 
   try {
@@ -280,7 +268,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
 test("clears the stale ceiling timer when a waiter finishes normally", async () => {
   vi.useFakeTimers();
   const delayed = delayedProvisionHost();
-  const namespace = new FakeProvisionNamespace(delayed.host);
+  const namespace = namespaceFor(delayed.host);
 
   try {
     const first = provisionProjectWorkspace({
@@ -349,7 +337,7 @@ test("drops an in-flight provision after the Workspace Host command ceiling", as
     }
   })();
 
-  const namespace = new FakeProvisionNamespace(host);
+  const namespace = namespaceFor(host);
 
   const input = {
     workspaceName: tenantWorkspaceName("stale-provision"),
