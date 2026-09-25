@@ -4,7 +4,6 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
   planHarnessBuild,
-  shellQuote,
 } from "../../src/harness-build.js";
 import {
   executeHarnessBuildRequest,
@@ -15,6 +14,7 @@ import {
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
 import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
+import { shellQuote } from "../../src/shell-quote.js";
 
 const commit = harnessCommit("5000000000000000000000000000000000000001");
 
@@ -277,16 +277,4 @@ test("the provision step obtains the requested commit before the build reads it"
   expect(provision.source, "an absent commit must name itself and the repository").toContain(
     'printf "harness commit %s is not in %s\\n" "$commit" "$expected_remote" >&2',
   );
-});
-
-test("shellQuote emits POSIX single-quote escaping the shell can parse", () => {
-  expect(shellQuote("plain")).toBe("'plain'");
-  expect(shellQuote("/workspace/harness/.git")).toBe("'/workspace/harness/.git'");
-  expect(shellQuote("$(rm -rf /)")).toBe("'$(rm -rf /)'");
-
-  // A single quote closes the literal, emits an escaped quote, then reopens it. An extra backslash
-  // here yields a string no shell can parse, which is how a quoting helper turns into an injection
-  // the first time a caller passes something other than a constant.
-  expect(shellQuote("a'b")).toBe("'a'\\''b'");
-  expect(shellQuote("'")).toBe("''\\'''");
 });
