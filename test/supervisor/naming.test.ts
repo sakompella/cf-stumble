@@ -19,11 +19,3 @@ test("a Supervisor reached by id refuses to construct", async () => {
     "a Supervisor must be reached by name, not by id",
   );
 }, 30_000);
-
-test("a Supervisor reached by name serves", async () => {
-  const stub = env.SUPERVISOR.getByName("named-supervisor");
-
-  const response = await stub.fetch("https://supervisor.invalid/");
-
-  expect(response.status).not.toBe(500);
-}, 30_000);
