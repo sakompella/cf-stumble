@@ -57,6 +57,14 @@ export {
 
 export { TurnBound } from "./turn-bound.js";
 
+export {
+  timedTurnMount,
+  timedTurnProvision,
+  turnFields,
+  turnTrace,
+  type TurnTrace,
+} from "./turn-log.js";
+
 export { projectTurnStream, type ProjectTurnStreamInput } from "./turn-stream.js";
 
 export {

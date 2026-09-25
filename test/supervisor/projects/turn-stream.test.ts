@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
 import { projectTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
+import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
 import { parseProjectId } from "../../../src/project-catalog.js";
 import type { ProjectThreadResult } from "../../../src/supervisor/threads/index.js";
 
@@ -53,6 +54,7 @@ test("a stream that cannot create a reader abandons its lease", async () => {
     threads: { finishTurn: vi.fn(), abandonTurn },
     now,
     bound,
+    trace: turnTrace(projectId, "lease-one", undefined, Date.now()),
     frames,
   });
 
@@ -81,6 +83,7 @@ test("a deadline that rejects the pending RPC read is timed out", async () => {
     threads: { finishTurn, abandonTurn },
     now,
     bound,
+    trace: turnTrace(projectId, "lease-one", undefined, Date.now()),
     frames: rejectingFrames(reader),
   });
 

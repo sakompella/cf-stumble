@@ -28,6 +28,8 @@ import {
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
   type TurnStartContext,
+  timedTurnMount,
+  timedTurnProvision,
 } from "./projects/index.js";
 import {
   Generations,
@@ -316,17 +318,31 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
       // on the same generation it was admitted against (`turn-run.ts`). Mounting is synchronous
       // now; the turn path keeps its asynchronous mount contract, so this adapts here.
-      mount: () => Promise.resolve(this.mountServing(context.attribution.active)),
+      mount: () =>
+        timedTurnMount(context.trace, () => this.mountServing(context.attribution.active)),
       // The harness checkout is owned by the active generation's repository. Reconcile it before
       // mounting so a reset cannot leave Computer with a missing working directory.
       provisionHarness:
         generation === undefined
           ? undefined
-          : (signal) => this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
+          : (signal) =>
+              timedTurnProvision(
+                context.trace,
+                "harness",
+                () => this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
+                (ready) => (ready ? undefined : "unavailable"),
+              ),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: async (project, signal) =>
-        (await this.connections.ensureProvisioned(project.id, signal)).ok,
+        (
+          await timedTurnProvision(
+            context.trace,
+            "repository",
+            () => this.connections.ensureProvisioned(project.id, signal),
+            (used) => (used.ok ? undefined : used.problem.code),
+          )
+        ).ok,
     });
   }
 

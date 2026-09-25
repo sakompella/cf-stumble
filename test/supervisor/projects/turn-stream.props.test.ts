@@ -1,11 +1,12 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import { expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
 import { parseProjectId } from "../../../src/project-catalog.js";
 import type { ProjectId } from "../../../src/project-catalog.js";
 import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
 import { projectTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
+import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
 import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/turn-frames.js";
 import type { ProjectThreadResult } from "../../../src/supervisor/threads/index.js";
 
@@ -18,6 +19,13 @@ function testProjectId(): ProjectId {
 }
 
 const projectId = testProjectId();
+
+// Every generated turn settles and logs; the events are not what these properties check.
+beforeEach(() => {
+  for (const level of ["log", "warn", "error"] as const) {
+    vi.spyOn(console, level).mockImplementation(() => {});
+  }
+});
 
 const text = gs.text({ alphabet: "abc XYZ012-é日🙂", maxSize: 80 });
 
@@ -50,6 +58,7 @@ async function readTurn(chunks: readonly Uint8Array[]): Promise<readonly unknown
     },
     now: () => 0,
     bound: new TurnBound(10_000, () => 0),
+    trace: turnTrace(projectId, "lease-property", undefined, 0),
     frames: new ReadableStream<Uint8Array>({
       start(controller) {
         for (const chunk of chunks) controller.enqueue(chunk);
