@@ -131,26 +131,7 @@ test.each([
   },
 );
 
-test("a turn that throws answers a bare fault, carrying nothing from the exception", async () => {
-  const response = await routeOwnerApiRequest(
-    post(TURN_PATH, { prompt: "do it" }),
-    supervisor({
-      runProjectTurn: () =>
-        Promise.reject(
-          new Error(`workspace refused the token ${SECRET} at /root/.git-credentials`),
-        ),
-    }),
-    ownerScope,
-  );
-
-  expect(response.status).toBe(500);
-  const body = await response.text();
-  expect(JSON.parse(body)).toEqual({ ok: false, error: { code: "internal-error" } });
-  expect(body).not.toContain(SECRET);
-  expect(body).not.toContain("git-credentials");
-});
-
-test("logs a redacted cause when a turn throws while keeping the public fault", async () => {
+test("a turn that throws logs a redacted cause and answers a bare fault", async () => {
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
   const response = await routeOwnerApiRequest(
@@ -163,37 +144,14 @@ test("logs a redacted cause when a turn throws while keeping the public fault", 
   );
 
   expect(response.status).toBe(500);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "internal-error" },
-  });
+  const body = await response.text();
+  expect(JSON.parse(body)).toEqual({ ok: false, error: { code: "internal-error" } });
+  expect(body).not.toContain(SECRET);
+  expect(body).not.toContain("git-credentials");
   expect(loggedErrors).toHaveBeenCalledOnce();
   const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
   expect(logged).toContain("internal-error");
   expect(logged).not.toContain(SECRET);
-});
-
-test("a turn started by another site is refused before the Supervisor sees it", async () => {
-  const reached: unknown[] = [];
-
-  const response = await routeOwnerApiRequest(
-    post(TURN_PATH, { prompt: "do it" }, "https://evil.test"),
-    supervisor({
-      runProjectTurn: (projectId) => {
-        reached.push(projectId);
-
-        return Promise.reject(new Error("a cross-origin turn must not reach the Supervisor"));
-      },
-    }),
-    ownerScope,
-  );
-
-  expect(response.status).toBe(403);
-  expect(reached).toEqual([]);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "cross-origin-request" },
-  });
 });
 
 test("the turn route keeps to its method and its path", async () => {

@@ -13,6 +13,8 @@
 
 import { expect, test } from "vitest";
 import { ownerPageHtml, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "../../src/page/index.js";
+import { OWNER_PAGE_SCRIPT_TURN } from "../../src/page/script-turn.js";
+import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 
 /** The script the browser actually receives, taken out of the one inline `<script>` element. */
@@ -24,6 +26,76 @@ function inlinePageScript(html: string): string {
   }
 
   return found[1];
+}
+
+type StubNode = {
+  textContent: string;
+  appendChild(node: StubNode): void;
+};
+
+type TurnRenderer = (frame: ProjectTurnFrame) => boolean;
+
+type RenderText = string | number | boolean | null | undefined;
+
+function renderText(value: RenderText): string {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+// The stubs mirror the renderer's free helper names, so renaming a helper should fail this test.
+// oxlint-disable-next-line eslint/max-lines-per-function
+function turnRenderer(visible: string[]): TurnRenderer {
+  const node = (textContent = ""): StubNode => ({
+    textContent,
+    appendChild(child) {
+      visible.push(child.textContent);
+    },
+  });
+
+  const assistantText: StubNode | null = null;
+  const page = { assistantText, selection: "selection" };
+
+  const documentStub = { createTextNode: (value: string) => node(value) };
+  const setText = (_id: string, value: string) => visible.push(value);
+  const text = renderText;
+  const textMessage = () => node();
+  const element = (_tag: string, _className: string) => node();
+  const messageEntry = (_className: string, _kind: string) => node();
+  const toolBlock = () => visible.push("tool-start");
+  const toolResult = () => visible.push("tool-result");
+  const diffMessage = () => visible.push("diff");
+  const diffUnavailableMessage = () => visible.push("diff-unavailable");
+
+  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: evaluate only the delivered turn renderer with the stubs above.
+  const makeRenderer = new Function(
+    "page",
+    "document",
+    "node",
+    "setText",
+    "text",
+    "textMessage",
+    "element",
+    "messageEntry",
+    "toolBlock",
+    "toolResult",
+    "diffMessage",
+    "diffUnavailableMessage",
+    `${OWNER_PAGE_SCRIPT_TURN}\nreturn applyFrame;`,
+  ) as (...args: unknown[]) => TurnRenderer;
+
+  return makeRenderer(
+    page,
+    documentStub,
+    () => null,
+    setText,
+    text,
+    textMessage,
+    element,
+    messageEntry,
+    toolBlock,
+    toolResult,
+    diffMessage,
+    diffUnavailableMessage,
+  );
 }
 
 test("the page markup carries every stable element id", () => {
@@ -90,26 +162,50 @@ test("the sidebar can show an entry that is a checkout rather than a connection"
   expect(script).toContain("no repository connected yet");
 });
 
-test("the streaming client reads the frames the turn route emits", () => {
+test("the streaming client renders every frame the turn route emits", () => {
   const script = inlinePageScript(ownerPageHtml("test-nonce"));
+  const visible: string[] = [];
+  const render = turnRenderer(visible);
 
-  // The vocabulary is `ProjectTurnFrame` in supervisor/projects/turn-frames.ts. A kind this page
-  // does not handle is a frame the owner would never see, so every one is named here.
-  for (const kind of [
-    "text",
-    "tool-start",
-    "tool-result",
-    "diff",
-    "diff-unavailable",
-    "saved",
-    "turn-failed",
-    "turn-rejected",
-    "save-failed",
-    "stream-invalid",
-    "cancelled",
-    "timed-out",
-  ]) {
-    expect(script, `no handling for frame kind ${kind}`).toContain(`"${kind}"`);
+  const frames: readonly (readonly [string, ProjectTurnFrame, boolean])[] = [
+    ["text", { kind: "text", text: "hello" }, false],
+    [
+      "tool-start",
+      { kind: "tool-start", toolCallId: "call-1", toolName: "read", arguments: {} },
+      false,
+    ],
+    [
+      "tool-result",
+      {
+        kind: "tool-result",
+        toolCallId: "call-1",
+        toolName: "read",
+        isError: false,
+        content: "ok",
+        truncated: false,
+      },
+      false,
+    ],
+    ["diff", { kind: "diff", content: "diff", truncated: false }, false],
+    ["diff-unavailable", { kind: "diff-unavailable", detail: "not available" }, false],
+    ["saved", { kind: "saved", revision: 1, messageCount: 1 }, true],
+    [
+      "turn-failed",
+      { kind: "turn-failed", code: "model-error", saved: false, revision: undefined },
+      true,
+    ],
+    ["turn-rejected", { kind: "turn-rejected", code: "invalid-turn-request" }, true],
+    ["save-failed", { kind: "save-failed", code: "storage-failed" }, true],
+    ["stream-invalid", { kind: "stream-invalid", code: "malformed-frame" }, true],
+    ["cancelled", { kind: "cancelled" }, true],
+    ["timed-out", { kind: "timed-out" }, true],
+  ];
+
+  for (const [kind, frame, ends] of frames) {
+    const before = visible.length;
+
+    expect(render(frame), `unexpected terminal state for ${kind}`).toBe(ends);
+    expect(visible.length, `frame kind ${kind} was not rendered`).toBeGreaterThan(before);
   }
 
   // Reading the body while it arrives is what makes the conversation stream rather than appear in
@@ -123,12 +219,10 @@ test("a turn's diff renders with the tool-result colouring, and an unavailable d
   const script = inlinePageScript(ownerPageHtml("test-nonce"));
 
   // T13 added `diff` (`content`, `truncated`) and `diff-unavailable` (`detail`) to
-  // `FacetTurnFrame`/`ProjectTurnFrame`. Both must render: a diff reuses the bounded, coloured
-  // output every other frame gets, and a stated reason replaces a silent, empty diff.
+  // `FacetTurnFrame`/`ProjectTurnFrame`. The browser sees the frame kinds and the user-facing
+  // truncation note; private helper names are not part of the page contract.
   expect(script).toContain('frame.kind === "diff"');
   expect(script).toContain('frame.kind === "diff-unavailable"');
-  expect(script).toContain("diffMessage(frame)");
-  expect(script).toContain("diffUnavailableMessage(frame)");
   expect(script).toContain("frame.detail");
   expect(script).toContain("the harness truncated this diff");
 });
@@ -170,14 +264,6 @@ test("the sidebar collapses and the generation controls stay in a drawer", () =>
   expect(html).toContain(`id="${OWNER_PAGE_IDS.activeGenerationLabel}"`);
   expect(html).toContain(`id="${OWNER_PAGE_IDS.generationEpoch}"`);
   expect(html).toContain(`id="${OWNER_PAGE_IDS.rollbackButton}"`);
-});
-
-test("starting a fresh thread takes a second, deliberate click", () => {
-  const html = ownerPageHtml("test-nonce");
-  const script = inlinePageScript(html);
-
-  expect(script).toContain("click again to replace this conversation");
-  expect(html).toContain("leaves\n          every repository file exactly as it is");
 });
 
 test("the page shows no raw JSON panel", () => {

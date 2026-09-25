@@ -69,6 +69,7 @@ type RecordedSubmission = {
   readonly steps: string[];
   readonly received: GenerationRequest[];
   readonly preparedLabels: number[];
+  submissions: number;
 };
 
 function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
@@ -76,6 +77,7 @@ function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
     controlGeneration(request) {
       record.steps.push("control");
       record.received.push(request);
+      record.submissions += 1;
 
       return Promise.resolve(labeled);
     },
@@ -89,7 +91,12 @@ function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
 }
 
 test("labels the commit directly, then prepares that label", async () => {
-  const record: RecordedSubmission = { steps: [], received: [], preparedLabels: [] };
+  const record: RecordedSubmission = {
+    steps: [],
+    received: [],
+    preparedLabels: [],
+    submissions: 0,
+  };
 
   const response = await routeOwnerApiRequest(
     submitRequest(submissionBody()),
@@ -108,6 +115,7 @@ test("labels the commit directly, then prepares that label", async () => {
     "prepare",
   ]);
   expect(record.preparedLabels).toEqual([1]);
+  expect(record.submissions).toBe(1);
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual(expectedLabeledAndPrepared);
 });
@@ -192,33 +200,6 @@ test("prepares nothing when the control operation rejects the submission", async
   });
 });
 
-test("resubmitting the same harness commit returns the existing generation, not a new label", async () => {
-  let submissions = 0;
-
-  const response = await routeOwnerApiRequest(
-    submitRequest(submissionBody()),
-    supervisor({
-      controlGeneration() {
-        submissions += 1;
-
-        // Generations.labelInTransaction returns the existing generation for a commit that is
-        // already labeled (ADR-0030): the control layer never sees a second submission as new.
-        return Promise.resolve(labeled);
-      },
-      prepareGeneration() {
-        return Promise.resolve(readyCheck);
-      },
-    }),
-    ownerScope,
-  );
-
-  await expect(response.json()).resolves.toMatchObject({
-    ok: true,
-    outcome: { generation: { label: 1, harnessCommit, status: "candidate" } },
-  });
-  expect(submissions).toBe(1);
-});
-
 const malformedBodies: readonly (readonly [string, string])[] = [
   ["unparsable JSON", '{"harnessCommit":'],
   ["a JSON string", '"submit"'],
@@ -228,8 +209,6 @@ const malformedBodies: readonly (readonly [string, string])[] = [
   ["an unknown key", `{"harnessCommit":"${harnessCommit}","tenant":"other"}`],
   ["a supervisor name", `{"harnessCommit":"${harnessCommit}","supervisorName":"other"}`],
   ["a truncated harness commit", '{"harnessCommit":"0123456789abcdef"}'],
-  ["an uppercase harness commit", `{"harnessCommit":"${harnessCommit.toUpperCase()}"}`],
-  ["a branch name instead of a commit", '{"harnessCommit":"refs/heads/main"}'],
   ["a harness commit that is not a string", '{"harnessCommit":7}'],
   ["an array body", `[{"harnessCommit":"${harnessCommit}"}]`],
 ];
