@@ -1,10 +1,11 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { reset } from "cloudflare:test";
+import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { Supervisor } from "../../../src/supervisor/supervisor.js";
+import { ProjectThreads } from "../../../src/supervisor/threads/index.js";
+import { sampleSelectableCatalog } from "../../project-fixtures.js";
 import { connectedSupervisor as supervisor } from "../helpers.js";
-import { FakeWorkspace } from "./fake-workspace.js";
 import { THREAD_MESSAGE_SAMPLES } from "./message-samples.js";
 import { abandonProjectTurn, finishProjectTurn, startProjectTurn } from "./turn-slot.js";
 
@@ -18,25 +19,6 @@ const savedConversation = [
   THREAD_MESSAGE_SAMPLES.toolResult,
   THREAD_MESSAGE_SAMPLES.compactionSummary,
 ];
-
-/**
- * A project workspace holding what a turn wrote into it.
- *
- * The workspace is a fake because a Computer container cannot run under `workerd`, but the thing
- * this test holds is not the container: it is that starting a fresh thread reaches nothing but
- * thread storage. A fake records every call, so "the files survived" is checked as "the reset made
- * no workspace call at all" rather than as "no call happened to break anything".
- */
-async function workspaceWithTurnOutput(): Promise<FakeWorkspace> {
-  const workspace = new FakeWorkspace({ files: { "/workspace/notes.md": "written before" } });
-  await workspace.project().writeFile("/workspace/plan.md", "the agent wrote this during a turn");
-
-  return workspace;
-}
-
-function sortedFiles(workspace: FakeWorkspace): readonly (readonly [string, string])[] {
-  return [...workspace.files.entries()].toSorted(([left], [right]) => left.localeCompare(right));
-}
 
 /** Admit a turn and keep the lease it returns, which is the only key its completion accepts. */
 async function admit(
@@ -65,24 +47,46 @@ async function threadWithConversation(
   }
 }
 
-test("starting a fresh thread removes the conversation and leaves the workspace files alone", async () => {
+test("starting a fresh thread removes the conversation without calling workspace reset", async () => {
   const control = await supervisor("fresh-thread");
-  const workspace = await workspaceWithTurnOutput();
   await threadWithConversation(control, "sample-project-one");
-  const filesBefore = sortedFiles(workspace);
-  const callsBefore = workspace.requests.length;
+  const workspaceCalls: string[] = [];
 
-  const fresh = await control.startFreshProjectThread("sample-project-one");
-  const after = await control.getProjectThread("sample-project-one");
+  const fresh = await runInDurableObject(control, (_instance, state) => {
+    const resetWorkspaceCall = () => {
+      workspaceCalls.push("reset");
 
-  // The project's files are exactly what the turn left behind, and the reset asked the workspace
-  // for nothing: a fresh thread replaces the conversation, not the machine it ran on (ADR-0038).
-  expect(sortedFiles(workspace)).toEqual(filesBefore);
-  expect(workspace.requests.length, "a fresh thread must not call the workspace").toBe(callsBefore);
+      return Promise.resolve({ ok: true, reset: "workspace" } as const);
+    };
 
-  // The conversation is gone. A reset that wrote nothing would pass the two assertions above.
-  // The revision advances past the replaced conversation rather than counting turns again from
-  // zero, which is what stops a caller holding the old number from writing into the replacement.
+    const getByName = () => {
+      workspaceCalls.push("getByName");
+
+      return { reset: resetWorkspaceCall };
+    };
+
+    // SAFETY: this test invokes only `startFreshProjectThread`, which reads these three members; the fake environment records only the reset calls this method could make.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const subject = Object.assign(Object.create(Supervisor.prototype), {
+      env: { WORKSPACE_HOST: { getByName } },
+      workspaceName: "tenant-workspace",
+      connections: {
+        catalog: () => sampleSelectableCatalog,
+        resetWorkspace: () => workspaceCalls.push("connections-reset"),
+      },
+      threads: new ProjectThreads(state.storage, () => sampleSelectableCatalog),
+    }) as Supervisor;
+
+    return subject.startFreshProjectThread("sample-project-one");
+  });
+
+  // `startFreshProjectThread` deliberately does not await workspace work. Let a queued reset run
+  // before checking the recording stub, so this test observes the fire-and-forget mutation too.
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+
+  expect(workspaceCalls, "a fresh thread must not reset the workspace").toEqual([]);
   expect(fresh).toEqual({
     ok: true,
     thread: {
@@ -94,7 +98,7 @@ test("starting a fresh thread removes the conversation and leaves the workspace 
       turnDeadlineAt: undefined,
     },
   });
-  expect(after).toEqual(fresh);
+  expect(await control.getProjectThread("sample-project-one")).toEqual(fresh);
 });
 
 test("a fresh thread frees the turn slot the replaced conversation held", async () => {
