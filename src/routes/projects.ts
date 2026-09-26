@@ -4,6 +4,7 @@ import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { routePattern } from "./route-pattern.js";
 import type {
   ConnectRepositoryResult,
+  DisconnectRepositoryResult,
   GitHubAuthorizationOutcome,
   GitHubAuthorizationProblem,
   GitHubConnectionStatus,
@@ -33,6 +34,7 @@ export type ProjectApiSupervisor = Readonly<{
   getGitHubConnection: () => Promise<GitHubConnectionStatus>;
   startGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
+  disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
 }>;
 
 /**
@@ -72,6 +74,47 @@ const CONNECT_STATUS = {
   "tooling-missing": 503,
   "provisioning-failed": 503,
 } as const satisfies Record<string, number>;
+
+const DISCONNECT_STATUS = {
+  "invalid-project-id": 400,
+  "unknown-project-id": 404,
+  "harness-project": 400,
+  "turn-active": 409,
+} as const;
+
+function disconnectProjectId(pathname: string): string | undefined {
+  const encoded = /^\/api\/projects\/([^/]+)\/disconnect$/u.exec(pathname)?.[1];
+
+  if (encoded === undefined) return undefined;
+
+  try {
+    const projectId = decodeURIComponent(encoded);
+
+    return projectId.length === 0 ? undefined : projectId;
+  } catch {
+    return undefined;
+  }
+}
+
+async function disconnectResponse(
+  projectId: string,
+  supervisor: ProjectApiSupervisor,
+): Promise<Response> {
+  try {
+    const result = await supervisor.disconnectProject(projectId);
+
+    return result.ok
+      ? Response.json(result)
+      : Response.json(
+          { ok: false, problem: result.problem },
+          { status: DISCONNECT_STATUS[result.problem.code] },
+        );
+  } catch (cause) {
+    logRedactedCause("routes.projects.disconnect: internal-error", cause);
+
+    return jsonError(500, "internal-error");
+  }
+}
 
 const AUTHORIZATION_STATUS = {
   "not-configured": 503,
@@ -199,10 +242,13 @@ export function routeProjectApiRequest(
     return connectionResponse(supervisor);
   }
 
+  const disconnectedProjectId = disconnectProjectId(pathname);
+
   const mutation =
     pathname === "/api/projects/connect" ||
     pathname === "/api/github/authorization" ||
-    pathname === "/api/github/authorization/complete";
+    pathname === "/api/github/authorization/complete" ||
+    disconnectedProjectId !== undefined;
 
   if (!isPost || !mutation) {
     return undefined;
@@ -214,6 +260,10 @@ export function routeProjectApiRequest(
 
   if (pathname === "/api/projects/connect") {
     return connectResponse(request, supervisor);
+  }
+
+  if (disconnectedProjectId !== undefined) {
+    return disconnectResponse(disconnectedProjectId, supervisor);
   }
 
   return authorizationResponse(() =>

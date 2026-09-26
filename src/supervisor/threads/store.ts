@@ -1,10 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
+// oxlint-disable max-lines -- Thread storage keeps its transaction shells together.
 import type { AgentMessage } from "@cf-stumble/pi";
 import {
   assertNever,
   decideAbandonTurn,
   decideFinishTurn,
+  decideRemoveThread,
   decideStartTurn,
   type TurnLeaseClaim,
 } from "./decisions.js";
@@ -27,6 +29,15 @@ export type ThreadLease = Readonly<{
 export type ThreadLeaseResult =
   | Readonly<{ ok: true; lease: ThreadLease }>
   | Readonly<{ ok: false; problem: ThreadProblem }>;
+
+export type ThreadRemovalResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: false;
+      problem:
+        | ThreadProblem
+        | Readonly<{ code: "turn-active"; projectId: SelectableProject["id"]; deadlineAt: number }>;
+    }>;
 
 /**
  * The one thread each selectable project has, and the lease that decides who may write to it.
@@ -235,6 +246,23 @@ export class ThreadStore {
         default:
           return assertNever(decision);
       }
+    });
+  }
+
+  /** Delete the project's thread after confirming that no live turn owns it. */
+  remove(project: SelectableProject, now: number): ThreadRemovalResult {
+    return this.storage.transactionSync(() => {
+      const current = this.readThread(project);
+
+      if (!current.ok) return current;
+
+      const decision = decideRemoveThread(project.id, current.thread, now);
+
+      if (decision.kind === "rejected") return { ok: false, problem: decision.problem };
+
+      this.sql.exec(`DELETE FROM project_threads WHERE project_id = ?`, project.id);
+
+      return { ok: true };
     });
   }
 

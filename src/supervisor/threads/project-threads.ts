@@ -2,7 +2,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { parseAgentMessages } from "./messages.js";
-import { ThreadStore, type ThreadLeaseResult } from "./store.js";
+import { ThreadStore, type ThreadLeaseResult, type ThreadRemovalResult } from "./store.js";
 import {
   serializedThread,
   type ProjectThreadResult,
@@ -30,6 +30,16 @@ type ResolvedProject =
   | Readonly<{
       ok: false;
       problem: Readonly<{ code: "invalid-project-id" | "unknown-project-id" }>;
+    }>;
+
+export type DisconnectProjectResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: false;
+      problem: Readonly<{
+        code: "invalid-project-id" | "unknown-project-id" | "harness-project" | "turn-active";
+        deadlineAt?: number;
+      }>;
     }>;
 
 /**
@@ -112,6 +122,28 @@ export class ProjectThreads {
     const resolved = this.resolve(projectId);
 
     return resolved.ok ? serialized(this.store.abandonTurn(resolved.project, leaseId)) : resolved;
+  }
+
+  disconnectProject(projectId: unknown, now: number): DisconnectProjectResult {
+    const resolved = this.resolve(projectId);
+
+    if (!resolved.ok) return resolved;
+
+    if (resolved.project.kind === "harness") {
+      return { ok: false, problem: { code: "harness-project" } };
+    }
+
+    const removed: ThreadRemovalResult = this.store.remove(resolved.project, now);
+
+    if (!removed.ok) {
+      if (removed.problem.code === "turn-active") {
+        return { ok: false, problem: removed.problem };
+      }
+
+      return { ok: false, problem: { code: "unknown-project-id" } };
+    }
+
+    return { ok: true };
   }
 
   private resolve(projectId: unknown): ResolvedProject {

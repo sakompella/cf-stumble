@@ -1,6 +1,7 @@
 import {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
+  executeProjectRemovalRequest,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -122,6 +123,15 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       operations: this,
       request,
     });
+  }
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
+  removeProject(request: unknown): Promise<WorkspaceResult> {
+    if (this.unavailable) {
+      return Promise.reject(new Error("fake workspace host is unavailable"));
+    }
+
+    return executeProjectRemovalRequest({ operations: this, request });
   }
 
   ensureManagedInstructions(): Promise<WorkspaceResult> {

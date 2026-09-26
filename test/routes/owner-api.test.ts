@@ -141,6 +141,18 @@ test("resets the workspace and reports what it reset", async () => {
   await expect(response.json()).resolves.toEqual({ ok: true, reset: "workspace" });
 });
 
+test("an unauthenticated project disconnect cannot reach the owner API", async () => {
+  // oxlint-disable-next-line typescript/no-deprecated
+  const response = await SELF.fetch(
+    new Request("https://cf-stumble.test/api/projects/sample-project-one/disconnect", {
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(401);
+  expect(await response.text()).toBe("Unauthorized");
+});
+
 test("an unauthenticated workspace reset cannot reach the owner API", async () => {
   // oxlint-disable-next-line typescript/no-deprecated
   const response = await SELF.fetch(

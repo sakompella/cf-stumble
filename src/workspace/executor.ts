@@ -2,6 +2,7 @@ import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js"
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
+import { parseProjectRemovalRequest, planProjectRemovalRequest } from "./project-removal.js";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
@@ -183,6 +184,30 @@ export async function executeProjectProvisionRequest(
       `workspace.provision-project.${parsed.step}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
       cause,
     );
+
+    return unavailable();
+  }
+}
+
+/** The removal shell accepts only a parsed project id and derives every path server-side. */
+export async function executeProjectRemovalRequest(
+  input: Readonly<{
+    operations: WorkspaceOperations;
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public removal request is parsed at this boundary.
+    request: unknown;
+  }>,
+): Promise<WorkspaceResult> {
+  const parsed = parseProjectRemovalRequest(input.request);
+
+  if ("ok" in parsed) return parsed;
+
+  try {
+    const plan = planProjectRemovalRequest(parsed);
+    const output = await runLoggedCommand(input.operations, "project-removal", plan);
+
+    return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } };
+  } catch (cause) {
+    logRedactedCause("workspace.project-removal: workspace-unavailable", cause);
 
     return unavailable();
   }

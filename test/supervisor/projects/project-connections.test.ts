@@ -5,6 +5,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import { capturedEvents, named } from "../../log-capture.js";
 import { GitHubConnection, ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
@@ -351,6 +352,51 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
     subject.workspace.commands.filter((command) => command.includes("https://github.com/-/")),
     "a URL that derives no project id is never handed to the workspace",
   ).toEqual([]);
+});
+
+test("disconnects a project row and removes its clone through the narrow workspace step", async () => {
+  const subject = tenant("disconnect-project", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+
+  const disconnected = await subject.connections((connections) =>
+    connections.disconnect("sample-repo-1"),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(disconnected).toEqual({
+    ok: true,
+    projectId: "sample-repo-1",
+    workspace: "removed",
+  });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  const removal = subject.workspace.commands.find((command) => command.includes("rm -rf"));
+  expect(removal).toContain("/workspace/projects/sample-repo-1");
+  expect(removal).toContain("/workspace/projects/sample-repo-1.provisioning");
+  expect(removal).not.toContain("/workspace/harness");
+});
+
+test("removes the project row when workspace cleanup fails", async () => {
+  const events = capturedEvents();
+  const subject = tenant("disconnect-workspace-fails", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  subject.workspace.unavailable = true;
+
+  const disconnected = await subject.connections((connections) =>
+    connections.disconnect("sample-repo-1"),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(disconnected).toEqual({
+    ok: true,
+    projectId: "sample-repo-1",
+    workspace: "failed",
+  });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(named(events(), "project.disconnected")).toContainEqual(
+    expect.objectContaining({ project: "sample-repo-1", workspace: "failed" }),
+  );
 });
 
 test("provisions again every time a project is used", async () => {

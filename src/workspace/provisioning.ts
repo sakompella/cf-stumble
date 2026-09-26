@@ -23,6 +23,7 @@ import type { HarnessCommit } from "../harness-commit.js";
 import type { HarnessBuildRequest } from "../harness-build.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
+import type { ProjectRemovalWorkspaceHost } from "./project-removal.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
@@ -43,6 +44,10 @@ export type HarnessProvisionWorkspaceHost = Readonly<{
  */
 export type ProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): ProvisionWorkspaceHost;
+}>;
+
+export type ProjectRemovalWorkspaceNamespace = Readonly<{
+  getByName(name: string): ProjectRemovalWorkspaceHost;
 }>;
 
 export type HarnessProvisionWorkspaceNamespace = Readonly<{

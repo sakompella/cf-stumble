@@ -29,13 +29,15 @@ import {
   clearWorkspaceProvision,
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
+  PROVISION_RPC_TIMEOUT_MS,
   type CredentialWorkspaceNamespace,
   type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
+  type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 // oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
-import { logEvent, logRedactedCause } from "../../diagnostics.js";
+import { logEvent, logRedactedCause, timedWorkspaceRpc } from "../../diagnostics.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
@@ -111,6 +113,16 @@ async function repositorySizeAllowed(
   return reason === undefined || reason === "within-limits";
 }
 
+export type DisconnectRepositoryResult =
+  | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
+  | Readonly<{
+      ok: false;
+      problem: Readonly<{
+        code: "invalid-project-id" | "unknown-project-id" | "harness-project" | "turn-active";
+        deadlineAt?: number;
+      }>;
+    }>;
+
 export type ConnectRepositoryProblem = Readonly<{
   code:
     | "invalid-repository-url"
@@ -151,7 +163,8 @@ export interface ProjectConnectionsInput {
   readonly workspaceName: string;
   readonly namespace: CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace;
+    HarnessProvisionWorkspaceNamespace &
+    ProjectRemovalWorkspaceNamespace;
   readonly environment: GitHubConnectionEnvironment;
 }
 
@@ -161,7 +174,8 @@ export class ProjectConnections {
   private readonly workspaceName: string;
   private readonly namespace: CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace;
+    HarnessProvisionWorkspaceNamespace &
+    ProjectRemovalWorkspaceNamespace;
   private readonly repositorySizeToken: GitHubToken | undefined;
   private readonly githubFetcher: GitHubFetch;
 
@@ -303,6 +317,55 @@ export class ProjectConnections {
     }
 
     return this.store(canonical, displayName, github, now);
+  }
+
+  /** Remove a connected project, then best-effort remove its durable workspace directories. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
+  async disconnect(projectId: unknown): Promise<DisconnectRepositoryResult> {
+    const resolved = resolveProject(projectId, this.projects.catalog());
+
+    if (!resolved.ok) {
+      return { ok: false, problem: { code: resolved.reason } };
+    }
+
+    this.projects.disconnect(resolved.project.id);
+
+    let workspace: "removed" | "failed" = "removed";
+
+    try {
+      const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
+
+      const result = await timedWorkspaceRpc(
+        { method: "project", step: "remove" },
+        () =>
+          removalNamespace.getByName(this.workspaceName).removeProject({
+            kind: "remove-project",
+            projectId: resolved.project.id,
+          }),
+        (answered) => {
+          if (answered.ok && answered.result.kind === "command" && answered.result.exitCode === 0) {
+            return { outcome: "removed" };
+          }
+
+          return { outcome: "failed", level: "error" };
+        },
+        PROVISION_RPC_TIMEOUT_MS,
+      );
+
+      if (!result.ok || result.result.kind !== "command" || result.result.exitCode !== 0) {
+        workspace = "failed";
+      }
+    } catch (cause) {
+      workspace = "failed";
+      logRedactedCause(`project-disconnect.${resolved.project.id}: workspace-unavailable`, cause);
+    }
+
+    logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
+      project: resolved.project.id,
+      workspace,
+    });
+
+    return { ok: true, projectId: resolved.project.id, workspace };
   }
 
   /** Forget workspace-owned transient state after the owner resets the workspace. */

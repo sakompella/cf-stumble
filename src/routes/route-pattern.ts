@@ -21,7 +21,7 @@ const FIXED_ROUTES: ReadonlySet<string> = new Set([
   "/api/workspace/reset",
 ]);
 
-const PROJECT_ROUTE = /^\/api\/projects\/[^/]+(\/thread|\/thread\/fresh|\/turn)$/u;
+const PROJECT_ROUTE = /^\/api\/projects\/[^/]+(\/thread|\/thread\/fresh|\/turn|\/disconnect)$/u;
 
 export function routePattern(pathname: string): string {
   if (FIXED_ROUTES.has(pathname)) return pathname;

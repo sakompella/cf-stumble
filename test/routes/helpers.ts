@@ -56,6 +56,9 @@ export function ownerApiSupervisor(
     completeGitHubAuthorization() {
       return Promise.reject(new Error("this test must not complete a GitHub authorization"));
     },
+    disconnectProject() {
+      return Promise.reject(new Error("this test must not disconnect a project"));
+    },
     resetWorkspace() {
       return Promise.resolve({ ok: true, reset: "workspace" });
     },
