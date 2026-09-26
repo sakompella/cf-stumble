@@ -67,7 +67,7 @@ function shellQuote(value: string): string {
 }
 
 export function processGroupCommand(command: string): string {
-  const body = `trap 'trap - TERM INT HUP; kill -TERM -- -$$' TERM INT HUP; /bin/sh -c ${shellQuote(command)}`;
+  const body = `trap 'trap - TERM INT HUP; kill -KILL -- -$$ 2>/dev/null || kill -KILL $$' TERM INT HUP; /bin/sh -c ${shellQuote(command)}`;
 
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }

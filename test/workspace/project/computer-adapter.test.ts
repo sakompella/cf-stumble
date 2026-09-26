@@ -8,7 +8,7 @@ test("wraps a command in a session leader that kills the whole process group", (
   const wrapped = processGroupCommand("sleep 1 && printf '%s' \"done\"");
 
   expect(wrapped).toContain("exec setsid /bin/sh -c");
-  expect(wrapped).toContain("kill -TERM -- -$$");
+  expect(wrapped).toContain("kill -KILL -- -$$");
   expect(wrapped).toContain("sleep 1 && printf");
 });
 
