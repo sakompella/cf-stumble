@@ -9,6 +9,7 @@ import {
   type TimedOutcome,
 } from "../diagnostics.js";
 import {
+  PROJECT_CLONE_SIZE_MARKER,
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
 } from "../project-provision.js";
@@ -138,6 +139,37 @@ function runProjectHostStep(
   );
 }
 
+function cloneSizeKb(result: WorkspaceResult): number | null {
+  if (!result.ok || result.result.kind !== "command") return null;
+
+  const marker = result.result.stdout
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith(PROJECT_CLONE_SIZE_MARKER));
+
+  if (marker === undefined) return null;
+
+  const size = Number(marker.slice(PROJECT_CLONE_SIZE_MARKER.length));
+
+  return Number.isSafeInteger(size) && size >= 0 ? size : null;
+}
+
+type CloneOutcome = "ok" | "failed" | "unavailable";
+
+function logClone(
+  projectId: ProjectId,
+  startedAt: number,
+  result: WorkspaceResult | undefined,
+  outcome: CloneOutcome,
+): void {
+  logEvent(outcome === "ok" ? "info" : "warn", "workspace.clone", {
+    project: projectId,
+    durationMs: Date.now() - startedAt,
+    sizeKb: result === undefined ? null : cloneSizeKb(result),
+    outcome,
+  });
+}
+
+// oxlint-disable-next-line max-lines-per-function -- The step validates the shared RPC result before advancing the plan.
 async function runProjectStep(
   host: ProvisionWorkspaceHost,
   project: Project,
@@ -155,16 +187,29 @@ async function runProjectStep(
   if (signal !== undefined && signal.aborted) return unavailable;
 
   let result: WorkspaceResult;
+  const startedAt = Date.now();
 
   try {
     result = await runProjectHostStep(host, project, step);
   } catch (error) {
+    if (step === "clone") logClone(projectId, startedAt, undefined, "unavailable");
     logRedactedCause(
       `project-provision.${step}: provision-workspace-unavailable (${projectId})`,
       error,
     );
 
     return unavailable;
+  }
+
+  if (step === "clone") {
+    const outcome: CloneOutcome =
+      !result.ok || result.result.kind !== "command"
+        ? "unavailable"
+        : result.result.exitCode === 0
+          ? "ok"
+          : "failed";
+
+    logClone(projectId, startedAt, result, outcome);
   }
 
   if (
