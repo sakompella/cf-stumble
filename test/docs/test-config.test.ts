@@ -41,18 +41,24 @@ function config(name: string): string {
   return withoutComments(found[1]);
 }
 
+type WranglerContainer = Readonly<{ instance_type?: unknown }>;
+
 type WranglerConfig = Readonly<{
   cache?: Readonly<{ enabled?: boolean }>;
+  containers?: readonly WranglerContainer[];
 }>;
 
 function isWranglerConfig(value: unknown): value is WranglerConfig {
   if (!isRecord(value)) return false;
 
   const cache = value.cache;
+  const containers = value.containers;
 
   return (
-    cache === undefined ||
-    (isRecord(cache) && (cache.enabled === undefined || typeof cache.enabled === "boolean"))
+    (cache === undefined ||
+      (isRecord(cache) && (cache.enabled === undefined || typeof cache.enabled === "boolean"))) &&
+    (containers === undefined ||
+      (Array.isArray(containers) && containers.every((container) => isRecord(container))))
   );
 }
 
@@ -81,4 +87,10 @@ test("the test Worker configuration differs from production only by name and the
 test("Workers Cache is explicitly disabled in both configurations", () => {
   expect(parsedConfig("wrangler.jsonc").cache?.enabled).toBe(false);
   expect(parsedConfig("wrangler.test.jsonc").cache?.enabled).toBe(false);
+});
+
+test("workspace containers use the checked workload size", () => {
+  for (const name of ["wrangler.jsonc", "wrangler.test.jsonc"]) {
+    expect(parsedConfig(name).containers?.[0]?.instance_type).toBe("standard-3");
+  }
 });
