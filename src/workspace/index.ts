@@ -5,6 +5,7 @@ export { type WorkspaceFailure, type WorkspacePlan, type WorkspaceResult } from 
 export {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
+  executeProjectRemovalRequest,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -48,6 +49,7 @@ export {
   provisionProjectWorkspace,
   waitForWorkspaceProvision,
   clearWorkspaceProvision,
+  PROVISION_RPC_TIMEOUT_MS,
   PROVISION_STALE_AFTER_MS,
   PROVISION_STALE_MARGIN_MS,
   type HarnessProvisionProblem,
@@ -61,6 +63,7 @@ export {
   type ProvisionProjectWorkspaceInput,
   type ProvisionWorkspaceHost,
   type ProvisionWorkspaceNamespace,
+  type ProjectRemovalWorkspaceNamespace,
 } from "./provisioning.js";
 
 export {
@@ -72,3 +75,11 @@ export {
 } from "./host.js";
 
 export * from "./project/index.js";
+
+export {
+  parseProjectRemovalRequest,
+  planProjectRemovalRequest,
+  type ParsedProjectRemovalRequest,
+  type ProjectRemovalRequest,
+  type ProjectRemovalWorkspaceHost,
+} from "./project-removal.js";

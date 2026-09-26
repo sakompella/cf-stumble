@@ -18,8 +18,10 @@ import {
   tenantWorkspaceName,
   type FacetTurnHandoff,
   type ConnectRepositoryResult,
+  type DisconnectRepositoryResult,
   type CredentialWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
+  type ProjectRemovalWorkspaceNamespace,
   type VerifiedAccessScope,
   type GitHubAuthorizationOutcome,
   type GitHubConnectionStatus,
@@ -72,6 +74,7 @@ type SupervisorEnv = {
     ProjectWorkspaceNamespace &
     CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
+    ProjectRemovalWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace &
     ResetWorkspaceNamespace;
   /** The GitHub OAuth app the device flow belongs to. Public configuration, not a secret. */
@@ -244,6 +247,19 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     now: number = Date.now(),
   ): Promise<ConnectRepositoryResult> {
     return this.connections.connect(repositoryUrl, displayName, now);
+  }
+
+  /** Disconnect a connected repository after its thread confirms no live turn owns it. */
+  disconnectProject(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
+    projectId: unknown,
+    now: number = Date.now(),
+  ): Promise<DisconnectRepositoryResult> {
+    const thread = this.threads.disconnectProject(projectId, now);
+
+    return thread.ok
+      ? this.connections.disconnect(projectId)
+      : Promise.resolve({ ok: false, problem: thread.problem });
   }
 
   /**

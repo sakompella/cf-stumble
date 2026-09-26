@@ -90,6 +90,27 @@ export type AbandonTurnDecision =
   | Readonly<{ kind: "rejected"; problem: ThreadProblem }>
   | Readonly<{ kind: "abandoned" }>;
 
+export type RemoveThreadDecision =
+  | Readonly<{
+      kind: "rejected";
+      problem: Readonly<{ code: "turn-active"; projectId: ProjectId; deadlineAt: number }>;
+    }>
+  | Readonly<{ kind: "removed" }>;
+
+/** Refuse deletion while a lease is live; an expired lease no longer protects the project. */
+export function decideRemoveThread(
+  projectId: ProjectId,
+  current: ProjectThread,
+  now: number,
+): RemoveThreadDecision {
+  return holdsTurn(current, now)
+    ? {
+        kind: "rejected",
+        problem: { code: "turn-active", projectId, deadlineAt: current.turnDeadlineAt ?? 0 },
+      }
+    : { kind: "removed" };
+}
+
 /**
  * Abandoning is releasing the slot a caller was admitted to, so it asks for the lease but not for
  * a live deadline: a turn that ran past its deadline and nobody took over may still clean up.

@@ -5,6 +5,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import { capturedEvents, named } from "../../log-capture.js";
 import { GitHubConnection, ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
@@ -115,6 +116,7 @@ test("refuses a repository that exceeds the durable workspace size budget before
   expect(subject.workspace.commands.filter((command) => command.includes("git clone"))).toEqual([]);
   const event = JSON.stringify(logged.mock.calls);
   expect(event).toContain("project.size-check");
+  expect(event).toContain("blobBytes");
   expect(event).toContain("sample-repo-1");
   expect(event).toContain("repository-too-large");
   expect(event).not.toContain(REPOSITORY);
@@ -125,7 +127,7 @@ test("allows a measured repository within both workspace limits", async () => {
     fallbackToken: FAKE_TOKEN,
     replies: [
       { size: 4_999_999, default_branch: "main" },
-      { truncated: false, tree: [{ type: "blob" }] },
+      { truncated: false, tree: [{ type: "blob", size: 100 }] },
     ],
   });
 
@@ -154,7 +156,7 @@ test("refuses a repository whose tree response is truncated", async () => {
     fallbackToken: FAKE_TOKEN,
     replies: [
       { size: 1, default_branch: "main" },
-      { truncated: true, tree: [{ type: "blob" }] },
+      { truncated: true, tree: [{ type: "blob", size: 100 }] },
     ],
   });
 
@@ -171,7 +173,7 @@ test("refuses a repository whose tree exceeds the file-count limit", async () =>
     fallbackToken: FAKE_TOKEN,
     replies: [
       { size: 1, default_branch: "main" },
-      { truncated: false, tree: Array.from({ length: 25_001 }, () => ({ type: "blob" })) },
+      { truncated: false, tree: Array.from({ length: 3_001 }, () => ({ type: "blob", size: 1 })) },
     ],
   });
 
@@ -181,6 +183,43 @@ test("refuses a repository whose tree exceeds the file-count limit", async () =>
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
   expect(subject.workspace.commands).toEqual([]);
+});
+
+test("refuses a repository whose working tree exceeds the byte limit", async () => {
+  const subject = tenant("repository-working-tree-bytes", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 1, default_branch: "main" },
+      { truncated: false, tree: [{ type: "blob", size: 150_000_001 }] },
+    ],
+  });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
+  expect(subject.workspace.commands).toEqual([]);
+});
+
+test("allows a repository exactly at the file and working-tree byte limits", async () => {
+  const subject = tenant("repository-size-boundaries", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 4_999_999, default_branch: "main" },
+      {
+        truncated: false,
+        tree: Array.from({ length: 3_000 }, (_, index) => ({
+          type: "blob",
+          size: index === 2_999 ? 150_000_000 - 2_999 : 1,
+        })),
+      },
+    ],
+  });
+
+  await expect(
+    subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW)),
+  ).resolves.toMatchObject({ ok: true });
 });
 
 test("connects a repository once the workspace credential works, and provisions it", async () => {
@@ -313,6 +352,51 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
     subject.workspace.commands.filter((command) => command.includes("https://github.com/-/")),
     "a URL that derives no project id is never handed to the workspace",
   ).toEqual([]);
+});
+
+test("disconnects a project row and removes its clone through the narrow workspace step", async () => {
+  const subject = tenant("disconnect-project", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+
+  const disconnected = await subject.connections((connections) =>
+    connections.disconnect("sample-repo-1"),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(disconnected).toEqual({
+    ok: true,
+    projectId: "sample-repo-1",
+    workspace: "removed",
+  });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  const removal = subject.workspace.commands.find((command) => command.includes("rm -rf"));
+  expect(removal).toContain("/workspace/projects/sample-repo-1");
+  expect(removal).toContain("/workspace/projects/sample-repo-1.provisioning");
+  expect(removal).not.toContain("/workspace/harness");
+});
+
+test("removes the project row when workspace cleanup fails", async () => {
+  const events = capturedEvents();
+  const subject = tenant("disconnect-workspace-fails", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  subject.workspace.unavailable = true;
+
+  const disconnected = await subject.connections((connections) =>
+    connections.disconnect("sample-repo-1"),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(disconnected).toEqual({
+    ok: true,
+    projectId: "sample-repo-1",
+    workspace: "failed",
+  });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(named(events(), "project.disconnected")).toContainEqual(
+    expect.objectContaining({ project: "sample-repo-1", workspace: "failed" }),
+  );
 });
 
 test("provisions again every time a project is used", async () => {

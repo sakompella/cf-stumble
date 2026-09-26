@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { reset } from "cloudflare:test";
+import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { AgentMessage } from "@cf-stumble/pi";
 import { parseThreadMessages } from "../../../src/supervisor/threads/index.js";
@@ -248,6 +248,61 @@ test("a thread survives a generation change and names no generation in its store
     "turnActive",
     "turnDeadlineAt",
   ]);
+});
+
+test("refuses disconnecting an unknown or harness project", async () => {
+  const control = await supervisor("thread-disconnect-refusals");
+
+  await expect(control.disconnectProject("project-nine", NOW)).resolves.toEqual({
+    ok: false,
+    problem: { code: "unknown-project-id" },
+  });
+  await expect(control.disconnectProject("harness", NOW)).resolves.toEqual({
+    ok: false,
+    problem: { code: "harness-project" },
+  });
+});
+
+test("refuses disconnecting a project with a live turn", async () => {
+  const control = await supervisor("thread-disconnect-active");
+  await startProjectTurn(control, "sample-project-one", 0, NOW, LEASE_MS);
+
+  await expect(control.disconnectProject("sample-project-one", NOW)).resolves.toMatchObject({
+    ok: false,
+    problem: { code: "turn-active", deadlineAt: NOW + LEASE_MS },
+  });
+  await expect(control.getProjectThread("sample-project-one")).resolves.toMatchObject({
+    ok: true,
+    thread: { turnActive: true },
+  });
+});
+
+test("allows disconnect after a turn lease expires", async () => {
+  const control = await supervisor("thread-disconnect-expired");
+  await startProjectTurn(control, "sample-project-one", 0, NOW, LEASE_MS);
+
+  await expect(
+    control.disconnectProject("sample-project-one", NOW + LEASE_MS),
+  ).resolves.toMatchObject({
+    ok: true,
+  });
+  await expect(control.getProjectThread("sample-project-one")).resolves.toEqual({
+    ok: false,
+    problem: { code: "unknown-project-id" },
+  });
+
+  const threadRows = await runInDurableObject(
+    control,
+    (_instance, state) =>
+      state.storage.sql
+        .exec<{ readonly count: number }>(
+          "SELECT COUNT(*) AS count FROM project_threads WHERE project_id = ?",
+          "sample-project-one",
+        )
+        .toArray()[0]?.count,
+  );
+
+  expect(threadRows).toBe(0);
 });
 
 test("a turn whose deadline has passed is taken over by the next start", async () => {

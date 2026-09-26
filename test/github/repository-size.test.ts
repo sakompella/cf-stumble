@@ -22,12 +22,12 @@ test("looks up the GitHub repository size with the configured credential", async
         ? Response.json({ size: 1234, default_branch: "main" })
         : Response.json({
             truncated: false,
-            tree: [{ type: "blob" }, { type: "tree" }, { type: "blob" }],
+            tree: [{ type: "blob", size: 10 }, { type: "tree" }, { type: "blob", size: 20 }],
           }),
     );
   });
 
-  expect(size).toEqual({ sizeKb: 1234, blobCount: 2, truncated: false });
+  expect(size).toEqual({ sizeKb: 1234, blobCount: 2, blobBytes: 30, truncated: false });
   expect(requested.map(({ url }) => url)).toEqual([
     "https://api.github.com/repos/owner/repo",
     "https://api.github.com/repos/owner/repo/git/trees/main?recursive=1",
@@ -55,7 +55,7 @@ test("allows a public repository lookup without a configured credential", async 
     );
   });
 
-  expect(size).toEqual({ sizeKb: 7, blobCount: 0, truncated: false });
+  expect(size).toEqual({ sizeKb: 7, blobCount: 0, blobBytes: 0, truncated: false });
   expect(new Headers(requestedInit?.headers).has("authorization")).toBe(false);
 });
 
@@ -85,5 +85,17 @@ test("skips a malformed tree response", async () => {
           : Response.json({ truncated: true }),
       );
     }),
+  ).resolves.toBeUndefined();
+});
+
+test("skips a tree with a malformed blob size", async () => {
+  await expect(
+    lookupRepositorySize(repository, undefined, (url) =>
+      Promise.resolve(
+        url.includes("/git/trees/")
+          ? Response.json({ truncated: false, tree: [{ type: "blob" }] })
+          : Response.json({ size: 1, default_branch: "main" }),
+      ),
+    ),
   ).resolves.toBeUndefined();
 });

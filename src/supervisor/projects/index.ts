@@ -8,6 +8,7 @@ export type { VerifiedAccessScope } from "../../access/index.js";
 export type {
   CredentialWorkspaceNamespace,
   ProvisionWorkspaceNamespace,
+  ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
 
 export {
@@ -29,6 +30,7 @@ export {
   ProjectConnections,
   type ConnectRepositoryProblem,
   type ConnectRepositoryResult,
+  type DisconnectRepositoryResult,
   type ProjectListView,
   type ProjectUseProblem,
   type ProjectUseResult,

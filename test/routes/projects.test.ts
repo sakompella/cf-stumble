@@ -243,6 +243,62 @@ test.each([
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code: problem } });
 });
 
+test("disconnects the project id in the path", async () => {
+  let disconnected: unknown;
+
+  const response = await routeOwnerApiRequest(
+    post(`/api/projects/${connectedProject.id}/disconnect`, {}),
+    supervisor({
+      disconnectProject: (projectId) => {
+        disconnected = projectId;
+
+        return Promise.resolve({
+          ok: true,
+          projectId: connectedProject.id,
+          workspace: "removed",
+        });
+      },
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(200);
+  expect(disconnected).toBe(connectedProject.id);
+  await expect(response.json()).resolves.toEqual({
+    ok: true,
+    projectId: connectedProject.id,
+    workspace: "removed",
+  });
+});
+
+test.each([
+  ["invalid-project-id", 400],
+  ["unknown-project-id", 404],
+  ["harness-project", 400],
+  ["turn-active", 409],
+] as const)("answers a %s disconnect refusal with %i", async (code, status) => {
+  const response = await routeOwnerApiRequest(
+    post(`/api/projects/${connectedProject.id}/disconnect`, {}),
+    supervisor({
+      disconnectProject: () => Promise.resolve({ ok: false, problem: { code } }),
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(status);
+  await expect(response.json()).resolves.toEqual({ ok: false, problem: { code } });
+});
+
+test("keeps disconnect POST-only", async () => {
+  const response = await routeOwnerApiRequest(
+    get(`/api/projects/${connectedProject.id}/disconnect`),
+    supervisor(),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(404);
+});
+
 test("keeps the project routes to their methods", async () => {
   const postList = await routeOwnerApiRequest(post("/api/projects", {}), supervisor(), ownerScope);
 

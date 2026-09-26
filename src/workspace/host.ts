@@ -1,6 +1,8 @@
 // oxlint-disable import/max-dependencies -- Workspace Host owns the platform and all workspace surfaces.
 /// <reference types="@cloudflare/workers-types" />
 
+// oxlint-disable max-lines -- The Workspace Host class exposes one narrow method per workspace capability.
+
 import {
   Workspace,
   type DurableObjectStorageLike,
@@ -20,7 +22,11 @@ import { logEvent, logRedactedCause, timed } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
-import { executeHarnessBuildRequest, executeProjectProvisionRequest } from "./executor.js";
+import {
+  executeHarnessBuildRequest,
+  executeProjectProvisionRequest,
+  executeProjectRemovalRequest,
+} from "./executor.js";
 import {
   executeGitHubCredentialRequest,
   type GitHubCredentialResult,
@@ -275,6 +281,15 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
     return executeProjectProvisionRequest({
+      operations: new ComputerWorkspaceOperations(this.#workspace),
+      request,
+    });
+  }
+
+  /** Remove one connected project's clone and provisioning remnants, never the harness. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The RPC parser validates this boundary.
+  removeProject(request: unknown): Promise<WorkspaceResult> {
+    return executeProjectRemovalRequest({
       operations: new ComputerWorkspaceOperations(this.#workspace),
       request,
     });

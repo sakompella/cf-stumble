@@ -70,6 +70,7 @@ test("exposes only the Workspace Host RPC methods", () => {
     "fetch",
     "project",
     "provision",
+    "removeProject",
     "reset",
   ]);
 });

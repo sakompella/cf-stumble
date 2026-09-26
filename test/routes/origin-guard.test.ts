@@ -25,7 +25,8 @@ type Mutation = Readonly<{
     | "connect"
     | "authorize"
     | "complete"
-    | "reset";
+    | "reset"
+    | "disconnect";
 }>;
 
 const mutations: readonly Mutation[] = [
@@ -82,6 +83,12 @@ const mutations: readonly Mutation[] = [
     path: "/api/workspace/reset",
     body: {},
     operation: "reset",
+  },
+  {
+    name: "project disconnect",
+    path: `/api/projects/${sampleProjectOne.id}/disconnect`,
+    body: {},
+    operation: "disconnect",
   },
 ];
 
@@ -229,6 +236,18 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
           calls.value += 1;
 
           return Promise.resolve({ ok: true, reset: "workspace" });
+        },
+      });
+    case "disconnect":
+      return ownerApiSupervisor({
+        disconnectProject: () => {
+          calls.value += 1;
+
+          return Promise.resolve({
+            ok: true,
+            projectId: sampleProjectOne.id,
+            workspace: "removed",
+          });
         },
       });
     default: {

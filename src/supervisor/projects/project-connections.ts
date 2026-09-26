@@ -29,13 +29,15 @@ import {
   clearWorkspaceProvision,
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
+  PROVISION_RPC_TIMEOUT_MS,
   type CredentialWorkspaceNamespace,
   type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
+  type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 // oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
-import { logEvent, logRedactedCause } from "../../diagnostics.js";
+import { logEvent, logRedactedCause, timedWorkspaceRpc } from "../../diagnostics.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
@@ -52,10 +54,21 @@ export type ProjectListView = Readonly<{
   github: GitHubConnectionStatus;
 }>;
 
-/** A full-tree file ceiling protects the per-file durable workspace index and sync walk. */
-export const MAX_REPOSITORY_BLOB_COUNT = 25_000;
+/**
+ * A full-tree file ceiling protects the per-file durable workspace index and sync walk. Hono's
+ * measured 1,800-file tree stayed healthy, while workers-sdk wedged at 5,649 files, so 3,000
+ * leaves useful margin above the largest healthy repository and refuses the observed failure class.
+ */
+export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
 
-/** A size ceiling leaves room on the 16 GB standard-3 disk for the harness and other projects. */
+/**
+ * The working tree byte ceiling keeps durable sync below the observed wedge. Hono's working tree
+ * was about 6 MB and workers-sdk's was about 48 MB locally (162 MB of Git data); 150 MB leaves
+ * margin for a larger healthy tree without admitting a repository that can overwhelm the workspace.
+ */
+export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
+
+/** The history-size ceiling remains separate from the current working-tree byte ceiling. */
 export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
 
 /** A truncated tree cannot prove the file count, so it is not safe to connect. */
@@ -67,6 +80,8 @@ function repositorySizeReason(measured: RepositorySizeLookup | undefined): strin
   if (REPOSITORY_TREE_MUST_BE_COMPLETE && measured.truncated) return "tree-truncated";
 
   if (measured.blobCount > MAX_REPOSITORY_BLOB_COUNT) return "too-many-files";
+
+  if (measured.blobBytes > MAX_REPOSITORY_BLOB_BYTES) return "working-tree-too-large";
 
   if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
 
@@ -89,6 +104,7 @@ async function repositorySizeAllowed(
     project,
     sizeKb: measured?.sizeKb ?? null,
     blobCount: measured?.blobCount ?? null,
+    blobBytes: measured?.blobBytes ?? null,
     truncated: measured?.truncated ?? null,
     outcome,
     reason: reason ?? "lookup-failed",
@@ -96,6 +112,16 @@ async function repositorySizeAllowed(
 
   return reason === undefined || reason === "within-limits";
 }
+
+export type DisconnectRepositoryResult =
+  | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
+  | Readonly<{
+      ok: false;
+      problem: Readonly<{
+        code: "invalid-project-id" | "unknown-project-id" | "harness-project" | "turn-active";
+        deadlineAt?: number;
+      }>;
+    }>;
 
 export type ConnectRepositoryProblem = Readonly<{
   code:
@@ -137,7 +163,8 @@ export interface ProjectConnectionsInput {
   readonly workspaceName: string;
   readonly namespace: CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace;
+    HarnessProvisionWorkspaceNamespace &
+    ProjectRemovalWorkspaceNamespace;
   readonly environment: GitHubConnectionEnvironment;
 }
 
@@ -147,7 +174,8 @@ export class ProjectConnections {
   private readonly workspaceName: string;
   private readonly namespace: CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace;
+    HarnessProvisionWorkspaceNamespace &
+    ProjectRemovalWorkspaceNamespace;
   private readonly repositorySizeToken: GitHubToken | undefined;
   private readonly githubFetcher: GitHubFetch;
 
@@ -289,6 +317,55 @@ export class ProjectConnections {
     }
 
     return this.store(canonical, displayName, github, now);
+  }
+
+  /** Remove a connected project, then best-effort remove its durable workspace directories. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
+  async disconnect(projectId: unknown): Promise<DisconnectRepositoryResult> {
+    const resolved = resolveProject(projectId, this.projects.catalog());
+
+    if (!resolved.ok) {
+      return { ok: false, problem: { code: resolved.reason } };
+    }
+
+    this.projects.disconnect(resolved.project.id);
+
+    let workspace: "removed" | "failed" = "removed";
+
+    try {
+      const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
+
+      const result = await timedWorkspaceRpc(
+        { method: "project", step: "remove" },
+        () =>
+          removalNamespace.getByName(this.workspaceName).removeProject({
+            kind: "remove-project",
+            projectId: resolved.project.id,
+          }),
+        (answered) => {
+          if (answered.ok && answered.result.kind === "command" && answered.result.exitCode === 0) {
+            return { outcome: "removed" };
+          }
+
+          return { outcome: "failed", level: "error" };
+        },
+        PROVISION_RPC_TIMEOUT_MS,
+      );
+
+      if (!result.ok || result.result.kind !== "command" || result.result.exitCode !== 0) {
+        workspace = "failed";
+      }
+    } catch (cause) {
+      workspace = "failed";
+      logRedactedCause(`project-disconnect.${resolved.project.id}: workspace-unavailable`, cause);
+    }
+
+    logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
+      project: resolved.project.id,
+      workspace,
+    });
+
+    return { ok: true, projectId: resolved.project.id, workspace };
   }
 
   /** Forget workspace-owned transient state after the owner resets the workspace. */
