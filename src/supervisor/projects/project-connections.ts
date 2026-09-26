@@ -52,10 +52,21 @@ export type ProjectListView = Readonly<{
   github: GitHubConnectionStatus;
 }>;
 
-/** A full-tree file ceiling protects the per-file durable workspace index and sync walk. */
-export const MAX_REPOSITORY_BLOB_COUNT = 25_000;
+/**
+ * A full-tree file ceiling protects the per-file durable workspace index and sync walk. Hono's
+ * measured 1,800-file tree stayed healthy, while workers-sdk wedged at 5,649 files, so 3,000
+ * leaves useful margin above the largest healthy repository and refuses the observed failure class.
+ */
+export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
 
-/** A size ceiling leaves room on the 16 GB standard-3 disk for the harness and other projects. */
+/**
+ * The working tree byte ceiling keeps durable sync below the observed wedge. Hono's working tree
+ * was about 6 MB and workers-sdk's was about 48 MB locally (162 MB of Git data); 150 MB leaves
+ * margin for a larger healthy tree without admitting a repository that can overwhelm the workspace.
+ */
+export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
+
+/** The history-size ceiling remains separate from the current working-tree byte ceiling. */
 export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
 
 /** A truncated tree cannot prove the file count, so it is not safe to connect. */
@@ -67,6 +78,8 @@ function repositorySizeReason(measured: RepositorySizeLookup | undefined): strin
   if (REPOSITORY_TREE_MUST_BE_COMPLETE && measured.truncated) return "tree-truncated";
 
   if (measured.blobCount > MAX_REPOSITORY_BLOB_COUNT) return "too-many-files";
+
+  if (measured.blobBytes > MAX_REPOSITORY_BLOB_BYTES) return "working-tree-too-large";
 
   if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
 
@@ -89,6 +102,7 @@ async function repositorySizeAllowed(
     project,
     sizeKb: measured?.sizeKb ?? null,
     blobCount: measured?.blobCount ?? null,
+    blobBytes: measured?.blobBytes ?? null,
     truncated: measured?.truncated ?? null,
     outcome,
     reason: reason ?? "lookup-failed",

@@ -11,6 +11,7 @@ const GITHUB_API_ROOT = "https://api.github.com/repos";
 export type RepositorySizeLookup = Readonly<{
   sizeKb: number;
   blobCount: number;
+  blobBytes: number;
   truncated: boolean;
 }>;
 
@@ -94,10 +95,25 @@ export async function lookupRepositorySize(
   }
 
   let blobCount = 0;
+  let blobBytes = 0;
 
   for (const entry of tree.tree) {
-    if (isRecord(entry) && entry.type === "blob") blobCount += 1;
+    if (!isRecord(entry) || entry.type !== "blob") continue;
+
+    const blobSize = entry.size;
+
+    if (
+      typeof blobSize !== "number" ||
+      !Number.isSafeInteger(blobSize) ||
+      blobSize < 0 ||
+      !Number.isSafeInteger(blobBytes + blobSize)
+    ) {
+      return undefined;
+    }
+
+    blobCount += 1;
+    blobBytes += blobSize;
   }
 
-  return { sizeKb: size, blobCount, truncated: tree.truncated };
+  return { sizeKb: size, blobCount, blobBytes, truncated: tree.truncated };
 }

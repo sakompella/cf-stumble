@@ -115,6 +115,7 @@ test("refuses a repository that exceeds the durable workspace size budget before
   expect(subject.workspace.commands.filter((command) => command.includes("git clone"))).toEqual([]);
   const event = JSON.stringify(logged.mock.calls);
   expect(event).toContain("project.size-check");
+  expect(event).toContain("blobBytes");
   expect(event).toContain("sample-repo-1");
   expect(event).toContain("repository-too-large");
   expect(event).not.toContain(REPOSITORY);
@@ -125,7 +126,7 @@ test("allows a measured repository within both workspace limits", async () => {
     fallbackToken: FAKE_TOKEN,
     replies: [
       { size: 4_999_999, default_branch: "main" },
-      { truncated: false, tree: [{ type: "blob" }] },
+      { truncated: false, tree: [{ type: "blob", size: 100 }] },
     ],
   });
 
@@ -154,7 +155,7 @@ test("refuses a repository whose tree response is truncated", async () => {
     fallbackToken: FAKE_TOKEN,
     replies: [
       { size: 1, default_branch: "main" },
-      { truncated: true, tree: [{ type: "blob" }] },
+      { truncated: true, tree: [{ type: "blob", size: 100 }] },
     ],
   });
 
@@ -171,7 +172,7 @@ test("refuses a repository whose tree exceeds the file-count limit", async () =>
     fallbackToken: FAKE_TOKEN,
     replies: [
       { size: 1, default_branch: "main" },
-      { truncated: false, tree: Array.from({ length: 25_001 }, () => ({ type: "blob" })) },
+      { truncated: false, tree: Array.from({ length: 3_001 }, () => ({ type: "blob", size: 1 })) },
     ],
   });
 
@@ -181,6 +182,43 @@ test("refuses a repository whose tree exceeds the file-count limit", async () =>
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
   expect(subject.workspace.commands).toEqual([]);
+});
+
+test("refuses a repository whose working tree exceeds the byte limit", async () => {
+  const subject = tenant("repository-working-tree-bytes", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 1, default_branch: "main" },
+      { truncated: false, tree: [{ type: "blob", size: 150_000_001 }] },
+    ],
+  });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
+  expect(subject.workspace.commands).toEqual([]);
+});
+
+test("allows a repository exactly at the file and working-tree byte limits", async () => {
+  const subject = tenant("repository-size-boundaries", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 4_999_999, default_branch: "main" },
+      {
+        truncated: false,
+        tree: Array.from({ length: 3_000 }, (_, index) => ({
+          type: "blob",
+          size: index === 2_999 ? 150_000_000 - 2_999 : 1,
+        })),
+      },
+    ],
+  });
+
+  await expect(
+    subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW)),
+  ).resolves.toMatchObject({ ok: true });
 });
 
 test("connects a repository once the workspace credential works, and provisions it", async () => {
