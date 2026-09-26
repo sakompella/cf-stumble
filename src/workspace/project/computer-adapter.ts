@@ -54,10 +54,6 @@ export function durableObjectTransactions(storage: DurableObjectStorage): Projec
 }
 
 /**
- * Adapts Computer's runtime to this target's exec port. `container-shell` matches the backend id
- * the existing generic executor uses for the same container backend registered on `WorkspaceHost`.
- */
-/**
  * Keep each command in its own session. The pinned computerd runner signals only the direct shell,
  * so this wrapper keeps a TERM trap in the session leader and forwards it to the complete process
  * group before exiting. A nested shell keeps the trap installed even when the command uses `exec`.
@@ -72,6 +68,10 @@ export function processGroupCommand(command: string): string {
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }
 
+/**
+ * Adapts Computer's runtime to this target's exec port. `container-shell` matches the backend id
+ * the existing generic executor uses for the same container backend registered on `WorkspaceHost`.
+ */
 // oxlint-disable-next-line max-lines-per-function -- The adapter wires process-group execution and container replacement detection in one port.
 export function computerExecBackend(
   workspace: Workspace,
