@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
+import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
 import type {
   BackendExecEvent,
   ExecBackend,
@@ -56,29 +57,76 @@ export function durableObjectTransactions(storage: DurableObjectStorage): Projec
  * Adapts Computer's runtime to this target's exec port. `container-shell` matches the backend id
  * the existing generic executor uses for the same container backend registered on `WorkspaceHost`.
  */
+/**
+ * Keep each command in its own session. The pinned computerd runner signals only the direct shell,
+ * so this wrapper keeps a TERM trap in the session leader and forwards it to the complete process
+ * group before exiting. A nested shell keeps the trap installed even when the command uses `exec`.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function processGroupCommand(command: string): string {
+  const body = `trap 'trap - TERM INT HUP; kill -TERM -- -$$' TERM INT HUP; /bin/sh -c ${shellQuote(command)}`;
+
+  return `exec setsid /bin/sh -c ${shellQuote(body)}`;
+}
+
+// oxlint-disable-next-line max-lines-per-function -- The adapter wires process-group execution and container replacement detection in one port.
 export function computerExecBackend(
   workspace: Workspace,
   backendId = "container-shell",
+  containerState?: ContainerLifecycleState,
 ): ExecBackend {
   return {
     async exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
-      const handle = await workspace.runtime.exec(input.command, {
-        backend: backendId,
-        cwd: input.cwd,
-        timeoutMs: input.timeoutMs,
-        encoding: undefined,
-      });
+      const generation = containerState?.generation;
+
+      const handle = await workspace.runtime
+        .exec(processGroupCommand(input.command), {
+          backend: backendId,
+          cwd: input.cwd,
+          timeoutMs: input.timeoutMs,
+          encoding: undefined,
+        })
+        .catch(
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Runtime rejects an untrusted backend value.
+          (error: unknown) => {
+            if (generation !== undefined && containerState?.generation !== generation) {
+              throw new ContainerRestartedError();
+            }
+
+            throw error;
+          },
+        );
+
+      if (generation !== undefined && containerState?.generation !== generation) {
+        await handle.kill().catch(() => {});
+        throw new ContainerRestartedError();
+      }
 
       const reader = handle.getReader();
 
       return {
         reader: {
           async read() {
-            const next = await reader.read();
+            try {
+              const next = await reader.read();
 
-            if (next.done) return { done: true };
+              if (generation !== undefined && containerState?.generation !== generation) {
+                throw new ContainerRestartedError();
+              }
 
-            return { done: false, value: toBackendEvent(next.value) };
+              if (next.done) return { done: true };
+
+              return { done: false, value: toBackendEvent(next.value) };
+            } catch (error) {
+              if (generation !== undefined && containerState?.generation !== generation) {
+                throw new ContainerRestartedError();
+              }
+
+              throw error;
+            }
           },
           cancel: () => reader.cancel(),
         },

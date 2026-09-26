@@ -6,7 +6,16 @@ test("reflection exposes exactly six methods and no forbidden backing capability
   const { target } = makeTarget();
 
   expect(Object.getOwnPropertyNames(ProjectRpcTarget.prototype).toSorted()).toEqual(
-    ["constructor", "kill", "listFiles", "lstat", "readFile", "startExec", "writeFile"].toSorted(),
+    [
+      "constructor",
+      "endTurn",
+      "kill",
+      "listFiles",
+      "lstat",
+      "readFile",
+      "startExec",
+      "writeFile",
+    ].toSorted(),
   );
   expect(Object.keys(target)).toEqual([]);
 

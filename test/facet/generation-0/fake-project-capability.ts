@@ -110,6 +110,10 @@ export class FakeProjectCapability implements ProjectRpcTargetContract, Disposab
     return this.#live().kill(operationId);
   }
 
+  endTurn(): Promise<ProjectResult<{ killed: number }>> {
+    return this.#live().endTurn();
+  }
+
   #live(): ProjectRpcTarget {
     if (this.#disposed) throw new Error("RPC stub used after being disposed.");
 

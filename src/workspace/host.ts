@@ -16,7 +16,7 @@ import {
 import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logRedactedCause, timed } from "../diagnostics.js";
+import { logEvent, logRedactedCause, timed } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
@@ -30,9 +30,16 @@ import {
   computerFilesystemProvider,
   durableObjectTransactions,
   ProjectRpcTarget,
+  parseProjectBudget,
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
-import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
+import {
+  recordWorkspaceContainerClosed,
+  withWorkspaceSyncIgnore,
+  type WorkspaceBackendLifecycle,
+} from "./backend-sync-ignore.js";
+
+export { parseProjectBudget };
 
 export type WorkspaceResetResult = Readonly<{
   ok: true;
@@ -68,12 +75,28 @@ export async function resetWorkspaceStorage(
     () => storage.deleteAll(),
     () => ({ outcome: "ok" }),
   );
-  await timed(
+  logEvent("info", "workspace.container.stopped", {
+    outcome: "stopped",
+    reasonCode: "workspace-reset",
+    exitCode: null,
+    signal: null,
+    running: true,
+  });
+
+  const runtime = await timed(
     "workspace.reset-step",
     { step: "restart-container" },
     () => container.restart(WORKSPACE_CONTAINER_RESET_SPEC),
-    (runtime) => ({ outcome: runtime.outcome }),
+    (value) => ({ outcome: value.outcome }),
   );
+
+  logEvent("info", "workspace.container.started", {
+    outcome: runtime.outcome,
+    runtimeId: runtime.runtimeId,
+    reasonCode: null,
+    exitCode: null,
+    signal: null,
+  });
 
   return { ok: true, reset: "workspace" };
 }
@@ -98,8 +121,11 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
 }
 
 /** Keep the backend decoration at the Workspace Host construction seam. */
-export function workspaceBackendForHost(backend: WorkspaceBackend): WorkspaceBackend {
-  return withWorkspaceSyncIgnore(backend);
+export function workspaceBackendForHost(
+  backend: WorkspaceBackend,
+  lifecycle?: WorkspaceBackendLifecycle,
+): WorkspaceBackend {
+  return withWorkspaceSyncIgnore(backend, lifecycle);
 }
 
 /** Restore the managed instructions after reset, without replacing an existing file. */
@@ -147,6 +173,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   readonly #container: WorkspaceContainerAPI;
+  readonly #containerLifecycle = { generation: 0 };
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
@@ -155,7 +182,25 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
-    this.#workspaceBackend = workspaceBackendForHost(this.#containerBackend);
+    this.#workspaceBackend = workspaceBackendForHost(this.#containerBackend, {
+      connected: (runtimeId) => {
+        logEvent("info", "workspace.container.started", {
+          outcome: "started",
+          runtimeId: runtimeId ?? null,
+          reasonCode: null,
+          exitCode: null,
+          signal: null,
+        });
+      },
+      closed: () => {
+        this.#containerLifecycle.generation += 1;
+        void recordWorkspaceContainerClosed(this.#container);
+      },
+      failed: () => {
+        this.#containerLifecycle.generation += 1;
+        void recordWorkspaceContainerClosed(this.#container);
+      },
+    });
     this.#workspace = this.#newWorkspace();
   }
 
@@ -239,22 +284,17 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return result;
   }
 
-  /**
-   * Hand out this workspace's project capability. `build` and `provision` each answer one request
-   * and return plain values, which suits a caller that asks for one thing; a turn instead makes
-   * many calls spread over its own lifetime, so this returns the narrow six-method surface once
-   * and the caller holds it for the turn.
-   *
-   * The capability is a `ProjectRpcTarget`, which the runtime serializes only for an RPC call. It
-   * can therefore only ever travel as a call argument or a return value, and never as a Worker
-   * Loader environment entry, which is cached per harness commit and shared by every project the
-   * generation serves.
-   */
-  project(): ProjectRpcTarget {
+  /** Hand out a project capability bounded to one turn and this container generation. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
+  project(budget?: unknown): ProjectRpcTarget {
+    const remainingMs = parseProjectBudget(budget);
+    const options = remainingMs === undefined ? {} : { remainingMs };
+
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),
       durableObjectTransactions(this.ctx.storage),
-      computerExecBackend(this.#workspace),
+      computerExecBackend(this.#workspace, "container-shell", this.#containerLifecycle),
+      { ...options, containerState: this.#containerLifecycle },
     );
   }
 
