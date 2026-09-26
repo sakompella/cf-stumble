@@ -4,7 +4,7 @@ import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
 import { projectTurnStream } from "./turn-stream.js";
 import type { TurnThreadWrites } from "./turn-settle.js";
-import { logEvent, timed, type TimedOutcome } from "../../diagnostics.js";
+import { logEvent, logRedactedCause, timed, type TimedOutcome } from "../../diagnostics.js";
 import { logLeaseAbandoned, turnFields, turnTrace, type TurnTrace } from "./turn-log.js";
 import type { ActiveGeneration } from "../generations/index.js";
 import type {
@@ -201,7 +201,7 @@ async function admitAndStart(input: RunProjectTurnInput): Promise<ProjectTurnRun
     return refused(started.reason);
   }
 
-  return { ok: true, frames: streamAdmittedTurn(input, turn, started.frames) };
+  return { ok: true, frames: streamOrAbandon(input, turn, started.frames) };
 }
 
 /** Fix everything the rest of the turn is measured against, and log that it was admitted. */
@@ -217,6 +217,13 @@ function admittedTurn(
 
   logEvent("info", "turn.admitted", turnFields(trace));
 
+  if (admitted.reclaimed === true) {
+    logEvent("warn", "turn.lease-reclaimed", {
+      ...turnFields(trace),
+      why: "previous-instance",
+    });
+  }
+
   return {
     projectId,
     leaseId: admitted.leaseId,
@@ -226,9 +233,32 @@ function admittedTurn(
   };
 }
 
+function streamOrAbandon(
+  input: RunProjectTurnInput,
+  turn: AdmittedTurn,
+  frames: ReadableStream<Uint8Array>,
+): ReadableStream<Uint8Array> {
+  try {
+    return streamAdmittedTurn(input, turn, frames);
+  } catch (error) {
+    // Constructing the Supervisor-owned response stream can itself fail after the facet started.
+    abandonTurn(input, turn, "stream-failed");
+    throw error;
+  }
+}
+
 function abandonTurn(input: RunProjectTurnInput, turn: AdmittedTurn, why: string): void {
   turn.bound.stop();
-  input.threads.abandonTurn(turn.projectId, turn.leaseId);
+
+  try {
+    input.threads.abandonTurn(turn.projectId, turn.leaseId);
+  } catch (cause) {
+    // A Durable Object can close while this cleanup write is in flight. The lease row then
+    // remains protected by its deadline, so a later admission can reclaim it; do not replace the
+    // start error with the cleanup error or let the route skip this record entirely.
+    logRedactedCause(`turn-abandon.${why}: lease-release-failed`, cause);
+  }
+
   logLeaseAbandoned(turn.trace, why, "warn");
 }
 

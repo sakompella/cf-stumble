@@ -1,5 +1,5 @@
 import type { Project } from "../../project-catalog.js";
-import { timed } from "../../diagnostics.js";
+import { timedWorkspaceRpc } from "../../diagnostics.js";
 import { waitForWorkspaceProvision } from "../../workspace/index.js";
 import {
   resolveSelectableProject,
@@ -213,8 +213,7 @@ async function obtainCapability(
   input: ProjectTurnInput,
 ): Promise<ProjectRpcTargetContract | undefined> {
   try {
-    return await timed(
-      "workspace.rpc",
+    return await timedWorkspaceRpc(
       { method: "project" },
       () => input.namespace.getByName(input.workspaceName).project(),
       () => ({ outcome: "ok" }),

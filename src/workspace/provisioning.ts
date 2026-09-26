@@ -1,6 +1,13 @@
 // oxlint-disable max-lines -- Project and harness provisioning share one workspace exclusion.
 import { Result } from "better-result";
-import { logEvent, logRedactedCause, timed, type TimedOutcome } from "../diagnostics.js";
+import {
+  logEvent,
+  logRedactedCause,
+  timed,
+  timedWorkspaceRpc,
+  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
+  type TimedOutcome,
+} from "../diagnostics.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
   type ProjectProvisionStepName,
@@ -69,6 +76,11 @@ export type ProvisionedProjectWorkspace = Readonly<{
 
 export type HarnessProvisionStepName = "provision" | "instructions";
 
+const HARNESS_PROVISION_STEP_NAMES: readonly HarnessProvisionStepName[] = [
+  "provision",
+  "instructions",
+];
+
 export type HarnessProvisionProblem =
   | Readonly<{
       code: "harness-provision-step-failed";
@@ -106,6 +118,26 @@ const STEP_RESULT_KIND = {
   instructions: "written",
 } as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
 
+function runProjectHostStep(
+  host: ProvisionWorkspaceHost,
+  project: Project,
+  step: ProjectProvisionStepName,
+): Promise<WorkspaceResult> {
+  return timedWorkspaceRpc(
+    { method: "provision", step },
+    () =>
+      host.provision({
+        kind: "provision-project",
+        projectId: project.id,
+        repositoryUrl: project.repositoryUrl,
+        step,
+      }),
+    (answered) =>
+      answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
+    PROVISION_RPC_TIMEOUT_MS,
+  );
+}
+
 async function runProjectStep(
   host: ProvisionWorkspaceHost,
   project: Project,
@@ -125,12 +157,7 @@ async function runProjectStep(
   let result: WorkspaceResult;
 
   try {
-    result = await host.provision({
-      kind: "provision-project",
-      projectId,
-      repositoryUrl: project.repositoryUrl,
-      step,
-    });
+    result = await runProjectHostStep(host, project, step);
   } catch (error) {
     logRedactedCause(
       `project-provision.${step}: provision-workspace-unavailable (${projectId})`,
@@ -178,8 +205,20 @@ async function runHarnessStep(
   try {
     result =
       step === "provision"
-        ? await host.build({ kind: "build-step", harnessCommit, step })
-        : await host.ensureManagedInstructions();
+        ? await timedWorkspaceRpc(
+            { method: "build", step },
+            () => host.build({ kind: "build-step", harnessCommit, step }),
+            (answered) =>
+              answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
+            PROVISION_RPC_TIMEOUT_MS,
+          )
+        : await timedWorkspaceRpc(
+            { method: "ensureManagedInstructions", step },
+            () => host.ensureManagedInstructions(),
+            (answered) =>
+              answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
+            PROVISION_RPC_TIMEOUT_MS,
+          );
   } catch (error) {
     logRedactedCause(`harness-provision.${step}: workspace-unavailable`, error);
 
@@ -230,15 +269,19 @@ type ActiveProvision = Readonly<{
 }>;
 
 /** The host kills a command at its ceiling; this margin covers the RPC's final settling turn. */
-export const PROVISION_STALE_MARGIN_MS = 1_000;
+export const PROVISION_STALE_MARGIN_MS = WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
-const PROVISION_COMMAND_BUDGET_MS = PROJECT_PROVISION_STEP_NAMES.reduce(
-  (budget, step) =>
-    budget + (STEP_RESULT_KIND[step] === "command" ? WORKSPACE_COMMAND_TIMEOUT_MS : 0),
-  0,
+/** Each Workspace Host call has the command ceiling plus its RPC settling margin. */
+export const PROVISION_RPC_TIMEOUT_MS =
+  WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
+
+const PROVISION_PLAN_STEP_COUNT = Math.max(
+  PROJECT_PROVISION_STEP_NAMES.length,
+  HARNESS_PROVISION_STEP_NAMES.length,
 );
 
-export const PROVISION_STALE_AFTER_MS = PROVISION_COMMAND_BUDGET_MS + PROVISION_STALE_MARGIN_MS;
+export const PROVISION_STALE_AFTER_MS =
+  PROVISION_PLAN_STEP_COUNT * PROVISION_RPC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
 
 /**
  * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn
@@ -470,7 +513,7 @@ async function provisionResolvedHarness(
 ): Promise<HarnessProvisioningOutcome> {
   const host = input.namespace.getByName(input.workspaceName);
 
-  for (const step of ["provision", "instructions"] as const) {
+  for (const step of HARNESS_PROVISION_STEP_NAMES) {
     const ran = await timed(
       "workspace.provision-step",
       {

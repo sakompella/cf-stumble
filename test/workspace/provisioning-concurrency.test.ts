@@ -289,7 +289,8 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
 
     await Promise.resolve();
 
-    expect(vi.getTimerCount()).toBe(1);
+    // The active RPC has its watchdog and command-ceiling timers in addition to the exclusion timer.
+    expect(vi.getTimerCount()).toBe(3);
 
     delayed.release();
 

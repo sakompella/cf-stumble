@@ -113,3 +113,30 @@ test("distinguishes a timeout from an ordinary RPC failure in the log alone", as
     "timeout",
   );
 });
+
+test("does not continue a credential step after its turn signal aborts", async () => {
+  const controller = new AbortController();
+
+  const host: CredentialWorkspaceHost = {
+    credential: () => {
+      controller.abort();
+
+      return Promise.resolve({
+        ok: true as const,
+        result: {
+          kind: "credential-status" as const,
+          state: "connected" as const,
+          login: "octocat",
+        },
+      });
+    },
+  };
+
+  const status = await readWorkspaceCredentialStatus({
+    workspaceName: "tenant-workspace",
+    namespace: namespaceOf(host),
+    signal: controller.signal,
+  });
+
+  expect(status.isErr() && status.error.code).toBe("credential-workspace-unavailable");
+});

@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { capturedEvents, named } from "../../log-capture.js";
 import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
 import { projectTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
 import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
@@ -95,4 +96,38 @@ test("a deadline that rejects the pending RPC read is timed out", async () => {
   expect(JSON.parse(new TextDecoder().decode(result.value))).toEqual({ kind: "timed-out" });
   expect(abandonTurn).toHaveBeenCalledOnce();
   expect(finishTurn).not.toHaveBeenCalled();
+});
+
+test("a failed lease cleanup does not replace the stream failure", async () => {
+  const events = capturedEvents();
+  const frames = new ReadableStream<Uint8Array>();
+  Object.defineProperty(frames, "getReader", {
+    value: () => {
+      throw new Error("stream reader unavailable");
+    },
+  });
+  const projectId = parseProjectId("project-one");
+
+  if (projectId === undefined) throw new Error("expected a valid project id");
+
+  const bound = new TurnBound(Date.now() + 1_000, now);
+
+  const stream = projectTurnStream({
+    projectId,
+    leaseId: "lease-one",
+    threads: {
+      finishTurn: vi.fn(),
+      abandonTurn: () => {
+        throw new Error("storage connection closed");
+      },
+    },
+    now,
+    bound,
+    trace: turnTrace(projectId, "lease-one", undefined, Date.now()),
+    frames,
+  });
+
+  await expect(stream.getReader().read()).rejects.toThrow("stream reader unavailable");
+  expect(named(events(), "turn.lease-abandoned")).toHaveLength(1);
+  bound.stop();
 });

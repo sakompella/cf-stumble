@@ -176,3 +176,63 @@ export async function timed<T>(
 
   return value;
 }
+
+/** How often a Workspace Host RPC reports that it is still waiting. */
+export const WORKSPACE_RPC_WATCH_INTERVAL_MS = 30_000;
+
+/** Time reserved for an RPC to settle after its container command ceiling. */
+export const WORKSPACE_RPC_TIMEOUT_MARGIN_MS = 1_000;
+
+/**
+ * Measure one Supervisor-side Workspace Host RPC and make a long wait visible. The warning timer
+ * belongs to this call, so a settled RPC clears it before it can report again. `timeoutMs` bounds
+ * a step whose container command cannot be interrupted by an AbortSignal; the underlying RPC still
+ * owns that command and is expected to stop at the same command ceiling.
+ */
+export async function timedWorkspaceRpc<T>(
+  fields: LogFields,
+  run: () => Promise<T>,
+  classify: (value: T) => TimedOutcome,
+  timeoutMs?: number,
+): Promise<T> {
+  const startedAt = Date.now();
+
+  const waitingTimer = setInterval(() => {
+    logEvent("warn", "workspace.rpc-waiting", {
+      ...fields,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }, WORKSPACE_RPC_WATCH_INTERVAL_MS);
+
+  try {
+    return await timed("workspace.rpc", fields, () => boundedRpc(run, timeoutMs), classify);
+  } finally {
+    clearInterval(waitingTimer);
+  }
+}
+
+async function boundedRpc<T>(run: () => Promise<T>, timeoutMs: number | undefined): Promise<T> {
+  const operation = run();
+
+  // Promise.race observes this rejection, but keep a handler on the original RPC too: a remote
+  // call may reject after the timeout winner has already settled the race.
+  void operation.catch(() => {});
+
+  if (timeoutMs === undefined) return operation;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error("Workspace Host RPC timed out");
+      error.name = "TimeoutError";
+      reject(error);
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}

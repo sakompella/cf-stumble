@@ -1,4 +1,6 @@
 import type { HarnessCommit } from "../../harness-commit.js";
+import { timedWorkspaceRpc, WORKSPACE_RPC_TIMEOUT_MARGIN_MS } from "../../diagnostics.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../harness-build.js";
 import type {
   HarnessBuildConfiguration,
@@ -26,6 +28,8 @@ export type BuildWorkspaceNamespace = Readonly<{
 function unreachable(reason: string): Error {
   return new Error(reason);
 }
+
+const BUILD_RPC_TIMEOUT_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 /**
  * The `BuildWorkspace` the builder runs against, bound to one harness commit. It plans that
@@ -65,11 +69,18 @@ export class CommitBuildWorkspace implements BuildWorkspace {
       throw unreachable("a build workspace runs only the planned steps of its own commit");
     }
 
-    const result = await this.host().build({
-      kind: "build-step",
-      harnessCommit: this.harnessCommit,
-      step: step.name,
-    });
+    const result = await timedWorkspaceRpc(
+      { method: "build", step: step.name },
+      () =>
+        this.host().build({
+          kind: "build-step",
+          harnessCommit: this.harnessCommit,
+          step: step.name,
+        }),
+      (answered) =>
+        answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
+      BUILD_RPC_TIMEOUT_MS,
+    );
 
     if (!result.ok) {
       throw unreachable(`the build workspace refused the ${step.name} step: ${result.error.code}`);
@@ -91,10 +102,17 @@ export class CommitBuildWorkspace implements BuildWorkspace {
       throw unreachable("a build workspace reads only its own module map");
     }
 
-    const result = await this.host().build({
-      kind: "build-output",
-      harnessCommit: this.harnessCommit,
-    });
+    const result = await timedWorkspaceRpc(
+      { method: "build", step: "output" },
+      () =>
+        this.host().build({
+          kind: "build-output",
+          harnessCommit: this.harnessCommit,
+        }),
+      (answered) =>
+        answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
+      BUILD_RPC_TIMEOUT_MS,
+    );
 
     if (!result.ok) {
       throw unreachable(`the build output could not be read: ${result.error.code}`);

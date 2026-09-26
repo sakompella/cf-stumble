@@ -10,6 +10,7 @@ export type ThreadRow = {
   readonly turn_active: number;
   readonly turn_deadline_at: number | null;
   readonly turn_lease_id?: string | null;
+  readonly turn_holder_id?: string | null;
 };
 
 /**
@@ -31,5 +32,6 @@ export function threadFromRow(
         revision: row.revision,
         turnActive: row.turn_active === 1,
         turnDeadlineAt: row.turn_deadline_at ?? undefined,
+        turnHolderId: row.turn_holder_id ?? undefined,
       });
 }

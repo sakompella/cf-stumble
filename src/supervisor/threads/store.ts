@@ -18,7 +18,11 @@ import {
 } from "./thread.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 
-export type ThreadLease = Readonly<{ thread: ProjectThread; leaseId: string }>;
+export type ThreadLease = Readonly<{
+  thread: ProjectThread;
+  leaseId: string;
+  reclaimed: boolean;
+}>;
 
 export type ThreadLeaseResult =
   | Readonly<{ ok: true; lease: ThreadLease }>
@@ -40,10 +44,12 @@ export type ThreadLeaseResult =
 export class ThreadStore {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
+  private readonly holderId: string | undefined;
 
-  constructor(storage: DurableObjectStorage) {
+  constructor(storage: DurableObjectStorage, holderId?: string) {
     this.storage = storage;
     this.sql = storage.sql;
+    this.holderId = holderId;
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS project_threads (
         project_id TEXT PRIMARY KEY,
@@ -51,9 +57,18 @@ export class ThreadStore {
         revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
         turn_active INTEGER NOT NULL DEFAULT 0 CHECK (turn_active IN (0, 1)),
         turn_deadline_at INTEGER,
-        turn_lease_id TEXT
+        turn_lease_id TEXT,
+        turn_holder_id TEXT
       );
     `);
+
+    const columns = this.sql
+      .exec<{ readonly name: string }>("PRAGMA table_info(project_threads)")
+      .toArray();
+
+    if (!columns.some((column) => column.name === "turn_holder_id")) {
+      this.sql.exec("ALTER TABLE project_threads ADD COLUMN turn_holder_id TEXT");
+    }
   }
 
   read(project: SelectableProject): ThreadResult {
@@ -75,14 +90,15 @@ export class ThreadStore {
   startFreshThread(project: SelectableProject): ThreadResult {
     return this.storage.transactionSync(() => {
       this.sql.exec(
-        `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id)
-         VALUES (?, NULL, 0, 0, NULL, NULL)
+        `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id, turn_holder_id)
+         VALUES (?, NULL, 0, 0, NULL, NULL, NULL)
          ON CONFLICT (project_id) DO UPDATE SET
            messages = NULL,
            revision = revision + 1,
            turn_active = 0,
            turn_deadline_at = NULL,
-           turn_lease_id = NULL`,
+           turn_lease_id = NULL,
+           turn_holder_id = NULL`,
         project.id,
       );
 
@@ -110,33 +126,64 @@ export class ThreadStore {
         return leaseRejected(current.problem);
       }
 
-      const decision = decideStartTurn(project.id, current.thread, expectedRevision, now);
+      const reclaimed = this.previousInstanceLease(current.thread);
+
+      const decision = decideStartTurn(
+        project.id,
+        reclaimed ? { ...current.thread, turnActive: false } : current.thread,
+        expectedRevision,
+        now,
+      );
 
       switch (decision.kind) {
         case "rejected":
           return leaseRejected(decision.problem);
-        case "started": {
-          this.sql.exec(
-            `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id)
-             VALUES (?, NULL, ?, 1, ?, ?)
-             ON CONFLICT (project_id) DO UPDATE SET
-               turn_active = 1, turn_deadline_at = ?, turn_lease_id = ?`,
-            project.id,
+        case "started":
+          return this.persistStartedLease(
+            project,
+            current.thread,
             decision.revision,
             deadlineAt,
             leaseId,
-            deadlineAt,
-            leaseId,
+            reclaimed,
           );
-          const thread = { ...current.thread, turnActive: true, turnDeadlineAt: deadlineAt };
-
-          return leaseSucceeded({ thread, leaseId });
-        }
-
         default:
           return assertNever(decision);
       }
     });
+  }
+
+  private persistStartedLease(
+    project: SelectableProject,
+    current: ProjectThread,
+    revision: number,
+    deadlineAt: number,
+    leaseId: string,
+    reclaimed: boolean,
+  ): ThreadLeaseResult {
+    this.sql.exec(
+      `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id, turn_holder_id)
+       VALUES (?, NULL, ?, 1, ?, ?, ?)
+       ON CONFLICT (project_id) DO UPDATE SET
+         turn_active = 1, turn_deadline_at = ?, turn_lease_id = ?, turn_holder_id = ?`,
+      project.id,
+      revision,
+      deadlineAt,
+      leaseId,
+      this.holderId ?? null,
+      deadlineAt,
+      leaseId,
+      this.holderId ?? null,
+    );
+
+    const thread = {
+      ...current,
+      turnActive: true,
+      turnDeadlineAt: deadlineAt,
+      turnHolderId: this.holderId,
+    };
+
+    return leaseSucceeded({ thread, leaseId, reclaimed });
   }
 
   /**
@@ -168,7 +215,7 @@ export class ThreadStore {
         case "finished": {
           this.sql.exec(
             `UPDATE project_threads
-             SET messages = ?, revision = ?, turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL
+             SET messages = ?, revision = ?, turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL, turn_holder_id = NULL
              WHERE project_id = ?`,
             stored,
             decision.nextRevision,
@@ -181,6 +228,7 @@ export class ThreadStore {
             revision: decision.nextRevision,
             turnActive: false,
             turnDeadlineAt: undefined,
+            turnHolderId: undefined,
           });
         }
 
@@ -208,7 +256,7 @@ export class ThreadStore {
         case "abandoned": {
           this.sql.exec(
             `UPDATE project_threads
-             SET turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL
+             SET turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL, turn_holder_id = NULL
              WHERE project_id = ?`,
             project.id,
           );
@@ -217,6 +265,7 @@ export class ThreadStore {
             ...current.thread,
             turnActive: false,
             turnDeadlineAt: undefined,
+            turnHolderId: undefined,
           });
         }
 
@@ -224,6 +273,15 @@ export class ThreadStore {
           return assertNever(decision);
       }
     });
+  }
+
+  private previousInstanceLease(thread: ProjectThread): boolean {
+    return (
+      this.holderId !== undefined &&
+      thread.turnActive &&
+      thread.turnHolderId !== undefined &&
+      thread.turnHolderId !== this.holderId
+    );
   }
 
   private leaseClaim(project: SelectableProject, presented: string): TurnLeaseClaim {
@@ -251,7 +309,7 @@ export class ThreadStore {
   private readThread(project: SelectableProject): ThreadResult {
     const row = this.sql
       .exec<ThreadRow>(
-        `SELECT project_id, messages, revision, turn_active, turn_deadline_at
+        `SELECT project_id, messages, revision, turn_active, turn_deadline_at, turn_holder_id
          FROM project_threads WHERE project_id = ?`,
         project.id,
       )

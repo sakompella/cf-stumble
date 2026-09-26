@@ -30,6 +30,7 @@ import {
   type TurnStartContext,
   timedTurnMount,
   timedTurnProvision,
+  timedWorkspaceRpc,
 } from "./projects/index.js";
 import {
   Generations,
@@ -89,6 +90,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly connections: ProjectConnections;
   /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
   private readonly workspaceName: string;
+  /** Fences leases held by an instance that Durable Objects have since replaced. */
+  private readonly instanceId = crypto.randomUUID();
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
@@ -122,7 +125,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
     // One catalog reaches the thread surface and the turn path, read at each call so a repository
     // connected a moment ago resolves without restarting this object.
-    this.threads = new ProjectThreads(ctx.storage, () => this.connections.catalog());
+    this.threads = new ProjectThreads(
+      ctx.storage,
+      () => this.connections.catalog(),
+      this.instanceId,
+    );
   }
 
   private modelRoute(): MainFacetCapabilities["MODEL"] {
@@ -209,7 +216,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
   async resetWorkspace(): Promise<WorkspaceResetResult> {
     const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
-    const result = await namespace.getByName(this.workspaceName).reset();
+
+    const result = await timedWorkspaceRpc(
+      { method: "reset" },
+      () => namespace.getByName(this.workspaceName).reset(),
+      () => ({ outcome: "reset" }),
+    );
+
     this.connections.resetWorkspace();
 
     return result;

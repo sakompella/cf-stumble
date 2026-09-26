@@ -1,7 +1,13 @@
 import { Result } from "better-result";
-import { isTimeoutFailure, logRedactedCause, timed } from "../diagnostics.js";
+import {
+  isTimeoutFailure,
+  logRedactedCause,
+  timedWorkspaceRpc,
+  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
+} from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 /**
  * The Workspace Host credential surface as its caller uses it, and the three questions the caller
@@ -21,6 +27,12 @@ export type CredentialWorkspaceNamespace = Readonly<{
   getByName(name: string): CredentialWorkspaceHost;
 }>;
 
+const WORKSPACE_RPC_TIMEOUT_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
+
+function signalAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
 /**
  * Why a credential operation produced no answer. `credential-workspace-unavailable` covers a
  * Workspace Host that threw, refused, or answered with the wrong shape: from the caller's side
@@ -38,6 +50,8 @@ export interface WorkspaceCredentialInput {
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
   readonly namespace: CredentialWorkspaceNamespace;
+  /** Stops a turn at the next credential RPC boundary. */
+  readonly signal?: AbortSignal | undefined;
 }
 
 export interface InstallWorkspaceCredentialInput extends WorkspaceCredentialInput {
@@ -52,15 +66,19 @@ async function ask(
   input: WorkspaceCredentialInput,
   request: GitHubCredentialRequest,
 ): Promise<Result<GitHubCredentialResult, WorkspaceCredentialProblem>> {
+  if (signalAborted(input.signal)) {
+    return Result.err(unavailable(""));
+  }
+
   try {
-    const answered = await timed(
-      "workspace.rpc",
+    const answered = await timedWorkspaceRpc(
       { method: "credential", step: request.step },
       () => input.namespace.getByName(input.workspaceName).credential(request),
       (result) => (result.ok ? { outcome: "ok" } : { outcome: result.error.code, level: "warn" }),
+      WORKSPACE_RPC_TIMEOUT_MS,
     );
 
-    return Result.ok(answered);
+    return signalAborted(input.signal) ? Result.err(unavailable("")) : Result.ok(answered);
   } catch (cause) {
     logRedactedCause(
       `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,

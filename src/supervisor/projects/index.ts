@@ -80,6 +80,8 @@ export {
 // a second one, which is the drift E3 recorded.
 export { tenantWorkspaceName } from "../../workspace-names.js";
 
+export { timedWorkspaceRpc } from "../../diagnostics.js";
+
 export type {
   MountServingGeneration,
   ProjectTurnFacet,

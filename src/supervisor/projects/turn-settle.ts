@@ -1,4 +1,5 @@
 import type { ProjectThreadResult } from "../threads/index.js";
+import { logRedactedCause } from "../../diagnostics.js";
 import type { FacetTerminalFrame, ProjectTurnFrame, TurnStreamProblem } from "./turn-frames.js";
 
 /** The two thread writes a running turn can still make. Admission already happened. */
@@ -34,8 +35,19 @@ export type TurnSettlement = Readonly<{
  * A turn that ended without producing a conversation the Supervisor may keep. The lease goes back
  * immediately rather than at its deadline, so the project is free for the next turn.
  */
+function releaseLease(turn: TurnSettlement): void {
+  try {
+    turn.threads.abandonTurn(turn.projectId, turn.leaseId);
+  } catch (cause) {
+    // Storage can close while a stream is settling. The lease deadline still fences a later
+    // admission, and cleanup must not turn an otherwise valid terminal frame into a rejected
+    // stream.
+    logRedactedCause("turn-settle: lease-release-failed", cause);
+  }
+}
+
 function released(turn: TurnSettlement, frame: ProjectTurnFrame): TurnEnd {
-  turn.threads.abandonTurn(turn.projectId, turn.leaseId);
+  releaseLease(turn);
 
   return { frame };
 }
@@ -60,7 +72,7 @@ function saveCompletedTurn(turn: TurnSettlement, messages: readonly unknown[]): 
 
   if (!saved.ok) {
     // Terminal success the Supervisor could not make durable is not success (ADR-0037).
-    turn.threads.abandonTurn(turn.projectId, turn.leaseId);
+    releaseLease(turn);
 
     return { kind: "save-failed", code: saved.problem.code };
   }
@@ -84,7 +96,7 @@ function saveFailedTurn(
   const saved = turn.threads.finishTurn(turn.projectId, turn.leaseId, messages, turn.now());
 
   if (!saved.ok) {
-    turn.threads.abandonTurn(turn.projectId, turn.leaseId);
+    releaseLease(turn);
   }
 
   return {

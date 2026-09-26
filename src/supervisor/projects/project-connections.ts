@@ -258,7 +258,11 @@ export class ProjectConnections {
     // unattended credential that connection uses before handing the repository to the clone script.
     // Best effort: a public repository clones without any credential, so a missing one must not
     // block it. A private repository without a credential fails in the clone step itself.
-    await this.github.ensureCredential(Date.now());
+    await this.github.ensureCredential(Date.now(), signal);
+
+    if (signal?.aborted === true) {
+      return { ok: false, problem: { code: "provisioning-failed" } };
+    }
 
     const provisioned = await provisionProjectWorkspace({
       workspaceName: this.workspaceName,
