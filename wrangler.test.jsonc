@@ -54,9 +54,9 @@
       // root, so the build context is the root, not the Dockerfile's directory.
       "image_build_context": ".",
       "max_instances": 1,
-      // A harness build installs and bundles on this container; the deployed loop was proved on
-      // standard-1 (0.5 vCPU, 4 GiB). basic (1 GiB) is the size where earlier installs died.
-      "instance_type": "standard-1",
+      // Check workloads need more CPU, memory, and disk than standard-1 (0.5 vCPU, 4 GiB, 8 GB).
+      // standard-3 (2 vCPU, 8 GiB, 16 GB) leaves room for compiler and install peaks.
+      "instance_type": "standard-3",
     },
   ],
   // The harness repository this deployment builds from. A fork sets it to its own repository;
