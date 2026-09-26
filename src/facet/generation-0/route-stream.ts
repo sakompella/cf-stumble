@@ -164,12 +164,13 @@ function applyModelStreamEvent(
  * Read one decoded NDJSON line at a time from the model route's stream, translate each into
  * `assembler`'s Pi events, and stop at the first `done`/`error` event or when `signal` aborts.
  */
+// oxlint-disable-next-line max-lines-per-function -- The reader owns one stream's cancellation and terminal event.
 async function pumpModelStream(
   modelStream: ReadableStream<Uint8Array>,
   assembler: TurnAssembler,
   stream: AssistantMessageEventStream,
   signal: AbortSignal | undefined,
-): Promise<void> {
+): Promise<"completed" | "failed" | "aborted"> {
   const reader = modelStream.getReader();
 
   const abort = () => {
@@ -187,7 +188,7 @@ async function pumpModelStream(
       if (isAborted(signal)) {
         assembler.fail(stream, "aborted", "the turn was cancelled");
 
-        return;
+        return "aborted";
       }
 
       const next = await reader.read();
@@ -196,7 +197,7 @@ async function pumpModelStream(
         if (isAborted(signal)) {
           assembler.fail(stream, "aborted", "the turn was cancelled");
 
-          return;
+          return "aborted";
         }
 
         break;
@@ -213,14 +214,20 @@ async function pumpModelStream(
         if (event === undefined) continue;
         applyModelStreamEvent(event, assembler, stream);
 
-        if (event.type === "done" || event.type === "error") return;
+        if (event.type === "done") return "completed";
+
+        if (event.type === "error") return "failed";
       }
     }
 
     // The provider stream closed without a terminal event: nothing more will arrive.
     assembler.fail(stream, "error", "the model route ended its stream without a result");
+
+    return "failed";
   } catch {
     assembler.fail(stream, "error", "the model route did not answer");
+
+    return "failed";
   } finally {
     signal?.removeEventListener("abort", abort);
   }
@@ -233,23 +240,23 @@ async function driveModelStream(
   stream: AssistantMessageEventStream,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  let outcome: ReadableStream<Uint8Array> | ValidationFailure;
+  let route: ReadableStream<Uint8Array> | ValidationFailure;
 
   try {
-    outcome = await model.runStream(request);
+    route = await model.runStream(request);
   } catch {
     assembler.fail(stream, "error", "the model route did not answer");
 
     return;
   }
 
-  if (!(outcome instanceof ReadableStream)) {
-    assembler.fail(stream, "error", outcome.error.reason);
+  if (!(route instanceof ReadableStream)) {
+    assembler.fail(stream, "error", route.error.reason);
 
     return;
   }
 
-  await pumpModelStream(outcome, assembler, stream, signal);
+  await pumpModelStream(route, assembler, stream, signal);
 }
 
 function streamOnce(

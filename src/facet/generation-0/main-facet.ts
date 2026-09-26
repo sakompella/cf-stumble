@@ -37,7 +37,8 @@ export class MainFacet extends DurableObject<Generation0Capabilities> {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted; `startFacetTurn` parses it.
     request: unknown,
     workingDirectory: string,
+    deadlineAt?: number,
   ): ReadableStream<Uint8Array> {
-    return startFacetTurn(this.env, projectTarget, request, workingDirectory);
+    return startFacetTurn(this.env, projectTarget, request, workingDirectory, deadlineAt);
   }
 }

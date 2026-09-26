@@ -5,6 +5,7 @@ import {
   type ProjectRpcTargetContract,
 } from "../../workspace/project/protocol.js";
 import { NdjsonFrameReader } from "./execution-env-frame-reader.js";
+import { TURN_TOOL_TIMEOUT_RESERVE_MS } from "./turn-policy.js";
 import { resolveAbsolute, toAddressedPath } from "./execution-env-paths.js";
 import { isStartExecValue, parseEnvelope, parseExecEvent } from "./execution-env-rpc.js";
 import type { ParsedExecEvent, StartExecValue } from "./execution-env-rpc.js";
@@ -33,9 +34,36 @@ function hasEnvOverride(options: ShellExecOptions | undefined): boolean {
 /** Converts Pi's optional timeout in seconds to milliseconds, clamped to the target's own maximum. */
 function timeoutMsFrom(timeoutSeconds: number | undefined): number | undefined {
   if (timeoutSeconds === undefined) return undefined;
+
+  if (!Number.isFinite(timeoutSeconds)) return MAX_EXEC_TIMEOUT_MS;
+
   const ms = Math.round(timeoutSeconds * 1_000);
 
   return Math.min(Math.max(ms, 1), MAX_EXEC_TIMEOUT_MS);
+}
+
+/**
+ * Cap one command at the time left before the turn reserve. `undefined` means the command must
+ * not start: spending the reserve on a tool would leave no time for the model to explain its result.
+ */
+export function boundedExecTimeout(
+  requestedMs: number | undefined,
+  nowMs: number,
+  deadlineAt: number,
+): number | undefined {
+  const availableMs = Math.min(
+    MAX_EXEC_TIMEOUT_MS,
+    deadlineAt - nowMs - TURN_TOOL_TIMEOUT_RESERVE_MS,
+  );
+
+  if (availableMs < 1) return undefined;
+
+  const requested =
+    requestedMs === undefined || !Number.isFinite(requestedMs)
+      ? MAX_EXEC_TIMEOUT_MS
+      : Math.min(Math.max(requestedMs, 1), MAX_EXEC_TIMEOUT_MS);
+
+  return Math.min(requested, availableMs);
 }
 
 function requestKill(target: ExecTarget, operationId: string): void {
@@ -250,11 +278,27 @@ function startExecFailure(code: string): ExecResult {
  * honor, an already-aborted signal, a malformed target response, a truncated byte frame, or a
  * rejected RPC call all resolve to a typed `ExecutionError` instead.
  */
+export type ExecTurnBudget = Readonly<{
+  deadlineAt: number;
+  now: () => number;
+}>;
+
+function turnBudgetError(): ExecResult {
+  return {
+    ok: false,
+    error: new ExecutionError(
+      "timeout",
+      "the turn has less than its reserved time remaining; the command was not started",
+    ),
+  };
+}
+
 export async function execViaProjectTarget(
   cwd: string,
   target: ExecTarget,
   command: string,
   options?: ShellExecOptions,
+  budget?: ExecTurnBudget,
 ): Promise<ExecResult> {
   if (isOptionAborted(options)) {
     return {
@@ -274,11 +318,16 @@ export async function execViaProjectTarget(
   if (!resolvedCwd.ok)
     return { ok: false, error: new ExecutionError("spawn_error", resolvedCwd.error.message) };
 
-  const input = startExecInput(
-    command,
-    toAddressedPath(resolvedCwd.value),
-    timeoutMsFrom(options?.timeout),
-  );
+  const requestedTimeoutMs = timeoutMsFrom(options?.timeout);
+
+  const timeoutMs =
+    budget === undefined
+      ? requestedTimeoutMs
+      : boundedExecTimeout(requestedTimeoutMs, budget.now(), budget.deadlineAt);
+
+  if (budget !== undefined && timeoutMs === undefined) return turnBudgetError();
+
+  const input = startExecInput(command, toAddressedPath(resolvedCwd.value), timeoutMs);
 
   let started: unknown;
 

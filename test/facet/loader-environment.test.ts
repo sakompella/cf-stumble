@@ -78,5 +78,14 @@ test("the loader environment type has no project slot and the turn surface takes
   // the two to the same keys is what stops a project-scoped slot being declared on one side only.
   expectTypeOf<keyof Generation0Capabilities>().toEqualTypeOf<keyof MainFacetCapabilities>();
   expectTypeOf<MainFacet>().toExtend<MainFacetTarget>();
-  expectTypeOf<Parameters<MainFacetTarget["startTurn"]>>().toExtend<[unknown, unknown, string]>();
+  expectTypeOf<MainFacetTarget["startTurn"]>().toBeCallableWith(
+    new ProjectRpcTarget(
+      new FakeProjectFilesystemProvider(),
+      new FakeProjectTransactions(),
+      new FakeExecBackend(),
+    ),
+    undefined,
+    "/workspace",
+    1,
+  );
 });

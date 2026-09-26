@@ -2,13 +2,21 @@ export { MainFacet } from "./main-facet.js";
 
 export { handleGeneration0Request } from "./request-handler.js";
 
-export { startFacetTurn } from "./facet-turn.js";
+export { resolveTurnDeadlineAt, startFacetTurn } from "./facet-turn.js";
 
 export { leaseProjectCapability } from "./project-capability.js";
 
 export { createRouteStreamFn, ROUTE_MODEL } from "./route-stream.js";
 
 export { createRouteModels } from "./route-models.js";
+
+export { createModelCallAccounting } from "./model-accounting.js";
+
+export type {
+  ModelCallAccounting,
+  ModelCallOutcome,
+  ModelTurnAccounting,
+} from "./model-accounting.js";
 
 export { compactThread, estimateThreadTokens, needsCompaction } from "./compaction.js";
 
@@ -20,6 +28,7 @@ export {
   GENERATION_0_COMPACTION,
   GENERATION_0_SYSTEM_PROMPT,
   MAX_MODEL_CALLS,
+  TURN_TOOL_TIMEOUT_RESERVE_MS,
   TOOL_RESULT_DISPLAY_MAX_BYTES,
   TOOL_RESULT_DISPLAY_MAX_LINES,
   TURN_DIFF_COMMAND,
