@@ -2,18 +2,29 @@
 // cancellation, and one terminal event as one stream state machine. Splitting those transitions
 // would expose mutable settlement state and weaken the single-terminal-event invariant.
 
-import type {
-  BackendExecEvent,
-  ExecBackend,
-  ExecBackendHandle,
-  ExecBackendInput,
+import {
+  isContainerRestartedError,
+  type BackendExecEvent,
+  type ExecBackend,
+  type ExecBackendHandle,
+  type ExecBackendInput,
 } from "./exec-backend.js";
 import { MAX_EXEC_FRAME_BYTES, type ExecEvent } from "./protocol.js";
 
+export type ExecKillReason = "manual" | "end-turn" | "turn-end";
+
+export type ExecSettlement = Readonly<{
+  outcome: Extract<ExecEvent, { kind: "terminal" }>["outcome"];
+  exitCode: number | null;
+  errorCode: "backend-unavailable" | "container-restarted" | null;
+  durationMs: number;
+  endedBy: ExecKillReason | null;
+}>;
+
 export interface ExecOperation {
   readonly events: ReadableStream<Uint8Array>;
-  /** Requests a manual kill. A no-op once the operation has already reached a terminal outcome. */
-  requestKill(): void;
+  /** Requests a kill. A no-op once the operation has reached a terminal outcome. */
+  requestKill(reason?: ExecKillReason): void;
 }
 
 interface SettleState {
@@ -22,6 +33,8 @@ interface SettleState {
   timer: ReturnType<typeof setTimeout> | undefined;
   /** Set once `execBackend.exec()` resolves and this operation is still unsettled. */
   handle: ExecBackendHandle | undefined;
+  readonly startedAt: number;
+  killReason: ExecKillReason | null;
   resumePump: (() => void) | undefined;
 }
 
@@ -118,7 +131,7 @@ function resumePump(state: SettleState): void {
 function settle(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  onSettle: () => void,
+  onSettle: (settlement: ExecSettlement) => void,
   outcome: ExecEvent,
   killBackend: boolean,
 ): void {
@@ -140,15 +153,26 @@ function settle(
     void state.handle.kill().catch(() => {});
   }
 
-  onSettle();
+  const terminal = outcome.kind === "terminal" ? outcome : undefined;
+  onSettle({
+    outcome: terminal?.outcome ?? "failed",
+    exitCode: terminal?.outcome === "exited" ? terminal.exitCode : null,
+    errorCode: terminal?.outcome === "failed" ? terminal.error.code : null,
+    durationMs: Math.max(0, Date.now() - state.startedAt),
+    endedBy:
+      terminal?.outcome === "killed" || terminal?.outcome === "timed-out" ? state.killReason : null,
+  });
 }
 
-function failed(state: SettleState): ExecEvent {
+function failed(
+  state: SettleState,
+  code: "backend-unavailable" | "container-restarted" = "backend-unavailable",
+): ExecEvent {
   return {
     kind: "terminal",
     seq: state.seq++,
     outcome: "failed",
-    error: { code: "backend-unavailable" },
+    error: { code },
   };
 }
 
@@ -232,7 +256,7 @@ async function pumpBackendEvents(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
   handle: ExecBackendHandle,
-  onSettle: () => void,
+  onSettle: (settlement: ExecSettlement) => void,
 ): Promise<void> {
   const decoders: Decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
 
@@ -254,8 +278,14 @@ async function pumpBackendEvents(
 
       if (applyBackendRead(state, controller, settleWith, decoders, read)) return;
     }
-  } catch {
-    settleWith(failed(state), true);
+  } catch (error) {
+    settleWith(
+      failed(
+        state,
+        isContainerRestartedError(error) ? "container-restarted" : "backend-unavailable",
+      ),
+      true,
+    );
   }
 }
 
@@ -279,7 +309,7 @@ function startBackendExec(
 function armTimeout(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  onSettle: () => void,
+  onSettle: (settlement: ExecSettlement) => void,
   timeoutMs: number,
 ): void {
   state.timer = setTimeout(() => {
@@ -303,7 +333,7 @@ function watchBackendExec(
   controller: ReadableStreamDefaultController<Uint8Array>,
   execBackend: ExecBackend,
   input: ExecBackendInput,
-  onSettle: () => void,
+  onSettle: (settlement: ExecSettlement) => void,
 ): void {
   startBackendExec(execBackend, input).then(
     (handle) => {
@@ -316,8 +346,17 @@ function watchBackendExec(
       state.handle = handle;
       void pumpBackendEvents(state, controller, handle, onSettle);
     },
-    () => {
-      settle(state, controller, onSettle, failed(state), false);
+    (error) => {
+      settle(
+        state,
+        controller,
+        onSettle,
+        failed(
+          state,
+          isContainerRestartedError(error) ? "container-restarted" : "backend-unavailable",
+        ),
+        false,
+      );
     },
   );
 }
@@ -345,23 +384,26 @@ function watchBackendExec(
 export function startExecOperation(
   execBackend: ExecBackend,
   input: ExecBackendInput,
-  onSettle: () => void,
+  onSettle: (settlement: ExecSettlement) => void,
 ): ExecOperation {
   const state: SettleState = {
     settled: false,
     seq: 0,
     timer: undefined,
     handle: undefined,
+    startedAt: Date.now(),
+    killReason: null,
     resumePump: undefined,
   };
 
-  let requestKillImpl: (() => void) | undefined;
+  let requestKillImpl: ((reason?: ExecKillReason) => void) | undefined;
 
   const events = new ReadableStream<Uint8Array>(
     {
       start(controller) {
         armTimeout(state, controller, onSettle, input.timeoutMs);
-        requestKillImpl = () => {
+        requestKillImpl = (reason = "manual") => {
+          state.killReason = reason;
           settle(
             state,
             controller,
@@ -385,6 +427,6 @@ export function startExecOperation(
 
   return {
     events,
-    requestKill: () => requestKillImpl?.(),
+    requestKill: (reason) => requestKillImpl?.(reason),
   };
 }

@@ -65,6 +65,7 @@ export {
 
 export {
   WorkspaceHost,
+  parseProjectBudget,
   resetWorkspaceStorage,
   type WorkspaceResetResult,
   WORKSPACE_CONTAINER_RESET_SPEC,

@@ -27,6 +27,23 @@ export interface ExecBackendInput {
 }
 
 /** The narrow slice of Computer's runtime this target needs to start a command. */
+export interface ContainerLifecycleState {
+  readonly generation: number;
+}
+
 export interface ExecBackend {
   exec(input: ExecBackendInput): Promise<ExecBackendHandle>;
+}
+
+/** Marks a backend stream that ended because its container runtime was replaced. */
+export class ContainerRestartedError extends Error {
+  readonly code = "container-restarted" as const;
+
+  constructor() {
+    super("container restarted");
+  }
+}
+
+export function isContainerRestartedError(error: unknown): error is ContainerRestartedError {
+  return error instanceof ContainerRestartedError;
 }

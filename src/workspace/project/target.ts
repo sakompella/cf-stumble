@@ -1,6 +1,8 @@
+// oxlint-disable max-lines -- Capability lifetime, process cleanup, and RPC methods share one bounded target.
 import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
-import { startExecOperation, type ExecOperation } from "./exec-operation.js";
+import { startExecOperation, type ExecOperation, type ExecSettlement } from "./exec-operation.js";
+import { logEvent } from "../../diagnostics.js";
 import {
   mapProviderError,
   type ProjectFilesystemProvider,
@@ -22,7 +24,9 @@ import {
   type ProjectFileInfo,
   type ProjectLstatInfo,
   type ProjectResult,
+  type ProjectFailure,
   type ProjectRpcTargetContract,
+  type ProjectErrorCode,
   type WriteMode,
 } from "./protocol.js";
 import {
@@ -33,6 +37,15 @@ import {
 } from "./start-exec-input.js";
 
 type StartedExec = { operationId: string; events: ReadableStream<Uint8Array> };
+
+export type ProjectContainerState = Readonly<{ generation: number }>;
+
+export type ProjectRpcTargetOptions = Readonly<{
+  /** The turn's remaining budget, already parsed by WorkspaceHost. */
+  remainingMs?: number;
+  /** Changes whenever the Workspace Host observes a container replacement. */
+  containerState?: ProjectContainerState;
+}>;
 
 function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
   try {
@@ -55,18 +68,30 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   readonly #execBackend: ExecBackend;
   readonly #operations = new Map<string, ExecOperation>();
   readonly #nonce: string;
+  readonly #turnEndsAt: number | undefined;
+  readonly #containerState: ProjectContainerState | undefined;
+  #containerGeneration: number | undefined;
+  #turnTimer: ReturnType<typeof setTimeout> | undefined;
+  #ended = false;
+  #endResult: { killed: number } | undefined;
   #nextOperationSequence = 0;
 
   constructor(
     provider: ProjectFilesystemProvider,
     transactions: ProjectTransactions,
     execBackend: ExecBackend,
+    options: ProjectRpcTargetOptions = {},
   ) {
     super();
     this.#provider = provider;
     this.#transactions = transactions;
     this.#execBackend = execBackend;
     this.#nonce = crypto.randomUUID();
+    this.#containerState = options.containerState;
+    this.#containerGeneration = options.containerState?.generation;
+    this.#turnEndsAt =
+      options.remainingMs === undefined ? undefined : Date.now() + options.remainingMs;
+    this.#armTurnTimer();
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#lstat` parses `path`.
@@ -102,12 +127,30 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     return projectResult<StartedExec>(() => {
       const parsed = parseStartExecInput(input);
 
-      return parsed.ok ? this.#startExec(parsed.value) : parsed;
+      if (!parsed.ok) {
+        this.#logRefusal(null, parsed.error.code);
+
+        return parsed;
+      }
+
+      return this.#startExec(parsed.value);
     });
   }
 
   #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
-    if (this.#operations.size >= MAX_CONCURRENT_EXECS) return fail("too-many-operations");
+    const capabilityFailure = this.#checkCapability();
+
+    if (capabilityFailure !== undefined) {
+      this.#logRefusal(input.timeoutMs, capabilityFailure.error.code);
+
+      return capabilityFailure;
+    }
+
+    if (this.#operations.size >= MAX_CONCURRENT_EXECS) {
+      this.#logRefusal(input.timeoutMs, "too-many-operations");
+
+      return fail("too-many-operations");
+    }
 
     const cwdOutcome = resolveAddressedPath(this.#provider, input.cwdSegments, {
       followFinalSymlink: true,
@@ -124,6 +167,19 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return fail("not-directory", addressedPathOf(input.cwdSegments));
     }
 
+    const remainingMs =
+      this.#turnEndsAt === undefined ? undefined : Math.max(0, this.#turnEndsAt - Date.now());
+
+    if (remainingMs !== undefined && remainingMs <= 0) {
+      void this.endTurn();
+      this.#logRefusal(input.timeoutMs, "turn-ended");
+
+      return fail("turn-ended");
+    }
+
+    const timeoutMs =
+      remainingMs === undefined ? input.timeoutMs : Math.min(input.timeoutMs, remainingMs);
+
     // The operation identity, its event stream, and its host timeout timer are all produced
     // synchronously here, before `execBackend.exec()` is ever awaited: see `startExecOperation`
     // for why a slow or never-settling backend handle must not leave this call, or the operation
@@ -135,10 +191,11 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       {
         command: input.command,
         cwd: cwdOutcome.value.path,
-        timeoutMs: input.timeoutMs,
+        timeoutMs,
       },
-      () => {
+      (settlement) => {
         this.#operations.delete(operationId);
+        this.#logSettlement(settlement, timeoutMs);
       },
     );
 
@@ -163,6 +220,99 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#operations.get(operationId)?.requestKill();
 
     return ok(null);
+  }
+
+  endTurn(): Promise<ProjectResult<{ killed: number }>> {
+    return projectResult(() => this.#endTurn("end-turn"));
+  }
+
+  #endTurn(reason: "end-turn" | "turn-end" = "end-turn"): ProjectResult<{ killed: number }> {
+    if (this.#endResult !== undefined) return ok(this.#endResult);
+    this.#ended = true;
+
+    if (this.#turnTimer !== undefined) {
+      clearTimeout(this.#turnTimer);
+      this.#turnTimer = undefined;
+    }
+
+    let killed = 0;
+
+    for (const operation of this.#operations.values()) {
+      killed += 1;
+      operation.requestKill(reason);
+    }
+
+    this.#endResult = { killed };
+
+    return ok(this.#endResult);
+  }
+
+  #armTurnTimer(): void {
+    if (this.#turnEndsAt === undefined) return;
+    const remaining = this.#turnEndsAt - Date.now();
+
+    if (remaining <= 0) {
+      this.#endTurn("turn-end");
+
+      return;
+    }
+
+    // setTimeout clamps values above 2^31-1 to an immediate callback. Re-arm long budgets so the
+    // capability does not end early and still owns one bounded timer until its deadline.
+    const delay = Math.min(remaining, 2_147_483_647);
+    this.#turnTimer = setTimeout(() => {
+      this.#turnTimer = undefined;
+      this.#armTurnTimer();
+    }, delay);
+  }
+
+  #containerWasReplaced(): boolean {
+    return (
+      this.#containerState !== undefined &&
+      this.#containerState.generation !== this.#containerGeneration
+    );
+  }
+
+  #checkCapability(): ProjectFailure | undefined {
+    if (this.#containerWasReplaced()) {
+      // Filesystem state is durable across a replacement. Refuse only this first exec so callers
+      // receive an explicit restart outcome, then permit a retry against the new container.
+      this.#containerGeneration = this.#containerState?.generation;
+
+      return { ok: false, error: { code: "container-restarted" } };
+    }
+
+    if (this.#ended) return { ok: false, error: { code: "turn-ended" } };
+
+    if (this.#turnEndsAt !== undefined && Date.now() >= this.#turnEndsAt) {
+      this.#endTurn("turn-end");
+
+      return { ok: false, error: { code: "turn-ended" } };
+    }
+
+    return undefined;
+  }
+
+  #logSettlement(settlement: ExecSettlement, timeoutMs: number): void {
+    logEvent("info", "workspace.exec", {
+      outcome: settlement.outcome,
+      exitCode: settlement.exitCode,
+      durationMs: settlement.durationMs,
+      timeoutMs,
+      endedBy: settlement.endedBy,
+      errorCode: settlement.errorCode,
+    });
+  }
+
+  #logRefusal(timeoutMs: number | null, code: ProjectErrorCode): void {
+    logEvent("info", "workspace.exec", {
+      outcome: "refused",
+      exitCode: null,
+      durationMs: 0,
+      timeoutMs,
+      endedBy: code === "turn-ended" ? "turn-end" : null,
+      errorCode: code,
+    });
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.

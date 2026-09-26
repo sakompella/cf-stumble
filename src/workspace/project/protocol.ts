@@ -21,7 +21,9 @@ export type ProjectErrorCode =
   | "content-too-large"
   | "symlink-loop"
   | "backend-unavailable"
-  | "too-many-operations";
+  | "too-many-operations"
+  | "turn-ended"
+  | "container-restarted";
 
 export type ProjectFailure = { ok: false; error: { code: ProjectErrorCode; path?: string } };
 
@@ -46,7 +48,12 @@ export type ExecEvent =
   | { kind: "stderr"; seq: number; data: string }
   | { kind: "terminal"; seq: number; outcome: "exited"; exitCode: number }
   | { kind: "terminal"; seq: number; outcome: "killed" | "timed-out" }
-  | { kind: "terminal"; seq: number; outcome: "failed"; error: { code: "backend-unavailable" } };
+  | {
+      kind: "terminal";
+      seq: number;
+      outcome: "failed";
+      error: { code: "backend-unavailable" | "container-restarted" };
+    };
 
 export type StartExecInput = { command: string; cwd?: string; timeoutMs?: number };
 
@@ -59,6 +66,7 @@ export interface ProjectRpcTargetContract {
     input: unknown,
   ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<Uint8Array> }>>;
   kill(operationId: unknown): Promise<ProjectResult<null>>;
+  endTurn(): Promise<ProjectResult<{ killed: number }>>;
 }
 
 export function ok<T>(value: T): ProjectResult<T> {

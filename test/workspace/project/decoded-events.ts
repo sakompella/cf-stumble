@@ -82,5 +82,6 @@ export function withDecodedEvents(target: ProjectRpcTarget) {
         : started;
     },
     kill: (...operationId: Parameters<ProjectRpcTarget["kill"]>) => target.kill(...operationId),
+    endTurn: () => target.endTurn(),
   };
 }

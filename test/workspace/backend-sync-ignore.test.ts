@@ -1,6 +1,9 @@
 import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
 import { expect, test } from "vitest";
-import { withWorkspaceSyncIgnore } from "../../src/workspace/backend-sync-ignore.js";
+import {
+  containerStatusIndicatesReplacement,
+  withWorkspaceSyncIgnore,
+} from "../../src/workspace/backend-sync-ignore.js";
 import { workspaceBackendForHost } from "../../src/workspace/host.js";
 
 type SyncRPC = BackendHandle["rpc"]["sync"];
@@ -66,6 +69,14 @@ function connect(backend: WorkspaceBackend): Promise<BackendHandle> {
   // oxlint-disable-next-line anti-slop/no-reflect-apply, typescript/no-unsafe-return, typescript/unbound-method -- SAFETY: the fake backend ignores its host.
   return Reflect.apply(backend.connect, backend, []);
 }
+
+test.each([
+  [{ running: true, exit: null }, false],
+  [{ running: false, exit: null }, true],
+  [{ running: true, exit: { reason: "normal exit" } }, true],
+] as const)("detects a replacement only from an exited or stopped status", (status, expected) => {
+  expect(containerStatusIndicatesReplacement(status)).toBe(expected);
+});
 
 test("adds node_modules to a fetchChanges call with no caller ignore", async () => {
   const inputs: FetchChangesInput[] = [];
