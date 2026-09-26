@@ -70,7 +70,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   readonly #nonce: string;
   readonly #turnEndsAt: number | undefined;
   readonly #containerState: ProjectContainerState | undefined;
-  readonly #containerGeneration: number | undefined;
+  #containerGeneration: number | undefined;
   #turnTimer: ReturnType<typeof setTimeout> | undefined;
   #ended = false;
   #endResult: { killed: number } | undefined;
@@ -274,7 +274,13 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   #checkCapability(): ProjectFailure | undefined {
-    if (this.#containerWasReplaced()) return { ok: false, error: { code: "container-restarted" } };
+    if (this.#containerWasReplaced()) {
+      // Filesystem state is durable across a replacement. Refuse only this first exec so callers
+      // receive an explicit restart outcome, then permit a retry against the new container.
+      this.#containerGeneration = this.#containerState?.generation;
+
+      return { ok: false, error: { code: "container-restarted" } };
+    }
 
     if (this.#ended) return { ok: false, error: { code: "turn-ended" } };
 
@@ -294,8 +300,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       durationMs: settlement.durationMs,
       timeoutMs,
       endedBy: settlement.endedBy,
-      endedByEndTurn: settlement.endedBy === "end-turn",
-      endedByTurnEnd: settlement.endedBy === "turn-end",
       errorCode: settlement.errorCode,
     });
   }
@@ -307,17 +311,12 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       durationMs: 0,
       timeoutMs,
       endedBy: code === "turn-ended" ? "turn-end" : null,
-      endedByEndTurn: false,
-      endedByTurnEnd: code === "turn-ended",
       errorCode: code,
     });
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
   #lstat(path: unknown): ProjectResult<ProjectLstatInfo> {
-    const capabilityFailure = this.#checkCapability();
-
-    if (capabilityFailure !== undefined) return capabilityFailure;
     const segments = parseAddressedPath(path);
 
     if (!segments.ok) return segments;
@@ -348,9 +347,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
   #readFile(path: unknown): ProjectResult<Uint8Array> {
-    const capabilityFailure = this.#checkCapability();
-
-    if (capabilityFailure !== undefined) return capabilityFailure;
     const segments = parseAddressedPath(path);
 
     if (!segments.ok) return segments;
@@ -381,9 +377,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; every argument is parsed immediately below.
   #writeFile(path: unknown, bytes: unknown, mode: unknown): ProjectResult<null> {
-    const capabilityFailure = this.#checkCapability();
-
-    if (capabilityFailure !== undefined) return capabilityFailure;
     const segments = parseAddressedPath(path);
 
     if (!segments.ok) return segments;
@@ -420,9 +413,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
   #listFiles(path: unknown): ProjectResult<readonly ProjectFileInfo[]> {
-    const capabilityFailure = this.#checkCapability();
-
-    if (capabilityFailure !== undefined) return capabilityFailure;
     const segments = parseAddressedPath(path);
 
     if (!segments.ok) return segments;

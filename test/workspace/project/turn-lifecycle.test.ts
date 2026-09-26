@@ -12,11 +12,16 @@ function makeTarget(options: ConstructorParameters<typeof ProjectRpcTarget>[3] =
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();
 
-  const target = withDecodedEvents(
-    new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend, options),
+  const rawTarget = new ProjectRpcTarget(
+    provider,
+    new FakeProjectTransactions(),
+    execBackend,
+    options,
   );
 
-  return { execBackend, target };
+  const target = withDecodedEvents(rawTarget);
+
+  return { execBackend, target, rawTarget };
 }
 
 afterEach(() => {
@@ -33,6 +38,33 @@ test.each([50, 500, 10_000])(
     expect(execBackend.requests[0]?.timeoutMs).toBeLessThanOrEqual(remainingMs);
   },
 );
+
+test("a transport blip does not refuse filesystem or exec operations", async () => {
+  const state = { generation: 0 };
+  const { execBackend, target, rawTarget } = makeTarget({ containerState: state });
+
+  await expect(rawTarget.lstat("/")).resolves.toMatchObject({ ok: true });
+  await expect(target.startExec({ command: "still-available" })).resolves.toMatchObject({
+    ok: true,
+  });
+  expect(execBackend.requests).toHaveLength(1);
+});
+
+test("a replacement preserves filesystem access and reports one restart before exec retry", async () => {
+  const state = { generation: 0 };
+  const { execBackend, target, rawTarget } = makeTarget({ containerState: state });
+  state.generation = 1;
+
+  await expect(rawTarget.lstat("/")).resolves.toMatchObject({ ok: true });
+  await expect(target.startExec({ command: "first-after-restart" })).resolves.toEqual({
+    ok: false,
+    error: { code: "container-restarted" },
+  });
+  await expect(target.startExec({ command: "retry-after-restart" })).resolves.toMatchObject({
+    ok: true,
+  });
+  expect(execBackend.requests).toHaveLength(1);
+});
 
 test("endTurn kills every live exec, is idempotent, and refuses later starts", async () => {
   const events = capturedEvents();
@@ -54,7 +86,6 @@ test("endTurn kills every live exec, is idempotent, and refuses later starts", a
   expect(execEvents.at(-1)).toMatchObject({
     outcome: "refused",
     errorCode: "turn-ended",
-    endedByTurnEnd: true,
   });
 });
 
@@ -78,8 +109,6 @@ test("the turn timer ends the capability and kills its exec", async () => {
   expect(execBackend.handles[0]?.killCalls).toBe(1);
   expect(named(events(), "workspace.exec").at(0)).toMatchObject({
     outcome: "killed",
-    endedByTurnEnd: true,
-    endedByEndTurn: false,
   });
   expect(Number(named(events(), "workspace.exec").at(0)?.timeoutMs)).toBeLessThanOrEqual(50);
 });

@@ -78,6 +78,10 @@ export interface WorkspaceContainerStatus {
   } | null;
 }
 
+export function containerStatusIndicatesReplacement(status: WorkspaceContainerStatus): boolean {
+  return !status.running || status.exit !== null;
+}
+
 function containerReasonCode(reason: string | undefined): string {
   if (reason === undefined) return "not-reported";
 

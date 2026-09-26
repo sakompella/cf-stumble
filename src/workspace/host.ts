@@ -34,6 +34,7 @@ import {
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
 import {
+  containerStatusIndicatesReplacement,
   recordWorkspaceContainerClosed,
   withWorkspaceSyncIgnore,
   type WorkspaceBackendLifecycle,
@@ -168,12 +169,22 @@ export async function ensureManagedInstructions(
  * Its RPC surface returns plain values and one narrow project capability; it never returns the
  * workspace, its container API, or a credential-bearing binding.
  */
+interface WorkspaceContainerLifecycle {
+  generation: number;
+  hasConnected: boolean;
+  runtimeId: string | undefined;
+}
+
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   readonly #container: WorkspaceContainerAPI;
-  readonly #containerLifecycle = { generation: 0 };
+  readonly #containerLifecycle: WorkspaceContainerLifecycle = {
+    generation: 0,
+    hasConnected: false,
+    runtimeId: undefined,
+  };
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
@@ -184,6 +195,15 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
     this.#workspaceBackend = workspaceBackendForHost(this.#containerBackend, {
       connected: (runtimeId) => {
+        if (
+          this.#containerLifecycle.hasConnected &&
+          this.#containerLifecycle.runtimeId !== runtimeId
+        ) {
+          this.#containerLifecycle.generation += 1;
+        }
+
+        this.#containerLifecycle.hasConnected = true;
+        this.#containerLifecycle.runtimeId = runtimeId;
         logEvent("info", "workspace.container.started", {
           outcome: "started",
           runtimeId: runtimeId ?? null,
@@ -193,15 +213,27 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         });
       },
       closed: () => {
-        this.#containerLifecycle.generation += 1;
-        void recordWorkspaceContainerClosed(this.#container);
+        void this.#observeContainerClose();
       },
       failed: () => {
-        this.#containerLifecycle.generation += 1;
-        void recordWorkspaceContainerClosed(this.#container);
+        void this.#observeContainerClose();
       },
     });
     this.#workspace = this.#newWorkspace();
+  }
+
+  async #observeContainerClose(): Promise<void> {
+    try {
+      const status = await this.#container.status();
+
+      if (containerStatusIndicatesReplacement(status)) {
+        this.#containerLifecycle.generation += 1;
+      }
+    } catch {
+      // A failed status query cannot prove that the container was replaced.
+    }
+
+    await recordWorkspaceContainerClosed(this.#container);
   }
 
   /** A Workspace creates its SQLite tables when constructed, so a wiped store needs a new one. */

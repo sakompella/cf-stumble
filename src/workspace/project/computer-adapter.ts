@@ -55,15 +55,15 @@ export function durableObjectTransactions(storage: DurableObjectStorage): Projec
 
 /**
  * Keep each command in its own session. The pinned computerd runner signals only the direct shell,
- * so this wrapper keeps a TERM trap in the session leader and forwards it to the complete process
- * group before exiting. A nested shell keeps the trap installed even when the command uses `exec`.
+ * so this wrapper keeps a TERM trap in the session leader and sends SIGKILL to the complete process
+ * group. A nested shell keeps the trap installed even when the command uses `exec`.
  */
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 export function processGroupCommand(command: string): string {
-  const body = `trap 'trap - TERM INT HUP; kill -KILL -- -$$ 2>/dev/null || kill -KILL $$' TERM INT HUP; /bin/sh -c ${shellQuote(command)}`;
+  const body = `trap 'kill -s KILL 0' TERM INT HUP; /bin/sh -c ${shellQuote(command)} & wait $!`;
 
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }
