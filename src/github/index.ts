@@ -28,3 +28,9 @@ export {
 } from "./device-flow.js";
 
 export { containsCredential, redactCredentials, REDACTED } from "./redaction.js";
+
+export {
+  lookupRepositorySize,
+  REPOSITORY_SIZE_TIMEOUT_MS,
+  type RepositorySizeLookup,
+} from "./repository-size.js";

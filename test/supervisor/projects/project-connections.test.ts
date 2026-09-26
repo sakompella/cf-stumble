@@ -29,7 +29,8 @@ const CLIENT_ID = "Iv1.cfstumbleFAKE";
 
 const REPOSITORY = "https://github.com/sample/repo-1";
 
-type Reply = Readonly<{ [field: string]: string | number }>;
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Scripted GitHub replies intentionally cover several response shapes.
+type Reply = Readonly<{ [field: string]: unknown }>;
 
 function githubReplying(replies: readonly Reply[]): GitHubFetch {
   let index = 0;
@@ -93,6 +94,93 @@ function tenant(
 afterEach(async () => {
   vi.restoreAllMocks();
   await reset();
+});
+
+test("refuses a repository that exceeds the durable workspace size budget before cloning", async () => {
+  const logged = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const subject = tenant("repository-too-large", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 6_000_000, default_branch: "main" },
+      { truncated: false, tree: [] },
+    ],
+  });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
+  expect(subject.workspace.commands.filter((command) => command.includes("git clone"))).toEqual([]);
+  const event = JSON.stringify(logged.mock.calls);
+  expect(event).toContain("project.size-check");
+  expect(event).toContain("sample-repo-1");
+  expect(event).toContain("repository-too-large");
+  expect(event).not.toContain(REPOSITORY);
+});
+
+test("allows a measured repository within both workspace limits", async () => {
+  const subject = tenant("repository-size-allowed", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 4_999_999, default_branch: "main" },
+      { truncated: false, tree: [{ type: "blob" }] },
+    ],
+  });
+
+  const connected = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(connected).toMatchObject({ ok: true });
+});
+
+test("skips the size guard when GitHub metadata is unavailable", async () => {
+  const subject = tenant("repository-size-skipped", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [{ message: "rate limit exceeded" }],
+  });
+
+  const connected = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(connected).toMatchObject({ ok: true });
+});
+
+test("refuses a repository whose tree response is truncated", async () => {
+  const subject = tenant("repository-tree-truncated", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 1, default_branch: "main" },
+      { truncated: true, tree: [{ type: "blob" }] },
+    ],
+  });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
+  expect(subject.workspace.commands).toEqual([]);
+});
+
+test("refuses a repository whose tree exceeds the file-count limit", async () => {
+  const subject = tenant("repository-file-count", {
+    fallbackToken: FAKE_TOKEN,
+    replies: [
+      { size: 1, default_branch: "main" },
+      { truncated: false, tree: Array.from({ length: 25_001 }, () => ({ type: "blob" })) },
+    ],
+  });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
+  expect(subject.workspace.commands).toEqual([]);
 });
 
 test("connects a repository once the workspace credential works, and provisions it", async () => {
@@ -161,6 +249,18 @@ test("keeps a repository the workspace cannot read out of the catalog", async ()
     subject.workspace.commands.some((command) => command.includes("git clone")),
     "a repository is verified before anything is cloned",
   ).toBe(false);
+});
+
+test("maps a clone disk failure to repository-too-large", async () => {
+  const workspace = new FakeTenantWorkspace();
+  workspace.cloneExitCode = 122;
+  const subject = tenant("connect-clone-disk-fails", { workspace, fallbackToken: FAKE_TOKEN });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
 });
 
 test("takes a project back out when its clone fails, so a listed project has files", async () => {

@@ -166,6 +166,7 @@ test.each([
   ["invalid-repository-url", 400],
   ["project-id-conflict", 409],
   ["repository-not-accessible", 403],
+  ["repository-too-large", 413],
   ["tooling-missing", 503],
   ["provisioning-failed", 503],
 ] as const)("answers a %s connection with %i", async (code, status) => {
