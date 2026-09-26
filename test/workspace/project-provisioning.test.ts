@@ -48,6 +48,7 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
   readonly plans: WorkspacePlan[] = [];
   failingStep: ProjectProvisionStepName | undefined;
+  cloneStdout = "";
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
@@ -80,7 +81,15 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
 
     return Promise.resolve(
       plan.kind === "run-command"
-        ? { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } }
+        ? {
+            ok: true,
+            result: {
+              kind: "command",
+              stdout: request.step === "clone" ? this.cloneStdout : "",
+              stderr: "",
+              exitCode: 0,
+            },
+          }
         : { ok: true, result: { kind: "written" } },
     );
   }
@@ -111,6 +120,20 @@ test("namespace fixtures record names independently", () => {
 
   expect(first.names).toEqual(["first-workspace"]);
   expect(second.names).toEqual(["second-workspace"]);
+});
+
+test("logs the clone duration and resulting durable size without a path", async () => {
+  const host = new FakeProvisionHost();
+  host.cloneStdout = "cf-stumble-clone-size-kb=123\n";
+  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await provisionerFor(host).provision();
+
+  const event = JSON.stringify(logged.mock.calls);
+  expect(event).toContain("workspace.clone");
+  expect(event).toContain(projectOne.id);
+  expect(event).toContain("123");
+  expect(event).not.toContain("/workspace");
 });
 
 test("clones and then writes the managed instructions into the tenant's workspace", async () => {

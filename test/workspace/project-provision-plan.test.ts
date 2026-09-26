@@ -60,6 +60,28 @@ test("clones the repository the catalog names for the project", () => {
   expect(cloneSource(projectOne)).not.toContain(projectTwo.repositoryUrl);
 });
 
+test("uses a shallow blobless single-branch clone", () => {
+  const source = cloneSource(projectOne);
+
+  expect(source).toContain(
+    'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
+  );
+});
+
+test("marks a clone that runs out of disk as a repository size failure", () => {
+  const source = cloneSource(projectOne);
+
+  expect(source).toContain(
+    "grep -Eiq 'no space left on device|disk quota exceeded|not enough space'",
+  );
+  expect(source).toContain("exit 122");
+});
+
+test("prints the resulting clone size for structured provisioning telemetry", () => {
+  expect(cloneSource(projectOne)).toContain('du -sk -- "$repository"');
+  expect(cloneSource(projectOne)).toContain("cf-stumble-clone-size-kb=%s");
+});
+
 test("quotes an interpolated repository URL the catalog would accept", () => {
   // The catalog's URL checks accept an embedded single quote, so the planner cannot be the place
   // that assumes a URL is shell-safe. A later configuration edit is all it would take.
@@ -90,8 +112,10 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
     'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
   );
   expect(source, "a clone becomes the project root only after it succeeds").toContain(
+    '  if clone_output="$(git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging" 2>&1)"; then',
+  );
+  expect(source).toContain(
     [
-      '  git clone "$expected_remote" "$staging"',
       '  git -C "$staging" config core.fileMode false',
       '  rmdir "$repository" 2>/dev/null || true',
       '  mv "$staging" "$repository"',

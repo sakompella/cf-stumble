@@ -1,7 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
 
+// oxlint-disable max-lines -- Connection reconciliation includes the size guard and clone failure mapping.
+
 import { ConnectedProjects } from "./connected-projects.js";
 import type { HarnessCommit } from "../../harness-commit.js";
+import { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "../../project-provision.js";
+import { lookupRepositorySize, type RepositorySizeLookup } from "../../github/index.js";
+import { parseGitHubToken, type GitHubFetch, type GitHubToken } from "../../github/index.js";
 import {
   GitHubConnection,
   type GitHubAuthorizationOutcome,
@@ -15,6 +20,7 @@ import {
   resolveProject,
   type Project,
   type ProjectCatalog,
+  type ProjectId,
   type PublicRepositoryUrl,
 } from "../../project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../../selectable-projects.js";
@@ -28,7 +34,8 @@ import {
   type ProvisionWorkspaceNamespace,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
-import { logRedactedCause } from "../../diagnostics.js";
+// oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
+import { logEvent, logRedactedCause } from "../../diagnostics.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
@@ -45,6 +52,51 @@ export type ProjectListView = Readonly<{
   github: GitHubConnectionStatus;
 }>;
 
+/** A full-tree file ceiling protects the per-file durable workspace index and sync walk. */
+export const MAX_REPOSITORY_BLOB_COUNT = 25_000;
+
+/** A size ceiling leaves room on the 16 GB standard-3 disk for the harness and other projects. */
+export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
+
+/** A truncated tree cannot prove the file count, so it is not safe to connect. */
+export const REPOSITORY_TREE_MUST_BE_COMPLETE = true;
+
+function repositorySizeReason(measured: RepositorySizeLookup | undefined): string | undefined {
+  if (measured === undefined) return undefined;
+
+  if (REPOSITORY_TREE_MUST_BE_COMPLETE && measured.truncated) return "tree-truncated";
+
+  if (measured.blobCount > MAX_REPOSITORY_BLOB_COUNT) return "too-many-files";
+
+  if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
+
+  return "within-limits";
+}
+
+async function repositorySizeAllowed(
+  project: ProjectId,
+  repositoryUrl: PublicRepositoryUrl,
+  token: GitHubToken | undefined,
+  fetcher: GitHubFetch,
+): Promise<boolean> {
+  const measured = await lookupRepositorySize(repositoryUrl, token, fetcher);
+  const reason = repositorySizeReason(measured);
+
+  const outcome =
+    measured === undefined ? "skipped" : reason === "within-limits" ? "allowed" : "refused";
+
+  logEvent(outcome === "allowed" ? "info" : "warn", "project.size-check", {
+    project,
+    sizeKb: measured?.sizeKb ?? null,
+    blobCount: measured?.blobCount ?? null,
+    truncated: measured?.truncated ?? null,
+    outcome,
+    reason: reason ?? "lookup-failed",
+  });
+
+  return reason === undefined || reason === "within-limits";
+}
+
 export type ConnectRepositoryProblem = Readonly<{
   code:
     | "invalid-repository-url"
@@ -52,6 +104,7 @@ export type ConnectRepositoryProblem = Readonly<{
     | "repository-not-accessible"
     | "workspace-unavailable"
     | "tooling-missing"
+    | "repository-too-large"
     | "provisioning-failed";
   detail: string;
 }>;
@@ -67,7 +120,11 @@ export type ConnectRepositoryResult =
 
 /** Why a project could not be provisioned when it was used. */
 export type ProjectUseProblem = Readonly<{
-  code: "invalid-project-id" | "unknown-project-id" | "provisioning-failed";
+  code:
+    | "invalid-project-id"
+    | "unknown-project-id"
+    | "repository-too-large"
+    | "provisioning-failed";
 }>;
 
 export type ProjectUseResult =
@@ -91,11 +148,15 @@ export class ProjectConnections {
   private readonly namespace: CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace;
+  private readonly repositorySizeToken: GitHubToken | undefined;
+  private readonly githubFetcher: GitHubFetch;
 
   constructor(input: ProjectConnectionsInput) {
     this.projects = new ConnectedProjects(input.storage);
     this.workspaceName = input.workspaceName;
     this.namespace = input.namespace;
+    this.repositorySizeToken = parseGitHubToken(input.environment.fallbackToken);
+    this.githubFetcher = input.environment.fetcher;
     this.github = new GitHubConnection({
       store: new GitHubConnectionStore(input.storage),
       workspaceName: input.workspaceName,
@@ -164,6 +225,7 @@ export class ProjectConnections {
    * rather than what cf-stumble believes. Only then is the project stored and provisioned, and a
    * clone that fails takes a newly stored project back out: a project in the list has files.
    */
+  // oxlint-disable-next-line max-lines-per-function -- The workflow keeps guard, credential, access, and catalog effects ordered.
   async connect(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the repository URL arrives from a client.
     repositoryUrl: unknown,
@@ -171,18 +233,33 @@ export class ProjectConnections {
     displayName: unknown,
     now: number,
   ): Promise<ConnectRepositoryResult> {
+    const canonical = canonicalRepositoryUrl(repositoryUrl);
+    const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
+
+    // A URL that derives no project id could never be stored, so it is refused before the
+    // workspace is asked to reach it.
+    if (canonical === undefined || projectId === undefined) {
+      return this.refused(
+        { code: "invalid-repository-url", detail: "" },
+        { state: "disconnected" },
+      );
+    }
+
+    const sizeAllowed = await repositorySizeAllowed(
+      projectId,
+      canonical,
+      this.repositorySizeToken,
+      this.githubFetcher,
+    );
+
+    if (!sizeAllowed) {
+      return this.refused({ code: "repository-too-large", detail: "" }, { state: "disconnected" });
+    }
+
     const github = await this.github.ensureCredential(now);
 
     if (github.state === "tooling-missing") {
       return this.refused({ code: "tooling-missing", detail: "" }, github);
-    }
-
-    const canonical = canonicalRepositoryUrl(repositoryUrl);
-
-    // A URL that derives no project id could never be stored, so it is refused before the
-    // workspace is asked to reach it.
-    if (canonical === undefined || projectIdForRepository(canonical) === undefined) {
-      return this.refused({ code: "invalid-repository-url", detail: "" }, github);
     }
 
     const access = await checkRepositoryAccess({
@@ -272,9 +349,19 @@ export class ProjectConnections {
       signal,
     });
 
-    return provisioned.isErr()
-      ? { ok: false, problem: { code: "provisioning-failed" } }
-      : { ok: true, project: resolved.project };
+    if (provisioned.isErr()) {
+      const diskFailure =
+        provisioned.error.code === "provision-step-failed" &&
+        provisioned.error.step === "clone" &&
+        provisioned.error.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE;
+
+      return {
+        ok: false,
+        problem: { code: diskFailure ? "repository-too-large" : "provisioning-failed" },
+      };
+    }
+
+    return { ok: true, project: resolved.project };
   }
 
   private async store(
@@ -297,7 +384,16 @@ export class ProjectConnections {
         this.projects.disconnect(connected.project.id);
       }
 
-      return this.refused({ code: "provisioning-failed", detail: "" }, github);
+      return this.refused(
+        {
+          code:
+            provisioned.problem.code === "repository-too-large"
+              ? "repository-too-large"
+              : "provisioning-failed",
+          detail: "",
+        },
+        github,
+      );
     }
 
     return {

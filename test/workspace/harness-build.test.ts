@@ -267,6 +267,9 @@ test("the provision step obtains the requested commit before the build reads it"
   );
 
   expect(provision.source).toContain(`commit=${shellQuote(commit)}`);
+  expect(provision.source, "a fresh harness checkout should not retain all history").toContain(
+    'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$incoming"',
+  );
   expect(provision.source, "a commit pushed after provisioning must be fetched").toContain(
     'git --git-dir="$git_dir" fetch --no-tags --quiet origin "$commit"',
   );
