@@ -11,6 +11,7 @@ import type {
   AgentHarnessTool,
   AgentMessage,
   AgentState,
+  AssistantMessage,
   AgentTool,
   ExecutionEnv,
   ExecutionToolContext,
@@ -25,6 +26,7 @@ import {
   GENERATION_0_SYSTEM_PROMPT,
   MAX_MODEL_CALLS,
 } from "./turn-policy.js";
+import { createModelCallAccounting, type ModelTurnAccounting } from "./model-accounting.js";
 import type { CompactionPolicy } from "./compaction.js";
 
 export type PiAgentTurnState = Readonly<
@@ -36,8 +38,13 @@ export type PiAgentTurnProblem = Readonly<{
 }>;
 
 export type PiAgentTurnOutcome =
-  | Readonly<{ ok: true; state: PiAgentTurnState }>
-  | Readonly<{ ok: false; problem: PiAgentTurnProblem; state: PiAgentTurnState }>;
+  | Readonly<{ ok: true; state: PiAgentTurnState; model: ModelTurnAccounting }>
+  | Readonly<{
+      ok: false;
+      problem: PiAgentTurnProblem;
+      state: PiAgentTurnState;
+      model: ModelTurnAccounting;
+    }>;
 
 export type PiAgentTurnRequest = Readonly<{
   prompt: string;
@@ -134,23 +141,60 @@ async function startingMessages(request: PiAgentTurnRequest): Promise<readonly A
   return compacted ?? messages;
 }
 
+function accountStreamFn(
+  streamFn: StreamFn,
+  accounting: ReturnType<typeof createModelCallAccounting>,
+): StreamFn {
+  return async (model, context, options) => {
+    const finish = accounting.start();
+    let stream: Awaited<ReturnType<StreamFn>>;
+
+    try {
+      stream = await streamFn(model, context, options);
+    } catch (error) {
+      finish("failed");
+      throw error;
+    }
+
+    void stream.result().then(
+      (message: AssistantMessage) => {
+        finish(
+          message.stopReason === "aborted"
+            ? "aborted"
+            : message.stopReason === "error"
+              ? "failed"
+              : "completed",
+        );
+      },
+      () => {
+        finish("failed");
+      },
+    );
+
+    return stream;
+  };
+}
+
 export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAgentTurnOutcome> {
   const context = { env: request.env } satisfies ExecutionToolContext;
   let reachedCallLimit = false;
   let modelCalls = 0;
+  const accounting = createModelCallAccounting();
+  const streamFn = accountStreamFn(request.streamFn, accounting);
+  const accountedRequest = { ...request, streamFn };
 
   const agent = new Agent({
     initialState: {
       ...request.state,
       systemPrompt: await turnSystemPrompt(request),
-      messages: [...(await startingMessages(request))],
+      messages: [...(await startingMessages(accountedRequest))],
       tools: executionTools(context),
     },
     // Pi's own message conversion, so a compaction summary reaches the model as the summary block
     // Pi defines. The agent's default conversion drops every role it does not send verbatim, which
     // would silently discard exactly the message compaction just produced.
     convertToLlm,
-    streamFn: request.streamFn,
+    streamFn,
     shouldStopAfterTurn: ({ toolResults }) => {
       modelCalls += 1;
       reachedCallLimit = modelCalls === MAX_MODEL_CALLS && toolResults.length > 0;
@@ -177,10 +221,10 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
   const state = handoffState(agent);
 
   if (reachedCallLimit) {
-    return { ok: false, problem: { code: "model-call-limit" }, state };
+    return { ok: false, problem: { code: "model-call-limit" }, state, model: accounting.summary() };
   }
 
   return agent.state.errorMessage === undefined
-    ? { ok: true, state }
-    : { ok: false, problem: { code: "model-error" }, state };
+    ? { ok: true, state, model: accounting.summary() }
+    : { ok: false, problem: { code: "model-error" }, state, model: accounting.summary() };
 }

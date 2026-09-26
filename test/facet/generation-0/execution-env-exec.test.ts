@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { createFacetExecutionEnv } from "../../../src/facet/generation-0/execution-env.js";
+import { TURN_TOOL_TIMEOUT_RESERVE_MS } from "../../../src/facet/generation-0/turn-policy.js";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
 
 /** Waits for the microtask queue this test's promises are chained on to drain. */
@@ -106,4 +108,42 @@ test("a hanging or rejecting backend kill does not stop an abort from resolving"
 
   controller.abort();
   await expect(execPromise).resolves.toMatchObject({ ok: false, error: { code: "aborted" } });
+});
+
+test("does not start a command when the turn reserve is exhausted", async () => {
+  const backend = makeFacetExecutionEnv();
+  const now = 100_000;
+
+  const env = createFacetExecutionEnv({
+    cwd: "/workspace",
+    projectTarget: backend.projectTarget,
+    turnDeadlineAt: now + TURN_TOOL_TIMEOUT_RESERVE_MS,
+    now: () => now,
+  });
+
+  const result = await env.exec("long-check");
+
+  expect(result).toMatchObject({ ok: false, error: { code: "timeout" } });
+
+  if (!result.ok) expect(result.error.message).toContain("reserved time");
+  expect(backend.execBackend.requests).toHaveLength(0);
+});
+
+test("passes only the budgeted timeout to the project target", async () => {
+  const backend = makeFacetExecutionEnv();
+  const now = 100_000;
+
+  const env = createFacetExecutionEnv({
+    cwd: "/workspace",
+    projectTarget: backend.projectTarget,
+    turnDeadlineAt: now + TURN_TOOL_TIMEOUT_RESERVE_MS + 10_000,
+    now: () => now,
+  });
+
+  const promise = env.exec("long-check", { timeout: 600 });
+
+  await tick();
+  expect(backend.execBackend.requests[0]?.timeoutMs).toBe(10_000);
+  backend.execBackend.handles[0]!.push({ name: "exit", exitCode: 0 });
+  await expect(promise).resolves.toMatchObject({ ok: true });
 });

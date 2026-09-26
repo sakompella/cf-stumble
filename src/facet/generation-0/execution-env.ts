@@ -22,6 +22,8 @@ export interface FacetExecutionEnvLocal {
    */
   readonly cwd: string;
   readonly projectTarget: ProjectRpcTargetContract;
+  readonly turnDeadlineAt?: number;
+  readonly now?: () => number;
 }
 
 /**
@@ -35,7 +37,8 @@ export interface FacetExecutionEnvLocal {
  * function only binds that logic to one `{ cwd, projectTarget }` pair.
  */
 export function createFacetExecutionEnv(local: FacetExecutionEnvLocal): ExecutionEnv {
-  const { cwd, projectTarget } = local;
+  const { cwd, projectTarget, turnDeadlineAt, now = Date.now } = local;
+  const budget = turnDeadlineAt === undefined ? undefined : { deadlineAt: turnDeadlineAt, now };
 
   return {
     cwd,
@@ -58,6 +61,6 @@ export function createFacetExecutionEnv(local: FacetExecutionEnvLocal): Executio
     createTempDir: () => Promise.resolve(unsupportedError("createTempDir")),
     createTempFile: (options) => createTempFileVia(projectTarget, options),
     cleanup: () => Promise.resolve(),
-    exec: (command, options) => execViaProjectTarget(cwd, projectTarget, command, options),
+    exec: (command, options) => execViaProjectTarget(cwd, projectTarget, command, options, budget),
   };
 }

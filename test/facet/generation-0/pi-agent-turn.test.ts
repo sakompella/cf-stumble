@@ -218,3 +218,19 @@ test("reports call-limit exhaustion as a failure and makes no 25th model call", 
   expect(script.contexts).toHaveLength(24);
   expect(outcome).toMatchObject({ ok: false, problem: { code: "model-call-limit" } });
 });
+
+test("accounts model calls on the returned turn outcome", async () => {
+  const script = scriptedStream([assistant([{ type: "text", text: "Done." }], "stop")]);
+
+  const outcome = await runPiAgentTurn({
+    prompt: "Answer.",
+    state: createPiAgentTurnState(model),
+    env: makeFacetExecutionEnv().env,
+    streamFn: script.streamFn,
+  });
+
+  expect(outcome).toMatchObject({
+    ok: true,
+    model: { calls: 1, completed: 1, failed: 0, aborted: 0 },
+  });
+});

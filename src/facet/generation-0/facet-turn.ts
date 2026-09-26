@@ -4,6 +4,7 @@ import { createPiAgentTurnState, runPiAgentTurn } from "./pi-agent-turn.js";
 import { leaseProjectCapability, type ProjectCapabilityLease } from "./project-capability.js";
 import { createRouteStreamFn, ROUTE_MODEL } from "./route-stream.js";
 import { TurnFrames } from "./turn-frames.js";
+import { PROJECT_TURN_DEADLINE_MS } from "../../turn-budget.js";
 import { mutatesWorkspace, readWorkspaceDiff } from "./workspace-diff.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { Generation0Capabilities } from "./capabilities.js";
@@ -23,8 +24,13 @@ function encodeFrame(frame: FacetTurnFrame): Uint8Array {
 
 function outcomeFrame(outcome: PiAgentTurnOutcome): FacetTurnFrame {
   return outcome.ok
-    ? { kind: "completed", state: outcome.state }
-    : { kind: "failed", code: outcome.problem.code, state: outcome.state };
+    ? { kind: "completed", state: outcome.state, modelAccounting: outcome.model }
+    : {
+        kind: "failed",
+        code: outcome.problem.code,
+        state: outcome.state,
+        modelAccounting: outcome.model,
+      };
 }
 
 function diffFrame(diff: WorkspaceDiff): FacetTurnFrame {
@@ -39,10 +45,19 @@ async function pumpTurn(
   request: FacetTurnRequest,
   workingDirectory: string,
   signal: AbortSignal,
+  deadlineAt: number,
+  now: () => number,
   publish: (frame: FacetTurnFrame) => void,
 ): Promise<void> {
   const frames = new TurnFrames();
-  const env = createFacetExecutionEnv({ cwd: workingDirectory, projectTarget: lease.capability });
+
+  const env = createFacetExecutionEnv({
+    cwd: workingDirectory,
+    projectTarget: lease.capability,
+    turnDeadlineAt: deadlineAt,
+    now,
+  });
+
   let touchedFiles = false;
 
   const outcome = await runPiAgentTurn({
@@ -86,13 +101,26 @@ async function pumpTurn(
  * and the caller cancelling this stream. The last one also aborts the run, so a caller that stops
  * reading stops the work rather than merely stopping the frames.
  */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this parses an optional RPC deadline.
+export function resolveTurnDeadlineAt(value: unknown, startedAt: number): number {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC deadline is untrusted.
+  if (typeof value === "number" && Number.isFinite(value) && value > startedAt) return value;
+
+  return startedAt + PROJECT_TURN_DEADLINE_MS;
+}
+
+// oxlint-disable-next-line max-lines-per-function -- The stream lifecycle keeps parsing, leasing, and cancellation in one boundary.
 export function startFacetTurn(
   capabilities: Generation0Capabilities,
   received: ProjectRpcTargetContract,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request arrives over RPC, so it has no proven shape here.
   request: unknown,
   workingDirectory: string,
+  deadline?: number,
+  now: () => number = Date.now,
 ): ReadableStream<Uint8Array> {
+  const startedAt = now();
+  const deadlineAt = resolveTurnDeadlineAt(deadline, startedAt);
   const cancellation = new AbortController();
   let lease: ProjectCapabilityLease | undefined;
 
@@ -126,7 +154,16 @@ export function startFacetTurn(
       }
 
       try {
-        await pumpTurn(capabilities, lease, parsed, workingDirectory, cancellation.signal, publish);
+        await pumpTurn(
+          capabilities,
+          lease,
+          parsed,
+          workingDirectory,
+          cancellation.signal,
+          deadlineAt,
+          now,
+          publish,
+        );
         close();
       } catch (error) {
         if (!cancellation.signal.aborted) controller.error(error);

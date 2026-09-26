@@ -22,6 +22,9 @@ export const GENERATION_0_SYSTEM_PROMPT = [
  */
 export const MAX_MODEL_CALLS = 24;
 
+/** Keep enough wall time for the model to read a tool result and finish the turn. */
+export const TURN_TOOL_TIMEOUT_RESERVE_MS = 60_000;
+
 /**
  * How much of one tool result reaches the browser in a frame, in the same two limits Pi's own
  * tools apply to their output: `createBashTool` already truncates a command's output to the last

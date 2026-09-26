@@ -36,6 +36,7 @@ export interface MainFacetTarget extends Rpc.DurableObjectBranded {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request crosses an RPC hop into generated code, so the host proves nothing about its shape and the generation parses it.
     request: unknown,
     workingDirectory: string,
+    deadlineAt?: number,
   ): ReadableStream<Uint8Array>;
 }
 
