@@ -76,6 +76,11 @@ export type ProvisionedProjectWorkspace = Readonly<{
 
 export type HarnessProvisionStepName = "provision" | "instructions";
 
+const HARNESS_PROVISION_STEP_NAMES: readonly HarnessProvisionStepName[] = [
+  "provision",
+  "instructions",
+];
+
 export type HarnessProvisionProblem =
   | Readonly<{
       code: "harness-provision-step-failed";
@@ -266,11 +271,17 @@ type ActiveProvision = Readonly<{
 /** The host kills a command at its ceiling; this margin covers the RPC's final settling turn. */
 export const PROVISION_STALE_MARGIN_MS = WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
-/** One provision plan has two steps, and each Workspace Host call has the same bound. */
+/** Each Workspace Host call has the command ceiling plus its RPC settling margin. */
 export const PROVISION_RPC_TIMEOUT_MS =
   WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
-export const PROVISION_STALE_AFTER_MS = 2 * PROVISION_RPC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
+const PROVISION_PLAN_STEP_COUNT = Math.max(
+  PROJECT_PROVISION_STEP_NAMES.length,
+  HARNESS_PROVISION_STEP_NAMES.length,
+);
+
+export const PROVISION_STALE_AFTER_MS =
+  PROVISION_PLAN_STEP_COUNT * PROVISION_RPC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
 
 /**
  * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn
@@ -502,7 +513,7 @@ async function provisionResolvedHarness(
 ): Promise<HarnessProvisioningOutcome> {
   const host = input.namespace.getByName(input.workspaceName);
 
-  for (const step of ["provision", "instructions"] as const) {
+  for (const step of HARNESS_PROVISION_STEP_NAMES) {
     const ran = await timed(
       "workspace.provision-step",
       {

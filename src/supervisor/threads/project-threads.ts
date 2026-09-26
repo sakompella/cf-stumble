@@ -46,8 +46,8 @@ export class ProjectThreads {
   private readonly store: ThreadStore;
   private readonly catalog: ProjectCatalogSource;
 
-  constructor(storage: DurableObjectStorage, catalog: ProjectCatalogSource) {
-    this.store = new ThreadStore(storage);
+  constructor(storage: DurableObjectStorage, catalog: ProjectCatalogSource, holderId?: string) {
+    this.store = new ThreadStore(storage, holderId);
     this.catalog = catalog;
   }
 
@@ -128,7 +128,14 @@ function serialized(result: ThreadResult): ProjectThreadResult {
 }
 
 function serializedLease(result: ThreadLeaseResult): ProjectTurnLeaseResult {
-  return result.ok
-    ? { ok: true, thread: serializedThread(result.lease.thread), leaseId: result.lease.leaseId }
-    : result;
+  if (!result.ok) return result;
+
+  return result.lease.reclaimed
+    ? {
+        ok: true,
+        thread: serializedThread(result.lease.thread),
+        leaseId: result.lease.leaseId,
+        reclaimed: true,
+      }
+    : { ok: true, thread: serializedThread(result.lease.thread), leaseId: result.lease.leaseId };
 }

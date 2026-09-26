@@ -217,6 +217,13 @@ function admittedTurn(
 
   logEvent("info", "turn.admitted", turnFields(trace));
 
+  if (admitted.reclaimed === true) {
+    logEvent("warn", "turn.lease-reclaimed", {
+      ...turnFields(trace),
+      why: "previous-instance",
+    });
+  }
+
   return {
     projectId,
     leaseId: admitted.leaseId,

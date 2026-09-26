@@ -21,6 +21,8 @@ export type ProjectThread = Readonly<{
   revision: number;
   turnActive: boolean;
   turnDeadlineAt: number | undefined;
+  /** The Supervisor instance that currently holds the active lease. */
+  turnHolderId?: string | undefined;
 }>;
 
 export type ThreadProblem =
@@ -78,11 +80,23 @@ export type ProjectThreadResult =
  * so a client that never started a turn cannot learn the lease of one that is running.
  */
 export type ProjectTurnLeaseResult =
-  | { readonly ok: true; readonly thread: SerializedThread; readonly leaseId: string }
+  | {
+      readonly ok: true;
+      readonly thread: SerializedThread;
+      readonly leaseId: string;
+      readonly reclaimed?: boolean;
+    }
   | { readonly ok: false; readonly problem: ProjectThreadProblem };
 
 export function emptyThread(projectId: ProjectId): ProjectThread {
-  return { projectId, messages: [], revision: 0, turnActive: false, turnDeadlineAt: undefined };
+  return {
+    projectId,
+    messages: [],
+    revision: 0,
+    turnActive: false,
+    turnDeadlineAt: undefined,
+    turnHolderId: undefined,
+  };
 }
 
 export function serializedThread(thread: ProjectThread): SerializedThread {

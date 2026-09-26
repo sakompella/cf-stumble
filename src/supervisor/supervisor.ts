@@ -90,6 +90,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly connections: ProjectConnections;
   /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
   private readonly workspaceName: string;
+  /** Fences leases held by an instance that Durable Objects have since replaced. */
+  private readonly instanceId = crypto.randomUUID();
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
@@ -123,7 +125,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
     // One catalog reaches the thread surface and the turn path, read at each call so a repository
     // connected a moment ago resolves without restarting this object.
-    this.threads = new ProjectThreads(ctx.storage, () => this.connections.catalog());
+    this.threads = new ProjectThreads(
+      ctx.storage,
+      () => this.connections.catalog(),
+      this.instanceId,
+    );
   }
 
   private modelRoute(): MainFacetCapabilities["MODEL"] {
