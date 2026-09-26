@@ -66,7 +66,9 @@ test("a build never replaces the editable harness checkout", () => {
   );
 
   expect(
-    provision.source.indexOf('git clone "$expected_remote" "$incoming"'),
+    provision.source.indexOf(
+      'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$incoming"',
+    ),
     "a replacement clone must land beside the repository, not on top of it",
   ).toBeGreaterThan(0);
   expect(
@@ -79,7 +81,7 @@ test("a build never replaces the editable harness checkout", () => {
   ).toContain('    printf "%s is not a git repository and is not empty\\n" "$repository" >&2');
   expect(provision.source).toContain(
     [
-      '  git clone "$expected_remote" "$incoming"',
+      '  git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$incoming"',
       '  git -C "$incoming" config core.fileMode false',
       '  rmdir "$repository" 2>/dev/null || true',
     ].join("\n"),

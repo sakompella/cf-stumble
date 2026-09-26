@@ -9,6 +9,19 @@ import {
 import type { Project, ProjectId } from "./project-catalog.js";
 
 /**
+ * Keep enough recent history for ordinary `git log -n` and local review, while leaving older
+ * history available through an explicit `git fetch`. Blob filtering keeps the durable clone small;
+ * Git fetches a blob only when a command needs it.
+ */
+export const PROJECT_CLONE_DEPTH = 50;
+
+/** Exit code reserved for a clone rejected because the workspace ran out of disk. */
+export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
+
+/** Prefix emitted only by the clone shell so its caller can record durable size without a path. */
+export const PROJECT_CLONE_SIZE_MARKER = "cf-stumble-clone-size-kb=";
+
+/**
  * Where one catalog project's repository lands in the tenant's shared workspace, and where the
  * managed agent instructions go.
  *
@@ -107,6 +120,7 @@ export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] =
  * is configuration rather than a constant, and hand-written escaping is what turns a quoting
  * helper into an injection.
  */
+// oxlint-disable-next-line max-lines-per-function -- This shell keeps locking, clone, and reconciliation atomic.
 function cloneProjectRepository(
   configuration: ProjectProvisionConfiguration,
   repositoryUrl: string,
@@ -142,13 +156,25 @@ function cloneProjectRepository(
     "    exit 1",
     "  fi",
     '  rm -rf "$staging"',
-    '  git clone "$expected_remote" "$staging"',
+    `  if clone_output="$(git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging" 2>&1)"; then`,
+    "    :",
+    "  else",
+    "    clone_exit=$?",
+    `    if printf '%s\\n' "$clone_output" | grep -Eiq 'no space left on device|disk quota exceeded|not enough space'; then`,
+    '      printf "repository clone exceeded workspace capacity\\n" >&2',
+    `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
+    "    fi",
+    '    printf "%s\\n" "$clone_output" >&2',
+    '    exit "$clone_exit"',
+    "  fi",
     '  git -C "$staging" config core.fileMode false',
     '  rmdir "$repository" 2>/dev/null || true',
     '  mv "$staging" "$repository"',
     "fi",
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
     'test "$actual_remote" = "$expected_remote"',
+    'clone_size_kb="$(du -sk -- "$repository" | cut -f1)"',
+    `printf "${PROJECT_CLONE_SIZE_MARKER}%s\\n" "$clone_size_kb"`,
   ].join("\n");
 }
 

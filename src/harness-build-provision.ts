@@ -1,4 +1,5 @@
 import { shellQuote } from "./shell-quote.js";
+import { PROJECT_CLONE_DEPTH } from "./project-provision.js";
 import { WORKSPACE_ROOT } from "./workspace-layout.js";
 import type { HarnessBuildConfiguration } from "./harness-build.js";
 import type { HarnessCommit } from "./harness-commit.js";
@@ -49,7 +50,7 @@ function reconcileHarnessRepository(): readonly string[] {
     "  fi",
     '  incoming="${repository}.incoming.$$"',
     '  rm -rf "$incoming"',
-    '  git clone "$expected_remote" "$incoming"',
+    `  git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$incoming"`,
     '  git -C "$incoming" config core.fileMode false',
     '  rmdir "$repository" 2>/dev/null || true',
     '  mv "$incoming" "$repository"',
