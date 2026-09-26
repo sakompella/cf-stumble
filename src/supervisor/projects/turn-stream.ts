@@ -6,6 +6,7 @@ import {
 import { endTurn, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
 import type { TurnBound } from "./turn-bound.js";
 import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
+import { logRedactedCause } from "../../diagnostics.js";
 
 export type ProjectTurnStreamInput = TurnSettlement &
   Readonly<{
@@ -18,6 +19,18 @@ export type ProjectTurnStreamInput = TurnSettlement &
     /** Who this turn is in the operational log. */
     trace: TurnTrace;
   }>;
+
+function abandonFailedStream(input: ProjectTurnStreamInput): void {
+  try {
+    input.threads.abandonTurn(input.projectId, input.leaseId);
+  } catch (releaseCause) {
+    // If the Supervisor's storage connection closed, the lease deadline is the remaining fence.
+    // Cleanup must not replace the stream failure or prevent the abandonment record.
+    logRedactedCause("turn-stream: lease-release-failed", releaseCause);
+  }
+
+  logLeaseAbandoned(input.trace, "stream-failed", "error");
+}
 
 const encoder = new TextEncoder();
 
@@ -207,8 +220,9 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
         // path reaches `endTurn`, so release the admitted lease before the stream error reaches its
         // caller. A failed stream must not make the next turn wait for this one's deadline.
         failed = true;
-        input.threads.abandonTurn(input.projectId, input.leaseId);
-        logLeaseAbandoned(input.trace, "stream-failed", "error");
+
+        abandonFailedStream(input);
+
         throw cause;
       } finally {
         input.bound.signal.removeEventListener("abort", stopReading);

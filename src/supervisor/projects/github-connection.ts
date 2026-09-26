@@ -116,11 +116,11 @@ export class GitHubConnection {
    * workspace's own answer, because the owner is mid-flow and the credential legitimately is not
    * there yet.
    */
-  status(now: number): Promise<GitHubConnectionStatus> {
+  status(now: number, signal?: AbortSignal): Promise<GitHubConnectionStatus> {
     const pending = this.store.pendingAuthorization(now);
 
     return pending === undefined
-      ? this.observed()
+      ? this.observed(undefined, undefined, signal)
       : Promise.resolve({
           state: "awaiting-authorization",
           verificationUri: pending.verificationUri,
@@ -138,17 +138,21 @@ export class GitHubConnection {
    * somebody at a verification page. With no fallback the answer is a reconnect requirement, never
    * an optimistic `connected`.
    */
-  async ensureCredential(now: number): Promise<GitHubConnectionStatus> {
-    const current = await this.status(now);
+  async ensureCredential(now: number, signal?: AbortSignal): Promise<GitHubConnectionStatus> {
+    const current = await this.status(now, signal);
 
-    if (current.state === "connected" || current.state === "tooling-missing") {
+    if (
+      signal?.aborted === true ||
+      current.state === "connected" ||
+      current.state === "tooling-missing"
+    ) {
       return current;
     }
 
     const token = parseGitHubToken(this.environment.fallbackToken);
 
     const repaired =
-      token === undefined ? current : await this.install(token, "configured-token", now);
+      token === undefined ? current : await this.install(token, "configured-token", now, signal);
 
     logCredentialEnsure(current, token !== undefined, repaired);
 
@@ -256,16 +260,17 @@ export class GitHubConnection {
     }
   }
 
-  /** Install a token, then report what the workspace can do with it rather than assuming. */
   private async install(
     token: GitHubToken,
     source: CredentialSource,
     now: number,
+    signal?: AbortSignal,
   ): Promise<GitHubConnectionStatus> {
     const installed = await installWorkspaceCredential({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
       token,
+      signal,
     });
 
     if (installed.isErr()) {
@@ -283,7 +288,7 @@ export class GitHubConnection {
     const status: GitHubConnectionStatus =
       installed.value === "tooling-missing"
         ? { state: "tooling-missing" }
-        : await this.observed(source, now);
+        : await this.observed(source, now, signal);
 
     logCredentialInstall(source, status);
 
@@ -291,10 +296,15 @@ export class GitHubConnection {
   }
 
   /** Ask the workspace what its credential can do, and keep the record honest about the answer. */
-  private async observed(source?: CredentialSource, at?: number): Promise<GitHubConnectionStatus> {
+  private async observed(
+    source?: CredentialSource,
+    at?: number,
+    signal?: AbortSignal,
+  ): Promise<GitHubConnectionStatus> {
     const read = await readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
+      signal,
     });
 
     if (read.isErr()) {

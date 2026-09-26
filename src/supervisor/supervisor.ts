@@ -30,6 +30,7 @@ import {
   type TurnStartContext,
   timedTurnMount,
   timedTurnProvision,
+  timedWorkspaceRpc,
 } from "./projects/index.js";
 import {
   Generations,
@@ -209,7 +210,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
   async resetWorkspace(): Promise<WorkspaceResetResult> {
     const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
-    const result = await namespace.getByName(this.workspaceName).reset();
+
+    const result = await timedWorkspaceRpc(
+      { method: "reset" },
+      () => namespace.getByName(this.workspaceName).reset(),
+      () => ({ outcome: "reset" }),
+    );
+
     this.connections.resetWorkspace();
 
     return result;
