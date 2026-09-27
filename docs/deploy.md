@@ -32,7 +32,9 @@ The image also carries the packages your harness build needs, fetched from the l
 
 ## What to expect the first time
 
-Your first submission is slow. On a container with half a virtual CPU, a submission took between five and eight minutes end to end, and most of that is installing packages and bundling the harness. It is not stuck. Everything after that is fast. Activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
+Your first submission is slow. Installing packages and bundling the harness takes most of that time. It is not stuck.
+
+The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). The times below are historical: they were measured on the smaller `standard-1` container (0.5 vCPU) before this project moved to `standard-3`, and have not been re-measured on the current size. A submission took between five and eight minutes end to end. Activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
 
 Cold starting the workspace container adds ten to sixty seconds to the first request after an idle period.
 
@@ -96,11 +98,15 @@ it.
 
 The workspace is a development machine. It has `git` and `gh`. Authorize GitHub inside the workspace, then connect one GitHub repository from there. The `gh` credential stays in the workspace's local GitHub configuration. The repository keeps its own files and Git history. Your browser does not receive the GitHub credential.
 
+Set `GITHUB_OAUTH_CLIENT_ID` in the Worker's variables before you authorize. It names the GitHub OAuth app the device flow uses. It is public configuration, not a secret. Without it, starting the device flow answers `not-configured`.
+
+Set the `GH_TOKEN` secret if you want an unattended run to authorize without a person at a browser. cf-stumble installs `GH_TOKEN` as the workspace credential whenever the workspace has no usable one, and treats it as a test and development path, not a second production login. A deployment with neither value set reports `disconnected`.
+
 The sidebar also contains the harness project. It selects `/workspace/harness`, which is a Git clone of the harness repository. It is not a second connected repository or a separate workspace.
 
-A connection is refused when GitHub's complete tree reports more than 3,000 files or 150 MB of current-tree blobs. The existing truncated-tree and 5,000,000 KB repository-history limits still apply; if GitHub metadata cannot be read, cf-stumble skips this check and the clone remains the final check.
+A connection is refused when GitHub's complete tree reports more than 3,000 files or 150 MB of current-tree blobs. The existing truncated-tree and 5,000,000 KB repository-history limits still apply. This check queries GitHub's API with the `GH_TOKEN` secret. If you authorize only through the interactive device flow and never set `GH_TOKEN`, the query runs unauthenticated. GitHub answers an unauthenticated request for a private repository the same way it answers one that does not exist, so the check cannot read the repository and skips it; the clone remains the final check for a private repository connected this way.
 
-To remove a connected project, send the owner-only `POST /api/projects/{id}/disconnect` request with the page's exact `Origin`. The request refuses an unknown project, the harness, or a project with a live turn; after the turn lease expires it removes the project, its thread, and its workspace clone.
+To remove a connected project, send the owner-only `POST /api/projects/{id}/disconnect` request with the page's exact `Origin`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
 
 ## First run
 
