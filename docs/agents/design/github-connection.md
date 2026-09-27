@@ -72,15 +72,19 @@ existing project.
 
 ## Connecting a repository
 
-`Supervisor.connectProject` performs these steps in order (`src/supervisor/projects/project-connections.ts:264-319,444-480`):
+`Supervisor.connectProject` performs these steps in order (`src/supervisor/projects/project-connections.ts:239-304,432-470`):
 
 1. Canonicalize the GitHub URL and derive the project id. Query GitHub for repository size and the default branch's recursive tree. Refuse a known oversized repository or truncated tree before asking the workspace for a credential. If the lookup fails or returns malformed data, skip the size preflight and continue.
 2. Make the workspace credential usable, if possible without a person. Leave a working credential alone.
 3. Ask the workspace whether the repository is readable, by running `git ls-remote` through the credential helper that `gh auth setup-git` configured. This is the same access path a clone takes.
 4. Record the project in `connected_projects`.
-5. Provision the project: reconcile its clone inside the tenant's one workspace and rewrite the managed instructions file.
+5. Provision the project: reconcile its clone inside the tenant's one workspace and rewrite the managed instructions file. A new clone is measured first, as described below.
 
-The preflight refuses more than 3,000 blobs, more than 150,000,000 total blob bytes, a GitHub repository size above 5,000,000 KB, or a truncated default-branch tree. It returns `repository-too-large` for each refusal (`src/supervisor/projects/project-connections.ts:62-113`). The tree check covers the default branch at connection time, not every branch or later growth. Its API requests use `GH_TOKEN` when configured, not the device-flow credential held inside the workspace (`src/github/repository-size.ts:31-118`). For a private repository authorized only by device flow, the lookup can fail and the connection proceeds without these thresholds. The shallow, blobless, single-branch clone can fail on disk capacity, but it does not enforce the skipped metadata thresholds (`src/project-provision.ts:159-177`; `src/supervisor/projects/project-connections.ts:429-438`).
+The preflight refuses more than 3,000 blobs, more than 150,000,000 total blob bytes, a GitHub repository size above 5,000,000 KB, or a truncated default-branch tree. It returns `repository-too-large` for each refusal (`src/github/repository-size.ts:9-60`; `src/supervisor/projects/project-connections.ts:64-87`). Its API requests use `GH_TOKEN` when configured, not the device-flow credential held inside the workspace (`src/github/repository-size.ts:115-170`). For a private repository authorized only by device flow, the preflight lookup can fail, and the connection then continues without a preflight result.
+
+The clone step measures the repository again before it makes a new clone. It runs `gh api` inside the workspace, so it uses the workspace's own `gh` credential and can read a private repository that the owner authorized through the device flow. It makes the same two REST requests and applies the same limits in the same order. GitHub reports the repository `size` in kilobytes and each tree entry's `size` in bytes. A repository over a limit makes the clone step exit with code 122 before `git clone` runs, and both connection and provisioning on use report `repository-too-large` (`src/github/repository-size-guard.ts`; `src/project-provision.ts:163-215`). Exit code 122 also means that the clone ran out of disk, so the result alone does not say which check refused. The check runs only when no clone exists, so it also covers a clone recreated after a workspace reset from a repository that has grown since it was connected. It measures the default branch at that time and never measures or removes an existing clone.
+
+The clone-time check fails open, like the preflight. When `gh` is missing, a request fails or times out, or GitHub returns an unexpected response, the check reports the repository as unmeasured and the clone continues. A public repository recloned while the workspace has no `gh` credential may also be unmeasured; whether `gh api` answers without a credential was not checked. The check limits each request to 5 seconds with `timeout` when the image provides it. The image's runtime stage is `debian:stable-slim`, where `timeout` comes from the essential `coreutils` package. On 2026-09-27 that image (Debian 13.7) had `/usr/bin/timeout` from coreutils 9.7. The tag is not pinned, so a later image is unchecked. Without `timeout`, a `gh` request is limited only by the 900-second workspace command ceiling, and a request that hangs fails the clone instead of letting it continue. The tests run the planned shell with stub `gh` and `git` commands; no test has run this check against GitHub or inside Computer.
 
 If provisioning fails, cf-stumble removes a project it has just recorded. Provisioning also runs when a project is used, so a workspace that the platform recreated is repaired on the next turn.
 
@@ -88,7 +92,11 @@ If provisioning fails, cf-stumble removes a project it has just recorded. Provis
 
 The owner can call `POST /api/projects/{id}/disconnect` with an `Origin` exactly matching the request origin. The route refuses an invalid or unknown project id, the harness project, and a project with an active turn. An expired lease can be reclaimed (`src/routes/projects.ts:99-115,245-267`; `src/supervisor/supervisor.ts:252-262`).
 
-On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` and `.provision-lock` directories (`src/supervisor/supervisor.ts:258-262`; `src/supervisor/projects/project-connections.ts:324-369`; `src/workspace/project-removal.ts:51-65`). When workspace cleanup succeeds, disconnect deletes uncommitted work in that clone. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
+On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` directory (`src/supervisor/supervisor.ts:253-261`; `src/supervisor/projects/project-connections.ts:311-343`; `src/workspace/project-removal.ts:58-76`). The removal command first takes the project's `.provision-lock`, the same lock the clone step takes, and releases it when it exits. When workspace cleanup succeeds, disconnect deletes uncommitted work in that clone. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
+
+Two mechanisms keep a disconnect from overlapping other work on the same project. Inside one Supervisor, connection (from recording the row through provisioning), disconnect, and provisioning on use run one at a time for each project id (`src/supervisor/projects/project-lifecycle-queue.ts`). The Supervisor removes the thread inside that same operation, so no turn can start between the thread removal and the row removal. The queue exists only in memory. It moves on when the removal RPC returns, fails, or times out, and it is lost when the platform replaces the Supervisor instance, while the removal command may still be running in the workspace. The provision lock covers that case: a clone that starts while a removal is still running waits for the removal to finish, and a removal waits for a running clone.
+
+The lock is not airtight. A holder creates the lock directory before it writes its process id, and a contender that finds no process id at that moment treats the lock as stale and takes it over (`src/project-provision.ts:104-126`). Turn commands do not take the lock. The lock tests run the removal and clone scripts on an ordinary host filesystem, and the queue tests use a fake workspace. Neither shows how Computer's `/workspace` mount or its storage sync orders overlapping commands.
 
 ## The owner authorization
 
@@ -131,7 +139,8 @@ from a secret never appears as an owner authorization.
 This is a test and development path. The configured token authenticates GitHub API requests for
 the repository-size preflight and, when needed, crosses the credential-install RPC into the
 Workspace Host. The device-flow token is used only for credential installation; it does not
-authenticate the size preflight. Public HTTP responses, structured operational event fields, and
+authenticate the Supervisor's size preflight. The clone-time size check runs `gh api` inside the
+workspace, so it uses whichever credential the workspace's `gh` holds. Public HTTP responses, structured operational event fields, and
 Supervisor SQLite do not store either token. A deployment that sets neither
 `GITHUB_OAUTH_CLIENT_ID` nor `GH_TOKEN` reports `disconnected` instead of guessing.
 
