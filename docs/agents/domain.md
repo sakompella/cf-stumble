@@ -32,22 +32,7 @@ Add an ADR only when a decision will be expensive to reverse, has a meaningful a
 
 ## File structure
 
-```
-/
-├── docs/
-│   └── agents/
-│       ├── CONTEXT.md
-│       ├── adr/
-│       │   ├── README.md
-│       │   └── 0002-....md
-│       ├── design/
-│       │   ├── overview.md
-│       │   ├── feature-map.md
-│       │   ├── computer-integration.md
-│       │   └── slices.md
-│       └── domain.md
-└── src/
-```
+Agent-authored records live under `docs/agents/`. Run `git ls-files docs/agents` for the current file list; the reading order above identifies the records needed for architecture work.
 
 The domain-modeling skill normally expects `CONTEXT.md` at the repository root and ADRs in `docs/adr/`. This repository keeps both under `docs/agents/`, so use the paths in this file.
 
