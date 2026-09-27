@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run",
+    "test:tools": "node --test 'tools/**/*.test.ts'",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware --max-warnings=0",
@@ -19,7 +20,7 @@
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
     "probe:clean-build": "scripts/probe/clean-build.sh",
     "harness:browser": "pnpm exec tsx tools/browser-harness/run.mts",
-    "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
+    "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
