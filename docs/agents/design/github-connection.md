@@ -88,7 +88,7 @@ If provisioning fails, cf-stumble removes a project it has just recorded. Provis
 
 The owner can call `POST /api/projects/{id}/disconnect` with an `Origin` exactly matching the request origin. The route refuses an invalid or unknown project id, the harness project, and a project with an active turn. An expired lease can be reclaimed (`src/routes/projects.ts:99-115,245-267`; `src/supervisor/supervisor.ts:252-262`).
 
-On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` and `.provision-lock` directories (`src/supervisor/supervisor.ts:258-262`; `src/supervisor/projects/project-connections.ts:324-369`; `src/workspace/project-removal.ts:51-65`). Disconnect deletes uncommitted work in that project directory. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
+On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` and `.provision-lock` directories (`src/supervisor/supervisor.ts:258-262`; `src/supervisor/projects/project-connections.ts:324-369`; `src/workspace/project-removal.ts:51-65`). When workspace cleanup succeeds, disconnect deletes uncommitted work in that clone. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
 
 ## The owner authorization
 
