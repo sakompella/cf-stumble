@@ -25,16 +25,64 @@ export type CompactionPolicy = Readonly<{
  * message list (ADR-0038), so the path is the whole list and every entry's parent is the entry
  * before it. Projecting it here is what lets Pi's own cut-point and summarization logic run
  * unchanged rather than being reimplemented against a different shape.
+ *
+ * A thread this generation compacted starts with Pi's summary message, and that message becomes a
+ * `compaction` entry. Pi finds a previous summary only through such an entry, so a second
+ * compaction then updates the summary with Pi's update prompt instead of summarizing the old
+ * summary as if it were conversation. The messages after it follow the entry, which is where Pi's
+ * own sessions keep what came after a compaction. The saved thread keeps its format.
  */
 function sessionEntries(messages: readonly AgentMessage[]): Entry[] {
-  return messages.map((message, index) => ({
-    type: "message",
-    id: `${index}`,
-    parentId: index === 0 ? null : `${index - 1}`,
-    seq: index,
-    timestamp: message.timestamp,
-    message,
-  }));
+  const [first, ...rest] = messages;
+
+  if (first?.role !== "compactionSummary") return messageEntries(messages, 0);
+
+  const compaction: Entry = {
+    type: "compaction",
+    id: "0",
+    parentId: null,
+    seq: 0,
+    timestamp: first.timestamp,
+    summary: first.summary,
+    tokensBefore: first.tokensBefore,
+    retainedTail: [],
+    details: {
+      readFiles: summaryFileList(first.summary, "read-files"),
+      modifiedFiles: summaryFileList(first.summary, "modified-files"),
+    },
+  };
+
+  return [compaction, ...messageEntries(rest, 1)];
+}
+
+function messageEntries(messages: readonly AgentMessage[], firstSeq: number): Entry[] {
+  return messages.map((message, index) => {
+    const seq = firstSeq + index;
+
+    return {
+      type: "message",
+      id: `${seq}`,
+      parentId: seq === 0 ? null : `${seq - 1}`,
+      seq,
+      timestamp: message.timestamp,
+      message,
+    };
+  });
+}
+
+/**
+ * One file list Pi appended to a summary it wrote, read back from the summary's last `<tag>`
+ * block. Pi's own sessions keep these lists as the compaction entry's details and merge them into
+ * the next summary; the saved thread keeps only the summary text, so they are recovered from it.
+ */
+function summaryFileList(summary: string, tag: "read-files" | "modified-files"): string[] {
+  const open = `<${tag}>\n`;
+  const start = summary.lastIndexOf(open);
+
+  if (start === -1) return [];
+  const end = summary.indexOf(`\n</${tag}>`, start);
+
+  return end === -1 ? [] : summary.slice(start + open.length, end).split("\n");
 }
 
 /** What Pi estimates this conversation costs, using provider usage when a reply reported it. */

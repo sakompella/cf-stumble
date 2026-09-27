@@ -7,11 +7,15 @@ import {
   runPiAgentTurn,
 } from "../../../src/facet/generation-0/index.js";
 import { ROUTE_MODEL } from "../../../src/facet/generation-0/route-stream.js";
+import {
+  parseThreadMessages,
+  serializeThreadMessages,
+} from "../../../src/supervisor/threads/index.js";
 import { makeFacetExecutionEnv } from "./execution-env-target.js";
 import { assistant, scriptedModel as model, scriptedStream } from "./scripted-model.js";
 import { createAssistantMessageEventStream } from "@cf-stumble/pi";
 import type { AgentMessage, StreamFn } from "@cf-stumble/pi";
-import type { CompactionPolicy } from "../../../src/facet/generation-0/index.js";
+import type { CompactionPolicy, PiAgentTurnState } from "../../../src/facet/generation-0/index.js";
 
 /**
  * A budget small enough that any conversation exceeds it, and a retention of zero so the cut point
@@ -186,4 +190,101 @@ test("a route that cannot summarize leaves the conversation intact instead of lo
     outcome.state.messages.map((message) => message.role),
     "a failed summary must not cost the thread the conversation it was summarizing",
   ).toEqual(["user", "assistant", "user", "assistant", "user", "assistant"]);
+});
+
+const SECOND_SUMMARY =
+  "## Goal\nKeep the login fix.\n\n## Progress\nThe user asked for the decision.";
+
+/** A conversation whose first turn read a file, so Pi's summary lists that file after its text. */
+function conversationThatRead(): AgentMessage[] {
+  return [
+    { role: "user", content: "Find the login bug.", timestamp: 1 },
+    assistant(
+      [{ type: "toolCall", id: "read-1", name: "read", arguments: { path: "auth.ts" } }],
+      "toolUse",
+    ),
+    {
+      role: "toolResult",
+      toolCallId: "read-1",
+      toolName: "read",
+      content: [{ type: "text", text: "export function login() {}" }],
+      isError: false,
+      timestamp: 2,
+    },
+    assistant([{ type: "text", text: "It is in auth.ts, line 40." }], "stop"),
+    { role: "user", content: "Fix it.", timestamp: 3 },
+    assistant([{ type: "text", text: "Fixed and the check passes." }], "stop"),
+  ];
+}
+
+function summarizationPrompts(
+  contexts: readonly { systemPrompt?: string | undefined; messages: readonly AgentMessage[] }[],
+): string[] {
+  return contexts.flatMap((context) =>
+    (context.systemPrompt ?? "").includes("context summarization assistant")
+      ? [JSON.stringify(context.messages)]
+      : [],
+  );
+}
+
+/** One turn forced to compact, whose summarization calls all answer `summary`. */
+async function compactingTurn(state: PiAgentTurnState, prompt: string, summary: string) {
+  const script = scriptedStream([
+    assistant([{ type: "text", text: summary }], "stop"),
+    assistant([{ type: "text", text: summary }], "stop"),
+    assistant([{ type: "text", text: "Still the auth.ts fix." }], "stop"),
+  ]);
+
+  const outcome = await runPiAgentTurn({
+    prompt,
+    state,
+    env: makeFacetExecutionEnv().env,
+    streamFn: script.streamFn,
+    compaction: FORCED,
+  });
+
+  if (!outcome.ok) throw new Error("a compacting turn must complete");
+
+  return { contexts: script.contexts, messages: outcome.state.messages, state: outcome.state };
+}
+
+test("a second compaction updates the saved summary instead of summarizing it as conversation", async () => {
+  const first = await compactingTurn(
+    { ...createPiAgentTurnState(model), messages: conversationThatRead() },
+    "What did we decide?",
+    SUMMARY,
+  );
+
+  expect(first.messages[0]).toMatchObject({ role: "compactionSummary" });
+
+  const reloaded = parseThreadMessages(serializeThreadMessages(first.messages));
+
+  if (reloaded.isErr()) throw new Error(`the saved thread must parse: ${reloaded.error.reason}`);
+
+  const second = await compactingTurn(
+    { ...first.state, messages: [...reloaded.value] },
+    "Remind me again.",
+    SECOND_SUMMARY,
+  );
+
+  const [historyPrompt] = summarizationPrompts(second.contexts);
+
+  expect(historyPrompt, "Pi's update prompt carries the first summary").toContain(
+    "<previous-summary>",
+  );
+  expect(historyPrompt).toContain("incorporate into the existing summary");
+  expect(historyPrompt).toContain("fix landed in auth.ts");
+  expect(
+    historyPrompt,
+    "the first summary is not replayed as a message of the conversation being summarized",
+  ).not.toContain("was compacted into the following summary");
+
+  const summaries = second.messages.filter((message) => message.role === "compactionSummary");
+  expect(summaries, "one summary replaces the other").toHaveLength(1);
+  expect(second.messages[0]).toBe(summaries[0]);
+  expect(summaries[0]?.summary).toContain("Keep the login fix.");
+  expect(
+    summaries[0]?.summary,
+    "files read before the first compaction stay listed after the second",
+  ).toContain("<read-files>\nauth.ts\n</read-files>");
 });
