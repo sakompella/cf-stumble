@@ -102,7 +102,7 @@ test("offline fake workspace schedules missing repository provisioning before a 
 
   await builderFor(host).builder.build(commit);
 
-  expect(plan.steps[0]?.source).toContain('while ! mkdir "$lock" 2>/dev/null; do');
+  expect(plan.steps[0]?.source).toContain('exec 9>"$lock"\nflock 9');
   expect(plan.steps[0]?.source).toContain(
     'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$incoming"',
   );

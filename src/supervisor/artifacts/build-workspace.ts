@@ -144,6 +144,8 @@ export class CommitBuildWorkspace implements BuildWorkspace {
  * in flight and receives its result, and the entry is dropped as soon as that build settles, so a
  * later request for the same commit builds again. This is a conflict rule, not a queue: nothing is
  * deferred, ordered, or retried here, and builds of different commits do not wait for each other.
+ * Their provision steps still share the harness checkout, so the provision shell takes its own
+ * lock in the workspace container (`harness-build-provision.ts`) rather than relying on this map.
  *
  * Two tenants cannot collide at all, because the workspace name is the tenant's own and each
  * tenant's scratch subtree lives in that tenant's container.

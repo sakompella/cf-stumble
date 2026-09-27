@@ -11,23 +11,28 @@ import type { HarnessCommit } from "./harness-commit.js";
  * checkout belongs, and a commit pushed after the checkout was provisioned.
  */
 
-/** Hold the provision lock for the rest of the step, taking it from a process that has died. */
-function holdProvisionLock(): readonly string[] {
-  return [
-    'while ! mkdir "$lock" 2>/dev/null; do',
-    '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
-    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
-    '    stale_lock="${lock}.stale.$$"',
-    '    if mv "$lock" "$stale_lock" 2>/dev/null; then',
-    '      rm -rf "$stale_lock"',
-    "    fi",
-    "  else",
-    "    sleep 1",
-    "  fi",
-    "done",
-    'printf "%s\\n" "$$" > "$lock/pid"',
-    "trap 'rm -rf \"$lock\"' EXIT",
-  ];
+/**
+ * The provision lock: a kernel `flock` on a file in the container's own `/tmp`. Nothing records a
+ * pid, so there is no stale owner to detect or take over. The kernel releases the lock when the
+ * last process holding the descriptor exits, and a container restart ends every such process. The
+ * file stays out of `/workspace`, which Computer copies to and from its store, so that copying
+ * cannot replace the file that holders and contenders lock.
+ *
+ * Earlier builds locked with a `harness.provision-lock` directory beside the checkout. That
+ * directory is ignored, not deleted.
+ */
+export const HARNESS_PROVISION_LOCK = "/tmp/cf-stumble-harness-provision.lock";
+
+/**
+ * Hold the provision lock for the rest of the step. The text reads the lock path from the shell
+ * variable `lock`, which the caller sets first.
+ *
+ * Descriptor 9 stays open in the shell and in every process it starts. The pinned computerd runner
+ * signals only the direct shell (see `processGroupCommand`), and a build step does not run through
+ * that wrapper, so a `git clone` can outlive a timed-out step. The lock stays held until it exits.
+ */
+export function holdProvisionLock(): readonly string[] {
+  return ['exec 9>"$lock"', "flock 9"];
 }
 
 /**
@@ -85,12 +90,10 @@ export function provisionHarnessRepository(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
 ): string {
-  const lock = `${configuration.harnessRepositoryRoot}.provision-lock`;
-
   return [
     "set -eu",
     `mkdir -p ${shellQuote(WORKSPACE_ROOT)}`,
-    `lock=${shellQuote(lock)}`,
+    `lock=${shellQuote(HARNESS_PROVISION_LOCK)}`,
     `repository=${shellQuote(configuration.harnessRepositoryRoot)}`,
     `git_dir=${shellQuote(configuration.harnessGitDir)}`,
     `expected_remote=${shellQuote(configuration.harnessGitRemote)}`,
