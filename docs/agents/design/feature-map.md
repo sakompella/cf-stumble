@@ -1,5 +1,7 @@
 # Version 0 feature map
 
+> **Historical.** This records the scope frozen at the `v0` tag. `main` has since moved 179 commits past that tag; see [`status-2026-09-27.md`](../status-2026-09-27.md) for what shipped after and for scope that no longer matches this list.
+
 Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account feature. The front door is a "Deploy to Cloudflare" button. The deployed instance remains owner-only through Cloudflare Access. The `v0` tag includes this completed scope and cut line.
 
 ## Version 0 scope
