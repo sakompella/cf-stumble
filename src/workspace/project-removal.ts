@@ -2,7 +2,8 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { parseProjectId, type ProjectId } from "../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../selectable-projects.js";
 import { shellQuote } from "../shell-quote.js";
-import { projectDirectory } from "../workspace-layout.js";
+import { PROJECTS_DIRECTORY, projectDirectory } from "../workspace-layout.js";
+import { acquireProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
 
@@ -48,7 +49,12 @@ export function parseProjectRemovalRequest(
   return projectId === undefined ? invalidRequest() : { kind: "remove-project", projectId };
 }
 
-/** Remove only the project clone and the fixed provisioning remnants. */
+/**
+ * Remove only the project clone and its staging directory, while holding the project's provision
+ * lock. The Supervisor orders its own requests, but a removal can outlive the RPC that asked for
+ * it, and the lock is what keeps a later clone from landing in the directory it is deleting. The
+ * lock has the weakness `project-provision.ts` records: a holder is visible before its pid is.
+ */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
@@ -58,7 +64,11 @@ export function planProjectRemovalRequest(
     kind: "run-command",
     source: [
       "set -eu",
-      `rm -rf -- ${[root, `${root}.provisioning`, `${root}.provision-lock`].map((path) => shellQuote(path)).join(" ")}`,
+      `projects=${shellQuote(PROJECTS_DIRECTORY)}`,
+      `lock=${shellQuote(projectProvisionLockPath(root))}`,
+      ...acquireProvisionLock(),
+      "trap 'rm -rf \"$lock\"' EXIT",
+      `rm -rf -- ${[root, `${root}.provisioning`].map((path) => shellQuote(path)).join(" ")}`,
     ].join("\n"),
     cwd: "/",
     timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,

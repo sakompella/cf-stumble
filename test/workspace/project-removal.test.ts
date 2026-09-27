@@ -88,3 +88,19 @@ test("removes only the clone and staging directory", async () => {
   expect(operations.sources[0]).toContain(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
   expect(operations.sources[0]).not.toContain("/workspace/harness");
 });
+
+test("takes the project's provision lock instead of deleting it", () => {
+  const plan = planProjectRemovalRequest({
+    kind: "remove-project",
+    projectId: sampleProjectOne.id,
+  });
+
+  const lock = `${projectDirectory(sampleProjectOne.id)}.provision-lock`;
+  const removal = plan.source.split("\n").find((line) => line.startsWith("rm -rf --"));
+
+  expect(plan.source).toContain(`lock='${lock}'`);
+  expect(plan.source.indexOf('while ! mkdir "$lock"')).toBeLessThan(
+    plan.source.indexOf("rm -rf --"),
+  );
+  expect(removal).not.toContain(lock);
+});

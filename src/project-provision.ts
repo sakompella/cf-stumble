@@ -96,6 +96,35 @@ export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] =
   "instructions",
 ];
 
+/** The lock directory that the clone step and project removal both take for one project. */
+export function projectProvisionLockPath(projectRoot: string): string {
+  return `${projectRoot}.provision-lock`;
+}
+
+/**
+ * Shell lines that wait for and take one project's provision lock. They expect `$projects` and
+ * `$lock` to be set, and they leave releasing the lock to the caller's `EXIT` trap. The clone step
+ * and project removal both take it, so a removal that is still running in the workspace after its
+ * RPC gave up still keeps a later clone out of the directory it is deleting.
+ */
+export function acquireProvisionLock(): readonly string[] {
+  return [
+    'mkdir -p "$projects"',
+    'while ! mkdir "$lock" 2>/dev/null; do',
+    '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
+    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
+    '    stale_lock="${lock}.stale.$$"',
+    '    if mv "$lock" "$stale_lock" 2>/dev/null; then',
+    '      rm -rf "$stale_lock"',
+    "    fi",
+    "  else",
+    "    sleep 1",
+    "  fi",
+    "done",
+    'printf "%s\\n" "$$" > "$lock/pid"',
+  ];
+}
+
 /**
  * Reconcile the project directory against the repository the catalog names for this project.
  *
@@ -135,7 +164,7 @@ function cloneProjectRepository(
   configuration: ProjectProvisionConfiguration,
   repositoryUrl: PublicRepositoryUrl,
 ): string {
-  const lock = `${configuration.projectRoot}.provision-lock`;
+  const lock = projectProvisionLockPath(configuration.projectRoot);
   const staging = `${configuration.projectRoot}.provisioning`;
 
   return [
@@ -147,19 +176,7 @@ function cloneProjectRepository(
     `staging=${shellQuote(staging)}`,
     `expected_remote=${shellQuote(repositoryUrl)}`,
     repositorySizeVerdictSource(repositoryUrl),
-    'mkdir -p "$projects"',
-    'while ! mkdir "$lock" 2>/dev/null; do',
-    '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
-    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
-    '    stale_lock="${lock}.stale.$$"',
-    '    if mv "$lock" "$stale_lock" 2>/dev/null; then',
-    '      rm -rf "$stale_lock"',
-    "    fi",
-    "  else",
-    "    sleep 1",
-    "  fi",
-    "done",
-    'printf "%s\\n" "$$" > "$lock/pid"',
+    ...acquireProvisionLock(),
     'trap \'rm -rf "$lock" "$staging"\' EXIT',
     'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
     '  if test -e "$repository" && test -n "$(ls -A "$repository" 2>/dev/null)"; then',
