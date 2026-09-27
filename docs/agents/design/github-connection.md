@@ -101,6 +101,17 @@ The provision lock is a kernel `flock` on `/tmp/cf-stumble-project-<id>.provisio
 
 Some limits remain. Commands a turn runs do not take the lock. `flock` blocks without its own timeout, so a waiter is bounded only by the 900-second workspace command ceiling. The Node tests run the real removal and clone scripts under `/bin/sh` with stand-ins for `git`, `rm`, and `flock` (Perl's `flock` on macOS). A manual run on 2026-09-27 in `debian:stable-slim` with `dash` and util-linux `flock` 2.41.5 showed a clone waiting for a removal whose shell had been killed, and the new clone surviving. Neither run used computerd or Computer, so how the container runs overlapping commands in production is unverified.
 
+## Durable results of clone and removal
+
+Computer runs a command in the container and then copies the container's changes into the Workspace Host's durable store. A replacement container starts from that store. The pinned Computer reports the copy as `sync.status`, either `complete` or `pending`, together with any entries it skipped. A `pending` copy can follow a command that exited 0, and the Workspace Host configures no retry for it. The flock only covers the shell, so it does not cover this copy.
+
+The Workspace Host therefore runs the clone step and project removal with `require-complete` (`src/workspace/computer-operations.ts`, `src/workspace/host.ts`). A copy that is pending or skipped entries makes the step fail with `workspace-sync-incomplete`. The step is also checked against the durable store itself, through `Workspace.fs.lstat`, which reads the store rather than the container (`src/workspace/executor.ts`):
+
+- After a clone exits 0, the project root and its `.git` directory must exist in the store, and the stored `.git/config` must name the catalog's repository as `origin`. Otherwise connection reports `provisioning-failed` and removes the new row, and a turn is refused before it starts.
+- After a removal exits 0, neither the clone nor its `.provisioning` directory may exist in the store. Otherwise disconnect reports `workspace: "failed"`, never `removed`. The thread and catalog row are still gone, as for any failed cleanup, so the old clone can come back with a replacement container. A later connection of the same repository then finds that clone and reuses it, including any uncommitted work it held.
+
+Build, credential, and managed-instruction commands do not require a complete copy. The checks read the store once, right after the command; nothing retries a pending copy or proves that a later copy from a replacement container keeps the removal. The tests use shapes like the pinned Computer's results and a fake store. No test has run Computer, so how often a copy is pending in production is unknown.
+
 ## The owner authorization
 
 Version 0 uses GitHub's OAuth device flow, which is question Q2's default. The Supervisor asks
