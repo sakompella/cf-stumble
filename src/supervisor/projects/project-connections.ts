@@ -485,7 +485,9 @@ export class ProjectConnections {
             return { outcome: "removed" };
           }
 
-          return { outcome: "failed", level: "error" };
+          // `workspace-sync-incomplete` means the container deleted the clone but the durable store
+          // may still hold it, so it can return with a replacement container. It is not a removal.
+          return { outcome: answered.ok ? "failed" : answered.error.code, level: "error" };
         },
         PROVISION_RPC_TIMEOUT_MS,
       );

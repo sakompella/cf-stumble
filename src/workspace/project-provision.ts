@@ -13,6 +13,7 @@ import {
   type Project,
 } from "../project-catalog.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
+import type { WorkspaceOperations } from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
 
 /**
@@ -124,4 +125,45 @@ export function planProjectProvisionRequest(request: ParsedProjectProvisionReque
       return exhaustive;
     }
   }
+}
+
+/** The `url` of `[remote "origin"]` in a Git config file, or nothing. */
+export function originUrl(config: string): string | undefined {
+  let inOrigin = false;
+
+  for (const line of config.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("[")) {
+      inOrigin = trimmed === '[remote "origin"]';
+      continue;
+    }
+
+    const url = /^url\s*=\s*(.*)$/u.exec(trimmed)?.[1];
+
+    if (inOrigin && url !== undefined) return url;
+  }
+
+  return undefined;
+}
+
+/**
+ * Whether a clone that exited successfully is in the durable workspace store: the project root and
+ * its Git directory exist there, and the stored Git config names the catalog's repository as
+ * `origin`. `WorkspaceOperations` reads the store, not the container, so a clone whose
+ * post-command sync was lost reads as absent here even though the container has it.
+ */
+export async function cloneIsDurable(
+  operations: WorkspaceOperations,
+  project: Project,
+): Promise<boolean> {
+  const { projectRoot, projectGitDir } = projectProvisionConfiguration(project.id);
+
+  if ((await operations.lstat(projectRoot)) !== "directory") return false;
+
+  if ((await operations.lstat(projectGitDir)) !== "directory") return false;
+
+  if ((await operations.lstat(`${projectGitDir}/config`)) !== "file") return false;
+
+  return originUrl(await operations.readFile(`${projectGitDir}/config`)) === project.repositoryUrl;
 }

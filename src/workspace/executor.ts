@@ -1,8 +1,16 @@
 import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
-import { parseProjectProvisionRequest, planProjectProvisionRequest } from "./project-provision.js";
-import { parseProjectRemovalRequest, planProjectRemovalRequest } from "./project-removal.js";
+import {
+  cloneIsDurable,
+  parseProjectProvisionRequest,
+  planProjectProvisionRequest,
+} from "./project-provision.js";
+import {
+  parseProjectRemovalRequest,
+  planProjectRemovalRequest,
+  removalIsDurable,
+} from "./project-removal.js";
 import type { HarnessBuildConfiguration } from "../harness-build.js";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
@@ -28,6 +36,18 @@ export type WorkspaceOperations = Readonly<{
 }>;
 
 export type CommandOutput = Readonly<{ stdout: string; stderr: string; exitCode: number }>;
+
+/**
+ * Thrown by `runCommand` when the command ran but its container changes are not proven to be in
+ * the durable workspace store. Only surfaces that need a durable result ask for that check.
+ */
+export class WorkspaceSyncIncomplete extends Error {
+  override readonly name = "WorkspaceSyncIncomplete";
+}
+
+function syncIncomplete(): WorkspaceFailure {
+  return { ok: false, error: { code: "workspace-sync-incomplete" } };
+}
 
 function unavailable(): WorkspaceFailure {
   return { ok: false, error: { code: "workspace-unavailable" } };
@@ -174,12 +194,27 @@ export async function executeProjectProvisionRequest(
   if ("ok" in parsed) return parsed;
 
   try {
-    return await executePlan(
+    const result = await executePlan(
       input.operations,
       planProjectProvisionRequest(parsed),
       `provision-project.${parsed.step}`,
     );
+
+    const cloned =
+      parsed.step === "clone" && result.ok && result.result.kind === "command"
+        ? result.result.exitCode === 0
+        : false;
+
+    return cloned && !(await cloneIsDurable(input.operations, parsed.project))
+      ? syncIncomplete()
+      : result;
   } catch (cause) {
+    if (cause instanceof WorkspaceSyncIncomplete) {
+      logRedactedCause(`workspace.provision-project.${parsed.step}: sync-incomplete`, cause);
+
+      return syncIncomplete();
+    }
+
     logRedactedCause(
       `workspace.provision-project.${parsed.step}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
       cause,
@@ -205,8 +240,18 @@ export async function executeProjectRemovalRequest(
     const plan = planProjectRemovalRequest(parsed);
     const output = await runLoggedCommand(input.operations, "project-removal", plan);
 
+    if (output.exitCode === 0 && !(await removalIsDurable(input.operations, parsed.projectId))) {
+      return syncIncomplete();
+    }
+
     return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } };
   } catch (cause) {
+    if (cause instanceof WorkspaceSyncIncomplete) {
+      logRedactedCause("workspace.project-removal: sync-incomplete", cause);
+
+      return syncIncomplete();
+    }
+
     logRedactedCause("workspace.project-removal: workspace-unavailable", cause);
 
     return unavailable();

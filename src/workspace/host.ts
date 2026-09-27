@@ -261,7 +261,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   build(request: unknown): Promise<WorkspaceResult> {
     return executeHarnessBuildRequest({
       configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
-      operations: new ComputerWorkspaceOperations(this.#workspace),
+      operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
       request,
     });
   }
@@ -281,7 +281,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
     return executeProjectProvisionRequest({
-      operations: new ComputerWorkspaceOperations(this.#workspace),
+      operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
       request,
     });
   }
@@ -290,14 +290,16 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The RPC parser validates this boundary.
   removeProject(request: unknown): Promise<WorkspaceResult> {
     return executeProjectRemovalRequest({
-      operations: new ComputerWorkspaceOperations(this.#workspace),
+      operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
       request,
     });
   }
 
   /** Restore the managed instructions after a workspace reset, without replacing an existing file. */
   ensureManagedInstructions(): Promise<WorkspaceResult> {
-    return ensureManagedInstructions(new ComputerWorkspaceOperations(this.#workspace));
+    return ensureManagedInstructions(
+      new ComputerWorkspaceOperations(this.#workspace, "not-required"),
+    );
   }
 
   /**
@@ -316,7 +318,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown): Promise<GitHubCredentialResult> {
     return executeGitHubCredentialRequest({
-      operations: new ComputerWorkspaceOperations(this.#workspace),
+      operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
       request,
     });
   }

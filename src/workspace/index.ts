@@ -1,4 +1,4 @@
-export { ComputerWorkspaceOperations } from "./computer-operations.js";
+export { ComputerWorkspaceOperations, type CommandSync } from "./computer-operations.js";
 
 export { type WorkspaceFailure, type WorkspacePlan, type WorkspaceResult } from "./decisions.js";
 
@@ -6,6 +6,7 @@ export {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
+  WorkspaceSyncIncomplete,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,

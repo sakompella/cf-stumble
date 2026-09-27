@@ -2,6 +2,7 @@ import {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
   executeProjectRemovalRequest,
+  WorkspaceSyncIncomplete,
   type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -81,12 +82,27 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return held;
   }
 
-  lstat(): Promise<WorkspacePathKind | undefined> {
-    return Promise.resolve("directory");
+  /** Durable store paths, as the Workspace Host's `lstat` and `readFile` read them. */
+  private readonly durablePaths = new Map<string, WorkspacePathKind>();
+  private readonly durableFiles = new Map<string, string>();
+
+  /**
+   * How Computer's post-command sync ends for a clone or removal, which the Workspace Host runs
+   * with `require-complete`. `incomplete` throws as `ComputerWorkspaceOperations` does then, and
+   * leaves the durable store as it was.
+   */
+  commandSync: "complete" | "incomplete" = "complete";
+
+  lstat(path: string): Promise<WorkspacePathKind | undefined> {
+    return Promise.resolve(this.durablePaths.get(path));
   }
 
-  readFile(): Promise<string> {
-    return Promise.reject(new Error("nothing in these tests reads a workspace file"));
+  readFile(path: string): Promise<string> {
+    const content = this.durableFiles.get(path);
+
+    return content === undefined
+      ? Promise.reject(new Error(`no durable file at ${path}`))
+      : Promise.resolve(content);
   }
 
   writeFile(path: string, content: string): Promise<void> {
@@ -95,7 +111,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Promise.resolve();
   }
 
-  runCommand(
+  async runCommand(
     source: string,
     _cwd?: string,
     _timeoutMs?: number,
@@ -107,9 +123,43 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
 
     const heldIndex = this.held.findIndex((command) => source.includes(command.fragment));
     const [held] = heldIndex >= 0 ? this.held.splice(heldIndex, 1) : [];
+    const output = held === undefined ? this.answer(source) : await this.heldOutput(held);
 
-    if (held !== undefined) return this.heldOutput(held);
+    if (output.exitCode === 0) this.persist(source);
 
+    return output;
+  }
+
+  /** Apply a successful clone or removal to the durable store, as a completed sync would. */
+  private persist(source: string): void {
+    const cloned = /^repository='([^']+)'$/mu.exec(source)?.[1];
+    const remote = /^expected_remote='([^']+)'$/mu.exec(source)?.[1];
+    const removed = /^rm -rf -- '([^']+)'/mu.exec(source)?.[1];
+
+    if (cloned === undefined && removed === undefined) return;
+
+    if (this.commandSync === "incomplete") {
+      throw new WorkspaceSyncIncomplete("fake post-command sync pending");
+    }
+
+    if (cloned !== undefined && remote !== undefined) {
+      this.durablePaths.set(cloned, "directory");
+      this.durablePaths.set(`${cloned}/.git`, "directory");
+      this.durablePaths.set(`${cloned}/.git/config`, "file");
+      this.durableFiles.set(`${cloned}/.git/config`, `[remote "origin"]\n\turl = ${remote}\n`);
+    }
+
+    if (removed !== undefined) {
+      for (const path of this.durablePaths.keys()) {
+        if (path === removed || path.startsWith(`${removed}/`) || path.startsWith(`${removed}.`)) {
+          this.durablePaths.delete(path);
+          this.durableFiles.delete(path);
+        }
+      }
+    }
+  }
+
+  private answer(source: string): CommandOutput {
     if (source.includes("gh auth login")) {
       this.credentialState =
         this.credentialState === "tooling-missing" ? "tooling-missing" : "connected";
@@ -131,7 +181,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       );
     }
 
-    return Promise.resolve({ stdout: "", stderr: "", exitCode: this.cloneExitCode });
+    return { stdout: "", stderr: "", exitCode: this.cloneExitCode };
   }
 
   private async heldOutput(command: HeldCommand): Promise<CommandOutput> {
@@ -140,8 +190,8 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return { stdout: "", stderr: "", exitCode: await command.exitCode };
   }
 
-  private output(stdout: string): Promise<CommandOutput> {
-    return Promise.resolve({ stdout: `${stdout}\n`, stderr: "", exitCode: 0 });
+  private output(stdout: string): CommandOutput {
+    return { stdout: `${stdout}\n`, stderr: "", exitCode: 0 };
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.

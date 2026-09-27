@@ -17,10 +17,20 @@ export type WorkspacePlan =
   | Readonly<{ kind: "write-file"; path: string; content: string }>
   | Readonly<{ kind: "run-command"; source: string; cwd: string; timeoutMs: number }>;
 
+/**
+ * `workspace-sync-incomplete` means a command ran in the container but its effect is not proven to
+ * be in the durable workspace store: Computer's post-command sync did not complete, or the store
+ * does not show the result. After the container is replaced, the store is what comes back.
+ */
 export type WorkspaceFailure = Readonly<{
   ok: false;
   error: Readonly<{
-    code: "invalid-request" | "path-outside-root" | "unknown-command" | "workspace-unavailable";
+    code:
+      | "invalid-request"
+      | "path-outside-root"
+      | "unknown-command"
+      | "workspace-unavailable"
+      | "workspace-sync-incomplete";
   }>;
 }>;
 

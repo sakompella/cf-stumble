@@ -399,6 +399,56 @@ test("removes the project row when workspace cleanup fails", async () => {
   );
 });
 
+test("reports a removal that the durable store does not show as failed, not removed", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const events = capturedEvents();
+  const subject = tenant("disconnect-sync-incomplete", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  subject.workspace.commandSync = "incomplete";
+
+  const disconnected = await subject.connections((connections) =>
+    connections.disconnect("sample-repo-1", () => ({ ok: true })),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  // The row and thread are gone, as for any failed cleanup; the result says the clone may remain.
+  expect(disconnected).toEqual({ ok: true, projectId: "sample-repo-1", workspace: "failed" });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(named(events(), "workspace.rpc")).toContainEqual(
+    expect.objectContaining({ step: "remove", outcome: "workspace-sync-incomplete" }),
+  );
+});
+
+test("keeps a repository whose clone the durable store does not show out of the catalog", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const workspace = new FakeTenantWorkspace();
+  workspace.commandSync = "incomplete";
+  const subject = tenant("connect-sync-incomplete", { workspace, fallbackToken: FAKE_TOKEN });
+
+  const refused = await subject.connections((connections) =>
+    connections.connect(REPOSITORY, undefined, NOW),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
+  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+});
+
+test("refuses provisioning on use when the clone's sync does not complete", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const subject = tenant("use-sync-incomplete", { fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  subject.workspace.commandSync = "incomplete";
+
+  const used = await subject.connections((connections) =>
+    connections.ensureProvisioned("sample-repo-1"),
+  );
+
+  expect(used).toEqual({ ok: false, problem: { code: "provisioning-failed" } });
+});
+
 test("provisions again every time a project is used", async () => {
   const subject = tenant("provision-on-use", { fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));

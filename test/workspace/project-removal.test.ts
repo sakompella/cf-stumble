@@ -1,9 +1,10 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
   executeProjectRemovalRequest,
   parseProjectRemovalRequest,
   planProjectRemovalRequest,
+  WorkspaceSyncIncomplete,
   type ProjectRemovalRequest,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -14,6 +15,10 @@ import { holdProjectProvisionLock, projectProvisionLockPath } from "../../src/pr
 import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 const request: ProjectRemovalRequest = {
   kind: "remove-project",
   projectId: sampleProjectOne.id,
@@ -21,9 +26,15 @@ const request: ProjectRemovalRequest = {
 
 class FakeOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
+  readonly statted: string[] = [];
+  /** Durable store paths that are still present after the removal command. */
+  readonly remaining = new Set<string>();
+  syncFailure: WorkspaceSyncIncomplete | undefined;
 
-  lstat(): Promise<WorkspacePathKind | undefined> {
-    return Promise.resolve("directory");
+  lstat(path: string): Promise<WorkspacePathKind | undefined> {
+    this.statted.push(path);
+
+    return Promise.resolve(this.remaining.has(path) ? "directory" : undefined);
   }
 
   readFile(): Promise<string> {
@@ -36,6 +47,8 @@ class FakeOperations implements WorkspaceOperations {
 
   runCommand(source: string): Promise<CommandOutput> {
     this.sources.push(source);
+
+    if (this.syncFailure !== undefined) return Promise.reject(this.syncFailure);
 
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
   }
@@ -85,6 +98,10 @@ test("removes only the clone and staging directory", async () => {
   });
 
   expect(operations.sources).toHaveLength(1);
+  expect(operations.statted, "the durable store is checked for both directories").toEqual([
+    projectDirectory(sampleProjectOne.id),
+    `${projectDirectory(sampleProjectOne.id)}.provisioning`,
+  ]);
   expect(operations.sources[0]).toContain(`rm -rf`);
   expect(operations.sources[0]).toContain(projectDirectory(sampleProjectOne.id));
   expect(operations.sources[0]).toContain(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
@@ -107,4 +124,34 @@ test("holds the project's container-local lock before removing anything", () => 
 
   expect(plan.source.indexOf("flock 9")).toBeLessThan(plan.source.indexOf("rm -rf --"));
   expect(removal, "the lock file is never deleted").not.toContain(lock);
+});
+
+test.each([
+  [
+    "Computer's post-command sync did not complete",
+    (operations: FakeOperations) => {
+      operations.syncFailure = new WorkspaceSyncIncomplete("post-command sync pending");
+    },
+  ],
+  [
+    "the durable store still holds the clone",
+    (operations: FakeOperations) => {
+      operations.remaining.add(projectDirectory(sampleProjectOne.id));
+    },
+  ],
+  [
+    "the durable store still holds the staging directory",
+    (operations: FakeOperations) => {
+      operations.remaining.add(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
+    },
+  ],
+] as const)("a removal is not reported as done when %s", async (_case, arrange) => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const operations = new FakeOperations();
+  arrange(operations);
+
+  await expect(executeProjectRemovalRequest({ operations, request })).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-sync-incomplete" },
+  });
 });

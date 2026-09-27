@@ -8,12 +8,17 @@ import {
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
 import type { Project } from "../../src/project-catalog.js";
-import { MANAGED_AGENT_INSTRUCTIONS_PATH } from "../../src/workspace-layout.js";
+import {
+  MANAGED_AGENT_INSTRUCTIONS_PATH,
+  projectDirectory,
+  projectGitDirectory,
+} from "../../src/workspace-layout.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   executeProjectProvisionRequest,
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
+  WorkspaceSyncIncomplete,
   type CommandOutput,
   type ProjectProvisionRequest,
   type WorkspaceOperations,
@@ -78,16 +83,32 @@ class FakeProjectOperations implements WorkspaceOperations {
    * the provision shell's catch-all logs a redacted cause instead of discarding it. */
   commandFailure: Error | undefined;
 
+  /** The Git config the durable store holds for the clone, or nothing when the clone is absent. */
+  durableGitConfig: string | undefined =
+    `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${projectOne.repositoryUrl}\n`;
+
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
     this.calls.push(`lstat:${path}`);
 
-    return Promise.resolve(this.symlinks.has(path) ? "symbolic-link" : "directory");
+    return Promise.resolve(this.kindOf(path));
+  }
+
+  private kindOf(path: string): WorkspacePathKind | undefined {
+    if (this.symlinks.has(path)) return "symbolic-link";
+
+    if (path.startsWith(projectDirectory(projectOne.id)) && this.durableGitConfig === undefined) {
+      return undefined;
+    }
+
+    return path.endsWith("/.git/config") ? "file" : "directory";
   }
 
   readFile(path: string): Promise<string> {
     this.calls.push(`read:${path}`);
 
-    return Promise.reject(new Error("provisioning never reads through the workspace surface"));
+    return this.durableGitConfig !== undefined && path.endsWith("/.git/config")
+      ? Promise.resolve(this.durableGitConfig)
+      : Promise.reject(new Error(`no durable file at ${path}`));
   }
 
   writeFile(path: string, content: string): Promise<void> {
@@ -161,8 +182,14 @@ test("runs the clone above the project root and writes the instructions beside i
     provision(operations, provisionRequest(projectOne, "instructions")),
   ).resolves.toEqual({ ok: true, result: { kind: "written" } });
 
+  const gitDir = projectGitDirectory(projectOne.id);
+
   expect(operations.calls).toEqual([
     "command:/",
+    `lstat:${projectDirectory(projectOne.id)}`,
+    `lstat:${gitDir}`,
+    `lstat:${gitDir}/config`,
+    `read:${gitDir}/config`,
     ...pathParts(MANAGED_AGENT_INSTRUCTIONS_PATH).map((prefix) => `lstat:${prefix}`),
     `write:${MANAGED_AGENT_INSTRUCTIONS_PATH}:${MANAGED_AGENT_INSTRUCTIONS.length}`,
   ]);
@@ -176,6 +203,36 @@ test("reports a failing clone with its exit code instead of continuing", async (
   await expect(provision(operations, provisionRequest(projectOne, "clone"))).resolves.toEqual({
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 128 },
+  });
+});
+
+test.each([
+  [
+    "Computer's post-command sync did not complete",
+    (operations: FakeProjectOperations) => {
+      operations.commandFailure = new WorkspaceSyncIncomplete("post-command sync pending");
+    },
+  ],
+  [
+    "the durable store has no clone",
+    (operations: FakeProjectOperations) => {
+      operations.durableGitConfig = undefined;
+    },
+  ],
+  [
+    "the durable clone names another origin",
+    (operations: FakeProjectOperations) => {
+      operations.durableGitConfig = '[remote "origin"]\n\turl = https://github.com/sample/other\n';
+    },
+  ],
+] as const)("a clone is not provisioned when %s", async (_case, arrange) => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const operations = new FakeProjectOperations();
+  arrange(operations);
+
+  await expect(provision(operations, provisionRequest(projectOne, "clone"))).resolves.toEqual({
+    ok: false,
+    error: { code: "workspace-sync-incomplete" },
   });
 });
 
