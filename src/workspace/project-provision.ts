@@ -148,12 +148,16 @@ export function originUrl(config: string): string | undefined {
 }
 
 /**
- * Whether a clone that exited successfully is in the durable workspace store: the project root and
- * its Git directory exist there, and the stored Git config names the catalog's repository as
- * `origin`. `WorkspaceOperations` reads the store, not the container, so a clone whose
- * post-command sync was lost reads as absent here even though the container has it.
+ * Whether the durable workspace store shows the markers of a clone that exited successfully: the
+ * project root and its Git directory exist there, and the stored Git config names the catalog's
+ * repository as `origin`. `WorkspaceOperations` reads the store, not the container, so a clone
+ * whose post-command copy was lost entirely reads as absent here.
+ *
+ * The markers do not prove the stored repository is complete. Computer applies a copy in batches,
+ * so an earlier incomplete copy can leave some objects or working-tree files in the store and not
+ * others; this check cannot tell that from a whole clone.
  */
-export async function cloneIsDurable(
+export async function cloneMarkersAreDurable(
   operations: WorkspaceOperations,
   project: Project,
 ): Promise<boolean> {

@@ -2,7 +2,7 @@ import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js"
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {
-  cloneIsDurable,
+  cloneMarkersAreDurable,
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
 } from "./project-provision.js";
@@ -205,7 +205,7 @@ export async function executeProjectProvisionRequest(
         ? result.result.exitCode === 0
         : false;
 
-    return cloned && !(await cloneIsDurable(input.operations, parsed.project))
+    return cloned && !(await cloneMarkersAreDurable(input.operations, parsed.project))
       ? syncIncomplete()
       : result;
   } catch (cause) {

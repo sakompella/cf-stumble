@@ -107,10 +107,21 @@ Computer runs a command in the container and then copies the container's changes
 
 The Workspace Host therefore runs the clone step and project removal with `require-complete` (`src/workspace/computer-operations.ts`, `src/workspace/host.ts`). A copy that is pending or skipped entries makes the step fail with `workspace-sync-incomplete`. The step is also checked against the durable store itself, through `Workspace.fs.lstat`, which reads the store rather than the container (`src/workspace/executor.ts`):
 
-- After a clone exits 0, the project root and its `.git` directory must exist in the store, and the stored `.git/config` must name the catalog's repository as `origin`. Otherwise connection reports `provisioning-failed` and removes the new row, and a turn is refused before it starts.
+- After a clone exits 0, the project root and its `.git` directory must exist in the store, and the stored `.git/config` must name the catalog's repository as `origin`. Otherwise connection reports `provisioning-failed` and removes the new row, and a turn is refused before it starts. These are markers only. Passing them does not prove that the stored repository is complete.
 - After a removal exits 0, neither the clone nor its `.provisioning` directory may exist in the store. Otherwise disconnect reports `workspace: "failed"`, never `removed`. The thread and catalog row are still gone, as for any failed cleanup, so the old clone can come back with a replacement container. A later connection of the same repository then finds that clone and reuses it, including any uncommitted work it held.
 
 Build, credential, and managed-instruction commands do not require a complete copy. The checks read the store once, right after the command, and nothing retries a pending copy. The cross-eviction case is unproven: no test or deployment has shown whether a clone left in the store returns after the Workspace Host or its container is replaced, or whether a later copy from a replacement container keeps a removal. The operational events for these cases are in `observability.md`. The tests use shapes like the pinned Computer's results and a fake store. No test has run Computer, so how often a copy is pending in production is unknown.
+
+### Partial copies
+
+Computer applies a copy to the store in batches. A copy that ends `pending` can therefore leave part of its changes in the store. After a clone, the store can hold the root, `.git`, and `.git/config` but only some Git objects or working-tree files. After a removal, the store can still hold some of the deleted files. A replacement container starts from the store, so it can restore a partly broken clone. The marker check above passes for such a clone, and the clone step then reconciles it as an existing repository and does not clone again. Nothing in cf-stumble detects this case, and no test or deployment has observed it.
+
+cf-stumble never deletes a populated clone by itself, because the clone may hold the owner's uncommitted work. If a project's Git commands fail in ways that suggest missing objects or files, recover by hand:
+
+1. Check the clone first. Run `git -C /workspace/projects/<id> fsck` and `git -C /workspace/projects/<id> status` in the workspace.
+2. Ask the owner before you remove anything. The clone can hold uncommitted changes and unpushed commits that exist nowhere else.
+3. Save anything the owner wants to keep before any repair, for example `git diff` for uncommitted changes, `git format-patch @{upstream}..` for unpushed commits, or a plain copy of the files when Git commands fail.
+4. Only with the owner's approval, repair or replace the clone. Either run `git fetch` in it, which may restore missing objects, or remove the clone and let the next turn clone it again. The owner can also reset the whole workspace, which removes every project's clone.
 
 ## The owner authorization
 

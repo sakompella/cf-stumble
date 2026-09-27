@@ -50,13 +50,6 @@ export function parseProjectRemovalRequest(
   return projectId === undefined ? invalidRequest() : { kind: "remove-project", projectId };
 }
 
-/**
- * Remove only the project clone and its staging directory, while holding the project's provision
- * lock. The Supervisor orders its own requests, but a removal can outlive the RPC that asked for
- * it, and the lock is what keeps a later clone out of the directory it is deleting. The
- * `.provision-lock` directory is what earlier versions locked with; nothing uses it now, so it is
- * removed as a remnant.
- */
 /** The directories a removal deletes and then expects to be gone from the durable store. */
 function removedDirectories(projectId: ProjectId): readonly [string, string] {
   const root = projectDirectory(projectId);
@@ -64,6 +57,13 @@ function removedDirectories(projectId: ProjectId): readonly [string, string] {
   return [root, `${root}.provisioning`];
 }
 
+/**
+ * Remove only the project clone and its staging directory, while holding the project's provision
+ * lock. The Supervisor orders its own requests, but a removal can outlive the RPC that asked for
+ * it, and the lock is what keeps a later clone out of the directory it is deleting. The
+ * `.provision-lock` directory is what earlier versions locked with; nothing uses it now, so it is
+ * removed as a remnant.
+ */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
