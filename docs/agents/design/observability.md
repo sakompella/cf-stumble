@@ -18,7 +18,8 @@ its logs too.
 - `timed(event, fields, run, classify)` runs one promise and logs its `outcome` and `durationMs`.
   A rejection is logged at `error` as `outcome: "threw"` with a `timeout` flag, then rethrown.
 - `logRedactedCause(context, cause, knownToken?)` still writes the redacted text of a thrown cause.
-  `timed` logs no cause, because only the caller knows which secret the cause might echo. A catch
+  It applies the field patterns, including the Access JWT pattern, to the whole cause before it
+  cuts the cause to 400 characters. `timed` logs no cause, because only the caller knows which secret the cause might echo. A catch
   block may call `logRedactedCause`; not every exception log uses it.
 
 A field value is a string, a number, a boolean, or `null`. Fields carry ids, names, codes,
@@ -108,7 +109,7 @@ lease id's last 8 characters), and `generation` (the label the turn was admitted
 | `harness-build.step`     | info, warn, or error                       | `commit`, `step`, `outcome` (`ok`, a build problem code, or `threw`), `exitCode` (a failed step), `durationMs`                                     | The Supervisor ran one build step in the workspace.                                                                                                                 |
 | `harness-build.output`   | info, warn, or error                       | `commit`, `outcome`, `durationMs`                                                                                                                  | The Supervisor read and checked the build's module map.                                                                                                             |
 
-A failed build step also writes a text tail of its output after `redactCredentials` handles recognized patterns. This is not a structured event. The exception paths can log raw error text (`src/supervisor/artifacts/builder.ts:72-119`).
+A failed build step also writes a text tail of its output after `redactCredentials` handles recognized patterns. This is not a structured event, and the tail does not get the Access JWT pattern. A thrown workspace call in a build step or the module map read goes through `logRedactedCause` (`src/supervisor/artifacts/builder.ts`).
 
 ## Boundary and credential events
 
