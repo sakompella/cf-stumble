@@ -16,9 +16,12 @@ Computer issue [#114](https://github.com/cloudflare/computer/issues/114) reports
 
 ## Upgrade follow-up
 
-Before version 0 relies on the pinned pair, check whether Cloudflare has published a supported
-Computer release that provides the required Worker-shell, container, and Durable Object behavior.
-Prefer that release if the full application workflow passes against it. Until then, retain the
+This section records pre-release research: the check it describes ran before the `v0` tag, when
+no Computer release had shipped a supported Worker-shell, container, and Durable Object path.
+`v0` shipped on the pinned pair below, and the pin is unchanged at this commit
+(`package.json`). Before adopting any newer Computer release, check whether Cloudflare has
+published one that provides the required Worker-shell, container, and Durable Object behavior,
+and prefer it only if the full application workflow passes against it. Until then, retain the
 source and image pair that the paid-account test exercised; do not update one without the other.
 
 ## Workspace layout
@@ -43,13 +46,13 @@ identity reaches a different one. No request supplies the name.
 
 `src/workspace-layout.ts` owns the layout:
 
-| Path                               | Holds                                                         |
-| ---------------------------------- | ------------------------------------------------------------- |
-| `/workspace`                       | The workspace root. Every addressed path lives beneath it.    |
-| `/workspace/AGENTS.md`             | The managed instructions, above every repository.             |
-| `/workspace/harness`               | The owner's editable harness checkout.                        |
-| `/workspace/projects/<project id>` | One connected project's clone.                                |
-| `/workspace/.builds/<commit>`      | Build scratch for one labeled commit. It holds no repository. |
+| Path                               | Holds                                                                               |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `/workspace`                       | The workspace root. Every addressed path lives beneath it.                          |
+| `/workspace/AGENTS.md`             | The managed instructions, above every repository.                                   |
+| `/workspace/harness`               | The owner's editable harness checkout.                                              |
+| `/workspace/projects/<project id>` | One connected project's clone.                                                      |
+| `/tmp/cf-stumble-builds/<commit>`  | Build scratch for one labeled commit, outside `/workspace`. It holds no repository. |
 
 Selecting a project sets the working directory a turn starts in. The project capability addresses
 the whole workspace, so the agent can read a sibling repository or the managed instructions, and
@@ -69,10 +72,12 @@ Worker Loader names are cached. The Supervisor uses the labeled harness commit I
 
 ## Harness build isolation
 
-A build extracts its commit into `/workspace/.builds/<commit>` and clears that directory first.
-Nothing else lives there, so clearing it can destroy no checkout. The harness directory is the
-owner's editable clone: a build reconciles it and fetches into it, and refuses rather than deletes
-when it finds a populated directory that is not that repository.
+A build extracts its commit into `/tmp/cf-stumble-builds/<commit>` and clears that directory
+first. That path is container-local, not durable: it sits outside `/workspace` and outside
+Computer's Durable Object, and a cache miss on a container restart rebuilds it from scratch
+(`src/workspace-layout.ts`). Nothing else lives there, so clearing it can destroy no checkout. The
+harness directory is the owner's editable clone: a build reconciles it and fetches into it, and
+refuses rather than deletes when it finds a populated directory that is not that repository.
 
 Two builds of one commit cannot delete each other's files. The owner builds in one workspace
 container. `WorkspaceHostModuleMapBuilder` admits one build per commit at a time, so a second request
@@ -129,8 +134,11 @@ of these, because it has a warm pnpm store, a newer Node, and generated output a
    152 MB unpacked. A local clean build with an isolated `HOME`, and therefore an empty
    content-addressable store, downloaded all 183 resolved packages and finished
    install, Pi build, and module-map build in about 13 seconds on a fast home network. A container
-   with slower storage and a possible FUSE-backed filesystem will be considerably slower, so the
-   recommended cold-build timeout is 900 seconds for the whole chain until a paid run measures it.
+   with slower storage and a possible FUSE-backed filesystem will be considerably slower. The
+   configured timeout, `WORKSPACE_COMMAND_TIMEOUT_MS` (`src/workspace-command-timeout.ts`), is
+   900 seconds and applies to each build step (install, Pi build, module-map build) separately,
+   not once for the whole chain: `HARNESS_BUILD_CONFIGURATION.stepTimeoutMs`
+   (`src/harness-build.ts`) sets each phase's own step budget to that value.
 6. **git and tar.** The provision step runs `git rev-parse`, `git clone --no-checkout`,
    `git config`, `git cat-file`, and `git fetch`, and the checkout step runs `git archive` and
    `tar`. The recorded container toolchain includes Git. It does not record `tar`, and the recorded
@@ -152,7 +160,7 @@ present, so `pnpm verify` fails before the checklist is reached.
 
 ## Generation requests
 
-A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The exact command, transport, and authentication mechanism remain open.
+A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The current implementation exposes `POST /api/generations/submit`, `/activate`, and `/rollback` (`src/routes/owner-api.ts`, `src/routes/generations.ts`), and the Worker sets the owner principal from a verified Cloudflare Access token before routing to those handlers (`src/worker.ts`). ADR-0003 does not fix this command, transport, or authentication mechanism as a durable commitment, so a future redesign may still change them.
 
 ## Owner approval for a paid environment
 

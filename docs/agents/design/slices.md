@@ -2,11 +2,11 @@
 
 > **Superseded for v0:** Handoff decisions 6 and 7 remove R2 cache, recovery, promotion rules, and relay records from version 0.
 
-**Status: retained for implementation history and local evidence. `feature-map.md` now defines the version 0 completion scope and cut line.** The locally provable parts of steps 1, 2, 4, 5 and 6 are built and tested against local workerd. Nothing has been deployed. This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
+**Status: retained for implementation history and local evidence. `feature-map.md` now defines the version 0 completion scope and cut line.** The locally provable parts of steps 1, 2, 4, 5 and 6 were built and tested against local workerd at the time of this plan. At that time nothing had been deployed; the [version 0 release notes](../../release/v0/release-notes.md) record the later paid deployment. This is a working implementation sketch, not the product definition. `overview.md` and the current ADRs take precedence. Normal Supervisor traffic currently uses the active generation's retained module map rather than a constructor-bound fixture.
 
 What existed at the end of this plan: an interim local module-map store under the labeled harness commit, supervisor-owned generation state in Durable Object SQLite, a bounded ordinary-request startup check (ADR-0029), and epoch-checked requests with a request-deduplication journal. ADR-0030 replaces the request journal with direct generation commands. Handoff decisions 6 and 7 later cut R2 cache, relay records, promotion rules, and recovery behavior from version 0.
 
-The module map now stays in Supervisor SQLite. The main remaining gap is authenticated control transport. Nothing authenticates a principal yet, because the transport that carries a request from a browser or from the main facet remains open.
+The module map now stays in Supervisor SQLite. At the time of this plan the main remaining gap was authenticated control transport: nothing authenticated a principal yet, because the transport that carries a request from a browser or from the main facet was still open. That gap is closed: the Worker authenticates the owner through Cloudflare Access before routing (`src/worker.ts`), and the owner API exposes `POST /api/generations/submit`, `/activate`, and `/rollback` (`src/routes/owner-api.ts`, `src/routes/generations.ts`).
 
 Start with local workerd tests, then use the paid account for behavior that local tests cannot prove. Build one small end-to-end path before broadening the harness.
 
@@ -30,7 +30,7 @@ Start with local workerd tests, then use the paid account for behavior that loca
 
 The vertical path is complete when a paid deployment proves all of the following:
 
-- Generation 0 is a mutable main facet, while the recovery harness remains immutable and outside generation selection.
+- Generation 0 is a mutable main facet. This plan expected a separate immutable recovery harness outside generation selection; handoff decision 7 later removed that recovery harness entirely (ADR-0024 amendment, `docs/agents/CONTEXT.md`), so this bullet no longer describes the current design.
 - Normal traffic and the startup check exercise the same proposed supervisor-to-facet boundary.
 - A specific harness commit can receive a generation label and become a generation candidate without granting the requester direct recovery authority.
 - The main harness can work with durable Computer files while project and harness Git histories remain separate.

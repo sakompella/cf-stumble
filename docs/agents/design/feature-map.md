@@ -2,7 +2,7 @@
 
 > **Historical.** This records version 0 scope frozen at the `v0` tag, with one post-release correction (`efc01f8`, 2026-09-23, aligned the bootstrap steps with the shipped direct-submission path). `main` has since moved 179 commits past the tag; see [`status-2026-09-27.md`](../status-2026-09-27.md) for what shipped after and for scope that no longer matches this list.
 
-Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account feature. The front door is a "Deploy to Cloudflare" button. The deployed instance remains owner-only through Cloudflare Access. The `v0` tag includes this completed scope and cut line.
+Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account feature. The front door is a "Deploy to Cloudflare" button. The deployed instance remains owner-only through Cloudflare Access. This list is the planned scope and cut line at the `v0` tag. See the [version 0 release notes](../../release/v0/release-notes.md) for the deployed evidence and for items the release did not prove, including criterion 13 below.
 
 ## Version 0 scope
 
@@ -18,7 +18,7 @@ Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account fe
 10. Build the page that shows the active generation, the selected working directory, the streaming conversation, the project sidebar, and generation controls.
 11. Deploy early to a paid Cloudflare account. Prove the demo path against the deployed Worker, Dynamic Worker facets, Computer workspace, Worker Loader, and model route. Keep the deployed evidence that a failed candidate leaves the active generation serving and that rollback loads a stored module map without a build.
 12. Add user-facing deploy documentation and the "Deploy to Cloudflare" button. The button uses the public source repository and deploys into the user's own account. Document what the button cannot configure, including Workers Paid, Cloudflare Access, the Computer backend, and GitHub authentication inside the workspace.
-13. Prove the fresh-account bootstrap sequence from empty storage.
+13. Prove the fresh-account bootstrap sequence from empty storage. Unverified at `v0`: the release notes record that the deploy-button flow never ran against a genuinely empty account.
 
 ## Demo
 
@@ -34,7 +34,7 @@ The demo defines the feature cut line. Delete code only when none of these steps
 
 ## Harness self-edit path
 
-`/workspace/harness` is the owner's editable harness checkout and a real Git clone. The agent edits and commits there with ordinary Git. A candidate submission names that commit SHA. The build runs `git archive` from the harness repository into `/workspace/.builds/<commit>` and builds in that directory. The harness sidebar entry only selects `/workspace/harness` as the working directory. It needs no separate commit machinery.
+`/workspace/harness` is the owner's editable harness checkout and a real Git clone. The agent edits and commits there with ordinary Git. A candidate submission names that commit SHA. The build runs `git archive` from the harness repository into the build scratch root and builds there; that root was `/tmp/cf-stumble-builds/<commit>` at `v0` and still is (`src/workspace-layout.ts`), not a path under `/workspace`. The harness sidebar entry only selects `/workspace/harness` as the working directory. It needs no separate commit machinery.
 
 ## Fresh-account bootstrap
 

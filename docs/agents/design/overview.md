@@ -14,7 +14,7 @@ The **supervisor** is the immutable half. It lives in the Supervisor Durable Obj
 
 Version 0 has no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing. The earlier design put a second Pi-derived fork in the Supervisor and gave it recovery episodes, eligibility rules and relay evidence. Handoff decision 7 deleted all of it and kept the turn lease. A future multi-user or self-healing version can add it back, and this paragraph is the record that it once existed.
 
-The interface between the supervisor and a main facet is not settled. Forwarding an ordinary Worker `fetch(Request): Promise<Response>` call is attractive because it uses the platform's native interface and keeps the permanent contract small, and local prototypes show that it works. That evidence does not make `fetch` the only acceptable design.
+The interface between the supervisor and a main facet is ordinary Worker `fetch(Request): Promise<Response>` forwarding today: `FacetRelay.forward` calls the facet's `fetch` and returns its response unchanged (`src/supervisor/relay/index.ts`, `src/supervisor/supervisor.ts`). It uses the platform's native interface and keeps the permanent contract small. ADR-0003 does not fix this as a durable commitment, so a future redesign may still replace it.
 
 Generation 0 is the first mutable main harness, initially based closely on Pi. It is not a special rollback target; it is the first generation like any other.
 
@@ -46,7 +46,7 @@ the repositories, and the supervisor does not own or interpret project files or 
 
 A project Git commit is just a Git commit. A harness commit becomes a generation only when the Supervisor gives that specific commit a generation label; committing it alone does not activate it.
 
-A new main-harness revision may be submitted as a **generation candidate**. The Supervisor labels the specific harness commit, checks it, records the result against that generation, and decides whether it may run. The exact submission command and transport remain design choices.
+A new main-harness revision may be submitted as a **generation candidate**. The Supervisor labels the specific harness commit, checks it, records the result against that generation, and decides whether it may run. The current implementation submits over `POST /api/generations/submit` (`src/routes/generations.ts`); ADR-0003 does not fix this transport as a durable commitment.
 
 The user or mutable main harness may also request that the supervisor activate a specific existing generation or return to an earlier one. Naming a target is not the same as controlling the live system. The supervisor validates the request and performs or rejects the state change; mutable code cannot write the protected generation state directly or bypass recovery checks.
 
@@ -79,12 +79,18 @@ A broad administration console, configuration editor, metrics dashboard, and bro
 
 The main open questions are:
 
-- the supervisor-to-facet interface, including whether normal `fetch` is sufficient;
-- what the main harness can request and how the supervisor authenticates and checks it;
+- whether ordinary `fetch` forwarding stays the supervisor-to-facet interface, or a future
+  redesign replaces it (current implementation: `fetch`, see "The two harnesses" above);
 - what makes a generation known good;
 - what happens to a running turn when its browser disconnects;
 - recovery limits and timeouts; and
-- how executable Worker modules are produced, identified, and retained.
+- whether the current module-map build path (see "Runtime and Computer" below) stays the way
+  executable Worker modules are produced, identified, and retained.
+
+What the main harness can request, and how the supervisor authenticates and checks it, is
+implemented: Cloudflare Access sets the owner principal before routing, and the owner API exposes
+generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`,
+`src/routes/generations.ts`).
 
 The cold-start check is settled by ADR-0029. ADR-0037 settles UI transport. The host selects the
 Workers AI model through its binding. A caller cannot select the model, effort, or endpoint, as the
