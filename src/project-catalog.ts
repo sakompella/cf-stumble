@@ -8,9 +8,10 @@
 const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--(?:[1-9][0-9]*[dhsu]+)+)?$/u;
 
 /**
- * The longest id {@link projectIdForRepository} gives out. A directory name may have 255 bytes, and
- * provisioning names `<id>.provision-lock.stale.<pid>` beside a project's directory, so an id has
- * to leave room for that suffix. Only a repository name with dozens of dots or underscores comes
+ * The longest id {@link projectIdForRepository} gives out. A file name may have 255 bytes, and
+ * provisioning names `<id>.provisioning` beside a project's directory and
+ * `cf-stumble-project-<id>.provision.lock` in the container's `/tmp`, so an id has to leave room
+ * for that prefix and suffix. Only a repository name with dozens of dots or underscores comes
  * near it: plain GitHub names give at most 140 characters.
  */
 export const PROJECT_ID_LIMIT = 200;

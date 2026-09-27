@@ -6,7 +6,7 @@ import {
   projectDirectory,
   projectGitDirectory,
 } from "./workspace-layout.js";
-import type { Project, ProjectId, PublicRepositoryUrl } from "./project-catalog.js";
+import type { Project, ProjectId } from "./project-catalog.js";
 import { REPOSITORY_SIZE_VERDICT_FUNCTION, repositorySizeVerdictSource } from "./github/index.js";
 
 /**
@@ -96,33 +96,28 @@ export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] =
   "instructions",
 ];
 
-/** The lock directory that the clone step and project removal both take for one project. */
-export function projectProvisionLockPath(projectRoot: string): string {
-  return `${projectRoot}.provision-lock`;
+/**
+ * One project's provision lock: a kernel `flock` on a file in the container's own `/tmp`, taken by
+ * the clone step and by project removal. The id alphabet is letters, digits, and `-`, so the name
+ * is safe in a path, and one project's lock never orders another project's work.
+ *
+ * Nothing records a pid, so there is no stale owner to detect or take over. The kernel releases the
+ * lock when the last process holding the descriptor exits, and a container restart ends every such
+ * process. The file stays out of `/workspace`, which Computer copies to and from its store, so that
+ * copying cannot replace the file that holders and contenders lock. Nothing deletes it: a waiter
+ * that locked a deleted file would not exclude a newcomer that created a fresh one.
+ */
+export function projectProvisionLockPath(projectId: ProjectId): string {
+  return `/tmp/cf-stumble-project-${projectId}.provision.lock`;
 }
 
 /**
- * Shell lines that wait for and take one project's provision lock. They expect `$projects` and
- * `$lock` to be set, and they leave releasing the lock to the caller's `EXIT` trap. The clone step
- * and project removal both take it, so a removal that is still running in the workspace after its
- * RPC gave up still keeps a later clone out of the directory it is deleting.
+ * Shell lines that hold the project's provision lock for the rest of the command. They read the
+ * lock path from `$lock`. Descriptor 9 stays open in the shell and in every process it starts, so a
+ * `git clone` or `rm` that outlives a killed shell keeps the lock until it exits too.
  */
-export function acquireProvisionLock(): readonly string[] {
-  return [
-    'mkdir -p "$projects"',
-    'while ! mkdir "$lock" 2>/dev/null; do',
-    '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
-    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
-    '    stale_lock="${lock}.stale.$$"',
-    '    if mv "$lock" "$stale_lock" 2>/dev/null; then',
-    '      rm -rf "$stale_lock"',
-    "    fi",
-    "  else",
-    "    sleep 1",
-    "  fi",
-    "done",
-    'printf "%s\\n" "$$" > "$lock/pid"',
-  ];
+export function holdProjectProvisionLock(): readonly string[] {
+  return ['exec 9>"$lock"', "flock 9"];
 }
 
 /**
@@ -142,11 +137,10 @@ export function acquireProvisionLock(): readonly string[] {
  * killed run left behind. `rmdir` removes the project root only when it is an empty directory,
  * which is the one case where there is nothing to lose.
  *
- * The lock serializes the ordinary case; it is not airtight, since a process can hold the
- * directory for a moment before it records its own pid. Two concurrent runs can then both reach
- * the clone, one loses its staging directory, and its step fails and is retried. Converging on the
- * project root itself is what the staged move protects. Restarting one project reads and writes
- * only that project's own directory, so it cannot reclone or overwrite another.
+ * The project's provision lock (`projectProvisionLockPath`) orders this step with other clone
+ * steps and with project removal for the same project. Commands a turn runs do not take it.
+ * Restarting one project reads and writes only that project's own directory, so it cannot reclone
+ * or overwrite another.
  *
  * Before a new clone, the step measures the repository with the workspace's own `gh` credential
  * (`github/repository-size-guard.ts`) and refuses one over a workspace ceiling. This is the check
@@ -162,9 +156,10 @@ export function acquireProvisionLock(): readonly string[] {
 // oxlint-disable-next-line max-lines-per-function -- This shell keeps locking, clone, and reconciliation atomic.
 function cloneProjectRepository(
   configuration: ProjectProvisionConfiguration,
-  repositoryUrl: PublicRepositoryUrl,
+  project: Project,
 ): string {
-  const lock = projectProvisionLockPath(configuration.projectRoot);
+  const { repositoryUrl } = project;
+  const lock = projectProvisionLockPath(project.id);
   const staging = `${configuration.projectRoot}.provisioning`;
 
   return [
@@ -176,8 +171,9 @@ function cloneProjectRepository(
     `staging=${shellQuote(staging)}`,
     `expected_remote=${shellQuote(repositoryUrl)}`,
     repositorySizeVerdictSource(repositoryUrl),
-    ...acquireProvisionLock(),
-    'trap \'rm -rf "$lock" "$staging"\' EXIT',
+    'mkdir -p "$projects"',
+    ...holdProjectProvisionLock(),
+    "trap 'rm -rf \"$staging\"' EXIT",
     'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
     '  if test -e "$repository" && test -n "$(ls -A "$repository" 2>/dev/null)"; then',
     '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
@@ -228,7 +224,7 @@ export function planProjectProvision(
     steps: [
       {
         name: "clone",
-        source: cloneProjectRepository(configuration, project.repositoryUrl),
+        source: cloneProjectRepository(configuration, project),
         // The clone moves the project root into place, so it cannot run inside it, and the
         // workspace root may not exist yet on a cold container.
         cwd: "/",

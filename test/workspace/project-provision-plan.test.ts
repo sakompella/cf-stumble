@@ -1,12 +1,18 @@
 import { expect, test } from "vitest";
 import {
+  holdProjectProvisionLock,
   MANAGED_AGENT_INSTRUCTIONS,
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
   projectProvisionConfiguration,
+  projectProvisionLockPath,
   projectProvisionStep,
 } from "../../src/project-provision.js";
-import { parsePublicRepositoryUrl } from "../../src/project-catalog.js";
+import {
+  parseProjectId,
+  parsePublicRepositoryUrl,
+  PROJECT_ID_LIMIT,
+} from "../../src/project-catalog.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import type { Project } from "../../src/project-catalog.js";
 import { shellQuote } from "../../src/shell-quote.js";
@@ -104,10 +110,14 @@ test("quotes an interpolated repository URL the catalog would accept", () => {
 test("reconciles an existing clone instead of replacing its working tree", () => {
   const source = cloneSource(projectOne);
 
-  expect(source).toContain('while ! mkdir "$lock" 2>/dev/null; do');
-  expect(source, "a lock whose owner is gone must not block provisioning forever").toContain(
-    '  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then',
+  expect(source).toContain(`lock=${shellQuote(projectProvisionLockPath(projectOne.id))}\n`);
+  expect(source.indexOf(holdProjectProvisionLock().join("\n"))).toBeLessThan(
+    source.indexOf("rev-parse --is-bare-repository"),
   );
+  expect(
+    source,
+    "the lock file is never deleted, or two holders could each lock a file",
+  ).not.toMatch(/rm -rf "\$lock"/u);
   expect(source).toContain(
     'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
   );
@@ -180,4 +190,14 @@ test("gives each project its own directory inside the one workspace", () => {
   ).toBe(false);
   expect(cloneSource(projectOne)).not.toContain(projectDirectory(projectTwo.id));
   expect(cloneSource(projectOne)).not.toContain(HARNESS_DIRECTORY);
+});
+
+test("the longest project id still gives a lock file name the filesystem accepts", () => {
+  const longest = parseProjectId("a".repeat(PROJECT_ID_LIMIT));
+
+  if (longest === undefined) throw new Error("an id at the limit must parse");
+
+  const name = projectProvisionLockPath(longest).split("/").at(-1) ?? "";
+
+  expect(new TextEncoder().encode(name).length).toBeLessThanOrEqual(255);
 });

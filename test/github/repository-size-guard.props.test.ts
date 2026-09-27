@@ -20,6 +20,7 @@ import {
   projectProvisionStep,
 } from "../../src/project-provision.js";
 import {
+  FLOCK_STAND_IN,
   STUB_GIT,
   scratchDirectory,
   underScratch,
@@ -100,7 +101,7 @@ function prepare(scenario: Scenario): string {
   scenarioCount += 1;
   const directory = join(scratch, String(scenarioCount));
   const bin = join(directory, "bin");
-  execFileSync("mkdir", ["-p", bin]);
+  execFileSync("mkdir", ["-p", bin, join(directory, "tmp")]);
 
   writeFileSync(join(directory, "repository.json"), scenario.repository.body);
   writeFileSync(join(directory, "repository.exit"), String(scenario.repository.exitCode));
@@ -110,6 +111,7 @@ function prepare(scenario: Scenario): string {
   if (scenario.gh !== false) writeExecutable(join(bin, "gh"), STUB_GH);
 
   writeExecutable(join(bin, "git"), STUB_GIT);
+  writeExecutable(join(bin, "flock"), FLOCK_STAND_IN);
 
   if (scenario.existingClone === true) writeFileSync(join(directory, "existing-clone"), "");
 
@@ -143,7 +145,7 @@ function verdict(scenario: Scenario): string {
   return ran.stdout.trim();
 }
 
-/** The real clone step, with `/workspace` moved under this run's scratch directory. */
+/** The real clone step, with `/workspace` and `/tmp` moved under this run's scratch directory. */
 function clone(scenario: Scenario) {
   const directory = prepare(scenario);
 

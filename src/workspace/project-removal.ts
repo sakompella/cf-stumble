@@ -2,8 +2,8 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { parseProjectId, type ProjectId } from "../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../selectable-projects.js";
 import { shellQuote } from "../shell-quote.js";
-import { PROJECTS_DIRECTORY, projectDirectory } from "../workspace-layout.js";
-import { acquireProvisionLock, projectProvisionLockPath } from "../project-provision.js";
+import { projectDirectory } from "../workspace-layout.js";
+import { holdProjectProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
 
@@ -52,8 +52,9 @@ export function parseProjectRemovalRequest(
 /**
  * Remove only the project clone and its staging directory, while holding the project's provision
  * lock. The Supervisor orders its own requests, but a removal can outlive the RPC that asked for
- * it, and the lock is what keeps a later clone from landing in the directory it is deleting. The
- * lock has the weakness `project-provision.ts` records: a holder is visible before its pid is.
+ * it, and the lock is what keeps a later clone out of the directory it is deleting. The
+ * `.provision-lock` directory is what earlier versions locked with; nothing uses it now, so it is
+ * removed as a remnant.
  */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
@@ -64,11 +65,9 @@ export function planProjectRemovalRequest(
     kind: "run-command",
     source: [
       "set -eu",
-      `projects=${shellQuote(PROJECTS_DIRECTORY)}`,
-      `lock=${shellQuote(projectProvisionLockPath(root))}`,
-      ...acquireProvisionLock(),
-      "trap 'rm -rf \"$lock\"' EXIT",
-      `rm -rf -- ${[root, `${root}.provisioning`].map((path) => shellQuote(path)).join(" ")}`,
+      `lock=${shellQuote(projectProvisionLockPath(request.projectId))}`,
+      ...holdProjectProvisionLock(),
+      `rm -rf -- ${[root, `${root}.provisioning`, `${root}.provision-lock`].map((path) => shellQuote(path)).join(" ")}`,
     ].join("\n"),
     cwd: "/",
     timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
