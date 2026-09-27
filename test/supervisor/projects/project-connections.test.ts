@@ -359,7 +359,7 @@ test("disconnects a project row and removes its clone through the narrow workspa
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1"),
+    connections.disconnect("sample-repo-1", () => ({ ok: true })),
   );
 
   const listed = await subject.connections((connections) => connections.list(NOW));
@@ -383,7 +383,7 @@ test("removes the project row when workspace cleanup fails", async () => {
   subject.workspace.unavailable = true;
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1"),
+    connections.disconnect("sample-repo-1", () => ({ ok: true })),
   );
 
   const listed = await subject.connections((connections) => connections.list(NOW));

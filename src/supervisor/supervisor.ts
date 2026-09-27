@@ -255,11 +255,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     projectId: unknown,
     now: number = Date.now(),
   ): Promise<DisconnectRepositoryResult> {
-    const thread = this.threads.disconnectProject(projectId, now);
-
-    return thread.ok
-      ? this.connections.disconnect(projectId)
-      : Promise.resolve({ ok: false, problem: thread.problem });
+    return this.connections.disconnect(projectId, () =>
+      this.threads.disconnectProject(projectId, now),
+    );
   }
 
   /**

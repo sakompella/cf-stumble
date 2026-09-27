@@ -14,6 +14,35 @@ import type { GitHubCredentialState } from "../../../src/github/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
 import type { WorkspaceResult } from "../../../src/workspace/decisions.js";
 
+/** A command the fake has been told to hold open until the test answers it. */
+export class HeldCommand {
+  readonly fragment: string;
+  /** Resolves once the held command has started. */
+  readonly reached: Promise<void>;
+  readonly exitCode: Promise<number>;
+  private markReached: (() => void) | undefined;
+  private answer: ((exitCode: number) => void) | undefined;
+
+  constructor(fragment: string) {
+    this.fragment = fragment;
+    this.reached = new Promise((resolve) => {
+      this.markReached = resolve;
+    });
+    this.exitCode = new Promise((resolve) => {
+      this.answer = resolve;
+    });
+  }
+
+  start(): void {
+    this.markReached?.();
+  }
+
+  /** Answer the held command with this exit code. */
+  release(exitCode = 0): void {
+    this.answer?.(exitCode);
+  }
+}
+
 /**
  * A stand-in for the tenant's Workspace Host that runs the real surfaces.
  *
@@ -39,6 +68,18 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
   unavailable = false;
+  private readonly held: HeldCommand[] = [];
+
+  /**
+   * Hold the next command whose text contains `fragment` until the test releases it, so a test can
+   * choose how two overlapping operations interleave.
+   */
+  holdNext(fragment: string): HeldCommand {
+    const held = new HeldCommand(fragment);
+    this.held.push(held);
+
+    return held;
+  }
 
   lstat(): Promise<WorkspacePathKind | undefined> {
     return Promise.resolve("directory");
@@ -64,6 +105,11 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
 
     if (stdin !== undefined) this.stdins.push([source, stdin]);
 
+    const heldIndex = this.held.findIndex((command) => source.includes(command.fragment));
+    const [held] = heldIndex >= 0 ? this.held.splice(heldIndex, 1) : [];
+
+    if (held !== undefined) return this.heldOutput(held);
+
     if (source.includes("gh auth login")) {
       this.credentialState =
         this.credentialState === "tooling-missing" ? "tooling-missing" : "connected";
@@ -86,6 +132,12 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     }
 
     return Promise.resolve({ stdout: "", stderr: "", exitCode: this.cloneExitCode });
+  }
+
+  private async heldOutput(command: HeldCommand): Promise<CommandOutput> {
+    command.start();
+
+    return { stdout: "", stderr: "", exitCode: await command.exitCode };
   }
 
   private output(stdout: string): Promise<CommandOutput> {

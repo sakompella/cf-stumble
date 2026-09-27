@@ -3,10 +3,16 @@
 // oxlint-disable max-lines -- Connection reconciliation includes the size guard and clone failure mapping.
 
 import { ConnectedProjects } from "./connected-projects.js";
+import { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "../../project-provision.js";
-import { lookupRepositorySize, type RepositorySizeLookup } from "../../github/index.js";
-import { parseGitHubToken, type GitHubFetch, type GitHubToken } from "../../github/index.js";
+import {
+  lookupRepositorySize,
+  parseGitHubToken,
+  type GitHubFetch,
+  type GitHubToken,
+  type RepositorySizeLookup,
+} from "../../github/index.js";
 import {
   GitHubConnection,
   type GitHubAuthorizationOutcome,
@@ -16,6 +22,7 @@ import {
 import { GitHubConnectionStore } from "./github-connection-store.js";
 import {
   canonicalRepositoryUrl,
+  parseProjectId,
   projectIdForRepository,
   resolveProject,
   type Project,
@@ -35,8 +42,8 @@ import {
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
-import type { VerifiedAccessScope } from "../../access/index.js";
 // oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
+import type { VerifiedAccessScope } from "../../access/index.js";
 import { logEvent, logRedactedCause, timedWorkspaceRpc } from "../../diagnostics.js";
 
 /**
@@ -113,15 +120,23 @@ async function repositorySizeAllowed(
   return reason === undefined || reason === "within-limits";
 }
 
+type DisconnectRefusal = Readonly<{
+  ok: false;
+  problem: Readonly<{
+    code: "invalid-project-id" | "unknown-project-id" | "harness-project" | "turn-active";
+    deadlineAt?: number;
+  }>;
+}>;
+
 export type DisconnectRepositoryResult =
   | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
-  | Readonly<{
-      ok: false;
-      problem: Readonly<{
-        code: "invalid-project-id" | "unknown-project-id" | "harness-project" | "turn-active";
-        deadlineAt?: number;
-      }>;
-    }>;
+  | DisconnectRefusal;
+
+/**
+ * Removes the project's thread, or refuses because a turn still owns it. It runs inside the
+ * disconnect's ordered operation, so no turn can be admitted between it and the row removal.
+ */
+export type ReleaseProjectThread = () => Readonly<{ ok: true }> | DisconnectRefusal;
 
 export type ConnectRepositoryProblem = Readonly<{
   code:
@@ -170,6 +185,7 @@ export interface ProjectConnectionsInput {
 
 export class ProjectConnections {
   private readonly projects: ConnectedProjects;
+  private readonly lifecycle = new ProjectLifecycleQueue();
   private readonly github: GitHubConnection;
   private readonly workspaceName: string;
   private readonly namespace: CredentialWorkspaceNamespace &
@@ -316,56 +332,48 @@ export class ProjectConnections {
       );
     }
 
-    return this.store(canonical, displayName, github, now);
+    return this.lifecycle.exclusive(projectId, () =>
+      this.store(canonical, displayName, github, now),
+    );
   }
 
-  /** Remove a connected project, then best-effort remove its durable workspace directories. */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
-  async disconnect(projectId: unknown): Promise<DisconnectRepositoryResult> {
-    const resolved = resolveProject(projectId, this.projects.catalog());
+  /**
+   * Release a connected project's thread, remove its catalog row, then best-effort remove its
+   * durable workspace directories. The whole sequence is one ordered operation for the project id,
+   * so a reconnect cannot clone into the directory while this removal is still running.
+   */
+  disconnect(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
+    projectId: unknown,
+    releaseThread: ReleaseProjectThread,
+  ): Promise<DisconnectRepositoryResult> {
+    const parsed = parseProjectId(projectId);
 
-    if (!resolved.ok) {
-      return { ok: false, problem: { code: resolved.reason } };
+    if (parsed === undefined) {
+      return Promise.resolve({ ok: false, problem: { code: "invalid-project-id" } });
     }
 
-    this.projects.disconnect(resolved.project.id);
+    return this.lifecycle.exclusive(parsed, async () => {
+      const thread = releaseThread();
 
-    let workspace: "removed" | "failed" = "removed";
+      if (!thread.ok) return thread;
 
-    try {
-      const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
+      const resolved = resolveProject(parsed, this.projects.catalog());
 
-      const result = await timedWorkspaceRpc(
-        { method: "project", step: "remove" },
-        () =>
-          removalNamespace.getByName(this.workspaceName).removeProject({
-            kind: "remove-project",
-            projectId: resolved.project.id,
-          }),
-        (answered) => {
-          if (answered.ok && answered.result.kind === "command" && answered.result.exitCode === 0) {
-            return { outcome: "removed" };
-          }
-
-          return { outcome: "failed", level: "error" };
-        },
-        PROVISION_RPC_TIMEOUT_MS,
-      );
-
-      if (!result.ok || result.result.kind !== "command" || result.result.exitCode !== 0) {
-        workspace = "failed";
+      if (!resolved.ok) {
+        return { ok: false, problem: { code: resolved.reason } };
       }
-    } catch (cause) {
-      workspace = "failed";
-      logRedactedCause(`project-disconnect.${resolved.project.id}: workspace-unavailable`, cause);
-    }
 
-    logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
-      project: resolved.project.id,
-      workspace,
+      this.projects.disconnect(resolved.project.id);
+      const workspace = await this.removeProjectDirectories(resolved.project.id);
+
+      logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
+        project: resolved.project.id,
+        workspace,
+      });
+
+      return { ok: true, projectId: resolved.project.id, workspace };
     });
-
-    return { ok: true, projectId: resolved.project.id, workspace };
   }
 
   /** Forget workspace-owned transient state after the owner resets the workspace. */
@@ -394,9 +402,23 @@ export class ProjectConnections {
    * also what repairs a workspace the platform recreated: the state that matters is in the
    * workspace, and nothing here remembers having provisioned before.
    */
-  async ensureProvisioned(
+  ensureProvisioned(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
     projectId: unknown,
+    signal?: AbortSignal,
+  ): Promise<ProjectUseResult> {
+    const parsed = parseProjectId(projectId);
+
+    if (parsed === undefined) {
+      return Promise.resolve({ ok: false, problem: { code: "invalid-project-id" } });
+    }
+
+    return this.lifecycle.exclusive(parsed, () => this.provisionConnected(parsed, signal));
+  }
+
+  /** The body of `ensureProvisioned`, for a caller already running in the project's queue. */
+  private async provisionConnected(
+    projectId: ProjectId,
     signal?: AbortSignal,
   ): Promise<ProjectUseResult> {
     // Only connected repositories reach this path: harness turns use the generation-bound
@@ -454,7 +476,7 @@ export class ProjectConnections {
       return this.refused({ code: connected.problem.code, detail: "" }, github);
     }
 
-    const provisioned = await this.ensureProvisioned(connected.project.id);
+    const provisioned = await this.provisionConnected(connected.project.id);
 
     if (!provisioned.ok) {
       if (!connected.alreadyConnected) {
@@ -479,6 +501,37 @@ export class ProjectConnections {
       alreadyConnected: connected.alreadyConnected,
       github,
     };
+  }
+
+  private async removeProjectDirectories(projectId: ProjectId): Promise<"removed" | "failed"> {
+    try {
+      const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
+
+      const result = await timedWorkspaceRpc(
+        { method: "project", step: "remove" },
+        () =>
+          removalNamespace.getByName(this.workspaceName).removeProject({
+            kind: "remove-project",
+            projectId,
+          }),
+        (answered) => {
+          if (answered.ok && answered.result.kind === "command" && answered.result.exitCode === 0) {
+            return { outcome: "removed" };
+          }
+
+          return { outcome: "failed", level: "error" };
+        },
+        PROVISION_RPC_TIMEOUT_MS,
+      );
+
+      return result.ok && result.result.kind === "command" && result.result.exitCode === 0
+        ? "removed"
+        : "failed";
+    } catch (cause) {
+      logRedactedCause(`project-disconnect.${projectId}: workspace-unavailable`, cause);
+
+      return "failed";
+    }
   }
 
   private refused(
