@@ -15,49 +15,44 @@ import {
   piContextToRouteRequest,
   routeResponseToPiAssistant,
 } from "./workers-ai-adapter.js";
-import type { PiMessage, PiTool, PiToolParameters } from "./workers-ai-adapter.js";
+import type { PiMessage, PiTextContent, PiTool, PiToolParameters } from "./workers-ai-adapter.js";
 import type { ModelCapability } from "./capabilities.js";
 import type { ModelStreamEvent, ValidationFailure } from "../../model-route.js";
 import { toPiUsage } from "./stream-assembler.js";
 
 export { ROUTE_MODEL } from "./stream-assembler.js";
 
+type ContentBlock = Extract<Message, { role: "toolResult" }>["content"][number];
+
 /**
- * Narrows one Pi message to the text-only shape the model route's closed message union can carry,
- * or reports `undefined` when it holds content the route has no field for.
+ * One content block as text the model route can carry. An image becomes a note that says it was
+ * left out, so the model knows a picture exists that it cannot see and does not answer about it.
  *
- * Generation 0 prompts with text and runs four text tools, so image content cannot arise from its
- * own turns. Rejecting it is still the honest answer for a conversation that somehow holds one:
- * the route would otherwise receive a message with the image silently missing, and the model would
- * answer about a picture it never saw.
+ * Generation 0's read tool declines images, so its own turns produce none. A thread saved by an
+ * earlier build can still hold one, and rejecting it here would fail every later turn on that
+ * thread, because the Supervisor saves the failed turn's conversation with the image still in it.
  */
-function routableMessage(message: Message): PiMessage | undefined {
+function textBlock(block: ContentBlock): PiTextContent {
+  return block.type === "text"
+    ? block
+    : {
+        type: "text",
+        text: `[Image omitted (${block.mimeType}): this model route carries text only.]`,
+      };
+}
+
+/** Narrows one Pi message to the text-only shape the model route's closed message union carries. */
+function routableMessage(message: Message): PiMessage {
   if (message.role === "assistant") return message;
 
   if (message.role === "user") {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Pi types this content as `string | (TextContent | ImageContent)[]`; the union needs narrowing.
     if (typeof message.content === "string") return { ...message, content: message.content };
-    const text = message.content.filter((block) => block.type === "text");
 
-    return text.length === message.content.length ? { ...message, content: text } : undefined;
+    return { ...message, content: message.content.map((block) => textBlock(block)) };
   }
 
-  const text = message.content.filter((block) => block.type === "text");
-
-  return text.length === message.content.length ? { ...message, content: text } : undefined;
-}
-
-function routableMessages(messages: readonly Message[]): readonly PiMessage[] | undefined {
-  const routable: PiMessage[] = [];
-
-  for (const message of messages) {
-    const narrowed = routableMessage(message);
-
-    if (narrowed === undefined) return undefined;
-    routable.push(narrowed);
-  }
-
-  return routable;
+  return { ...message, content: message.content.map((block) => textBlock(block)) };
 }
 
 function routableTools(tools: Context["tools"]): readonly PiTool[] {
@@ -265,20 +260,7 @@ function streamOnce(
   signal: AbortSignal | undefined,
 ): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
-  const messages = routableMessages(context.messages);
-
-  if (messages === undefined) {
-    stream.push({
-      type: "error",
-      reason: "error",
-      error: {
-        ...assistantShell("error"),
-        errorMessage: "the conversation holds non-text content",
-      },
-    });
-
-    return stream;
-  }
+  const messages = context.messages.map((message) => routableMessage(message));
 
   const request = piContextToRouteRequest(
     context.systemPrompt === undefined

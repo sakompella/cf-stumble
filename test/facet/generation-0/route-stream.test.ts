@@ -9,6 +9,7 @@ import type {
   ValidationFailure,
 } from "../../../src/model-route.js";
 import type { StreamFn } from "@cf-stumble/pi";
+import { says } from "./facet-turn-helpers.js";
 
 /** `@cf-stumble/pi` exports `StreamFn` but not the `Context` it receives; derive both, as
  * `route-stream.ts` itself does, rather than restating the shape here. */
@@ -111,14 +112,19 @@ test("streams a tool call and assembles its parsed arguments", async () => {
   });
 });
 
-test("rejects a conversation holding non-text content before ever calling the model", async () => {
-  const model = fakeModel(() => Promise.reject(new Error("must not be called")));
+test("sends an image block as a text note that says the image was left out", async () => {
+  const model = fakeModel(() =>
+    Promise.resolve(encodeModelRouteResponseAsStream(says("I cannot see it."))),
+  );
 
   const imageContext: Context = {
     messages: [
       {
         role: "user",
-        content: [{ type: "image", data: "AAA", mimeType: "image/png" }],
+        content: [
+          { type: "text", text: "What is in this picture?" },
+          { type: "image", data: "AAA", mimeType: "image/png" },
+        ],
         timestamp: 0,
       },
     ],
@@ -126,8 +132,13 @@ test("rejects a conversation holding non-text content before ever calling the mo
 
   const stream = await createRouteStreamFn(model)(ROUTE_MODEL, imageContext);
   const finalMessage = await stream.result();
-  expect(finalMessage).toMatchObject({ stopReason: "error" });
-  expect(model.calls).toHaveLength(0);
+  expect(finalMessage).toMatchObject({ stopReason: "stop" });
+  expect(model.calls[0]?.messages.at(-1)).toMatchObject({ role: "user" });
+
+  const sent = JSON.stringify(model.calls[0]?.messages.at(-1));
+  expect(sent).toContain("What is in this picture?");
+  expect(sent).toContain("Image omitted (image/png)");
+  expect(sent, "the route receives no image bytes").not.toContain("AAA");
 });
 
 test("a model-route validation failure becomes an error event with its reason", async () => {
