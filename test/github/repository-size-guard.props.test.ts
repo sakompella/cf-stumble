@@ -56,7 +56,8 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-type GitHubAnswer = Readonly<{ exitCode: number; body: string }>;
+/** A canned `gh api` answer. With `raw`, the stub prints `body` as it is instead of through `--jq`. */
+type GitHubAnswer = Readonly<{ exitCode: number; body: string; raw?: boolean }>;
 
 type Scenario = Readonly<{
   repository: GitHubAnswer;
@@ -80,6 +81,11 @@ function answered(body: CannedJson): GitHubAnswer {
   return { exitCode: 0, body: JSON.stringify(body) };
 }
 
+/** `gh` printing something its `--jq` filter could never print. */
+function printedAsIs(text: string): GitHubAnswer {
+  return { exitCode: 0, body: text, raw: true };
+}
+
 const STUB_GH = `#!/bin/sh
 printf '%s\\n' "$*" >> "$STUB_DIR/gh.log"
 case "$2" in
@@ -88,11 +94,18 @@ case "$2" in
 esac
 code="$(cat "$STUB_DIR/$answer.exit")"
 if [ "$code" != 0 ]; then
-  printf 'HTTP 404: Not Found\\n' >&2
+  printf 'HTTP 404: Not Found (Authorization: token %s)\\n' "$STUB_SECRET" >&2
   exit "$code"
+fi
+if [ -e "$STUB_DIR/$answer.raw" ]; then
+  cat "$STUB_DIR/$answer.raw"
+  exit 0
 fi
 exec "$STUB_JQ" -r "$4" "$STUB_DIR/$answer.json"
 `;
+
+/** A recognizable fake token the stub `gh` prints on failure, which no output may carry. */
+const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 let scenarioCount = 0;
 
@@ -107,6 +120,13 @@ function prepare(scenario: Scenario): string {
   writeFileSync(join(directory, "repository.exit"), String(scenario.repository.exitCode));
   writeFileSync(join(directory, "tree.json"), scenario.tree.body);
   writeFileSync(join(directory, "tree.exit"), String(scenario.tree.exitCode));
+
+  for (const [name, answer] of [
+    ["repository", scenario.repository],
+    ["tree", scenario.tree],
+  ] as const) {
+    if (answer.raw === true) writeFileSync(join(directory, `${name}.raw`), answer.body);
+  }
 
   if (scenario.gh !== false) writeExecutable(join(bin, "gh"), STUB_GH);
 
@@ -125,6 +145,7 @@ function run(directory: string, source: string) {
       PATH: `${join(directory, "bin")}:/usr/bin:/bin`,
       STUB_DIR: directory,
       STUB_JQ: jq,
+      STUB_SECRET: FAKE_TOKEN,
       STUB_REMOTE: project.repositoryUrl,
     },
   });
@@ -141,6 +162,9 @@ function verdict(scenario: Scenario): string {
   );
 
   expect(ran.status, ran.stderr).toBe(0);
+  expect(`${ran.stdout}${ran.stderr}`, "gh's error text never leaves the check").not.toContain(
+    FAKE_TOKEN,
+  );
 
   return ran.stdout.trim();
 }
@@ -248,6 +272,31 @@ test.each([
       tree: answered({ tree: [] }),
     },
   ],
+  [
+    "gh prints unfiltered JSON for the repository",
+    {
+      repository: printedAsIs(JSON.stringify({ size: 1, default_branch: "main" })),
+      tree: answered({ truncated: false, tree: [] }),
+    },
+  ],
+  [
+    "gh prints an unknown word for the tree",
+    { repository: answered({ size: 1, default_branch: "main" }), tree: printedAsIs("refuse\n") },
+  ],
+  [
+    "gh prints a ceiling name followed by another line",
+    {
+      repository: answered({ size: 1, default_branch: "main" }),
+      tree: printedAsIs("too-many-files\nwithin-limits\n"),
+    },
+  ],
+  [
+    "gh prints a size that is not plain digits",
+    {
+      repository: printedAsIs("5e+15 main\n"),
+      tree: answered({ truncated: false, tree: [] }),
+    },
+  ],
 ] as const)("the verdict is unmeasured when %s", (_case, scenario: Scenario) => {
   expect(verdict(scenario)).toBe("unmeasured");
 });
@@ -278,6 +327,9 @@ test("the clone step still clones when GitHub cannot be measured", () => {
 
   expect(ran.status, ran.stderr).toBe(0);
   expect(ran.gitLog).toBe("clone\n");
+  expect(ran.stderr, "gh's error text never reaches the clone step's output").not.toContain(
+    FAKE_TOKEN,
+  );
 });
 
 test("an existing clone is neither measured nor recloned", () => {

@@ -34,7 +34,13 @@ test("a new clone is measured after the existing-clone check and before git clon
   expect(existingCheck).toBeGreaterThanOrEqual(0);
   expect(measured).toBeGreaterThan(existingCheck);
   expect(cloned).toBeGreaterThan(measured);
-  expect(source.slice(measured, cloned)).toContain(`exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`);
+  const decision = source.slice(measured, cloned);
+
+  expect(decision).toContain(`exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`);
+  expect(decision, "only a named ceiling refuses").toContain(
+    "    tree-truncated | too-many-files | working-tree-too-large | repository-too-large)",
+  );
+  expect(decision, "no catch-all arm can refuse an unexpected verdict").not.toContain("*)");
 });
 
 test("the size check asks gh for the repository's API path and carries no credential", () => {

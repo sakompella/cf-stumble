@@ -179,10 +179,11 @@ function cloneProjectRepository(
     '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
     "    exit 1",
     "  fi",
+    // Only a named ceiling refuses. Any other output, even an unexpected one, lets the clone
+    // proceed, so the check cannot fail closed on something it did not measure.
     `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
     '  case "$size_verdict" in',
-    "    within-limits | unmeasured) ;;",
-    "    *)",
+    "    tree-truncated | too-many-files | working-tree-too-large | repository-too-large)",
     '      printf "repository exceeds a workspace size limit: %s\\n" "$size_verdict" >&2',
     `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
     "      ;;",
