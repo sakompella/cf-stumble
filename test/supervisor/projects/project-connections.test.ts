@@ -419,6 +419,25 @@ test("provisions again every time a project is used", async () => {
   ).toHaveLength(2);
 });
 
+test("keeps a project whose reprovision the clone size check refuses", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("reprovision-too-large", { workspace, fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+
+  // After a reset the clone step measures the repository again and exits with the size code when
+  // it has grown past a ceiling (`github/repository-size-guard.ts`).
+  workspace.cloneExitCode = 122;
+
+  const used = await subject.connections((connections) =>
+    connections.ensureProvisioned("sample-repo-1"),
+  );
+
+  const listed = await subject.connections((connections) => connections.list(NOW));
+
+  expect(used).toEqual({ ok: false, problem: { code: "repository-too-large" } });
+  expect(listed.projects.map((project) => project.id)).toContain("sample-repo-1");
+});
+
 test("reinstalls the configured credential before repairing a repository after a reset", async () => {
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("credential-before-use", { workspace, fallbackToken: FAKE_TOKEN });

@@ -9,9 +9,9 @@ import { PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE } from "../../project-provision.js
 import {
   lookupRepositorySize,
   parseGitHubToken,
+  repositorySizeReason,
   type GitHubFetch,
   type GitHubToken,
-  type RepositorySizeLookup,
 } from "../../github/index.js";
 import {
   GitHubConnection,
@@ -61,40 +61,6 @@ export type ProjectListView = Readonly<{
   github: GitHubConnectionStatus;
 }>;
 
-/**
- * A full-tree file ceiling protects the per-file durable workspace index and sync walk. Hono's
- * measured 1,800-file tree stayed healthy, while workers-sdk wedged at 5,649 files, so 3,000
- * leaves useful margin above the largest healthy repository and refuses the observed failure class.
- */
-export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
-
-/**
- * The working tree byte ceiling keeps durable sync below the observed wedge. Hono's working tree
- * was about 6 MB and workers-sdk's was about 48 MB locally (162 MB of Git data); 150 MB leaves
- * margin for a larger healthy tree without admitting a repository that can overwhelm the workspace.
- */
-export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
-
-/** The history-size ceiling remains separate from the current working-tree byte ceiling. */
-export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
-
-/** A truncated tree cannot prove the file count, so it is not safe to connect. */
-export const REPOSITORY_TREE_MUST_BE_COMPLETE = true;
-
-function repositorySizeReason(measured: RepositorySizeLookup | undefined): string | undefined {
-  if (measured === undefined) return undefined;
-
-  if (REPOSITORY_TREE_MUST_BE_COMPLETE && measured.truncated) return "tree-truncated";
-
-  if (measured.blobCount > MAX_REPOSITORY_BLOB_COUNT) return "too-many-files";
-
-  if (measured.blobBytes > MAX_REPOSITORY_BLOB_BYTES) return "working-tree-too-large";
-
-  if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
-
-  return "within-limits";
-}
-
 async function repositorySizeAllowed(
   project: ProjectId,
   repositoryUrl: PublicRepositoryUrl,
@@ -102,7 +68,7 @@ async function repositorySizeAllowed(
   fetcher: GitHubFetch,
 ): Promise<boolean> {
   const measured = await lookupRepositorySize(repositoryUrl, token, fetcher);
-  const reason = repositorySizeReason(measured);
+  const reason = measured === undefined ? undefined : repositorySizeReason(measured);
 
   const outcome =
     measured === undefined ? "skipped" : reason === "within-limits" ? "allowed" : "refused";

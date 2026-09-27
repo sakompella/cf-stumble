@@ -6,7 +6,8 @@ import {
   projectDirectory,
   projectGitDirectory,
 } from "./workspace-layout.js";
-import type { Project, ProjectId } from "./project-catalog.js";
+import type { Project, ProjectId, PublicRepositoryUrl } from "./project-catalog.js";
+import { REPOSITORY_SIZE_VERDICT_FUNCTION, repositorySizeVerdictSource } from "./github/index.js";
 
 /**
  * Keep enough recent history for ordinary `git log -n` and local review, while leaving older
@@ -15,7 +16,10 @@ import type { Project, ProjectId } from "./project-catalog.js";
  */
 export const PROJECT_CLONE_DEPTH = 50;
 
-/** Exit code reserved for a clone rejected because the workspace ran out of disk. */
+/**
+ * Exit code reserved for a clone rejected for size: the workspace ran out of disk, or the size
+ * check the clone runs first found the repository over a workspace ceiling.
+ */
 export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
 
 /** Prefix emitted only by the clone shell so its caller can record durable size without a path. */
@@ -115,6 +119,12 @@ export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] =
  * project root itself is what the staged move protects. Restarting one project reads and writes
  * only that project's own directory, so it cannot reclone or overwrite another.
  *
+ * Before a new clone, the step measures the repository with the workspace's own `gh` credential
+ * (`github/repository-size-guard.ts`) and refuses one over a workspace ceiling. This is the check
+ * that covers a private repository the Supervisor's `GH_TOKEN` preflight cannot see, and a clone
+ * recreated after a reset from a repository that has grown since it was connected. A repository it
+ * cannot measure is cloned anyway. An existing clone is never measured or removed.
+ *
  * Every value the shell sees goes through `shellQuote`. The repository URL is a
  * `PublicRepositoryUrl` from the catalog, never request data, but a URL is the one value here that
  * is configuration rather than a constant, and hand-written escaping is what turns a quoting
@@ -123,7 +133,7 @@ export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] =
 // oxlint-disable-next-line max-lines-per-function -- This shell keeps locking, clone, and reconciliation atomic.
 function cloneProjectRepository(
   configuration: ProjectProvisionConfiguration,
-  repositoryUrl: string,
+  repositoryUrl: PublicRepositoryUrl,
 ): string {
   const lock = `${configuration.projectRoot}.provision-lock`;
   const staging = `${configuration.projectRoot}.provisioning`;
@@ -136,6 +146,7 @@ function cloneProjectRepository(
     `git_dir=${shellQuote(configuration.projectGitDir)}`,
     `staging=${shellQuote(staging)}`,
     `expected_remote=${shellQuote(repositoryUrl)}`,
+    repositorySizeVerdictSource(repositoryUrl),
     'mkdir -p "$projects"',
     'while ! mkdir "$lock" 2>/dev/null; do',
     '  owner="$(cat "$lock/pid" 2>/dev/null || true)"',
@@ -155,6 +166,14 @@ function cloneProjectRepository(
     '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
     "    exit 1",
     "  fi",
+    `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
+    '  case "$size_verdict" in',
+    "    within-limits | unmeasured) ;;",
+    "    *)",
+    '      printf "repository exceeds a workspace size limit: %s\\n" "$size_verdict" >&2',
+    `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
+    "      ;;",
+    "  esac",
     '  rm -rf "$staging"',
     `  if clone_output="$(git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging" 2>&1)"; then`,
     "    :",
