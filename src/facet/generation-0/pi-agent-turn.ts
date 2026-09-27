@@ -79,9 +79,39 @@ function bindExecutionTool(
   };
 }
 
+const PI_READ_IMAGE_CLAIM =
+  "Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments.";
+
+const TEXT_ONLY_READ_IMAGE_NOTE =
+  "Supports text files. An image file returns only its type, because this model route carries text only.";
+
+/**
+ * Pi's read tool with every image declined, so reading an image answers with its type as text.
+ *
+ * The model route carries text only (`route-stream.ts`), so an image block in a tool result would
+ * fail the next model call. The Supervisor saves that failed turn's conversation, so every later
+ * turn on the thread would meet the same image and fail the same way. A processor that declines
+ * is the hook Pi provides for this: the tool then returns its own text result instead.
+ */
+function textOnlyReadTool(): AgentHarnessTool<ExecutionToolContext> {
+  const tool = createReadTool({
+    imageProcessor: () =>
+      Promise.resolve({
+        ok: false,
+        message:
+          "[Image omitted: this model route carries text only. Use bash to inspect the file.]",
+      }),
+  });
+
+  return {
+    ...tool,
+    description: tool.description.replace(PI_READ_IMAGE_CLAIM, TEXT_ONLY_READ_IMAGE_NOTE),
+  };
+}
+
 function executionTools(context: ExecutionToolContext): AgentTool[] {
   return [
-    bindExecutionTool(createReadTool(), context),
+    bindExecutionTool(textOnlyReadTool(), context),
     bindExecutionTool(createWriteTool(), context),
     bindExecutionTool(createEditTool(), context),
     bindExecutionTool(createBashTool(), context),
