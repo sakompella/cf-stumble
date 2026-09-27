@@ -1,8 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import {
@@ -20,6 +19,12 @@ import {
   projectProvisionConfiguration,
   projectProvisionStep,
 } from "../../src/project-provision.js";
+import {
+  STUB_GIT,
+  scratchDirectory,
+  underScratch,
+  writeExecutable,
+} from "../workspace/planned-shell-fixture.js";
 
 /**
  * These tests run the planned shell under `/bin/sh` with a stub `gh` and, for the clone step, a
@@ -44,7 +49,7 @@ const project: Project = (() => {
   return parsed;
 })();
 
-const scratch = mkdtempSync(join(tmpdir(), "cf-stumble-size-guard-"));
+const scratch = scratchDirectory("cf-stumble-size-guard-");
 
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
@@ -88,22 +93,6 @@ fi
 exec "$STUB_JQ" -r "$4" "$STUB_DIR/$answer.json"
 `;
 
-const STUB_GIT = `#!/bin/sh
-case "$*" in
-  *rev-parse*)
-    if [ -e "$STUB_DIR/existing-clone" ]; then printf 'false\\n'; exit 0; fi
-    exit 128
-    ;;
-  clone\\ *)
-    for target; do :; done
-    mkdir -p "$target/.git"
-    printf 'clone\\n' >> "$STUB_DIR/git.log"
-    ;;
-  *--get-all\\ remote.origin.url*) printf '%s\\n' "$STUB_REMOTE" ;;
-esac
-exit 0
-`;
-
 let scenarioCount = 0;
 
 /** A fresh directory holding the stubs and the canned GitHub answers for one run. */
@@ -118,13 +107,9 @@ function prepare(scenario: Scenario): string {
   writeFileSync(join(directory, "tree.json"), scenario.tree.body);
   writeFileSync(join(directory, "tree.exit"), String(scenario.tree.exitCode));
 
-  if (scenario.gh !== false) {
-    writeFileSync(join(bin, "gh"), STUB_GH);
-    chmodSync(join(bin, "gh"), 0o755);
-  }
+  if (scenario.gh !== false) writeExecutable(join(bin, "gh"), STUB_GH);
 
-  writeFileSync(join(bin, "git"), STUB_GIT);
-  chmodSync(join(bin, "git"), 0o755);
+  writeExecutable(join(bin, "git"), STUB_GIT);
 
   if (scenario.existingClone === true) writeFileSync(join(directory, "existing-clone"), "");
 
@@ -169,7 +154,7 @@ function clone(scenario: Scenario) {
 
   if (step.name !== "clone") throw new Error("the clone step must be the command step");
 
-  const ran = run(directory, step.source.replaceAll("'/workspace/", `'${directory}/workspace/`));
+  const ran = run(directory, underScratch(step.source, directory));
 
   const log = (name: string) =>
     existsSync(join(directory, name))
