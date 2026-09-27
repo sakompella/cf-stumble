@@ -11,6 +11,7 @@ Use this file to find the repository's agent-authored domain documentation. cf-s
 5. Read `docs/agents/design/feature-map.md` for the version 0 completion scope, `docs/agents/design/slices.md` for earlier implementation status, and `docs/agents/design/computer-integration.md` for the pinned Computer integration.
 6. Read `docs/agents/status-2026-09-27.md` for what changed since the `v0` tag and what remains open.
 7. Read `docs/agents/audit-2026-09-27.md` for the source-wide review at that snapshot, its verified code paths, and findings that still need runtime tests.
+8. Read `docs/agents/audit-fixes-2026-09-27.md` for the local fixes and what still needs deployed evidence.
 
 The ignored files `docs/agents/_original-vision-audit.md` and `docs/agents/_cloudflare-viability.md` are evidence notes. They provide historical and platform research, not current decisions.
 
