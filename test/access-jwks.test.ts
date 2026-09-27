@@ -128,7 +128,10 @@ test("reports a key-service failure when fetching the JWKS rejects, without expo
   expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
   const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
   expect(logged).toContain("key-service-unavailable");
-  expect(logged).not.toContain(signed);
+
+  for (const segment of signed.split(".")) {
+    expect(logged, "no header, claims, or signature text survives").not.toContain(segment);
+  }
 });
 
 test("reports a key-service failure when the JWKS endpoint answers a non-2xx status", async () => {

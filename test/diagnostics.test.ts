@@ -6,6 +6,8 @@ import {
   timed,
   type LogFields,
 } from "../src/diagnostics.js";
+import { textLines } from "./log-capture.js";
+import { syntheticJwt } from "./synthetic-jwt.js";
 
 /**
  * `logRedactedCause` and `isTimeoutFailure` sit inside catch blocks whose whole job is to turn an
@@ -55,6 +57,43 @@ test("logs a fixed fallback instead of throwing when a cause's message getter th
   expect(loggedErrors).toHaveBeenCalledTimes(1);
   const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
   expect(logged).toContain("[unprintable cause]");
+});
+
+/**
+ * A thrown cause is free text, so an Access JWT inside it is not a structured field the logger
+ * already redacts. Redaction must run before the cut: cutting first can drop the token's end and
+ * leave its header and claims, or a whole short token, in the log.
+ */
+test("logRedactedCause redacts every segment of a short JWT and keeps the surrounding text", () => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const jwt = syntheticJwt();
+
+  logRedactedCause(
+    "access-keys.load: key-service-unavailable",
+    new Error(`JWKS unavailable for ${jwt.token} after retry`),
+  );
+
+  const [logged = ""] = textLines(loggedErrors);
+  expect(logged).toContain("access-keys.load: key-service-unavailable");
+  expect(logged).toContain("JWKS unavailable for [redacted] after retry");
+
+  for (const segment of jwt.segments) expect(logged).not.toContain(segment);
+});
+
+test("logRedactedCause redacts a JWT that crosses the cause length limit", () => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const jwt = syntheticJwt(600);
+  expect(jwt.token.length, "the token alone is longer than the logged cause").toBeGreaterThan(400);
+
+  logRedactedCause(
+    "access-keys.load: key-service-unavailable",
+    new Error(`${"context ".repeat(40)}${jwt.token}`),
+  );
+
+  const [logged = ""] = textLines(loggedErrors);
+  expect(logged).toContain("context context");
+
+  for (const segment of jwt.segments) expect(logged).not.toContain(segment);
 });
 
 test("isTimeoutFailure reports false instead of throwing when a cause's message getter throws", () => {

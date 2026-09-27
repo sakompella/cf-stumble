@@ -3,7 +3,13 @@ import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import type { CommandOutput } from "../../workspace/index.js";
 import { redactCredentials } from "../../github/index.js";
-import { logCommit, timed, type TimedOutcome } from "../../diagnostics.js";
+import {
+  isTimeoutFailure,
+  logCommit,
+  logRedactedCause,
+  timed,
+  type TimedOutcome,
+} from "../../diagnostics.js";
 import {
   moduleMapFromBuildOutput,
   planHarnessBuild,
@@ -75,7 +81,10 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       // `build-workspace-unavailable` says nothing about which of the workspace, the container or
       // the connection to them gave way, and each of those failed at least once during this
       // project's deployed builds.
-      console.error(`harness build step ${step.name} could not run`, String(error));
+      logRedactedCause(
+        `harness-build.${step.name}: ${isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable"}`,
+        error,
+      );
 
       return Result.err({ code: "build-workspace-unavailable", harnessCommit });
     }
@@ -112,7 +121,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     try {
       encoded = await this.workspace.readFile(path);
     } catch (error) {
-      console.error(`harness build wrote no module map at ${path}`, String(error));
+      logRedactedCause(`harness-build.output ${path}: build-output-missing`, error);
 
       return Result.err({ code: "build-output-missing", harnessCommit });
     }

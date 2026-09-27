@@ -1,6 +1,8 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { everythingLogged, textLines } from "../../log-capture.js";
+import { syntheticJwt } from "../../synthetic-jwt.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   planHarnessBuild,
@@ -31,6 +33,12 @@ const configuration: HarnessBuildConfiguration = {
 };
 
 const commit = testHarnessCommit("2000000000000000000000000000000000000001");
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 function succeeded(): CommandOutput {
   return { stdout: "", stderr: "", exitCode: 0 };
@@ -151,6 +159,54 @@ test("reports an unavailable build workspace", async () => {
   }
 
   expect(built.error).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
+});
+
+test("an unavailable build workspace logs its cause with every credential redacted", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const jwt = syntheticJwt();
+
+  const workspace: BuildWorkspace = {
+    runCommand: () =>
+      Promise.reject(new Error(`container refused ${jwt.token} for x:${FAKE_TOKEN}@github.com`)),
+    readFile: () => Promise.reject(new Error("a failed step reads no output")),
+  };
+
+  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+
+  expect(built.isErr() ? built.error.code : "ok").toBe("build-workspace-unavailable");
+  expect(textLines(errors).join("\n"), "the cause still explains the failure").toMatch(
+    /harness-build\.provision: build-workspace-unavailable: container refused \[redacted\]/u,
+  );
+
+  const logged = everythingLogged();
+
+  for (const segment of jwt.segments) expect(logged).not.toContain(segment);
+  expect(logged).not.toContain(FAKE_TOKEN);
+});
+
+test("missing build output logs its cause with every credential redacted", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const jwt = syntheticJwt();
+
+  const workspace: BuildWorkspace = {
+    runCommand: () => Promise.resolve(succeeded()),
+    readFile: (path) =>
+      Promise.reject(new Error(`no file at ${path}; request carried ${jwt.token} ${FAKE_TOKEN}`)),
+  };
+
+  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+
+  expect(built.isErr() ? built.error.code : "ok").toBe("build-output-missing");
+  expect(textLines(errors).join("\n"), "the cause still names the path it read").toContain(
+    `no file at /harness-builds/${commit}/build/module-map.json`,
+  );
+
+  const logged = everythingLogged();
+
+  for (const segment of jwt.segments) expect(logged).not.toContain(segment);
+  expect(logged).not.toContain(FAKE_TOKEN);
 });
 
 test("reports missing and invalid build output", async () => {

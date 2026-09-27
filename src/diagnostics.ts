@@ -45,11 +45,25 @@ export function isTimeoutFailure(cause: unknown): boolean {
 /** The fixed fallback logged when rendering a thrown cause itself throws. */
 const UNPRINTABLE_CAUSE = "[unprintable cause]";
 
+/**
+ * An Access JWT, which the GitHub-shaped redaction does not recognize. Nothing should pass one to
+ * a log; this pattern is the last defense if something does.
+ */
+const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
+
+/**
+ * Every pattern the log recognizes, applied to whole text. Callers cut only after this runs:
+ * cutting first can leave a token's header and claims without the rest the pattern needs.
+ */
+function redactLogText(text: string, knownToken?: string): string {
+  return redactCredentials(text, knownToken).replaceAll(JWT_PATTERN, REDACTED);
+}
+
 function causeText(cause: unknown, knownToken: string | undefined): string {
   try {
     const message = cause instanceof Error ? cause.message : String(cause);
 
-    return redactCredentials(message, knownToken).slice(0, CAUSE_TEXT_LIMIT);
+    return redactLogText(message, knownToken).slice(0, CAUSE_TEXT_LIMIT);
   } catch {
     return UNPRINTABLE_CAUSE;
   }
@@ -77,12 +91,6 @@ export type LogLevel = "info" | "warn" | "error";
 /** Every string field is an id, a name, or a code, so anything longer than this is a mistake. */
 const FIELD_TEXT_LIMIT = 200;
 
-/**
- * An Access JWT, which the GitHub-shaped redaction does not recognize. Nothing should pass one to
- * a log field; this is the last line if something does.
- */
-const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
-
 /** The keys the logger writes itself. A field of the same name is dropped, not merged. */
 const RESERVED_KEYS: ReadonlySet<string> = new Set(["event", "level", "ts"]);
 
@@ -106,7 +114,7 @@ function logValue(value: LogValue): LogValue {
   if (!isText(value)) return value;
 
   try {
-    return redactCredentials(value).replaceAll(JWT_PATTERN, REDACTED).slice(0, FIELD_TEXT_LIMIT);
+    return redactLogText(value).slice(0, FIELD_TEXT_LIMIT);
   } catch {
     return UNPRINTABLE_CAUSE;
   }
