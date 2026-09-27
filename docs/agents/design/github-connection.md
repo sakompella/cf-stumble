@@ -72,19 +72,23 @@ existing project.
 
 ## Connecting a repository
 
-`Supervisor.connectProject` performs these steps in order:
+`Supervisor.connectProject` performs these steps in order (`src/supervisor/projects/project-connections.ts:264-319,444-480`):
 
-1. Make the workspace credential usable, if that is possible without a person. A working
-   credential is left alone.
-2. Ask the workspace whether the repository is readable, by running `git ls-remote` through the
-   credential helper that `gh auth setup-git` configured. This is the same path a clone takes.
-3. Record the project in `connected_projects`.
-4. Provision the project: reconcile its clone inside the tenant's one workspace and rewrite the
-   managed instructions file.
+1. Canonicalize the GitHub URL and derive the project id. Query GitHub for repository size and the default branch's recursive tree. Refuse a known oversized repository or truncated tree before asking the workspace for a credential. If the lookup fails or returns malformed data, skip the size preflight and continue.
+2. Make the workspace credential usable, if possible without a person. Leave a working credential alone.
+3. Ask the workspace whether the repository is readable, by running `git ls-remote` through the credential helper that `gh auth setup-git` configured. This is the same access path a clone takes.
+4. Record the project in `connected_projects`.
+5. Provision the project: reconcile its clone inside the tenant's one workspace and rewrite the managed instructions file.
 
-If the clone fails, cf-stumble removes a project it has just recorded. A project in the list is a
-project whose repository is in the workspace. Provisioning also runs when a project is used, so a
-workspace that the platform recreated is repaired on the next turn rather than reported as broken.
+The preflight refuses more than 3,000 blobs, more than 150,000,000 total blob bytes, a GitHub repository size above 5,000,000 KB, or a truncated default-branch tree. It returns `repository-too-large` for each refusal (`src/supervisor/projects/project-connections.ts:62-113`). The tree check covers the default branch at connection time, not every branch or later growth. Its API requests use `GH_TOKEN` when configured, not the device-flow credential held inside the workspace (`src/github/repository-size.ts:31-118`). For a private repository authorized only by device flow, the lookup can fail and the connection proceeds without these thresholds. The shallow, blobless, single-branch clone can fail on disk capacity, but it does not enforce the skipped metadata thresholds (`src/project-provision.ts:159-177`; `src/supervisor/projects/project-connections.ts:429-438`).
+
+If provisioning fails, cf-stumble removes a project it has just recorded. Provisioning also runs when a project is used, so a workspace that the platform recreated is repaired on the next turn.
+
+## Disconnecting a repository
+
+The owner can call `POST /api/projects/{id}/disconnect` with an `Origin` exactly matching the request origin. The route refuses an invalid or unknown project id, the harness project, and a project with an active turn. An expired lease can be reclaimed (`src/routes/projects.ts:99-115,245-267`; `src/supervisor/supervisor.ts:252-262`).
+
+On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` and `.provision-lock` directories (`src/supervisor/supervisor.ts:258-262`; `src/supervisor/projects/project-connections.ts:324-369`; `src/workspace/project-removal.ts:51-65`). Disconnect deletes uncommitted work in that project directory. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
 
 ## The owner authorization
 
@@ -124,34 +128,25 @@ as it installs one from the device flow, and records the connection with the sou
 `configured-token`. The connection status therefore says which credential is in use, and a token
 from a secret never appears as an owner authorization.
 
-This is a test and development path. It obeys the same rules as the device flow: the token reaches
-the workspace and nothing else, and no response, log, or stored row carries it. It is not a second
-production authorization mechanism, and a deployment that sets neither `GITHUB_OAUTH_CLIENT_ID` nor
+This is a test and development path. Like the device flow, it sends the token only through the
+credential-install RPC to the Workspace Host. Public HTTP responses, structured operational event
+fields, and Supervisor SQLite do not store the token. It is not a second production authorization
+mechanism, and a deployment that sets neither `GITHUB_OAUTH_CLIENT_ID` nor
 `GH_TOKEN` reports `disconnected` instead of guessing.
 
 ## Where the credential lives
 
-`WorkspaceHost.credential` is the only path that carries a token into the workspace. It runs
-`gh auth login --with-token` with the token on the command's standard input, then runs
-`gh auth setup-git`. The token is never part of a command line, never part of a result, and never
-written to a file, so no interrupted install can leave one behind.
+`GitHubCredentialRequest` carries the token over the credential-install RPC to `WorkspaceHost.credential`. The Workspace Host passes it to `gh auth login --with-token` on standard input, then runs `gh auth setup-git`. The token is absent from command text and application-controlled temporary files; `gh` writes it to local `~/.config/gh/hosts.yml` outside the repositories (`src/workspace/github-credential.ts:30-33,77-95`; `src/workspace/credential-access.ts:100-115`; `src/github/credential-commands.ts:7-16,35-56`).
 
 After that, `git` and `gh` authenticate the way they do on any development machine. cf-stumble does
 not proxy GitHub operations, and the Supervisor keeps no copy of the token: the tenant's storage
 holds a login name, the credential source, and the time it was recorded.
 
-Because the Supervisor keeps no copy, a workspace that loses its filesystem loses the credential.
-The status command reports that as `reconnect-required` rather than as a connection, so cf-stumble
-never claims a working credential that ordinary tools cannot use. An unattended deployment with
-`GH_TOKEN` set reinstalls the token by itself.
+Because the Supervisor keeps no copy, a workspace that loses its local `gh` configuration loses the credential. If the Supervisor previously recorded a connection, status reports `reconnect-required`; without a prior record, a missing credential reports `disconnected`. A request that ensures credentials reinstalls a configured `GH_TOKEN` without owner action (`src/supervisor/projects/github-connection.ts:133-159,317-346`).
 
 ## Redaction
 
-`src/github/redaction.ts` removes GitHub token prefixes and URL credentials from any text that
-leaves the workspace, such as an error `git` printed. Redaction is the last line, not the design:
-no type that crosses an HTTP, RPC, or storage boundary has a field for a token.
-`test/github/credential-surfaces.test.ts` drives a whole authorization with a recognizable fake
-token and then searches every one of those surfaces for it.
+`src/github/redaction.ts` removes recognized GitHub token prefixes and URL credentials from text on credential paths, such as an error `git` printed. Structured operational event fields also pass through the redaction in `src/diagnostics.ts:101-128`. Neither mechanism proves that every exception or plain-text log line hides every possible secret. The install RPC carries a token by design, while public HTTP responses and Supervisor SQLite do not store it. `test/github/credential-surfaces.test.ts` checks intended authorization surfaces with a recognizable fake token.
 
 ## What the pinned image must provide
 
