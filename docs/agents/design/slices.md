@@ -37,9 +37,9 @@ The vertical path is complete when a paid deployment proves all of the following
 - A failed candidate leaves the active generation serving.
 - Manual rollback loads the stored module map for an earlier generation that ran before.
 
-## Open choices before implementation commits to them
+## Open choices at the time of this plan
 
-ADRs 0028 through 0030 settle the startup check, artifact shape, and direct generation requests. Each record states what it does not settle. The rest of this list stands.
+ADRs 0028 through 0030 settled the startup check, artifact shape, and direct generation requests. The list below records what remained open then. `overview.md`, the current ADRs, and the dated status note describe what was later implemented.
 
 - The supervisor-to-facet interface and the startup check that fits it.
 - What counts as a completed real turn, including 4xx and 5xx responses and streams. The Supervisor must not treat a successful HTTP status as enough evidence because a stream can fail after its headers arrive.
@@ -47,7 +47,7 @@ ADRs 0028 through 0030 settle the startup check, artifact shape, and direct gene
 - HTTP, SSE, or WebSocket for the UI transport.
 - How Computer builds executable Worker modules from the labeled harness commit and stores the resulting map in Supervisor SQLite.
 
-Do not settle these by implication in an implementation. The paid-account spike should produce evidence for each choice, and the resulting decision should be recorded before the dependent path grows.
+The plan called for paid-account evidence and a recorded decision before implementation depended on any of these choices. This was a planning rule, not a list of work still open today.
 
 ## Excluded from this plan
 

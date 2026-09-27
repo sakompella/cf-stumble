@@ -1,6 +1,6 @@
 # Version 0 feature map
 
-> **Historical.** This records version 0 scope frozen at the `v0` tag, with one post-release correction (`efc01f8`, 2026-09-23, aligned the bootstrap steps with the shipped direct-submission path). `main` has since moved 179 commits past the tag; see [`status-2026-09-27.md`](../status-2026-09-27.md) for what shipped after and for scope that no longer matches this list.
+> **Historical.** This records version 0 scope frozen at the `v0` tag, with one post-release correction (`efc01f8`, 2026-09-23, aligned the bootstrap steps with the shipped direct-submission path). At the 2026-09-27 status snapshot, `main` was 179 commits past the tag; see [`status-2026-09-27.md`](../status-2026-09-27.md) for what shipped after and for scope that no longer matches this list.
 
 Version 0 is a public repository with a deploy-to-your-own-Cloudflare-account feature. The front door is a "Deploy to Cloudflare" button. The deployed instance remains owner-only through Cloudflare Access. This list is the planned scope and cut line at the `v0` tag. See the [version 0 release notes](../../release/v0/release-notes.md) for the deployed evidence and for items the release did not prove, including criterion 13 below.
 

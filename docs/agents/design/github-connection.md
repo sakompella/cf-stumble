@@ -128,11 +128,12 @@ as it installs one from the device flow, and records the connection with the sou
 `configured-token`. The connection status therefore says which credential is in use, and a token
 from a secret never appears as an owner authorization.
 
-This is a test and development path. Like the device flow, it sends the token only through the
-credential-install RPC to the Workspace Host. Public HTTP responses, structured operational event
-fields, and Supervisor SQLite do not store the token. It is not a second production authorization
-mechanism, and a deployment that sets neither `GITHUB_OAUTH_CLIENT_ID` nor
-`GH_TOKEN` reports `disconnected` instead of guessing.
+This is a test and development path. The configured token authenticates GitHub API requests for
+the repository-size preflight and, when needed, crosses the credential-install RPC into the
+Workspace Host. The device-flow token is used only for credential installation; it does not
+authenticate the size preflight. Public HTTP responses, structured operational event fields, and
+Supervisor SQLite do not store either token. A deployment that sets neither
+`GITHUB_OAUTH_CLIENT_ID` nor `GH_TOKEN` reports `disconnected` instead of guessing.
 
 ## Where the credential lives
 

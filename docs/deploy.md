@@ -36,7 +36,7 @@ Your first submission is slow. Installing packages and bundling the harness take
 
 The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). The times below are historical: they were measured on the smaller `standard-1` container (0.5 vCPU) before this project moved to `standard-3`, and have not been re-measured on the current size. A submission took between five and eight minutes end to end. Activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
 
-Cold starting the workspace container adds ten to sixty seconds to the first request after an idle period. That figure is also a `standard-1` measurement, from before the move to `standard-3`, and has not been re-measured on the current size.
+On the earlier `standard-1` container, a cold start added ten to sixty seconds to the first request after an idle period. That time has not been re-measured on `standard-3`.
 
 ## Configure Cloudflare Access
 
