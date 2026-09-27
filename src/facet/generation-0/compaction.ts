@@ -125,6 +125,12 @@ export async function compactThread(
 
   if (!prepared.ok || prepared.value === undefined) return undefined;
 
+  // A cut point that keeps every message leaves Pi nothing to summarize. It would still ask the
+  // model for a summary, and the thread would grow by that summary instead of shrinking.
+  const { messagesToSummarize, turnPrefixMessages } = prepared.value;
+
+  if (messagesToSummarize.length === 0 && turnPrefixMessages.length === 0) return undefined;
+
   // oxlint-disable-next-line typescript/no-unsafe-argument -- Pi declares `AgentState.model` as `Model<any>` and `compact` as `Model<Api>`; this passes one Pi value between two Pi declarations of it.
   const compacted = await compact(prepared.value, models, model, undefined, signal);
 

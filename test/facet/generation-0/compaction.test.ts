@@ -288,3 +288,28 @@ test("a second compaction updates the saved summary instead of summarizing it as
     "files read before the first compaction stay listed after the second",
   ).toContain("<read-files>\nauth.ts\n</read-files>");
 });
+
+test("a retention that keeps every message spends no summarization call and keeps the thread", async () => {
+  const script = scriptedStream([assistant([{ type: "text", text: "Carrying on." }], "stop")]);
+
+  const outcome = await runPiAgentTurn({
+    prompt: "Continue.",
+    state: { ...createPiAgentTurnState(model), messages: conversation() },
+    env: makeFacetExecutionEnv().env,
+    streamFn: script.streamFn,
+    compaction: { ...FORCED, settings: { ...FORCED.settings, keepRecentTokens: 1_000_000 } },
+  });
+
+  expect(outcome.ok).toBe(true);
+  expect(summarizationPrompts(script.contexts), "no cut point leaves nothing to summarize").toEqual(
+    [],
+  );
+  expect(outcome.state.messages.map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+    "user",
+    "assistant",
+    "user",
+    "assistant",
+  ]);
+});
