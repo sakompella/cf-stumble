@@ -20,6 +20,9 @@ import {
 } from "../harness.mjs";
 import { REFUSALS, SAVED_STATE } from "./_chat.mjs";
 
+/** The seeded exchange plus this turn's prompt, one assistant message, its result, and a reply. */
+const READ_ONLY_SAVED_STATE = "saved · revision 4 · 6 messages";
+
 /**
  * What a turn puts on the page, and what the page refuses to do with it.
  *
@@ -116,17 +119,17 @@ export const CASES: readonly HarnessCase[] = [
       assertNonEmpty(tools[0]?.output ?? "", "the read tool output");
       assertSame(diffs.diffMessages, 0, "turn diff entries");
       assertSame(diffs.unavailableMessages, 0, "diff-unavailable entries");
-      assertSame(turn.turnState, SAVED_STATE, "the terminal turn state");
+      assertSame(turn.turnState, READ_ONLY_SAVED_STATE, "the terminal turn state");
       assertSame(turn.sendDisabled, false, "Send after a read-only turn");
 
       await completeTurn(page, "Say that again in one line");
       assertSame(
         (await readTurn(page)).turnState,
-        SAVED_STATE,
+        "saved · revision 5 · 10 messages",
         "the terminal state of the second turn",
       );
 
-      return `the read-only turn ended ${SAVED_STATE} with one finished tool, no diff entry of either kind, and a second turn started normally`;
+      return `the read-only turn ended ${READ_ONLY_SAVED_STATE} with one finished tool, no diff entry of either kind, and a second turn saved at revision 5`;
     },
   },
   {

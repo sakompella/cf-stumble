@@ -202,7 +202,7 @@ export function serveThreadRoutes(
 
   if (req.method === "POST" && fresh !== undefined) {
     const projectId = decodeURIComponent(fresh);
-    const replaced = { revision: threadOf(state, projectId).revision + 1, messageCount: 0 };
+    const replaced = { revision: threadOf(state, projectId).revision + 1, messages: [] };
     state.threads.set(projectId, replaced);
 
     return { status: 200, payload: threadPayload(projectId, replaced) };

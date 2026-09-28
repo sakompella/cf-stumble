@@ -85,6 +85,7 @@ export function failedToolResult(
   return { kind: "tool-result", toolCallId, toolName, isError: true, content, truncated: false };
 }
 
+/** The stub restates `revision` and `messageCount` with what it stored (`server-turn.mts`). */
 export const SAVED_FRAME: ProjectTurnFrame = { kind: "saved", revision: 4, messageCount: 6 };
 
 export const TURN_DIFF_FRAME: ProjectTurnFrame = {

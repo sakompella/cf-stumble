@@ -239,28 +239,28 @@ A scenario is what cannot be reached by driving the page. Everything else — th
 generation ledger, the connected repositories — is state the stub keeps and a case changes by
 acting on the page or by calling a control.
 
-| Scenario                        | The turn it streams, and what else differs                                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ready`                         | text, `read_file`, text, `apply_patch`, `run_command` (large, server-truncated), text, the turn's own diff, `saved · revision 4 · 6 messages` |
-| `ready-paused`                  | the same turn, held after the first text and one completed tool                                                                               |
-| `no-terminal-frame`             | text and three tools, then the body ends with no terminal frame                                                                               |
-| `no-diff`                       | text, one successful read, `saved`; neither diff frame                                                                                        |
-| `diff-unavailable`              | the ready turn with the reason in place of the diff                                                                                           |
-| `markup-output`                 | a script-shaped text frame and an `<img … onerror=` tool result                                                                               |
-| `long-line`                     | one successful 200,000-character line marked `LONG-START` … `LONG-END`, `truncated: false`                                                    |
-| `tool-failed`                   | one failed tool inside a turn that still saves                                                                                                |
-| `project-switch`                | held after one tool; every later frame carries `EXTERNAL-LATE`                                                                                |
-| `turn-failed`                   | `failed: model-error · saved at revision 4`                                                                                                   |
-| `save-failed`                   | `not saved: stale-revision`; the stored thread stays at revision 3                                                                            |
-| `stream-invalid`                | `unreadable turn stream: malformed-frame`                                                                                                     |
-| `cancelled`                     | the Supervisor's own `cancelled` terminal frame                                                                                               |
-| `timed-out`                     | `timed out`                                                                                                                                   |
-| `turn-conflict`                 | HTTP 409 `turn-conflict` before any frame                                                                                                     |
-| `no-active-generation`          | HTTP 503 `no-active-generation` before any frame                                                                                              |
-| `no-projects`                   | `GET /api/projects` answers an empty catalog with connected GitHub                                                                            |
-| `github-disconnected`           | GitHub state `disconnected`                                                                                                                   |
-| `github-awaiting-authorization` | state `awaiting-authorization`, code `WDJB-MJHT`, GitHub's device link                                                                        |
-| `status-problem`                | `GET /api/status` is refused, so the page renders no epoch                                                                                    |
+| Scenario                        | The turn it streams, and what else differs                                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`                         | text, `read_file`, text, `apply_patch`, `run_command` (large, server-truncated), text, the turn's own diff, `saved · revision 4 · 10 messages` |
+| `ready-paused`                  | the same turn, held after the first text and one completed tool                                                                                |
+| `no-terminal-frame`             | text and three tools, then the body ends with no terminal frame                                                                                |
+| `no-diff`                       | text, one successful read, `saved`; neither diff frame                                                                                         |
+| `diff-unavailable`              | the ready turn with the reason in place of the diff                                                                                            |
+| `markup-output`                 | a script-shaped text frame and an `<img … onerror=` tool result                                                                                |
+| `long-line`                     | one successful 200,000-character line marked `LONG-START` … `LONG-END`, `truncated: false`                                                     |
+| `tool-failed`                   | one failed tool inside a turn that still saves                                                                                                 |
+| `project-switch`                | held after one tool; every later frame carries `EXTERNAL-LATE`                                                                                 |
+| `turn-failed`                   | `failed: model-error · saved at revision 4`                                                                                                    |
+| `save-failed`                   | `not saved: stale-revision`; the stored thread stays at revision 3                                                                             |
+| `stream-invalid`                | `unreadable turn stream: malformed-frame`                                                                                                      |
+| `cancelled`                     | the Supervisor's own `cancelled` terminal frame                                                                                                |
+| `timed-out`                     | `timed out`                                                                                                                                    |
+| `turn-conflict`                 | HTTP 409 `turn-conflict` before any frame                                                                                                      |
+| `no-active-generation`          | HTTP 503 `no-active-generation` before any frame                                                                                               |
+| `no-projects`                   | `GET /api/projects` answers an empty catalog with connected GitHub                                                                             |
+| `github-disconnected`           | GitHub state `disconnected`                                                                                                                    |
+| `github-awaiting-authorization` | state `awaiting-authorization`, code `WDJB-MJHT`, GitHub's device link                                                                         |
+| `status-problem`                | `GET /api/status` is refused, so the page renders no epoch                                                                                     |
 
 ### Baseline data
 
@@ -270,8 +270,12 @@ acting on the page or by calling a control.
   `https://github.com/octocat/new-repo` without changing the selection.
 - Threads: every project starts at revision 3 with two messages. The first names the project id and
   its location; the second carries `HARNESS-THREAD` for the harness entry and `EARLIER-EDIT-KEPT`
-  for a repository. A saved frame moves that project's thread to revision 4 with six messages; a
-  fresh thread moves it to the next revision with none.
+  for a repository. A frame that says the turn was saved (`saved`, or `turn-failed` with
+  `saved: true`) is where the stub stores it: the prompt the page sent and the streamed text and
+  tools become the next revision, grouped into Pi messages, and the frame is restated with that
+  revision and count. A first `ready` turn therefore saves revision 4 with ten messages, a reload
+  reads back the owner's own prompt, and a second turn saves revision 5. A fresh thread moves it to
+  the next revision with none.
 - Generations: generation 1, commit `abc123`, status `ready`, epoch 3. Submitting `def456` labels
   ready generation 2 and does not activate it. Submitting `broken456` labels generation 2 and
   answers `rejected: startup-check-failed`. Submitting a commit that already has a label returns

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
 import { parseScenario, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import type { GenerationRecord, GenerationState } from "./fixtures-generation.mjs";
-import type { ThreadState } from "./fixtures-thread.mjs";
+import { threadSummary, type ThreadState } from "./fixtures-thread.mjs";
 import { parseJsonRecordText, type JsonValue } from "./json.mjs";
 import {
   acceptsHtml,
@@ -127,7 +127,7 @@ async function handle(
   const turn = TURN_PATH.exec(path)?.[1];
 
   if (req.method === "POST" && turn !== undefined) {
-    await serveTurn(res, state, decodeURIComponent(turn), record);
+    await serveTurn(res, state, { projectId: decodeURIComponent(turn), body: parsed }, record);
 
     return;
   }
@@ -189,7 +189,7 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
         timeoutMs,
         "the browser to close the turn response",
       ),
-    thread: (projectId) => threadOf(state, projectId),
+    thread: (projectId) => threadSummary(threadOf(state, projectId)),
     projects: () => [...state.projects],
     generation: () => state.generation,
     setGeneration: (patch) => {

@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { initialProjects, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import { INITIAL_GENERATION, type GenerationState } from "./fixtures-generation.mjs";
-import { INITIAL_THREAD, type ThreadState } from "./fixtures-thread.mjs";
+import { initialThread, type StoredThread } from "./fixtures-thread.mjs";
 import type { JsonValue } from "./json.mjs";
 
 /**
@@ -37,7 +37,7 @@ export type StreamWatch = {
 export type ScenarioState = {
   scenario: HarnessScenario;
   projects: ProjectEntry[];
-  readonly threads: Map<string, ThreadState>;
+  readonly threads: Map<string, StoredThread>;
   generation: GenerationState;
   requests: RequestRecord[];
   stream: StreamWatch;
@@ -51,7 +51,7 @@ export function initialState(scenario: HarnessScenario): ScenarioState {
   return {
     scenario,
     projects: [...initialProjects(scenario)],
-    threads: new Map<string, ThreadState>(),
+    threads: new Map<string, StoredThread>(),
     generation: INITIAL_GENERATION,
     requests: [],
     stream: freshStreamWatch(),
@@ -59,8 +59,8 @@ export function initialState(scenario: HarnessScenario): ScenarioState {
 }
 
 /** Every project starts from the same saved thread; the map holds only the ones that moved. */
-export function threadOf(state: ScenarioState, projectId: string): ThreadState {
-  return state.threads.get(projectId) ?? INITIAL_THREAD;
+export function threadOf(state: ScenarioState, projectId: string): StoredThread {
+  return state.threads.get(projectId) ?? initialThread(projectId);
 }
 
 export function resetState(state: ScenarioState, scenario: HarnessScenario): void {

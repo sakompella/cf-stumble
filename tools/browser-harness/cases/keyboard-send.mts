@@ -44,7 +44,7 @@ export const CASES: readonly HarnessCase[] = [
       await waitForTurnEnded(page);
       assertSame(
         (await readTurn(page)).turnState,
-        "saved · revision 4 · 6 messages",
+        "saved · revision 4 · 10 messages",
         "keyboard turn ending",
       );
       await waitForSettledReads(page);

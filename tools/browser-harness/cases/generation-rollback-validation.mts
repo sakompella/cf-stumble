@@ -68,7 +68,7 @@ async function finishRollback(
   await completeTurn(page, "Report the retained edit");
   assertSame(
     (await readTurn(page)).turnState,
-    "saved · revision 4 · 6 messages",
+    "saved · revision 4 · 10 messages",
     "the continuation after rollback",
   );
   assertIncludes(

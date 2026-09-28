@@ -98,7 +98,7 @@ export const CASES: readonly HarnessCase[] = [
       const thread = await readThread(page);
       assertSame(
         finished.turnState,
-        "saved · revision 4 · 6 messages",
+        "saved · revision 4 · 10 messages",
         "the turn after a failed candidate",
       );
       assertSame(thread.pageError, "", "the page error after a failed candidate");
@@ -147,7 +147,7 @@ export const CASES: readonly HarnessCase[] = [
       const finished = await readTurn(page);
       assertSame(
         finished.turnState,
-        "saved · revision 4 · 6 messages",
+        "saved · revision 4 · 10 messages",
         "the continuation after activation",
       );
       assertNonEmpty((await readConversation(page)).allText, "the continued conversation");

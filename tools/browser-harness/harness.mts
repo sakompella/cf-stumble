@@ -34,6 +34,7 @@ export type { RecordedRequest } from "./server-state.mjs";
 export { FRAME_INTERVAL_MS } from "./server-turn.mjs";
 
 export {
+  CLOSING_TEXT,
   EXTERNAL_LATE_MARKER,
   LONG_LINE_CHARACTERS,
   LONG_LINE_END_MARKER,

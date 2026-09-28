@@ -20,6 +20,7 @@
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
     "probe:clean-build": "scripts/probe/clean-build.sh",
     "harness:browser": "pnpm exec tsx tools/browser-harness/run.mts",
+    "test:browser": "playwright test -c tools/playwright/playwright.config.mts",
     "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm typecheck && pnpm format:check && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
@@ -33,6 +34,7 @@
     "@cloudflare/workers-types": "^5",
     "@hegeldev/hegel": "0.4.5",
     "@oxlint/plugins": "^1",
+    "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
     "esbuild": "0.28.1",
     "oxfmt": "^0.65.0",

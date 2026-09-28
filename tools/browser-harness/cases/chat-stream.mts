@@ -6,6 +6,7 @@ import {
   assertNonDecreasing,
   assertNonEmpty,
   assertSame,
+  CLOSING_TEXT,
   completeTurn,
   HARNESS_PROJECT_ID,
   openTool,
@@ -196,7 +197,7 @@ export const CASES: readonly HarnessCase[] = [
 
       const beforeReload = await readThread(page);
       assertSame(beforeReload.revision, "4", "the thread revision after the quiet reread");
-      assertSame(beforeReload.messageCount, "6", "the message count after the quiet reread");
+      assertSame(beforeReload.messageCount, "10", "the message count after the quiet reread");
       assertAtLeast((await readTranscript(page)).length, 1, "transcript entries after the reread");
 
       await page.reload();
@@ -206,11 +207,12 @@ export const CASES: readonly HarnessCase[] = [
       const saved = await readConversation(page);
       assertSame(reloaded.project, "hello-world", "the project after reload");
       assertSame(reloaded.revision, "4", "the thread revision after reload");
-      assertSame(reloaded.messageCount, "6", "the message count after reload");
-      assertSame(saved.messages, 6, "rendered saved messages after reload");
-      assertNonEmpty(saved.allText, "the saved conversation after reload");
+      assertSame(reloaded.messageCount, "10", "the message count after reload");
+      assertSame(saved.messages, 10, "rendered saved messages after reload");
+      assertIncludes(saved.allText, PROMPT, "the saved conversation after reload");
+      assertIncludes(saved.allText, CLOSING_TEXT, "the saved conversation after reload");
 
-      return `the turn reported ${SAVED_STATE}, re-read its thread after the POST, and revision 4 with 6 messages survived a full reload`;
+      return `the turn reported ${SAVED_STATE}, re-read its thread after the POST, and revision 4 with 10 messages, including the prompt and the closing reply, survived a full reload`;
     },
   },
 ];

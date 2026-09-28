@@ -20,7 +20,7 @@ import {
 
 export const PROMPT = "Add the project sidebar";
 
-export const SAVED_STATE = "saved · revision 4 · 6 messages";
+export const SAVED_STATE = "saved · revision 4 · 10 messages";
 
 export const NON_SUCCESS_ENDINGS: readonly Readonly<{
   scenario: HarnessScenario;

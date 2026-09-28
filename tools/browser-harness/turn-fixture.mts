@@ -59,8 +59,12 @@ const DIFF_UNAVAILABLE_FRAME: ProjectTurnFrame = {
   detail: "the workspace held no git repository, so this turn produced no diff",
 };
 
-/** What ends each recorded turn. `saved` is the only success the page may report (ADR-0037). */
-const SAVED: ProjectTurnFrame = { kind: "saved", revision: 4, messageCount: 6 };
+/**
+ * What ends each recorded turn. `saved` is the only success the page may report (ADR-0037). A frame
+ * that says the thread was saved is restated by the stub with the revision and message count it
+ * actually stored (`server-turn.mts`), so the numbers here are only a first turn's.
+ */
+const SAVED: ProjectTurnFrame = { kind: "saved", revision: 4, messageCount: 10 };
 
 const ENDINGS = new Map<HarnessScenario, ProjectTurnFrame>([
   ["turn-failed", { kind: "turn-failed", code: "model-error", saved: true, revision: 4 }],

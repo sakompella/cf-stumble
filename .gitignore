@@ -10,3 +10,5 @@ build/
 .env.*
 .audit/
 .hegel/
+/test-results/
+/playwright-report/

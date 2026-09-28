@@ -10,6 +10,7 @@
     "build-generation-0.mts",
     "vendor-pi.mts",
     "verify-project-protocol.mts",
-    "browser-harness/**/*.mts"
+    "browser-harness/**/*.mts",
+    "playwright/**/*.mts"
   ]
 }
