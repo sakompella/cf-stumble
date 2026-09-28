@@ -1,0 +1,77 @@
+{
+  "recorded_at": "2026-09-28T04:07:50.317072+00:00",
+  "purpose": "second isolated staging run, sole goal: independent read-only filesystem check of project removal, requested by parent to close the gap from run 1",
+  "worktree_source_commit": "74a8d5a473f2709dd507f0186daad0b667ee685f",
+  "staging": {
+    "worker_name": "cf-stumble-staging-lcv2 (deleted)",
+    "worker_version_id": "4bea1677-1e4b-44c9-8c44-92bd78a53614",
+    "worker_url": "https://cf-stumble-staging-lcv2.adityakompella.workers.dev (worker deleted, URL now dead)",
+    "container_app_name": "cf-stumble-staging-lcv2-workspacehost (deleted)",
+    "container_app_id": "a03f42d1-461e-46ae-a6fd-4ae5e5bca95a",
+    "container_do_namespace_id": "a56ce53e19c94de3be28c12455402d2d",
+    "container_instance_id": "df995e09aad5798efb16d1465c1e16aa360dbab040bab64410ef85817736d6fe",
+    "auth_method": "self-signed ECDSA JWT via CF_ACCESS_PUBLIC_KEYS (tools/access-session.mts pattern), fresh disposable keypair distinct from run 1's"
+  },
+  "sequence_and_results": {
+    "1_deploy": "wrangler deploy --config wrangler.staging.jsonc succeeded; new Worker + new container app + new DO namespace, all distinct from run 1 and from prod",
+    "2_status_before": {
+      "code": 200,
+      "body": {
+        "activeGeneration": {
+          "generation": null,
+          "epoch": 0,
+          "activationId": null
+        }
+      }
+    },
+    "3_connect": {
+      "code": 200,
+      "body": {
+        "ok": true,
+        "project": {
+          "id": "octocat-hello-world",
+          "displayName": "Live-Computer-Verify-2 disposable test",
+          "repositoryUrl": "https://github.com/octocat/Hello-World"
+        },
+        "alreadyConnected": false,
+        "github": {
+          "state": "disconnected"
+        }
+      }
+    },
+    "4_instance_state_after_connect": "running, location=ord12, confirmed via `wrangler containers instances`",
+    "5_ssh_attempts": [
+      {
+        "run": "this session, attempt 1",
+        "method": "printf via pipe into `wrangler containers ssh <instance-id>`",
+        "instance_state": "running (confirmed via `wrangler containers instances`, state=running, location=ord12) at time of attempt",
+        "result": "ERROR: Web socket error: Unexpected server response: 400"
+      },
+      {
+        "run": "this session, attempt 2",
+        "method": "real `ssh` client with `-o ProxyCommand=\"wrangler containers ssh <id> --stdio\"`",
+        "instance_state": "running, same instance",
+        "result": "same: Web socket error: Unexpected server response: 400. Wrangler debug log shows the REST call GET /accounts/.../containers/instances/<id>/ssh returned 200 (session request accepted), but the follow-up WebSocket upgrade to the container itself was rejected with HTTP 400."
+      }
+    ],
+    "6_ssh_conclusion": "The 400 is a websocket-upgrade rejection after a successful 200 session-request response, and it reproduced identically with the instance confirmed running (not idle) and with two different client invocations. This points to the container/network configuration (private network, no IPv4/IPv6 assignment, per wrangler.jsonc) or the account/tier not supporting the SSH debug feature for this container class, not a timing/readiness problem. No independent read-only filesystem surface was reachable for this container in either staging deployment.",
+    "7_disconnect": {
+      "code": 200,
+      "body": {
+        "ok": true,
+        "projectId": "octocat-hello-world",
+        "workspace": "removed"
+      }
+    }
+  },
+  "cleanup": {
+    "worker_delete": "wrangler delete --name cf-stumble-staging-lcv2 --force -> 'Successfully deleted cf-stumble-staging-lcv2'; verified via deployments list -> error 10007 'This Worker does not exist on your account'",
+    "container_delete": "wrangler containers delete a03f42d1-461e-46ae-a6fd-4ae5e5bca95a -> 'Your container has been deleted'; verified via containers list -> only cf-stumble-workspacehost (prod) remains, same id/state/last-modified as before this run",
+    "worktree_removed": true
+  },
+  "prod_untouched": {
+    "container_app_id": "a03b9a60-62d5-4520-beb6-7fa5fa23e348",
+    "last_modified_unchanged": "2026-09-26T05:44:58.892Z"
+  },
+  "sync_pending_status": "not induced in this run either; both connect and disconnect completed with a full sync on the first try"
+}

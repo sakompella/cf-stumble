@@ -1,0 +1,120 @@
+{
+  "recorded_at": "2026-09-28T04:00:15.249276Z",
+  "worktree_source_commit": "74a8d5a473f2709dd507f0186daad0b667ee685f",
+  "staging": {
+    "worker_name": "cf-stumble-staging-lcv (deleted)",
+    "worker_versions": [
+      "92f12752-a35e-447e-a3d6-e94385df060c",
+      "4b8a9bfa-c3b1-4aa5-8151-21fd0c2d6381"
+    ],
+    "worker_url": "https://cf-stumble-staging-lcv.adityakompella.workers.dev (worker deleted, URL now dead)",
+    "container_app_name": "cf-stumble-staging-lcv-workspacehost (deleted)",
+    "container_app_id": "a03ffaa5-fa5e-4845-bc43-c31a3a32a103",
+    "container_do_namespace_id": "78c9df4b7b714d4f8f814d882f696eee",
+    "container_instance_id": "1a22d9618475971de3c07f6bd661a88e3e9649c2f645ae6f73382a6ddf07fa31",
+    "auth_method": "self-signed ECDSA JWT via CF_ACCESS_PUBLIC_KEYS (tools/access-session.mts pattern); team_domain=local-dev.cloudflareaccess.com, aud=local-development-audience, sub=local-owner (all disposable, non-secret placeholder strings)"
+  },
+  "prod_reference_for_isolation_check": {
+    "container_app_name": "cf-stumble-workspacehost",
+    "container_app_id": "a03b9a60-62d5-4520-beb6-7fa5fa23e348",
+    "container_do_namespace_id": "9a31c28e699f42a88fa09c0ada4a4216",
+    "note": "confirmed distinct app name and DO namespace id from staging throughout; unchanged before/after (same last_modified timestamp) at end of session"
+  },
+  "checks": {
+    "1_status_before": {
+      "code": 200,
+      "body": {
+        "activeGeneration": {
+          "generation": null,
+          "epoch": 0,
+          "activationId": null
+        }
+      }
+    },
+    "2_connect": {
+      "code": 200,
+      "body": {
+        "ok": true,
+        "project": {
+          "id": "octocat-hello-world",
+          "displayName": "Live-Computer-Verify disposable test",
+          "repositoryUrl": "https://github.com/octocat/Hello-World"
+        },
+        "alreadyConnected": false,
+        "github": {
+          "state": "disconnected"
+        }
+      }
+    },
+    "3_list_after_connect": {
+      "code": 200,
+      "body": {
+        "ok": true,
+        "projects": [
+          {
+            "kind": "repository",
+            "id": "octocat-hello-world",
+            "displayName": "Live-Computer-Verify disposable test",
+            "repositoryUrl": "https://github.com/octocat/Hello-World"
+          },
+          {
+            "kind": "harness",
+            "id": "harness",
+            "displayName": "harness"
+          }
+        ],
+        "github": {
+          "state": "disconnected"
+        }
+      }
+    },
+    "4_container_active_after_connect": "instances.active=1, running, atl06, standard-1 (0.5vCPU/4GiB/8GB)",
+    "5_container_went_idle_naturally": "~18 min later, state changed running->inactive with no action from us (organic scale-to-zero)",
+    "6_disconnect": {
+      "code": 200,
+      "elapsed_s": 3.4,
+      "body": {
+        "ok": true,
+        "projectId": "octocat-hello-world",
+        "workspace": "removed"
+      }
+    },
+    "7_list_after_disconnect": {
+      "code": 200,
+      "body": {
+        "ok": true,
+        "projects": [
+          {
+            "kind": "harness",
+            "id": "harness",
+            "displayName": "harness"
+          }
+        ],
+        "github": {
+          "state": "disconnected"
+        }
+      }
+    },
+    "8_instance_after_disconnect": "same instance id 1a22d961... returned to state=running, location=atl06 -- proves the same container instance recycled from idle and the durable workspace it read from was intact enough to complete the removal",
+    "9_prod_readonly_get": {
+      "route": "GET https://stumble.akompella.dev/api/status",
+      "auth": "owner's existing Firefox CF_Authorization/CF_AppSession cookies, read via an ephemeral immutable sqlite copy, values never printed, temp copy deleted immediately after the one request",
+      "status_code": 200,
+      "body": {
+        "activeGeneration": {
+          "generation": {
+            "label": 5,
+            "harnessCommit": "7465a299fda7b88e5b43b9170498c3e4b4848fdc",
+            "status": "ready"
+          },
+          "epoch": 21,
+          "activationId": 6
+        }
+      }
+    }
+  },
+  "known_gaps": {
+    "filesystem_level_absence_check": "NOT independently confirmed. Parent asked to verify absence of /workspace/projects/octocat-hello-world and its .provisioning path via a read-only surface (`wrangler containers ssh <instance-id>`) distinct from the API's workspace:'removed' claim. I deleted the staging Worker script before that request arrived. The container application itself was still listed and 'active' afterward, but its single instance had gone idle (scale-to-zero) with the Worker binding gone, so nothing could route a request to wake it, and `wrangler containers ssh` failed with INSTANCE_NOT_READY on the one attempt made. This is a sequencing mistake on my part, not a finding about the removal itself. The only removal evidence that stands is the API-level 'workspace: removed' response plus the subsequent GET /api/projects list no longer showing the project -- exactly the class of evidence the parent said not to treat as sufficient on its own.",
+    "sync_pending_branch": "sync.status: 'pending' (Computer's incomplete-copy case, require-complete failure path, workspace-sync-incomplete) was never induced or observed live. Every clone and disconnect in this session returned a complete/ok result. That negative branch remains tested only in this repo's own unit/property tests (per docs/agents/design/github-connection.md), not against a real Computer workspace."
+  }
+}
