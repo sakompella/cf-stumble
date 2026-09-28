@@ -26,4 +26,4 @@ A tracked `.githooks/pre-commit` runs the same command and blocks the commit whe
 
 ### Project architecture
 
-For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, implementation plan, and Computer evidence. Everything under `docs/agents/` is agent-generated; `README.md` is reserved for human-written project documentation and agents must not change it unless the user explicitly directs the content.
+For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, implementation plan, and Computer evidence. Everything under `docs/agents/` is agent-generated. Agents must never edit `README.md`, including to fix formatting or a failing check. Tell the owner when it needs a change.
