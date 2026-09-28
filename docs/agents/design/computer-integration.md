@@ -164,9 +164,8 @@ A harness commit becomes a generation when the Supervisor gives that specific co
 
 ## Owner approval for a paid environment
 
-The owner has approved a disposable paid Cloudflare account for the probes listed here and in
-`.audit/v0/q7-request.md`. That approval was always in force; nothing in this integration waits on
-it. The rules that stay:
+The owner has approved a disposable paid Cloudflare account for the probes listed here. That
+approval was always in force; nothing in this integration waits on it. The rules that stay:
 
 - The account is disposable. Nothing depends on it surviving, and it holds no data the project needs.
 - Local container results are local evidence. A probe run under Podman on an x86-64 box proves tool
