@@ -2,7 +2,7 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sakompella/cf-stumble)
 
-Deploy a private, owner-only cf-stumble instance to your Cloudflare account. 
+Deploy a private, owner-only cf-stumble instance to your Cloudflare account.
 
 cf-stumble is an owner-only coding agent. It runs in your Cloudflare account and uses Cloudflare Access to identify its one owner.
 
