@@ -1,6 +1,6 @@
 # Live Computer check, 2026-09-28
 
-Two temporary Cloudflare deployments tested the project connection path from source commit `74a8d5a473f2709dd507f0186daad0b667ee685f`. They used a separate Worker name, fresh Durable Object namespaces, and separate standard-1 Container applications. Neither deployment changed the production Worker, its route, its container, or its connected projects. Both temporary Workers and Containers were deleted and their absence checked after the runs.
+Two temporary Cloudflare deployments tested the project connection path from source commit `74a8d5a473f2709dd507f0186daad0b667ee685f`. They used a separate Worker name, fresh Durable Object namespaces, and separate standard-1 Container applications. Neither deployment changed the production Worker, its route, its container, or its connected projects. Both temporary Workers and Containers were deleted and their absence checked after the runs. A later registry check found two image tags from these deployments; both tags were deleted, while the production and shared base images were left in place.
 
 The tests used `octocat/Hello-World`, a small public GitHub repository, and a disposable self-signed test identity. The staging deployments held no GitHub secret and submitted no harness generation, so they ran no harness build or Workers AI turn. The test key, JWT, and the owner's Firefox cookies are not in this record.
 
