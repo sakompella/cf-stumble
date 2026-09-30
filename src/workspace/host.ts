@@ -19,6 +19,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
 import { logEvent, logRedactedCause, timed } from "../diagnostics.js";
+import { parseRequestId } from "../request-id.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
@@ -300,10 +301,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * so neither of the others can be asked to install, read, or exercise a token.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
-  credential(request: unknown): Promise<GitHubCredentialResult> {
+  credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
     return executeGitHubCredentialRequest({
       operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
       request,
+      requestId: parseRequestId(requestId),
     });
   }
 

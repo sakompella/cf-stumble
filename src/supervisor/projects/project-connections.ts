@@ -41,6 +41,7 @@ import {
   type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
+  type RequestId,
 } from "../../workspace/index.js";
 // oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
 import type { VerifiedAccessScope } from "../../access/index.js";
@@ -193,13 +194,13 @@ export class ProjectConnections {
    * The harness entry is in it and has no repository URL, which is what tells the sidebar that
    * this one is not a connection: there is nothing to authorize and nothing to clone.
    */
-  async list(now: number): Promise<ProjectListView> {
-    return { projects: this.catalog(), github: await this.connectionStatus(now) };
+  async list(now: number, requestId?: RequestId): Promise<ProjectListView> {
+    return { projects: this.catalog(), github: await this.connectionStatus(now, requestId) };
   }
 
-  async connectionStatus(now: number): Promise<GitHubConnectionStatus> {
+  async connectionStatus(now: number, requestId?: RequestId): Promise<GitHubConnectionStatus> {
     try {
-      return await this.github.status(now);
+      return await this.github.status(now, undefined, requestId);
     } catch (cause) {
       logRedactedCause("project-connections.connection-status: workspace-unavailable", cause);
 

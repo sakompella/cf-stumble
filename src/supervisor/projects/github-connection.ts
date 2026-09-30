@@ -1,3 +1,4 @@
+// oxlint-disable max-lines -- The connection workflow owns status, authorization, and credential install together.
 import {
   parseGitHubToken,
   requestDeviceAuthorization,
@@ -10,6 +11,7 @@ import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
   type CredentialWorkspaceNamespace,
+  type RequestId,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 import type { CredentialSource, GitHubConnectionStore } from "./github-connection-store.js";
@@ -116,11 +118,15 @@ export class GitHubConnection {
    * workspace's own answer, because the owner is mid-flow and the credential legitimately is not
    * there yet.
    */
-  status(now: number, signal?: AbortSignal): Promise<GitHubConnectionStatus> {
+  status(
+    now: number,
+    signal?: AbortSignal,
+    requestId?: RequestId,
+  ): Promise<GitHubConnectionStatus> {
     const pending = this.store.pendingAuthorization(now);
 
     return pending === undefined
-      ? this.observed(undefined, undefined, signal)
+      ? this.observed(undefined, undefined, signal, requestId)
       : Promise.resolve({
           state: "awaiting-authorization",
           verificationUri: pending.verificationUri,
@@ -300,11 +306,13 @@ export class GitHubConnection {
     source?: CredentialSource,
     at?: number,
     signal?: AbortSignal,
+    requestId?: RequestId,
   ): Promise<GitHubConnectionStatus> {
     const read = await readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
       signal,
+      requestId,
     });
 
     if (read.isErr()) {

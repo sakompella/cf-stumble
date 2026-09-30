@@ -7,6 +7,7 @@ import {
 } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
+import { requestIdFields, type RequestId } from "../request-id.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 /**
@@ -19,7 +20,10 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
  * that forwards a result verbatim still forwards no credential.
  */
 export type CredentialWorkspaceHost = Readonly<{
-  credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult>;
+  credential(
+    request: GitHubCredentialRequest,
+    requestId?: RequestId,
+  ): Promise<GitHubCredentialResult>;
 }>;
 
 /** Just enough of the Workspace Host binding to reach the tenant's workspace by name. */
@@ -52,6 +56,8 @@ export interface WorkspaceCredentialInput {
   readonly namespace: CredentialWorkspaceNamespace;
   /** Stops a turn at the next credential RPC boundary. */
   readonly signal?: AbortSignal | undefined;
+  /** The owner request this call serves. It reaches the log only. */
+  readonly requestId?: RequestId | undefined;
 }
 
 export interface InstallWorkspaceCredentialInput extends WorkspaceCredentialInput {
@@ -72,8 +78,8 @@ async function ask(
 
   try {
     const answered = await timedWorkspaceRpc(
-      { method: "credential", step: request.step },
-      () => input.namespace.getByName(input.workspaceName).credential(request),
+      { ...requestIdFields(input.requestId), method: "credential", step: request.step },
+      () => input.namespace.getByName(input.workspaceName).credential(request, input.requestId),
       (result) => (result.ok ? { outcome: "ok" } : { outcome: result.error.code, level: "warn" }),
       WORKSPACE_RPC_TIMEOUT_MS,
     );

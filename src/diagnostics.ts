@@ -204,16 +204,17 @@ export async function timedWorkspaceRpc<T>(
   timeoutMs?: number,
 ): Promise<T> {
   const startedAt = Date.now();
+  const logged = timeoutMs === undefined ? fields : { ...fields, timeoutMs };
 
   const waitingTimer = setInterval(() => {
     logEvent("warn", "workspace.rpc-waiting", {
-      ...fields,
+      ...logged,
       elapsedMs: Date.now() - startedAt,
     });
   }, WORKSPACE_RPC_WATCH_INTERVAL_MS);
 
   try {
-    return await timed("workspace.rpc", fields, () => boundedRpc(run, timeoutMs), classify);
+    return await timed("workspace.rpc", logged, () => boundedRpc(run, timeoutMs), classify);
   } finally {
     clearInterval(waitingTimer);
   }

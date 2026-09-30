@@ -53,6 +53,7 @@ import {
 import type {
   HarnessProvisionWorkspaceNamespace,
   WorkspaceResetResult,
+  RequestId,
 } from "../workspace/index.js";
 import {
   checkGenerationStartup,
@@ -208,12 +209,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * The tenant's connected repositories, with a GitHub connection status that carries no
    * credential. This is what the page's project sidebar reads.
    */
-  listProjects(now: number = Date.now()): Promise<ProjectListView> {
-    return this.connections.list(now);
+  listProjects(requestId?: RequestId, now: number = Date.now()): Promise<ProjectListView> {
+    return this.connections.list(now, requestId);
   }
 
-  getGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionStatus> {
-    return this.connections.connectionStatus(now);
+  getGitHubConnection(
+    requestId?: RequestId,
+    now: number = Date.now(),
+  ): Promise<GitHubConnectionStatus> {
+    return this.connections.connectionStatus(now, requestId);
   }
 
   /** Reset only the shared workspace; project threads and generation state live elsewhere here. */

@@ -1,4 +1,5 @@
 import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js";
+import { requestIdFields, type RequestId } from "../request-id.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {
@@ -87,13 +88,15 @@ export async function runLoggedCommand(
   operations: WorkspaceOperations,
   command: string,
   plan: PlannedCommand,
-  stdin?: string,
+  options: Readonly<{ stdin?: string; requestId?: RequestId | undefined }> = {},
 ): Promise<CommandOutput> {
   const startedAt = Date.now();
-  const output = await operations.runCommand(plan.source, plan.cwd, plan.timeoutMs, stdin);
+  const output = await operations.runCommand(plan.source, plan.cwd, plan.timeoutMs, options.stdin);
 
   logEvent(output.exitCode === 0 ? "info" : "warn", "workspace.command", {
+    ...requestIdFields(options.requestId),
     command,
+    timeoutMs: plan.timeoutMs,
     exitCode: output.exitCode,
     durationMs: Date.now() - startedAt,
   });
