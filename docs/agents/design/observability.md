@@ -164,20 +164,24 @@ lease id's last 8 characters), and `generation` (the label the turn was admitted
 Earlier logs used `workspace.container.stopped`, `workspace.container.exited`, and
 `workspace.container.started` for other facts. The app wrote `stopped` on every backend transport
 close, even with `running: true`, and on a failed status read with a guessed `running: false`. It
-wrote `exited` on a close with an exit status. It wrote `started` when a backend connected. Queries
-for those names mean different things before and after commit `71f03be` (the first deploy
-containing it):
+wrote `exited` on a close with an exit status. It wrote `started` when a backend connected. The
+meaning of each name changed in three steps, so a query for an old name needs the date of the first
+deploy that contains the matching commit:
 
-- The app's `workspace.container.exited` event is gone. Computer still writes its own
-  `message: workspace.container.exited`, which is a separate producer.
-- `workspace.container.stopped` now means the platform monitor saw the container exit. It is no
-  longer written for a backend close.
-- Use `workspace.backend.closed` for a transport close, and read `running` and `exitCode`.
-- Use `workspace.container.stop-requested` for a reset's intent to stop.
-- `workspace.container.started` now follows a launch that Computer reports, whether from a backend
-  connect, a backend recovery restart, or a reset; a backend connection alone is
-  `workspace.backend.connected`. Launch, adopt, and stop are observed as `workspace.container.started`,
-  `workspace.container.adopted`, and `workspace.container.stopped`.
+1. Commit `71f03be` (the first deploy containing it) removed the app's close-derived
+   `workspace.container.stopped` and `workspace.container.exited` events and moved a backend
+   connection to `workspace.backend.connected`.
+   - Use `workspace.backend.closed` for a transport close, and read `running` and `exitCode`.
+   - Use `workspace.container.stop-requested` for a reset's intent to stop.
+   - Computer still writes its own `message: workspace.container.exited`, which is a separate
+     producer.
+2. Commit `130f353` (the first deploy containing it) made `workspace.container.started` follow a
+   launch that Computer reports, whether from a backend connect, a backend recovery restart, or a
+   reset. It added `workspace.container.adopted` and `workspace.container.wake-requested`. Between
+   `71f03be` and `130f353`, `started` was written only after a reset restart.
+3. Commit `68f76f7` (the first deploy containing it) brought `workspace.container.stopped` back
+   with a new meaning: the platform monitor saw the container exit. It is never written for a
+   backend close. Between `71f03be` and `68f76f7`, no event claimed a stop.
 
 ### When a clone or removal does not reach the durable store
 
