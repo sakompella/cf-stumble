@@ -4,6 +4,7 @@ import type {
   IWorkspaceContainerAPI,
   WorkspaceRef,
 } from "@cloudflare/computer/backends/container";
+import { vi, type MockInstance } from "vitest";
 import { ObservedWorkspaceContainer } from "../../src/workspace/container-observer.js";
 
 export const SPEC: ContainerLaunchSpec = { env: { PORT: "8080" }, enableInternet: true };
@@ -134,14 +135,22 @@ export function fakeContainer(options: FakeOptions = {}) {
 /** One platform monitor per call, each settled by the test when the container "exits". */
 export function controlledMonitor(order: string[] = []) {
   const pending: { resolve(): void; reject(error: Error | string): void }[] = [];
+  /** A spy on each monitor promise's `then`, so a test can read the promise the observer chained. */
+  const thens: MockInstance<Promise<void>["then"]>[] = [];
 
   return {
     calls: pending,
-    monitor: () =>
-      new Promise<void>((resolve, reject) => {
+    thens,
+    monitor: () => {
+      const monitored = new Promise<void>((resolve, reject) => {
         order.push("monitor");
         pending.push({ resolve, reject });
-      }),
+      });
+
+      thens.push(vi.spyOn(monitored, "then"));
+
+      return monitored;
+    },
   };
 }
 

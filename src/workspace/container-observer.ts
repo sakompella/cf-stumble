@@ -256,13 +256,18 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     const settled = this.#monitor();
     this.#watched.set(runtimeId, launchedAtMs);
 
+    // A throw while classifying or logging a stop must not become an unhandled rejection.
     void settled.then(
       () => {
-        this.#stopped(runtimeId, NORMAL_STOP);
+        observeSafely(() => {
+          this.#stopped(runtimeId, NORMAL_STOP);
+        });
       },
       // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A rejection can be anything; stopCause reads a message and a code from it.
       (error: unknown) => {
-        this.#stopped(runtimeId, stopCause(error));
+        observeSafely(() => {
+          this.#stopped(runtimeId, stopCause(error));
+        });
       },
     );
   }

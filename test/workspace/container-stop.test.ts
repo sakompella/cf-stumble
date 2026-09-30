@@ -319,3 +319,31 @@ test("a stop held across overlapping connects is explained if any of them relaun
     expect.objectContaining({ reasonSource: "application-intent" }),
   ]);
 });
+
+test.each(["resolves", "rejects"] as const)(
+  "a console that throws while a monitor %s leaves the settlement handler's promise fulfilled",
+  async (how) => {
+    capturedEvents();
+    const { observed, platform } = watchedContainer({ running: false });
+    await observed.start(SPEC);
+    vi.spyOn(console, "error").mockImplementation(() => {
+      throw new Error("console is broken");
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {
+      throw new Error("console is broken");
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("console is broken");
+    });
+
+    if (how === "resolves") platform.calls[0]?.resolve();
+    else platform.calls[0]?.reject(new Error("Container exited with unexpected exit code: 137"));
+
+    await settle();
+
+    const chained: unknown = platform.thens[0]?.mock.results[0]?.value;
+
+    expect(chained).toBeInstanceOf(Promise);
+    await expect(chained).resolves.toBeUndefined();
+  },
+);
