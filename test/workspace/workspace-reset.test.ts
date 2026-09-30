@@ -72,7 +72,7 @@ test("a reset logs each step with its duration, and nothing the container answer
   );
 });
 
-test("a reset logs the stop as a request, then the restart's own launch result", async () => {
+test("a reset logs the stop as a request and leaves the launch event to the container observer", async () => {
   const events = capturedEvents();
 
   await resetWorkspaceStorage(
@@ -96,11 +96,6 @@ test("a reset logs the stop as a request, then the restart's own launch result",
       event: "workspace.container.stop-requested",
       reasonCode: "workspace-reset",
     }),
-    expect.objectContaining({
-      event: "workspace.container.started",
-      outcome: "launched",
-      runtimeId: "reset-runtime",
-    }),
   ]);
   expect(lifecycle[0]).not.toHaveProperty("running");
 });
@@ -120,7 +115,6 @@ test("a restart that fails is logged at error level before the failure leaves", 
     step: "restart-container",
     outcome: "threw",
   });
-  expect(named(events(), "workspace.container.started")).toEqual([]);
 });
 
 test("the owner's reset request is logged with how long the whole reset took", async () => {

@@ -21,6 +21,7 @@ import type { WorkspacePathKind } from "./executor.js";
 import { logEvent, logRedactedCause, timed, parseRequestId } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
+import { ObservedWorkspaceContainer } from "./container-observer.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
 import {
   executeHarnessBuildRequest,
@@ -84,17 +85,12 @@ export async function resetWorkspaceStorage(
   );
   logEvent("info", "workspace.container.stop-requested", { reasonCode: "workspace-reset" });
 
-  const runtime = await timed(
+  await timed(
     "workspace.reset-step",
     { step: "restart-container" },
     () => container.restart(WORKSPACE_CONTAINER_RESET_SPEC),
     (value) => ({ outcome: value.outcome }),
   );
-
-  logEvent("info", "workspace.container.started", {
-    outcome: runtime.outcome,
-    runtimeId: runtime.runtimeId,
-  });
 
   return { ok: true, reset: "workspace" };
 }
@@ -176,7 +172,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
-  readonly #container: WorkspaceContainerAPI;
+  readonly #container: ObservedWorkspaceContainer;
   readonly #containerLifecycle: WorkspaceContainerLifecycle = {
     generation: 0,
     hasConnected: false,
@@ -185,7 +181,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
-    this.#container = new WorkspaceContainerAPI(ctx);
+    this.#container = new ObservedWorkspaceContainer(new WorkspaceContainerAPI(ctx));
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
@@ -303,7 +299,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
   async reset(): Promise<WorkspaceResetResult> {
-    const result = await resetWorkspaceStorage(this.ctx.storage, this.#container);
+    const result = await resetWorkspaceStorage(this.ctx.storage, {
+      restart: (spec) => this.#container.restartFor("workspace-reset", spec),
+    });
+
     // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
     // deployment); rebuild it so the next operation recreates them instead of failing.
     this.#workspace = this.#newWorkspace();
