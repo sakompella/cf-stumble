@@ -174,8 +174,6 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
 
     if (!adopted) this.#markReplaced(runtime.runtimeId);
 
-    this.#watch(runtime.runtimeId, launchedAtMs);
-
     if (!adopted && !launch.wakeWritten) this.#logWake(launch);
 
     logEvent("info", adopted ? "workspace.container.adopted" : "workspace.container.started", {
@@ -186,6 +184,11 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
       runtimeId: runtime.runtimeId,
       startedAtMs: launchedAtMs,
       durationMs: this.#now() - launch.startedAt,
+    });
+
+    // Its own guard: a monitor that throws must not undo the launch event above.
+    observeSafely(() => {
+      this.#watch(runtime.runtimeId, launchedAtMs);
     });
   }
 

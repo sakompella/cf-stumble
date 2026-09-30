@@ -174,6 +174,9 @@ test("a monitor that throws while arming never fails the launch", async () => {
     outcome: "launched",
   });
   expect(named(events(), "workspace.container.stopped")).toEqual([]);
+  expect(named(events(), "workspace.container.started")).toEqual([
+    expect.objectContaining({ runtimeId: "runtime-1" }),
+  ]);
 });
 
 test("a log call that throws never fails the launch", async () => {
