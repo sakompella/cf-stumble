@@ -72,7 +72,7 @@ makes with `crypto.randomUUID()` in `routeOwnerApiRequest`. No header, query, or
 supply it, so a client cannot forge or reuse one. Filter on it to find the events one request
 caused. For the project list and the GitHub connection read, it is sent to the Supervisor and the
 Workspace Host as an explicit argument of each call, not stored as shared state, so overlapping
-requests keep separate ids. Other routes do not pass it on yet.
+requests keep separate ids. Other routes do not pass it on.
 
 | Event           | Level                                                                                   | Fields                                                                                                                                                                                                                                                            | Written when                                                                                                                                                                                                                     |
 | --------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -85,11 +85,11 @@ requests keep separate ids. Other routes do not pass it on yet.
   of a turn.
 - `clientAborted` is `true` when the runtime aborted the request signal and `null` otherwise. The
   runtime aborts that signal only under the `enable_request_signal` compatibility flag, and
-  `wrangler.jsonc` does not set it. Until it does, `null` means unknown, not "the client stayed". Even with the flag, a client
-  disconnect usually cancels the invocation, so `true` will be rare.
+  `wrangler.jsonc` does not set it, so `null` means unknown, not "the client stayed". Even with the
+  flag, a client disconnect usually cancels the invocation, so `true` will be rare.
 - Only the project list, the connection read, and the credential calls under them carry the id to
-  the Supervisor and the Workspace Host so far. The other routes write `route.settled` with an id
-  that appears on no other event.
+  the Supervisor and the Workspace Host. The other routes write `route.settled` with an id that
+  appears on no other event.
 - The Workers platform records a canceled invocation with its own `outcome` and wall time, and that
   record exists even when this code never reaches its log line. Treat `route.settled` as evidence
   that a request finished, not as a count of requests: a canceled invocation can leave no
