@@ -23,6 +23,9 @@ type FakeOptions = Readonly<{
 class FakeContainer implements IWorkspaceContainerAPI {
   readonly calls: string[] = [];
   readonly #options: FakeOptions;
+  /** The runtime id each launch returns, in order; the last one repeats. */
+  readonly runtimeIds: string[] = ["runtime-1"];
+  #launches = 0;
 
   constructor(options: FakeOptions) {
     this.#options = options;
@@ -52,7 +55,8 @@ class FakeContainer implements IWorkspaceContainerAPI {
     return this.#options.launchFails === true
       ? Promise.reject(new Error("container would not start"))
       : Promise.resolve({
-          runtimeId: "runtime-1",
+          runtimeId:
+            this.runtimeIds[Math.min(this.#launches++, this.runtimeIds.length - 1)] ?? "runtime-1",
           clientSecret: "client-secret",
           outcome: this.#options.outcome ?? "launched",
         });
@@ -88,6 +92,39 @@ function fakeContainer(options: FakeOptions = {}) {
 
   return { calls: inner.calls, observed: new ObservedWorkspaceContainer(inner) };
 }
+
+/** One platform monitor per call, each settled by the test when the container "exits". */
+function controlledMonitor() {
+  const pending: { resolve(): void; reject(error: Error): void }[] = [];
+
+  return {
+    calls: pending,
+    monitor: () =>
+      new Promise<void>((resolve, reject) => {
+        pending.push({ resolve, reject });
+      }),
+  };
+}
+
+function watchedContainer(options: FakeOptions = {}) {
+  const clock = { now: 1_000 };
+  const inner = new FakeContainer(options);
+  const platform = controlledMonitor();
+
+  const observed = new ObservedWorkspaceContainer(inner, {
+    monitor: platform.monitor,
+    now: () => clock.now,
+  });
+
+  return { inner, platform, observed, clock };
+}
+
+const settle = () =>
+  new Promise<void>((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, 0);
+  });
 
 test("a cold connect logs the wake request and then the launch the container reported", async () => {
   const events = capturedEvents();
@@ -218,4 +255,110 @@ test("observing adds no timer and reads status only once per launch", async () =
   expect(calls).toEqual(["status", "start"]);
   expect(vi.getTimerCount()).toBe(0);
   vi.useRealTimers();
+});
+
+test("a stop the Host did not ask for is one warning with the run duration and an unknown source", async () => {
+  const events = capturedEvents();
+  const { observed, platform, clock } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+  clock.now = 61_000;
+  platform.calls[0]?.resolve();
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({
+      level: "warn",
+      runtimeId: "runtime-1",
+      stoppedAtMs: 61_000,
+      runDurationMs: 60_000,
+      reasonCode: "normal-exit",
+      reasonSource: "unknown",
+      expected: null,
+      exitCode: null,
+    }),
+  ]);
+});
+
+test("a crash with an exit code is an error that carries the code and no message text", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+  platform.calls[0]?.reject(
+    new Error("Container exited with unexpected exit code: 137 secret-text"),
+  );
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({ level: "error", reasonCode: "unexpected-exit-code", exitCode: 137 }),
+  ]);
+  expect(everythingLogged()).not.toContain("secret-text");
+});
+
+test("a stop of an adopted container has no run duration", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: true, outcome: "adopted" });
+
+  await observed.start(SPEC);
+  platform.calls[0]?.resolve();
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped").at(0)).toMatchObject({
+    runDurationMs: null,
+  });
+});
+
+test("the old runtime's exit after a Host restart is logged as application intent", async () => {
+  const events = capturedEvents();
+  const { inner, observed, platform } = watchedContainer({ running: false });
+  inner.runtimeIds.push("runtime-2");
+
+  await observed.start(SPEC);
+  await observed.restartFor("workspace-reset", SPEC);
+  platform.calls[0]?.resolve();
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({
+      level: "info",
+      runtimeId: "runtime-1",
+      reasonSource: "application-intent",
+      expected: true,
+    }),
+  ]);
+});
+
+test("each runtime is watched once and stops once, however often it is adopted", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: true, outcome: "adopted" });
+
+  await observed.start(SPEC);
+  await observed.start(SPEC);
+  await observed.start(SPEC);
+  expect(platform.calls).toHaveLength(1);
+
+  platform.calls[0]?.resolve();
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toHaveLength(1);
+});
+
+test("no monitor is armed before a launch returns or when it throws", async () => {
+  capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false, launchFails: true });
+
+  await expect(observed.start(SPEC)).rejects.toThrow();
+
+  expect(platform.calls).toHaveLength(0);
+});
+
+test("without a monitor the observer writes no stop event", async () => {
+  const events = capturedEvents();
+  const { observed } = fakeContainer({ running: false });
+
+  await observed.start(SPEC);
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([]);
 });

@@ -90,7 +90,7 @@ type ContainerReasonCode =
   | "unknown"
   | "status-unavailable";
 
-function containerReasonCode(reason: string | undefined): ContainerReasonCode {
+export function containerReasonCode(reason: string | undefined): ContainerReasonCode {
   if (reason === undefined) return "not-reported";
 
   if (/unexpected exit code/iu.test(reason)) return "unexpected-exit-code";
@@ -102,7 +102,7 @@ function containerReasonCode(reason: string | undefined): ContainerReasonCode {
   return "unknown";
 }
 
-function containerExitCode(reason: string | undefined): number | null {
+export function containerExitCode(reason: string | undefined): number | null {
   const match = /exit code[=: ]+(\d+)/iu.exec(reason ?? "");
 
   return match === null ? null : Number(match[1]);

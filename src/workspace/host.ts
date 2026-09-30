@@ -181,7 +181,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
-    this.#container = new ObservedWorkspaceContainer(new WorkspaceContainerAPI(ctx));
+    const platformContainer = ctx.container;
+
+    this.#container = new ObservedWorkspaceContainer(new WorkspaceContainerAPI(ctx), {
+      monitor: platformContainer === undefined ? undefined : () => platformContainer.monitor(),
+    });
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
