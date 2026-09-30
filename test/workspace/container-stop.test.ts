@@ -14,7 +14,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a stop the Host did not ask for is one warning with the run duration and an unknown source", async () => {
+test("a clean exit the Host did not ask for is one info event with the run duration and an unknown source", async () => {
   const events = capturedEvents();
   const { observed, platform, clock } = watchedContainer({ running: false });
 
@@ -25,7 +25,7 @@ test("a stop the Host did not ask for is one warning with the run duration and a
 
   expect(named(events(), "workspace.container.stopped")).toEqual([
     expect.objectContaining({
-      level: "warn",
+      level: "info",
       runtimeId: "runtime-1",
       stoppedAtMs: 61_000,
       runDurationMs: 60_000,
@@ -210,4 +210,21 @@ test("the exit code a monitor error reports wins over the one parsed from its te
   await settle();
 
   expect(named(events(), "workspace.container.stopped").at(0)).toMatchObject({ exitCode: 139 });
+});
+
+test("an unexplained exit that is neither clean nor a crash code is a warning", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+  platform.calls[0]?.reject(new Error("network connection lost"));
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({
+      level: "warn",
+      reasonCode: "connection-lost",
+      reasonSource: "unknown",
+    }),
+  ]);
 });

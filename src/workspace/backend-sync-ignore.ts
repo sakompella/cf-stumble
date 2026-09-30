@@ -82,7 +82,7 @@ export function containerStatusIndicatesReplacement(status: WorkspaceContainerSt
   return !status.running || status.exit !== null;
 }
 
-type ContainerReasonCode =
+export type ContainerReasonCode =
   | "not-reported"
   | "unexpected-exit-code"
   | "normal-exit"

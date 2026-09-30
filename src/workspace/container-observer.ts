@@ -4,7 +4,11 @@ import type {
   IWorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { logEvent, logRedactedCause, type LogLevel } from "../diagnostics.js";
-import { containerExitCode, containerReasonCode } from "./backend-sync-ignore.js";
+import {
+  containerExitCode,
+  containerReasonCode,
+  type ContainerReasonCode,
+} from "./backend-sync-ignore.js";
 
 type LaunchKind = "start" | "restart";
 
@@ -26,6 +30,13 @@ function stopCause(error: unknown): StopCause {
   const reason = error instanceof Error ? error.message : String(error);
 
   return { reason, exitCode: reportedExitCode(error) ?? containerExitCode(reason) };
+}
+
+/** A clean exit is ordinary, a crash code is a fault, and anything else the Host did not cause is a warning. */
+function stopLevel(reasonCode: ContainerReasonCode, intentional: boolean): LogLevel {
+  if (intentional || reasonCode === "normal-exit") return "info";
+
+  return reasonCode === "unexpected-exit-code" ? "error" : "warn";
 }
 
 /** Observation must never fail a launch, so a throw while logging or arming is logged and dropped. */
@@ -263,11 +274,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     this.#watched.delete(runtimeId);
     this.#replaced.delete(runtimeId);
 
-    const level: LogLevel = intentional
-      ? "info"
-      : reasonCode === "unexpected-exit-code"
-        ? "error"
-        : "warn";
+    const level = stopLevel(reasonCode, intentional);
 
     logEvent(level, "workspace.container.stopped", {
       runtimeId,
