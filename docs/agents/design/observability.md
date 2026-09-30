@@ -150,6 +150,12 @@ lease id's last 8 characters), and `generation` (the label the turn was admitted
 - **Stops the Host cannot see.** A stop is written only while the Workspace Host instance that
   saw the launch is alive. If that instance is evicted, its stop is lost, and a later connect
   that adopts the container writes `adopted` with no start time.
+- **Extra Durable Object residency from the stop observer.** The platform documents that a
+  pending `monitor()` call keeps the Durable Object from being evicted until the container exits
+  or for up to 15 minutes, and that a later operation can extend its time in memory. The stop
+  observer adds one such call per runtime. Computer already makes the same call just before a
+  launch returns. The residency the extra call adds has not been measured, and it needs evidence
+  from a staging deployment.
 - **Why the platform stopped a container.** The monitor reports an exit, not a cause. The log
   writes `reasonSource: "unknown"` for any exit the Host did not cause.
 

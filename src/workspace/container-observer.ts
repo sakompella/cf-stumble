@@ -246,9 +246,11 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
 
   /**
    * Log the one stop of each runtime this instance sees launch or adopt. This is the platform's
-   * own `monitor()`, which Computer also calls and which ends only when the container exits. It is
-   * armed once per runtime, after the launch returned, so it never starts a container. An instance
-   * that is evicted loses its watch and writes nothing.
+   * own `monitor()`, which ends when the container exits. It is armed once per runtime, after the
+   * launch returned, so it never starts a container.
+   *
+   * A pending `monitor()` prevents eviction until the container exits or for up to 15 minutes.
+   * Computer makes the same call, and the residency this second call adds is unmeasured.
    */
   #watch(runtimeId: string, launchedAtMs: number | null): void {
     if (this.#monitor === undefined || this.#watched.has(runtimeId)) return;
