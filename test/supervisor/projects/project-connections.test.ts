@@ -5,6 +5,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import { newRequestId } from "../../../src/diagnostics.js";
 import { capturedEvents, named } from "../../log-capture.js";
 import { GitHubConnection, ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
@@ -638,4 +639,32 @@ test("shows a workspace image without gh instead of installing one", async () =>
   const status = await subject.connections((connections) => connections.ensureCredential(NOW));
 
   expect(status).toEqual({ state: "tooling-missing" });
+});
+
+test.each(["list", "connection"] as const)(
+  "a %s read passes its request id to the Workspace Host and the events it writes",
+  async (read) => {
+    const events = capturedEvents();
+    const subject = tenant(`request-id-${read}`);
+    const requestId = newRequestId();
+
+    await subject.connections(async (connections) => {
+      if (read === "list") await connections.list(NOW, requestId);
+      else await connections.connectionStatus(NOW, requestId);
+    });
+
+    expect(subject.workspace.credentialRequestIds).toEqual([requestId]);
+
+    for (const event of ["workspace.rpc", "github-credential.status", "workspace.command"]) {
+      expect(named(events(), event).map((entry) => entry.requestId)).toEqual([requestId]);
+    }
+  },
+);
+
+test("a read with no request id sends none to the Workspace Host", async () => {
+  const subject = tenant("request-id-absent");
+
+  await subject.connections((connections) => connections.connectionStatus(NOW));
+
+  expect(subject.workspace.credentialRequestIds).toEqual([undefined]);
 });
