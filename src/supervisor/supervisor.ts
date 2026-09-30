@@ -32,8 +32,8 @@ import {
   type TurnStartContext,
   timedTurnMount,
   timedTurnProvision,
+  parseRequestId,
   timedWorkspaceRpc,
-  type RequestId,
 } from "./projects/index.js";
 import {
   Generations,
@@ -209,15 +209,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * The tenant's connected repositories, with a GitHub connection status that carries no
    * credential. This is what the page's project sidebar reads.
    */
-  listProjects(requestId?: RequestId, now: number = Date.now()): Promise<ProjectListView> {
-    return this.connections.list(now, requestId);
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
+  listProjects(requestId?: unknown, now: number = Date.now()): Promise<ProjectListView> {
+    return this.connections.list(now, parseRequestId(requestId));
   }
 
   getGitHubConnection(
-    requestId?: RequestId,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
+    requestId?: unknown,
     now: number = Date.now(),
   ): Promise<GitHubConnectionStatus> {
-    return this.connections.connectionStatus(now, requestId);
+    return this.connections.connectionStatus(now, parseRequestId(requestId));
   }
 
   /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
