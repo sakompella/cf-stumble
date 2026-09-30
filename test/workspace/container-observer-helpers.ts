@@ -71,15 +71,17 @@ export class FakeContainer implements IWorkspaceContainerAPI {
 
   async #launch(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     this.specs.push(spec);
-    await this.#options.gate;
+    // Read the options now: a later setNext must not change a launch that is already waiting.
+    const { gate, launchFails, outcome } = this.#options;
+    await gate;
 
-    if (this.#options.launchFails === true) throw new Error("container would not start");
+    if (launchFails === true) throw new Error("container would not start");
 
     this.lastRuntime = {
       runtimeId:
         this.runtimeIds[Math.min(this.#launches++, this.runtimeIds.length - 1)] ?? "runtime-1",
       clientSecret: "client-secret",
-      outcome: this.#options.outcome ?? "launched",
+      outcome: outcome ?? "launched",
     };
     this.calls.push("launch-returned");
 

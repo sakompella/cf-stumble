@@ -80,6 +80,8 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   #restartsInFlight = 0;
   /** Connects in progress: they destroy a running container only when they relaunch it. */
   #startsInFlight = 0;
+  /** Whether any connect since the last release relaunched a running container. */
+  #relaunchedSinceRelease = false;
   /** Stops seen during a connect, classified when the connect returns. */
   readonly #held: { runtimeId: string; cause: StopCause }[] = [];
   #launches = 0;
@@ -202,14 +204,13 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     run: (spec: ContainerLaunchSpec) => Promise<ContainerRuntimeInfo>,
     spec: ContainerLaunchSpec,
   ): Promise<ContainerRuntimeInfo> {
-    let relaunched = false;
-
     if (kind === "restart") this.#restartsInFlight += 1;
     else this.#startsInFlight += 1;
 
     try {
       const runtime = await run(spec);
-      relaunched = runtime.outcome === "relaunched";
+
+      if (runtime.outcome === "relaunched") this.#relaunchedSinceRelease = true;
 
       return runtime;
     } finally {
@@ -219,6 +220,9 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
         this.#startsInFlight -= 1;
 
         if (this.#startsInFlight === 0) {
+          const relaunched = this.#relaunchedSinceRelease;
+          this.#relaunchedSinceRelease = false;
+
           observeSafely(() => {
             this.#releaseHeldStops(relaunched);
           });

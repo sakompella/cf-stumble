@@ -281,3 +281,41 @@ test.each(["returns", "fails"] as const)(
     else expect(result).toEqual(new Error("container would not start"));
   },
 );
+
+test("a stop held across overlapping connects is explained if any of them relaunched, however they end", async () => {
+  const events = capturedEvents();
+  const platform = controlledMonitor();
+  const gates: (() => void)[] = [];
+
+  const inner = new FakeContainer({ running: true });
+  const observed = new ObservedWorkspaceContainer(inner, { monitor: platform.monitor });
+  await observed.start(SPEC);
+
+  const held = async (outcome: "relaunched" | "adopted") => {
+    const gate = new Promise<void>((resolve) => {
+      gates.push(resolve);
+    });
+
+    inner.setNext({ gate, outcome });
+    const connecting = observed.start(SPEC);
+    await settle();
+
+    return connecting;
+  };
+
+  const relaunching = held("relaunched");
+  await settle();
+  const adopting = held("adopted");
+  await settle();
+  platform.calls[0]?.reject(new Error("Container exited with unexpected exit code: 137"));
+  await settle();
+
+  gates.forEach((open) => {
+    open();
+  });
+  await Promise.all([relaunching, adopting]);
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({ reasonSource: "application-intent" }),
+  ]);
+});
