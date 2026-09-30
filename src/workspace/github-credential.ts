@@ -1,8 +1,8 @@
 import {
   isTimeoutFailure,
   logRedactedCause,
-  requestIdFields,
   timed,
+  requestIdFields,
   type RequestId,
 } from "../diagnostics.js";
 import {
@@ -14,6 +14,7 @@ import {
   redactCredentials,
   repositoryAccessSource,
   type GitHubCredentialState,
+  type GitHubCredentialStatus,
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
@@ -149,7 +150,7 @@ async function installCredential(
 async function credentialStatus(
   operations: WorkspaceOperations,
   requestId: RequestId | undefined,
-): Promise<GitHubCredentialResult> {
+): Promise<GitHubCredentialStatus> {
   const output = await runLoggedCommand(
     operations,
     "github-credential.status",
@@ -157,39 +158,32 @@ async function credentialStatus(
     { requestId },
   );
 
-  const status = parseCredentialStatus(output.stdout);
+  return parseCredentialStatus(output.stdout);
+}
+
+/**
+ * Time the status read. `outcome` is the credential state; a command that throws is logged by
+ * `timed` as `threw`. The login stays out of the event.
+ */
+async function timedCredentialStatus(
+  operations: WorkspaceOperations,
+  requestId: RequestId | undefined,
+): Promise<GitHubCredentialResult> {
+  const status = await timed(
+    "github-credential.status",
+    { ...requestIdFields(requestId), timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+    () => credentialStatus(operations, requestId),
+    ({ state }) => ({
+      outcome: state,
+      level: state === "connected" ? "info" : "warn",
+      fields: { timeout: false },
+    }),
+  );
 
   return {
     ok: true,
     result: { kind: "credential-status", state: status.state, login: status.login },
   };
-}
-
-/**
- * Time the status read. `outcome` is the credential state, or `unavailable` if the command threw
- * (`timed` logs that as `threw`). The login stays out of the event.
- */
-function timedCredentialStatus(
-  operations: WorkspaceOperations,
-  requestId: RequestId | undefined,
-): Promise<GitHubCredentialResult> {
-  return timed(
-    "github-credential.status",
-    { ...requestIdFields(requestId), timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
-    () => credentialStatus(operations, requestId),
-    (result) => {
-      const state =
-        result.ok && result.result.kind === "credential-status"
-          ? result.result.state
-          : "unexpected";
-
-      return {
-        outcome: state,
-        level: state === "connected" ? "info" : "warn",
-        fields: { timeout: false },
-      };
-    },
-  );
 }
 
 async function repositoryAccess(
