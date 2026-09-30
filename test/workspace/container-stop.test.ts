@@ -243,3 +243,41 @@ test("the monitor is armed after the launch returns, and arming adds no timer", 
   expect(vi.getTimerCount()).toBe(0);
   vi.useRealTimers();
 });
+
+test.each(["returns", "fails"] as const)(
+  "a log call that throws while releasing a held stop leaves a connect that %s unchanged",
+  async (ending) => {
+    capturedEvents();
+    const platform = controlledMonitor();
+    let open: (() => void) | undefined;
+
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+
+    const inner = new FakeContainer({ running: true });
+    const observed = new ObservedWorkspaceContainer(inner, { monitor: platform.monitor });
+    await observed.start(SPEC);
+    inner.setNext({ gate, launchFails: ending === "fails" });
+
+    const connecting = observed.start(SPEC);
+
+    const outcome = connecting.then(
+      (runtime) => runtime,
+      (error: Error) => error,
+    );
+
+    await settle();
+    platform.calls[0]?.reject(new Error("Container exited with unexpected exit code: 137"));
+    await settle();
+    vi.spyOn(console, "error").mockImplementation(() => {
+      throw new Error("console is broken");
+    });
+    open?.();
+
+    const result = await outcome;
+
+    if (ending === "returns") expect(result).toBe(inner.lastRuntime);
+    else expect(result).toEqual(new Error("container would not start"));
+  },
+);

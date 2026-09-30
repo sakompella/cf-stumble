@@ -218,7 +218,11 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
       } else {
         this.#startsInFlight -= 1;
 
-        if (this.#startsInFlight === 0) this.#releaseHeldStops(relaunched);
+        if (this.#startsInFlight === 0) {
+          observeSafely(() => {
+            this.#releaseHeldStops(relaunched);
+          });
+        }
       }
     }
   }
