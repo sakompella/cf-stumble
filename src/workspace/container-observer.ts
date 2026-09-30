@@ -60,7 +60,7 @@ export type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "wor
  * unchanged. It reads `status()` once per launch, which reads a flag and wakes nothing, and it adds
  * no timer, heartbeat, or poll.
  *
- * `start` is the backend's first connect. It adopts a running container or launches one. `restart`
+ * `start` is the backend's connect. It adopts a running container or launches one. `restart`
  * is the backend's one recovery after a failed health probe. `restartFor` is the Host's own
  * restart, such as a reset. Only a launch that Computer reports is logged as started: the outcome
  * comes from its return value, and a call that throws writes no started event.
@@ -118,7 +118,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     const launchSequence = this.#launches;
     const runningBefore = await this.#runningBefore();
 
-    // A first connect that finds the container running may only adopt it, so it is not a wake yet.
+    // A backend connect that finds the container running may only adopt it, so it is not a wake yet.
     // If it relaunches instead, `#observeLaunch` writes the wake after the call.
     const wakeWritten = trigger !== "backend-connect" || runningBefore !== true;
 
