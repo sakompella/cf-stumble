@@ -1,7 +1,9 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
+import type { RequestId } from "../request-id.js";
 import { routePattern } from "./route-pattern.js";
+import { markDegraded } from "./route-settled.js";
 import type {
   ConnectRepositoryResult,
   DisconnectRepositoryResult,
@@ -26,12 +28,12 @@ import type {
  * reaches a client and no status shape can gain a token by accident.
  */
 export type ProjectApiSupervisor = Readonly<{
-  listProjects: () => Promise<ProjectListView>;
+  listProjects: (requestId?: RequestId) => Promise<ProjectListView>;
   connectProject: (
     repositoryUrl: unknown,
     displayName: unknown,
   ) => Promise<ConnectRepositoryResult>;
-  getGitHubConnection: () => Promise<GitHubConnectionStatus>;
+  getGitHubConnection: (requestId?: RequestId) => Promise<GitHubConnectionStatus>;
   startGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
@@ -125,11 +127,22 @@ const AUTHORIZATION_STATUS = {
   "authorization-denied": 403,
 } as const satisfies Record<GitHubAuthorizationProblem, number>;
 
-async function listResponse(supervisor: ProjectApiSupervisor): Promise<Response> {
-  try {
-    const view = await supervisor.listProjects();
+/** A connection that needs the owner's attention is still a 200, so the log marks it. */
+function reportingGitHub(response: Response, github: GitHubConnectionStatus): Response {
+  return github.state === "reconnect-required" ? markDegraded(response) : response;
+}
 
-    return Response.json({ ok: true, projects: view.projects, github: view.github });
+async function listResponse(
+  supervisor: ProjectApiSupervisor,
+  requestId: RequestId | undefined,
+): Promise<Response> {
+  try {
+    const view = await supervisor.listProjects(requestId);
+
+    return reportingGitHub(
+      Response.json({ ok: true, projects: view.projects, github: view.github }),
+      view.github,
+    );
   } catch (cause) {
     logRedactedCause("routes.projects.list: workspace-unavailable", cause);
 
@@ -137,9 +150,14 @@ async function listResponse(supervisor: ProjectApiSupervisor): Promise<Response>
   }
 }
 
-async function connectionResponse(supervisor: ProjectApiSupervisor): Promise<Response> {
+async function connectionResponse(
+  supervisor: ProjectApiSupervisor,
+  requestId: RequestId | undefined,
+): Promise<Response> {
   try {
-    return Response.json({ ok: true, github: await supervisor.getGitHubConnection() });
+    const github = await supervisor.getGitHubConnection(requestId);
+
+    return reportingGitHub(Response.json({ ok: true, github }), github);
   } catch (cause) {
     logRedactedCause("routes.projects.connection: workspace-unavailable", cause);
 
@@ -229,17 +247,18 @@ export function routeProjectApiRequest(
   request: Request,
   supervisor: ProjectApiSupervisor,
   scope: VerifiedAccessScope,
+  requestId?: RequestId,
 ): Promise<Response> | undefined {
   const pathname = new URL(request.url).pathname;
   const isGet = request.method === "GET";
   const isPost = request.method === "POST";
 
   if (isGet && pathname === "/api/projects") {
-    return listResponse(supervisor);
+    return listResponse(supervisor, requestId);
   }
 
   if (isGet && pathname === "/api/github/connection") {
-    return connectionResponse(supervisor);
+    return connectionResponse(supervisor, requestId);
   }
 
   const disconnectedProjectId = disconnectProjectId(pathname);

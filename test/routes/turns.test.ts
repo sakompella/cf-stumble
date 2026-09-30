@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { textLines } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import type { ProjectTurnRunProblemCode } from "../../src/supervisor/projects/index.js";
 
@@ -148,8 +149,8 @@ test("a turn that throws logs a redacted cause and answers a bare fault", async 
   expect(JSON.parse(body)).toEqual({ ok: false, error: { code: "internal-error" } });
   expect(body).not.toContain(SECRET);
   expect(body).not.toContain("git-credentials");
-  expect(loggedErrors).toHaveBeenCalledOnce();
-  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  const [logged = "", ...otherLines] = textLines(loggedErrors);
+  expect(otherLines).toEqual([]);
   expect(logged).toContain("internal-error");
   expect(logged).not.toContain(SECRET);
 });

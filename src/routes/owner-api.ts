@@ -9,6 +9,8 @@ import {
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
 import { jsonError } from "./json.js";
+import type { RequestId } from "../request-id.js";
+import { settleRoute } from "./route-settled.js";
 import {
   isCrossOriginMutation,
   routeProjectApiRequest,
@@ -142,8 +144,19 @@ export function routeOwnerApiRequest(
   supervisor: OwnerApiSupervisor,
   scope: VerifiedAccessScope,
 ): Promise<Response> {
+  return settleRoute(request, (requestId) =>
+    dispatchOwnerApiRequest(request, supervisor, scope, requestId),
+  );
+}
+
+function dispatchOwnerApiRequest(
+  request: Request,
+  supervisor: OwnerApiSupervisor,
+  scope: VerifiedAccessScope,
+  requestId: RequestId | undefined,
+): Promise<Response> {
   const pathname = new URL(request.url).pathname;
-  const projectRoute = routeProjectApiRequest(request, supervisor, scope);
+  const projectRoute = routeProjectApiRequest(request, supervisor, scope, requestId);
 
   if (projectRoute !== undefined) {
     return projectRoute;
