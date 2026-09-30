@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
+import { settleRoute } from "../../src/routes/route-settled.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
@@ -220,4 +221,23 @@ test("the event carries the route pattern and never the path, query, or project 
   const settled = named(events(), "route.settled");
   expect(settled.at(0)).toMatchObject({ route: "/api/projects/:projectId/disconnect" });
   expect(JSON.stringify(settled)).not.toMatch(/secret-project-name|token=abc/u);
+});
+
+test("a dispatch that rejects rethrows the same error after one fault event with no status or phase", async () => {
+  const events = capturedEvents();
+  const failure = new Error("dispatch failed");
+
+  await expect(
+    settleRoute(get("/api/github/connection"), () => Promise.reject(failure)),
+  ).rejects.toBe(failure);
+
+  expect(named(events(), "route.settled")).toEqual([
+    expect.objectContaining({
+      level: "error",
+      route: "/api/github/connection",
+      applicationOutcome: "fault",
+      status: null,
+      phase: null,
+    }),
+  ]);
 });
