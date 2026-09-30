@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  observeBackendClose,
   readContainerStatus,
   type BackendCloseTrigger,
   recordWorkspaceBackendClosed,
@@ -87,4 +88,73 @@ test("a connect failure is logged as such, not as a transport close", async () =
     trigger: "connect-failed",
     running: false,
   });
+});
+
+/** A container whose status answers differently on each call, so a second read would show. */
+function changingContainer(answers: readonly WorkspaceContainerStatus[]) {
+  const reads: number[] = [];
+
+  return {
+    reads,
+    status: () => {
+      reads.push(reads.length);
+
+      return Promise.resolve(
+        answers[Math.min(reads.length - 1, answers.length - 1)] ?? answers[0]!,
+      );
+    },
+  };
+}
+
+test("a close reads the status once, and the generation decision and the log share that read", async () => {
+  const events = capturedEvents();
+  let replaced = 0;
+
+  const container = changingContainer([
+    { running: false, exit: null },
+    { running: true, exit: null },
+  ]);
+
+  await observeBackendClose(container, "transport-closed", () => {
+    replaced += 1;
+  });
+
+  expect(container.reads).toHaveLength(1);
+  expect(replaced).toBe(1);
+  expect(named(events(), "workspace.backend.closed")).toEqual([
+    expect.objectContaining({ running: false }),
+  ]);
+});
+
+test("a close that finds the container running bumps no generation", async () => {
+  capturedEvents();
+  let replaced = 0;
+
+  await observeBackendClose(
+    changingContainer([{ running: true, exit: null }]),
+    "transport-closed",
+    () => {
+      replaced += 1;
+    },
+  );
+
+  expect(replaced).toBe(0);
+});
+
+test("a failed status read bumps no generation and is logged as unknown", async () => {
+  const events = capturedEvents();
+  let replaced = 0;
+
+  await observeBackendClose(
+    { status: () => Promise.reject(new Error("status rpc failed")) },
+    "connect-failed",
+    () => {
+      replaced += 1;
+    },
+  );
+
+  expect(replaced).toBe(0);
+  expect(named(events(), "workspace.backend.closed")).toEqual([
+    expect.objectContaining({ running: null, statusReadOutcome: "failed" }),
+  ]);
 });

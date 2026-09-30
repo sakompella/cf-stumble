@@ -160,3 +160,20 @@ export function recordWorkspaceBackendClosed(
     statusReadOutcome: "ok",
   });
 }
+
+/**
+ * Read the container status once after a backend closed, and decide from that one read. A
+ * replacement bumps the caller's generation, and the same read is what the log reports, so the two
+ * cannot disagree. A failed read proves nothing, so it bumps nothing.
+ */
+export async function observeBackendClose(
+  container: Readonly<{ status(): Promise<WorkspaceContainerStatus> }>,
+  trigger: BackendCloseTrigger,
+  onReplaced: () => void,
+): Promise<void> {
+  const result = await readContainerStatus(container);
+
+  if (result.read === "ok" && containerStatusIndicatesReplacement(result.status)) onReplaced();
+
+  recordWorkspaceBackendClosed(trigger, result);
+}
