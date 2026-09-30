@@ -83,7 +83,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   /** Whether any connect since the last release relaunched a running container. */
   #relaunchedSinceRelease = false;
   /** Stops seen during a connect, classified when the connect returns. */
-  readonly #held: { runtimeId: string; cause: StopCause }[] = [];
+  readonly #held: { runtimeId: string; cause: StopCause; stoppedAtMs: number }[] = [];
   #launches = 0;
 
   constructor(
@@ -232,8 +232,8 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   }
 
   #releaseHeldStops(intentional: boolean): void {
-    for (const { runtimeId, cause } of this.#held.splice(0)) {
-      this.#logStopped(runtimeId, cause, intentional);
+    for (const { runtimeId, cause, stoppedAtMs } of this.#held.splice(0)) {
+      this.#logStopped(runtimeId, cause, stoppedAtMs, intentional);
     }
   }
 
@@ -273,17 +273,24 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   }
 
   #stopped(runtimeId: string, cause: StopCause): void {
+    // The time is when the monitor settled, even if the stop waits for a connect to return.
+    const stoppedAtMs = this.#now();
+
     if (this.#startsInFlight > 0) {
-      this.#held.push({ runtimeId, cause });
+      this.#held.push({ runtimeId, cause, stoppedAtMs });
 
       return;
     }
 
-    this.#logStopped(runtimeId, cause, this.#restartsInFlight > 0);
+    this.#logStopped(runtimeId, cause, stoppedAtMs, this.#restartsInFlight > 0);
   }
 
-  #logStopped(runtimeId: string, cause: StopCause, duringRestart: boolean): void {
-    const stoppedAtMs = this.#now();
+  #logStopped(
+    runtimeId: string,
+    cause: StopCause,
+    stoppedAtMs: number,
+    duringRestart: boolean,
+  ): void {
     const launchedAtMs = this.#watched.get(runtimeId) ?? null;
     const reasonCode = containerReasonCode(cause.reason);
     const intentional = duringRestart || this.#replaced.has(runtimeId);
