@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
-import { fakeContainer, SPEC } from "./container-observer-helpers.js";
-import type { ObservedWorkspaceContainer } from "../../src/workspace/container-observer.js";
+import { FakeContainer, fakeContainer, SPEC } from "./container-observer-helpers.js";
+import { ObservedWorkspaceContainer } from "../../src/workspace/container-observer.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -22,7 +22,7 @@ test("a cold connect logs the wake request and then the launch the container rep
       event: "workspace.container.wake-requested",
       trigger: "backend-connect",
       runningBefore: false,
-      attempt: 1,
+      launchSequence: 1,
     }),
     expect.objectContaining({
       event: "workspace.container.started",
@@ -76,7 +76,7 @@ test.each([
 
     expect(calls).toEqual(["status", "restart"]);
     expect(named(events(), "workspace.container.wake-requested")).toEqual([
-      expect.objectContaining({ trigger, runningBefore: true, attempt: 1 }),
+      expect.objectContaining({ trigger, runningBefore: true, launchSequence: 1 }),
     ]);
     expect(named(events(), "workspace.container.started")).toEqual([
       expect.objectContaining({ trigger }),
@@ -84,7 +84,7 @@ test.each([
   },
 );
 
-test("attempts count the launch requests one observer has seen", async () => {
+test("launch sequence counts the launch requests one observer has seen", async () => {
   const events = capturedEvents();
   const { observed } = fakeContainer({ running: false });
 
@@ -92,7 +92,7 @@ test("attempts count the launch requests one observer has seen", async () => {
   await observed.restart(SPEC);
 
   expect(
-    named(events(), "workspace.container.wake-requested").map((entry) => entry.attempt),
+    named(events(), "workspace.container.wake-requested").map((entry) => entry.launchSequence),
   ).toEqual([1, 2]);
 });
 
@@ -136,4 +136,23 @@ test("observing adds no timer and reads status only once per launch", async () =
   expect(calls).toEqual(["status", "start"]);
   expect(vi.getTimerCount()).toBe(0);
   vi.useRealTimers();
+});
+
+test("the launch duration and start time come from the injected clock", async () => {
+  const events = capturedEvents();
+  let tick = 0;
+
+  const observed = new ObservedWorkspaceContainer(new FakeContainer({ running: false }), {
+    now: () => {
+      tick += 5;
+
+      return tick;
+    },
+  });
+
+  await observed.start(SPEC);
+
+  expect(named(events(), "workspace.container.started")).toEqual([
+    expect.objectContaining({ startedAtMs: 10, durationMs: 10 }),
+  ]);
 });

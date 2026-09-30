@@ -54,8 +54,8 @@ export type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "wor
  * restart, such as a reset. Only a launch that Computer reports is logged as started: the outcome
  * comes from its return value, and a call that throws writes no started event.
  *
- * `attempt` counts the launch requests this Workspace Host instance has seen since it was built. A
- * new instance starts again at 1.
+ * `launchSequence` counts the launch requests this Workspace Host instance has seen since it was
+ * built. A new instance starts again at 1.
  */
 export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   readonly #inner: IWorkspaceContainerAPI;
@@ -71,7 +71,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   #startsInFlight = 0;
   /** Stops seen during a connect, classified when the connect returns. */
   readonly #held: { runtimeId: string; cause: StopCause }[] = [];
-  #attempts = 0;
+  #launches = 0;
 
   constructor(
     inner: IWorkspaceContainerAPI,
@@ -103,21 +103,25 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     kind: LaunchKind,
     run: (spec: ContainerLaunchSpec) => Promise<ContainerRuntimeInfo>,
   ): Promise<ContainerRuntimeInfo> {
-    this.#attempts += 1;
-    const attempt = this.#attempts;
+    this.#launches += 1;
+    const launchSequence = this.#launches;
     const runningBefore = await this.#runningBefore();
 
     // A first connect that finds the container running may only adopt it, so it is not a wake.
     if (trigger !== "backend-connect" || runningBefore !== true) {
       observeSafely(() => {
-        logEvent("info", "workspace.container.wake-requested", { trigger, runningBefore, attempt });
+        logEvent("info", "workspace.container.wake-requested", {
+          trigger,
+          runningBefore,
+          launchSequence,
+        });
       });
     }
 
-    const startedAt = Date.now();
+    const startedAt = this.#now();
     const runtime = await this.#runWhileLaunching(kind, run, spec);
     observeSafely(() => {
-      this.#observeLaunch({ trigger, runningBefore, attempt, startedAt, runtime });
+      this.#observeLaunch({ trigger, runningBefore, launchSequence, startedAt, runtime });
     });
 
     return runtime;
@@ -127,7 +131,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     launch: Readonly<{
       trigger: ContainerWakeTrigger;
       runningBefore: boolean | null;
-      attempt: number;
+      launchSequence: number;
       startedAt: number;
       runtime: ContainerRuntimeInfo;
     }>,
@@ -143,11 +147,11 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     logEvent("info", adopted ? "workspace.container.adopted" : "workspace.container.started", {
       trigger: launch.trigger,
       runningBefore: launch.runningBefore,
-      attempt: launch.attempt,
+      launchSequence: launch.launchSequence,
       outcome: runtime.outcome,
       runtimeId: runtime.runtimeId,
       startedAtMs: launchedAtMs,
-      durationMs: Date.now() - launch.startedAt,
+      durationMs: this.#now() - launch.startedAt,
     });
   }
 
