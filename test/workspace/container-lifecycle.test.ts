@@ -6,7 +6,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("records structured stopped and exited events with safe reason and exit-code fields", async () => {
+const claimsOfPhysicalEnd = ["workspace.container.stopped", "workspace.container.exited"];
+
+test("a transport close after an observed exit is one event with the exit fields and no text", async () => {
   const events = capturedEvents();
   await recordWorkspaceContainerClosed({
     status: () =>
@@ -20,21 +22,51 @@ test("records structured stopped and exited events with safe reason and exit-cod
       }),
   });
 
-  expect(named(events(), "workspace.container.stopped").at(0)).toMatchObject({
-    level: "warn",
-    outcome: "stopped",
-    reasonCode: "unexpected-exit-code",
-    exitCode: 1,
-    signal: "SIGKILL",
-    running: false,
-  });
-  expect(named(events(), "workspace.container.exited").at(0)).toMatchObject({
-    level: "warn",
-    outcome: "exited",
-    reasonCode: "unexpected-exit-code",
-    exitCode: 1,
-    signal: "SIGKILL",
-    expected: false,
-  });
+  expect(events()).toEqual([
+    expect.objectContaining({
+      event: "workspace.backend.closed",
+      level: "warn",
+      running: false,
+      reasonCode: "unexpected-exit-code",
+      exitCode: 1,
+      signal: "SIGKILL",
+      statusReadOutcome: "ok",
+    }),
+  ]);
   expect(JSON.stringify(events())).not.toContain("unexpected exit code: 1");
+});
+
+test("a transport close while the container still runs claims no stop or exit", async () => {
+  const events = capturedEvents();
+  await recordWorkspaceContainerClosed({
+    status: () => Promise.resolve({ running: true, exit: null }),
+  });
+
+  expect(events().map((entry) => entry.event)).toEqual(["workspace.backend.closed"]);
+  expect(named(events(), "workspace.backend.closed").at(0)).toMatchObject({
+    running: true,
+    exitCode: null,
+    signal: null,
+    statusReadOutcome: "ok",
+  });
+  expect(events().map((entry) => entry.event)).not.toEqual(
+    expect.arrayContaining(claimsOfPhysicalEnd),
+  );
+});
+
+test("a failed status read leaves running unknown instead of guessing false", async () => {
+  const events = capturedEvents();
+  await recordWorkspaceContainerClosed({
+    status: () => Promise.reject(new Error("status rpc failed")),
+  });
+
+  expect(events()).toEqual([
+    expect.objectContaining({
+      event: "workspace.backend.closed",
+      level: "warn",
+      running: null,
+      reasonCode: "status-unavailable",
+      statusReadOutcome: "failed",
+    }),
+  ]);
 });

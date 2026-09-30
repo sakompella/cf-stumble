@@ -100,40 +100,30 @@ function containerExitCode(reason: string | undefined): number | null {
   return match === null ? null : Number(match[1]);
 }
 
-/** Record the lifecycle result after a backend transport closes. */
+/**
+ * Record that a backend transport closed, with what one status read saw. A closed transport is not
+ * a stopped container, so `running` is `null` when the read failed and this writes one event.
+ */
 export async function recordWorkspaceContainerClosed(
   container: Readonly<{ status(): Promise<WorkspaceContainerStatus> }>,
 ): Promise<void> {
   try {
     const status = await container.status();
     const reason = status.exit?.reason ?? status.exit?.cause;
-    const reasonCode = containerReasonCode(reason);
-    const exitCode = status.exit?.exitCode ?? containerExitCode(reason);
-    const signal = status.exit?.signal ?? null;
-    logEvent("warn", "workspace.container.stopped", {
-      outcome: "stopped",
-      reasonCode,
-      exitCode,
-      signal,
+    logEvent("warn", "workspace.backend.closed", {
       running: status.running,
+      reasonCode: containerReasonCode(reason),
+      exitCode: status.exit?.exitCode ?? containerExitCode(reason),
+      signal: status.exit?.signal ?? null,
+      statusReadOutcome: "ok",
     });
-
-    if (status.exit !== null) {
-      logEvent("warn", "workspace.container.exited", {
-        outcome: "exited",
-        reasonCode,
-        exitCode,
-        signal,
-        expected: false,
-      });
-    }
   } catch {
-    logEvent("warn", "workspace.container.stopped", {
-      outcome: "stopped",
+    logEvent("warn", "workspace.backend.closed", {
+      running: null,
       reasonCode: "status-unavailable",
       exitCode: null,
       signal: null,
-      running: false,
+      statusReadOutcome: "failed",
     });
   }
 }

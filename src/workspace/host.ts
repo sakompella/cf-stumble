@@ -82,13 +82,7 @@ export async function resetWorkspaceStorage(
     () => storage.deleteAll(),
     () => ({ outcome: "ok" }),
   );
-  logEvent("info", "workspace.container.stopped", {
-    outcome: "stopped",
-    reasonCode: "workspace-reset",
-    exitCode: null,
-    signal: null,
-    running: true,
-  });
+  logEvent("info", "workspace.container.stop-requested", { reasonCode: "workspace-reset" });
 
   const runtime = await timed(
     "workspace.reset-step",
@@ -100,9 +94,6 @@ export async function resetWorkspaceStorage(
   logEvent("info", "workspace.container.started", {
     outcome: runtime.outcome,
     runtimeId: runtime.runtimeId,
-    reasonCode: null,
-    exitCode: null,
-    signal: null,
   });
 
   return { ok: true, reset: "workspace" };
@@ -210,13 +201,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
         this.#containerLifecycle.hasConnected = true;
         this.#containerLifecycle.runtimeId = runtimeId;
-        logEvent("info", "workspace.container.started", {
-          outcome: "started",
-          runtimeId: runtimeId ?? null,
-          reasonCode: null,
-          exitCode: null,
-          signal: null,
-        });
+        logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
       },
       closed: () => {
         void this.#observeContainerClose();
