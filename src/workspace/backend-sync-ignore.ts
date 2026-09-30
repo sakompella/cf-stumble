@@ -82,7 +82,7 @@ export function containerStatusIndicatesReplacement(status: WorkspaceContainerSt
   return !status.running || status.exit !== null;
 }
 
-export type ContainerReasonCode =
+type ContainerReasonCode =
   | "not-reported"
   | "unexpected-exit-code"
   | "normal-exit"
@@ -136,10 +136,11 @@ export function recordWorkspaceBackendClosed(
   result: ContainerStatusRead,
 ): void {
   if (result.read === "failed") {
+    const reasonCode: ContainerReasonCode = "status-unavailable";
     logEvent("warn", "workspace.backend.closed", {
       trigger,
       running: null,
-      reasonCode: "status-unavailable",
+      reasonCode,
       exitCode: null,
       signal: null,
       statusReadOutcome: "failed",

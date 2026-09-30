@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
   readContainerStatus,
+  type BackendCloseTrigger,
   recordWorkspaceBackendClosed,
   type WorkspaceContainerStatus,
 } from "../../src/workspace/backend-sync-ignore.js";
@@ -12,7 +13,7 @@ afterEach(() => {
 
 async function closeWith(
   status: () => Promise<WorkspaceContainerStatus>,
-  trigger: "transport-closed" | "connect-failed" = "transport-closed",
+  trigger: BackendCloseTrigger = "transport-closed",
 ): Promise<void> {
   recordWorkspaceBackendClosed(trigger, await readContainerStatus({ status }));
 }
@@ -81,7 +82,9 @@ test("a connect failure is logged as such, not as a transport close", async () =
   const events = capturedEvents();
   await closeWith(() => Promise.resolve({ running: false, exit: null }), "connect-failed");
 
-  expect(named(events(), "workspace.backend.closed")).toEqual([
-    expect.objectContaining({ trigger: "connect-failed", running: false }),
-  ]);
+  expect(events().map((entry) => entry.event)).toEqual(["workspace.backend.closed"]);
+  expect(named(events(), "workspace.backend.closed").at(0)).toMatchObject({
+    trigger: "connect-failed",
+    running: false,
+  });
 });
