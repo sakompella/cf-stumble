@@ -3,10 +3,43 @@ import type {
   ContainerRuntimeInfo,
   IWorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
-import { logEvent, type LogLevel } from "../diagnostics.js";
+import { logEvent, logRedactedCause, type LogLevel } from "../diagnostics.js";
 import { containerExitCode, containerReasonCode } from "./backend-sync-ignore.js";
 
 type LaunchKind = "start" | "restart";
+
+/** What the platform monitor said about an exit: text for the reason code, and a code if it gave one. */
+type StopCause = Readonly<{ reason: string; exitCode: number | null }>;
+
+const NORMAL_STOP: StopCause = { reason: "exited normally", exitCode: null };
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A platform error may carry an exitCode; nothing else is read.
+function reportedExitCode(error: unknown): number | null {
+  if (!(error instanceof Error) || !("exitCode" in error)) return null;
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the property is unchecked platform data.
+  return typeof error.exitCode === "number" ? error.exitCode : null;
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A monitor rejection can be anything; this reads only a message and a code.
+function stopCause(error: unknown): StopCause {
+  const reason = error instanceof Error ? error.message : String(error);
+
+  return { reason, exitCode: reportedExitCode(error) ?? containerExitCode(reason) };
+}
+
+/** Observation must never fail a launch, so a throw while logging or arming is logged and dropped. */
+function observeSafely(step: () => void): void {
+  try {
+    step();
+  } catch (cause) {
+    try {
+      logRedactedCause("workspace.container-observer: observation failed", cause);
+    } catch {
+      // The console itself is broken; there is nowhere left to report.
+    }
+  }
+}
 
 /** Why the Workspace Host asked the container to launch. */
 export type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "workspace-reset";
@@ -37,7 +70,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   /** Connects in progress: they destroy a running container only when they relaunch it. */
   #startsInFlight = 0;
   /** Stops seen during a connect, classified when the connect returns. */
-  readonly #held: { runtimeId: string; error: Error | undefined }[] = [];
+  readonly #held: { runtimeId: string; cause: StopCause }[] = [];
   #attempts = 0;
 
   constructor(
@@ -76,11 +109,30 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
 
     // A first connect that finds the container running may only adopt it, so it is not a wake.
     if (trigger !== "backend-connect" || runningBefore !== true) {
-      logEvent("info", "workspace.container.wake-requested", { trigger, runningBefore, attempt });
+      observeSafely(() => {
+        logEvent("info", "workspace.container.wake-requested", { trigger, runningBefore, attempt });
+      });
     }
 
     const startedAt = Date.now();
     const runtime = await this.#runWhileLaunching(kind, run, spec);
+    observeSafely(() => {
+      this.#observeLaunch({ trigger, runningBefore, attempt, startedAt, runtime });
+    });
+
+    return runtime;
+  }
+
+  #observeLaunch(
+    launch: Readonly<{
+      trigger: ContainerWakeTrigger;
+      runningBefore: boolean | null;
+      attempt: number;
+      startedAt: number;
+      runtime: ContainerRuntimeInfo;
+    }>,
+  ): void {
+    const { runtime } = launch;
     const adopted = runtime.outcome === "adopted";
     const launchedAtMs = adopted ? null : this.#now();
 
@@ -89,16 +141,14 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     this.#watch(runtime.runtimeId, launchedAtMs);
 
     logEvent("info", adopted ? "workspace.container.adopted" : "workspace.container.started", {
-      trigger,
-      runningBefore,
-      attempt,
+      trigger: launch.trigger,
+      runningBefore: launch.runningBefore,
+      attempt: launch.attempt,
       outcome: runtime.outcome,
       runtimeId: runtime.runtimeId,
       startedAtMs: launchedAtMs,
-      durationMs: Date.now() - startedAt,
+      durationMs: Date.now() - launch.startedAt,
     });
-
-    return runtime;
   }
 
   /**
@@ -133,8 +183,8 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   }
 
   #releaseHeldStops(intentional: boolean): void {
-    for (const { runtimeId, error } of this.#held.splice(0)) {
-      this.#logStopped(runtimeId, error, intentional);
+    for (const { runtimeId, cause } of this.#held.splice(0)) {
+      this.#logStopped(runtimeId, cause, intentional);
     }
   }
 
@@ -154,33 +204,34 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   #watch(runtimeId: string, launchedAtMs: number | null): void {
     if (this.#monitor === undefined || this.#watched.has(runtimeId)) return;
 
+    const settled = this.#monitor();
     this.#watched.set(runtimeId, launchedAtMs);
 
-    void this.#monitor().then(
+    void settled.then(
       () => {
-        this.#stopped(runtimeId);
+        this.#stopped(runtimeId, NORMAL_STOP);
       },
-      (error: Error) => {
-        this.#stopped(runtimeId, error);
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A rejection can be anything; stopCause reads a message and a code from it.
+      (error: unknown) => {
+        this.#stopped(runtimeId, stopCause(error));
       },
     );
   }
 
-  #stopped(runtimeId: string, error?: Error): void {
+  #stopped(runtimeId: string, cause: StopCause): void {
     if (this.#startsInFlight > 0) {
-      this.#held.push({ runtimeId, error });
+      this.#held.push({ runtimeId, cause });
 
       return;
     }
 
-    this.#logStopped(runtimeId, error, this.#restartsInFlight > 0);
+    this.#logStopped(runtimeId, cause, this.#restartsInFlight > 0);
   }
 
-  #logStopped(runtimeId: string, error: Error | undefined, duringRestart: boolean): void {
+  #logStopped(runtimeId: string, cause: StopCause, duringRestart: boolean): void {
     const stoppedAtMs = this.#now();
     const launchedAtMs = this.#watched.get(runtimeId) ?? null;
-    const reason = error === undefined ? "exited normally" : error.message;
-    const reasonCode = containerReasonCode(reason);
+    const reasonCode = containerReasonCode(cause.reason);
     const intentional = duringRestart || this.#replaced.has(runtimeId);
     this.#watched.delete(runtimeId);
     this.#replaced.delete(runtimeId);
@@ -197,7 +248,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
       runDurationMs: launchedAtMs === null ? null : stoppedAtMs - launchedAtMs,
       reasonCode,
       reasonSource: intentional ? "application-intent" : "unknown",
-      exitCode: containerExitCode(reason),
+      exitCode: cause.exitCode,
       signal: null,
       expected: intentional ? true : null,
     });

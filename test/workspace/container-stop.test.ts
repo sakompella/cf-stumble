@@ -157,3 +157,57 @@ test.each([
     ]);
   },
 );
+
+test("a monitor that throws while arming never fails the launch", async () => {
+  const events = capturedEvents();
+  const inner = new FakeContainer({ running: false });
+
+  const observed = new ObservedWorkspaceContainer(inner, {
+    monitor: () => {
+      throw new Error("monitor is unavailable");
+    },
+  });
+
+  await expect(observed.start(SPEC)).resolves.toEqual({
+    runtimeId: "runtime-1",
+    clientSecret: "client-secret",
+    outcome: "launched",
+  });
+  expect(named(events(), "workspace.container.stopped")).toEqual([]);
+});
+
+test("a log call that throws never fails the launch", async () => {
+  capturedEvents();
+  const { observed } = fakeContainer({ running: false });
+  vi.spyOn(console, "log").mockImplementation(() => {
+    throw new Error("console is broken");
+  });
+
+  await expect(observed.start(SPEC)).resolves.toMatchObject({ runtimeId: "runtime-1" });
+});
+
+test("a monitor that rejects with something other than an Error is still one stop", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+  platform.calls[0]?.reject("container vanished");
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({ reasonCode: "unknown", exitCode: null }),
+  ]);
+});
+
+test("the exit code a monitor error reports wins over the one parsed from its text", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+  platform.calls[0]?.reject(
+    Object.assign(new Error("Container exited with unexpected exit code: 1"), { exitCode: 139 }),
+  );
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped").at(0)).toMatchObject({ exitCode: 139 });
+});

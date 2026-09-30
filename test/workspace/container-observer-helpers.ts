@@ -98,7 +98,7 @@ export function fakeContainer(options: FakeOptions = {}) {
 
 /** One platform monitor per call, each settled by the test when the container "exits". */
 export function controlledMonitor() {
-  const pending: { resolve(): void; reject(error: Error): void }[] = [];
+  const pending: { resolve(): void; reject(error: Error | string): void }[] = [];
 
   return {
     calls: pending,
