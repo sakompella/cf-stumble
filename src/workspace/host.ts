@@ -41,8 +41,10 @@ import {
 import { harnessBuildConfiguration } from "../harness-build.js";
 import {
   containerStatusIndicatesReplacement,
-  recordWorkspaceContainerClosed,
+  readContainerStatus,
+  recordWorkspaceBackendClosed,
   withWorkspaceSyncIgnore,
+  type BackendCloseTrigger,
   type WorkspaceBackendLifecycle,
 } from "./backend-sync-ignore.js";
 
@@ -204,27 +206,24 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
       },
       closed: () => {
-        void this.#observeContainerClose();
+        void this.#observeContainerClose("transport-closed");
       },
       failed: () => {
-        void this.#observeContainerClose();
+        void this.#observeContainerClose("connect-failed");
       },
     });
     this.#workspace = this.#newWorkspace();
   }
 
-  async #observeContainerClose(): Promise<void> {
-    try {
-      const status = await this.#container.status();
+  async #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
+    const result = await readContainerStatus(this.#container);
 
-      if (containerStatusIndicatesReplacement(status)) {
-        this.#containerLifecycle.generation += 1;
-      }
-    } catch {
-      // A failed status query cannot prove that the container was replaced.
+    // A failed status read cannot prove that the container was replaced.
+    if (result.read === "ok" && containerStatusIndicatesReplacement(result.status)) {
+      this.#containerLifecycle.generation += 1;
     }
 
-    await recordWorkspaceContainerClosed(this.#container);
+    recordWorkspaceBackendClosed(trigger, result);
   }
 
   /** A Workspace creates its SQLite tables when constructed, so a wiped store needs a new one. */

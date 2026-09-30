@@ -82,7 +82,15 @@ export function containerStatusIndicatesReplacement(status: WorkspaceContainerSt
   return !status.running || status.exit !== null;
 }
 
-function containerReasonCode(reason: string | undefined): string {
+export type ContainerReasonCode =
+  | "not-reported"
+  | "unexpected-exit-code"
+  | "normal-exit"
+  | "connection-lost"
+  | "unknown"
+  | "status-unavailable";
+
+function containerReasonCode(reason: string | undefined): ContainerReasonCode {
   if (reason === undefined) return "not-reported";
 
   if (/unexpected exit code/iu.test(reason)) return "unexpected-exit-code";
@@ -100,30 +108,54 @@ function containerExitCode(reason: string | undefined): number | null {
   return match === null ? null : Number(match[1]);
 }
 
-/**
- * Record that a backend transport closed, with what one status read saw. A closed transport is not
- * a stopped container, so `running` is `null` when the read failed and this writes one event.
- */
-export async function recordWorkspaceContainerClosed(
+/** One status read: what it returned, or that it failed. */
+export type ContainerStatusRead =
+  | { readonly read: "ok"; readonly status: WorkspaceContainerStatus }
+  | { readonly read: "failed" };
+
+/** Why the backend stopped being usable: its transport closed, or a connect attempt failed. */
+export type BackendCloseTrigger = "transport-closed" | "connect-failed";
+
+/** Read the status once; a rejection becomes `{ read: "failed" }`. */
+export async function readContainerStatus(
   container: Readonly<{ status(): Promise<WorkspaceContainerStatus> }>,
-): Promise<void> {
+): Promise<ContainerStatusRead> {
   try {
-    const status = await container.status();
-    const reason = status.exit?.reason ?? status.exit?.cause;
-    logEvent("warn", "workspace.backend.closed", {
-      running: status.running,
-      reasonCode: containerReasonCode(reason),
-      exitCode: status.exit?.exitCode ?? containerExitCode(reason),
-      signal: status.exit?.signal ?? null,
-      statusReadOutcome: "ok",
-    });
+    return { read: "ok", status: await container.status() };
   } catch {
+    return { read: "failed" };
+  }
+}
+
+/**
+ * Record that a backend closed or failed to connect, with what one status read saw. This is not a
+ * stopped container, so `running` is `null` when the read failed. It writes one event.
+ */
+export function recordWorkspaceBackendClosed(
+  trigger: BackendCloseTrigger,
+  result: ContainerStatusRead,
+): void {
+  if (result.read === "failed") {
     logEvent("warn", "workspace.backend.closed", {
+      trigger,
       running: null,
       reasonCode: "status-unavailable",
       exitCode: null,
       signal: null,
       statusReadOutcome: "failed",
     });
+
+    return;
   }
+
+  const { status } = result;
+  const reason = status.exit?.reason ?? status.exit?.cause;
+  logEvent("warn", "workspace.backend.closed", {
+    trigger,
+    running: status.running,
+    reasonCode: containerReasonCode(reason),
+    exitCode: status.exit?.exitCode ?? containerExitCode(reason),
+    signal: status.exit?.signal ?? null,
+    statusReadOutcome: "ok",
+  });
 }

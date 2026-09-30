@@ -79,7 +79,11 @@ test("a reset logs the stop as a request, then the restart's own launch result",
     { deleteAll: () => Promise.resolve() },
     {
       restart: () =>
-        Promise.resolve({ runtimeId: "reset-runtime", clientSecret: "secret", outcome: "adopted" }),
+        Promise.resolve({
+          runtimeId: "reset-runtime",
+          clientSecret: "secret",
+          outcome: "launched",
+        }),
     },
   );
 
@@ -94,7 +98,7 @@ test("a reset logs the stop as a request, then the restart's own launch result",
     }),
     expect.objectContaining({
       event: "workspace.container.started",
-      outcome: "adopted",
+      outcome: "launched",
       runtimeId: "reset-runtime",
     }),
   ]);
@@ -116,6 +120,7 @@ test("a restart that fails is logged at error level before the failure leaves", 
     step: "restart-container",
     outcome: "threw",
   });
+  expect(named(events(), "workspace.container.started")).toEqual([]);
 });
 
 test("the owner's reset request is logged with how long the whole reset took", async () => {

@@ -1,31 +1,40 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { recordWorkspaceContainerClosed } from "../../src/workspace/backend-sync-ignore.js";
+import {
+  readContainerStatus,
+  recordWorkspaceBackendClosed,
+  type WorkspaceContainerStatus,
+} from "../../src/workspace/backend-sync-ignore.js";
 import { capturedEvents, named } from "../log-capture.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const claimsOfPhysicalEnd = ["workspace.container.stopped", "workspace.container.exited"];
+async function closeWith(
+  status: () => Promise<WorkspaceContainerStatus>,
+  trigger: "transport-closed" | "connect-failed" = "transport-closed",
+): Promise<void> {
+  recordWorkspaceBackendClosed(trigger, await readContainerStatus({ status }));
+}
 
 test("a transport close after an observed exit is one event with the exit fields and no text", async () => {
   const events = capturedEvents();
-  await recordWorkspaceContainerClosed({
-    status: () =>
-      Promise.resolve({
-        running: false,
-        exit: {
-          reason: "Container exited with unexpected exit code: 1",
-          exitCode: 1,
-          signal: "SIGKILL",
-        },
-      }),
-  });
+  await closeWith(() =>
+    Promise.resolve({
+      running: false,
+      exit: {
+        reason: "Container exited with unexpected exit code: 1",
+        exitCode: 1,
+        signal: "SIGKILL",
+      },
+    }),
+  );
 
   expect(events()).toEqual([
     expect.objectContaining({
       event: "workspace.backend.closed",
       level: "warn",
+      trigger: "transport-closed",
       running: false,
       reasonCode: "unexpected-exit-code",
       exitCode: 1,
@@ -38,9 +47,7 @@ test("a transport close after an observed exit is one event with the exit fields
 
 test("a transport close while the container still runs claims no stop or exit", async () => {
   const events = capturedEvents();
-  await recordWorkspaceContainerClosed({
-    status: () => Promise.resolve({ running: true, exit: null }),
-  });
+  await closeWith(() => Promise.resolve({ running: true, exit: null }));
 
   expect(events().map((entry) => entry.event)).toEqual(["workspace.backend.closed"]);
   expect(named(events(), "workspace.backend.closed").at(0)).toMatchObject({
@@ -49,16 +56,15 @@ test("a transport close while the container still runs claims no stop or exit", 
     signal: null,
     statusReadOutcome: "ok",
   });
-  expect(events().map((entry) => entry.event)).not.toEqual(
-    expect.arrayContaining(claimsOfPhysicalEnd),
-  );
+
+  for (const claim of ["workspace.container.stopped", "workspace.container.exited"]) {
+    expect(named(events(), claim)).toEqual([]);
+  }
 });
 
 test("a failed status read leaves running unknown instead of guessing false", async () => {
   const events = capturedEvents();
-  await recordWorkspaceContainerClosed({
-    status: () => Promise.reject(new Error("status rpc failed")),
-  });
+  await closeWith(() => Promise.reject(new Error("status rpc failed")));
 
   expect(events()).toEqual([
     expect.objectContaining({
@@ -68,5 +74,14 @@ test("a failed status read leaves running unknown instead of guessing false", as
       reasonCode: "status-unavailable",
       statusReadOutcome: "failed",
     }),
+  ]);
+});
+
+test("a connect failure is logged as such, not as a transport close", async () => {
+  const events = capturedEvents();
+  await closeWith(() => Promise.resolve({ running: false, exit: null }), "connect-failed");
+
+  expect(named(events(), "workspace.backend.closed")).toEqual([
+    expect.objectContaining({ trigger: "connect-failed", running: false }),
   ]);
 });
