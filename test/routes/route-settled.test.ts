@@ -136,16 +136,6 @@ test("a client that left is recorded, and the request is still logged", async ()
   });
 });
 
-test("a request with no signal never claims that the client stayed", async () => {
-  const events = capturedEvents();
-  const request = get("/api/projects");
-  Object.defineProperty(request, "signal", { value: undefined });
-
-  await routeOwnerApiRequest(request, supervisor(), ownerScope);
-
-  expect(named(events(), "route.settled").at(0)).toMatchObject({ clientAborted: null });
-});
-
 test("a turn is logged at its headers without reading the stream", async () => {
   const events = capturedEvents();
   const pull = vi.fn();

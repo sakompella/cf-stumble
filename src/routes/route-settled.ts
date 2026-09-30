@@ -1,4 +1,4 @@
-import { logEvent, newRequestId, type LogLevel, type RequestId } from "../diagnostics.js";
+import { logEvent, type LogLevel, newRequestId, type RequestId } from "../diagnostics.js";
 import { routePattern } from "./route-pattern.js";
 
 /**
@@ -25,7 +25,10 @@ const STREAMED_ROUTE = "POST /api/projects/:projectId/turn";
 
 const degradedResponses = new WeakSet<Response>();
 
-/** Say that a successful response still reports a degraded state. */
+/**
+ * Say that a successful response still reports a degraded state. The marked object must be the one
+ * the route handler returns: a copy, such as a re-wrapped Response, loses the mark.
+ */
 export function markDegraded(response: Response): Response {
   degradedResponses.add(response);
 
@@ -48,22 +51,19 @@ const LEVEL = {
 } as const satisfies Record<ApplicationOutcome, LogLevel>;
 
 /**
- * A client that left is known only when the runtime aborts the request signal, which needs the
- * `enable_request_signal` compatibility flag. A live signal therefore proves nothing, so the log
- * says `true` or `null`, never `false`.
+ * `true` when the runtime aborted the request signal, `null` otherwise. The runtime aborts it only
+ * under the `enable_request_signal` compatibility flag, so a live signal proves nothing and `false`
+ * would be a guess.
  */
-function clientAborted(request: Request): true | null {
-  return signalAborted(request.signal) ? true : null;
-}
-
-function signalAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
+function abortedOrNull(request: Request): true | null {
+  return request.signal.aborted ? true : null;
 }
 
 /**
  * Run one owner API request. A request that reaches the workspace gets a fresh `requestId` and
  * writes one `route.settled` event when its response is ready. Other requests run quietly with no
- * id. A turn's response is a stream, so its event marks the headers; `turn.settled` is the end.
+ * id. A turn's response is a stream, so its event marks the headers; `turn.settled` is the end. If
+ * the handler throws there is no response, so that event has `status` and `phase` `null`.
  */
 export async function settleRoute(
   request: Request,
@@ -81,7 +81,7 @@ export async function settleRoute(
   try {
     const response = await run(requestId);
     const outcome = applicationOutcome(response);
-    const aborted = clientAborted(request);
+    const aborted = abortedOrNull(request);
 
     logEvent(aborted === true && outcome === "ok" ? "warn" : LEVEL[outcome], "route.settled", {
       ...fields,
@@ -99,8 +99,8 @@ export async function settleRoute(
       status: null,
       applicationOutcome: "fault",
       durationMs: Date.now() - startedAt,
-      clientAborted: clientAborted(request),
-      phase: "headers",
+      clientAborted: abortedOrNull(request),
+      phase: null,
     });
 
     throw cause;
