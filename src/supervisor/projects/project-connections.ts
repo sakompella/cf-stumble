@@ -41,11 +41,15 @@ import {
   type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
-  type RequestId,
 } from "../../workspace/index.js";
 // oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
 import type { VerifiedAccessScope } from "../../access/index.js";
-import { logEvent, logRedactedCause, timedWorkspaceRpc } from "../../diagnostics.js";
+import {
+  logEvent,
+  logRedactedCause,
+  timedWorkspaceRpc,
+  type RequestId,
+} from "../../diagnostics.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the

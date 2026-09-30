@@ -1,5 +1,10 @@
-import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js";
-import { requestIdFields, type RequestId } from "../request-id.js";
+import {
+  isTimeoutFailure,
+  logEvent,
+  logRedactedCause,
+  requestIdFields,
+  type RequestId,
+} from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {

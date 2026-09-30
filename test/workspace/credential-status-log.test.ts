@@ -1,3 +1,4 @@
+import { newRequestId, parseRequestId } from "../../src/diagnostics.js";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   executeGitHubCredentialRequest,
@@ -9,7 +10,6 @@ import {
   type WorkspaceOperations,
 } from "../../src/workspace/index.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import { newRequestId, parseRequestId } from "../../src/request-id.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 
 afterEach(() => {

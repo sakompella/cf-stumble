@@ -1,4 +1,4 @@
-import { logRedactedCause, timed } from "../diagnostics.js";
+import { logRedactedCause, timed, type RequestId } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
 import type { VerifiedAccessScope } from "../supervisor/projects/index.js";
 import type { ProjectThreadResult } from "../supervisor/threads/index.js";
@@ -9,7 +9,6 @@ import {
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
 import { jsonError } from "./json.js";
-import type { RequestId } from "../request-id.js";
 import { settleRoute } from "./route-settled.js";
 import {
   isCrossOriginMutation,

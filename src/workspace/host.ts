@@ -18,8 +18,7 @@ import {
 import { DurableObject } from "cloudflare:workers";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logEvent, logRedactedCause, timed } from "../diagnostics.js";
-import { parseRequestId } from "../request-id.js";
+import { logEvent, logRedactedCause, timed, parseRequestId } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";

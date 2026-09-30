@@ -1,4 +1,10 @@
-import { isTimeoutFailure, logRedactedCause, timed } from "../diagnostics.js";
+import {
+  isTimeoutFailure,
+  logRedactedCause,
+  requestIdFields,
+  timed,
+  type RequestId,
+} from "../diagnostics.js";
 import {
   credentialStatusSource,
   installCredentialSource,
@@ -9,7 +15,6 @@ import {
   repositoryAccessSource,
   type GitHubCredentialState,
 } from "../github/index.js";
-import { requestIdFields, type RequestId } from "../request-id.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { runLoggedCommand, type WorkspaceOperations } from "./executor.js";

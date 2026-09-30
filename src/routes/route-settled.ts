@@ -1,5 +1,4 @@
-import { logEvent, type LogLevel } from "../diagnostics.js";
-import { newRequestId, type RequestId } from "../request-id.js";
+import { logEvent, newRequestId, type LogLevel, type RequestId } from "../diagnostics.js";
 import { routePattern } from "./route-pattern.js";
 
 /**

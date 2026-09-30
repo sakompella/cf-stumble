@@ -38,8 +38,6 @@ export {
   type WorkspaceCredentialProblem,
 } from "./credential-access.js";
 
-export type { RequestId } from "../request-id.js";
-
 export {
   executeGitHubCredentialRequest,
   parseGitHubCredentialRequest,

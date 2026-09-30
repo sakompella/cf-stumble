@@ -1,7 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
-import { logEvent, logRedactedCause } from "../diagnostics.js";
-import type { RequestId } from "../request-id.js";
+import { logEvent, logRedactedCause, type RequestId } from "../diagnostics.js";
 import { routePattern } from "./route-pattern.js";
 import { markDegraded } from "./route-settled.js";
 import type {

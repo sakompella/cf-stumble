@@ -1,4 +1,5 @@
 // oxlint-disable max-lines -- The connection workflow owns status, authorization, and credential install together.
+import type { RequestId } from "../../diagnostics.js";
 import {
   parseGitHubToken,
   requestDeviceAuthorization,
@@ -11,7 +12,6 @@ import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
   type CredentialWorkspaceNamespace,
-  type RequestId,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 import type { CredentialSource, GitHubConnectionStore } from "./github-connection-store.js";

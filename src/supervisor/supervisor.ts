@@ -33,6 +33,7 @@ import {
   timedTurnMount,
   timedTurnProvision,
   timedWorkspaceRpc,
+  type RequestId,
 } from "./projects/index.js";
 import {
   Generations,
@@ -53,7 +54,6 @@ import {
 import type {
   HarnessProvisionWorkspaceNamespace,
   WorkspaceResetResult,
-  RequestId,
 } from "../workspace/index.js";
 import {
   checkGenerationStartup,
