@@ -228,3 +228,15 @@ test("an unexplained exit that is neither clean nor a crash code is a warning", 
     }),
   ]);
 });
+
+test("the monitor is armed after the launch returns, and arming adds no timer", async () => {
+  vi.useFakeTimers();
+  capturedEvents();
+  const { inner, observed } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+
+  expect(inner.calls).toEqual(["status", "start", "launch-returned", "monitor"]);
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});

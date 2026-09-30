@@ -2,6 +2,7 @@ import type {
   ContainerLaunchSpec,
   ContainerRuntimeInfo,
   IWorkspaceContainerAPI,
+  WorkspaceRef,
 } from "@cloudflare/computer/backends/container";
 import { ObservedWorkspaceContainer } from "../../src/workspace/container-observer.js";
 
@@ -40,70 +41,103 @@ export class FakeContainer implements IWorkspaceContainerAPI {
       : Promise.resolve({ running: this.#options.running ?? false, exit: null });
   }
 
-  start(): Promise<ContainerRuntimeInfo> {
+  /** The spec each launch was asked to use, in order. */
+  readonly specs: ContainerLaunchSpec[] = [];
+  /** The exact object the last launch returned. */
+  lastRuntime: ContainerRuntimeInfo | undefined;
+  /** Every pass-through call the observer made, as its name and arguments. */
+  readonly passedThrough: (readonly [string, ...(string | number)[]])[] = [];
+  readonly exit = { exitedAt: 7, reason: "passed through" };
+  readonly response = new Response("passed through");
+
+  readonly fetcher: Fetcher = {
+    fetch: () => Promise.resolve(this.response),
+    connect: () => {
+      throw new Error("not used");
+    },
+  };
+
+  start(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     this.calls.push("start");
 
-    return this.#launch();
+    return this.#launch(spec);
   }
 
-  restart(): Promise<ContainerRuntimeInfo> {
+  restart(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     this.calls.push("restart");
 
-    return this.#launch();
+    return this.#launch(spec);
   }
 
-  async #launch(): Promise<ContainerRuntimeInfo> {
+  async #launch(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
+    this.specs.push(spec);
     await this.#options.gate;
 
     if (this.#options.launchFails === true) throw new Error("container would not start");
 
-    return {
+    this.lastRuntime = {
       runtimeId:
         this.runtimeIds[Math.min(this.#launches++, this.runtimeIds.length - 1)] ?? "runtime-1",
       clientSecret: "client-secret",
       outcome: this.#options.outcome ?? "launched",
     };
+    this.calls.push("launch-returned");
+
+    return this.lastRuntime;
   }
 
-  exitInfo(): Promise<null> {
-    return Promise.reject(new Error("the observer never reads exit info"));
+  exitInfo() {
+    this.passedThrough.push(["exitInfo"]);
+
+    return Promise.resolve(this.exit);
   }
 
-  setInactivityTimeout(): Promise<void> {
-    return Promise.reject(new Error("the observer never sets an inactivity timeout"));
+  setInactivityTimeout(durationMs: number): Promise<void> {
+    this.passedThrough.push(["setInactivityTimeout", durationMs]);
+
+    return Promise.resolve();
   }
 
-  interceptOutboundHttp(): Promise<void> {
-    return Promise.reject(new Error("not used"));
+  interceptOutboundHttp(host: string, workspace: WorkspaceRef): Promise<void> {
+    this.passedThrough.push(["interceptOutboundHttp", host, workspace.binding, workspace.id]);
+
+    return Promise.resolve();
   }
 
-  interceptAllOutboundHttp(): Promise<void> {
-    return Promise.reject(new Error("not used"));
+  interceptAllOutboundHttp(workspace: WorkspaceRef, token: string): Promise<void> {
+    this.passedThrough.push(["interceptAllOutboundHttp", workspace.binding, workspace.id, token]);
+
+    return Promise.resolve();
   }
 
-  fetchPort(): Promise<Response> {
-    return Promise.reject(new Error("not used"));
+  fetchPort(port: number, input: string): Promise<Response> {
+    this.passedThrough.push(["fetchPort", port, input]);
+
+    return Promise.resolve(this.response);
   }
 
-  port(): Fetcher {
-    throw new Error("not used");
+  port(port: number): Fetcher {
+    this.passedThrough.push(["port", port]);
+
+    return this.fetcher;
   }
 }
 
 export function fakeContainer(options: FakeOptions = {}) {
   const inner = new FakeContainer(options);
 
-  return { calls: inner.calls, observed: new ObservedWorkspaceContainer(inner) };
+  return { inner, calls: inner.calls, observed: new ObservedWorkspaceContainer(inner) };
 }
 
 /** One platform monitor per call, each settled by the test when the container "exits". */
-export function controlledMonitor() {
+export function controlledMonitor(order: string[] = []) {
   const pending: { resolve(): void; reject(error: Error | string): void }[] = [];
 
   return {
     calls: pending,
     monitor: () =>
       new Promise<void>((resolve, reject) => {
+        order.push("monitor");
         pending.push({ resolve, reject });
       }),
   };
@@ -112,7 +146,7 @@ export function controlledMonitor() {
 export function watchedContainer(options: FakeOptions = {}) {
   const clock = { now: 1_000 };
   const inner = new FakeContainer(options);
-  const platform = controlledMonitor();
+  const platform = controlledMonitor(inner.calls);
 
   const observed = new ObservedWorkspaceContainer(inner, {
     monitor: platform.monitor,

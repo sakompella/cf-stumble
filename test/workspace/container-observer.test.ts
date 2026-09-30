@@ -77,7 +77,7 @@ test.each([
 
     await restart(observed);
 
-    expect(calls).toEqual(["status", "restart"]);
+    expect(calls).toEqual(["status", "restart", "launch-returned"]);
     expect(named(events(), "workspace.container.wake-requested")).toEqual([
       expect.objectContaining({ trigger, runningBefore: true, launchSequence: 1 }),
     ]);
@@ -136,7 +136,7 @@ test("observing adds no timer and reads status only once per launch", async () =
 
   await observed.start(SPEC);
 
-  expect(calls).toEqual(["status", "start"]);
+  expect(calls).toEqual(["status", "start", "launch-returned"]);
   expect(vi.getTimerCount()).toBe(0);
   vi.useRealTimers();
 });
@@ -158,4 +158,48 @@ test("the launch duration and start time come from the injected clock", async ()
   expect(named(events(), "workspace.container.started")).toEqual([
     expect.objectContaining({ startedAtMs: 10, durationMs: 10 }),
   ]);
+});
+
+test("a connect resolves to the exact object Computer returned, with the spec passed through", async () => {
+  capturedEvents();
+  const { inner, observed } = fakeContainer({ running: false });
+
+  const runtime = await observed.start(SPEC);
+
+  expect(runtime).toBe(inner.lastRuntime);
+  expect(inner.specs).toEqual([SPEC]);
+  expect(inner.specs[0]).toBe(SPEC);
+});
+
+test("every other container call is passed through with its arguments in order", async () => {
+  capturedEvents();
+  const { inner, observed } = fakeContainer({ running: false });
+  const workspace = { binding: "WORKSPACE_HOST", id: "workspace-id" };
+
+  await observed.setInactivityTimeout(1234);
+  await observed.interceptOutboundHttp("example.test", workspace);
+  await observed.interceptAllOutboundHttp(workspace, "token-1");
+  const response = await observed.fetchPort(8080, "http://container/health");
+
+  expect(await observed.exitInfo()).toBe(inner.exit);
+  expect(response).toBe(inner.response);
+  expect(observed.port(9090)).toBe(inner.fetcher);
+  expect(inner.passedThrough).toEqual([
+    ["setInactivityTimeout", 1234],
+    ["interceptOutboundHttp", "example.test", "WORKSPACE_HOST", "workspace-id"],
+    ["interceptAllOutboundHttp", "WORKSPACE_HOST", "workspace-id", "token-1"],
+    ["fetchPort", 8080, "http://container/health"],
+    ["exitInfo"],
+    ["port", 9090],
+  ]);
+});
+
+test("a launch makes no pass-through call of its own", async () => {
+  capturedEvents();
+  const { inner, observed } = fakeContainer({ running: false });
+
+  await observed.start(SPEC);
+  await observed.restart(SPEC);
+
+  expect(inner.passedThrough).toEqual([]);
 });
