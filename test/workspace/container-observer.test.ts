@@ -58,6 +58,9 @@ test("a connect that finds a running container but relaunches it is logged as st
   expect(named(events(), "workspace.container.started")).toEqual([
     expect.objectContaining({ outcome: "relaunched", runningBefore: true }),
   ]);
+  expect(named(events(), "workspace.container.wake-requested"), "written after the call").toEqual([
+    expect.objectContaining({ trigger: "backend-connect", runningBefore: true, launchSequence: 1 }),
+  ]);
 });
 
 test.each([

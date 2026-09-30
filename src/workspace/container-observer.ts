@@ -107,24 +107,44 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     const launchSequence = this.#launches;
     const runningBefore = await this.#runningBefore();
 
-    // A first connect that finds the container running may only adopt it, so it is not a wake.
-    if (trigger !== "backend-connect" || runningBefore !== true) {
+    // A first connect that finds the container running may only adopt it, so it is not a wake yet.
+    // If it relaunches instead, `#observeLaunch` writes the wake after the call.
+    const wakeWritten = trigger !== "backend-connect" || runningBefore !== true;
+
+    if (wakeWritten) {
       observeSafely(() => {
-        logEvent("info", "workspace.container.wake-requested", {
-          trigger,
-          runningBefore,
-          launchSequence,
-        });
+        this.#logWake({ trigger, runningBefore, launchSequence });
       });
     }
 
     const startedAt = this.#now();
     const runtime = await this.#runWhileLaunching(kind, run, spec);
     observeSafely(() => {
-      this.#observeLaunch({ trigger, runningBefore, launchSequence, startedAt, runtime });
+      this.#observeLaunch({
+        trigger,
+        runningBefore,
+        launchSequence,
+        startedAt,
+        runtime,
+        wakeWritten,
+      });
     });
 
     return runtime;
+  }
+
+  #logWake(
+    launch: Readonly<{
+      trigger: ContainerWakeTrigger;
+      runningBefore: boolean | null;
+      launchSequence: number;
+    }>,
+  ): void {
+    logEvent("info", "workspace.container.wake-requested", {
+      trigger: launch.trigger,
+      runningBefore: launch.runningBefore,
+      launchSequence: launch.launchSequence,
+    });
   }
 
   #observeLaunch(
@@ -134,6 +154,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
       launchSequence: number;
       startedAt: number;
       runtime: ContainerRuntimeInfo;
+      wakeWritten: boolean;
     }>,
   ): void {
     const { runtime } = launch;
@@ -143,6 +164,8 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     if (!adopted) this.#markReplaced(runtime.runtimeId);
 
     this.#watch(runtime.runtimeId, launchedAtMs);
+
+    if (!adopted && !launch.wakeWritten) this.#logWake(launch);
 
     logEvent("info", adopted ? "workspace.container.adopted" : "workspace.container.started", {
       trigger: launch.trigger,
