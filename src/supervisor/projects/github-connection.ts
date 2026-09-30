@@ -1,5 +1,4 @@
 // oxlint-disable max-lines -- The connection workflow owns status, authorization, and credential install together.
-import type { RequestId } from "../../diagnostics.js";
 import {
   parseGitHubToken,
   requestDeviceAuthorization,
@@ -12,6 +11,7 @@ import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
   type CredentialWorkspaceNamespace,
+  type WorkspaceCredentialInput,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 import type { CredentialSource, GitHubConnectionStore } from "./github-connection-store.js";
@@ -95,6 +95,9 @@ function sameOwner(scope: VerifiedAccessScope, identity: string, audience: strin
   return scope.identity === identity && scope.audience === audience;
 }
 
+/** A status read stops at `signal` and logs under `requestId`; neither changes the answer. */
+type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal" | "requestId">;
+
 export class GitHubConnection {
   private readonly store: GitHubConnectionStore;
   private readonly workspaceName: string;
@@ -118,15 +121,11 @@ export class GitHubConnection {
    * workspace's own answer, because the owner is mid-flow and the credential legitimately is not
    * there yet.
    */
-  status(
-    now: number,
-    signal?: AbortSignal,
-    requestId?: RequestId,
-  ): Promise<GitHubConnectionStatus> {
+  status(now: number, options: StatusReadOptions = {}): Promise<GitHubConnectionStatus> {
     const pending = this.store.pendingAuthorization(now);
 
     return pending === undefined
-      ? this.observed(undefined, undefined, signal, requestId)
+      ? this.observed(undefined, undefined, options)
       : Promise.resolve({
           state: "awaiting-authorization",
           verificationUri: pending.verificationUri,
@@ -145,7 +144,7 @@ export class GitHubConnection {
    * an optimistic `connected`.
    */
   async ensureCredential(now: number, signal?: AbortSignal): Promise<GitHubConnectionStatus> {
-    const current = await this.status(now, signal);
+    const current = await this.status(now, { signal });
 
     if (
       signal?.aborted === true ||
@@ -294,7 +293,7 @@ export class GitHubConnection {
     const status: GitHubConnectionStatus =
       installed.value === "tooling-missing"
         ? { state: "tooling-missing" }
-        : await this.observed(source, now, signal);
+        : await this.observed(source, now, { signal });
 
     logCredentialInstall(source, status);
 
@@ -305,14 +304,12 @@ export class GitHubConnection {
   private async observed(
     source?: CredentialSource,
     at?: number,
-    signal?: AbortSignal,
-    requestId?: RequestId,
+    options: StatusReadOptions = {},
   ): Promise<GitHubConnectionStatus> {
     const read = await readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
-      signal,
-      requestId,
+      ...options,
     });
 
     if (read.isErr()) {

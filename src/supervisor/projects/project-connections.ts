@@ -204,7 +204,7 @@ export class ProjectConnections {
 
   async connectionStatus(now: number, requestId?: RequestId): Promise<GitHubConnectionStatus> {
     try {
-      return await this.github.status(now, undefined, requestId);
+      return await this.github.status(now, { requestId });
     } catch (cause) {
       logRedactedCause("project-connections.connection-status: workspace-unavailable", cause);
 
