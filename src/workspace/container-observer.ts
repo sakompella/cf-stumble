@@ -6,6 +6,8 @@ import type {
 import { logEvent, type LogLevel } from "../diagnostics.js";
 import { containerExitCode, containerReasonCode } from "./backend-sync-ignore.js";
 
+type LaunchKind = "start" | "restart";
+
 /** Why the Workspace Host asked the container to launch. */
 export type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "workspace-reset";
 
@@ -30,7 +32,12 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   readonly #watched = new Map<string, number | null>();
   /** Runtimes that a later launch replaced on purpose. */
   readonly #replaced = new Set<string>();
-  #launchesInFlight = 0;
+  /** Host restarts in progress: the old container's exit during one is the Host's own doing. */
+  #restartsInFlight = 0;
+  /** Connects in progress: they destroy a running container only when they relaunch it. */
+  #startsInFlight = 0;
+  /** Stops seen during a connect, classified when the connect returns. */
+  readonly #held: { runtimeId: string; error: Error | undefined }[] = [];
   #attempts = 0;
 
   constructor(
@@ -43,7 +50,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   }
 
   start(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
-    return this.#launch("backend-connect", spec, (next) => this.#inner.start(next));
+    return this.#launch("backend-connect", spec, "start", (next) => this.#inner.start(next));
   }
 
   restart(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
@@ -54,12 +61,13 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     trigger: ContainerWakeTrigger,
     spec: ContainerLaunchSpec,
   ): Promise<ContainerRuntimeInfo> {
-    return this.#launch(trigger, spec, (next) => this.#inner.restart(next));
+    return this.#launch(trigger, spec, "restart", (next) => this.#inner.restart(next));
   }
 
   async #launch(
     trigger: ContainerWakeTrigger,
     spec: ContainerLaunchSpec,
+    kind: LaunchKind,
     run: (spec: ContainerLaunchSpec) => Promise<ContainerRuntimeInfo>,
   ): Promise<ContainerRuntimeInfo> {
     this.#attempts += 1;
@@ -72,7 +80,7 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     }
 
     const startedAt = Date.now();
-    const runtime = await this.#runWhileLaunching(run, spec);
+    const runtime = await this.#runWhileLaunching(kind, run, spec);
     const adopted = runtime.outcome === "adopted";
     const launchedAtMs = adopted ? null : this.#now();
 
@@ -93,17 +101,40 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     return runtime;
   }
 
-  /** A launch may destroy the old container, so an exit during the call is the Host's own doing. */
+  /**
+   * A restart always destroys the old container, so its exit during the call is the Host's own
+   * doing. A connect destroys one only when it relaunches a running container, so a stop that
+   * lands during a connect waits for the result: a relaunch explains it, anything else does not.
+   */
   async #runWhileLaunching(
+    kind: LaunchKind,
     run: (spec: ContainerLaunchSpec) => Promise<ContainerRuntimeInfo>,
     spec: ContainerLaunchSpec,
   ): Promise<ContainerRuntimeInfo> {
-    this.#launchesInFlight += 1;
+    let relaunched = false;
+
+    if (kind === "restart") this.#restartsInFlight += 1;
+    else this.#startsInFlight += 1;
 
     try {
-      return await run(spec);
+      const runtime = await run(spec);
+      relaunched = runtime.outcome === "relaunched";
+
+      return runtime;
     } finally {
-      this.#launchesInFlight -= 1;
+      if (kind === "restart") {
+        this.#restartsInFlight -= 1;
+      } else {
+        this.#startsInFlight -= 1;
+
+        if (this.#startsInFlight === 0) this.#releaseHeldStops(relaunched);
+      }
+    }
+  }
+
+  #releaseHeldStops(intentional: boolean): void {
+    for (const { runtimeId, error } of this.#held.splice(0)) {
+      this.#logStopped(runtimeId, error, intentional);
     }
   }
 
@@ -136,11 +167,21 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   }
 
   #stopped(runtimeId: string, error?: Error): void {
+    if (this.#startsInFlight > 0) {
+      this.#held.push({ runtimeId, error });
+
+      return;
+    }
+
+    this.#logStopped(runtimeId, error, this.#restartsInFlight > 0);
+  }
+
+  #logStopped(runtimeId: string, error: Error | undefined, duringRestart: boolean): void {
     const stoppedAtMs = this.#now();
     const launchedAtMs = this.#watched.get(runtimeId) ?? null;
     const reason = error === undefined ? "exited normally" : error.message;
     const reasonCode = containerReasonCode(reason);
-    const intentional = this.#launchesInFlight > 0 || this.#replaced.has(runtimeId);
+    const intentional = duringRestart || this.#replaced.has(runtimeId);
     this.#watched.delete(runtimeId);
     this.#replaced.delete(runtimeId);
 
