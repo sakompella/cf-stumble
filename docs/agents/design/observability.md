@@ -136,6 +136,19 @@ lease id's last 8 characters), and `generation` (the label the turn was admitted
 | `workspace.backend.connected`        | info                                                                                         | `runtimeId` (string or `null`)                                                                                                                                                                                                           | A backend connection completed. It does not show that a container launched (`src/workspace/host.ts:196-207`).                                                                                                                                                                                                                                                                                                                                             |
 | `workspace.backend.closed`           | warn                                                                                         | `trigger` (`transport-closed` or `connect-failed`), `running` (`true`, `false`, or `null` when the status read failed), `reasonCode`, `exitCode`, `signal`, `statusReadOutcome` (`ok` or `failed`)                                       | A backend transport closed, or a connect attempt failed. The Workspace Host reads status once, and both the generation bump and these fields come from that read. `running: true` means the container was still up; an exit status shows an observed exit. Nothing here claims a stop. Intentional closes, such as a reset, still log `warn`; step 3a will refine that (`src/workspace/host.ts:208-213,218-227`; `src/workspace/backend-sync-ignore.ts`). |
 
+### What the container events do not show
+
+- **Backend retries.** Computer's connect loop probes health, restarts the container once, and
+  gives up with one error. It has no callback for these steps. A `wake-requested` event with
+  `trigger: "backend-recovery"` marks the one restart, and `workspace.backend.closed` with
+  `trigger: "connect-failed"` marks a connect that gave up. The probe count, delays, and
+  remaining time are not logged.
+- **Stops the Host cannot see.** A stop is written only while the Workspace Host instance that
+  saw the launch is alive. If that instance is evicted, its stop is lost, and a later connect
+  that adopts the container writes `adopted` with no start time.
+- **Why the platform stopped a container.** The monitor reports an exit, not a cause. The log
+  writes `reasonSource: "unknown"` for any exit the Host did not cause.
+
 ### Container lifecycle names changed
 
 Earlier logs used `workspace.container.stopped`, `workspace.container.exited`, and
