@@ -26,18 +26,20 @@ Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this proje
 
 ## Configuration files
 
-`cloudflare.config.ts` is the source of truth for the Worker. `cf build`, `cf deploy`, and `cf dev` read it. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the variables.
+`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the variables. `cf build` reads it and passes. `cf dev` does not work yet, and `cf deploy` is unverified (see below).
 
 Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
 
-- `wrangler.jsonc` is what the Deploy to Cloudflare flow and `wrangler deploy` read. Its `migrations` list is the Durable Object history that Wrangler sends.
+- `wrangler.jsonc` is what the Deploy to Cloudflare flow and `wrangler deploy` read.
 - `wrangler.test.jsonc` is what the test runner reads. It leaves out the Workers AI binding.
 
-`test/docs/test-config.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
+Both Wrangler files declare the Durable Objects with `exports`, not `migrations`, so a Wrangler deployment and a `cf` deployment state the same lifecycle. `test/docs/cloudflare-config-drift.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
 
-Use `cf` for builds and deployments. Use Wrangler for what `cf` cannot do yet: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`, because `cf dev` rejects the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object.
+Deploys stay on Wrangler until `cf deploy --dry-run` passes for this project. `cf dev` fails on the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object, and `cf deploy` runs the same validation. Use Wrangler for the other commands `cf` lacks: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`.
 
-Do not remove `Supervisor` or `WorkspaceHost` from `worker.exports`, and do not change their `storage` value. The first deployment from `cloudflare.config.ts` replaces the Wrangler migrations with these declarations. A missing or mismatched class can orphan that class's stored data.
+Use one deploy path for the Worker. Never alternate `wrangler deploy` and `cf deploy` on the same Worker. If you switch, disable or reconfigure Workers Builds first, so that an automatic build does not deploy through the other path.
+
+Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change their `storage` value. A missing or mismatched class can orphan that class's stored data. Cloudflare cannot roll a Durable Object lifecycle change back to a version from before the change, so do not rely on a rollback across the first deployment that uses `exports`.
 
 ## Container image
 

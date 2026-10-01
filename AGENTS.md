@@ -22,7 +22,7 @@ A tracked `.githooks/pre-commit` runs the same command and blocks the commit whe
 
 ### Cloudflare CLI and configuration
 
-`cloudflare.config.ts` is the source of truth for the Worker. Run `cf` through `pnpm exec cf`, under Node: it cannot load the config on Bun. `pnpm exec cf build` checks that `cf` accepts the config and builds the Container image, so it needs Docker. It writes `.cloudflare/`, which Git ignores. `wrangler.jsonc` (Deploy to Cloudflare and `wrangler deploy`) and `wrangler.test.jsonc` (vitest) repeat the config, and `test/docs/test-config.test.ts` fails when they drift. `wrangler tail`, `wrangler secret put`, and `scripts/local/dev.sh` still use Wrangler. See `docs/deploy.md`.
+`cloudflare.config.ts` is the source of truth for the Worker. Run `cf` through `pnpm exec cf`, under Node: it cannot load the config on Bun. `pnpm exec cf build` checks that `cf` accepts the config and builds the Container image, so it needs Docker. It writes `.cloudflare/`, which Git ignores. `wrangler.jsonc` (Deploy to Cloudflare and `wrangler deploy`) and `wrangler.test.jsonc` (vitest) repeat the config, and `test/docs/cloudflare-config-drift.test.ts` fails when they drift. `cf dev` fails here and `cf deploy` is unverified, so deploys, `wrangler tail`, `wrangler secret put`, and `scripts/local/dev.sh` use Wrangler. Never alternate `wrangler deploy` and `cf deploy` on one Worker. See `docs/deploy.md`.
 
 ### Browser harness
 
