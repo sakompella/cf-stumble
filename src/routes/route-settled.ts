@@ -7,6 +7,7 @@ import {
 } from "../diagnostics.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { routePattern } from "./route-pattern.js";
+import { withRouteSpan } from "./route-span.js";
 
 /**
  * How the application judged a request, apart from its HTTP status: `degraded` is a success
@@ -112,7 +113,7 @@ export async function settleRoute(
   const fields = { requestId, route: pattern, method: request.method } as const;
 
   try {
-    const response = await run(requestId);
+    const response = await withRouteSpan({ requestId, route: pattern }, () => run(requestId));
     const outcome = applicationOutcome(response);
     const aborted = abortedOrNull(request);
     const durationMs = Date.now() - startedAt;
