@@ -15,7 +15,16 @@
   // Worker claims it. A route rather than a custom domain, because a custom domain writes DNS and
   // a route does not: the wildcard already makes this hostname proxied.
   // Operator diagnostics go to console.error (src/diagnostics.ts); without logs they vanish.
-  "observability": { "enabled": true },
+  // Every rate is 1 so that no request's events are dropped. Traces bill one event per span
+  // against the quota logs use. Issues must stay enabled: a deployment from a configuration
+  // without it turns Issues off. See `cloudflare.config.ts`.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true, "persist": true },
+    "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true },
+    "issues": { "enabled": true },
+  },
   "routes": [{ "pattern": "stumble.akompella.dev/*", "zone_name": "akompella.dev" }],
   // One entry point, and it is the one Cloudflare Access sits in front of. A `workers.dev`
   // subdomain is reachable without Access, so it would leave the Worker's own fail-closed check as

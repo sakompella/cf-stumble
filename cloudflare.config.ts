@@ -40,7 +40,18 @@ export default defineConfig({
     // Workers Cache would skip the Worker's Access check, and its key ignores identity.
     cache: { enabled: false },
     // Operator diagnostics go to console.error (src/diagnostics.ts); without logs they vanish.
-    observability: { enabled: true },
+    // Every rate is 1: the start and end events of one request must both survive, and a sampled
+    // trace would drop the requests an operator needs. Traces bill one event per span against the
+    // same quota as logs (20M a month on Workers Paid, then $0.60 per million), so lower
+    // `traces.headSamplingRate` first if the bill grows. Issues must stay enabled here: a
+    // deployment from a configuration without it turns Issues off.
+    observability: {
+      enabled: true,
+      headSamplingRate: 1,
+      logs: { enabled: true, headSamplingRate: 1, invocationLogs: true, persist: true },
+      traces: { enabled: true, headSamplingRate: 1, persist: true },
+      issues: { enabled: true },
+    },
     // The zone has a proxied wildcard record, so the hostname resolves to another origin unless
     // the Worker claims it. A route rather than a custom domain, because a custom domain writes
     // DNS and a route does not: the wildcard already makes this hostname proxied.

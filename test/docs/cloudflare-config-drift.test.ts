@@ -72,6 +72,19 @@ function bindingTarget(scriptName: unknown, ownName: unknown): string {
   return scriptName === undefined || scriptName === ownName ? "local" : JSON.stringify(scriptName);
 }
 
+// Wrangler spells keys in snake_case and `cloudflare.config.ts` in camelCase.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Converts an untyped nested configuration value.
+function camelKeys(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, inner]) => [
+      key.replaceAll(/_([a-z])/gu, (_match, letter: string) => letter.toUpperCase()),
+      camelKeys(inner),
+    ]),
+  );
+}
+
 function wranglerFacts(name: string): Facts {
   const wrangler: unknown = parsedConfig(name);
   const container = list(at(wrangler, "containers"))[0];
@@ -83,7 +96,7 @@ function wranglerFacts(name: string): Facts {
     compatibilityFlags: sorted(list(at(wrangler, "compatibility_flags"))),
     workersDev: at(wrangler, "workers_dev"),
     cacheEnabled: at(wrangler, "cache", "enabled"),
-    observability: at(wrangler, "observability"),
+    observability: camelKeys(at(wrangler, "observability")),
     routes: list(at(wrangler, "routes")).map((route) => ({
       pattern: at(route, "pattern"),
       zone: at(route, "zone_name"),
@@ -231,6 +244,19 @@ test("no configuration field escapes the comparison", () => {
   expect(keysOf(at(cloudflareConfig, "worker"))).toEqual(CLOUDFLARE_WORKER_KEYS);
   expect(keysOf(list(at(cloudflareConfig, "containers"))[0])).toEqual(CLOUDFLARE_CONTAINER_KEYS);
   expect(keysOf(cloudflareConfig)).toEqual(["containers", "worker"]);
+});
+
+test("traces, logs, and Issues stay enabled with every rate at 1", () => {
+  const expected = {
+    enabled: true,
+    headSamplingRate: 1,
+    logs: { enabled: true, headSamplingRate: 1, invocationLogs: true, persist: true },
+    traces: { enabled: true, headSamplingRate: 1, persist: true },
+    issues: { enabled: true },
+  };
+
+  expect(cloudflareFacts().observability).toEqual(expected);
+  expect(wranglerFacts("wrangler.jsonc").observability).toEqual(expected);
 });
 
 test("every configuration declares exactly one container", () => {
