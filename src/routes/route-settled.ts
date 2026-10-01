@@ -59,16 +59,16 @@ const LEVEL = {
 } as const satisfies Record<ApplicationOutcome, LogLevel>;
 
 /**
- * The longest a workspace call may run, command budget plus margin. A request that took this long
- * waited for a workspace call until its timeout fired, so it held the workspace.
+ * The longest a workspace call may run, command budget plus margin. A request that ran at least
+ * this long ran at least as long as one workspace call's budget, so it held the workspace.
  */
 const HELD_WORKSPACE_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 /**
  * Cloudflare Issues records `error` events and ignores `warn`, so the level decides whether an
  * operator sees a request. A request is an `error` when it faulted, when the client left before the
- * response was ready (the workspace call it started may still be running), or when it ran to the
- * workspace timeout. A refusal is not held work when the client leaves, so it stays a warning.
+ * response was ready (the workspace call it started may still be running), or when it ran at least
+ * as long as one workspace call's budget. A refusal is not held work when the client leaves, so it stays a warning.
  * `degraded` and `refused` responses otherwise stay warnings: they tell the owner something, and
  * they did not hold the workspace.
  */
@@ -79,6 +79,7 @@ function settledLevel(
 ): LogLevel {
   if (durationMs >= HELD_WORKSPACE_MS) return "error";
 
+  // `aborted` is only ever `true` under `enable_request_signal`, which the Worker does not set.
   if (aborted === true && outcome !== "refused") return "error";
 
   return LEVEL[outcome];
