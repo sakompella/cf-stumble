@@ -65,6 +65,13 @@ function dockerfilePath(value: unknown): string {
   return String(value).replace(/^\.\//u, "");
 }
 
+// A Wrangler binding without `script_name`, and a cf binding that names its own Worker, both point
+// at the Worker itself. Any other target is a different Worker.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads untyped configuration values.
+function bindingTarget(scriptName: unknown, ownName: unknown): string {
+  return scriptName === undefined || scriptName === ownName ? "local" : JSON.stringify(scriptName);
+}
+
 function wranglerFacts(name: string): Facts {
   const wrangler: unknown = parsedConfig(name);
   const container = list(at(wrangler, "containers"))[0];
@@ -85,6 +92,7 @@ function wranglerFacts(name: string): Facts {
       list(at(wrangler, "durable_objects", "bindings")).map((binding) => ({
         binding: at(binding, "name"),
         exportName: at(binding, "class_name"),
+        target: bindingTarget(at(binding, "script_name"), at(wrangler, "name")),
       })),
     ),
     durableObjectExports: Object.fromEntries(
@@ -110,6 +118,20 @@ function wranglerFacts(name: string): Facts {
   };
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads an untyped configuration value.
+function cloudflareExports(worker: unknown): Facts["durableObjectExports"] {
+  return Object.fromEntries(
+    entries(at(worker, "exports")).map(([exportName, entry]) => [
+      exportName,
+      {
+        type: at(entry, "type"),
+        storage: at(entry, "storage"),
+        container: at(entry, "container", "name"),
+      },
+    ]),
+  );
+}
+
 function cloudflareFacts(): Facts {
   const worker = at(cloudflareConfig, "worker");
   const env = entries(at(worker, "env"));
@@ -129,18 +151,13 @@ function cloudflareFacts(): Facts {
     durableObjectBindings: sorted(
       env
         .filter(([, binding]) => at(binding, "type") === "durable-object")
-        .map(([binding, value]) => ({ binding, exportName: at(value, "exportName") })),
+        .map(([binding, value]) => ({
+          binding,
+          exportName: at(value, "exportName"),
+          target: bindingTarget(at(value, "worker"), at(worker, "name")),
+        })),
     ),
-    durableObjectExports: Object.fromEntries(
-      entries(at(worker, "exports")).map(([exportName, entry]) => [
-        exportName,
-        {
-          type: at(entry, "type"),
-          storage: at(entry, "storage"),
-          container: at(entry, "container", "name"),
-        },
-      ]),
-    ),
+    durableObjectExports: cloudflareExports(worker),
     container: {
       name: at(container, "name"),
       dockerfile: dockerfilePath(at(container, "image", "dockerfile")),
@@ -208,9 +225,18 @@ test("no configuration field escapes the comparison", () => {
   expect(keysOf(parsedConfig("wrangler.jsonc"))).toEqual(WRANGLER_KEYS);
   expect(keysOf(parsedConfig("wrangler.test.jsonc"))).toEqual(withoutAi);
   expect(keysOf(wranglerContainer)).toEqual(WRANGLER_CONTAINER_KEYS);
+  expect(keysOf(list(at(parsedConfig("wrangler.test.jsonc"), "containers"))[0])).toEqual(
+    WRANGLER_CONTAINER_KEYS,
+  );
   expect(keysOf(at(cloudflareConfig, "worker"))).toEqual(CLOUDFLARE_WORKER_KEYS);
   expect(keysOf(list(at(cloudflareConfig, "containers"))[0])).toEqual(CLOUDFLARE_CONTAINER_KEYS);
   expect(keysOf(cloudflareConfig)).toEqual(["containers", "worker"]);
+});
+
+test("every configuration declares exactly one container", () => {
+  expect(list(at(parsedConfig("wrangler.jsonc"), "containers"))).toHaveLength(1);
+  expect(list(at(parsedConfig("wrangler.test.jsonc"), "containers"))).toHaveLength(1);
+  expect(list(at(cloudflareConfig, "containers"))).toHaveLength(1);
 });
 
 test("the container name is the one Wrangler derives from the Worker and the class", () => {
@@ -235,8 +261,8 @@ test("every live Durable Object class is declared as SQLite-backed with its bind
     },
   });
   expect(facts.durableObjectBindings).toEqual([
-    { binding: "SUPERVISOR", exportName: "Supervisor" },
-    { binding: "WORKSPACE_HOST", exportName: "WorkspaceHost" },
+    { binding: "SUPERVISOR", exportName: "Supervisor", target: "local" },
+    { binding: "WORKSPACE_HOST", exportName: "WorkspaceHost", target: "local" },
   ]);
 });
 
