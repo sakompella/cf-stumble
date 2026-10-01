@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { WORKSPACE_RPC_TIMEOUT_MARGIN_MS } from "../../src/diagnostics.js";
+import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { settleRoute } from "../../src/routes/route-settled.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
@@ -10,6 +12,8 @@ import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
  */
 
 const ORIGIN = "https://cf-stumble.test";
+
+const HELD_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -119,7 +123,7 @@ test("a refused request is a warning", async () => {
   });
 });
 
-test("a client that left is recorded, and the request is still logged", async () => {
+test("a client that left is an error, so Issues records the request that may hold the workspace", async () => {
   const events = capturedEvents();
   const controller = new AbortController();
   controller.abort();
@@ -131,9 +135,66 @@ test("a client that left is recorded, and the request is still logged", async ()
   );
 
   expect(named(events(), "route.settled").at(0)).toMatchObject({
-    level: "warn",
+    level: "error",
     applicationOutcome: "ok",
     clientAborted: true,
+  });
+});
+
+test("a refused request from a client that left stays a warning", async () => {
+  const events = capturedEvents();
+  const controller = new AbortController();
+  controller.abort();
+
+  await routeOwnerApiRequest(
+    new Request(`${ORIGIN}/api/workspace/reset`, { method: "POST", signal: controller.signal }),
+    supervisor(),
+    ownerScope,
+  );
+
+  expect(named(events(), "route.settled").at(0)).toMatchObject({
+    level: "warn",
+    applicationOutcome: "refused",
+    clientAborted: true,
+  });
+});
+
+test("a request that ran to the workspace timeout is an error even when it succeeded", async () => {
+  const events = capturedEvents();
+
+  const clock = vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(HELD_MS);
+
+  await routeOwnerApiRequest(get("/api/projects"), supervisor(), ownerScope);
+
+  clock.mockRestore();
+  expect(named(events(), "route.settled").at(0)).toMatchObject({
+    level: "error",
+    applicationOutcome: "ok",
+    durationMs: HELD_MS,
+  });
+});
+
+test("a degraded response that returned in time stays a warning", async () => {
+  const events = capturedEvents();
+
+  const clock = vi
+    .spyOn(Date, "now")
+    .mockReturnValueOnce(0)
+    .mockReturnValue(HELD_MS - 1);
+
+  await routeOwnerApiRequest(
+    get("/api/github/connection"),
+    supervisor({
+      getGitHubConnection: () =>
+        Promise.resolve({ state: "reconnect-required", reason: "workspace-unavailable" }),
+    }),
+    ownerScope,
+  );
+
+  clock.mockRestore();
+  expect(named(events(), "route.settled").at(0)).toMatchObject({
+    level: "warn",
+    applicationOutcome: "degraded",
   });
 });
 
