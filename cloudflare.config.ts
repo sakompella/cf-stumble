@@ -2,7 +2,7 @@ import { bindings, defineConfig, defineContainer, exports, triggers } from "cf/c
 
 // The Wrangler bundler reads build settings from `wrangler.config.ts`. Two Wrangler files remain
 // because nothing else reads this one yet: `wrangler.jsonc` for the Deploy to Cloudflare flow and
-// `wrangler deploy`, and `wrangler.test.jsonc` for the vitest pool. test/docs/test-config.test.ts
+// `wrangler deploy`, and `wrangler.test.jsonc` for the vitest pool. test/docs/cloudflare-config-drift.test.ts
 // fails when either drifts from this file.
 
 const WORKER_NAME = "cf-stumble";
