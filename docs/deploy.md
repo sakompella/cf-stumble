@@ -26,7 +26,7 @@ Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this proje
 
 ## Configuration files
 
-`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the variables. `cf build` reads it and passes. `cf dev` does not work yet, and `cf deploy` is unverified (see below).
+`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the variables. `cf build` reads it and passes. `cf deploy` passed on staging (see below). `cf dev` does not work yet.
 
 Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
 
@@ -35,7 +35,9 @@ Two Wrangler files repeat these settings, because the tools that read them do no
 
 Both Wrangler files declare the Durable Objects with `exports`, not `migrations`, so a Wrangler deployment and a `cf` deployment state the same lifecycle. `test/docs/cloudflare-config-drift.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
 
-Deploys stay on Wrangler until `cf deploy --dry-run` passes for this project. `cf dev` fails on the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object, and `cf deploy` appears to run the same validation (from reading the cf source; not observed). Use Wrangler for the other commands `cf` lacks: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`.
+`cf deploy` was tested on a staging Worker on 2026-10-01 (cf 1.0.0-beta.9, Wrangler 4.145). `cf deploy --dry-run` passed twice, and a real `cf deploy` to an existing staging Worker succeeded with no `script_name` error. Afterward the Durable Object namespace IDs, the container application ID, the `v2` migration tag, and the Supervisor's SQLite state were unchanged. The staging WorkspaceHost data was not checked, because its new container never got an instance. A `wrangler deploy` of the `exports` configuration onto a Worker that was on `migrations` v1 and v2 also succeeded: it kept the namespace IDs and the container application, and it reported no export changes. The earlier suspicion that `cf deploy` fails like `cf dev` was wrong. Which path deploys production is the owner's decision.
+
+`cf dev` still fails on the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object. `cf` has no `--config` flag, so a staging copy needs its own directory with `cloudflare.config.ts`, `wrangler.config.ts`, a `package.json` that declares `wrangler` and `cf`, and a `node_modules` link. Use Wrangler for the other commands `cf` lacks: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`.
 
 Use one deploy path for the Worker. Never alternate `wrangler deploy` and `cf deploy` on the same Worker. If you switch, disable or reconfigure Workers Builds first, so that an automatic build does not deploy through the other path.
 
