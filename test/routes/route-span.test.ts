@@ -29,7 +29,7 @@ test("the span carries the request id and the route pattern, and the result pass
   expect(names).toEqual(["owner-api.route"]);
   expect(setAttributes).toHaveBeenCalledExactlyOnceWith({
     "request.id": "id-1",
-    route: "/api/projects",
+    "http.route": "/api/projects",
   });
 });
 

@@ -15,8 +15,9 @@ const SPAN_NAME = "owner-api.route";
 
 /**
  * Run `work` inside an `owner-api.route` span that carries the request id and the route pattern,
- * so a trace can be found from a `route.settled` event. The runtime has no call that reads the
- * active span, so this opens a child span of the handler's span.
+ * so a trace can be found from a `route.settled` event. The pinned workers-types and local workerd
+ * have no `tracing.getActiveSpan`, so this opens a child span of the handler's span. Once a pinned
+ * version has it, set the attributes on the handler span instead and drop this span.
  *
  * Tracing must never change a request. If the tracing API is missing or throws before it calls
  * `work`, `work` runs unspanned. If it throws after, the outcome `work` already produced is
@@ -58,7 +59,7 @@ function setSpanAttributes(
   attributes: Readonly<{ requestId: string; route: string }>,
 ): void {
   try {
-    span.setAttributes({ "request.id": attributes.requestId, route: attributes.route });
+    span.setAttributes({ "request.id": attributes.requestId, "http.route": attributes.route });
   } catch {
     // A span that rejects attributes still times the request.
   }
