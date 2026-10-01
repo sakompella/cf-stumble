@@ -33,7 +33,7 @@ printf 'Local Access session: team %s, audience %s\n' "$TEAM_DOMAIN" "$AUDIENCE"
 # `cf dev` is not used here: it rejects `--var` and, with the Wrangler 4.145 bundler, fails on the
 # Durable Object binding that `cloudflare.config.ts` writes for the Worker itself ("defined on
 # another Worker") once a Container is attached to that Durable Object. `wrangler.jsonc` is kept
-# equal to `cloudflare.config.ts` by test/docs/test-config.test.ts.
+# equal to `cloudflare.config.ts` by test/docs/cloudflare-config-drift.test.ts.
 exec wrangler dev \
   --var "CF_ACCESS_TEAM_DOMAIN:$TEAM_DOMAIN" \
   --var "CF_ACCESS_AUD:$AUDIENCE" \
