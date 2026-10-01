@@ -20,6 +20,10 @@ Run `pnpm verify` before you claim anything works. It runs `build:pi`, `verify:v
 
 A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
 
+### Cloudflare CLI and configuration
+
+`cloudflare.config.ts` is the source of truth for the Worker. Run `cf` through `pnpm exec cf`, under Node: it cannot load the config on Bun. `pnpm exec cf build` checks that `cf` accepts the config and builds the Container image, so it needs Docker. It writes `.cloudflare/`, which Git ignores. `wrangler.jsonc` (Deploy to Cloudflare and `wrangler deploy`) and `wrangler.test.jsonc` (vitest) repeat the config, and `test/docs/test-config.test.ts` fails when they drift. `wrangler tail`, `wrangler secret put`, and `scripts/local/dev.sh` still use Wrangler. See `docs/deploy.md`.
+
 ### Browser harness
 
 `pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. `pnpm harness:browser` does: it starts a local stub of the owner API, serves the real page, drives headless Chromium over the DevTools protocol, and asserts the streaming conversation, the project sidebar, the generation drawer, keyboard access, and narrow and wide viewports. It needs a local Chromium and about a minute, so it stays outside the commit gate. Read `tools/browser-harness/README.md` before you change the page. The harness proves nothing about Cloudflare Access, which needs a deployed environment.

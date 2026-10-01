@@ -24,9 +24,24 @@ The button does not configure Cloudflare Access. It also does not provision Cont
 
 Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this project, that includes the Durable Objects, Workers AI binding, and Worker Loader. A Durable Object is Cloudflare's stateful Worker component. The configuration also declares the workspace Container, but Containers are outside the button's provisioning list.
 
+## Configuration files
+
+`cloudflare.config.ts` is the source of truth for the Worker. `cf build`, `cf deploy`, and `cf dev` read it. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the variables.
+
+Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
+
+- `wrangler.jsonc` is what the Deploy to Cloudflare flow and `wrangler deploy` read. Its `migrations` list is the Durable Object history that Wrangler sends.
+- `wrangler.test.jsonc` is what the test runner reads. It leaves out the Workers AI binding.
+
+`test/docs/test-config.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
+
+Use `cf` for builds and deployments. Use Wrangler for what `cf` cannot do yet: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`, because `cf dev` rejects the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object.
+
+Do not remove `Supervisor` or `WorkspaceHost` from `worker.exports`, and do not change their `storage` value. The first deployment from `cloudflare.config.ts` replaces the Wrangler migrations with these declarations. A missing or mismatched class can orphan that class's stored data.
+
 ## Container image
 
-`wrangler.jsonc` points to `containers/computerd.Dockerfile`, not to a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
+`cloudflare.config.ts` points to `containers/computerd.Dockerfile`, not to a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
 
 This indirection is required. Cloudflare Containers only pull images from the deploying account's managed registry or from a registry that account has configured. A direct reference to the public image fails with `IMAGE_REGISTRY_NOT_CONFIGURED`. Workers Builds has Docker, so it builds this Dockerfile and pushes the result to the deploying account's managed registry.
 
@@ -86,7 +101,7 @@ As the owner, send `POST /api/workspace/reset` to recover. Projects and the harn
 
 ## One entry point
 
-`wrangler.jsonc` sets `"workers_dev": false`. Your instance answers on the hostname you gave the
+`cloudflare.config.ts` sets `workersDev: false`, and `wrangler.jsonc` sets `"workers_dev": false`. Your instance answers on the hostname you gave the
 Worker a route for, and nowhere else.
 
 This is deliberate. A `workers.dev` subdomain is reachable without Cloudflare Access, so leaving it
@@ -127,11 +142,13 @@ Each verified Access identity gets its own Supervisor, workspace, and instance. 
 
 ## Point the instance at your own fork
 
-Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` variable in `wrangler.jsonc` to the HTTPS URL of your fork:
+Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` variable to the HTTPS URL of your fork in `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc`:
 
-```jsonc
-"vars": { "HARNESS_REPOSITORY_URL": "https://github.com/your-name/cf-stumble.git" },
+```ts
+HARNESS_REPOSITORY_URL: bindings.text("https://github.com/your-name/cf-stumble.git"),
 ```
+
+In the two Wrangler files, the same setting is `"vars": { "HARNESS_REPOSITORY_URL": "https://github.com/your-name/cf-stumble.git" }`.
 
 An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
 
