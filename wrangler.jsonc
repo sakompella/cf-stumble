@@ -32,19 +32,21 @@
       },
     ],
   },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["Supervisor"],
+  // Both classes are live and SQLite-backed. This replaces the earlier `migrations` history
+  // (v1: Supervisor, v2: WorkspaceHost) so that `wrangler deploy` and `cf deploy` declare the same
+  // lifecycle. Do not mix `migrations` and `exports`: Wrangler rejects the pair.
+  "exports": {
+    "Supervisor": { "type": "durable-object", "storage": "sqlite" },
+    "WorkspaceHost": {
+      "type": "durable-object",
+      "storage": "sqlite",
+      "container": "cf-stumble-workspacehost",
     },
-    {
-      "tag": "v2",
-      "new_sqlite_classes": ["WorkspaceHost"],
-    },
-  ],
+  },
   "containers": [
     {
-      "class_name": "WorkspaceHost",
+      // Wrangler would derive this name; it is explicit so that it matches cloudflare.config.ts.
+      "name": "cf-stumble-workspacehost",
       "image": "./containers/computerd.Dockerfile",
       // The Dockerfile copies the lockfile and the vendored Computer tarball from the repository
       // root, so the build context is the root, not the Dockerfile's directory.
