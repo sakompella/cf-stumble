@@ -1,7 +1,10 @@
+# `cf` refuses to run at a workspace root that is not itself a workspace package, so the root is
+# listed. pnpm already treats the root as a package, so nothing else changes.
+packages:
+  - "."
+  - vendor/pi-v0.84.4
 # esbuild and workerd ship prebuilt native binaries fetched by their postinstall.
 # koffi loads Hegel's native generation engine for the Node-only property project.
-packages:
-  - vendor/pi-v0.84.4
 allowBuilds:
   "@mongodb-js/zstd": false
   esbuild: true
