@@ -71,7 +71,7 @@ Cloudflare Issues and Workers traces are on for this Worker (`observability.issu
 
 **Find a request's trace.** Every request that writes `route.settled` runs inside a span named `owner-api.route`. The span has two attributes: `request.id`, the same value as `requestId` in the log events, and `route`, the route pattern. To follow one request, copy `requestId` from its `route.settled` event, then search traces for `request.id = <id>`. The span is a child of the platform's handler span, because the runtime offers no call that reads the active span. The fetch, binding, and Worker-to-Durable-Object spans for that request appear below it. Requests that write no `route.settled` event have no such span.
 
-**What Issues catches.** Issues records uncaught exceptions, failed invocations, 5xx responses, `console.error` output, and stack traces, and it groups them. This project writes operator diagnostics through `console.error` only for faults, so a `route.settled` event at `error` appears in Issues. A request that faulted, ran to the workspace timeout, or was abandoned by the client before the response is an `error` (see "Route events and request ids").
+**What Issues catches.** Issues records uncaught exceptions, failed invocations, 5xx responses, `console.error` output, and stack traces, and it groups them. `logEvent` writes events at level `error` with `console.error`, so a `route.settled` event at `error` appears in Issues. A request that faulted, ran to the workspace timeout, or was abandoned by the client before the response is an `error` (see "Route events and request ids").
 
 **What Issues misses.**
 
