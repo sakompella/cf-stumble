@@ -21,3 +21,8 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20260930.2"
   - "@cloudflare/workerd-windows-64@1.20260930.2"
   - workerd@1.20260930.2
+  - "@cloudflare/build-output-utils@0.8.4"
+  - "@cloudflare/codemods@0.3.0"
+  - "@cloudflare/config@0.22.0"
+  - "@cloudflare/runtime-types@0.1.6"
+  - cf@1.0.0-beta.9

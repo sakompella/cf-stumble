@@ -36,6 +36,7 @@
     "@oxlint/plugins": "^1",
     "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
+    "cf": "1.0.0-beta.9",
     "esbuild": "0.28.1",
     "oxfmt": "^0.65.0",
     "oxlint": "^1",
