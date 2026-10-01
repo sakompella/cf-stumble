@@ -65,6 +65,26 @@ Common questions and the events that answer them:
 | Does the GitHub credential work?  | `github-credential.install` and `github-credential.ensure`, especially `outcome: "credential-rejected"`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Why was a request refused?        | `access.refused`, `route.cross-origin-refused`, `turn.refused`, and `project.size-check`. Credential authorization and disconnect can also refuse a request; `project.disconnected` is not written for a refusal.                                                                                                                                                                                                                                                                                                                                                                        |
 
+## Issues and traces
+
+Cloudflare Issues and Workers traces are on for this Worker (`observability.issues` and `observability.traces` in `cloudflare.config.ts` and `wrangler.jsonc`). Both configurations must keep them on: a deployment from a configuration without `issues` turns Issues off.
+
+**Find a request's trace.** Every request that writes `route.settled` runs inside a span named `owner-api.route`. The span has two attributes: `request.id`, the same value as `requestId` in the log events, and `route`, the route pattern. To follow one request, copy `requestId` from its `route.settled` event, then search traces for `request.id = <id>`. The span is a child of the platform's handler span, because the runtime offers no call that reads the active span. The fetch, binding, and Worker-to-Durable-Object spans for that request appear below it. Requests that write no `route.settled` event have no such span.
+
+**What Issues catches.** Issues records uncaught exceptions, failed invocations, 5xx responses, `console.error` output, and stack traces, and it groups them. This project writes operator diagnostics through `console.error` only for faults, so a `route.settled` event at `error` appears in Issues. A request that faulted, ran to the workspace timeout, or was abandoned by the client before the response is an `error` (see "Route events and request ids").
+
+**What Issues misses.**
+
+- It ignores `warn`. Degraded and refused responses are warnings by design.
+- It misses cost that is not an error: a request that succeeds but is slow, or work that is expensive and finishes normally. Use `durationMs` in `route.settled` and the trace for those.
+- A canceled invocation often never reaches the code that writes `route.settled`, so a client that left may produce no event at all. The platform's own invocation record still exists.
+
+**Sampling and cost.** Every sampling rate is 1, so no request is dropped and the start and end events of a request stay together. Traces bill one event per span. A span is one event in the same quota as logs: 20 million events a month are included on Workers Paid, then $0.60 per million, with 7 days of retention. If the bill grows, lower `traces.headSamplingRate` first.
+
+**Not configured.** Issues automations, such as alerts or webhooks, are account resources in the dashboard. This repository creates none.
+
+**Test warning.** `pnpm test` prints "Unexpected fields found in observability field: issues" for `wrangler.test.jsonc`. The vitest plugin bundles Wrangler 4.126, which does not know the field yet. The warning is harmless, and the file must keep the field so that the drift test passes.
+
 ## Route events and request ids
 
 Every owner API request that reaches the workspace gets a `requestId`, a fresh UUID that the Worker
