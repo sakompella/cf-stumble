@@ -1,5 +1,6 @@
 # `cf` refuses to run at a workspace root that is not itself a workspace package, so the root is
-# listed. pnpm already treats the root as a package, so nothing else changes.
+# listed. `build:pi` uses `--filter` and `pnpm verify` passes, but recursive `pnpm -r` commands now
+# include the root.
 packages:
   - "."
   - vendor/pi-v0.84.4
