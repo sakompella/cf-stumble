@@ -41,7 +41,7 @@ import {
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
 import { PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
-import { WorkspaceIdleController } from "./idle-controller.js";
+import { afterIdleStop, WorkspaceIdleController } from "./idle-controller.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
   observeBackendClose,
@@ -210,7 +210,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
       },
       closed: () => {
-        void this.#observeContainerClose("transport-closed");
+        // The close an idle stop causes is its own doing, and is named so.
+        void this.#observeContainerClose(this.#idle.stopping() ? "idle-stop" : "transport-closed");
       },
       failed: () => {
         void this.#observeContainerClose("connect-failed");
@@ -374,7 +375,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),
       durableObjectTransactions(this.ctx.storage),
-      computerExecBackend(this.#workspace, "container-shell", this.#containerLifecycle),
+      afterIdleStop(
+        this.#idle,
+        computerExecBackend(this.#workspace, "container-shell", this.#containerLifecycle),
+      ),
       { ...options, containerState: this.#containerLifecycle, activity: this.#idle },
     );
   }

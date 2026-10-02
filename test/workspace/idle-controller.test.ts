@@ -179,7 +179,7 @@ test("an alarm at the limit closes the Workspace, destroys the container, and lo
   expect(calls).toEqual(["close", "destroy"]);
   expect(alarms, "a stopped container is not checked again").toHaveLength(1);
   expect(named(events(), "workspace.container.stop-requested")).toEqual([
-    expect.objectContaining({ reasonCode: "idle" }),
+    expect.objectContaining({ reasonCode: "idle-stop" }),
   ]);
   expect(named(events(), "workspace.container.idle-stop")).toEqual([
     expect.objectContaining({

@@ -158,3 +158,17 @@ test("a failed status read bumps no generation and is logged as unknown", async 
     expect.objectContaining({ running: null, statusReadOutcome: "failed" }),
   ]);
 });
+
+test("the close an idle stop causes is an info event with its own trigger", async () => {
+  const events = capturedEvents();
+  await closeWith(() => Promise.resolve({ running: true, exit: null }), "idle-stop");
+
+  expect(events()).toEqual([
+    expect.objectContaining({
+      event: "workspace.backend.closed",
+      level: "info",
+      trigger: "idle-stop",
+      running: true,
+    }),
+  ]);
+});

@@ -1,4 +1,5 @@
 import { logEvent, logRedactedCause } from "../diagnostics.js";
+import type { ExecBackend } from "./project/index.js";
 import { decideIdleStop, type WorkspaceActivity } from "./idle-stop.js";
 
 /** What the project capability reports about its own work. */
@@ -29,9 +30,10 @@ export type IdleStopOutcome = "stopped" | "not-running" | "skipped-busy" | "thre
  * Tracks the Workspace Host's work and arms the alarm that later checks for idleness (ADR-0036: the
  * decision is `decideIdleStop`; this is the shell around it). It holds counters in memory only.
  *
- * When the alarm finds the container idle it stops it. The alarm is armed once per quiet period and re-armed when it fires and finds the limit not yet
- * reached, so a burst of work writes the alarm at most once. The controller never arms an alarm
- * while no container runs, and nothing here is a timer, so it cannot keep the object in memory.
+ * When the alarm finds the container idle it stops it. The alarm is armed once per quiet period
+ * and re-armed when it fires and finds the limit not yet reached, so a burst of work writes the
+ * alarm at most once. The controller never arms an alarm while no container runs, and nothing here
+ * is a timer, so it cannot keep the object in memory.
  */
 export class WorkspaceIdleController implements ProjectActivity {
   readonly #ports: IdleControllerPorts;
@@ -40,6 +42,7 @@ export class WorkspaceIdleController implements ProjectActivity {
   #leaseEndsAtMs: number | null = null;
   #armed = false;
   #stopping: Promise<void> | undefined;
+  #finishStop: () => void = () => {};
 
   constructor(ports: IdleControllerPorts) {
     this.#ports = ports;
@@ -101,6 +104,11 @@ export class WorkspaceIdleController implements ProjectActivity {
     this.#armed = false;
   }
 
+  /** Whether an idle stop is in progress. */
+  stopping(): boolean {
+    return this.#stopping !== undefined;
+  }
+
   /** Settles once any stop in progress has finished. Work calls this after it has begun. */
   settled(): Promise<void> {
     return this.#stopping ?? Promise.resolve();
@@ -138,11 +146,18 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     if (this.#stopping !== undefined) return;
 
-    this.#stopping = this.#stop(decision.idleForMs, nowMs).finally(() => {
-      this.#stopping = undefined;
+    // Set before the stop runs: its first step is synchronous, and work or a close callback that
+    // arrives during it must already see the stop.
+    this.#stopping = new Promise<void>((done) => {
+      this.#finishStop = done;
     });
 
-    await this.#stopping;
+    try {
+      await this.#stop(decision.idleForMs, nowMs);
+    } finally {
+      this.#stopping = undefined;
+      this.#finishStop();
+    }
   }
 
   /**
@@ -153,7 +168,7 @@ export class WorkspaceIdleController implements ProjectActivity {
    */
   async #stop(idleForMs: number, startedAtMs: number): Promise<void> {
     const runningBefore = this.#ports.containerRunning();
-    logEvent("info", "workspace.container.stop-requested", { reasonCode: "idle" });
+    logEvent("info", "workspace.container.stop-requested", { reasonCode: "idle-stop" });
     let outcome: IdleStopOutcome;
 
     try {
@@ -195,4 +210,22 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     return "stopped";
   }
+}
+
+/**
+ * An exec backend that waits for an idle stop in progress before it starts a command. The exec has
+ * already been counted as in flight, so the stop keeps the container; this only keeps the command
+ * from starting on a Workspace that is half closed.
+ */
+export function afterIdleStop(
+  controller: Pick<WorkspaceIdleController, "settled">,
+  backend: ExecBackend,
+): ExecBackend {
+  return {
+    async exec(input) {
+      await controller.settled();
+
+      return backend.exec(input);
+    },
+  };
 }

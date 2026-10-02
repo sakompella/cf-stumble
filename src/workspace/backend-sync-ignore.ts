@@ -119,8 +119,11 @@ export type ContainerStatusRead =
   | { readonly read: "ok"; readonly status: WorkspaceContainerStatus }
   | { readonly read: "failed" };
 
-/** Why the backend stopped being usable: its transport closed, or a connect attempt failed. */
-export type BackendCloseTrigger = "transport-closed" | "connect-failed";
+/**
+ * Why the backend stopped being usable: its transport closed, a connect attempt failed, or the
+ * Host closed it to stop an idle container (`idle-stop`, an ordinary info event).
+ */
+export type BackendCloseTrigger = "transport-closed" | "connect-failed" | "idle-stop";
 
 /** Read the status once; a rejection becomes `{ read: "failed" }`. */
 export async function readContainerStatus(
@@ -133,6 +136,10 @@ export async function readContainerStatus(
   }
 }
 
+function closeLevel(trigger: BackendCloseTrigger): "info" | "warn" {
+  return trigger === "idle-stop" ? "info" : "warn";
+}
+
 /**
  * Record that a backend closed or failed to connect, with what one status read saw. This is not a
  * stopped container, so `running` is `null` when the read failed. It writes one event.
@@ -143,7 +150,7 @@ export function recordWorkspaceBackendClosed(
 ): void {
   if (result.read === "failed") {
     const reasonCode: ContainerReasonCode = "status-unavailable";
-    logEvent("warn", "workspace.backend.closed", {
+    logEvent(closeLevel(trigger), "workspace.backend.closed", {
       trigger,
       running: null,
       reasonCode,
@@ -157,7 +164,7 @@ export function recordWorkspaceBackendClosed(
 
   const { status } = result;
   const reason = status.exit?.reason ?? status.exit?.cause;
-  logEvent("warn", "workspace.backend.closed", {
+  logEvent(closeLevel(trigger), "workspace.backend.closed", {
     trigger,
     running: status.running,
     reasonCode: containerReasonCode(reason),
