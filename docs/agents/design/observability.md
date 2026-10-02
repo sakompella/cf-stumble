@@ -79,7 +79,7 @@ Cloudflare Issues and Workers traces are on for this Worker (`observability.issu
 - It misses cost that is not an error: work that is expensive and finishes normally, and requests that are slow but finish in under 901 seconds. Use `durationMs` in `route.settled` and the trace for those.
 - A canceled invocation often never reaches the code that writes `route.settled`, so a client that left may produce no event at all. The platform's own invocation record still exists.
 
-**Sampling and cost.** Every sampling rate is 1, so no request is dropped and the start and end events of a request stay together. Traces bill one event per span. A span is one event in the same quota as logs: 20 million events a month are included on Workers Paid, then $0.60 per million, with 7 days of retention. If the bill grows, lower `traces.headSamplingRate` first.
+**Sampling and cost.** Every sampling rate is 1, so no request is dropped and the start and end events of a request stay together. Traces bill one event per span. A span is one event in the same quota as logs: 20 million events a month are included on Workers Paid, then $0.60 per million, with 7 days of retention. One cold start of the workspace produced about 12,600 spans, mostly `durable_object_storage_exec` from the workspace filesystem start, which cost about $0.008 over the quota. If the bill grows, lower `traces.headSamplingRate` first.
 
 **Not configured.** Issues automations, such as alerts or webhooks, are account resources in the dashboard. This repository creates none.
 
