@@ -141,14 +141,22 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 
 const DIAGNOSTIC_TAIL_LIMIT = 2_000;
 
+/** The last `DIAGNOSTIC_TAIL_LIMIT` UTF-16 units, without a surrogate pair cut in half. */
+function lastUnits(text: string): string {
+  const tail = text.slice(-DIAGNOSTIC_TAIL_LIMIT);
+  const first = tail.codePointAt(0) ?? 0;
+
+  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
+}
+
 /** The redacted tail of each stream. Redaction runs first: a cut could leave half a token. */
 function stepDiagnostics(output: CommandOutput): BuildStepDiagnostics {
   const stdout = redactLogText(output.stdout);
   const stderr = redactLogText(output.stderr);
 
   return {
-    stdoutTail: stdout.slice(-DIAGNOSTIC_TAIL_LIMIT),
-    stderrTail: stderr.slice(-DIAGNOSTIC_TAIL_LIMIT),
+    stdoutTail: lastUnits(stdout),
+    stderrTail: lastUnits(stderr),
     truncated: stdout.length > DIAGNOSTIC_TAIL_LIMIT || stderr.length > DIAGNOSTIC_TAIL_LIMIT,
   };
 }
