@@ -129,8 +129,13 @@ function runningNow(
   window: TimeWindow,
   idleLimitMs: number,
 ): readonly Finding[] {
+  // An instance that began running after the window ended has a negative span here, so it never reports.
   return instances.flatMap((instance): Finding[] => {
-    const span = { beginMs: Math.max(instance.runningSinceMs, window.fromMs), endMs: window.toMs };
+    const span = {
+      beginMs: Math.max(instance.runningSinceMs, window.fromMs),
+      endMs: window.toMs,
+    };
+
     const unexplainedMs = span.endMs - span.beginMs - coveredMs(span, allowed);
 
     const lastBefore = lastActivity

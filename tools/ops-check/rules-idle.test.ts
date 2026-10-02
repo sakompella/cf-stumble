@@ -128,6 +128,42 @@ describe("rule d: overlapping instances", () => {
   });
 });
 
+describe("rule d: windows that end a few minutes ago", () => {
+  const postWindow = (nowMs: number): CheckInput => ({
+    ...runningAt(40, false, START),
+    nowMs,
+    instances: instanceSource(true, LAST_REQUEST_AT + 45 * MINUTE_MS),
+  });
+
+  it("does not use an instance that began after an explicit --to", () => {
+    assert.deepEqual(firing(postWindow(LAST_REQUEST_AT + 45 * MINUTE_MS)), []);
+  });
+
+  it("ignores an instance that began running after the window end even when live", () => {
+    const live = {
+      ...runningAt(40, false, START),
+      nowMs: LAST_REQUEST_AT + 40 * MINUTE_MS + 30_000,
+    };
+
+    assert.deepEqual(
+      firing({
+        ...live,
+        instances: instanceSource(true, LAST_REQUEST_AT + 40 * MINUTE_MS + 10_000),
+      }),
+      [],
+    );
+  });
+
+  it("does not report an instances failure for a --to five minutes ago", () => {
+    const failed = { status: "unavailable", reason: "HTTP 403" } as const;
+
+    assert.deepEqual(
+      firing({ ...postWindow(LAST_REQUEST_AT + 45 * MINUTE_MS), instances: failed }),
+      [],
+    );
+  });
+});
+
 describe("rule d: windows that ended in the past", () => {
   it("does not ask the instances API about a window that ended long ago", () => {
     const past = { ...runningAt(40, true, START), nowMs: LAST_REQUEST_AT + 400 * MINUTE_MS };

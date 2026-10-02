@@ -37,6 +37,9 @@ export const IDLE_OVERRUN_TOLERANCE_MS = 10 * MINUTE_MS;
  */
 export const METRICS_LAG_MS = 10 * MINUTE_MS;
 
+/** A window that ends this close to the time of the check is read as ending at the present. */
+export const LIVE_SLACK_MS = 60_000;
+
 /** Default idle limit, as a parameter of the check. */
 export const DEFAULT_IDLE_LIMIT_MS = 20 * MINUTE_MS;
 
