@@ -9,10 +9,13 @@ import { projectProvisionConfiguration } from "../../src/project-provision.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   BUILD_SCRATCH_ROOT,
+  GITHUB_CLI_CONFIG_DIRECTORY,
+  GIT_GLOBAL_CONFIG_PATH,
   HARNESS_DIRECTORY,
   HARNESS_GIT_DIRECTORY,
   MANAGED_AGENT_INSTRUCTIONS_PATH,
   PROJECTS_DIRECTORY,
+  WORKSPACE_SYNC_IGNORES,
   projectDirectory,
   projectGitDirectory,
   WORKSPACE_ROOT,
@@ -110,5 +113,19 @@ test("a sibling repository is reachable and everything above the root is not", (
 
   for (const escape of ["../../../etc/passwd", "/etc/passwd", `${WORKSPACE_ROOT}/../secrets`]) {
     expect(resolveAbsolute(cwd, escape).ok, `${escape} must not resolve`).toBe(false);
+  }
+});
+
+test("keeps the gh and Git configuration in the durable workspace, apart from every repository", () => {
+  for (const path of [GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH]) {
+    expect(path.startsWith(`${WORKSPACE_ROOT}/`)).toBe(true);
+    expect(path.startsWith(`${PROJECTS_DIRECTORY}/`)).toBe(false);
+    expect(path.startsWith(`${HARNESS_DIRECTORY}/`)).toBe(false);
+    expect(path).not.toBe(MANAGED_AGENT_INSTRUCTIONS_PATH);
+    expect(
+      path
+        .split("/")
+        .filter((segment) => WORKSPACE_SYNC_IGNORES.some((ignored) => ignored === segment)),
+    ).toStrictEqual([]);
   }
 });

@@ -72,6 +72,17 @@ export const BUILD_SCRATCH_ROOT = "/tmp/cf-stumble-builds";
 export const MANAGED_AGENT_INSTRUCTIONS_PATH = `${WORKSPACE_ROOT}/AGENTS.md`;
 
 /**
+ * `gh`'s configuration directory, which holds the GitHub credential (ADR-0039).
+ *
+ * It sits under the workspace root because Computer persists only that tree. A path under `$HOME`
+ * lives on the container's own disk and disappears whenever the container is replaced.
+ */
+export const GITHUB_CLI_CONFIG_DIRECTORY = `${WORKSPACE_ROOT}/.config/gh`;
+
+/** Git's global configuration file, for the same reason. `gh auth setup-git` writes the helper here. */
+export const GIT_GLOBAL_CONFIG_PATH = `${WORKSPACE_ROOT}/.gitconfig`;
+
+/**
  * One project's clone. The id is a `ProjectId`, so it is one segment of lower-case letters, digits,
  * and hyphens, and it has no dot that could name a sibling staging directory.
  */
