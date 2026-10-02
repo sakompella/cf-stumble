@@ -87,7 +87,7 @@ Cloudflare Issues and Workers traces are on for this Worker (`observability.issu
 
 ## Checking a running deployment
 
-`pnpm ops:check` reads one time window from the live account and applies six rules. It prints one line when everything is fine:
+`pnpm ops:check` reads one time window from the live account and applies nine rules. It prints one line when everything is fine:
 
 ```
 ✓ ops-check cf-stumble 2026-10-02T14:00Z..16:00Z
