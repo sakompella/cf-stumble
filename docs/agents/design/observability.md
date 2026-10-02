@@ -253,7 +253,7 @@ how often a copy is pending in production is unknown.
 | `harness-build.step`     | info, warn, or error                       | `commit`, `step`, `outcome` (`ok`, a build problem code, or `threw`), `exitCode` (a failed step), `durationMs`                                     | The Supervisor ran one build step in the workspace.                                                                                                                 |
 | `harness-build.output`   | info, warn, or error                       | `commit`, `outcome`, `durationMs`                                                                                                                  | The Supervisor read and checked the build's module map.                                                                                                             |
 
-A failed build step also writes a text tail of its output after `redactCredentials` handles recognized patterns. This is not a structured event, and the tail does not get the Access JWT pattern. A thrown workspace call in a build step or the module map read goes through `logRedactedCause` (`src/supervisor/artifacts/builder.ts`).
+A failed build step logs only its name, exit code, and duration. It does not log what the command printed, because command output can contain file contents. The redacted tail of each stream (the last 2,000 characters, with credentials and Access JWTs removed before the cut) travels instead in the owner's submission response, at `preparation.problem.diagnostics` as `stdoutTail`, `stderrTail`, and `truncated`. Only the owner, behind Cloudflare Access, receives it. Nothing stores it, so a submission that is interrupted before it responds loses the tail. A thrown workspace call in a build step or the module map read goes through `logRedactedCause` (`src/supervisor/artifacts/builder.ts`).
 
 ## Boundary and credential events
 
@@ -278,3 +278,9 @@ A failed build step also writes a text tail of its output after `redactCredentia
 reads `/api/projects/:projectId/turn`, an unknown API path reads `/api/unknown`, and a path the
 active generation serves reads `relay`. A GitHub credential `outcome` is the connection state, or
 the reconnect reason when the state is `reconnect-required`.
+
+## Noise from the container
+
+Between 2026-09-24 and 2026-09-28 the container logs held base64 dumps of source text. Container output does not pass through the Worker's redaction, so such a dump would be unredacted. Logs since the image roll on 2026-10-02 show none.
+
+Nothing in this repository prints file contents. The Worker code writes only through `logEvent` and `logRedactedCause` (`src/diagnostics.ts`), plus one line for an unmapped project provider error (`src/workspace/project/provider.ts`) that prints an error code and message. The one patch to Computer's daemon, `containers/computerd-walk.patch`, adds two log lines: the list of ignored path segments at start, and a failed symlink write with its path and error. Neither prints content. Computer's Worker-side package in `vendor/` logs only structured warnings and errors from the container backend. The dumps therefore most likely came from the upstream `computerd` binary at the pinned commit, which this repository does not build from source except through the patch. They are not reproduced today. If they come back, find the container log line first, then read the upstream commit named by `COMPUTER_COMMIT` in `containers/computerd.Dockerfile`.
