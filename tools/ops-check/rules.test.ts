@@ -92,7 +92,7 @@ describe("rule a: route patterns and streamed turns", () => {
       ),
     ];
 
-    const turns = Array.from({ length: 6 }, (_, i) => turn(i));
+    const turns = Array.from({ length: 10 }, (_, i) => turn(i));
 
     assert.deepEqual(
       firing(
