@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 
-import { WORKSPACE_SYNC_IGNORES } from "../../src/workspace-layout.js";
+import {
+  GITHUB_CLI_CONFIG_DIRECTORY,
+  GIT_GLOBAL_CONFIG_PATH,
+  WORKSPACE_SYNC_IGNORES,
+} from "../../src/workspace-layout.js";
 
 declare global {
   interface ImportMeta {
@@ -32,6 +36,13 @@ test("the workspace image's shim skips exactly the segments the sync ignores", (
   const setting = /^ENV COMPUTERD_WALK_IGNORE=(\S*)$/mu.exec(dockerfile)?.[1];
 
   expect(setting?.split(",")).toStrictEqual([...WORKSPACE_SYNC_IGNORES]);
+});
+
+test("the workspace image keeps gh and Git global configuration in the durable workspace", () => {
+  const setting = (name: string) => new RegExp(`^ENV ${name}=(\\S*)$`, "mu").exec(dockerfile)?.[1];
+
+  expect(setting("COMPUTER_VAR_GH_CONFIG_DIR")).toBe(GITHUB_CLI_CONFIG_DIRECTORY);
+  expect(setting("COMPUTER_VAR_GIT_CONFIG_GLOBAL")).toBe(GIT_GLOBAL_CONFIG_PATH);
 });
 
 test("the workspace image ships computerd built from source, not the prebuilt image", () => {

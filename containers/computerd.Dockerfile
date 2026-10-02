@@ -143,6 +143,13 @@ ENV FUSE_MOUNT=shim
 # `WORKSPACE_SYNC_IGNORES` in `src/workspace-layout.ts`; `test/workspace/computerd-image.test.ts`
 # checks it.
 ENV COMPUTERD_WALK_IGNORE=node_modules
+# computerd forwards only an allowlist plus `COMPUTER_VAR_*` (prefix stripped) to commands. These
+# two put `gh` and Git's global configuration under the persisted workspace, so the GitHub
+# credential survives a container replacement. Keep them equal to `GITHUB_CLI_CONFIG_DIRECTORY` and
+# `GIT_GLOBAL_CONFIG_PATH` in `src/workspace-layout.ts`; `test/workspace/computerd-image.test.ts`
+# checks it.
+ENV COMPUTER_VAR_GH_CONFIG_DIR=/workspace/.config/gh
+ENV COMPUTER_VAR_GIT_CONFIG_GLOBAL=/workspace/.gitconfig
 EXPOSE 8080
 
 # Seed the pnpm content-addressable store from this repository's lockfile.
