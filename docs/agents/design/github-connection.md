@@ -171,13 +171,19 @@ Supervisor SQLite do not store either token. A deployment that sets neither
 
 ## Where the credential lives
 
-`GitHubCredentialRequest` carries the token over the credential-install RPC to `WorkspaceHost.credential`. The Workspace Host passes it to `gh auth login --with-token` on standard input, then runs `gh auth setup-git`. The token is absent from command text and application-controlled temporary files; `gh` writes it to local `~/.config/gh/hosts.yml` outside the repositories (`src/workspace/github-credential.ts:30-33,77-95`; `src/workspace/credential-access.ts:100-115`; `src/github/credential-commands.ts:7-16,35-56`).
+`GitHubCredentialRequest` carries the token over the credential-install RPC to `WorkspaceHost.credential`. The Workspace Host passes it to `gh auth login --with-token` on standard input, then runs `gh auth setup-git`. The token is absent from command text and application-controlled temporary files; `gh` writes it to `/workspace/.config/gh/hosts.yml`, outside the repositories, and `gh auth setup-git` writes the Git credential helper to `/workspace/.gitconfig`. Every credential command exports `GH_CONFIG_DIR` and `GIT_CONFIG_GLOBAL` with those locations, and the workspace image sets the same variables for all other commands (`GITHUB_CLI_CONFIG_DIRECTORY` and `GIT_GLOBAL_CONFIG_PATH` in `src/workspace-layout.ts`; `src/github/credential-commands.ts`; `containers/computerd.Dockerfile`).
 
 After that, `git` and `gh` authenticate the way they do on any development machine. cf-stumble does
 not proxy GitHub operations, and the Supervisor keeps no copy of the token: the tenant's storage
 holds a login name, the credential source, and the time it was recorded.
 
-Because the Supervisor keeps no copy, a workspace that loses its local `gh` configuration loses the credential. If the Supervisor previously recorded a connection, status reports `reconnect-required`; without a prior record, a missing credential reports `disconnected`. A request that ensures credentials reinstalls a configured `GH_TOKEN` without owner action (`src/supervisor/projects/github-connection.ts:133-159,317-346`).
+Computer persists only `/workspace`, so the credential files survive a container replacement: an image rollout, a crash, a platform stop, or a recovery relaunch. Earlier versions wrote them under `$HOME` (`/root`) on the container's own disk, and every replacement lost the credential. The token now also rests in the Workspace Host's Durable Object storage, as the content of `hosts.yml`, next to the repositories. The install waits for a complete sync of that copy (`"require-complete"`), so a copy that is still pending fails the install instead of reporting `connected`. The Supervisor still stores no token.
+
+A workspace reset is the only event that clears the credential on purpose. It deletes the durable store, and the Supervisor clears its record. The computerd shim does not keep file modes when it restores files, so a restored `hosts.yml` can have mode 0644 instead of 0600. The container has one user, root, so this adds little risk. The agent's file listing of `/workspace` now shows `.config` and `.gitconfig`.
+
+The deployment that ships this change replaces the container, and the old credential sat on its disk. The owner authorizes GitHub once more after that deployment, unless `GH_TOKEN` is configured and reinstalls it.
+
+Because the Supervisor keeps no copy, a workspace that loses its `gh` configuration loses the credential. If the Supervisor previously recorded a connection, status reports `reconnect-required`; without a prior record, a missing credential reports `disconnected`. A request that ensures credentials reinstalls a configured `GH_TOKEN` without owner action (`src/supervisor/projects/github-connection.ts:133-159,317-346`).
 
 ## Redaction
 

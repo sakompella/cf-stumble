@@ -36,8 +36,8 @@ state. Starting a fresh thread replaces conversation and compacted context witho
 files. Both the project thread and shared workspace survive main-harness generation changes.
 
 The workspace behaves like an ordinary development machine. It has unrestricted outbound internet
-access, `git`, `gh`, and repository toolchains. GitHub credentials live in local configuration
-outside the repositories.
+access, `git`, `gh`, and repository toolchains. GitHub credentials live in `gh` and Git
+configuration under `/workspace`, outside the repositories, so they survive a container replacement.
 
 The workspace name comes from the tenant and from nothing else. The Worker turns a verified Access
 token into the Supervisor's name, and the Supervisor derives its one workspace name from that name,
@@ -51,6 +51,8 @@ identity reaches a different one. No request supplies the name.
 | `/workspace`                       | The workspace root. Every addressed path lives beneath it.                          |
 | `/workspace/AGENTS.md`             | The managed instructions, above every repository.                                   |
 | `/workspace/harness`               | The owner's editable harness checkout.                                              |
+| `/workspace/.config/gh`            | `gh` configuration, including the GitHub credential (`hosts.yml`).                  |
+| `/workspace/.gitconfig`            | Git's global configuration, including the `gh` credential helper.                   |
 | `/workspace/projects/<project id>` | One connected project's clone.                                                      |
 | `/tmp/cf-stumble-builds/<commit>`  | Build scratch for one labeled commit, outside `/workspace`. It holds no repository. |
 
