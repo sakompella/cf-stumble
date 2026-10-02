@@ -3,14 +3,21 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runChecks } from "./check.mts";
 import { bucketsOf, eventRow, input, logs, metrics } from "./fixtures.mts";
-import { MINUTE_MS, type CheckInput } from "./model.mts";
+import { MINUTE_MS, type CheckInput, type TimeWindow } from "./model.mts";
 import { firing, START, WINDOW } from "./rule-helpers.mts";
+
+/** These tests probe the 20-minute boundary, so they say so instead of using the default. */
+const TWENTY_MINUTES = 20 * MINUTE_MS;
+
+function idleInput(window: TimeWindow, sources: Parameters<typeof input>[1]): CheckInput {
+  return { ...input(window, sources), idleLimitMs: TWENTY_MINUTES };
+}
 
 describe("rule d: ran-past-idle", () => {
   const lastRequestAt = START + 60 * MINUTE_MS;
 
   const runningUntil = (minutes: number, idleLimitMs?: number): CheckInput => {
-    const base = input(WINDOW, {
+    const base = idleInput(WINDOW, {
       logs: logs([
         eventRow(lastRequestAt, "route.settled", {
           requestId: "r",
@@ -50,7 +57,7 @@ function runningAt(
   runningSinceMs: number,
 ): CheckInput {
   return {
-    ...input(
+    ...idleInput(
       { fromMs: START, toMs: LAST_REQUEST_AT + minutesAfterRequest * MINUTE_MS },
       {
         logs: logs([
@@ -108,6 +115,32 @@ describe("rule d: running now and metrics lag", () => {
   });
 });
 
+describe("rule d: the default idle limit", () => {
+  const idleStopMs = 10 * MINUTE_MS;
+  const lastRequest = START + 60 * MINUTE_MS;
+
+  const runFor = (minutes: number): CheckInput =>
+    input(WINDOW, {
+      logs: logs([
+        eventRow(lastRequest, "route.settled", {
+          requestId: "r",
+          route: "/api/projects",
+          durationMs: 1,
+        }),
+      ]),
+      metrics: metrics(
+        [[START, 1]],
+        bucketsOf({ fromMs: lastRequest, toMs: lastRequest + minutes * MINUTE_MS }, () => 5),
+      ),
+    });
+
+  it("is the Host's idle stop, so a run past it plus the tolerance is reported", () => {
+    assert.equal(runFor(5).idleLimitMs, idleStopMs);
+    assert.deepEqual(firing(runFor(20)), []);
+    assert.deepEqual(firing(runFor(25)), ["ran-past-idle"]);
+  });
+});
+
 describe("rule d: overlapping instances", () => {
   it("does not count the second of two overlapping instances as excess", () => {
     const lastRequest = START + 60 * MINUTE_MS;
@@ -117,7 +150,7 @@ describe("rule d: overlapping instances", () => {
       () => 8.58,
     );
 
-    const checked = input(WINDOW, {
+    const checked = idleInput(WINDOW, {
       logs: logs([
         eventRow(lastRequest, "route.settled", { requestId: "r", route: "/api/x", durationMs: 1 }),
       ]),

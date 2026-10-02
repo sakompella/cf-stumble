@@ -9,6 +9,7 @@ import {
   telemetry,
   WORKER,
 } from "./fixtures.mts";
+import { DEFAULT_IDLE_LIMIT_MS } from "./thresholds.mts";
 import { parseApplications, parseInstances, parseMetrics, parseTelemetry } from "./parse.mts";
 
 describe("telemetry parsing", () => {
@@ -160,7 +161,7 @@ describe("command line", () => {
       parsed.kind === "options"
         ? [parsed.options.window, parsed.options.idleLimitMs, parsed.options.json]
         : [],
-      [{ fromMs: 8 * 3_600_000, toMs: 10 * 3_600_000 }, 20 * 60_000, true],
+      [{ fromMs: 8 * 3_600_000, toMs: 10 * 3_600_000 }, DEFAULT_IDLE_LIMIT_MS, true],
     );
     assert.equal(parseOptions(["--since", "2h"], 0).kind, "invalid");
     assert.equal(

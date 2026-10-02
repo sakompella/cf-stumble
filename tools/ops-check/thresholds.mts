@@ -4,6 +4,7 @@
  * These are reporting thresholds for an operator, not runtime limits. Each one is tuned to catch
  * a specific incident within an hour: the 09-26 credential poller and the 09-27 unowned CPU run.
  */
+import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.ts";
 import { MINUTE_MS } from "./model.mts";
 
 /** A request that ran this long held the workspace long enough to matter; the poller ran 90 s. */
@@ -40,8 +41,11 @@ export const METRICS_LAG_MS = 10 * MINUTE_MS;
 /** A window that ends this close to the time of the check is read as ending at the present. */
 export const LIVE_SLACK_MS = 60_000;
 
-/** Default idle limit, as a parameter of the check. */
-export const DEFAULT_IDLE_LIMIT_MS = 20 * MINUTE_MS;
+/**
+ * Default idle limit, as a parameter of the check: the limit after which the Host stops an idle
+ * container. It is the Host's own constant, so the check follows a change to it.
+ */
+export const DEFAULT_IDLE_LIMIT_MS = WORKSPACE_IDLE_STOP_MS;
 
 /**
  * Time after `workspace.container.started` that counts as owner work. The launch call returns

@@ -7,6 +7,7 @@
  */
 import type { JsonRecord, JsonValue } from "../browser-harness/json.mts";
 import { BUCKET_MS, HOUR_MS, MINUTE_MS, type CheckInput, type TimeWindow } from "./model.mts";
+import { DEFAULT_IDLE_LIMIT_MS } from "./thresholds.mts";
 import { parseMetrics, parseTelemetry } from "./parse.mts";
 
 export const PROVISIONED_MEMORY_BYTES = 8 * 1024 ** 3;
@@ -123,7 +124,7 @@ export function input(
     worker: WORKER,
     nowMs,
     window,
-    idleLimitMs: 20 * MINUTE_MS,
+    idleLimitMs: DEFAULT_IDLE_LIMIT_MS,
     instances: none,
     ...sources,
   };
@@ -206,7 +207,7 @@ export function incident0927(extraRows: readonly JsonRecord[] = []): CheckInput 
   });
 }
 
-/** One owner request at 09:00 starts a 4-minute turn. The container idles 20 minutes, then stops. */
+/** One owner request at 09:00 starts a 4-minute turn. The container idles 10 minutes, then the Host stops it. */
 export function healthyDay(extraRows: readonly JsonRecord[] = []): CheckInput {
   const window = { fromMs: at("2026-09-30T00:00:00Z"), toMs: at("2026-10-01T00:00:00Z") };
   const turnEnd = at("2026-09-30T09:04:00Z");
@@ -219,20 +220,20 @@ export function healthyDay(extraRows: readonly JsonRecord[] = []): CheckInput {
     }),
     eventRow(at("2026-09-30T09:00:00Z"), "workspace.rpc", { requestId: "req-a", durationMs: 350 }),
     eventRow(turnEnd, "turn.settled", { totalMs: 4 * MINUTE_MS, ending: "saved" }),
-    eventRow(at("2026-09-30T09:24:00Z"), "workspace.container.stopped", {
+    eventRow(at("2026-09-30T09:14:00Z"), "workspace.container.stopped", {
       reasonCode: "normal-exit",
       reasonSource: "unknown",
     }),
   ];
 
-  const active = { fromMs: at("2026-09-30T09:00:00Z"), toMs: at("2026-09-30T09:25:00Z") };
+  const active = { fromMs: at("2026-09-30T09:00:00Z"), toMs: at("2026-09-30T09:15:00Z") };
   const cpu = bucketsOf(active, (t) => (t < turnEnd ? 90 : 4));
 
   return input(window, {
     logs: logs([...events, ...extraRows]),
     metrics: metrics(
       cpu,
-      bucketsOf(active, (t) => (t < at("2026-09-30T09:20:00Z") ? 5 : 4)),
+      bucketsOf(active, (t) => (t < at("2026-09-30T09:10:00Z") ? 5 : 4)),
     ),
   });
 }
