@@ -1,12 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
-import { capturedEvents } from "../log-capture.js";
+import { capturedEvents, named } from "../log-capture.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function controller(options: Readonly<{ alarmFails?: boolean }> = {}) {
+function controller(options: Readonly<{ alarmFails?: boolean; destroyFails?: boolean }> = {}) {
   const alarms: number[] = [];
   const clock = { now: 1_000 };
 
@@ -22,7 +22,10 @@ function controller(options: Readonly<{ alarmFails?: boolean }> = {}) {
     },
     containerRunning: () => true,
     closeWorkspace: () => Promise.resolve(),
-    stopContainer: () => Promise.resolve(),
+    stopContainer: () =>
+      options.destroyFails === true
+        ? Promise.reject(new Error("destroy failed"))
+        : Promise.resolve(),
   });
 
   return { idle, alarms, clock };
@@ -78,4 +81,41 @@ test("an alarm that cannot re-arm itself fails, so the platform runs it again", 
     "the platform's retry tries the write again",
   ).rejects.toThrow();
   expect(failing.alarms).toHaveLength(3);
+});
+
+test("activity re-arms after a failed re-arm, because the alarm is no longer considered armed", async () => {
+  capturedEvents();
+  const { idle, alarms, clock } = controller({ alarmFails: true });
+  idle.begin()();
+  await Promise.resolve();
+  await Promise.resolve();
+  clock.now = 5_000;
+  await expect(idle.onAlarm()).rejects.toThrow("alarm write failed");
+  const before = alarms.length;
+
+  idle.touch();
+
+  expect(alarms.length, "the next activity writes the alarm again").toBe(before + 1);
+});
+
+test("a stop whose destroy and retry write both fail logs the stop and fails the alarm", async () => {
+  const events = capturedEvents();
+  const { idle, clock } = controller({ destroyFails: true, alarmFails: true });
+  idle.begin()();
+  await Promise.resolve();
+  await Promise.resolve();
+  clock.now = 11_000;
+
+  await expect(idle.onAlarm()).rejects.toThrow("alarm write failed");
+  expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
+    outcome: "threw",
+  });
+});
+
+test("the idle check records how many times the platform retried the alarm", async () => {
+  const events = capturedEvents();
+  const { idle } = controller();
+  await idle.onAlarm(2);
+
+  expect(named(events(), "workspace.idle-check").at(0)).toMatchObject({ retryCount: 2 });
 });

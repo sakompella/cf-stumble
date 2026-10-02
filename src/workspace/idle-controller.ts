@@ -110,6 +110,7 @@ export class WorkspaceIdleController implements ProjectActivity {
     try {
       await this.#ports.setAlarm(atMs);
     } catch (cause) {
+      logRedactedCause("workspace.idle-alarm: re-arm failed", cause);
       this.#armed = false;
 
       throw cause;
@@ -135,7 +136,7 @@ export class WorkspaceIdleController implements ProjectActivity {
    * Handle the alarm: decide, and when the limit has passed with nothing in flight, stop the
    * container. It re-arms only while a container runs, and only for a later check.
    */
-  async onAlarm(): Promise<void> {
+  async onAlarm(retryCount = 0): Promise<void> {
     this.#armed = false;
     const nowMs = this.#ports.nowMs();
     const running = this.#ports.containerRunning();
@@ -151,6 +152,7 @@ export class WorkspaceIdleController implements ProjectActivity {
       idleLimitMs: this.#ports.idleLimitMs,
       running,
       decision: decision.kind,
+      retryCount,
     });
 
     if (!running) return;
