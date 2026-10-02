@@ -34,6 +34,11 @@ export const READY_CANDIDATE_COMMIT = "def456";
 
 export const BROKEN_CANDIDATE_COMMIT = "broken456";
 
+export const BUILD_FAILED_COMMIT = "buildfail789";
+
+/** Command output the page must show as text: it holds markup that would run if it were HTML. */
+export const BUILD_FAILED_STDERR = "error TS2322: <img src=x onerror=alert(1)> & more";
+
 export const INITIAL_GENERATION: GenerationState = {
   generations: [FIRST_GENERATION],
   activeLabel: 1,
@@ -78,6 +83,23 @@ export function statusPayload(state: GenerationState, scenario: HarnessScenario)
 }
 
 function preparation(record: GenerationRecord): JsonValue {
+  if (record.harnessCommit === BUILD_FAILED_COMMIT) {
+    return {
+      ok: false,
+      problem: {
+        code: "build-step-failed",
+        harnessCommit: record.harnessCommit,
+        step: "build-pi",
+        exitCode: 2,
+        diagnostics: {
+          stdoutTail: "compiling 12 files",
+          stderrTail: BUILD_FAILED_STDERR,
+          truncated: true,
+        },
+      },
+    };
+  }
+
   if (record.status === "failed") {
     return { ok: false, problem: { code: "startup-check-failed" } };
   }
@@ -122,7 +144,10 @@ export function submitGeneration(state: GenerationState, harnessCommit: string):
   const record: GenerationRecord = {
     label: Math.max(0, ...labels) + 1,
     harnessCommit,
-    status: harnessCommit === BROKEN_CANDIDATE_COMMIT ? "failed" : "ready",
+    status:
+      harnessCommit === BROKEN_CANDIDATE_COMMIT || harnessCommit === BUILD_FAILED_COMMIT
+        ? "failed"
+        : "ready",
   };
 
   return submitted({ ...state, generations: [...state.generations, record] }, record);

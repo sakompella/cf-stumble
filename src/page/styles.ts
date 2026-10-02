@@ -94,6 +94,15 @@ export const OWNER_PAGE_STYLES = `
     white-space: pre-wrap;
     word-break: break-word;
   }
+  .build-output {
+    background: rgba(128, 128, 128, 0.12);
+    border-radius: 4px;
+    max-height: 20rem;
+    overflow: auto;
+    padding: 0.4rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
   .message .text { background: none; padding: 0; }
   .tool-call { margin: 0.4rem 0; }
   .tool-call summary { cursor: pointer; font-family: ui-monospace, monospace; font-size: 0.85rem; }

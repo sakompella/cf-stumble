@@ -54,6 +54,8 @@ export const OWNER_PAGE_IDS = {
   submitGenerationLabel: "submit-generation-label",
   submitEpoch: "submit-epoch",
   submitPreparation: "submit-preparation",
+  submitDiagnostics: "submit-diagnostics",
+  submitDiagnosticsText: "submit-diagnostics-text",
 
   activateLabelInput: "activate-label-input",
   activateButton: "activate-button",

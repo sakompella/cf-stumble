@@ -13,12 +13,45 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
     var payload = result.payload;
     if (!payload || payload.ok !== true) {
       setText("${ID.submitStatus}", problemText(payload, result.status));
+      renderDiagnostics(null);
       return;
     }
     setText("${ID.submitStatus}", "ok");
     setText("${ID.submitGenerationLabel}", text(payload.outcome.generation.label));
     setText("${ID.submitEpoch}", text(payload.outcome.epoch));
     setText("${ID.submitPreparation}", preparationText(payload.preparation));
+    renderDiagnostics(payload.preparation);
+  }
+
+  // The tail of a failed build step. It is untrusted command output, so it only ever goes through
+  // textContent, and the details element stays closed until the reader opens it.
+  function renderDiagnostics(preparation) {
+    var box = node("${ID.submitDiagnostics}");
+    var diagnostics = preparation && preparation.ok === false && preparation.problem
+      ? preparation.problem.diagnostics
+      : null;
+    if (box === null) {
+      return;
+    }
+    if (!diagnostics) {
+      box.hidden = true;
+      box.open = false;
+      setText("${ID.submitDiagnosticsText}", "");
+      return;
+    }
+    var parts = [];
+    if (diagnostics.stderrTail) {
+      parts.push("stderr:\\n" + text(diagnostics.stderrTail));
+    }
+    if (diagnostics.stdoutTail) {
+      parts.push("stdout:\\n" + text(diagnostics.stdoutTail));
+    }
+    if (diagnostics.truncated === true) {
+      parts.push("(output truncated to the last 2000 characters of each stream)");
+    }
+    setText("${ID.submitDiagnosticsText}", parts.join("\\n\\n"));
+    box.hidden = false;
+    box.open = false;
   }
 
   function preparationText(preparation) {

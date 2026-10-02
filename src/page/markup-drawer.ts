@@ -25,6 +25,10 @@ const submissionPanel = `
           ${value("labeled generation", ID.submitGenerationLabel)}
           ${value("epoch after labeling", ID.submitEpoch)}
           ${value("preparation check", ID.submitPreparation)}
+          <details id="${ID.submitDiagnostics}" hidden>
+            <summary>build output</summary>
+            <pre class="build-output" id="${ID.submitDiagnosticsText}"></pre>
+          </details>
         </div>`;
 
 function controlPanel(panel: {
