@@ -40,6 +40,12 @@ export const METRICS_LAG_MS = 10 * MINUTE_MS;
 /** Default idle limit, as a parameter of the check. */
 export const DEFAULT_IDLE_LIMIT_MS = 20 * MINUTE_MS;
 
+/**
+ * Time after `workspace.container.started` that counts as owner work. The launch call returns
+ * before the container boots, and the first status read and provisioning run before they log.
+ */
+export const STARTUP_GRACE_MS = 10 * MINUTE_MS;
+
 /** Most evidence ids printed on one line. */
 export const MAX_EVIDENCE = 3;
 

@@ -1,3 +1,5 @@
+import { workSpan, type Interval } from "./intervals.mts";
+import { STARTUP_GRACE_MS } from "./thresholds.mts";
 import type { AppEvent } from "./model.mts";
 
 const OWNER_WORK_PREFIXES = [
@@ -9,6 +11,7 @@ const OWNER_WORK_PREFIXES = [
   "workspace.clone",
   "workspace.reset",
   "github-credential.",
+  "harness-build.",
 ];
 
 /**
@@ -27,4 +30,29 @@ export function isOwnerActivity(event: AppEvent): boolean {
 /** Routes the owner API serves. Other paths (assets, the page) never touch the workspace. */
 export function isOwnerRoute(route: string): boolean {
   return route.startsWith("/api/");
+}
+
+/**
+ * The span the container is explained by work: each owner event's work, plus the startup grace
+ * after a launch. A launch is the one lifecycle event that explains time, because a cold start
+ * and its first status read run before any request logs. No other lifecycle event owns time.
+ */
+export function workSpans(events: readonly AppEvent[]): readonly Interval[] {
+  return events.flatMap((event): Interval[] => {
+    if (event.name === "workspace.container.started") {
+      return [{ beginMs: event.atMs, endMs: event.atMs + STARTUP_GRACE_MS }];
+    }
+
+    return isOwnerWork(event) ? [workSpan(event)] : [];
+  });
+}
+
+/** `workSpans` plus requests that settled without touching the workspace. */
+export function activitySpans(events: readonly AppEvent[]): readonly Interval[] {
+  return [
+    ...workSpans(events),
+    ...events.flatMap((event): Interval[] =>
+      event.name === "route.settled" ? [workSpan(event)] : [],
+    ),
+  ];
 }

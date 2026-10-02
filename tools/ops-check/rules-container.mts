@@ -7,9 +7,9 @@
  * the log has one line at its end.
  */
 import { firstIds, isoMinute } from "./evidence.mts";
-import { coveredMs, mergeIntervals, touches, workSpan, type Interval } from "./intervals.mts";
+import { coveredMs, mergeIntervals, touches, type Interval } from "./intervals.mts";
 import type { Horizon } from "./horizon.mts";
-import { isOwnerActivity, isOwnerWork } from "./ownership.mts";
+import { activitySpans, isOwnerActivity, workSpans } from "./ownership.mts";
 import {
   BUSY_CPU_SECONDS_PER_BUCKET,
   IDLE_OVERRUN_TOLERANCE_MS,
@@ -64,9 +64,7 @@ export function unownedCpu(
   window: TimeWindow,
   horizon: Horizon,
 ): readonly Finding[] {
-  const owned = mergeIntervals(
-    logs.events.filter((event) => isOwnerWork(event)).map((event) => workSpan(event)),
-  );
+  const owned = mergeIntervals(workSpans(logs.events));
 
   const unowned = cpu
     .filter(
@@ -107,9 +105,7 @@ export function unownedCpu(
  * keep them up.
  */
 function allowedRunning(logs: LogData, idleLimitMs: number): readonly Interval[] {
-  const events = logs.events
-    .filter((event) => isOwnerActivity(event))
-    .map((event) => workSpan(event));
+  const events = activitySpans(logs.events);
 
   const invocations = logs.invocations.map((invocation) => ({
     beginMs: invocation.atMs - invocation.wallTimeMs,
