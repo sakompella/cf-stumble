@@ -139,6 +139,7 @@ test("offline fake workspace retries provisioning after an interrupted labeled c
     harnessCommit: commit,
     step: "checkout",
     exitCode: 3,
+    diagnostics: { stdoutTail: "", stderrTail: "build failed", truncated: false },
   });
   expect(
     host.requests.filter(
@@ -169,6 +170,7 @@ test("offline fake workspace refuses an unexpected origin before the labeled che
     harnessCommit: commit,
     step: "provision",
     exitCode: 3,
+    diagnostics: { stdoutTail: "", stderrTail: "build failed", truncated: false },
   });
   expect(host.requests).toEqual([{ kind: "build-step", harnessCommit: commit, step: "provision" }]);
 });

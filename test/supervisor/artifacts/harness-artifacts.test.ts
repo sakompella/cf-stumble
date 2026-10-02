@@ -65,7 +65,13 @@ class CountingBuilder implements HarnessModuleMapBuilder {
 class RefusingBuilder implements HarnessModuleMapBuilder {
   build(harnessCommit: string): Promise<HarnessBuildResult> {
     return Promise.resolve(
-      Result.err({ code: "build-step-failed", harnessCommit, step: "build-pi", exitCode: 2 }),
+      Result.err({
+        code: "build-step-failed",
+        harnessCommit,
+        step: "build-pi",
+        exitCode: 2,
+        diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
+      }),
     );
   }
 }
@@ -186,6 +192,7 @@ test("reports a failed build and stores nothing", async () => {
     harnessCommit: commits.failed,
     step: "build-pi",
     exitCode: 2,
+    diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
   });
   expect(outcome.rows).toBe(0);
 });

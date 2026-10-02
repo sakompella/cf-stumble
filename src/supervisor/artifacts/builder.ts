@@ -2,17 +2,18 @@ import { Result } from "better-result";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import type { CommandOutput } from "../../workspace/index.js";
-import { redactCredentials } from "../../github/index.js";
 import {
   isTimeoutFailure,
   logCommit,
   logRedactedCause,
+  redactLogText,
   timed,
   type TimedOutcome,
 } from "../../diagnostics.js";
 import {
   moduleMapFromBuildOutput,
   planHarnessBuild,
+  type BuildStepDiagnostics,
   type BuiltModuleMapFile,
   type HarnessBuildConfiguration,
   type HarnessBuildProblem,
@@ -90,22 +91,16 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     }
 
     if (output.exitCode !== 0) {
-      // A build failure reaches the browser as a step name and an exit code, which says nothing
-      // about what the command reported. The tail of the step's own output is the only account of
-      // why the build failed, and it exists nowhere else once the build directory is cleared. A
-      // fetch prints the remote it used, so the tail is redacted before it is cut: cutting first
-      // could leave a partial token too short for redaction to recognize.
-      console.error(`harness build step ${step.name} exited ${output.exitCode}`, {
-        harnessCommit,
-        stdout: redactCredentials(output.stdout).slice(-2000),
-        stderr: redactCredentials(output.stderr).slice(-2000),
-      });
-
+      // The tail of the step's own output is the only account of why the build failed, and it
+      // exists nowhere else once the build directory is cleared. It goes to the owner in the
+      // submission response and is not logged: command output can hold file contents. The log
+      // keeps the step, the exit code, and the duration (`buildOutcome`).
       return Result.err({
         code: "build-step-failed",
         harnessCommit,
         step: step.name,
         exitCode: output.exitCode,
+        diagnostics: stepDiagnostics(output),
       });
     }
 
@@ -142,6 +137,20 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 
     return moduleMapFromBuildOutput(harnessCommit, decoded);
   }
+}
+
+const DIAGNOSTIC_TAIL_LIMIT = 2_000;
+
+/** The redacted tail of each stream. Redaction runs first: a cut could leave half a token. */
+function stepDiagnostics(output: CommandOutput): BuildStepDiagnostics {
+  const stdout = redactLogText(output.stdout);
+  const stderr = redactLogText(output.stderr);
+
+  return {
+    stdoutTail: stdout.slice(-DIAGNOSTIC_TAIL_LIMIT),
+    stderrTail: stderr.slice(-DIAGNOSTIC_TAIL_LIMIT),
+    truncated: stdout.length > DIAGNOSTIC_TAIL_LIMIT || stderr.length > DIAGNOSTIC_TAIL_LIMIT,
+  };
 }
 
 /** A build step's log outcome: `ok`, or the problem code and, for a failed command, its exit code. */

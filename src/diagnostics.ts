@@ -55,7 +55,7 @@ const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
  * Every pattern the log recognizes, applied to whole text. Callers cut only after this runs:
  * cutting first can leave a token's header and claims without the rest the pattern needs.
  */
-function redactLogText(text: string, knownToken?: string): string {
+export function redactLogText(text: string, knownToken?: string): string {
   return redactCredentials(text, knownToken).replaceAll(JWT_PATTERN, REDACTED);
 }
 

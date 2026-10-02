@@ -25,6 +25,17 @@ export type BuiltModuleMapFile = Readonly<{
   modules: readonly Readonly<{ name: string; source: string }>[];
 }>;
 
+/**
+ * What a failed build step printed: the end of each stream, with credentials redacted before the
+ * cut. It travels only in the owner's submission response, never in a log. `truncated` is true when
+ * either stream was longer than its tail.
+ */
+export type BuildStepDiagnostics = Readonly<{
+  stdoutTail: string;
+  stderrTail: string;
+  truncated: boolean;
+}>;
+
 export type HarnessBuildProblem =
   | { readonly code: "build-workspace-unavailable"; readonly harnessCommit: string }
   | {
@@ -32,6 +43,7 @@ export type HarnessBuildProblem =
       readonly harnessCommit: string;
       readonly step: HarnessBuildStepName;
       readonly exitCode: number;
+      readonly diagnostics: BuildStepDiagnostics;
     }
   | { readonly code: "build-output-missing"; readonly harnessCommit: string }
   | {

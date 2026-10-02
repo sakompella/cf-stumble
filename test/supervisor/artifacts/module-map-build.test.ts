@@ -146,6 +146,7 @@ test("reports a failed archive extraction as the checkout step, not as a build f
     harnessCommit: commit,
     step: "checkout",
     exitCode: 3,
+    diagnostics: { stdoutTail: "", stderrTail: "build failed", truncated: false },
   });
 });
 

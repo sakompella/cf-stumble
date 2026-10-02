@@ -7,6 +7,7 @@ import type { GenerationRequest } from "../../src/supervisor/control/index.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
+import { everythingLogged } from "../log-capture.js";
 import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -172,6 +173,42 @@ test("returns a build failure as a preparation problem rather than a transport e
     ok: true,
     preparation: { ok: false, problem: { code: "build-workspace-unavailable", harnessCommit } },
   });
+});
+
+test("returns a failed build step's output tail to the owner and writes none of it to a log", async () => {
+  const diagnostics = {
+    stdoutTail: "",
+    stderrTail: "error TS2322: PRIVATE-COMPILER-OUTPUT",
+    truncated: false,
+  };
+
+  const response = await routeOwnerApiRequest(
+    submitRequest(submissionBody()),
+    supervisor({
+      controlGeneration() {
+        return Promise.resolve(labeled);
+      },
+      prepareGeneration() {
+        return Promise.resolve({
+          ok: false,
+          problem: {
+            code: "build-step-failed",
+            harnessCommit,
+            step: "build-pi",
+            exitCode: 2,
+            diagnostics,
+          },
+        });
+      },
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toMatchObject({
+    preparation: { ok: false, problem: { code: "build-step-failed", diagnostics } },
+  });
+  expect(everythingLogged()).not.toContain("PRIVATE-COMPILER-OUTPUT");
 });
 
 test("prepares nothing when the control operation rejects the submission", async () => {

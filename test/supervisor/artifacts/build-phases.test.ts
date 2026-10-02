@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { capturedEvents, everythingLogged, named } from "../../log-capture.js";
 import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
@@ -98,6 +99,7 @@ test("a failing phase names that phase, and the phases after it never run", asyn
       harnessCommit: commit,
       step: outcome.failing,
       exitCode: 7,
+      diagnostics: { stdoutTail: "", stderrTail: `${outcome.failing} failed`, truncated: false },
     });
     expect(outcome.steps.at(-1), "a build stops at the phase that failed").toBe(outcome.failing);
     expect(
@@ -136,19 +138,72 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("a failed phase logs its output tail with every credential redacted", async () => {
-  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "log").mockImplementation(() => {});
+test("a failed phase gives the owner its output tail with every credential redacted, and logs none of it", async () => {
+  const events = capturedEvents();
 
   const built = await new WorkspaceHostModuleMapBuilder(
     namespaceFor(new TokenEchoingHost(phaseNames[0] ?? "")),
     workspaceName,
   ).build(commit);
 
-  expect(built.isErr()).toBe(true);
-  const written = JSON.stringify(errors.mock.calls);
-  expect(written, "the tail is still there to explain the failure").toContain(
+  if (built.isOk() || built.error.code !== "build-step-failed") {
+    throw new Error("the phase must fail with a build-step-failed problem");
+  }
+
+  const { diagnostics } = built.error;
+  expect(diagnostics.stderrTail, "the owner can read why the build failed").toContain(
     "authentication failed",
   );
-  expect(written, "a log is not a place a credential may be").not.toContain(FAKE_TOKEN);
+  expect(JSON.stringify(diagnostics), "a credential never reaches even the owner").not.toContain(
+    FAKE_TOKEN,
+  );
+  expect(diagnostics.truncated).toBe(false);
+
+  const logged = everythingLogged();
+  expect(logged, "command output is not written to a log").not.toContain("authentication failed");
+  expect(logged).not.toContain("x-access-token");
+  expect(logged).not.toContain(FAKE_TOKEN);
+  expect(named(events(), "harness-build.step").at(-1)).toMatchObject({
+    step: phaseNames[0],
+    outcome: "build-step-failed",
+    exitCode: 7,
+  });
 });
+
+test("the tail keeps the end of a long stream and says it was cut", async () => {
+  const host = new LongOutputHost(phaseNames[0] ?? "");
+
+  const built = await new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName).build(
+    commit,
+  );
+
+  if (built.isOk() || built.error.code !== "build-step-failed") {
+    throw new Error("the phase must fail with a build-step-failed problem");
+  }
+
+  expect(built.error.diagnostics.stderrTail).toHaveLength(2_000);
+  expect(built.error.diagnostics.stderrTail.endsWith("THE END")).toBe(true);
+  expect(built.error.diagnostics.truncated).toBe(true);
+});
+
+class LongOutputHost implements BuildWorkspaceHost {
+  private readonly failing: string;
+
+  constructor(failing: string) {
+    this.failing = failing;
+  }
+
+  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+    const failed = request.kind === "build-step" && request.step === this.failing;
+
+    return Promise.resolve({
+      ok: true,
+      result: {
+        kind: "command",
+        stdout: "{}",
+        stderr: failed ? `${"x".repeat(5_000)}THE END` : "",
+        exitCode: failed ? 7 : 0,
+      },
+    });
+  }
+}
