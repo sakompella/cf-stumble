@@ -176,6 +176,10 @@ approval was always in force; nothing in this integration waits on it. The rules
 - Every paid run keeps its output with the release evidence, so the next reader sees the measurement
   rather than the claim.
 
+## Container lifetime
+
+The container does not stop by itself while the Workspace Host exists. Computer's backend accepts the WebSocket that computerd opens back to the Host, and nothing closes it, so the open request keeps the Durable Object active and the platform never sees it as inactive. The Host therefore stops an idle container itself: after ten minutes with no Host RPC in flight, no `exec` in flight, and no turn lease open, an alarm closes the `Workspace` and destroys the container (ADR-0043). A destroyed container loses only what lived outside the durable store, such as `node_modules`; every `exec` pulls its changes into the store before it settles. The container's idle CPU is the shim's disk walk, which polls every five seconds (ADR-0044).
+
 ## Deployment risk
 
 Dynamic Workers and Durable Object facets are beta, and Computer is preview software. Paid-account tests must exercise the exact Worker Loader, facet, Computer, and workspace-capability path before the project treats the integration as deployable.
