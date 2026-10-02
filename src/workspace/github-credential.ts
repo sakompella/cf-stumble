@@ -129,9 +129,8 @@ export function parseGitHubCredentialRequest(
  * Hand the token to `gh` on standard input, which is what `--with-token` reads.
  *
  * The token is an argument of this one call and of nothing else. It is not in the command text, so
- * no process list or shell history can hold it, and it is not written anywhere, so no install —
- * failed, interrupted, or successful — can leave it on a filesystem to be found later. There is
- * therefore nothing to clean up after this returns.
+ * no process list or shell history can hold it. `gh` writes it to its own configuration, which is
+ * the credential itself. Only a failed durable sync needs a cleanup, which `runInstall` does.
  */
 async function installCredential(
   operations: Readonly<{ lenient: WorkspaceOperations; durable: WorkspaceOperations }>,
@@ -173,7 +172,14 @@ async function runInstall(
         source: logoutCredentialSource(),
         cwd: "/",
         timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
-      }).catch(() => void 0);
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A caught value can be anything.
+      }).catch((logoutCause: unknown) => {
+        logRedactedCause(
+          `github-credential.logout: ${failureLabel(logoutCause)}`,
+          logoutCause,
+          token,
+        );
+      });
     }
 
     throw cause;
