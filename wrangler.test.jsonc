@@ -70,8 +70,10 @@
       "instance_type": "standard-3",
     },
   ],
-  // The harness repository this deployment builds from. A fork sets it to its own repository;
-  // empty means the repository named in `src/harness-build.ts`. See `docs/deploy.md`.
-  "vars": { "HARNESS_REPOSITORY_URL": "", "GITHUB_OAUTH_CLIENT_ID": "" },
+  // Instance values are Worker secrets, set once per instance and never committed. A deployment
+  // from this file fails while a required secret is unset. The optional ones (HARNESS_REPOSITORY_URL,
+  // GITHUB_OAUTH_CLIENT_ID, GH_TOKEN) are left out on purpose, because listing a name makes it
+  // required. See `cloudflare.config.ts` and `docs/deploy.md`.
+  "secrets": { "required": ["CF_ACCESS_AUD", "CF_ACCESS_OWNER_SUB", "CF_ACCESS_TEAM_DOMAIN"] },
   "worker_loaders": [{ "binding": "LOADER" }],
 }

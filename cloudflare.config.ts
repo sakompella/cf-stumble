@@ -68,10 +68,17 @@ export default defineConfig({
       }),
     },
     env: {
-      // The harness repository this deployment builds from. A fork sets it to its own repository;
-      // empty means the repository named in `src/harness-build.ts`. See `docs/deploy.md`.
-      HARNESS_REPOSITORY_URL: bindings.text(""),
-      GITHUB_OAUTH_CLIENT_ID: bindings.text(""),
+      // Instance values are Worker secrets, set once per instance and never committed. `cf deploy`
+      // removes plain-text variables that this file does not declare, but keeps secrets, so a value
+      // that differs per instance cannot live in `vars`. A declared secret is required: a deploy
+      // fails while it is unset. Without these three the Worker refuses every request.
+      CF_ACCESS_TEAM_DOMAIN: bindings.secret(),
+      CF_ACCESS_AUD: bindings.secret(),
+      CF_ACCESS_OWNER_SUB: bindings.secret(),
+      // Three more secrets are optional, so they are deliberately not declared here: declaring one
+      // would make it required. `HARNESS_REPOSITORY_URL` (a fork's own harness repository; empty
+      // means the one in `src/harness-build.ts`), `GITHUB_OAUTH_CLIENT_ID`, and `GH_TOKEN` are set
+      // with `wrangler secret put`, and every later deploy keeps them. See `docs/deploy.md`.
       SUPERVISOR: bindings.durableObject({ worker: WORKER_NAME, exportName: "Supervisor" }),
       WORKSPACE_HOST: bindings.durableObject({ worker: WORKER_NAME, exportName: "WorkspaceHost" }),
       LOADER: bindings.workerLoader(),

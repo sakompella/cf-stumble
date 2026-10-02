@@ -26,6 +26,7 @@ type Facts = Readonly<{
   durableObjectExports: unknown;
   container: unknown;
   vars: unknown;
+  secrets: unknown;
   workerLoaders: unknown;
   ai: unknown;
 }>;
@@ -125,7 +126,8 @@ function wranglerFacts(name: string): Facts {
       maxInstances: at(container, "max_instances"),
       instanceType: at(container, "instance_type"),
     },
-    vars: at(wrangler, "vars"),
+    vars: at(wrangler, "vars") ?? {},
+    secrets: sorted(list(at(wrangler, "secrets", "required"))),
     workerLoaders: list(at(wrangler, "worker_loaders")).map((loader) => at(loader, "binding")),
     ai: at(wrangler, "ai", "binding"),
   };
@@ -178,6 +180,9 @@ function cloudflareFacts(): Facts {
       maxInstances: at(container, "maxInstances"),
       instanceType: at(container, "instanceType"),
     },
+    secrets: sorted(
+      env.filter(([, binding]) => at(binding, "type") === "secret").map(([key]) => key),
+    ),
     vars: Object.fromEntries(
       env
         .filter(([, binding]) => at(binding, "type") === "text")
@@ -203,7 +208,7 @@ const WRANGLER_KEYS = [
   "name",
   "observability",
   "routes",
-  "vars",
+  "secrets",
   "worker_loaders",
   "workers_dev",
 ];
@@ -257,6 +262,19 @@ test("traces, logs, and Issues stay enabled with every rate at 1", () => {
 
   expect(cloudflareFacts().observability).toEqual(expected);
   expect(wranglerFacts("wrangler.jsonc").observability).toEqual(expected);
+});
+
+test("the instance values are exactly the three required Access secrets, and no plain variables", () => {
+  const secrets = ["CF_ACCESS_AUD", "CF_ACCESS_OWNER_SUB", "CF_ACCESS_TEAM_DOMAIN"];
+
+  for (const facts of [
+    cloudflareFacts(),
+    wranglerFacts("wrangler.jsonc"),
+    wranglerFacts("wrangler.test.jsonc"),
+  ]) {
+    expect(facts.secrets).toEqual(secrets);
+    expect(facts.vars).toEqual({});
+  }
 });
 
 test("every configuration declares exactly one container", () => {
