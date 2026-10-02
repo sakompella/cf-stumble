@@ -18,6 +18,8 @@ When you create or edit prose documentation, read `docs/agents/writing-style.md`
 
 Run `pnpm verify` before you claim anything works. It runs `build:pi`, `verify:vendor`, `verify:project-protocol`, typecheck, format check, lint, `test:tools`, `build:module-map`, `build:loaded-execution-env-fixture`, and the full test suite in that order. `test:tools` runs the vendored lint-rule tests under `tools/` with `node --test`, because Vitest only collects `test/` and `src/`. It takes about 50 seconds on the Mac. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
 
+After a staging deploy or an e2e run, run `pnpm ops:check` (see `docs/agents/design/observability.md`, "Checking a running deployment") before you claim it works. `pnpm verify` cannot see runtime faults such as a poller or an idle container that keeps running.
+
 A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
 
 ### Cloudflare CLI and configuration

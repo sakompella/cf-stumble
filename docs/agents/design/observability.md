@@ -85,6 +85,57 @@ Cloudflare Issues and Workers traces are on for this Worker (`observability.issu
 
 **Test warning.** `pnpm test` prints "Unexpected fields found in observability field: issues" for `wrangler.test.jsonc`. The vitest plugin bundles Wrangler 4.126, which does not know the field yet. The warning is harmless, and the file must keep the field so that the drift test passes.
 
+## Checking a running deployment
+
+`pnpm ops:check` reads one time window from the live account and applies six rules. It prints one line when everything is fine:
+
+```
+✓ ops-check cf-stumble 2026-10-02T14:00Z..16:00Z
+```
+
+Otherwise it prints one line per violation and exits 1:
+
+```
+✗ poller 38/h >= 20/h on /api/github/connection, 0 touch the workspace, 38 canceled 2026-09-26T18:00Z..21:00Z [inv:poll-0 inv:poll-1 inv:poll-2]
+```
+
+Each line names the rule, the measured value against its threshold, the window, and up to three evidence ids. An id is a `requestId`, an `inv:` platform request id, or the start of a metrics bucket. `--json` prints the same findings as JSON.
+
+```sh
+pnpm ops:check                                        # last 2 hours, Worker cf-stumble
+pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --from 2026-10-02T15:00:00Z
+pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 1d --idle-minutes 30 --json
+```
+
+Run it after a staging deploy or an e2e run, and when you want to know whether something is running that nobody asked for. It is not part of `pnpm verify`, because it needs a live account.
+
+**Credentials.** The command reads `CLOUDFLARE_API_TOKEN`, or the file named by `--token-file`. The file holds a bare token or the `cf` login JSON (`~/.config/cloudflare/config/default.json`). GraphQL needs an API token with Account Analytics Read. On 2026-10-02 the `cf` OAuth token also worked for the telemetry query, the Containers API, and GraphQL, but do not rely on that. The command sends a token only in the `Authorization` header and never prints it. With no token, it reports both sources as `unknown`. The account is `--account`, `CLOUDFLARE_ACCOUNT_ID`, or the only account the token sees.
+
+**Sources.**
+
+- Telemetry query (`workers/observability/telemetry/query`, `view: "events"`): every event with an `event` field, and every canceled fetch invocation (`$workers.outcome = canceled`). The platform record has `$workers.wallTimeMs` and the request URL, because a canceled call often writes no `route.settled`. Each query returns at most 2000 rows; a full answer is reported as `unknown`.
+- GraphQL `containersMetricsAdaptiveGroups` for CPU, in five-minute buckets, summed over instances. The command finds the application by name (`<worker>-*`) in the Containers API, which also gives the provisioned memory.
+- GraphQL `containersUsageAdaptiveGroups` for running time: `allocatedMemory` byte-seconds divided by provisioned memory and by 60 gives running minutes per bucket. `containerUptime` returned 0 in every bucket on 2026-10-02, so the command does not use it. The usage dataset also has its own `cpuTimeSec`, which was larger than the metrics dataset for the same bucket; the command uses the metrics dataset.
+
+**Rules.** All thresholds are named constants in `tools/ops-check/thresholds.mts`. They are reporting thresholds, not runtime limits.
+
+| Rule               | Fires when                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `slow-requests`    | One owner route has at least 10 requests in a rolling hour that are slow (`route.settled` with `durationMs` of 30 s or more) or canceled by the platform.                      |
+| `poller`           | One route has at least 20 calls in a rolling hour, and at least 10 touch the workspace (their `requestId` appears on workspace or credential events) or over 10% are canceled. |
+| `unowned-cpu`      | At least 30 minutes of consecutive five-minute buckets above 30 CPU-seconds (about 0.1 vCPU), none overlapping owner work in the logs.                                         |
+| `ran-past-idle`    | A run of running buckets holds more than 10 minutes of allocated time beyond the idle limit (default 20 minutes, `--idle-minutes`) after the last owner activity.              |
+| `running-close`    | Any `workspace.backend.closed` with `running: true`.                                                                                                                           |
+| `unexplained-stop` | Any `workspace.container.stopped` with `reasonCode` `unknown` at warn or error.                                                                                                |
+| `error-events`     | Any event at error level, one finding per event name.                                                                                                                          |
+| `unknown`          | A source failed, hit its row limit, or returned nothing while another source shows activity.                                                                                   |
+
+Owner work is a `turn.*`, `workspace.rpc`, `workspace.exec`, `workspace.command`, `workspace.provision*`, `workspace.clone`, `workspace.reset*` or `github-credential.*` event. Most events are written when the work ends, so the command places each one on the timeline from `timestamp - durationMs` (or `totalMs`, `elapsedMs`) to `timestamp`. A long exec owns the buckets it ran through. For `ran-past-idle`, every owner activity (including `route.settled` and canceled invocations) also keeps the container allowed to run for the idle limit after it. The command reads the logs from one idle limit before the window starts, so a request just before the window still counts. It assumes an invocation's timestamp is its end; this is unverified.
+
+**Missing data is never zero.** A rule runs only when every source it reads is usable. If the metrics are missing, empty, or in error, `unowned-cpu` and `ran-past-idle` do not run, and the command prints an `unknown` line for each failing source instead. The same holds for empty logs, because "no owner events" could mean "no data". An `unknown` line also exits 1: the command cannot say that all is well.
+
+**Tests.** `tools/ops-check/*.test.ts` run in `pnpm test:tools`. `fixtures.mts` builds hand-made API responses for four days: the 09-26 poller (95 s polls, 90 s cancellations), the 09-27 run (19 hours of 0.6 to 1.0 vCPU and four log events), a healthy day, and a day with no metrics. Each response goes through the same parser the command uses. The tests check that each rule fires at its threshold and not one step below. Fetching and the command line (`fetch.mts`, `run.mts`) have no tests and stay outside the gate, like `pnpm harness:browser`.
+
 ## Route events and request ids
 
 Every owner API request that reaches the workspace gets a `requestId`, a fresh UUID that the Worker
