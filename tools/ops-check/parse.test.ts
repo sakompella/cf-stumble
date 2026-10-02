@@ -94,19 +94,27 @@ describe("metrics parsing", () => {
 });
 
 describe("containers API parsing", () => {
-  it("reads instances and skips rows without a state or start time", () => {
+  it("reads running instances from status.updated_at, not started_at", () => {
     const parsed = parseInstances({
       result: {
         instances: [
-          { id: "i1", started_at: "2026-10-02T13:17:54Z", status: { state: "running" } },
-          { id: "i2", status: { state: "running" } },
+          {
+            id: "i1",
+            started_at: "2026-10-02T13:17:54Z",
+            status: { state: "running", updated_at: "2026-10-02T15:08:22Z" },
+          },
+          { id: "i2", status: { state: "stopped" } },
         ],
       },
     });
 
-    assert.deepEqual(parsed, [
-      { id: "i1", state: "running", startedAtMs: Date.parse("2026-10-02T13:17:54Z") },
-    ]);
+    assert.deepEqual(parsed, [{ id: "i1", runningSinceMs: Date.parse("2026-10-02T15:08:22Z") }]);
+  });
+
+  it("is unavailable when a running instance has no usable running-since time", () => {
+    const noTime = { result: { instances: [{ id: "i1", status: { state: "running" } }] } };
+
+    assert.equal(parseInstances(noTime), null);
     assert.equal(parseInstances({ result: {} }), null);
   });
 

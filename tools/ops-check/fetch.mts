@@ -14,7 +14,7 @@ import {
 } from "../browser-harness/json.mts";
 import {
   BUCKET_MS,
-  type Instance,
+  type RunningInstance,
   type LogData,
   type MetricData,
   type Source,
@@ -204,7 +204,7 @@ export function fetchInstances(
   token: string,
   account: string,
   applications: readonly ContainerApplication[],
-): Promise<Source<readonly Instance[]>> {
+): Promise<Source<readonly RunningInstance[]>> {
   return guarded(async () => {
     const answers = await Promise.all(
       applications.map(async (application) =>

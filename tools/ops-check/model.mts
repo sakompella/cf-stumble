@@ -56,11 +56,14 @@ export interface MetricData {
   readonly usage: readonly UsageBucket[];
 }
 
-/** One container instance as the Containers API reports it right now. */
-export interface Instance {
+/**
+ * An instance the Containers API reports as running. `runningSinceMs` is when it entered that
+ * state (`status.updated_at`), not when it was created (`started_at`): an instance created
+ * hours earlier can be restarted, and only the running time counts against the idle limit.
+ */
+export interface RunningInstance {
   readonly id: string;
-  readonly state: string;
-  readonly startedAtMs: number;
+  readonly runningSinceMs: number;
 }
 
 export type Source<T> =
@@ -80,7 +83,7 @@ export interface CheckInput {
   readonly logs: Source<LogData>;
   readonly metrics: Source<MetricData>;
   /** What the Containers API says is running at `window.toMs`, which metrics cannot yet tell. */
-  readonly instances: Source<readonly Instance[]>;
+  readonly instances: Source<readonly RunningInstance[]>;
 }
 
 export type RuleId =

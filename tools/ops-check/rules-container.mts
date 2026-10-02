@@ -20,7 +20,7 @@ import {
   MINUTE_MS,
   type CpuBucket,
   type Finding,
-  type Instance,
+  type RunningInstance,
   type LogData,
   type TimeWindow,
   type UsageBucket,
@@ -123,24 +123,24 @@ function allowedRunning(logs: LogData, idleLimitMs: number): readonly Interval[]
 /**
  * Instances the Containers API reports as running at the end of the window, measured directly
  * because the newest metrics are incomplete. Time the owner does not explain counts against the
- * instance from the start of the window, or from its start if that is later.
+ * instance from the start of the window, or from when it entered the running state if that is later.
  */
 function runningNow(
-  instances: readonly Instance[],
+  instances: readonly RunningInstance[],
   allowed: readonly Interval[],
   lastActivity: readonly number[],
   window: TimeWindow,
   idleLimitMs: number,
 ): readonly Finding[] {
   return instances.flatMap((instance): Finding[] => {
-    const span = { beginMs: Math.max(instance.startedAtMs, window.fromMs), endMs: window.toMs };
+    const span = { beginMs: Math.max(instance.runningSinceMs, window.fromMs), endMs: window.toMs };
     const unexplainedMs = span.endMs - span.beginMs - coveredMs(span, allowed);
 
     const lastBefore = lastActivity
       .filter((atMs) => atMs < window.toMs)
       .toSorted((a, b) => b - a)[0];
 
-    return instance.state === "running" && unexplainedMs > IDLE_OVERRUN_TOLERANCE_MS
+    return unexplainedMs > IDLE_OVERRUN_TOLERANCE_MS
       ? [
           {
             rule: "ran-past-idle",
@@ -154,7 +154,7 @@ function runningNow(
 
 export function ranPastIdle(
   usage: readonly UsageBucket[],
-  instances: readonly Instance[],
+  instances: readonly RunningInstance[],
   logs: LogData,
   window: TimeWindow,
   idleLimitMs: number,

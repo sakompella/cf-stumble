@@ -16,7 +16,7 @@ import type {
   AppEvent,
   CpuBucket,
   EventLevel,
-  Instance,
+  RunningInstance,
   Invocation,
   LogData,
   MetricData,
@@ -237,22 +237,37 @@ export function parseApplications(response: JsonValue): readonly ContainerApplic
   });
 }
 
-/** Instances from the Containers API instances response, or `null` when the shape is wrong. */
-export function parseInstances(response: JsonValue): readonly Instance[] | null {
+/**
+ * The running instances in a Containers API instances response. Instances in any other state are
+ * not running, so they are left out. A running instance with no usable `status.updated_at`, or a
+ * response of the wrong shape, answers `null`: its run start is unknown, and a guess would turn
+ * into a wrong finding.
+ */
+export function parseInstances(response: JsonValue): readonly RunningInstance[] | null {
   const instances = path(response, ["result", "instances"]);
 
   if (instances === undefined || !isJsonArray(instances)) {
     return null;
   }
 
-  return instances.flatMap((instance): Instance[] => {
+  const parsed = instances.map((instance) => {
     const id = text(member(instance, "id"));
     const state = text(path(instance, ["status", "state"]));
-    const startedAt = text(member(instance, "started_at"));
-    const startedAtMs = startedAt === null ? Number.NaN : Date.parse(startedAt);
+    const updatedAt = text(path(instance, ["status", "updated_at"]));
+    const runningSinceMs = updatedAt === null ? Number.NaN : Date.parse(updatedAt);
 
-    return id === null || state === null || Number.isNaN(startedAtMs)
-      ? []
-      : [{ id, state, startedAtMs }];
+    return { id, state, runningSinceMs };
   });
+
+  if (parsed.some((instance) => instance.id === null || instance.state === null)) {
+    return null;
+  }
+
+  const running = parsed.flatMap((instance): RunningInstance[] =>
+    instance.state === "running" && instance.id !== null
+      ? [{ id: instance.id, runningSinceMs: instance.runningSinceMs }]
+      : [],
+  );
+
+  return running.some((instance) => Number.isNaN(instance.runningSinceMs)) ? null : running;
 }

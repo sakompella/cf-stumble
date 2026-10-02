@@ -180,11 +180,15 @@ describe("rule d: ran-past-idle", () => {
 
 const LAST_REQUEST_AT = START + 60 * MINUTE_MS;
 
-function instanceSource(state: string, startedAtMs: number): CheckInput["instances"] {
-  return { status: "ok", data: [{ id: "instance-0001", state, startedAtMs }] };
+function instanceSource(running: boolean, runningSinceMs: number): CheckInput["instances"] {
+  return { status: "ok", data: running ? [{ id: "instance-0001", runningSinceMs }] : [] };
 }
 
-function runningAt(minutesAfterRequest: number, state: string, startedAtMs: number): CheckInput {
+function runningAt(
+  minutesAfterRequest: number,
+  running: boolean,
+  runningSinceMs: number,
+): CheckInput {
   return {
     ...input(
       { fromMs: START, toMs: LAST_REQUEST_AT + minutesAfterRequest * MINUTE_MS },
@@ -199,21 +203,25 @@ function runningAt(minutesAfterRequest: number, state: string, startedAtMs: numb
         metrics: metrics([[START, 1]], [[START, 0]]),
       },
     ),
-    instances: instanceSource(state, startedAtMs),
+    instances: instanceSource(running, runningSinceMs),
   };
 }
 
 describe("rule d: running now and metrics lag", () => {
   it("fires when the instances API shows a running instance with no owner for too long", () => {
-    assert.deepEqual(firing(runningAt(40, "running", START)), ["ran-past-idle"]);
+    assert.deepEqual(firing(runningAt(40, true, START)), ["ran-past-idle"]);
   });
 
   it("is quiet for an instance that is not running, because the newest metrics are incomplete", () => {
-    assert.deepEqual(firing(runningAt(40, "stopped", START)), []);
+    assert.deepEqual(firing(runningAt(40, false, START)), []);
   });
 
-  it("is quiet when the instance started with the request and is within the idle limit", () => {
-    assert.deepEqual(firing(runningAt(25, "running", LAST_REQUEST_AT)), []);
+  it("is quiet when the instance entered running with the request and is within the idle limit", () => {
+    assert.deepEqual(firing(runningAt(25, true, LAST_REQUEST_AT)), []);
+  });
+
+  it("counts from when the instance entered running, not from when it was created", () => {
+    assert.deepEqual(firing(runningAt(25, true, LAST_REQUEST_AT - 5 * MINUTE_MS)), []);
   });
 
   it("ignores usage buckets still inside the lag, which can be partial", () => {
@@ -222,7 +230,7 @@ describe("rule d: running now and metrics lag", () => {
       () => 5,
     );
 
-    const lagged = runningAt(40, "stopped", START);
+    const lagged = runningAt(40, false, START);
 
     assert.deepEqual(firing({ ...lagged, metrics: metrics([[START, 1]], partial) }), []);
   });
@@ -233,7 +241,7 @@ describe("rule d: running now and metrics lag", () => {
       () => 5,
     );
 
-    const checked = { ...runningAt(45, "running", START), metrics: metrics([[START, 1]], run) };
+    const checked = { ...runningAt(45, true, START), metrics: metrics([[START, 1]], run) };
 
     assert.equal(runChecks(checked).length, 1);
   });
@@ -241,9 +249,7 @@ describe("rule d: running now and metrics lag", () => {
   it("reports an unreadable instances API as unknown", () => {
     const failed = { status: "unavailable", reason: "HTTP 403" } as const;
 
-    assert.deepEqual(firing({ ...runningAt(40, "running", START), instances: failed }), [
-      "unknown",
-    ]);
+    assert.deepEqual(firing({ ...runningAt(40, true, START), instances: failed }), ["unknown"]);
   });
 });
 
