@@ -18,7 +18,7 @@ declare global {
       readonly CF_ACCESS_TEAM_DOMAIN: string;
       readonly CF_ACCESS_AUD: string;
       readonly CF_ACCESS_OWNER_SUB: string;
-      /** The GitHub OAuth app the device authorization belongs to. Public configuration. */
+      /** The GitHub OAuth app the device authorization belongs to. Public configuration, stored as a secret so deploys keep it. */
       readonly GITHUB_OAUTH_CLIENT_ID?: string;
       /** The documented test and development credential. See `docs/agents/design/github-connection.md`. */
       readonly GH_TOKEN?: string;

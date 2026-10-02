@@ -80,7 +80,7 @@ export const HARNESS_BUILD_CONFIGURATION = {
  * `HARNESS_REPOSITORY_URL` is the one setting a fork has to change. The default is the project's
  * own repository, which is right for the owner's instance and wrong for everybody else: a deploy
  * button user's instance would clone and build this repository instead of their fork, and their
- * own harness commits would never be reachable. A deployment sets that variable to its own
+ * own harness commits would never be reachable. A deployment sets that secret to its own
  * repository and changes nothing else.
  */
 export function harnessBuildConfiguration(
