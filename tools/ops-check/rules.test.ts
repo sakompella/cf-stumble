@@ -186,7 +186,11 @@ describe("rule e: fault events", () => {
     eventRow(START + MINUTE_MS, "workspace.backend.closed", { level: "warn", running });
 
   const stopped = (level: string) =>
-    eventRow(START + MINUTE_MS, "workspace.container.stopped", { level, reasonCode: "unknown" });
+    eventRow(START + MINUTE_MS, "workspace.container.stopped", {
+      level,
+      reasonCode: "unexpected-exit-code",
+      reasonSource: "unknown",
+    });
 
   it("fires on a close with running true, not running false or null", () => {
     assert.deepEqual(firing(withLogs([closed(true)])), ["running-close"]);
@@ -203,6 +207,39 @@ describe("rule e: fault events", () => {
     assert.ok(firing(withLogs([stopped("warn")])).includes("unexplained-stop"));
     assert.ok(firing(withLogs([stopped("error")])).includes("unexplained-stop"));
     assert.deepEqual(firing(withLogs([stopped("info")])), []);
+  });
+});
+
+describe("rule e: stops and closes the Host caused", () => {
+  const closed = (running: boolean) =>
+    eventRow(START + MINUTE_MS, "workspace.backend.closed", { level: "warn", running });
+
+  it("does not report a stop the Host asked for (reasonSource application-intent)", () => {
+    const intended = eventRow(START + MINUTE_MS, "workspace.container.stopped", {
+      level: "warn",
+      reasonCode: "workspace-reset",
+      reasonSource: "application-intent",
+    });
+
+    assert.deepEqual(firing(withLogs([intended])), []);
+  });
+
+  it("does not report a close within seconds of the Host's own stop or wake request", () => {
+    const request = (name: string, afterMs: number) =>
+      eventRow(START + MINUTE_MS + afterMs, name, {});
+
+    assert.deepEqual(
+      firing(withLogs([closed(true), request("workspace.container.stop-requested", 5000)])),
+      [],
+    );
+    assert.deepEqual(
+      firing(withLogs([closed(true), request("workspace.container.wake-requested", -5000)])),
+      [],
+    );
+    assert.deepEqual(
+      firing(withLogs([closed(true), request("workspace.container.stop-requested", 60_000)])),
+      ["running-close"],
+    );
   });
 
   it("fires on any error-level event inside the window, not outside it", () => {

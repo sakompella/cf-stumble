@@ -71,6 +71,7 @@ function parseAppEvent(row: JsonRecord, source: JsonRecord): AppEvent | null {
     applicationOutcome: text(source["applicationOutcome"]),
     running: running === true || running === false ? running : null,
     reasonCode: text(source["reasonCode"]),
+    reasonSource: text(source["reasonSource"]),
   };
 }
 

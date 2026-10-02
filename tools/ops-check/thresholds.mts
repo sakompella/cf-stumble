@@ -46,6 +46,9 @@ export const DEFAULT_IDLE_LIMIT_MS = 20 * MINUTE_MS;
  */
 export const STARTUP_GRACE_MS = 10 * MINUTE_MS;
 
+/** A backend close this close to the Host\'s own stop or wake request is part of that restart. */
+export const RESTART_CLOSE_WINDOW_MS = 10_000;
+
 /** Most evidence ids printed on one line. */
 export const MAX_EVIDENCE = 3;
 

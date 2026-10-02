@@ -21,6 +21,7 @@ export interface AppEvent {
   readonly applicationOutcome: string | null;
   readonly running: boolean | null;
   readonly reasonCode: string | null;
+  readonly reasonSource: string | null;
 }
 
 /** The platform's record of one fetch invocation, from `$workers.*` metadata. */

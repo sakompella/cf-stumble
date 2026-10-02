@@ -159,6 +159,7 @@ export function incident0926(): CheckInput {
       level: "warn",
       running: true,
       reasonCode: "unknown",
+      reasonSource: "unknown",
     }),
   );
 
@@ -189,6 +190,7 @@ export function incident0927(extraRows: readonly JsonRecord[] = []): CheckInput 
     eventRow(at("2026-09-27T18:56:00Z"), "workspace.container.stopped", {
       level: "warn",
       reasonCode: "unknown",
+      reasonSource: "unknown",
     }),
   ];
 
@@ -217,7 +219,10 @@ export function healthyDay(extraRows: readonly JsonRecord[] = []): CheckInput {
     }),
     eventRow(at("2026-09-30T09:00:00Z"), "workspace.rpc", { requestId: "req-a", durationMs: 350 }),
     eventRow(turnEnd, "turn.settled", { totalMs: 4 * MINUTE_MS, ending: "saved" }),
-    eventRow(at("2026-09-30T09:24:00Z"), "workspace.container.stopped", { reasonCode: "idle" }),
+    eventRow(at("2026-09-30T09:24:00Z"), "workspace.container.stopped", {
+      reasonCode: "normal-exit",
+      reasonSource: "unknown",
+    }),
   ];
 
   const active = { fromMs: at("2026-09-30T09:00:00Z"), toMs: at("2026-09-30T09:25:00Z") };
@@ -256,7 +261,7 @@ export function stagingWorkerRows(window: TimeWindow): readonly JsonRecord[] {
     eventRow(
       at5(2),
       "workspace.container.stopped",
-      { level: "warn", reasonCode: "unknown" },
+      { level: "warn", reasonCode: "unknown", reasonSource: "unknown" },
       staging,
     ),
     eventRow(
