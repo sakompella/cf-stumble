@@ -31,6 +31,8 @@ This directory records current decisions. Every ADR declares whether a human app
   walking ignored trees.
 - **[ADR-0043](0043-workspace-host-stops-its-idle-container.md)**: the Workspace Host stops its
   container after ten idle minutes, because computerd's open WebSocket keeps the object active.
+- **[ADR-0044](0044-poll-the-shim-disk-walk-every-five-seconds.md)**: the workspace image polls the
+  shim's disk walk every five seconds, because sync reconciles before every pull anyway.
 
 ## Adding a decision
 

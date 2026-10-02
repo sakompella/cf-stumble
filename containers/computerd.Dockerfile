@@ -13,7 +13,8 @@
 # Durable Object, but it cannot stop the walk. `containers/computerd-walk.patch` makes the shim use
 # `lstat` and sync a symlink as a symlink, never following it, and skip every path with a segment
 # in `COMPUTERD_WALK_IGNORE` in both directions, with the same whole-segment matching as the sync
-# protocol's `ignore`. It also adds shim tests, which the build runs.
+# protocol's `ignore`. It also lets `COMPUTERD_POLL_MS` set how often the shim walks the disk, and
+# adds shim tests, which the build runs (ADR-0044).
 #
 # The build. It follows upstream's release workflow (`.github/workflows/next-computerd-image.yml`)
 # at the pinned commit: `npm ci`, build the `dofs`, `rpc` and `computerd` workspaces, then
@@ -143,6 +144,11 @@ ENV FUSE_MOUNT=shim
 # `WORKSPACE_SYNC_IGNORES` in `src/workspace-layout.ts`; `test/workspace/computerd-image.test.ts`
 # checks it.
 ENV COMPUTERD_WALK_IGNORE=node_modules
+# The shim's background disk walk runs this often, in milliseconds (upstream: 250). The walk costs
+# about 0.1 vCPU per 1,000 entries under `/workspace`, so an idle container held 0.4 vCPU at 4,000
+# entries. Sync does not need the walk: computerd reconciles before every pull and flushes after
+# every push (ADR-0044). `test/workspace/computerd-image.test.ts` pins the value.
+ENV COMPUTERD_POLL_MS=5000
 # computerd forwards only an allowlist plus `COMPUTER_VAR_*` (prefix stripped) to commands. These
 # two put `gh` and Git's global configuration under the persisted workspace, so the GitHub
 # credential survives a container replacement. Keep them equal to `GITHUB_CLI_CONFIG_DIRECTORY` and

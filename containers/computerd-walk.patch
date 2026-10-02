@@ -1,7 +1,16 @@
 diff --git a/packages/computerd/src/cli/computerd.ts b/packages/computerd/src/cli/computerd.ts
-index 5036db4..862b6bc 100644
+index 5036db4..d087b91 100644
 --- a/packages/computerd/src/cli/computerd.ts
 +++ b/packages/computerd/src/cli/computerd.ts
+@@ -21,7 +21,7 @@ import {
+   parseFuseMountMode,
+   resolveFuseBackend,
+ } from "../fuse/index.js";
+-import { mountShim, type ShimMount } from "../shim/index.js";
++import { mountShim, parsePollMs, type ShimMount } from "../shim/index.js";
+ import { installLogging } from "./logger.js";
+ 
+ // The compiled-in default port. esbuild's `define` substitutes the
 @@ -73,6 +73,24 @@ function parsePort(value: string | undefined): number {
    return port;
  }
@@ -27,21 +36,40 @@ index 5036db4..862b6bc 100644
  function parseMountPoint(value: string | undefined): string {
    const mountPoint = value === undefined || value === "" ? DEFAULT_MOUNT_POINT : value;
    if (!isAbsolute(mountPoint)) {
-@@ -613,7 +631,9 @@ async function main(): Promise<void> {
+@@ -613,7 +631,11 @@ async function main(): Promise<void> {
      await mkdir(mountPoint, { recursive: true });
  
      if (backend.kind === "shim") {
 -      shim = await mountShim({ vfs, mountPoint });
 +      const ignore = parseWalkIgnore(process.env.COMPUTERD_WALK_IGNORE);
 +      console.log(`[info] shim ignores path segments: ${JSON.stringify(ignore)}`);
-+      shim = await mountShim({ vfs, mountPoint, ignore });
++      const pollIntervalMs = parsePollMs(process.env.COMPUTERD_POLL_MS);
++      console.log(`[info] shim poll interval ms: ${pollIntervalMs ?? "default"}`);
++      shim = await mountShim({ vfs, mountPoint, ignore, pollIntervalMs });
        fuse = shim;
      } else {
        fuse = await mountFuse({
+diff --git a/packages/computerd/src/shim/index.ts b/packages/computerd/src/shim/index.ts
+index 44c32ff..a47943e 100644
+--- a/packages/computerd/src/shim/index.ts
++++ b/packages/computerd/src/shim/index.ts
+@@ -1,2 +1,2 @@
+ export type { ShimMount } from "./shim.js";
+-export { mountShim } from "./shim.js";
++export { mountShim, parsePollMs } from "./shim.js";
 diff --git a/packages/computerd/src/shim/shim.test.ts b/packages/computerd/src/shim/shim.test.ts
-index f92e8ae..bafb535 100644
+index f92e8ae..7904f3d 100644
 --- a/packages/computerd/src/shim/shim.test.ts
 +++ b/packages/computerd/src/shim/shim.test.ts
+@@ -4,7 +4,7 @@ import path from "node:path";
+ import { expect, onTestFinished, test } from "vitest";
+ 
+ import { createNodeVirtualFileSystem } from "../fuse/index.js";
+-import { mountShim } from "./index.js";
++import { mountShim, parsePollMs } from "./index.js";
+ 
+ // Poll cadence for the assertions below. We pass the same value into
+ // the shim so the disk -> VFS reconcile fires this often, and use a
 @@ -29,10 +29,15 @@ async function eventually(
    throw new Error("eventually(): condition never became true");
  }
@@ -60,7 +88,7 @@ index f92e8ae..bafb535 100644
    onTestFinished(async () => {
      await shim.unmount();
      await fs.rm(mountPoint, { recursive: true, force: true });
-@@ -239,3 +244,127 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
+@@ -239,3 +244,137 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
    expect(await fs.readFile(path.join(mountPoint, "repo", "a.txt"), "utf8")).toBe("alpha");
    await expect(fs.access(path.join(mountPoint, "outside.txt"))).rejects.toThrow(/ENOENT/);
  });
@@ -188,8 +216,18 @@ index f92e8ae..bafb535 100644
 +  await shim.reconcileNow();
 +  expect(vfs.readFileSync(`${mountPoint}/node_modules.txt`).toString()).toBe("kept");
 +});
++
++test("COMPUTERD_POLL_MS is unset, or one positive integer", () => {
++  expect(parsePollMs(undefined)).toBeUndefined();
++  expect(parsePollMs("")).toBeUndefined();
++  expect(parsePollMs(" 5000 ")).toBe(5000);
++
++  for (const bad of ["0", "-1", "2.5", "5s", "1e3", "0x10", "99999999999999999999"]) {
++    expect(() => parsePollMs(bad), bad).toThrow(/COMPUTERD_POLL_MS/);
++  }
++});
 diff --git a/packages/computerd/src/shim/shim.ts b/packages/computerd/src/shim/shim.ts
-index 16ab794..2d0d080 100644
+index 16ab794..b279b5d 100644
 --- a/packages/computerd/src/shim/shim.ts
 +++ b/packages/computerd/src/shim/shim.ts
 @@ -8,7 +8,16 @@
@@ -248,7 +286,23 @@ index 16ab794..2d0d080 100644
    // sha1 of the file content the last time we synced. Used to
    // detect "echo" events: when a disk→VFS write triggers the VFS
    // watcher, the watcher reads the VFS and sees content that
-@@ -93,6 +112,7 @@ const DEFAULT_POLL_MS = 250;
+@@ -90,9 +109,23 @@ type Shadow = Map<string, ShadowEntry>;
+ 
+ const DEFAULT_POLL_MS = 250;
+ 
++// COMPUTERD_POLL_MS: how often the shim walks the disk for changes. Unset
++// or empty keeps the default. Computer's sync already reconciles before
++// every pull and flushes after every push, so a longer interval only
++// delays a background writer's edit reaching the VFS.
++export function parsePollMs(value: string | undefined): number | undefined {
++  const text = (value ?? "").trim();
++  if (text === "") return undefined;
++  if (!/^[1-9][0-9]*$/.test(text) || !Number.isSafeInteger(Number(text))) {
++    throw new Error(`COMPUTERD_POLL_MS must be a positive integer, got ${JSON.stringify(value)}`);
++  }
++  return Number(text);
++}
++
  export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
    const { vfs, mountPoint } = options;
    const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_MS;
@@ -256,7 +310,7 @@ index 16ab794..2d0d080 100644
  
    // VFS paths and host paths share the same absolute prefix:
    // `${mountPoint}/foo.txt` lives at `${mountPoint}/foo.txt` in the
-@@ -127,7 +147,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+@@ -127,7 +160,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
    // them into the VFS. That matches the "computerd is not the only
    // writer" relaxation the shim explicitly takes on.
    await run(async () => {
@@ -265,7 +319,7 @@ index 16ab794..2d0d080 100644
    });
  
    // The watcher is scoped to the mount point so any events outside
-@@ -157,7 +177,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+@@ -157,7 +190,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
          // operations; the mount point itself is not materialised
          // beneath itself.
          if (vfsPath === mountPoint) continue;
@@ -274,7 +328,7 @@ index 16ab794..2d0d080 100644
        }
      } catch (error) {
        if (!stopped) {
-@@ -171,7 +191,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+@@ -171,7 +204,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
    // Shared by the periodic poll below and the on-demand
    // reconcileNow() hook; both go through `run` so they serialise
    // against the VFS watcher loop.
@@ -283,7 +337,7 @@ index 16ab794..2d0d080 100644
    const pollTimer = setInterval(() => {
      if (stopped) return;
      void reconcile().catch((error) => {
-@@ -204,7 +224,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
+@@ -204,7 +237,7 @@ export async function mountShim(options: MountShimOptions): Promise<ShimMount> {
        // of the chain — a concurrent watcher event can't sneak in a
        // write between our walk and the resolve of `flush()`.
        await run(async () => {
@@ -292,7 +346,7 @@ index 16ab794..2d0d080 100644
        });
      },
      async reconcileNow(): Promise<void> {
-@@ -220,6 +240,7 @@ async function materialiseVfsToDisk(
+@@ -220,6 +253,7 @@ async function materialiseVfsToDisk(
    vfs: NodeVirtualFileSystem,
    mountPoint: string,
    shadow: Shadow,
@@ -300,7 +354,7 @@ index 16ab794..2d0d080 100644
  ): Promise<void> {
    const queue: string[] = [mountPoint];
    while (queue.length > 0) {
-@@ -232,10 +253,16 @@ async function materialiseVfsToDisk(
+@@ -232,10 +266,16 @@ async function materialiseVfsToDisk(
      }
      for (const name of entries) {
        const vfsPath = `${current}/${name}`;
@@ -318,7 +372,7 @@ index 16ab794..2d0d080 100644
          await fsMkdir(hostPath, { recursive: true });
          shadow.set(vfsPath, dirShadow(stat.mtimeMs));
          queue.push(vfsPath);
-@@ -264,6 +291,7 @@ async function flushVfsToDisk(
+@@ -264,6 +304,7 @@ async function flushVfsToDisk(
    vfs: NodeVirtualFileSystem,
    mountPoint: string,
    shadow: Shadow,
@@ -326,7 +380,7 @@ index 16ab794..2d0d080 100644
  ): Promise<void> {
    const queue: string[] = [mountPoint];
    while (queue.length > 0) {
-@@ -276,9 +304,10 @@ async function flushVfsToDisk(
+@@ -276,9 +317,10 @@ async function flushVfsToDisk(
      }
      for (const name of entries) {
        const vfsPath = `${current}/${name}`;
@@ -338,7 +392,7 @@ index 16ab794..2d0d080 100644
        if (stat.isDirectory()) queue.push(vfsPath);
      }
    }
-@@ -289,9 +318,16 @@ async function syncVfsPathToDisk(
+@@ -289,9 +331,16 @@ async function syncVfsPathToDisk(
    mountPoint: string,
    vfsPath: string,
    shadow: Shadow,
@@ -355,7 +409,7 @@ index 16ab794..2d0d080 100644
  
    if (stat === undefined) {
      // VFS says it's gone. Remove from disk + shadow. Recursive rm
-@@ -302,6 +338,17 @@ async function syncVfsPathToDisk(
+@@ -302,6 +351,17 @@ async function syncVfsPathToDisk(
      return;
    }
  
@@ -373,7 +427,7 @@ index 16ab794..2d0d080 100644
    if (stat.isDirectory()) {
      await fsMkdir(hostPath, { recursive: true });
      shadow.set(vfsPath, dirShadow(stat.mtimeMs));
-@@ -345,17 +392,46 @@ async function reconcileDiskToVfs(
+@@ -345,17 +405,46 @@ async function reconcileDiskToVfs(
    vfs: NodeVirtualFileSystem,
    mountPoint: string,
    shadow: Shadow,
@@ -422,7 +476,7 @@ index 16ab794..2d0d080 100644
          try {
            vfs.unlinkSync(vfsPath);
          } catch {
-@@ -376,6 +452,15 @@ async function reconcileDiskToVfs(
+@@ -376,6 +465,15 @@ async function reconcileDiskToVfs(
      if (prev?.kind === "file" && prev.size === stat.size && prev.mtimeMs === stat.mtimeMs) {
        return;
      }
@@ -438,7 +492,7 @@ index 16ab794..2d0d080 100644
      let bytes: Buffer;
      try {
        bytes = await fsReadFile(hostPath);
-@@ -434,6 +519,7 @@ async function reconcileDiskToVfs(
+@@ -434,6 +532,7 @@ async function reconcileDiskToVfs(
        if (entry.kind === "dir") {
          vfs.rmdirSync(vfsPath);
        } else {
@@ -446,7 +500,7 @@ index 16ab794..2d0d080 100644
          vfs.unlinkSync(vfsPath);
        }
      } catch {
-@@ -445,13 +531,23 @@ async function reconcileDiskToVfs(
+@@ -445,13 +544,23 @@ async function reconcileDiskToVfs(
    }
  }
  
@@ -471,7 +525,7 @@ index 16ab794..2d0d080 100644
    ) => Promise<void>,
  ): Promise<void> {
    let entries: string[];
-@@ -462,16 +558,17 @@ async function walkDisk(
+@@ -462,16 +571,17 @@ async function walkDisk(
    }
    for (const name of entries) {
      const hostPath = join(current, name);
@@ -493,7 +547,7 @@ index 16ab794..2d0d080 100644
      }
    }
  }
-@@ -506,6 +603,67 @@ function dirShadow(mtimeMs: number): ShadowEntry {
+@@ -506,6 +616,67 @@ function dirShadow(mtimeMs: number): ShadowEntry {
    return { kind: "dir", size: 0, mtimeMs };
  }
  
@@ -561,7 +615,7 @@ index 16ab794..2d0d080 100644
  function depth(path: string): number {
    let count = 0;
    for (let i = 0; i < path.length; i++) if (path.charCodeAt(i) === 47) count++;
-@@ -526,20 +684,25 @@ function safeVfsStat(
+@@ -526,20 +697,25 @@ function safeVfsStat(
    | {
        isFile(): boolean;
        isDirectory(): boolean;
@@ -588,7 +642,7 @@ index 16ab794..2d0d080 100644
        size: s.size,
        mtimeMs: s.mtime.getTime(),
      };
-@@ -548,6 +711,14 @@ function safeVfsStat(
+@@ -548,6 +724,14 @@ function safeVfsStat(
    }
  }
  
