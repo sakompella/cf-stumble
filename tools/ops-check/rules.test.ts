@@ -4,18 +4,8 @@ import { describe, it } from "node:test";
 import { bucketsOf, canceledInvocationRow, eventRow, input, logs, metrics } from "./fixtures.mts";
 import { BUCKET_MS, MINUTE_MS, type CheckInput } from "./model.mts";
 import { runChecks } from "./check.mts";
-import { firing, START, WINDOW } from "./rule-helpers.mts";
+import { CALM, firing, START, WINDOW, withLogs } from "./rule-helpers.mts";
 import type { JsonRecord } from "../browser-harness/json.mts";
-
-/** A metrics source with rows but no CPU worth reporting, so only the rule under test can fire. */
-const CALM = metrics([[START, 1]], [[START, 0]]);
-
-function withLogs(
-  events: readonly JsonRecord[],
-  invocations: readonly JsonRecord[] = [],
-): CheckInput {
-  return input(WINDOW, { logs: logs(events, invocations), metrics: CALM });
-}
 
 function settled(
   index: number,
@@ -167,79 +157,6 @@ describe("rule c: unowned-cpu", () => {
 
   it("is broken by a bucket that owner work overlaps", () => {
     assert.deepEqual(firing(cpuRun(6, 31, 3)), []);
-  });
-});
-
-describe("rule e: fault events", () => {
-  const closed = (running: boolean) =>
-    eventRow(START + MINUTE_MS, "workspace.backend.closed", { level: "warn", running });
-
-  const stopped = (level: string) =>
-    eventRow(START + MINUTE_MS, "workspace.container.stopped", {
-      level,
-      reasonCode: "unexpected-exit-code",
-      reasonSource: "unknown",
-    });
-
-  it("fires on a close with running true, not running false or null", () => {
-    assert.deepEqual(firing(withLogs([closed(true)])), ["running-close"]);
-    assert.deepEqual(firing(withLogs([closed(false)])), []);
-    assert.deepEqual(
-      firing(
-        withLogs([eventRow(START, "workspace.backend.closed", { level: "warn", running: null })]),
-      ),
-      [],
-    );
-  });
-
-  it("fires on an unknown stop reason at warn or error, not at info", () => {
-    assert.ok(firing(withLogs([stopped("warn")])).includes("unexplained-stop"));
-    assert.ok(firing(withLogs([stopped("error")])).includes("unexplained-stop"));
-    assert.deepEqual(firing(withLogs([stopped("info")])), []);
-  });
-});
-
-describe("rule e: stops and closes the Host caused", () => {
-  const closed = (running: boolean) =>
-    eventRow(START + MINUTE_MS, "workspace.backend.closed", { level: "warn", running });
-
-  it("does not report a stop the Host asked for (reasonSource application-intent)", () => {
-    const intended = eventRow(START + MINUTE_MS, "workspace.container.stopped", {
-      level: "warn",
-      reasonCode: "workspace-reset",
-      reasonSource: "application-intent",
-    });
-
-    assert.deepEqual(firing(withLogs([intended])), []);
-  });
-
-  it("does not report a close within seconds of the Host's own stop or wake request", () => {
-    const request = (name: string, afterMs: number) =>
-      eventRow(START + MINUTE_MS + afterMs, name, {});
-
-    assert.deepEqual(
-      firing(withLogs([closed(true), request("workspace.container.stop-requested", 5000)])),
-      [],
-    );
-    assert.deepEqual(
-      firing(withLogs([closed(true), request("workspace.container.wake-requested", -5000)])),
-      [],
-    );
-    assert.deepEqual(
-      firing(withLogs([closed(true), request("workspace.container.stop-requested", 60_000)])),
-      ["running-close"],
-    );
-  });
-
-  it("fires on any error-level event inside the window, not outside it", () => {
-    assert.deepEqual(
-      firing(withLogs([eventRow(START + MINUTE_MS, "turn.settled", { level: "error" })])),
-      ["error-events"],
-    );
-    assert.deepEqual(
-      firing(withLogs([eventRow(START - MINUTE_MS, "turn.settled", { level: "error" })])),
-      [],
-    );
   });
 });
 

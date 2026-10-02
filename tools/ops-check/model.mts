@@ -98,6 +98,7 @@ export type RuleId =
   | "ran-past-idle"
   | "running-close"
   | "unexplained-stop"
+  | "placement-unavailable"
   | "error-events"
   | "unknown";
 

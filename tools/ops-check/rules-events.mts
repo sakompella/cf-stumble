@@ -62,6 +62,17 @@ export function faultEvents(logs: LogData, window: TimeWindow): readonly Finding
         (event) =>
           event.name === "workspace.container.stopped" &&
           event.reasonSource === "unknown" &&
+          event.reasonCode !== "placement-unavailable" &&
+          (event.level === "warn" || event.level === "error"),
+      ),
+    ),
+    ...finding(
+      "placement-unavailable",
+      "workspace.container.stopped with placement-unavailable (the platform had no machine to start on)",
+      events.filter(
+        (event) =>
+          event.name === "workspace.container.stopped" &&
+          event.reasonCode === "placement-unavailable" &&
           (event.level === "warn" || event.level === "error"),
       ),
     ),
