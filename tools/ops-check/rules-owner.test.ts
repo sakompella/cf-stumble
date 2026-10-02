@@ -50,6 +50,18 @@ describe("rule c: what owns container time", () => {
     );
   });
 
+  it("is not owned by the idle alarm's own events", () => {
+    const idleCheck = eventRow(START + 5 * MINUTE_MS, "workspace.idle-check", {
+      idleLimitMs: 600_000,
+    });
+
+    const idleStop = eventRow(START + 5 * MINUTE_MS, "workspace.container.idle-stop", {
+      durationMs: 35 * MINUTE_MS,
+    });
+
+    assert.deepEqual(check([idleRoute, idleCheck, idleStop]), ["unowned-cpu"]);
+  });
+
   it("is not owned by other lifecycle events", () => {
     const stopped = eventRow(START + 5 * MINUTE_MS, "workspace.container.stopped", {});
 

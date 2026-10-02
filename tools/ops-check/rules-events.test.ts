@@ -35,6 +35,20 @@ describe("rule e: fault events", () => {
   });
 });
 
+describe("rule e: the idle stop's own close", () => {
+  it("does not report the close the Host makes to stop an idle container", () => {
+    const close = (trigger: string) =>
+      eventRow(START + MINUTE_MS, "workspace.backend.closed", {
+        level: "info",
+        running: true,
+        trigger,
+      });
+
+    assert.deepEqual(firing(withLogs([close("idle-stop")])), []);
+    assert.deepEqual(firing(withLogs([close("transport-closed")])), ["running-close"]);
+  });
+});
+
 describe("rule e: reason codes of the idle stop", () => {
   const stopped = (fields: Record<string, string | boolean>) =>
     eventRow(START + MINUTE_MS, "workspace.container.stopped", fields);

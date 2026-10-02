@@ -52,6 +52,7 @@ export function faultEvents(logs: LogData, window: TimeWindow): readonly Finding
         (event) =>
           event.name === "workspace.backend.closed" &&
           event.running === true &&
+          event.trigger !== "idle-stop" &&
           !nearRestart(event, events),
       ),
     ),

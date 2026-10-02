@@ -24,6 +24,8 @@ export interface AppEvent {
   readonly reasonSource: string | null;
   /** `route.settled` only: `headers` for a streamed response whose work continues. */
   readonly phase: string | null;
+  /** `workspace.backend.closed` only: `transport-closed`, `connect-failed` or `idle-stop`. */
+  readonly trigger: string | null;
 }
 
 /** The platform's record of one fetch invocation. `route` is the pattern the Worker logs, never the raw path. */
