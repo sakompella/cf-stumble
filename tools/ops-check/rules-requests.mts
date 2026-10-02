@@ -14,8 +14,9 @@ import {
   POLLER_WORKSPACE_TOUCHES,
   SLOW_REQUESTS_PER_HOUR,
   SLOW_REQUEST_MS,
+  STREAM_START_SLACK_MS,
 } from "./thresholds.mts";
-import type { Finding, LogData, TimeWindow } from "./model.mts";
+import type { Finding, Invocation, LogData, TimeWindow } from "./model.mts";
 
 export interface OwnerCall {
   readonly atMs: number;
@@ -30,14 +31,14 @@ function inWindow(atMs: number, window: TimeWindow): boolean {
   return atMs >= window.fromMs && atMs < window.toMs;
 }
 
-export function ownerCalls(logs: LogData, window: TimeWindow): readonly OwnerCall[] {
+function settledCalls(logs: LogData, window: TimeWindow): readonly OwnerCall[] {
   const workspaceRequestIds = new Set(
     logs.events.flatMap((event) =>
       isOwnerWork(event) && event.requestId !== null ? [event.requestId] : [],
     ),
   );
 
-  const settled = logs.events.flatMap((event): OwnerCall[] =>
+  return logs.events.flatMap((event): OwnerCall[] =>
     event.name === "route.settled" && event.route !== null && inWindow(event.atMs, window)
       ? [
           {
@@ -51,9 +52,26 @@ export function ownerCalls(logs: LogData, window: TimeWindow): readonly OwnerCal
         ]
       : [],
   );
+}
 
-  const canceled = logs.invocations.flatMap((invocation): OwnerCall[] =>
+function canceledCalls(logs: LogData, window: TimeWindow): readonly OwnerCall[] {
+  const streamStarts = logs.events.filter(
+    (event) => event.name === "route.settled" && event.phase === "headers",
+  );
+
+  // A streamed turn writes `route.settled` when its stream starts. If the client then leaves, the
+  // platform cancels the same invocation; it is one call, so the settled event stands for it.
+  const alreadySettled = (invocation: Invocation) =>
+    streamStarts.some(
+      (event) =>
+        event.route === invocation.route &&
+        event.atMs >= invocation.atMs - invocation.wallTimeMs - STREAM_START_SLACK_MS &&
+        event.atMs <= invocation.atMs,
+    );
+
+  return logs.invocations.flatMap((invocation): OwnerCall[] =>
     invocation.outcome === "canceled" &&
+    !alreadySettled(invocation) &&
     isOwnerRoute(invocation.route) &&
     inWindow(invocation.atMs, window)
       ? [
@@ -68,8 +86,10 @@ export function ownerCalls(logs: LogData, window: TimeWindow): readonly OwnerCal
         ]
       : [],
   );
+}
 
-  return [...settled, ...canceled];
+export function ownerCalls(logs: LogData, window: TimeWindow): readonly OwnerCall[] {
+  return [...settledCalls(logs, window), ...canceledCalls(logs, window)];
 }
 
 function byRoute(calls: readonly OwnerCall[]): ReadonlyMap<string, readonly OwnerCall[]> {

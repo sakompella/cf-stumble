@@ -24,7 +24,7 @@ describe("telemetry parsing", () => {
         { source: { level: "info", message: "no event field" }, timestamp: 1 },
         { source: { event: "no.timestamp" } },
       ]),
-      telemetry([canceledInvocationRow(2000, "i", "/api/y", 90_000)]),
+      telemetry([canceledInvocationRow(2000, "i", "/api/projects", 90_000)]),
       WORKER,
     );
 
@@ -35,7 +35,7 @@ describe("telemetry parsing", () => {
     );
     assert.deepEqual(
       parsed.status === "ok" ? parsed.data.invocations.map((i) => [i.route, i.wallTimeMs]) : [],
-      [["/api/y", 90_000]],
+      [["/api/projects", 90_000]],
     );
   });
 

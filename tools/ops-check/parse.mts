@@ -11,6 +11,7 @@ import {
   type JsonRecord,
   type JsonValue,
 } from "../browser-harness/json.mts";
+import { routePattern } from "../../src/routes/route-pattern.ts";
 import { METRICS_ROW_LIMIT, TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
 import type {
   AppEvent,
@@ -72,6 +73,7 @@ function parseAppEvent(row: JsonRecord, source: JsonRecord): AppEvent | null {
     running: running === true || running === false ? running : null,
     reasonCode: text(source["reasonCode"]),
     reasonSource: text(source["reasonSource"]),
+    phase: text(source["phase"]),
   };
 }
 
@@ -91,7 +93,7 @@ function parseInvocation(row: JsonRecord): Invocation | null {
     return null;
   }
 
-  return { atMs, id, route: URL.parse(url)?.pathname ?? url, outcome, wallTimeMs };
+  return { atMs, id, route: routePattern(URL.parse(url)?.pathname ?? url), outcome, wallTimeMs };
 }
 
 /** Rows of one telemetry `events` view response, or `null` when the shape is wrong. */

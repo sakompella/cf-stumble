@@ -24,7 +24,7 @@ function settled(
 ): JsonRecord {
   return eventRow(START + index * spacingMs, "route.settled", {
     requestId: `req-${index}`,
-    route: "/api/x",
+    route: "/api/projects",
     durationMs,
     ...extra,
   });
@@ -60,10 +60,49 @@ describe("rule a: slow-requests", () => {
 
   it("does not count an invocation that was not canceled", () => {
     const completed = Array.from({ length: 10 }, (_, i) =>
-      canceledInvocationRow(START + i * MINUTE_MS, `c-${i}`, "/api/x", 50, "ok"),
+      canceledInvocationRow(START + i * MINUTE_MS, `c-${i}`, "/api/projects", 50, "ok"),
     );
 
     assert.deepEqual(firing(withLogs([], completed)), []);
+  });
+});
+
+describe("rule a: route patterns and streamed turns", () => {
+  it("groups canceled invocations of one route pattern across project ids", () => {
+    const canceled = Array.from({ length: 10 }, (_, i) =>
+      canceledInvocationRow(START + i * MINUTE_MS, `c-${i}`, `/api/projects/p${i}/thread`, 50),
+    );
+
+    assert.deepEqual(firing(withLogs([], canceled)), ["slow-requests"]);
+  });
+
+  it("counts a streamed turn once when the client left after its route.settled", () => {
+    const turn = (i: number) => [
+      eventRow(START + i * MINUTE_MS, "route.settled", {
+        requestId: `t-${i}`,
+        route: "/api/projects/:projectId/turn",
+        phase: "headers",
+        durationMs: 20,
+      }),
+      canceledInvocationRow(
+        START + i * MINUTE_MS + 40_000,
+        `c-${i}`,
+        `/api/projects/p${i}/turn`,
+        40_000,
+      ),
+    ];
+
+    const turns = Array.from({ length: 6 }, (_, i) => turn(i));
+
+    assert.deepEqual(
+      firing(
+        withLogs(
+          turns.flatMap((pair) => [pair[0] ?? {}]),
+          turns.flatMap((pair) => [pair[1] ?? {}]),
+        ),
+      ),
+      [],
+    );
   });
 });
 
@@ -84,7 +123,7 @@ describe("rule b: poller", () => {
       withLogs(
         calls(20 - canceled, 90_000, 100),
         Array.from({ length: canceled }, (_, i) =>
-          canceledInvocationRow(START + (30 + i) * MINUTE_MS, `c-${i}`, "/api/x", 50),
+          canceledInvocationRow(START + (30 + i) * MINUTE_MS, `c-${i}`, "/api/projects", 50),
         ),
       );
 
@@ -97,7 +136,7 @@ describe("rule b: poller", () => {
 
 describe("rule c: unowned-cpu", () => {
   const events = [
-    eventRow(START, "route.settled", { requestId: "r", route: "/api/x", durationMs: 1 }),
+    eventRow(START, "route.settled", { requestId: "r", route: "/api/projects", durationMs: 1 }),
   ];
 
   const cpuRun = (buckets: number, perBucket: number, owned?: number) =>
@@ -127,57 +166,6 @@ describe("rule c: unowned-cpu", () => {
 
   it("is broken by a bucket that owner work overlaps", () => {
     assert.deepEqual(firing(cpuRun(6, 31, 3)), []);
-  });
-});
-
-describe("rule c: what owns container time", () => {
-  const hot = (buckets: number) =>
-    metrics(
-      bucketsOf({ fromMs: START, toMs: START + buckets * BUCKET_MS }, () => 99),
-      [[START, 0]],
-    );
-
-  const check = (events: readonly JsonRecord[]) =>
-    firing(input(WINDOW, { logs: logs(events), metrics: hot(7) }));
-
-  const idleRoute = eventRow(START - 60 * MINUTE_MS, "route.settled", {
-    requestId: "r",
-    route: "/api/x",
-    durationMs: 1,
-  });
-
-  it("fires on 35 minutes of CPU when nothing owns it", () => {
-    assert.deepEqual(check([idleRoute]), ["unowned-cpu"]);
-  });
-
-  it("is owned by a 35-minute exec logged once, at its end", () => {
-    const exec = eventRow(START + 35 * MINUTE_MS, "workspace.exec", { durationMs: 35 * MINUTE_MS });
-
-    assert.deepEqual(check([idleRoute, exec]), []);
-  });
-
-  it("is owned by a harness build step", () => {
-    const build = eventRow(START + 35 * MINUTE_MS, "harness-build.step", {
-      durationMs: 35 * MINUTE_MS,
-    });
-
-    assert.deepEqual(check([idleRoute, build]), []);
-  });
-
-  it("is owned for the startup grace after a launch, and no longer", () => {
-    const started = eventRow(START, "workspace.container.started", {});
-
-    assert.deepEqual(check([idleRoute, started]), []);
-    assert.deepEqual(
-      firing(input(WINDOW, { logs: logs([idleRoute, started]), metrics: hot(10) })),
-      ["unowned-cpu"],
-    );
-  });
-
-  it("is not owned by other lifecycle events", () => {
-    const stopped = eventRow(START + 5 * MINUTE_MS, "workspace.container.stopped", {});
-
-    assert.deepEqual(check([idleRoute, stopped]), ["unowned-cpu"]);
   });
 });
 

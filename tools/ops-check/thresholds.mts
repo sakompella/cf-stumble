@@ -52,6 +52,9 @@ export const RESTART_CLOSE_WINDOW_MS = 10_000;
 /** The GraphQL `limit` for container metrics. A result this long may be cut off. */
 export const METRICS_ROW_LIMIT = 5000;
 
+/** Clock slack when matching a streamed route's `route.settled` to the invocation that began it. */
+export const STREAM_START_SLACK_MS = 5000;
+
 /** Most evidence ids printed on one line. */
 export const MAX_EVIDENCE = 3;
 

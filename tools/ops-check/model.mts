@@ -22,9 +22,11 @@ export interface AppEvent {
   readonly running: boolean | null;
   readonly reasonCode: string | null;
   readonly reasonSource: string | null;
+  /** `route.settled` only: `headers` for a streamed response whose work continues. */
+  readonly phase: string | null;
 }
 
-/** The platform's record of one fetch invocation, from `$workers.*` metadata. */
+/** The platform's record of one fetch invocation. `route` is the pattern the Worker logs, never the raw path. */
 export interface Invocation {
   readonly atMs: number;
   readonly id: string;
