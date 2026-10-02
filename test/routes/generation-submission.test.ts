@@ -1,14 +1,18 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { GenerationRequest } from "../../src/supervisor/control/index.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
-import { everythingLogged } from "../log-capture.js";
+import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -181,6 +185,8 @@ test("returns a failed build step's output tail to the owner and writes none of 
     stderrTail: "error TS2322: PRIVATE-COMPILER-OUTPUT",
     truncated: false,
   };
+
+  capturedEvents();
 
   const response = await routeOwnerApiRequest(
     submitRequest(submissionBody()),
