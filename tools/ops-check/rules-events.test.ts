@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { runChecks } from "./check.mts";
 import { eventRow } from "./fixtures.mts";
 import { MINUTE_MS } from "./model.mts";
-import { firing, START, withLogs } from "./rule-helpers.mts";
+import { firing, START, WINDOW, withLogs } from "./rule-helpers.mts";
 
 describe("rule e: fault events", () => {
   const closed = (running: boolean) =>
@@ -32,6 +32,20 @@ describe("rule e: fault events", () => {
     assert.ok(firing(withLogs([stopped("warn")])).includes("unexplained-stop"));
     assert.ok(firing(withLogs([stopped("error")])).includes("unexplained-stop"));
     assert.deepEqual(firing(withLogs([stopped("info")])), []);
+  });
+});
+
+describe("rule e: a restart request just before the window", () => {
+  it("does not flag a close just after --from whose stop-requested came seconds before it", () => {
+    const request = eventRow(WINDOW.fromMs - 5000, "workspace.container.stop-requested", {});
+
+    const close = eventRow(WINDOW.fromMs + 2000, "workspace.backend.closed", {
+      level: "warn",
+      running: true,
+      trigger: "transport-closed",
+    });
+
+    assert.deepEqual(firing(withLogs([request, close])), []);
   });
 });
 

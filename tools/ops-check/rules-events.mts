@@ -24,7 +24,8 @@ function finding(rule: RuleId, what: string, matches: readonly AppEvent[]): read
 /**
  * A reset or a recovery restarts the container on purpose, and the backend transport closes while
  * it does. Such a close is not a fault, so a close within seconds of the Host's own stop or wake
- * request is not reported.
+ * request is not reported. The caller passes every fetched event, not only those in the report
+ * window, because the request can come seconds before `--from`.
  */
 function nearRestart(close: AppEvent, events: readonly AppEvent[]): boolean {
   return events.some(
@@ -53,7 +54,7 @@ export function faultEvents(logs: LogData, window: TimeWindow): readonly Finding
           event.name === "workspace.backend.closed" &&
           event.running === true &&
           event.trigger !== "idle-stop" &&
-          !nearRestart(event, events),
+          !nearRestart(event, logs.events),
       ),
     ),
     ...finding(
