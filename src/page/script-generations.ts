@@ -47,7 +47,7 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       parts.push("stdout:\\n" + text(diagnostics.stdoutTail));
     }
     if (diagnostics.truncated === true) {
-      parts.push("(output truncated to the last 2000 characters of each stream)");
+      parts.push("(output truncated to the last part of each stream)");
     }
     setText("${ID.submitDiagnosticsText}", parts.join("\\n\\n"));
     box.hidden = false;
@@ -72,12 +72,14 @@ export const OWNER_PAGE_SCRIPT_GENERATIONS = `
       return;
     }
     setText("${ID.submitStatus}", "running");
+    renderDiagnostics(null);
     try {
       var body = { harnessCommit: harnessCommit };
       renderSubmission(await call("POST", "/api/generations/submit", body));
       await refreshStatus();
     } catch (error) {
       setText("${ID.submitStatus}", "request failed");
+      renderDiagnostics(null);
       reportError("the submission request", error);
     }
   }

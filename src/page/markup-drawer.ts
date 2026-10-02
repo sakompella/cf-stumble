@@ -27,7 +27,7 @@ const submissionPanel = `
           ${value("preparation check", ID.submitPreparation)}
           <details id="${ID.submitDiagnostics}" hidden>
             <summary>build output</summary>
-            <pre class="build-output" id="${ID.submitDiagnosticsText}"></pre>
+            <pre class="build-output" tabindex="0" id="${ID.submitDiagnosticsText}"></pre>
           </details>
         </div>`;
 

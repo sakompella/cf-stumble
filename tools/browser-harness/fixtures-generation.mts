@@ -144,10 +144,7 @@ export function submitGeneration(state: GenerationState, harnessCommit: string):
   const record: GenerationRecord = {
     label: Math.max(0, ...labels) + 1,
     harnessCommit,
-    status:
-      harnessCommit === BROKEN_CANDIDATE_COMMIT || harnessCommit === BUILD_FAILED_COMMIT
-        ? "failed"
-        : "ready",
+    status: harnessCommit === BROKEN_CANDIDATE_COMMIT ? "failed" : "ready",
   };
 
   return submitted({ ...state, generations: [...state.generations, record] }, record);
