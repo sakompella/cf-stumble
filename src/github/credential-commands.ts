@@ -1,12 +1,13 @@
 import { shellQuote } from "../shell-quote.js";
+import { GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH } from "../workspace-layout.js";
 
 /**
  * The shell text that installs, inspects, and exercises the workspace's GitHub credential, kept
  * beside the parsing of what those commands print.
  *
  * ADR-0039 puts the credential in the ordinary local `gh` configuration rather than in a
- * cf-stumble store: `gh auth login --with-token` writes `~/.config/gh/hosts.yml`, and
- * `gh auth setup-git` points Git's credential helper at it, so `git` and `gh` authenticate the way
+ * cf-stumble store: `gh auth login --with-token` writes `hosts.yml` under `GH_CONFIG_DIR`, and
+ * `gh auth setup-git` points Git's credential helper at it in `GIT_CONFIG_GLOBAL`, so `git` and `gh` authenticate the way
  * they would on any development machine and no cf-stumble code sits between them and GitHub.
  *
  * The token never appears in command text and never touches a filesystem. `gh auth login
@@ -17,6 +18,20 @@ import { shellQuote } from "../shell-quote.js";
  */
 
 export const GITHUB_HOSTNAME = "github.com";
+
+/**
+ * Shell lines that point `gh` and Git's global configuration at the durable workspace paths.
+ *
+ * Computer persists only `/workspace`, so a credential under `$HOME` is lost with the container.
+ * The image sets the same variables, but a command that names them itself does not depend on the
+ * image it runs in. Every command that needs the credential starts with these lines.
+ */
+export function durableGitHubConfigurationSource(): readonly string[] {
+  return [
+    `export GH_CONFIG_DIR=${shellQuote(GITHUB_CLI_CONFIG_DIRECTORY)}`,
+    `export GIT_CONFIG_GLOBAL=${shellQuote(GIT_GLOBAL_CONFIG_PATH)}`,
+  ];
+}
 
 /**
  * What the workspace's credential is doing, as the status command reports it. `unusable` is the
@@ -37,7 +52,7 @@ const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u;
  *
  * The command reads the token from its own standard input, so an interrupted install leaves
  * nothing behind: a token that never reaches a filesystem cannot be forgotten on one. `umask`
- * still applies, because `gh` writes the credential into `~/.config/gh/hosts.yml` itself.
+ * still applies, because `gh` writes the credential into `hosts.yml` itself.
  *
  * A missing `gh` is reported rather than repaired: ADR-0039 expects the pinned image to carry the
  * development tools, and silently installing a package manager's idea of `gh` during an
@@ -46,6 +61,7 @@ const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u;
 export function installCredentialSource(): string {
   return [
     "set -eu",
+    ...durableGitHubConfigurationSource(),
     "umask 077",
     "if ! command -v gh >/dev/null 2>&1; then",
     "  printf 'tooling-missing\\n'",
@@ -68,6 +84,7 @@ export function installCredentialSource(): string {
 export function credentialStatusSource(): string {
   return [
     "set -u",
+    ...durableGitHubConfigurationSource(),
     "if ! command -v gh >/dev/null 2>&1; then",
     "  printf 'tooling-missing\\n'",
     "  exit 0",
@@ -96,6 +113,7 @@ export function credentialStatusSource(): string {
 export function repositoryAccessSource(repositoryUrl: string): string {
   return [
     "set -u",
+    ...durableGitHubConfigurationSource(),
     "export GIT_TERMINAL_PROMPT=0",
     `url=${shellQuote(repositoryUrl)}`,
     'if error="$(git ls-remote --heads "$url" 2>&1 >/dev/null)"; then',

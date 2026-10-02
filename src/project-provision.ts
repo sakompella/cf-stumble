@@ -7,7 +7,11 @@ import {
   projectGitDirectory,
 } from "./workspace-layout.js";
 import type { Project, ProjectId } from "./project-catalog.js";
-import { REPOSITORY_SIZE_VERDICT_FUNCTION, repositorySizeVerdictSource } from "./github/index.js";
+import {
+  durableGitHubConfigurationSource,
+  REPOSITORY_SIZE_VERDICT_FUNCTION,
+  repositorySizeVerdictSource,
+} from "./github/index.js";
 
 /**
  * Keep enough recent history for ordinary `git log -n` and local review, while leaving older
@@ -164,6 +168,7 @@ function cloneProjectRepository(
 
   return [
     "set -eu",
+    ...durableGitHubConfigurationSource(),
     `projects=${shellQuote(PROJECTS_DIRECTORY)}`,
     `lock=${shellQuote(lock)}`,
     `repository=${shellQuote(configuration.projectRoot)}`,

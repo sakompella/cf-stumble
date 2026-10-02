@@ -1,3 +1,4 @@
+import { durableGitHubConfigurationSource } from "./github/index.js";
 import { shellQuote } from "./shell-quote.js";
 import { PROJECT_CLONE_DEPTH } from "./project-provision.js";
 import { WORKSPACE_ROOT } from "./workspace-layout.js";
@@ -92,6 +93,7 @@ export function provisionHarnessRepository(
 ): string {
   return [
     "set -eu",
+    ...durableGitHubConfigurationSource(),
     `mkdir -p ${shellQuote(WORKSPACE_ROOT)}`,
     `lock=${shellQuote(HARNESS_PROVISION_LOCK)}`,
     `repository=${shellQuote(configuration.harnessRepositoryRoot)}`,
