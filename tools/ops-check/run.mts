@@ -1,6 +1,13 @@
 import { parseOptions, USAGE } from "./args.mts";
 import { formatReport, runChecks } from "./check.mts";
-import { fetchLogs, fetchMetrics, readToken, resolveAccount } from "./fetch.mts";
+import {
+  fetchApplications,
+  fetchInstances,
+  fetchLogs,
+  fetchMetrics,
+  readToken,
+  resolveAccount,
+} from "./fetch.mts";
 import type { Options } from "./args.mts";
 import type { CheckInput, Source } from "./model.mts";
 
@@ -29,19 +36,28 @@ async function gather(options: Options): Promise<CheckInput> {
   const base = { worker: options.worker, window: options.window, idleLimitMs: options.idleLimitMs };
 
   if (token === null) {
-    return { ...base, logs: noToken, metrics: noToken };
+    return { ...base, logs: noToken, metrics: noToken, instances: noToken };
   }
 
   const account = await resolveAccount(token, options.account);
   // Container work that started before the window can still be owned by a request just before it.
   const logWindow = { ...options.window, fromMs: options.window.fromMs - options.idleLimitMs };
 
-  const [logs, metrics] = await Promise.all([
+  const [logs, applications] = await Promise.all([
     fetchLogs(token, account, options.worker, logWindow),
-    fetchMetrics(token, account, options.worker, options.window),
+    fetchApplications(token, account, options.worker),
   ]);
 
-  return { ...base, logs, metrics };
+  if (applications.status === "unavailable") {
+    return { ...base, logs, metrics: applications, instances: applications };
+  }
+
+  const [metrics, instances] = await Promise.all([
+    fetchMetrics(token, account, applications.data, options.window),
+    fetchInstances(token, account, applications.data),
+  ]);
+
+  return { ...base, logs, metrics, instances };
 }
 
 const options = parsed.options;

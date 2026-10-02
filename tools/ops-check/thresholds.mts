@@ -30,6 +30,13 @@ export const UNOWNED_RUN_MS = 30 * MINUTE_MS;
 /** Running time beyond the idle limit that is tolerated before a finding: the stop is not exact. */
 export const IDLE_OVERRUN_TOLERANCE_MS = 10 * MINUTE_MS;
 
+/**
+ * Metrics lag the clock by a few minutes: on 2026-10-02 the newest bucket was still filling and
+ * the container looked stopped when it was not. Buckets that end inside this span are incomplete,
+ * so the rules skip them and the instances API answers for the present.
+ */
+export const METRICS_LAG_MS = 10 * MINUTE_MS;
+
 /** Default idle limit, as a parameter of the check. */
 export const DEFAULT_IDLE_LIMIT_MS = 20 * MINUTE_MS;
 

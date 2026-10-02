@@ -112,9 +112,11 @@ export function logs(
 
 export function input(
   window: TimeWindow,
-  sources: Pick<CheckInput, "logs" | "metrics">,
+  sources: Pick<CheckInput, "logs" | "metrics"> & Partial<Pick<CheckInput, "instances">>,
 ): CheckInput {
-  return { worker: "cf-stumble", window, idleLimitMs: 20 * MINUTE_MS, ...sources };
+  const none: CheckInput["instances"] = { status: "ok", data: [] };
+
+  return { worker: WORKER, window, idleLimitMs: 20 * MINUTE_MS, instances: none, ...sources };
 }
 
 /**

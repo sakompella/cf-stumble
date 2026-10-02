@@ -12,6 +12,7 @@ import { isOwnerActivity, isOwnerWork } from "./ownership.mts";
 import {
   BUSY_CPU_SECONDS_PER_BUCKET,
   IDLE_OVERRUN_TOLERANCE_MS,
+  METRICS_LAG_MS,
   UNOWNED_RUN_MS,
 } from "./thresholds.mts";
 import {
@@ -19,6 +20,7 @@ import {
   MINUTE_MS,
   type CpuBucket,
   type Finding,
+  type Instance,
   type LogData,
   type TimeWindow,
   type UsageBucket,
@@ -26,6 +28,11 @@ import {
 
 function bucketOf(startMs: number): Interval {
   return { beginMs: startMs, endMs: startMs + BUCKET_MS };
+}
+
+/** True for a bucket inside the window whose five minutes have fully reached the metrics. */
+function usable(startMs: number, window: TimeWindow): boolean {
+  return inWindow(startMs, window) && startMs + BUCKET_MS <= window.toMs - METRICS_LAG_MS;
 }
 
 function inWindow(startMs: number, window: TimeWindow): boolean {
@@ -63,7 +70,7 @@ export function unownedCpu(
   const unowned = cpu
     .filter(
       (bucket) =>
-        inWindow(bucket.startMs, window) &&
+        usable(bucket.startMs, window) &&
         bucket.cpuTimeSec > BUSY_CPU_SECONDS_PER_BUCKET &&
         !touches(bucketOf(bucket.startMs), owned),
     )
@@ -113,8 +120,41 @@ function allowedRunning(logs: LogData, idleLimitMs: number): readonly Interval[]
   );
 }
 
+/**
+ * Instances the Containers API reports as running at the end of the window, measured directly
+ * because the newest metrics are incomplete. Time the owner does not explain counts against the
+ * instance from the start of the window, or from its start if that is later.
+ */
+function runningNow(
+  instances: readonly Instance[],
+  allowed: readonly Interval[],
+  lastActivity: readonly number[],
+  window: TimeWindow,
+  idleLimitMs: number,
+): readonly Finding[] {
+  return instances.flatMap((instance): Finding[] => {
+    const span = { beginMs: Math.max(instance.startedAtMs, window.fromMs), endMs: window.toMs };
+    const unexplainedMs = span.endMs - span.beginMs - coveredMs(span, allowed);
+
+    const lastBefore = lastActivity
+      .filter((atMs) => atMs < window.toMs)
+      .toSorted((a, b) => b - a)[0];
+
+    return instance.state === "running" && unexplainedMs > IDLE_OVERRUN_TOLERANCE_MS
+      ? [
+          {
+            rule: "ran-past-idle",
+            detail: `${Math.round(unexplainedMs / MINUTE_MS)} min > ${IDLE_OVERRUN_TOLERANCE_MS / MINUTE_MS} min beyond the ${idleLimitMs / MINUTE_MS} min idle limit, instance still running, last owner activity ${lastBefore === undefined ? "none seen" : isoMinute(lastBefore)}`,
+            evidence: firstIds([`instance:${instance.id.slice(0, 8)}`, isoMinute(window.toMs)]),
+          },
+        ]
+      : [];
+  });
+}
+
 export function ranPastIdle(
   usage: readonly UsageBucket[],
+  instances: readonly Instance[],
   logs: LogData,
   window: TimeWindow,
   idleLimitMs: number,
@@ -122,14 +162,17 @@ export function ranPastIdle(
   const allowed = allowedRunning(logs, idleLimitMs);
 
   const running = usage
-    .filter((bucket) => inWindow(bucket.startMs, window) && bucket.runningMinutes > 0)
+    .filter((bucket) => usable(bucket.startMs, window) && bucket.runningMinutes > 0)
     .toSorted((a, b) => a.startMs - b.startMs);
 
   const lastActivity = logs.events
     .filter((event) => isOwnerActivity(event))
     .map((event) => event.atMs);
 
-  return consecutiveRuns(running).flatMap((run): Finding[] => {
+  const now = runningNow(instances, allowed, lastActivity, window, idleLimitMs);
+  const edgeMs = window.toMs - METRICS_LAG_MS - BUCKET_MS;
+
+  const fromBuckets = consecutiveRuns(running).flatMap((run): Finding[] => {
     const excessMinutes = run.reduce(
       (sum, bucket) =>
         sum +
@@ -147,6 +190,11 @@ export function ranPastIdle(
     }
 
     const runEndMs = first.startMs + run.length * BUCKET_MS;
+
+    if (now.length > 0 && runEndMs > edgeMs) {
+      return [];
+    }
+
     const lastBefore = lastActivity.filter((atMs) => atMs < runEndMs).toSorted((a, b) => b - a)[0];
 
     return [
@@ -157,4 +205,6 @@ export function ranPastIdle(
       },
     ];
   });
+
+  return [...now, ...fromBuckets];
 }

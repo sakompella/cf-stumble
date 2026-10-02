@@ -10,7 +10,7 @@ import type { CheckInput, Finding } from "./model.mts";
  * `missingData` reports the rest, so a skipped rule shows up as `unknown` instead of as silence.
  */
 export function runChecks(input: CheckInput): readonly Finding[] {
-  const { logs, metrics, window, idleLimitMs } = input;
+  const { logs, metrics, instances, window, idleLimitMs } = input;
   const logsUsable = logs.status === "ok";
 
   // Empty logs cannot attribute container time: absence of owner events there may be absence of data.
@@ -31,7 +31,13 @@ export function runChecks(input: CheckInput): readonly Finding[] {
     ...(joinable
       ? [
           ...unownedCpu(metrics.data.cpu, logs.data, window),
-          ...ranPastIdle(metrics.data.usage, logs.data, window, idleLimitMs),
+          ...ranPastIdle(
+            metrics.data.usage,
+            instances.status === "ok" ? instances.data : [],
+            logs.data,
+            window,
+            idleLimitMs,
+          ),
         ]
       : []),
     ...missingData(input),

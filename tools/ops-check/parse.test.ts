@@ -9,7 +9,7 @@ import {
   telemetry,
   WORKER,
 } from "./fixtures.mts";
-import { parseApplications, parseMetrics, parseTelemetry } from "./parse.mts";
+import { parseApplications, parseInstances, parseMetrics, parseTelemetry } from "./parse.mts";
 
 describe("telemetry parsing", () => {
   it("keeps fields the rules read and drops rows without an event name or timestamp", () => {
@@ -94,6 +94,22 @@ describe("metrics parsing", () => {
 });
 
 describe("containers API parsing", () => {
+  it("reads instances and skips rows without a state or start time", () => {
+    const parsed = parseInstances({
+      result: {
+        instances: [
+          { id: "i1", started_at: "2026-10-02T13:17:54Z", status: { state: "running" } },
+          { id: "i2", status: { state: "running" } },
+        ],
+      },
+    });
+
+    assert.deepEqual(parsed, [
+      { id: "i1", state: "running", startedAtMs: Date.parse("2026-10-02T13:17:54Z") },
+    ]);
+    assert.equal(parseInstances({ result: {} }), null);
+  });
+
   it("reads id, name and memory", () => {
     const parsed = parseApplications({
       result: [{ id: "a", name: "w-host", configuration: { memory_mib: 8192 } }, { id: "b" }],

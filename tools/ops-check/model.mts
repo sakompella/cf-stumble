@@ -56,6 +56,13 @@ export interface MetricData {
   readonly usage: readonly UsageBucket[];
 }
 
+/** One container instance as the Containers API reports it right now. */
+export interface Instance {
+  readonly id: string;
+  readonly state: string;
+  readonly startedAtMs: number;
+}
+
 export type Source<T> =
   | { readonly status: "ok"; readonly data: T }
   | { readonly status: "unavailable"; readonly reason: string };
@@ -72,6 +79,8 @@ export interface CheckInput {
   readonly idleLimitMs: number;
   readonly logs: Source<LogData>;
   readonly metrics: Source<MetricData>;
+  /** What the Containers API says is running at `window.toMs`, which metrics cannot yet tell. */
+  readonly instances: Source<readonly Instance[]>;
 }
 
 export type RuleId =

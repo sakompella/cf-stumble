@@ -12,7 +12,12 @@ function unknown(detail: string): Finding {
 }
 
 export function missingData(input: CheckInput): readonly Finding[] {
-  const { logs, metrics } = input;
+  const { logs, metrics, instances } = input;
+
+  const instancesUnknown =
+    instances.status === "unavailable"
+      ? [unknown(`instances unavailable: ${instances.reason}`)]
+      : [];
 
   if (logs.status === "unavailable" || metrics.status === "unavailable") {
     return [
@@ -20,6 +25,7 @@ export function missingData(input: CheckInput): readonly Finding[] {
       ...(metrics.status === "unavailable"
         ? [unknown(`metrics unavailable: ${metrics.reason}`)]
         : []),
+      ...instancesUnknown,
     ];
   }
 
@@ -27,6 +33,7 @@ export function missingData(input: CheckInput): readonly Finding[] {
   const { cpu, usage } = metrics.data;
 
   return [
+    ...instancesUnknown,
     ...(logs.data.truncated ? [unknown("logs truncated at the query row limit")] : []),
     ...(logRows > 0 && cpu.length === 0
       ? [unknown(`cpu metrics empty while logs show ${logRows} rows`)]

@@ -178,6 +178,75 @@ describe("rule d: ran-past-idle", () => {
   });
 });
 
+const LAST_REQUEST_AT = START + 60 * MINUTE_MS;
+
+function instanceSource(state: string, startedAtMs: number): CheckInput["instances"] {
+  return { status: "ok", data: [{ id: "instance-0001", state, startedAtMs }] };
+}
+
+function runningAt(minutesAfterRequest: number, state: string, startedAtMs: number): CheckInput {
+  return {
+    ...input(
+      { fromMs: START, toMs: LAST_REQUEST_AT + minutesAfterRequest * MINUTE_MS },
+      {
+        logs: logs([
+          eventRow(LAST_REQUEST_AT, "route.settled", {
+            requestId: "r",
+            route: "/api/x",
+            durationMs: 1,
+          }),
+        ]),
+        metrics: metrics([[START, 1]], [[START, 0]]),
+      },
+    ),
+    instances: instanceSource(state, startedAtMs),
+  };
+}
+
+describe("rule d: running now and metrics lag", () => {
+  it("fires when the instances API shows a running instance with no owner for too long", () => {
+    assert.deepEqual(firing(runningAt(40, "running", START)), ["ran-past-idle"]);
+  });
+
+  it("is quiet for an instance that is not running, because the newest metrics are incomplete", () => {
+    assert.deepEqual(firing(runningAt(40, "stopped", START)), []);
+  });
+
+  it("is quiet when the instance started with the request and is within the idle limit", () => {
+    assert.deepEqual(firing(runningAt(25, "running", LAST_REQUEST_AT)), []);
+  });
+
+  it("ignores usage buckets still inside the lag, which can be partial", () => {
+    const partial = bucketsOf(
+      { fromMs: LAST_REQUEST_AT + 25 * MINUTE_MS, toMs: LAST_REQUEST_AT + 40 * MINUTE_MS },
+      () => 5,
+    );
+
+    const lagged = runningAt(40, "stopped", START);
+
+    assert.deepEqual(firing({ ...lagged, metrics: metrics([[START, 1]], partial) }), []);
+  });
+
+  it("reports one finding, not two, when buckets and the instance describe the same run", () => {
+    const run = bucketsOf(
+      { fromMs: LAST_REQUEST_AT + 20 * MINUTE_MS, toMs: LAST_REQUEST_AT + 35 * MINUTE_MS },
+      () => 5,
+    );
+
+    const checked = { ...runningAt(45, "running", START), metrics: metrics([[START, 1]], run) };
+
+    assert.equal(runChecks(checked).length, 1);
+  });
+
+  it("reports an unreadable instances API as unknown", () => {
+    const failed = { status: "unavailable", reason: "HTTP 403" } as const;
+
+    assert.deepEqual(firing({ ...runningAt(40, "running", START), instances: failed }), [
+      "unknown",
+    ]);
+  });
+});
+
 describe("rule e: fault events", () => {
   const closed = (running: boolean) =>
     eventRow(START + MINUTE_MS, "workspace.backend.closed", { level: "warn", running });

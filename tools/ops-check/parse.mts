@@ -16,6 +16,7 @@ import type {
   AppEvent,
   CpuBucket,
   EventLevel,
+  Instance,
   Invocation,
   LogData,
   MetricData,
@@ -233,5 +234,25 @@ export function parseApplications(response: JsonValue): readonly ContainerApplic
     return id === null || name === null || mebibytes === null
       ? []
       : [{ id, name, memoryBytes: mebibytes * 1024 * 1024 }];
+  });
+}
+
+/** Instances from the Containers API instances response, or `null` when the shape is wrong. */
+export function parseInstances(response: JsonValue): readonly Instance[] | null {
+  const instances = path(response, ["result", "instances"]);
+
+  if (instances === undefined || !isJsonArray(instances)) {
+    return null;
+  }
+
+  return instances.flatMap((instance): Instance[] => {
+    const id = text(member(instance, "id"));
+    const state = text(path(instance, ["status", "state"]));
+    const startedAt = text(member(instance, "started_at"));
+    const startedAtMs = startedAt === null ? Number.NaN : Date.parse(startedAt);
+
+    return id === null || state === null || Number.isNaN(startedAtMs)
+      ? []
+      : [{ id, state, startedAtMs }];
   });
 }

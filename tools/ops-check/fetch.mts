@@ -14,12 +14,19 @@ import {
 } from "../browser-harness/json.mts";
 import {
   BUCKET_MS,
+  type Instance,
   type LogData,
   type MetricData,
   type Source,
   type TimeWindow,
 } from "./model.mts";
-import { parseApplications, parseMetrics, parseTelemetry } from "./parse.mts";
+import {
+  parseApplications,
+  parseInstances,
+  parseMetrics,
+  parseTelemetry,
+  type ContainerApplication,
+} from "./parse.mts";
 import { TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
@@ -144,22 +151,39 @@ const USAGE = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{accoun
   containersUsageAdaptiveGroups(limit:5000,filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
     dimensions{datetimeFiveMinutes applicationId instanceId} sum{allocatedMemory}}}}}`;
 
-/** Container CPU and allocated time for the Worker's container applications (`<worker>-*`). */
-export function fetchMetrics(
+/** The Worker's Containers application is named after the Worker and its class, lowercased. */
+export function fetchApplications(
   token: string,
   account: string,
   worker: string,
+): Promise<Source<readonly ContainerApplication[]>> {
+  const name = `${worker}-workspacehost`;
+
+  return guarded(async () => {
+    const all = parseApplications(
+      await send(token, `${API}/accounts/${account}/containers/applications`, { method: "GET" }),
+    );
+
+    const found = all?.filter((application) => application.name === name) ?? [];
+
+    return found.length === 0
+      ? { status: "unavailable", reason: `no container application named ${name}` }
+      : { status: "ok", data: found };
+  });
+}
+
+/** Container CPU and allocated time for the Worker's container application. */
+export function fetchMetrics(
+  token: string,
+  account: string,
+  applications: readonly ContainerApplication[],
   window: TimeWindow,
 ): Promise<Source<MetricData>> {
   return guarded(async () => {
-    const applications = parseApplications(
-      await send(token, `${API}/accounts/${account}/containers/applications`, { method: "GET" }),
-    )?.filter((application) => application.name.startsWith(`${worker}-`));
+    const memory = applications[0]?.memoryBytes;
 
-    const memory = applications?.[0]?.memoryBytes;
-
-    if (applications === undefined || applications.length === 0 || memory === undefined) {
-      return { status: "unavailable", reason: `no container application named ${worker}-*` };
+    if (memory === undefined) {
+      return { status: "unavailable", reason: "no container application" };
     }
 
     const variables = {
@@ -172,5 +196,30 @@ export function fetchMetrics(
     const run = (query: string) => post(token, `${API}/graphql`, { query, variables });
 
     return parseMetrics(await run(METRICS), await run(USAGE), memory);
+  });
+}
+
+/** What the Containers API says is running now. Metrics lag; this does not. */
+export function fetchInstances(
+  token: string,
+  account: string,
+  applications: readonly ContainerApplication[],
+): Promise<Source<readonly Instance[]>> {
+  return guarded(async () => {
+    const answers = await Promise.all(
+      applications.map(async (application) =>
+        parseInstances(
+          await send(
+            token,
+            `${API}/accounts/${account}/containers/applications/${application.id}/instances`,
+            { method: "GET" },
+          ),
+        ),
+      ),
+    );
+
+    return answers.includes(null)
+      ? { status: "unavailable", reason: "instances response had an unexpected shape" }
+      : { status: "ok", data: answers.flatMap((instances) => instances ?? []) };
   });
 }
