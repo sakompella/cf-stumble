@@ -101,7 +101,7 @@ type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
 function credential(operations: CredentialOperations, request: unknown) {
-  return executeGitHubCredentialRequest({ operations, request });
+  return executeGitHubCredentialRequest({ operations, installOperations: operations, request });
 }
 
 function statusOf(result: GitHubCredentialResult): GitHubCredentialState | undefined {

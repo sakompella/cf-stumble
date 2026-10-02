@@ -43,6 +43,7 @@ test("a status read logs its timed outcome and command with the request id, and 
 
   await executeGitHubCredentialRequest({
     operations: connected,
+    installOperations: connected,
     request: statusRequest,
     requestId,
   });
@@ -70,7 +71,11 @@ test("a status read logs its timed outcome and command with the request id, and 
 test("a status read without a request id writes no requestId field", async () => {
   const events = capturedEvents();
 
-  await executeGitHubCredentialRequest({ operations: connected, request: statusRequest });
+  await executeGitHubCredentialRequest({
+    operations: connected,
+    installOperations: connected,
+    request: statusRequest,
+  });
 
   expect(named(events(), "github-credential.status").at(0)).not.toHaveProperty("requestId");
   expect(named(events(), "workspace.command").at(0)).not.toHaveProperty("requestId");
@@ -83,6 +88,7 @@ test("a status state other than connected is a warning", async () => {
     operations: operationsAnswering(() =>
       Promise.resolve({ stdout: "missing\n", stderr: "", exitCode: 0 }),
     ),
+    installOperations: connected,
     request: statusRequest,
   });
 
@@ -98,6 +104,7 @@ test("a status read that throws is one error event and still the public unavaila
 
   const result = await executeGitHubCredentialRequest({
     operations: operationsAnswering(() => Promise.reject(new Error("command timed out"))),
+    installOperations: connected,
     request: statusRequest,
     requestId,
   });

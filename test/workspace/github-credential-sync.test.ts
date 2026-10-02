@@ -1,4 +1,5 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { capturedEvents, everythingLogged } from "../log-capture.js";
 import {
   executeGitHubCredentialRequest,
   WorkspaceSyncIncomplete,
@@ -14,10 +15,15 @@ import {
  * the surface uses it for the install only, and that the failure leaks nothing.
  */
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 class RecordingOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
+  /** Set to make every command run and then fail, as a pending post-command sync does. */
   failure: Error | undefined;
 
   lstat(): Promise<WorkspacePathKind | undefined> {
@@ -33,19 +39,25 @@ class RecordingOperations implements WorkspaceOperations {
   }
 
   runCommand(source: string): Promise<CommandOutput> {
-    if (this.failure !== undefined) return Promise.reject(this.failure);
     this.sources.push(source);
 
-    return Promise.resolve({ stdout: "installed", stderr: "", exitCode: 0 });
+    return this.failure === undefined
+      ? Promise.resolve({ stdout: "installed", stderr: "", exitCode: 0 })
+      : Promise.reject(this.failure);
   }
 }
+
+const installRequest = { kind: "github-credential", step: "install", token: FAKE_TOKEN };
 
 test("runs the install through operations that require a complete sync, and nothing else", async () => {
   const lenient = new RecordingOperations();
   const strict = new RecordingOperations();
-  const request = { kind: "github-credential", step: "install", token: FAKE_TOKEN };
 
-  await executeGitHubCredentialRequest({ operations: lenient, installOperations: strict, request });
+  await executeGitHubCredentialRequest({
+    operations: lenient,
+    installOperations: strict,
+    request: installRequest,
+  });
   await executeGitHubCredentialRequest({
     operations: lenient,
     installOperations: strict,
@@ -58,16 +70,38 @@ test("runs the install through operations that require a complete sync, and noth
   expect(lenient.sources[0]).toContain("gh auth status");
 });
 
-test("an install whose workspace copy is still pending is not connected and leaks no token", async () => {
-  const pendingSync = new RecordingOperations();
-  pendingSync.failure = new WorkspaceSyncIncomplete(
+test("an install whose workspace copy is still pending logs the credential out and is not connected", async () => {
+  const events = capturedEvents();
+  const lenient = new RecordingOperations();
+  const strict = new RecordingOperations();
+  strict.failure = new WorkspaceSyncIncomplete(
     `post-command sync pending (exit 0, skipped 0) ${FAKE_TOKEN}`,
   );
 
   const result = await executeGitHubCredentialRequest({
-    operations: pendingSync,
-    installOperations: pendingSync,
-    request: { kind: "github-credential", step: "install", token: FAKE_TOKEN },
+    operations: lenient,
+    installOperations: strict,
+    request: installRequest,
+  });
+
+  expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
+  expect(lenient.sources).toHaveLength(1);
+  expect(lenient.sources[0]).toContain("gh auth logout --hostname github.com");
+  expect(lenient.sources[0]).toContain("export GH_CONFIG_DIR=");
+  expect(JSON.stringify(events())).not.toContain(FAKE_TOKEN);
+  expect(everythingLogged()).not.toContain(FAKE_TOKEN);
+});
+
+test("a failed logout does not hide the incomplete sync", async () => {
+  const lenient = new RecordingOperations();
+  lenient.failure = new Error("container gone");
+  const strict = new RecordingOperations();
+  strict.failure = new WorkspaceSyncIncomplete("pending");
+
+  const result = await executeGitHubCredentialRequest({
+    operations: lenient,
+    installOperations: strict,
+    request: installRequest,
   });
 
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });

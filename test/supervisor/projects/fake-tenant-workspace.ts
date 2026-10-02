@@ -208,6 +208,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
 
     return executeGitHubCredentialRequest({
       operations: this,
+      installOperations: this,
       request,
       requestId: parseRequestId(requestId),
     });

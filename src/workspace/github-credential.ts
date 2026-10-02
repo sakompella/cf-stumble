@@ -8,6 +8,7 @@ import {
 import {
   credentialStatusSource,
   installCredentialSource,
+  logoutCredentialSource,
   parseCredentialStatus,
   parseGitHubToken,
   parseRepositoryAccess,
@@ -18,7 +19,12 @@ import {
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import { runLoggedCommand, WorkspaceSyncIncomplete, type WorkspaceOperations } from "./executor.js";
+import {
+  runLoggedCommand,
+  WorkspaceSyncIncomplete,
+  type CommandOutput,
+  type WorkspaceOperations,
+} from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly } from "./untrusted.js";
 
 /**
@@ -128,15 +134,10 @@ export function parseGitHubCredentialRequest(
  * therefore nothing to clean up after this returns.
  */
 async function installCredential(
-  operations: WorkspaceOperations,
+  operations: Readonly<{ lenient: WorkspaceOperations; durable: WorkspaceOperations }>,
   token: string,
 ): Promise<GitHubCredentialResult> {
-  const output = await runLoggedCommand(
-    operations,
-    "github-credential.install",
-    { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
-    { stdin: `${token}\n` },
-  );
+  const output = await runInstall(operations, token);
 
   if (output.exitCode !== 0) {
     return failed("credential-command-failed", output.stderr, token);
@@ -145,6 +146,38 @@ async function installCredential(
   return output.stdout.trim() === "tooling-missing"
     ? { ok: true, result: { kind: "credential-status", state: "tooling-missing", login: void 0 } }
     : { ok: true, result: { kind: "credential-installed" } };
+}
+
+/**
+ * Run the install command, and undo it when its durable copy is not confirmed.
+ *
+ * The command has already written `hosts.yml` in the container when the sync check fails. Left
+ * there, the next status read would report `connected` for a credential the install reported as
+ * failed, and a container replacement would then lose it. A best-effort logout makes the
+ * container match the failure. The original failure still propagates.
+ */
+async function runInstall(
+  operations: Readonly<{ lenient: WorkspaceOperations; durable: WorkspaceOperations }>,
+  token: string,
+): Promise<CommandOutput> {
+  try {
+    return await runLoggedCommand(
+      operations.durable,
+      "github-credential.install",
+      { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+      { stdin: `${token}\n` },
+    );
+  } catch (cause) {
+    if (cause instanceof WorkspaceSyncIncomplete) {
+      await runLoggedCommand(operations.lenient, "github-credential.logout", {
+        source: logoutCredentialSource(),
+        cwd: "/",
+        timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+      }).catch(() => void 0);
+    }
+
+    throw cause;
+  }
 }
 
 async function credentialStatus(
@@ -208,16 +241,22 @@ async function repositoryAccess(
   };
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A caught value can be anything.
+function failureLabel(cause: unknown): string {
+  if (isTimeoutFailure(cause)) return "timeout";
+
+  return cause instanceof WorkspaceSyncIncomplete ? "sync-incomplete" : "workspace-unavailable";
+}
+
 /** The credential surface's effect shell. Every failure leaves as a redacted plain value. */
 export async function executeGitHubCredentialRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
     /**
      * Operations that fail unless the workspace's durable copy is complete. The install uses them,
-     * so a credential that only the container's disk holds is never reported as installed. It
-     * defaults to `operations`.
+     * so a credential that only the container's disk holds is never reported as installed.
      */
-    installOperations?: WorkspaceOperations | undefined;
+    installOperations: WorkspaceOperations;
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public credential request is parsed at this boundary.
     request: unknown;
     /** Names the owner request this call serves, for the log only. It changes no behavior. */
@@ -231,7 +270,10 @@ export async function executeGitHubCredentialRequest(
   try {
     switch (parsed.step) {
       case "install":
-        return await installCredential(input.installOperations ?? input.operations, parsed.token);
+        return await installCredential(
+          { lenient: input.operations, durable: input.installOperations },
+          parsed.token,
+        );
       case "status":
         return await timedCredentialStatus(input.operations, input.requestId);
       case "verify-repository":
@@ -243,13 +285,8 @@ export async function executeGitHubCredentialRequest(
       }
     }
   } catch (cause) {
-    let label = "workspace-unavailable";
-
-    if (isTimeoutFailure(cause)) label = "timeout";
-    else if (cause instanceof WorkspaceSyncIncomplete) label = "sync-incomplete";
-
     logRedactedCause(
-      `github-credential.${parsed.step}: ${label}`,
+      `github-credential.${parsed.step}: ${failureLabel(cause)}`,
       cause,
       parsed.step === "install" ? parsed.token : undefined,
     );

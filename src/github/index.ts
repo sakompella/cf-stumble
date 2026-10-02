@@ -2,6 +2,7 @@ export {
   credentialStatusSource,
   durableGitHubConfigurationSource,
   installCredentialSource,
+  logoutCredentialSource,
   parseCredentialStatus,
   parseRepositoryAccess,
   repositoryAccessSource,

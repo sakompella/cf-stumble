@@ -167,6 +167,7 @@ test("the credential install command is logged by name, and its token reaches no
 
   const result = await executeGitHubCredentialRequest({
     operations: new CommandOperations(),
+    installOperations: new CommandOperations(),
     request: { kind: "github-credential", step: "install", token: FAKE_TOKEN },
   });
 

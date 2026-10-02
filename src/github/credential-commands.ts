@@ -74,6 +74,21 @@ export function installCredentialSource(): string {
 }
 
 /**
+ * Remove the credential from the container, best effort.
+ *
+ * The install runs this when the durable copy of a fresh credential could not be confirmed, so the
+ * container does not keep a credential that the install reported as failed. A missing `gh` or an
+ * absent credential is not an error here.
+ */
+export function logoutCredentialSource(): string {
+  return [
+    "set -u",
+    ...durableGitHubConfigurationSource(),
+    `gh auth logout --hostname ${GITHUB_HOSTNAME} >/dev/null 2>&1 || true`,
+  ].join("\n");
+}
+
+/**
  * Report the credential the workspace actually has.
  *
  * `gh auth status` answers from local configuration and from GitHub, and the login is read with a
