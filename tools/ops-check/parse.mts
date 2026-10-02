@@ -100,12 +100,22 @@ function telemetryRows(response: JsonValue): readonly JsonRecord[] | null {
 }
 
 /**
+ * Rows written by `worker`. The query asks for that already; checking again here means a row from
+ * another Worker on the account (a staging copy, an e2e Worker) can never reach a rule even if the
+ * query filter is lost.
+ */
+function ownedBy(worker: string, rows: readonly JsonRecord[]): readonly JsonRecord[] {
+  return rows.filter((row) => text(path(row, ["$metadata", "service"])) === worker);
+}
+
+/**
  * Combine the two telemetry queries: every row with an `event` field, and every canceled
  * invocation. `truncated` is true when either query hit the row limit.
  */
 export function parseTelemetry(
   eventsResponse: JsonValue,
   invocationsResponse: JsonValue,
+  worker: string,
 ): Source<LogData> {
   const eventRows = telemetryRows(eventsResponse);
   const invocationRows = telemetryRows(invocationsResponse);
@@ -117,7 +127,7 @@ export function parseTelemetry(
   return {
     status: "ok",
     data: {
-      events: eventRows.flatMap((row) => {
+      events: ownedBy(worker, eventRows).flatMap((row) => {
         const source = row["source"];
 
         const event =
@@ -125,7 +135,7 @@ export function parseTelemetry(
 
         return event === null ? [] : [event];
       }),
-      invocations: invocationRows.flatMap((row) => {
+      invocations: ownedBy(worker, invocationRows).flatMap((row) => {
         const invocation = parseInvocation(row);
 
         return invocation === null ? [] : [invocation];

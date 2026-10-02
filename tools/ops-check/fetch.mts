@@ -110,16 +110,19 @@ function telemetryQuery(window: TimeWindow, filters: readonly JsonRecord[]): Jso
   };
 }
 
-/** Every logged event, and every canceled fetch invocation, over `window`. */
+/** Every event and canceled fetch invocation that `worker` wrote over `window`. */
 export function fetchLogs(
   token: string,
   account: string,
+  worker: string,
   window: TimeWindow,
 ): Promise<Source<LogData>> {
   const url = `${API}/accounts/${account}/workers/observability/telemetry/query`;
-  const events = [{ key: "event", operation: "exists", type: "string" }];
+  const service = { key: "$metadata.service", operation: "eq", type: "string", value: worker };
+  const events = [service, { key: "event", operation: "exists", type: "string" }];
 
   const canceled = [
+    service,
     { key: "$workers.outcome", operation: "eq", type: "string", value: "canceled" },
     { key: "$workers.eventType", operation: "eq", type: "string", value: "fetch" },
   ];
@@ -128,6 +131,7 @@ export function fetchLogs(
     parseTelemetry(
       await post(token, url, telemetryQuery(window, events)),
       await post(token, url, telemetryQuery(window, canceled)),
+      worker,
     ),
   );
 }

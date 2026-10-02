@@ -37,7 +37,7 @@ async function gather(options: Options): Promise<CheckInput> {
   const logWindow = { ...options.window, fromMs: options.window.fromMs - options.idleLimitMs };
 
   const [logs, metrics] = await Promise.all([
-    fetchLogs(token, account, logWindow),
+    fetchLogs(token, account, options.worker, logWindow),
     fetchMetrics(token, account, options.worker, options.window),
   ]);
 

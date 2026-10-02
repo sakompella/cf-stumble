@@ -7,6 +7,7 @@ import {
   graphql,
   PROVISIONED_MEMORY_BYTES,
   telemetry,
+  WORKER,
 } from "./fixtures.mts";
 import { parseApplications, parseMetrics, parseTelemetry } from "./parse.mts";
 
@@ -24,6 +25,7 @@ describe("telemetry parsing", () => {
         { source: { event: "no.timestamp" } },
       ]),
       telemetry([canceledInvocationRow(2000, "i", "/api/y", 90_000)]),
+      WORKER,
     );
 
     assert.equal(parsed.status, "ok");
@@ -37,8 +39,22 @@ describe("telemetry parsing", () => {
     );
   });
 
+  it("drops events and invocations from another Worker on the account", () => {
+    const parsed = parseTelemetry(
+      telemetry([
+        eventRow(1000, "turn.settled", {}, "cf-stumble-staging"),
+        eventRow(2000, "turn.settled"),
+      ]),
+      telemetry([canceledInvocationRow(3000, "i", "/api/y", 1, "canceled", "cf-stumble-staging")]),
+      WORKER,
+    );
+
+    assert.deepEqual(parsed.status === "ok" ? parsed.data.events.map((e) => e.atMs) : [], [2000]);
+    assert.deepEqual(parsed.status === "ok" ? parsed.data.invocations : [], []);
+  });
+
   it("is unavailable, not empty, for a response of the wrong shape", () => {
-    assert.equal(parseTelemetry({ success: false }, telemetry([])).status, "unavailable");
+    assert.equal(parseTelemetry({ success: false }, telemetry([]), WORKER).status, "unavailable");
   });
 });
 

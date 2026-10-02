@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatReport, runChecks } from "./check.mts";
-import { healthyDay, incident0926, incident0927, logs, missingMetricsDay } from "./fixtures.mts";
+import {
+  healthyDay,
+  incident0926,
+  incident0927,
+  logs,
+  missingMetricsDay,
+  stagingWorkerRows,
+} from "./fixtures.mts";
 import type { CheckInput, RuleId } from "./model.mts";
 
 function rules(checked: CheckInput): readonly RuleId[] {
@@ -49,6 +56,24 @@ describe("incident fixtures", () => {
     const checked = { ...base, logs: logs([]) };
 
     assert.deepEqual(rules(checked), ["unknown"]);
+  });
+});
+
+describe("another Worker on the same account", () => {
+  it("adds no finding to a healthy day", () => {
+    const window = healthyDay().window;
+
+    assert.deepEqual(rules(healthyDay(stagingWorkerRows(window))), []);
+  });
+
+  it("does not own CPU that is unowned, or hide the 09-27 findings", () => {
+    const window = incident0927().window;
+
+    assert.deepEqual(rules(incident0927(stagingWorkerRows(window))), [
+      "ran-past-idle",
+      "unexplained-stop",
+      "unowned-cpu",
+    ]);
   });
 });
 

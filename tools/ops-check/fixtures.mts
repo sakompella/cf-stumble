@@ -15,17 +15,24 @@ export function at(iso: string): number {
   return Date.parse(iso);
 }
 
-export function logRow(atMs: number, source: JsonRecord): JsonRecord {
+export const WORKER = "cf-stumble";
+
+export function logRow(atMs: number, source: JsonRecord, service = WORKER): JsonRecord {
   return {
     source,
     dataset: "cloudflare-workers",
     timestamp: atMs,
-    $metadata: { requestId: "platform" },
+    $metadata: { requestId: "platform", service },
   };
 }
 
-export function eventRow(atMs: number, name: string, fields: JsonRecord = {}): JsonRecord {
-  return logRow(atMs, { event: name, level: "info", ...fields });
+export function eventRow(
+  atMs: number,
+  name: string,
+  fields: JsonRecord = {},
+  service = WORKER,
+): JsonRecord {
+  return logRow(atMs, { event: name, level: "info", ...fields }, service);
 }
 
 export function canceledInvocationRow(
@@ -34,6 +41,7 @@ export function canceledInvocationRow(
   path: string,
   wallTimeMs: number,
   outcome = "canceled",
+  service = WORKER,
 ): JsonRecord {
   return {
     source: { level: "info", message: `GET https://owner.example.test${path}` },
@@ -44,7 +52,7 @@ export function canceledInvocationRow(
       wallTimeMs,
       event: { request: { url: `https://owner.example.test${path}` } },
     },
-    $metadata: { requestId: id },
+    $metadata: { requestId: id, service },
   };
 }
 
@@ -99,7 +107,7 @@ export function logs(
   events: readonly JsonRecord[],
   invocations: readonly JsonRecord[] = [],
 ): CheckInput["logs"] {
-  return parseTelemetry(telemetry(events), telemetry(invocations));
+  return parseTelemetry(telemetry(events), telemetry(invocations), WORKER);
 }
 
 export function input(
@@ -155,7 +163,7 @@ export function incident0926(): CheckInput {
  * 09-27: the container ran 19 hours at 0.6 to 1.0 vCPU after one request, with flat memory and
  * four log events. Nothing in the logs owns the CPU, and the stop has no known reason.
  */
-export function incident0927(): CheckInput {
+export function incident0927(extraRows: readonly JsonRecord[] = []): CheckInput {
   const window = { fromMs: at("2026-09-27T00:00:00Z"), toMs: at("2026-09-27T19:00:00Z") };
 
   const events = [
@@ -176,7 +184,7 @@ export function incident0927(): CheckInput {
   const cpu = bucketsOf(running, (t) => 180 + ((t / BUCKET_MS) % 5) * 30);
 
   return input(window, {
-    logs: logs(events),
+    logs: logs([...events, ...extraRows]),
     metrics: metrics(
       cpu,
       bucketsOf(running, () => 5),
@@ -185,7 +193,7 @@ export function incident0927(): CheckInput {
 }
 
 /** One owner request at 09:00 starts a 4-minute turn. The container idles 20 minutes, then stops. */
-export function healthyDay(): CheckInput {
+export function healthyDay(extraRows: readonly JsonRecord[] = []): CheckInput {
   const window = { fromMs: at("2026-09-30T00:00:00Z"), toMs: at("2026-10-01T00:00:00Z") };
   const turnEnd = at("2026-09-30T09:04:00Z");
 
@@ -204,7 +212,7 @@ export function healthyDay(): CheckInput {
   const cpu = bucketsOf(active, (t) => (t < turnEnd ? 90 : 4));
 
   return input(window, {
-    logs: logs(events),
+    logs: logs([...events, ...extraRows]),
     metrics: metrics(
       cpu,
       bucketsOf(active, (t) => (t < at("2026-09-30T09:20:00Z") ? 5 : 4)),
@@ -215,4 +223,35 @@ export function healthyDay(): CheckInput {
 /** The healthy day's logs with metrics that returned no rows at all. */
 export function missingMetricsDay(): CheckInput {
   return { ...healthyDay(), metrics: metrics([], []) };
+}
+
+/**
+ * What a staging copy of the Worker writes on the same account during `window`: faults, an
+ * unexplained stop, and workspace work around the clock. None of it belongs to `cf-stumble`.
+ */
+export function stagingWorkerRows(window: TimeWindow): readonly JsonRecord[] {
+  const staging = "cf-stumble-staging";
+  const at5 = (minutes: number) => window.fromMs + minutes * MINUTE_MS;
+
+  const around = Array.from(
+    { length: Math.ceil((window.toMs - window.fromMs) / BUCKET_MS) },
+    (_, i) => eventRow(at5(i * 5 + 4), "workspace.exec", { durationMs: 4 * MINUTE_MS }, staging),
+  );
+
+  return [
+    ...around,
+    eventRow(at5(1), "workspace.backend.closed", { level: "warn", running: true }, staging),
+    eventRow(
+      at5(2),
+      "workspace.container.stopped",
+      { level: "warn", reasonCode: "unknown" },
+      staging,
+    ),
+    eventRow(
+      at5(3),
+      "route.settled",
+      { level: "error", requestId: "s", route: "/api/x", durationMs: 1 },
+      staging,
+    ),
+  ];
 }
