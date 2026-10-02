@@ -99,7 +99,7 @@ The Worker rejects every route until you configure Access. Set up Access after t
 | `CF_ACCESS_AUD`         | The application audience tag. The dashboard shows it on the application, and it is the `aud` claim in the token. |
 | `CF_ACCESS_OWNER_SUB`   | The `sub` claim in your own Access token after your first login.                                                 |
 
-These three are not declared in the configuration, so the first deploy works before you have them. Set them after you sign in to the deployed hostname, because `CF_ACCESS_OWNER_SUB` only exists then. A request that carries a credential gets 500 `invalid-configuration` until all three are set; a request with no credential gets 401.
+These three are not declared in the configuration, so the first deploy works before you have them. Set them after you sign in to the deployed hostname, because `CF_ACCESS_OWNER_SUB` only exists then. A request with a valid Access credential gets 500 `invalid-configuration` until all three are set; a request with no credential, or with one the Worker cannot verify, gets 401.
 
 Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accepts only the identity whose `sub` claim matches this value.
 
