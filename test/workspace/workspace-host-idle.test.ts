@@ -66,6 +66,7 @@ test("each tracked RPC arms the idle alarm when it ends", async () => {
     provision: (host: WorkspaceHost) => host.provision({ kind: "not-a-step" }),
     removeProject: (host: WorkspaceHost) => host.removeProject({ kind: "not-a-removal" }),
     credential: (host: WorkspaceHost) => host.credential({ kind: "not-a-credential" }),
+    ensureManagedInstructions: (host: WorkspaceHost) => host.ensureManagedInstructions(),
   };
 
   for (const [rpc, call] of Object.entries(requests)) {
