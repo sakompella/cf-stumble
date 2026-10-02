@@ -41,6 +41,7 @@ import {
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
 import { PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
+import { ContainerLifecycle } from "./container-lifecycle.js";
 import { afterIdleStop, WorkspaceIdleController } from "./idle-controller.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
@@ -165,23 +166,13 @@ export async function ensureManagedInstructions(
  * Its RPC surface returns plain values and one narrow project capability; it never returns the
  * workspace, its container API, or a credential-bearing binding.
  */
-interface WorkspaceContainerLifecycle {
-  generation: number;
-  hasConnected: boolean;
-  runtimeId: string | undefined;
-}
-
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   readonly #container: ObservedWorkspaceContainer;
   readonly #idle: WorkspaceIdleController;
-  readonly #containerLifecycle: WorkspaceContainerLifecycle = {
-    generation: 0,
-    hasConnected: false,
-    runtimeId: undefined,
-  };
+  readonly #containerLifecycle = new ContainerLifecycle();
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
@@ -198,15 +189,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
     this.#workspaceBackend = workspaceBackendForHost(this.#containerBackend, {
       connected: (runtimeId) => {
-        if (
-          this.#containerLifecycle.hasConnected &&
-          this.#containerLifecycle.runtimeId !== runtimeId
-        ) {
-          this.#containerLifecycle.generation += 1;
-        }
-
-        this.#containerLifecycle.hasConnected = true;
-        this.#containerLifecycle.runtimeId = runtimeId;
+        this.#containerLifecycle.connected(runtimeId);
         logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
       },
       closed: () => {
@@ -224,7 +207,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       setAlarm: (atMs) => ctx.storage.setAlarm(atMs),
       containerRunning: () => platformContainer?.running ?? false,
       closeWorkspace: () => this.#workspace.close(),
-      stopContainer: () => this.#container.stopFor("idle"),
+      stopContainer: async () => {
+        await this.#container.stopFor("idle");
+        this.#containerLifecycle.stoppedByHost();
+      },
     });
   }
 
@@ -245,7 +231,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
     return observeBackendClose(this.#container, trigger, () => {
-      this.#containerLifecycle.generation += 1;
+      this.#containerLifecycle.replaced();
     });
   }
 
