@@ -152,5 +152,7 @@ describe("command line", () => {
       "invalid",
     );
     assert.equal(parseOptions(["--worker", "w"], 0).kind, "invalid");
+    assert.equal(parseOptions(["--worker", "w", "--since", "2h", "--bogus"], 0).kind, "invalid");
+    assert.equal(parseOptions(["--worker"], 0).kind, "invalid");
   });
 });

@@ -26,14 +26,17 @@ if (parsed.kind === "invalid") {
   process.exit(2);
 }
 
-const noToken: Source<never> = {
-  status: "unavailable",
-  reason: "no CLOUDFLARE_API_TOKEN and no --token-file",
-};
+/** Every source failed for one reason: the check can say nothing, and says so for each. */
+function allUnavailable(
+  base: Omit<CheckInput, "logs" | "metrics" | "instances">,
+  reason: string,
+): CheckInput {
+  const failed: Source<never> = { status: "unavailable", reason };
+
+  return { ...base, logs: failed, metrics: failed, instances: failed };
+}
 
 async function gather(options: Options): Promise<CheckInput> {
-  const token = readToken(options.tokenFile, process.env);
-
   const base = {
     worker: options.worker,
     nowMs: Date.now(),
@@ -41,17 +44,24 @@ async function gather(options: Options): Promise<CheckInput> {
     idleLimitMs: options.idleLimitMs,
   };
 
-  if (token === null) {
-    return { ...base, logs: noToken, metrics: noToken, instances: noToken };
+  const token = readToken(options.tokenFile, process.env);
+
+  if (token.status === "unavailable") {
+    return allUnavailable(base, token.reason);
   }
 
-  const account = await resolveAccount(token, options.account);
+  const account = await resolveAccount(token.data, options.account, process.env);
+
+  if (account.status === "unavailable") {
+    return allUnavailable(base, account.reason);
+  }
+
   // Container work that started before the window can still be owned by a request just before it.
   const logWindow = { ...options.window, fromMs: options.window.fromMs - options.idleLimitMs };
 
   const [logs, applications] = await Promise.all([
-    fetchLogs(token, account, options.worker, logWindow),
-    fetchApplications(token, account, options.worker),
+    fetchLogs(token.data, account.data, options.worker, logWindow),
+    fetchApplications(token.data, account.data, options.worker),
   ]);
 
   if (applications.status === "unavailable") {
@@ -59,8 +69,8 @@ async function gather(options: Options): Promise<CheckInput> {
   }
 
   const [metrics, instances] = await Promise.all([
-    fetchMetrics(token, account, applications.data, options.window),
-    fetchInstances(token, account, applications.data),
+    fetchMetrics(token.data, account.data, applications.data, options.window),
+    fetchInstances(token.data, account.data, applications.data),
   ]);
 
   return { ...base, logs, metrics, instances };

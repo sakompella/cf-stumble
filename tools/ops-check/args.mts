@@ -51,19 +51,30 @@ function invalid(reason: string): ParsedOptions {
   return { kind: "invalid", reason };
 }
 
+const OPTION_TYPES = {
+  worker: { type: "string" },
+  since: { type: "string" },
+  from: { type: "string" },
+  to: { type: "string" },
+  "idle-minutes": { type: "string", default: String(DEFAULT_IDLE_LIMIT_MS / MINUTE_MS) },
+  account: { type: "string" },
+  "token-file": { type: "string" },
+  json: { type: "boolean", default: false },
+} as const;
+
 export function parseOptions(argv: readonly string[], nowMs: number): ParsedOptions {
+  try {
+    return parseValidOptions(argv, nowMs);
+  } catch (cause) {
+    // parseArgs throws on an unknown flag or a flag with no value; that is a usage error, not a crash.
+    return invalid(cause instanceof Error ? cause.message : String(cause));
+  }
+}
+
+function parseValidOptions(argv: readonly string[], nowMs: number): ParsedOptions {
   const { values } = parseArgs({
     args: [...argv],
-    options: {
-      worker: { type: "string" },
-      since: { type: "string" },
-      from: { type: "string" },
-      to: { type: "string" },
-      "idle-minutes": { type: "string", default: String(DEFAULT_IDLE_LIMIT_MS / MINUTE_MS) },
-      account: { type: "string" },
-      "token-file": { type: "string" },
-      json: { type: "boolean", default: false },
-    },
+    options: OPTION_TYPES,
   });
 
   const sinceMs = values.since === undefined ? null : parseDuration(values.since);

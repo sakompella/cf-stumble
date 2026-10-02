@@ -31,20 +31,32 @@ import { TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
 
-/** The token from CLOUDFLARE_API_TOKEN, or from a file holding the bare token or `cf` login JSON. */
-export function readToken(tokenFile: string | null, env: NodeJS.ProcessEnv): string | null {
-  const content =
-    tokenFile === null ? (env["CLOUDFLARE_API_TOKEN"] ?? "") : readFileSync(tokenFile, "utf8");
+/**
+ * The token from CLOUDFLARE_API_TOKEN, or from a file holding the bare token or `cf` login JSON.
+ * A missing token or an unreadable file is an `unavailable` source, never an exception.
+ */
+export function readToken(tokenFile: string | null, env: NodeJS.ProcessEnv): Source<string> {
+  const noToken: Source<string> = {
+    status: "unavailable",
+    reason: "no CLOUDFLARE_API_TOKEN and no --token-file",
+  };
 
-  const trimmed = content.trim();
-  const login = parseJsonRecordText(trimmed);
-  const oauth = login?.["oauth_token"];
+  try {
+    const content =
+      tokenFile === null ? (env["CLOUDFLARE_API_TOKEN"] ?? "") : readFileSync(tokenFile, "utf8");
 
-  if (login === undefined) {
-    return trimmed === "" ? null : trimmed;
+    const trimmed = content.trim();
+    const login = parseJsonRecordText(trimmed);
+    const oauth = login?.["oauth_token"];
+
+    if (login === undefined) {
+      return trimmed === "" ? noToken : { status: "ok", data: trimmed };
+    }
+
+    return oauth !== undefined && isJsonString(oauth) ? { status: "ok", data: oauth } : noToken;
+  } catch {
+    return { status: "unavailable", reason: "cannot read --token-file" };
   }
-
-  return oauth !== undefined && isJsonString(oauth) ? oauth : null;
 }
 
 class ApiFailure extends Error {}
@@ -84,9 +96,20 @@ async function guarded<T>(run: () => Promise<Source<T>>): Promise<Source<T>> {
   }
 }
 
-export async function resolveAccount(token: string, requested: string | null): Promise<string> {
-  if (requested !== null) return requested;
+/** The account to query: `--account`, then CLOUDFLARE_ACCOUNT_ID, then the token's only account. */
+export function resolveAccount(
+  token: string,
+  requested: string | null,
+  env: NodeJS.ProcessEnv,
+): Promise<Source<string>> {
+  const named = requested ?? env["CLOUDFLARE_ACCOUNT_ID"]?.trim() ?? "";
 
+  return named === ""
+    ? guarded(async () => ({ status: "ok", data: await soleAccount(token) }))
+    : Promise.resolve({ status: "ok", data: named });
+}
+
+async function soleAccount(token: string): Promise<string> {
   const response = await send(token, `${API}/accounts`, { method: "GET" });
   const accounts = isJsonRecord(response) ? response["result"] : undefined;
 
