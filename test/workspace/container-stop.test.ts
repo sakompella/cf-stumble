@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { containerReasonCode } from "../../src/workspace/backend-sync-ignore.js";
 import { ObservedWorkspaceContainer } from "../../src/workspace/container-observer.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
@@ -50,6 +51,38 @@ test("a crash with an exit code is an error that carries the code and no message
     expect.objectContaining({ level: "error", reasonCode: "unexpected-exit-code", exitCode: 137 }),
   ]);
   expect(everythingLogged()).not.toContain("secret-text");
+});
+
+test("a placement failure is named, not an unknown stop", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false });
+
+  await observed.start(SPEC);
+  platform.calls[0]?.reject(
+    new Error(
+      "There is no container instance that can be provided to this Durable Object, try again later",
+    ),
+  );
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped")).toEqual([
+    expect.objectContaining({
+      level: "warn",
+      reasonCode: "placement-unavailable",
+      reasonSource: "unknown",
+      exitCode: null,
+    }),
+  ]);
+});
+
+test.each([
+  ["Container exited with unexpected exit code: 137", "unexpected-exit-code"],
+  ["The container exited normally", "normal-exit"],
+  ["network connection lost", "connection-lost"],
+  ["a container instance exists", "unknown"],
+  ["no instance", "unknown"],
+])("%s is %s, never a placement failure", (reason, code) => {
+  expect(containerReasonCode(reason)).toBe(code);
 });
 
 test("a stop of an adopted container has no run duration", async () => {

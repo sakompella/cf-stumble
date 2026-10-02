@@ -87,6 +87,7 @@ export type ContainerReasonCode =
   | "unexpected-exit-code"
   | "normal-exit"
   | "connection-lost"
+  | "placement-unavailable"
   | "unknown"
   | "status-unavailable";
 
@@ -98,6 +99,10 @@ export function containerReasonCode(reason: string | undefined): ContainerReason
   if (/normally/iu.test(reason)) return "normal-exit";
 
   if (/network|connection/iu.test(reason)) return "connection-lost";
+
+  // `monitor()` rejects this way when the platform has no machine for the container, which is a
+  // placement failure and not a stop. Computer retries the connect after it.
+  if (/no container instance that can be provided/iu.test(reason)) return "placement-unavailable";
 
   return "unknown";
 }
