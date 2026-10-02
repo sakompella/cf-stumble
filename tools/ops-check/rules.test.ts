@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { bucketsOf, canceledInvocationRow, eventRow, input, logs, metrics } from "./fixtures.mts";
 import { BUCKET_MS, MINUTE_MS, type CheckInput } from "./model.mts";
+import { runChecks } from "./check.mts";
 import { firing, START, WINDOW } from "./rule-helpers.mts";
 import type { JsonRecord } from "../browser-harness/json.mts";
 
@@ -287,6 +288,40 @@ describe("rule f: unknown", () => {
       firing(input(WINDOW, { logs: logs(rows), metrics: metrics(busy, [[START, 0]]) })),
       ["unknown"],
     );
+  });
+});
+
+describe("rule f: sources that are all empty", () => {
+  const empty = (instances: CheckInput["instances"]): CheckInput => ({
+    ...input(
+      { fromMs: START, toMs: START + 120 * MINUTE_MS },
+      { logs: logs([]), metrics: metrics([], []) },
+    ),
+    nowMs: START + 120 * MINUTE_MS,
+    instances,
+  });
+
+  const running: CheckInput["instances"] = {
+    status: "ok",
+    data: [{ id: "instance-0001", runningSinceMs: START }],
+  };
+
+  it("passes when every source is empty and nothing is running", () => {
+    assert.deepEqual(firing(empty({ status: "ok", data: [] })), []);
+  });
+
+  it("is unknown when every source is empty but an instance is running", () => {
+    assert.deepEqual(firing(empty(running)), ["unknown"]);
+  });
+
+  it("names each empty source that a running instance contradicts", () => {
+    const details = runChecks(empty(running)).map((finding) => finding.detail);
+
+    assert.equal(details.filter((detail) => detail.includes("running instances")).length, 3);
+  });
+
+  it("ignores a running instance for a window that ended long ago", () => {
+    assert.deepEqual(firing({ ...empty(running), nowMs: START + 2000 * MINUTE_MS }), []);
   });
 });
 

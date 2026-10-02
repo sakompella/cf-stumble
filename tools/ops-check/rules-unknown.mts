@@ -13,6 +13,27 @@ function unknown(detail: string): Finding {
   return { rule: "unknown", detail, evidence: [] };
 }
 
+/**
+ * `unknown` for a source that returned nothing while another source shows activity. When every
+ * source is empty and no instance runs, nothing is known to have happened, and the check passes:
+ * a quiet system looks exactly like this, and a check that failed on it could never be green.
+ */
+function emptyWhileActive(
+  name: string,
+  rows: number,
+  others: readonly (readonly [string, number])[],
+): readonly Finding[] {
+  const active = others.filter(([, count]) => count > 0);
+
+  return rows > 0 || active.length === 0
+    ? []
+    : [
+        unknown(
+          `${name} empty while ${active.map(([what, count]) => `${count} ${what}`).join(", ")} show activity`,
+        ),
+      ];
+}
+
 export function missingData(input: CheckInput): readonly Finding[] {
   const { logs, metrics, instances } = input;
 
@@ -34,6 +55,7 @@ export function missingData(input: CheckInput): readonly Finding[] {
 
   const logRows = logs.data.events.length + logs.data.invocations.length;
   const { cpu, usage } = metrics.data;
+  const runningNow = horizonOf(input).live && instances.status === "ok" ? instances.data.length : 0;
 
   const completeMs = horizonOf(input).completeUntilMs - input.window.fromMs;
 
@@ -50,18 +72,19 @@ export function missingData(input: CheckInput): readonly Finding[] {
     ...instancesUnknown,
     ...shortWindow,
     ...(logs.data.truncated ? [unknown("logs truncated at the query row limit")] : []),
-    ...(logRows > 0 && cpu.length === 0
-      ? [unknown(`cpu metrics empty while logs show ${logRows} rows`)]
-      : []),
-    ...(logRows > 0 && usage.length === 0
-      ? [unknown(`usage metrics empty while logs show ${logRows} rows`)]
-      : []),
-    ...(logRows === 0 && cpu.length + usage.length > 0
-      ? [
-          unknown(
-            `logs empty while metrics show ${cpu.length + usage.length} buckets, so container time cannot be attributed`,
-          ),
-        ]
-      : []),
+    ...emptyWhileActive("logs", logRows, [
+      ["metrics buckets", cpu.length + usage.length],
+      ["running instances", runningNow],
+    ]),
+    ...emptyWhileActive("cpu metrics", cpu.length, [
+      ["log rows", logRows],
+      ["usage buckets", usage.length],
+      ["running instances", runningNow],
+    ]),
+    ...emptyWhileActive("usage metrics", usage.length, [
+      ["log rows", logRows],
+      ["cpu buckets", cpu.length],
+      ["running instances", runningNow],
+    ]),
   ];
 }
