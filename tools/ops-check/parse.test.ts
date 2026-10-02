@@ -144,6 +144,13 @@ describe("command line", () => {
       [{ fromMs: 8 * 3_600_000, toMs: 10 * 3_600_000 }, 20 * 60_000, true],
     );
     assert.equal(parseOptions(["--since", "2h"], 0).kind, "invalid");
+    assert.equal(
+      parseOptions(
+        ["--worker", "w", "--since", "1h", "--to", "2026-10-03T00:00:00Z"],
+        Date.parse("2026-10-02T00:00:00Z"),
+      ).kind,
+      "invalid",
+    );
     assert.equal(parseOptions(["--worker", "w"], 0).kind, "invalid");
   });
 });

@@ -112,11 +112,21 @@ export function logs(
 
 export function input(
   window: TimeWindow,
-  sources: Pick<CheckInput, "logs" | "metrics"> & Partial<Pick<CheckInput, "instances">>,
+  sources: Pick<CheckInput, "logs" | "metrics"> & Partial<Pick<CheckInput, "instances" | "nowMs">>,
 ): CheckInput {
   const none: CheckInput["instances"] = { status: "ok", data: [] };
 
-  return { worker: WORKER, window, idleLimitMs: 20 * MINUTE_MS, instances: none, ...sources };
+  // By default the check runs long after the window, so all its metrics are complete.
+  const nowMs = window.toMs + 24 * HOUR_MS;
+
+  return {
+    worker: WORKER,
+    nowMs,
+    window,
+    idleLimitMs: 20 * MINUTE_MS,
+    instances: none,
+    ...sources,
+  };
 }
 
 /**

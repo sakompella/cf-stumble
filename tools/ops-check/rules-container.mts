@@ -8,11 +8,11 @@
  */
 import { firstIds, isoMinute } from "./evidence.mts";
 import { coveredMs, mergeIntervals, touches, workSpan, type Interval } from "./intervals.mts";
+import type { Horizon } from "./horizon.mts";
 import { isOwnerActivity, isOwnerWork } from "./ownership.mts";
 import {
   BUSY_CPU_SECONDS_PER_BUCKET,
   IDLE_OVERRUN_TOLERANCE_MS,
-  METRICS_LAG_MS,
   UNOWNED_RUN_MS,
 } from "./thresholds.mts";
 import {
@@ -31,8 +31,8 @@ function bucketOf(startMs: number): Interval {
 }
 
 /** True for a bucket inside the window whose five minutes have fully reached the metrics. */
-function usable(startMs: number, window: TimeWindow): boolean {
-  return inWindow(startMs, window) && startMs + BUCKET_MS <= window.toMs - METRICS_LAG_MS;
+function usable(startMs: number, window: TimeWindow, horizon: Horizon): boolean {
+  return inWindow(startMs, window) && startMs + BUCKET_MS <= horizon.completeUntilMs;
 }
 
 function inWindow(startMs: number, window: TimeWindow): boolean {
@@ -62,6 +62,7 @@ export function unownedCpu(
   cpu: readonly CpuBucket[],
   logs: LogData,
   window: TimeWindow,
+  horizon: Horizon,
 ): readonly Finding[] {
   const owned = mergeIntervals(
     logs.events.filter((event) => isOwnerWork(event)).map((event) => workSpan(event)),
@@ -70,7 +71,7 @@ export function unownedCpu(
   const unowned = cpu
     .filter(
       (bucket) =>
-        usable(bucket.startMs, window) &&
+        usable(bucket.startMs, window, horizon) &&
         bucket.cpuTimeSec > BUSY_CPU_SECONDS_PER_BUCKET &&
         !touches(bucketOf(bucket.startMs), owned),
     )
@@ -158,19 +159,21 @@ export function ranPastIdle(
   logs: LogData,
   window: TimeWindow,
   idleLimitMs: number,
+  horizon: Horizon,
 ): readonly Finding[] {
   const allowed = allowedRunning(logs, idleLimitMs);
 
   const running = usage
-    .filter((bucket) => usable(bucket.startMs, window) && bucket.runningMinutes > 0)
+    .filter((bucket) => usable(bucket.startMs, window, horizon) && bucket.runningMinutes > 0)
     .toSorted((a, b) => a.startMs - b.startMs);
 
   const lastActivity = logs.events
     .filter((event) => isOwnerActivity(event))
     .map((event) => event.atMs);
 
-  const now = runningNow(instances, allowed, lastActivity, window, idleLimitMs);
-  const edgeMs = window.toMs - METRICS_LAG_MS - BUCKET_MS;
+  const now = horizon.live ? runningNow(instances, allowed, lastActivity, window, idleLimitMs) : [];
+
+  const edgeMs = horizon.completeUntilMs - BUCKET_MS;
 
   const fromBuckets = consecutiveRuns(running).flatMap((run): Finding[] => {
     const excessMinutes = run.reduce(

@@ -33,7 +33,13 @@ const noToken: Source<never> = {
 
 async function gather(options: Options): Promise<CheckInput> {
   const token = readToken(options.tokenFile, process.env);
-  const base = { worker: options.worker, window: options.window, idleLimitMs: options.idleLimitMs };
+
+  const base = {
+    worker: options.worker,
+    nowMs: Date.now(),
+    window: options.window,
+    idleLimitMs: options.idleLimitMs,
+  };
 
   if (token === null) {
     return { ...base, logs: noToken, metrics: noToken, instances: noToken };

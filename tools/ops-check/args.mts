@@ -75,6 +75,8 @@ export function parseOptions(argv: readonly string[], nowMs: number): ParsedOpti
 
   if (toMs === null) return invalid("--to is not a date");
 
+  if (toMs > nowMs) return invalid("--to is in the future");
+
   if (values.since !== undefined && sinceMs === null)
     return invalid("--since must look like 90m, 2h or 1d");
 

@@ -1,6 +1,7 @@
 import { ownerCalls, poller, slowRequests } from "./rules-requests.mts";
 import { ranPastIdle, unownedCpu } from "./rules-container.mts";
 import { faultEvents } from "./rules-events.mts";
+import { horizonOf } from "./horizon.mts";
 import { missingData } from "./rules-unknown.mts";
 import { isoMinute } from "./evidence.mts";
 import type { CheckInput, Finding } from "./model.mts";
@@ -11,6 +12,7 @@ import type { CheckInput, Finding } from "./model.mts";
  */
 export function runChecks(input: CheckInput): readonly Finding[] {
   const { logs, metrics, instances, window, idleLimitMs } = input;
+  const horizon = horizonOf(input);
   const logsUsable = logs.status === "ok";
 
   // Empty logs cannot attribute container time: absence of owner events there may be absence of data.
@@ -30,13 +32,14 @@ export function runChecks(input: CheckInput): readonly Finding[] {
       : []),
     ...(joinable
       ? [
-          ...unownedCpu(metrics.data.cpu, logs.data, window),
+          ...unownedCpu(metrics.data.cpu, logs.data, window, horizon),
           ...ranPastIdle(
             metrics.data.usage,
             instances.status === "ok" ? instances.data : [],
             logs.data,
             window,
             idleLimitMs,
+            horizon,
           ),
         ]
       : []),

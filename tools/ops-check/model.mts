@@ -78,6 +78,8 @@ export interface TimeWindow {
 
 export interface CheckInput {
   readonly worker: string;
+  /** The time of the check. Metrics newer than a few minutes before it are incomplete. */
+  readonly nowMs: number;
   readonly window: TimeWindow;
   readonly idleLimitMs: number;
   readonly logs: Source<LogData>;

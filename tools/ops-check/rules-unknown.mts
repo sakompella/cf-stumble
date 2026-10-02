@@ -5,6 +5,7 @@
  * `unknown`. It is never read as zero, because a quiet answer from a broken source would hide the
  * incident the check exists to find.
  */
+import { horizonOf } from "./horizon.mts";
 import type { CheckInput, Finding } from "./model.mts";
 
 function unknown(detail: string): Finding {
@@ -14,8 +15,9 @@ function unknown(detail: string): Finding {
 export function missingData(input: CheckInput): readonly Finding[] {
   const { logs, metrics, instances } = input;
 
+  // Instances describe the present, so a failure matters only to a window that reaches it.
   const instancesUnknown =
-    instances.status === "unavailable"
+    instances.status === "unavailable" && horizonOf(input).live
       ? [unknown(`instances unavailable: ${instances.reason}`)]
       : [];
 
