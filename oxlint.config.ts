@@ -82,6 +82,15 @@ export default defineConfig({
     "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
   },
 
+  overrides: [
+    {
+      // `node:test` registers `describe` and `it` and tracks their promises itself; awaiting each
+      // one at the top level would serialize the tests for no gain.
+      files: ["tools/**/*.test.ts"],
+      rules: { "typescript/no-floating-promises": "off" },
+    },
+  ],
+
   // The vendored copy also ships an opt-in `anti-slop-effect` plugin: no-manual-effect-error-tag,
   // no-manual-tag-comparison, no-manual-tagged-construction, no-service-constructor-imports and
   // prefer-effect-match. It is deliberately not registered. This project uses better-result, not

@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023"],
     "types": ["node"]
   },
@@ -11,6 +12,8 @@
     "vendor-pi.mts",
     "verify-project-protocol.mts",
     "browser-harness/**/*.mts",
-    "playwright/**/*.mts"
+    "playwright/**/*.mts",
+    "ops-check/**/*.mts",
+    "ops-check/**/*.ts"
   ]
 }
