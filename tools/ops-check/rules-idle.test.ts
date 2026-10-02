@@ -108,6 +108,26 @@ describe("rule d: running now and metrics lag", () => {
   });
 });
 
+describe("rule d: overlapping instances", () => {
+  it("does not count the second of two overlapping instances as excess", () => {
+    const lastRequest = START + 60 * MINUTE_MS;
+
+    const owned = bucketsOf(
+      { fromMs: lastRequest, toMs: lastRequest + 20 * MINUTE_MS },
+      () => 8.58,
+    );
+
+    const checked = input(WINDOW, {
+      logs: logs([
+        eventRow(lastRequest, "route.settled", { requestId: "r", route: "/api/x", durationMs: 1 }),
+      ]),
+      metrics: metrics([[START, 1]], owned),
+    });
+
+    assert.deepEqual(firing(checked), []);
+  });
+});
+
 describe("rule d: windows that ended in the past", () => {
   it("does not ask the instances API about a window that ended long ago", () => {
     const past = { ...runningAt(40, true, START), nowMs: LAST_REQUEST_AT + 400 * MINUTE_MS };

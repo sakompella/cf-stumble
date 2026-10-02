@@ -255,6 +255,21 @@ describe("rule e: stops and closes the Host caused", () => {
 });
 
 describe("rule f: unknown", () => {
+  it("is reported when the window has less than 30 minutes of complete metrics", () => {
+    const short = {
+      ...input(
+        { fromMs: START, toMs: START + 25 * MINUTE_MS },
+        { logs: logs(calls(1, 1, 1)), metrics: CALM },
+      ),
+    };
+
+    assert.deepEqual(firing(short), ["unknown"]);
+    assert.deepEqual(
+      firing({ ...short, window: { fromMs: START, toMs: START + 30 * MINUTE_MS } }),
+      [],
+    );
+  });
+
   it("is reported when a query hit its row limit", () => {
     const rows = Array.from({ length: 2000 }, (_, i) => eventRow(START + i, "turn.admitted"));
 
@@ -285,7 +300,9 @@ describe("rule f: unknown", () => {
       ["unknown"],
     );
   });
+});
 
+describe("rule f: unknown datasets", () => {
   it("is reported when metrics have rows only for one dataset", () => {
     const checked = input(WINDOW, {
       logs: logs(calls(1, 1, 1)),

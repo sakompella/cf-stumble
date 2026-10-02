@@ -49,6 +49,9 @@ export const STARTUP_GRACE_MS = 10 * MINUTE_MS;
 /** A backend close this close to the Host\'s own stop or wake request is part of that restart. */
 export const RESTART_CLOSE_WINDOW_MS = 10_000;
 
+/** The GraphQL `limit` for container metrics. A result this long may be cut off. */
+export const METRICS_ROW_LIMIT = 5000;
+
 /** Most evidence ids printed on one line. */
 export const MAX_EVIDENCE = 3;
 

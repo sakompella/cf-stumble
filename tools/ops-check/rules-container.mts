@@ -172,12 +172,14 @@ export function ranPastIdle(
   const edgeMs = horizon.completeUntilMs - BUCKET_MS;
 
   const fromBuckets = consecutiveRuns(running).flatMap((run): Finding[] => {
+    // A restart overlaps two instances, and a bucket can then report more minutes than it has.
     const excessMinutes = run.reduce(
       (sum, bucket) =>
         sum +
         Math.max(
           0,
-          bucket.runningMinutes - coveredMs(bucketOf(bucket.startMs), allowed) / MINUTE_MS,
+          Math.min(bucket.runningMinutes, BUCKET_MS / MINUTE_MS) -
+            coveredMs(bucketOf(bucket.startMs), allowed) / MINUTE_MS,
         ),
       0,
     );

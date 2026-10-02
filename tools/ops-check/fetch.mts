@@ -27,7 +27,7 @@ import {
   parseTelemetry,
   type ContainerApplication,
 } from "./parse.mts";
-import { TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
+import { METRICS_ROW_LIMIT, TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
 
@@ -167,11 +167,11 @@ export function fetchLogs(
 }
 
 const METRICS = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{accounts(filter:{accountTag:$a}){
-  containersMetricsAdaptiveGroups(limit:5000,filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
+  containersMetricsAdaptiveGroups(limit:${METRICS_ROW_LIMIT},filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
     dimensions{datetimeFiveMinutes applicationId instanceId} sum{cpuTimeSec}}}}}`;
 
 const USAGE = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{accounts(filter:{accountTag:$a}){
-  containersUsageAdaptiveGroups(limit:5000,filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
+  containersUsageAdaptiveGroups(limit:${METRICS_ROW_LIMIT},filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
     dimensions{datetimeFiveMinutes applicationId instanceId} sum{allocatedMemory}}}}}`;
 
 /** The Worker's Containers application is named after the Worker and its class, lowercased. */

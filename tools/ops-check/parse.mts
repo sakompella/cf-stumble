@@ -11,7 +11,7 @@ import {
   type JsonRecord,
   type JsonValue,
 } from "../browser-harness/json.mts";
-import { TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
+import { METRICS_ROW_LIMIT, TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
 import type {
   AppEvent,
   CpuBucket,
@@ -189,6 +189,10 @@ export function parseMetrics(
 
   if (metricRows === null || usageRows === null) {
     return unavailable("GraphQL response had errors or an unexpected shape");
+  }
+
+  if (metricRows.length >= METRICS_ROW_LIMIT || usageRows.length >= METRICS_ROW_LIMIT) {
+    return unavailable("GraphQL result reached its row limit");
   }
 
   const pairs = (rows: readonly JsonRecord[], group: string, field: string) =>

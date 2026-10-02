@@ -83,6 +83,25 @@ describe("metrics parsing", () => {
     );
   });
 
+  it("is reported when GraphQL returns as many rows as its limit", () => {
+    const rows = Array.from({ length: 5000 }, (_, i) => ({
+      dimensions: {
+        datetimeFiveMinutes: new Date(
+          Date.parse("2026-10-01T00:00:00Z") + i * 300_000,
+        ).toISOString(),
+      },
+      sum: { cpuTimeSec: 1, allocatedMemory: 1 },
+    }));
+
+    const parsed = parseMetrics(
+      graphql("containersMetricsAdaptiveGroups", rows),
+      graphql("containersUsageAdaptiveGroups", []),
+      1,
+    );
+
+    assert.equal(parsed.status, "unavailable");
+  });
+
   it("is unavailable when GraphQL answers with errors", () => {
     const failed = { errors: [{ message: "denied" }], data: null };
 
