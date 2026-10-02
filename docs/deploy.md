@@ -83,7 +83,7 @@ The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). The 
 
 On the earlier `standard-1` container, a cold start added ten to sixty seconds to the first request after an idle period. That time has not been re-measured on `standard-3`.
 
-The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. Nothing is lost by the stop. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
+The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 
 ## Configure Cloudflare Access
 

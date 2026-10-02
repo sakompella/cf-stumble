@@ -26,8 +26,10 @@ it cannot keep the object in memory. The container's stop is logged as the Host'
 (`reasonCode: "idle-stop"`), whichever way the platform's `monitor()` settles.
 
 **Cost of a stop.** The next request after a stop builds a fresh container, which takes a cold
-start. Nothing is lost: the Durable Object's SQLite is the authority, and every exec pulls the
-container's changes before it settles.
+start. An idle stop loses what a platform restart loses: files the sync does not copy into the
+Durable Object's SQLite, such as `node_modules`, `/tmp`, and anything outside `/workspace` or under
+an ignored segment. Everything else is kept, because SQLite is the authority and every exec pulls
+the container's changes before it settles.
 
 **Alternatives.**
 
@@ -37,6 +39,8 @@ container's changes before it settles.
   seconds later and the object is already gone, so nothing can log it.
 - Changing Computer's backend to a hibernatable WebSocket is an upstream change and much larger.
 
-**Residual race.** A project `exec` that starts in the instant between the final busy check and
-the destroy meets a container that is going away. It fails like any exec on a restarted container,
-and the next one launches a fresh container.
+**Races.** An exec counts as in flight before it reaches the Workspace, and it waits for any stop
+in progress before it starts. A stop that sees work in flight after the close keeps the container
+and checks again one limit later. The check and the destroy follow each other with no wait between
+them, and an exec that begins after the destroy has started waits for it to finish and then
+launches a fresh container.
