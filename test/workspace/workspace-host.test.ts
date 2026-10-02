@@ -63,6 +63,7 @@ test("exposes only the Workspace Host RPC methods", () => {
     Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted(),
     "`project` hands out the narrow project capability; anything else added here is a new surface",
   ).toEqual([
+    "alarm",
     "build",
     "constructor",
     "credential",

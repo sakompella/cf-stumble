@@ -40,6 +40,9 @@ import {
   parseProjectBudget,
 } from "./project/index.js";
 import { harnessBuildConfiguration } from "../harness-build.js";
+import { PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
+import { WorkspaceIdleController } from "./idle-controller.js";
+import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import {
   observeBackendClose,
   withWorkspaceSyncIgnore,
@@ -173,6 +176,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   readonly #container: ObservedWorkspaceContainer;
+  readonly #idle: WorkspaceIdleController;
   readonly #containerLifecycle: WorkspaceContainerLifecycle = {
     generation: 0,
     hasConnected: false,
@@ -211,6 +215,27 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       },
     });
     this.#workspace = this.#newWorkspace();
+    this.#idle = new WorkspaceIdleController({
+      nowMs: () => Date.now(),
+      idleLimitMs: WORKSPACE_IDLE_STOP_MS,
+      setAlarm: (atMs) => {
+        ctx.storage.setAlarm(atMs).catch((cause: unknown) => {
+          logRedactedCause("workspace.idle-alarm: not armed", cause);
+        });
+      },
+      containerRunning: () => platformContainer?.running ?? false,
+    });
+  }
+
+  /** Run one Host RPC as work in flight, so the idle check never counts it as quiet time. */
+  async #tracked<T>(work: () => Promise<T>): Promise<T> {
+    const end = this.#idle.begin();
+
+    try {
+      return await work();
+    } finally {
+      end();
+    }
   }
 
   #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
@@ -236,11 +261,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
-    return executeHarnessBuildRequest({
-      configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
-      operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
-      request,
-    });
+    return this.#tracked(() =>
+      executeHarnessBuildRequest({
+        configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
+        operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
+        request,
+      }),
+    );
   }
 
   /**
@@ -257,25 +284,29 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
-    return executeProjectProvisionRequest({
-      operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
-      request,
-    });
+    return this.#tracked(() =>
+      executeProjectProvisionRequest({
+        operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
+        request,
+      }),
+    );
   }
 
   /** Remove one connected project's clone and provisioning remnants, never the harness. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The RPC parser validates this boundary.
   removeProject(request: unknown): Promise<WorkspaceResult> {
-    return executeProjectRemovalRequest({
-      operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
-      request,
-    });
+    return this.#tracked(() =>
+      executeProjectRemovalRequest({
+        operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
+        request,
+      }),
+    );
   }
 
   /** Restore the managed instructions after a workspace reset, without replacing an existing file. */
   ensureManagedInstructions(): Promise<WorkspaceResult> {
-    return ensureManagedInstructions(
-      new ComputerWorkspaceOperations(this.#workspace, "not-required"),
+    return this.#tracked(() =>
+      ensureManagedInstructions(new ComputerWorkspaceOperations(this.#workspace, "not-required")),
     );
   }
 
@@ -298,25 +329,29 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
-    return executeGitHubCredentialRequest({
-      operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
-      installOperations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
-      request,
-      requestId: parseRequestId(requestId),
-    });
+    return this.#tracked(() =>
+      executeGitHubCredentialRequest({
+        operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
+        installOperations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
+        request,
+        requestId: parseRequestId(requestId),
+      }),
+    );
   }
 
   /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
-  async reset(): Promise<WorkspaceResetResult> {
-    const result = await resetWorkspaceStorage(this.ctx.storage, {
-      restart: (spec) => this.#container.restartFor("workspace-reset", spec),
+  reset(): Promise<WorkspaceResetResult> {
+    return this.#tracked(async () => {
+      const result = await resetWorkspaceStorage(this.ctx.storage, {
+        restart: (spec) => this.#container.restartFor("workspace-reset", spec),
+      });
+
+      // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
+      // deployment); rebuild it so the next operation recreates them instead of failing.
+      this.#workspace = this.#newWorkspace();
+
+      return result;
     });
-
-    // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
-    // deployment); rebuild it so the next operation recreates them instead of failing.
-    this.#workspace = this.#newWorkspace();
-
-    return result;
   }
 
   /** Hand out a project capability bounded to one turn and this container generation. */
@@ -325,15 +360,25 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     const remainingMs = parseProjectBudget(budget);
     const options = remainingMs === undefined ? {} : { remainingMs };
 
+    // Work can arrive until the turn's deadline, and the quiet period starts after it.
+    this.#idle.leaseUntil(Date.now() + (remainingMs ?? PROJECT_TURN_LEASE_MS));
+
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),
       durableObjectTransactions(this.ctx.storage),
       computerExecBackend(this.#workspace, "container-shell", this.#containerLifecycle),
-      { ...options, containerState: this.#containerLifecycle },
+      { ...options, containerState: this.#containerLifecycle, activity: this.#idle },
     );
   }
 
   override fetch(request: Request): Promise<Response> {
     return this.#containerBackend.handleFetch(request);
+  }
+
+  /** The idle check. The RPC WebSocket from computerd is not work, so it never delays a stop. */
+  override alarm(): Promise<void> {
+    this.#idle.onAlarm();
+
+    return Promise.resolve();
   }
 }

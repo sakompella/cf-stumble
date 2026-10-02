@@ -3,6 +3,7 @@ import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
 import { startExecOperation, type ExecOperation, type ExecSettlement } from "./exec-operation.js";
 import { logEvent } from "../../diagnostics.js";
+import type { ProjectActivity } from "../idle-controller.js";
 import {
   mapProviderError,
   type ProjectFilesystemProvider,
@@ -45,6 +46,8 @@ export type ProjectRpcTargetOptions = Readonly<{
   remainingMs?: number;
   /** Changes whenever the Workspace Host observes a container replacement. */
   containerState?: ProjectContainerState;
+  /** Told when the capability does work, so the Host knows the workspace is not idle. */
+  activity?: ProjectActivity;
 }>;
 
 function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
@@ -70,6 +73,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   readonly #nonce: string;
   readonly #turnEndsAt: number | undefined;
   readonly #containerState: ProjectContainerState | undefined;
+  readonly #activity: ProjectActivity | undefined;
   #containerGeneration: number | undefined;
   #turnTimer: ReturnType<typeof setTimeout> | undefined;
   #ended = false;
@@ -88,6 +92,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#execBackend = execBackend;
     this.#nonce = crypto.randomUUID();
     this.#containerState = options.containerState;
+    this.#activity = options.activity;
     this.#containerGeneration = options.containerState?.generation;
     this.#turnEndsAt =
       options.remainingMs === undefined ? undefined : Date.now() + options.remainingMs;
@@ -96,11 +101,15 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#lstat` parses `path`.
   lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>> {
+    this.#activity?.touch();
+
     return projectResult(() => this.#lstat(path));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#readFile` parses `path`.
   readFile(path: unknown): Promise<ProjectResult<Uint8Array>> {
+    this.#activity?.touch();
+
     return projectResult(() => this.#readFile(path));
   }
 
@@ -112,11 +121,15 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#writeFile` parses every argument.
     mode: unknown,
   ): Promise<ProjectResult<null>> {
+    this.#activity?.touch();
+
     return projectResult(() => this.#writeFile(path, bytes, mode));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#listFiles` parses `path`.
   listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>> {
+    this.#activity?.touch();
+
     return projectResult(() => this.#listFiles(path));
   }
 
@@ -124,6 +137,8 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseStartExecInput` parses `input`.
     input: unknown,
   ): Promise<ProjectResult<StartedExec>> {
+    this.#activity?.touch();
+
     return projectResult<StartedExec>(() => {
       const parsed = parseStartExecInput(input);
 
@@ -186,22 +201,44 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     // it starts, unbounded.
     const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
 
-    const operation = startExecOperation(
-      this.#execBackend,
-      {
-        command: input.command,
-        cwd: cwdOutcome.value.path,
-        timeoutMs,
-      },
-      (settlement) => {
-        this.#operations.delete(operationId);
-        this.#logSettlement(settlement, timeoutMs);
-      },
+    // The operation holds the workspace until it settles, even past the turn's deadline.
+    const endActivity = this.#activity?.begin();
+
+    const operation = this.#startOperation(
+      operationId,
+      cwdOutcome.value.path,
+      input,
+      timeoutMs,
+      endActivity,
     );
 
     this.#operations.set(operationId, operation);
 
     return ok({ operationId, events: operation.events });
+  }
+
+  #startOperation(
+    operationId: string,
+    cwd: string,
+    input: ParsedStartExecInput,
+    timeoutMs: number,
+    endActivity: (() => void) | undefined,
+  ): ExecOperation {
+    try {
+      return startExecOperation(
+        this.#execBackend,
+        { command: input.command, cwd, timeoutMs },
+        (settlement) => {
+          this.#operations.delete(operationId);
+          endActivity?.();
+          this.#logSettlement(settlement, timeoutMs);
+        },
+      );
+    } catch (error) {
+      endActivity?.();
+
+      throw error;
+    }
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `operationId` is validated below.
