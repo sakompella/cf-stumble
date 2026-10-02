@@ -202,7 +202,10 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   async #destroyIfStillIdle(): Promise<IdleStopOutcome> {
-    if (this.#inFlight > 0) return "skipped-busy";
+    // Decide again on a fresh snapshot: work, or a turn lease taken during the close, cancels the stop.
+    const decision = decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
+
+    if (decision.kind !== "stop") return "skipped-busy";
 
     if (!this.#ports.containerRunning()) return "not-running";
 

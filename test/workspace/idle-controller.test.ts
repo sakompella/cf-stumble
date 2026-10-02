@@ -234,6 +234,26 @@ test("work that begins during the close keeps the container, and the check is re
   expect(alarms.at(-1)).toBe(21_000);
 });
 
+test("a turn lease taken during the close keeps the container, and the check is repeated later", async () => {
+  const events = capturedEvents();
+
+  const { idle, clock, alarms, calls } = controller({
+    duringClose: (world) => {
+      world.idle.leaseUntil(60_000);
+    },
+  });
+
+  idle.begin()();
+  clock.now = 11_000;
+  await idle.onAlarm();
+
+  expect(calls).toEqual(["close"]);
+  expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
+    outcome: "skipped-busy",
+  });
+  expect(alarms.at(-1)).toBe(21_000);
+});
+
 test("work that begins during the stop waits for it through settled()", async () => {
   const { idle, clock } = controller();
   idle.begin()();
