@@ -1,4 +1,5 @@
 import { parseOptions, USAGE } from "./args.mts";
+import { endsNow } from "./horizon.mts";
 import { formatReport, runChecks } from "./check.mts";
 import {
   fetchApplications,
@@ -68,9 +69,14 @@ async function gather(options: Options): Promise<CheckInput> {
     return { ...base, logs, metrics: applications, instances: applications };
   }
 
+  // What runs now says nothing about a past window, so the instances are fetched only for one that ends now.
+  const noInstances: CheckInput["instances"] = { status: "ok", data: [] };
+
   const [metrics, instances] = await Promise.all([
     fetchMetrics(token.data, account.data, applications.data, options.window),
-    fetchInstances(token.data, account.data, applications.data),
+    endsNow(options.window, base.nowMs)
+      ? fetchInstances(token.data, account.data, applications.data)
+      : noInstances,
   ]);
 
   return { ...base, logs, metrics, instances };

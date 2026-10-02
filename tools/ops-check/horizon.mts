@@ -1,5 +1,5 @@
 import { LIVE_SLACK_MS, METRICS_LAG_MS } from "./thresholds.mts";
-import type { CheckInput } from "./model.mts";
+import type { CheckInput, TimeWindow } from "./model.mts";
 
 /**
  * How far the metrics can be trusted, and whether the window reaches the present.
@@ -15,11 +15,16 @@ export interface Horizon {
   readonly live: boolean;
 }
 
+/** True when the window ends at the present, so the Containers API can speak for it. */
+export function endsNow(window: TimeWindow, nowMs: number): boolean {
+  return window.toMs >= nowMs - LIVE_SLACK_MS;
+}
+
 export function horizonOf(input: CheckInput): Horizon {
   const latestCompleteMs = input.nowMs - METRICS_LAG_MS;
 
   return {
     completeUntilMs: Math.min(input.window.toMs, latestCompleteMs),
-    live: input.window.toMs >= input.nowMs - LIVE_SLACK_MS,
+    live: endsNow(input.window, input.nowMs),
   };
 }
