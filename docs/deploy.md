@@ -43,6 +43,28 @@ Use one deploy path for the Worker. Never alternate `wrangler deploy` and `cf de
 
 Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change their `storage` value. A missing or mismatched class can orphan that class's stored data. Cloudflare cannot roll a Durable Object lifecycle change back to a version from before the change, so do not rely on a rollback across the first deployment that uses `exports`.
 
+## Instance secrets
+
+Values that differ per instance are Worker secrets, set once and never committed. `cf deploy` removes plain-text variables that `cloudflare.config.ts` does not declare, and it keeps secrets, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`.
+
+| Secret                                                          | Required | Purpose                                                          |
+| --------------------------------------------------------------- | -------- | ---------------------------------------------------------------- |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes      | The Access check. Without them the Worker refuses every request. |
+| `HARNESS_REPOSITORY_URL`                                        | No       | The fork the instance builds its harness from.                   |
+| `GITHUB_OAUTH_CLIENT_ID`                                        | No       | The GitHub OAuth app for the device flow.                        |
+| `GH_TOKEN`                                                      | No       | An unattended-run GitHub credential.                             |
+
+A declared secret is required: Wrangler and `cf` fail a deploy while it is unset. For that reason only the three Access secrets are declared in `cloudflare.config.ts` and `wrangler.jsonc`. The optional ones stay undeclared, and every later deploy keeps them.
+
+Set them in one of two ways:
+
+- On the first deploy, put them in a JSON or `.env` file outside the repository and run `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
+- At any time, run `npx wrangler secret put <NAME> --name <worker>` for each name.
+
+`scripts/deploy/check-config.sh` checks that the three Access values are in your shell before you write that file.
+
+`cf deploy` stops with "Aborting the upload operation because of conflicts ... remove the --strict flag" when the live Worker was last updated through the script API or the dashboard, and it still prints "Deploy complete". Check the exit code. A Worker last deployed by Wrangler or `cf` does not hit this. The one-path rule still applies: do not alternate `wrangler deploy` and `cf deploy` on one Worker.
+
 ## Container image
 
 `cloudflare.config.ts` points to `containers/computerd.Dockerfile`, not to a registry image. The Dockerfile builds `computerd`, Cloudflare Computer's container daemon, from a pinned public source commit with one small patch, then copies it into a Debian and Node image. The first image build fetches that source and its npm packages, so it takes a few minutes longer than copying a prebuilt binary.
@@ -69,13 +91,15 @@ The Worker rejects every route until you configure Access. Set up Access after t
 2. In the Cloudflare dashboard, open **Zero Trust** > **Access controls** > **Applications**. Create a new application, choose **Self-hosted and private**, and add the public hostname that serves this Worker. Choose a hostname in the Cloudflare zone in your account.
 3. Add one Allow policy for your own identity. Access denies requests that do not match an Allow policy.
 4. Save the application and sign in to that hostname once. Then read your own `sub` claim. The simplest way is to open `https://<your-hostname>/cdn-cgi/access/get-identity` in the same browser, which returns your Access identity as JSON. The other way is to decode the `CF_Authorization` cookie, which is an ordinary JWT whose payload carries `sub` and `aud`.
-5. Set the three values below in the deployed Worker's settings, then redeploy or save so the Worker picks them up.
+5. Set the three values below as Worker secrets (see "Instance secrets"), then deploy or save so the Worker picks them up.
 
 | Worker value            | Value to set                                                                                                     |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `CF_ACCESS_TEAM_DOMAIN` | Your Zero Trust team domain. It is the domain that identifies the Zero Trust team.                               |
 | `CF_ACCESS_AUD`         | The application audience tag. The dashboard shows it on the application, and it is the `aud` claim in the token. |
 | `CF_ACCESS_OWNER_SUB`   | The `sub` claim in your own Access token after your first login.                                                 |
+
+These three are declared as required secrets in the configuration, so a deploy fails while one is unset.
 
 Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accepts only the identity whose `sub` claim matches this value.
 
@@ -121,7 +145,7 @@ it.
 
 The workspace is a development machine. It has `git` and `gh`. Authorize GitHub inside the workspace, then connect one GitHub repository from there. The `gh` credential stays in the workspace's local GitHub configuration. The repository keeps its own files and Git history. Your browser does not receive the GitHub credential.
 
-Set `GITHUB_OAUTH_CLIENT_ID` in the Worker's variables before you authorize. It names the GitHub OAuth app the device flow uses. It is public configuration, not a secret. Without it, starting the device flow answers `not-configured`.
+Set `GITHUB_OAUTH_CLIENT_ID` as a Worker secret before you authorize (see "Instance secrets"). It names the GitHub OAuth app the device flow uses. The value is public, but it is stored as a secret so that a deploy keeps it. Without it, starting the device flow answers `not-configured`.
 
 Set the `GH_TOKEN` secret if you want an unattended run to authorize without a person at a browser. cf-stumble installs `GH_TOKEN` as the workspace credential whenever the workspace has no usable one, and treats it as a test and development path, not a second production login. A deployment with neither value set reports `disconnected`.
 
@@ -146,13 +170,11 @@ Each verified Access identity gets its own Supervisor, workspace, and instance. 
 
 ## Point the instance at your own fork
 
-Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` variable to the HTTPS URL of your fork in `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc`:
+Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` secret to the HTTPS URL of your fork (see "Instance secrets"):
 
-```ts
-HARNESS_REPOSITORY_URL: bindings.text("https://github.com/your-name/cf-stumble.git"),
+```sh
+printf '%s' 'https://github.com/your-name/cf-stumble.git' | npx wrangler secret put HARNESS_REPOSITORY_URL --name cf-stumble
 ```
-
-In the two Wrangler files, the same setting is `"vars": { "HARNESS_REPOSITORY_URL": "https://github.com/your-name/cf-stumble.git" }`.
 
 An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
 
