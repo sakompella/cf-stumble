@@ -56,6 +56,9 @@ test("the walk patch reads COMPUTERD_POLL_MS and tests its parse", () => {
   expect(patch).toContain("COMPUTERD_POLL_MS");
   expect(patch).toContain("parsePollMs(");
   expect(patch).toContain("COMPUTERD_POLL_MS is unset, or one positive integer");
+  expect(patch, "a value above the timer limit is refused, not clamped to 1 ms").toContain(
+    "MAX_POLL_MS = 2_147_483_647",
+  );
 });
 
 test("the workspace image keeps gh and Git global configuration in the durable workspace", () => {
