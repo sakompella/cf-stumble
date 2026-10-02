@@ -2,8 +2,11 @@
 
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
+import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceHost } from "../../src/workspace/host.js";
+import { PROJECT_TURN_LEASE_MS } from "../../src/turn-budget.js";
+import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
 import { capturedEvents, named } from "../log-capture.js";
 
@@ -20,6 +23,16 @@ afterEach(() => {
 class FakeContainer {
   running = true;
   readonly destroyed: unknown[] = [];
+  /** Launch requests the Workspace made, so a test can tell when an exec reached the container. */
+  starts = 0;
+  /** When set, the destroy waits for it, as a slow platform call would. */
+  destroyGate: Promise<void> | undefined;
+
+  start(): void {
+    this.starts += 1;
+
+    throw new Error("the fake container does not launch");
+  }
 
   monitor(): Promise<void> {
     return new Promise<void>(() => {});
@@ -31,7 +44,7 @@ class FakeContainer {
     // Computer's own restart destroys the container first; only an idle stop leaves it stopped.
     if (reason === "idle") this.running = false;
 
-    return Promise.resolve();
+    return this.destroyGate ?? Promise.resolve();
   }
 }
 
@@ -141,4 +154,58 @@ test("a reset that lost the alarm arms a new one", async () => {
   });
 
   expect(alarm).not.toBeNull();
+});
+
+/** The project root is made by provisioning in a real workspace; here the test makes it. */
+async function seedWorkspaceRoot(state: DurableObjectState): Promise<void> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the Host makes the same cast; Computer accepts the Durable Object SQLite API its generic cursor declaration narrows.
+  const storage = state.storage as DurableObjectStorageLike;
+
+  const workspace = new Workspace({
+    storage,
+    sessionId: state.id.toString(),
+    backends: [],
+  });
+
+  await workspace.fs.mkdir(WORKSPACE_ROOT, { recursive: true });
+}
+
+const tick = () =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, 20);
+  });
+
+test("an exec started while the idle stop destroys the container waits for it", async () => {
+  capturedEvents();
+
+  const seen = await withHost("host-seam-exec-wait", async (host, state, container) => {
+    const open = { release: (): void => {} };
+
+    container.destroyGate = new Promise<void>((resolve) => {
+      open.release = resolve;
+    });
+    await host.build({ kind: "not-a-build" });
+    await seedWorkspaceRoot(state);
+
+    // With no budget the capability has no turn deadline, so it can still start an exec later.
+    const project = host.project();
+
+    vi.spyOn(Date, "now").mockReturnValue(
+      Date.now() + PROJECT_TURN_LEASE_MS + WORKSPACE_IDLE_STOP_MS + 1_000,
+    );
+    const alarm = host.alarm();
+    await tick();
+    const started = await project.startExec({ command: "true", timeoutMs: 1_000 });
+    await tick();
+    const whileDestroying = container.starts;
+    open.release();
+    await alarm;
+    await tick();
+
+    return { whileDestroying, afterwards: container.starts, started };
+  });
+
+  expect(seen.started.ok, "the exec is accepted").toBe(true);
+  expect(seen.whileDestroying, "it does not reach the container during the destroy").toBe(0);
+  expect(seen.afterwards, "it reaches the container once the destroy settled").toBeGreaterThan(0);
 });
