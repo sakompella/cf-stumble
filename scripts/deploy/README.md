@@ -10,12 +10,12 @@ Run it in the same shell or CI job that will start the deploy:
 
 The guard reads these environment variables. The shell or CI secret manager supplies the values. Do not put them in tracked files.
 
-| Environment variable        | Value source at deploy time                                               | Worker delivery                                                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN`     | The Cloudflare Access team domain from the Access dashboard.              | A Worker secret with this name, set with `cf deploy --secrets-file` or `wrangler secret put`. The Worker reads `env.CF_ACCESS_TEAM_DOMAIN`. |
-| `CF_ACCESS_AUD`             | The Access application audience tag, also called the application AUD.     | A Worker secret with this name, set the same way. The Worker reads `env.CF_ACCESS_AUD`.                                                     |
-| `CF_ACCESS_OWNER_SUB`       | The owner's stable `sub` subject claim from the Access identity provider. | A Worker secret with this name, set the same way. The Worker reads `env.CF_ACCESS_OWNER_SUB`.                                               |
-| `CF_STUMBLE_HARNESS_COMMIT` | The full harness commit the deploy publishes, from `git rev-parse HEAD`.  | The Worker receives no binding for it. The owner submits it after the deploy, as the Generation 0 step below describes.                     |
+| Environment variable        | Value source at deploy time                                               | Worker delivery                                                                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CF_ACCESS_TEAM_DOMAIN`     | The Cloudflare Access team domain from the Access dashboard.              | A Worker secret with this name, set with `cf deploy --secrets-file` or `wrangler secret put`. It is not declared in the configuration. The Worker reads `env.CF_ACCESS_TEAM_DOMAIN`. |
+| `CF_ACCESS_AUD`             | The Access application audience tag, also called the application AUD.     | A Worker secret with this name, set the same way. The Worker reads `env.CF_ACCESS_AUD`.                                                                                              |
+| `CF_ACCESS_OWNER_SUB`       | The owner's stable `sub` subject claim from the Access identity provider. | A Worker secret with this name, set the same way. The Worker reads `env.CF_ACCESS_OWNER_SUB`.                                                                                        |
+| `CF_STUMBLE_HARNESS_COMMIT` | The full harness commit the deploy publishes, from `git rev-parse HEAD`.  | The Worker receives no binding for it. The owner submits it after the deploy, as the Generation 0 step below describes.                                                              |
 
 ## The Access application and policy this Worker requires
 
@@ -42,7 +42,7 @@ are checked when the owner deploys.
 
 `CF_STUMBLE_HARNESS_COMMIT` must be a full SHA-1 or SHA-256 Git object ID in lowercase hexadecimal, because a generation is one specific labeled commit (ADR-0002). A branch name or a short ref fails the guard rather than the submission.
 
-A deploy wrapper must invoke the guard before it starts the deploy. The three Access values are required Worker secrets: write them to a file outside the repository and pass it with `cf deploy --secrets-file <file>` on the first deploy, or set each with `wrangler secret put <NAME> --name <worker>`. Later deploys keep them. Do not pass them with `--var`: `cf deploy` removes plain-text variables the configuration does not declare. The guard does not set, persist, or forward any value itself. See "Instance secrets" in `docs/deploy.md`.
+A deploy wrapper must invoke the guard before it starts the deploy. The three Access values are Worker secrets that the configuration does not declare, so the first deploy works without them and the Worker refuses every request until they are set. Set them after the Access login: write them to a file outside the repository and pass it with `cf deploy --secrets-file <file>`, or run `wrangler secret put <NAME> --name <worker>` for each. Later deploys keep them. Do not pass them with `--var`: `cf deploy` removes plain-text variables the configuration does not declare. The guard does not set, persist, or forward any value itself. See "Instance secrets" in `docs/deploy.md`.
 
 The output reports only whether each variable is present and its character length. It never prints a value.
 

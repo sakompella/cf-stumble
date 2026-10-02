@@ -20,13 +20,13 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 Select the button in the README. Cloudflare copies the public source repository into your GitHub account, lets you choose names, provisions the resources declared in `wrangler.jsonc`, sets up Workers Builds, builds the project, and deploys it.
 
-The button does not configure Cloudflare Access. It also does not provision Containers. Workers Builds builds the Container image, but Cloudflare must create the Container application as part of the deployment. Complete the Access setup below before you use the app.
+The button does not configure Cloudflare Access. It also does not provision Containers. Workers Builds builds the Container image, but Cloudflare must create the Container application as part of the deployment. The button declares no secrets, so the first deploy works without them. Until you set the Access secrets below, the Worker refuses every request. Complete the Access setup before you use the app.
 
 Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this project, that includes the Durable Objects, Workers AI binding, and Worker Loader. A Durable Object is Cloudflare's stateful Worker component. The configuration also declares the workspace Container, but Containers are outside the button's provisioning list.
 
 ## Configuration files
 
-`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the variables. `cf build` reads it and passes. `cf deploy` passed on staging (see below). `cf dev` does not work yet.
+`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares no variables or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build` reads it and passes. `cf deploy` passed on staging (see below). `cf dev` does not work yet.
 
 Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
 
@@ -45,25 +45,25 @@ Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change 
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once and never committed. `cf deploy` removes plain-text variables that `cloudflare.config.ts` does not declare, and it keeps secrets, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`.
+Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them and no plain-text variables. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
 
-| Secret                                                          | Required | Purpose                                                          |
-| --------------------------------------------------------------- | -------- | ---------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes      | The Access check. Without them the Worker refuses every request. |
-| `HARNESS_REPOSITORY_URL`                                        | No       | The fork the instance builds its harness from.                   |
-| `GITHUB_OAUTH_CLIENT_ID`                                        | No       | The GitHub OAuth app for the device flow.                        |
-| `GH_TOKEN`                                                      | No       | An unattended-run GitHub credential.                             |
+| Secret                                                          | Required by the Worker | Purpose                                                          |
+| --------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------- |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes                    | The Access check. Without them the Worker refuses every request. |
+| `HARNESS_REPOSITORY_URL`                                        | No                     | The fork the instance builds its harness from.                   |
+| `GITHUB_OAUTH_CLIENT_ID`                                        | No                     | The GitHub OAuth app for the device flow.                        |
+| `GH_TOKEN`                                                      | No                     | An unattended-run GitHub credential.                             |
 
-A declared secret is required: Wrangler and `cf` fail a deploy while it is unset. For that reason only the three Access secrets are declared in `cloudflare.config.ts` and `wrangler.jsonc`. The optional ones stay undeclared, and every later deploy keeps them.
+Set them in one of two ways, after the Access login for the three Access values:
 
-Set them in one of two ways:
+- Put them in a JSON or `.env` file outside the repository and run `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
+- Run `npx wrangler secret put <NAME> --name <worker>` for each name.
 
-- On the first deploy, put them in a JSON or `.env` file outside the repository and run `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
-- At any time, run `npx wrangler secret put <NAME> --name <worker>` for each name.
+Every later deploy keeps them. An instance whose values are still plain-text variables must convert them with `--secrets-file`; that turns them into secrets. Running `wrangler secret put` for a name that is already a plain variable is untested.
 
-`scripts/deploy/check-config.sh` checks that the three Access values are in your shell before you write that file.
+`cf deploy` stops with "Aborting the upload operation because of conflicts ... remove the --strict flag" when someone last changed the live Worker through the dashboard or the script API, and it still prints "Deploy complete". Check the exit code. `wrangler secret put` does not cause this. A Worker last deployed by Wrangler or `cf` does not hit it either. The one-path rule still applies: do not alternate `wrangler deploy` and `cf deploy` on one Worker.
 
-`cf deploy` stops with "Aborting the upload operation because of conflicts ... remove the --strict flag" when the live Worker was last updated through the script API or the dashboard, and it still prints "Deploy complete". Check the exit code. A Worker last deployed by Wrangler or `cf` does not hit this. The one-path rule still applies: do not alternate `wrangler deploy` and `cf deploy` on one Worker.
+`scripts/deploy/check-config.sh` checks that the three Access values and `CF_STUMBLE_HARNESS_COMMIT` are in your shell before you write the secrets file.
 
 ## Container image
 
@@ -99,7 +99,7 @@ The Worker rejects every route until you configure Access. Set up Access after t
 | `CF_ACCESS_AUD`         | The application audience tag. The dashboard shows it on the application, and it is the `aud` claim in the token. |
 | `CF_ACCESS_OWNER_SUB`   | The `sub` claim in your own Access token after your first login.                                                 |
 
-These three are declared as required secrets in the configuration, so a deploy fails while one is unset.
+These three are not declared in the configuration, so the first deploy works before you have them. Set them after you sign in to the deployed hostname, because `CF_ACCESS_OWNER_SUB` only exists then. The Worker returns 500 `invalid-configuration` until all three are set.
 
 Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accepts only the identity whose `sub` claim matches this value.
 
