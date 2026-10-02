@@ -208,7 +208,6 @@ const WRANGLER_KEYS = [
   "name",
   "observability",
   "routes",
-  "secrets",
   "worker_loaders",
   "workers_dev",
 ];
@@ -264,17 +263,23 @@ test("traces, logs, and Issues stay enabled with every rate at 1", () => {
   expect(wranglerFacts("wrangler.jsonc").observability).toEqual(expected);
 });
 
-test("the instance values are exactly the three required Access secrets, and no plain variables", () => {
-  const secrets = ["CF_ACCESS_AUD", "CF_ACCESS_OWNER_SUB", "CF_ACCESS_TEAM_DOMAIN"];
-
+test("no secret is declared and no plain variable exists, in any configuration", () => {
   for (const facts of [
     cloudflareFacts(),
     wranglerFacts("wrangler.jsonc"),
     wranglerFacts("wrangler.test.jsonc"),
   ]) {
-    expect(facts.secrets).toEqual(secrets);
+    expect(facts.secrets).toEqual([]);
     expect(facts.vars).toEqual({});
   }
+});
+
+test("every cloudflare.config.ts binding is one the comparison maps", () => {
+  const types = entries(at(cloudflareConfig, "worker", "env")).map(([, binding]) =>
+    at(binding, "type"),
+  );
+
+  expect(sorted(types)).toEqual(["ai", "durable-object", "durable-object", "worker-loader"]);
 });
 
 test("every configuration declares exactly one container", () => {
