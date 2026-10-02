@@ -291,11 +291,16 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * It is a surface of its own for the same reason provisioning is: a credential install is
    * neither a build step nor a provisioning step, and each surface parses only its own request,
    * so neither of the others can be asked to install, read, or exercise a token.
+   *
+   * The install requires a complete sync of the workspace's durable copy: `hosts.yml` now lives
+   * under the workspace root, and a copy that is still pending would be lost with the container.
+   * Status and the repository check change nothing, so they do not wait for a sync.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
     return executeGitHubCredentialRequest({
       operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
+      installOperations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
       request,
       requestId: parseRequestId(requestId),
     });

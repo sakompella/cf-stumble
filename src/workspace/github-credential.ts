@@ -18,7 +18,7 @@ import {
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import { runLoggedCommand, type WorkspaceOperations } from "./executor.js";
+import { runLoggedCommand, WorkspaceSyncIncomplete, type WorkspaceOperations } from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly } from "./untrusted.js";
 
 /**
@@ -212,6 +212,12 @@ async function repositoryAccess(
 export async function executeGitHubCredentialRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
+    /**
+     * Operations that fail unless the workspace's durable copy is complete. The install uses them,
+     * so a credential that only the container's disk holds is never reported as installed. It
+     * defaults to `operations`.
+     */
+    installOperations?: WorkspaceOperations | undefined;
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public credential request is parsed at this boundary.
     request: unknown;
     /** Names the owner request this call serves, for the log only. It changes no behavior. */
@@ -225,7 +231,7 @@ export async function executeGitHubCredentialRequest(
   try {
     switch (parsed.step) {
       case "install":
-        return await installCredential(input.operations, parsed.token);
+        return await installCredential(input.installOperations ?? input.operations, parsed.token);
       case "status":
         return await timedCredentialStatus(input.operations, input.requestId);
       case "verify-repository":
@@ -237,8 +243,13 @@ export async function executeGitHubCredentialRequest(
       }
     }
   } catch (cause) {
+    let label = "workspace-unavailable";
+
+    if (isTimeoutFailure(cause)) label = "timeout";
+    else if (cause instanceof WorkspaceSyncIncomplete) label = "sync-incomplete";
+
     logRedactedCause(
-      `github-credential.${parsed.step}: ${isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable"}`,
+      `github-credential.${parsed.step}: ${label}`,
       cause,
       parsed.step === "install" ? parsed.token : undefined,
     );
