@@ -90,6 +90,7 @@ export class WorkspaceIdleController implements ProjectActivity {
     this.#arm(idleSinceMs + this.#ports.idleLimitMs);
   }
 
+  /** Arm from work: a failed write is logged and must not fail the work. Later activity retries. */
   #arm(atMs: number): void {
     this.#armed = true;
 
@@ -97,6 +98,22 @@ export class WorkspaceIdleController implements ProjectActivity {
       logRedactedCause("workspace.idle-alarm: not armed", cause);
       this.#armed = false;
     });
+  }
+
+  /**
+   * Arm from the alarm itself. No work may follow to retry a failed write, so the rejection
+   * propagates out of `alarm()` and the platform runs the alarm again.
+   */
+  async #rearm(atMs: number): Promise<void> {
+    this.#armed = true;
+
+    try {
+      await this.#ports.setAlarm(atMs);
+    } catch (cause) {
+      this.#armed = false;
+
+      throw cause;
+    }
   }
 
   /** Forget the alarm this instance armed, because storage may have dropped it. Work re-arms it. */
@@ -139,7 +156,7 @@ export class WorkspaceIdleController implements ProjectActivity {
     if (!running) return;
 
     if (decision.kind === "check-at") {
-      this.#arm(decision.atMs);
+      await this.#rearm(decision.atMs);
 
       return;
     }
@@ -189,7 +206,7 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     // The container still runs after a busy skip or a failed destroy, so look again later.
     if (outcome === "skipped-busy" || outcome === "threw") {
-      this.#arm(this.#ports.nowMs() + this.#ports.idleLimitMs);
+      await this.#rearm(this.#ports.nowMs() + this.#ports.idleLimitMs);
     }
   }
 

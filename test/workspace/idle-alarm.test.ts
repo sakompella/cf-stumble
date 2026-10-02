@@ -8,9 +8,10 @@ afterEach(() => {
 
 function controller(options: Readonly<{ alarmFails?: boolean }> = {}) {
   const alarms: number[] = [];
+  const clock = { now: 1_000 };
 
   const idle = new WorkspaceIdleController({
-    nowMs: () => 1_000,
+    nowMs: () => clock.now,
     idleLimitMs: 10_000,
     setAlarm: (atMs) => {
       alarms.push(atMs);
@@ -24,7 +25,7 @@ function controller(options: Readonly<{ alarmFails?: boolean }> = {}) {
     stopContainer: () => Promise.resolve(),
   });
 
-  return { idle, alarms };
+  return { idle, alarms, clock };
 }
 
 test("an alarm that could not be written is tried again on the next activity", async () => {
@@ -56,4 +57,25 @@ test("forgetting the alarm lets the next activity arm a new one", () => {
   idle.forgetAlarm();
   idle.touch();
   expect(alarms).toHaveLength(2);
+});
+
+test("an alarm that cannot re-arm itself fails, so the platform runs it again", async () => {
+  capturedEvents();
+  const failing = controller({ alarmFails: true });
+  failing.idle.begin()();
+  await Promise.resolve();
+  await Promise.resolve();
+  failing.clock.now = 5_000;
+
+  await expect(failing.idle.onAlarm(), "no later activity will retry the write").rejects.toThrow(
+    "alarm write failed",
+  );
+  expect(failing.alarms, "the re-arm was attempted").toHaveLength(2);
+
+  failing.clock.now = 5_001;
+  await expect(
+    failing.idle.onAlarm(),
+    "the platform's retry tries the write again",
+  ).rejects.toThrow();
+  expect(failing.alarms).toHaveLength(3);
 });
