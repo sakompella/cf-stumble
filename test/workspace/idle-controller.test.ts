@@ -36,6 +36,8 @@ function controller(options: Behavior = {}) {
     idleLimitMs: LIMIT,
     setAlarm: (atMs) => {
       alarms.push(atMs);
+
+      return Promise.resolve();
     },
     containerRunning: () => state.running,
     closeWorkspace: () => {

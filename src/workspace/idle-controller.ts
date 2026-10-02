@@ -13,8 +13,8 @@ export type ProjectActivity = Readonly<{
 export type IdleControllerPorts = Readonly<{
   nowMs(): number;
   idleLimitMs: number;
-  /** Persist an alarm. A failure is the caller's to log; it must not fail the work that armed it. */
-  setAlarm(atMs: number): void;
+  /** Persist an alarm. The controller logs a rejection and tries again on the next activity. */
+  setAlarm(atMs: number): Promise<void>;
   containerRunning(): boolean;
   /** Release the Workspace's hold on the container: this ends computerd's open WebSocket request. */
   closeWorkspace(): Promise<void>;
@@ -89,7 +89,16 @@ export class WorkspaceIdleController implements ProjectActivity {
 
   #arm(atMs: number): void {
     this.#armed = true;
-    this.#ports.setAlarm(atMs);
+
+    this.#ports.setAlarm(atMs).catch((cause: unknown) => {
+      logRedactedCause("workspace.idle-alarm: not armed", cause);
+      this.#armed = false;
+    });
+  }
+
+  /** Forget the alarm this instance armed, because storage may have dropped it. Work re-arms it. */
+  forgetAlarm(): void {
+    this.#armed = false;
   }
 
   /** Settles once any stop in progress has finished. Work calls this after it has begun. */

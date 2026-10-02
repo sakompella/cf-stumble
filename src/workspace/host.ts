@@ -220,11 +220,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     this.#idle = new WorkspaceIdleController({
       nowMs: () => Date.now(),
       idleLimitMs: WORKSPACE_IDLE_STOP_MS,
-      setAlarm: (atMs) => {
-        ctx.storage.setAlarm(atMs).catch((cause: unknown) => {
-          logRedactedCause("workspace.idle-alarm: not armed", cause);
-        });
-      },
+      setAlarm: (atMs) => ctx.storage.setAlarm(atMs),
       containerRunning: () => platformContainer?.running ?? false,
       closeWorkspace: () => this.#workspace.close(),
       stopContainer: () => this.#container.stopFor("idle"),
@@ -350,15 +346,19 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
   reset(): Promise<WorkspaceResetResult> {
     return this.#tracked(async () => {
-      const result = await resetWorkspaceStorage(this.ctx.storage, {
-        restart: (spec) => this.#container.restartFor("workspace-reset", spec),
-      });
+      try {
+        return await resetWorkspaceStorage(this.ctx.storage, {
+          restart: (spec) => this.#container.restartFor("workspace-reset", spec),
+        });
+      } finally {
+        // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
+        // deployment); rebuild it so the next operation recreates them instead of failing.
+        this.#workspace = this.#newWorkspace();
 
-      // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
-      // deployment); rebuild it so the next operation recreates them instead of failing.
-      this.#workspace = this.#newWorkspace();
-
-      return result;
+        // It may also have dropped the idle alarm (the `delete_all_deletes_alarm` compatibility
+        // flag), so forget the one this instance armed; the end of this call arms a new one.
+        this.#idle.forgetAlarm();
+      }
     });
   }
 
