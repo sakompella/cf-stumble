@@ -85,6 +85,51 @@ test.each([
   expect(containerReasonCode(reason)).toBe(code);
 });
 
+test("an idle stop is the Host's own doing, whether the monitor resolves or rejects", async () => {
+  for (const settleBy of ["resolve", "reject"] as const) {
+    const events = capturedEvents();
+    const { observed, platform, destroyed } = watchedContainer({ running: false });
+
+    await observed.start(SPEC);
+    await observed.stopFor("idle");
+    platform.calls[0]?.[settleBy](new Error("idle"));
+    await settle();
+
+    expect(destroyed).toEqual(["idle"]);
+    expect(named(events(), "workspace.container.stopped")).toEqual([
+      expect.objectContaining({
+        level: "info",
+        reasonCode: "idle-stop",
+        reasonSource: "application-intent",
+        expected: true,
+      }),
+    ]);
+    vi.restoreAllMocks();
+  }
+});
+
+test("a failed destroy leaves the later exit an unknown stop", async () => {
+  const events = capturedEvents();
+  const { observed, platform } = watchedContainer({ running: false, destroyFails: true });
+
+  await observed.start(SPEC);
+  await expect(observed.stopFor("idle")).rejects.toThrow("destroy failed");
+  platform.calls[0]?.resolve();
+  await settle();
+
+  expect(named(events(), "workspace.container.stopped").at(0)).toMatchObject({
+    reasonCode: "normal-exit",
+    reasonSource: "unknown",
+  });
+});
+
+test("a container with no destroy cannot be stopped for idleness", async () => {
+  capturedEvents();
+  const { observed } = fakeContainer({ running: false });
+
+  await expect(observed.stopFor("idle")).rejects.toThrow("cannot be destroyed");
+});
+
 test("a stop of an adopted container has no run duration", async () => {
   const events = capturedEvents();
   const { observed, platform } = watchedContainer({ running: true, outcome: "adopted" });

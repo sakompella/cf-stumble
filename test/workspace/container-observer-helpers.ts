@@ -15,6 +15,7 @@ export type FakeOptions = Readonly<{
   running?: boolean | "status-fails";
   outcome?: ContainerRuntimeInfo["outcome"];
   launchFails?: boolean;
+  destroyFails?: boolean;
 }>;
 
 /** A container API that answers launches and status; any other call is a test mistake. */
@@ -159,12 +160,21 @@ export function watchedContainer(options: FakeOptions = {}) {
   const inner = new FakeContainer(options);
   const platform = controlledMonitor(inner.calls);
 
+  const destroyed: string[] = [];
+
   const observed = new ObservedWorkspaceContainer(inner, {
     monitor: platform.monitor,
+    destroy: (reason) => {
+      destroyed.push(reason);
+
+      return options.destroyFails === true
+        ? Promise.reject(new Error("destroy failed"))
+        : Promise.resolve();
+    },
     now: () => clock.now,
   });
 
-  return { inner, platform, observed, clock };
+  return { inner, platform, observed, clock, destroyed };
 }
 
 export const settle = () =>

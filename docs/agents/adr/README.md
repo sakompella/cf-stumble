@@ -29,6 +29,8 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0042](0042-build-computerd-from-source-with-walk-patch.md)**: the workspace image builds
   computerd from the pinned source with a patch that stops its shim from following symlinks and
   walking ignored trees.
+- **[ADR-0043](0043-workspace-host-stops-its-idle-container.md)**: the Workspace Host stops its
+  container after ten idle minutes, because computerd's open WebSocket keeps the object active.
 
 ## Adding a decision
 

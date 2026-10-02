@@ -189,6 +189,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
     this.#container = new ObservedWorkspaceContainer(new WorkspaceContainerAPI(ctx), {
       monitor: platformContainer === undefined ? undefined : () => platformContainer.monitor(),
+      destroy:
+        platformContainer === undefined ? undefined : (reason) => platformContainer.destroy(reason),
     });
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
@@ -224,6 +226,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         });
       },
       containerRunning: () => platformContainer?.running ?? false,
+      closeWorkspace: () => this.#workspace.close(),
+      stopContainer: () => this.#container.stopFor("idle"),
     });
   }
 
@@ -232,6 +236,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     const end = this.#idle.begin();
 
     try {
+      // An idle stop in progress sees this work as in flight and keeps the container; wait for it
+      // to finish closing the Workspace before touching it.
+      await this.#idle.settled();
+
       return await work();
     } finally {
       end();
@@ -377,8 +385,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   /** The idle check. The RPC WebSocket from computerd is not work, so it never delays a stop. */
   override alarm(): Promise<void> {
-    this.#idle.onAlarm();
-
-    return Promise.resolve();
+    return this.#idle.onAlarm();
   }
 }

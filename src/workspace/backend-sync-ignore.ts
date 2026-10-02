@@ -88,6 +88,7 @@ export type ContainerReasonCode =
   | "normal-exit"
   | "connection-lost"
   | "placement-unavailable"
+  | "idle-stop"
   | "unknown"
   | "status-unavailable";
 

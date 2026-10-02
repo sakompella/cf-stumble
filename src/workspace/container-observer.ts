@@ -3,41 +3,11 @@ import type {
   ContainerRuntimeInfo,
   IWorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
-import { logEvent, logRedactedCause, type LogLevel } from "../diagnostics.js";
-import {
-  containerExitCode,
-  containerReasonCode,
-  type ContainerReasonCode,
-} from "./backend-sync-ignore.js";
+import { logEvent, logRedactedCause } from "../diagnostics.js";
+import { containerReasonCode } from "./backend-sync-ignore.js";
+import { NORMAL_STOP, stopCause, stopLevel, type StopCause } from "./container-stop-cause.js";
 
 type LaunchKind = "start" | "restart";
-
-/** What the platform monitor said about an exit: text for the reason code, and a code if it gave one. */
-type StopCause = Readonly<{ reason: string; exitCode: number | null }>;
-
-const NORMAL_STOP: StopCause = { reason: "exited normally", exitCode: null };
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A platform error may carry an exitCode; nothing else is read.
-function reportedExitCode(error: unknown): number | null {
-  if (!(error instanceof Error) || !("exitCode" in error)) return null;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the property is unchecked platform data.
-  return typeof error.exitCode === "number" ? error.exitCode : null;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A monitor rejection can be anything; this reads only a message and a code.
-function stopCause(error: unknown): StopCause {
-  const reason = error instanceof Error ? error.message : String(error);
-
-  return { reason, exitCode: reportedExitCode(error) ?? containerExitCode(reason) };
-}
-
-/** A clean exit is ordinary, a crash code is a fault, and anything else the Host did not cause is a warning. */
-function stopLevel(reasonCode: ContainerReasonCode, intentional: boolean): LogLevel {
-  if (intentional || reasonCode === "normal-exit") return "info";
-
-  return reasonCode === "unexpected-exit-code" ? "error" : "warn";
-}
 
 /** Observation must never fail a launch, so a throw while logging or arming is logged and dropped. */
 function observeSafely(step: () => void): void {
@@ -71,9 +41,12 @@ export type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "wor
 export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
   readonly #inner: IWorkspaceContainerAPI;
   readonly #monitor: (() => Promise<void>) | undefined;
+  readonly #destroy: ((reason: string) => Promise<void>) | undefined;
   readonly #now: () => number;
   /** Runtimes this instance watches, with when their launch returned (`null` if adopted). */
   readonly #watched = new Map<string, number | null>();
+  /** Runtimes the Host stopped for being idle. */
+  readonly #idleStopped = new Set<string>();
   /** Runtimes that a later launch replaced on purpose. */
   readonly #replaced = new Set<string>();
   /** Host restarts in progress: the old container's exit during one is the Host's own doing. */
@@ -88,10 +61,15 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
 
   constructor(
     inner: IWorkspaceContainerAPI,
-    options: Readonly<{ monitor?: (() => Promise<void>) | undefined; now?: () => number }> = {},
+    options: Readonly<{
+      monitor?: (() => Promise<void>) | undefined;
+      destroy?: ((reason: string) => Promise<void>) | undefined;
+      now?: () => number;
+    }> = {},
   ) {
     this.#inner = inner;
     this.#monitor = options.monitor;
+    this.#destroy = options.destroy;
     this.#now = options.now ?? Date.now;
   }
 
@@ -294,10 +272,12 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     duringRestart: boolean,
   ): void {
     const launchedAtMs = this.#watched.get(runtimeId) ?? null;
-    const reasonCode = containerReasonCode(cause.reason);
-    const intentional = duringRestart || this.#replaced.has(runtimeId);
+    const idleStop = this.#idleStopped.has(runtimeId);
+    const reasonCode = idleStop ? "idle-stop" : containerReasonCode(cause.reason);
+    const intentional = duringRestart || idleStop || this.#replaced.has(runtimeId);
     this.#watched.delete(runtimeId);
     this.#replaced.delete(runtimeId);
+    this.#idleStopped.delete(runtimeId);
 
     const level = stopLevel(reasonCode, intentional);
 
@@ -319,6 +299,19 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
     } catch {
       return null;
     }
+  }
+
+  /** Destroy the container for being idle; watched runtimes are marked first, so their exit is ours. */
+  async stopFor(reason: "idle"): Promise<void> {
+    if (this.#destroy === undefined) throw new Error("this container cannot be destroyed");
+
+    for (const runtimeId of this.#watched.keys()) this.#idleStopped.add(runtimeId);
+
+    await this.#destroy(reason).catch((cause: unknown) => {
+      this.#idleStopped.clear();
+
+      throw cause;
+    });
   }
 
   setInactivityTimeout(durationMs: number): Promise<void> {
