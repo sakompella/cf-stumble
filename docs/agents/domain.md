@@ -9,7 +9,7 @@ Use this file to find the repository's agent-authored domain documentation. cf-s
 3. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change.
 4. Read `docs/release/v0/release-notes.md` for what version 0 shipped and the deployed evidence.
 5. Read `docs/agents/design/feature-map.md` for the version 0 completion scope, `docs/agents/design/slices.md` for earlier implementation status, and `docs/agents/design/computer-integration.md` for the pinned Computer integration.
-6. Read `docs/agents/status-2026-09-27.md` for what changed since the `v0` tag and what remains open.
+6. Read `docs/agents/status-2026-10-02.md` for the current state: what changed since 2026-09-27, what is deployed, and what remains open. Read `docs/agents/status-2026-09-27.md` for the history from the `v0` tag to 09-26.
 7. Read `docs/agents/audit-2026-09-27.md` for the source-wide review at that snapshot, its verified code paths, and findings that still need runtime tests.
 8. Read `docs/agents/audit-fixes-2026-09-27.md` for the local fixes and what still needs deployed evidence.
 
@@ -26,6 +26,8 @@ Everything in `docs/agents/` is agent-authored. `docs/` outside that directory i
 - `design/computer-integration.md` records the verified Computer pair and backend roles.
 - `design/github-connection.md` records how a repository is connected, where the GitHub credential
   lives, and which credential source an automated run uses.
+- `incident-2026-09-container-cost.md` records the 2026-09 container cost incident, its causes, and
+  how to detect a recurrence.
 - `design/observability.md` lists the structured operational log events, their fields, and how to
   query them. Read it before you add a log line or diagnose a deployed fault.
 
