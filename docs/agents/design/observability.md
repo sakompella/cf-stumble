@@ -139,6 +139,106 @@ Owner work is a `turn.*`, `workspace.rpc`, `workspace.exec`, `workspace.command`
 
 **Tests.** `tools/ops-check/*.test.ts` run in `pnpm test:tools`. `fixtures.mts` builds hand-made API responses for four days: the 09-26 poller (95 s polls, 90 s cancellations), the 09-27 run (19 hours of 0.6 to 1.0 vCPU and four log events), a healthy day, and a day with no metrics. Each response goes through the same parser the command uses. The tests check that each rule fires at its threshold and not one step below. Fetching and the command line (`fetch.mts`, `run.mts`) have no tests and stay outside the gate, like `pnpm harness:browser`.
 
+## Query recipes
+
+These are the queries behind `pnpm ops:check` (`tools/ops-check/fetch.mts`), so you can run them by
+hand. Replace `<account-id>` with the id from `pnpm exec cf accounts list` (or set
+`CLOUDFLARE_ACCOUNT_ID`) and `<worker>` with the Worker name from `cloudflare.config.ts`. Send the
+token in the `Authorization: Bearer` header only, never in a URL or a command line you log, and set
+a `User-Agent` header (the API refuses the default of some HTTP libraries).
+
+**Events from Workers Logs.** `POST https://api.cloudflare.com/client/v4/accounts/<account-id>/workers/observability/telemetry/query`
+with a body like this. `timeframe` is in milliseconds since the epoch.
+
+```json
+{
+  "queryId": "adhoc",
+  "view": "events",
+  "dry": true,
+  "limit": 2000,
+  "timeframe": { "from": 1790000000000, "to": 1790003600000 },
+  "parameters": {
+    "filters": [
+      { "key": "$metadata.service", "operation": "eq", "type": "string", "value": "<worker>" },
+      { "key": "event", "operation": "exists", "type": "string" }
+    ]
+  }
+}
+```
+
+- Add `{ "key": "event", "operation": "eq", "type": "string", "value": "route.settled" }` to read one
+  event. Any field an event carries works as a key, for example `requestId` or `reasonCode`.
+- Canceled invocations that wrote no event: filter `$workers.outcome = canceled` and
+  `$workers.eventType = fetch`. The row has `$workers.wallTimeMs` and the request URL.
+- One request's trace: the filter `request.id = <id>` returns its `owner-api.route` span, and that
+  span's `traceId` returns the whole trace (see "Issues and traces").
+- A query returns at most 2,000 rows. A full answer may be missing rows, so split the window.
+- Container output (computerd and Computer's own lines) is in the same dataset with
+  `$metadata.service` set to the container application id instead of the Worker name.
+- Workers Logs keeps events for 7 days. Copy out what an incident needs while it is still there.
+
+**Container usage and CPU.** `POST https://api.cloudflare.com/client/v4/graphql` with
+`{ "query": ..., "variables": ... }`. Variables: `a` (the account id), `f` and `t` (ISO times, half
+open), and `apps` (a list of container application ids). The token needs Account Analytics Read.
+
+```graphql
+query ($a: String!, $f: Time!, $t: Time!, $apps: [string!]) {
+  viewer {
+    accounts(filter: { accountTag: $a }) {
+      containersUsageAdaptiveGroups(
+        limit: 5000
+        filter: { datetime_geq: $f, datetime_lt: $t, applicationId_in: $apps }
+        orderBy: [datetimeFiveMinutes_ASC]
+      ) {
+        dimensions {
+          datetimeFiveMinutes
+          applicationId
+          instanceId
+        }
+        sum {
+          allocatedMemory
+        }
+      }
+    }
+  }
+}
+```
+
+- **Running minutes** in a bucket are `allocatedMemory / provisioned memory in bytes / 60`.
+  Provisioned memory is 8 GiB for `standard-3` and is in the Containers API response. Sum the
+  buckets over the day before you compare with billing. A bucket can read more than five minutes
+  while a restart overlaps two instances, and adaptive buckets are not exact start and stop times.
+  `containerUptime` returned 0 in every bucket, so do not use it.
+- **CPU** comes from `containersMetricsAdaptiveGroups` with `sum{cpuTimeSec}` and the same
+  filter and dimensions. Divide CPU-seconds by 300 for the average vCPU in a five-minute bucket.
+  The usage dataset also has `cpuTimeSec`, and it differs from the metrics dataset; prefer metrics.
+  For a long window use `datetimeHour` or `datetimeSixHours` in the dimensions and the order.
+- The newest buckets are incomplete. Do not read the last ten minutes as "stopped".
+
+**What runs now.** `GET /accounts/<account-id>/containers/applications` lists applications (the
+Worker's is named `<worker>-workspacehost`; its `id` is `<container-app-id>`).
+`GET /accounts/<account-id>/containers/applications/<container-app-id>/instances` lists instances
+with `status.state` (`running` or `inactive`) and `status.updated_at`. This answer does not lag
+the metrics, so use it to check whether a stop happened.
+
+**Tokens.** The `cf` OAuth login works for the telemetry query, the Containers API, and GraphQL on
+the current beta, but its token expires. Refresh it with `pnpm exec cf auth whoami` before a run,
+and prefer an API token with Account Analytics Read for anything repeated. **Billing** data needs
+an API token with Billing Read; the OAuth login cannot get that scope.
+
+**Cost check.** When the bill looks wrong:
+
+1. Run `pnpm ops:check --since 2d` and read every line, including `unknown`.
+2. Sum running minutes per day from the usage dataset (above) and compare them with the day's
+   container charge. They matched the invoice in the 2026-09 incident
+   (`docs/agents/incident-2026-09-container-cost.md`).
+3. For a day with too many minutes, find who owned the time: `route.settled` and canceled
+   invocations name a caller; `workspace.container.idle-stop` and `workspace.container.stopped`
+   show how each run ended; `workspace.idle-check` rows show what the idle alarm saw.
+4. If CPU is high with no owner work, count the entries under `/workspace` before you suspect
+   anything else: the shim's disk walk costs about 0.1 vCPU per 1,000 entries at 250 ms and a
+   twentieth of that at 5 s (ADR-0044).
+
 ## Route events and request ids
 
 Every owner API request that reaches the workspace gets a `requestId`, a fresh UUID that the Worker
@@ -238,8 +338,10 @@ lease id's last 8 characters), and `generation` (the label the turn was admitted
   pending `monitor()` call keeps the Durable Object from being evicted until the container exits
   or for up to 15 minutes, and that a later operation can extend its time in memory. The stop
   observer adds one such call per runtime. Computer already makes the same call just before a
-  launch returns. The residency the extra call adds has not been measured, and it needs evidence
-  from a staging deployment.
+  launch returns. The residency the extra call adds has not been measured. The owner decided on 2026-10-02 to
+  keep the call and accept that small cost: the stop events are worth it, and the idle stop
+  (ADR-0043) now bounds how long the container runs. The alternative, reading Computer's cached exit
+  state and billing data from outside, was considered and set aside.
 - **Why the platform stopped a container.** The monitor reports an exit, not a cause. The log
   writes `reasonSource: "unknown"` for any exit the Host did not cause.
 - **Computer's view of an idle stop.** An idle stop calls the platform's `destroy` directly, because
