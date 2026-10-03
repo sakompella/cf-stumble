@@ -222,7 +222,7 @@ with `status.state` (`running` or `inactive`) and `status.updated_at`. This answ
 the metrics, so use it to check whether a stop happened.
 
 **Tokens.** The `cf` OAuth login works for the telemetry query, the Containers API, and GraphQL on
-the current beta, but its token expires. Refresh it with `pnpm exec cf auth whoami` before a run,
+the current beta, but its token expires. Refresh it with `pnpm exec cf auth whoami` before a run and pass the file to `ops:check` with `--token-file` (`ops:check` does not read the `cf` config unless you name it),
 and prefer an API token with Account Analytics Read for anything repeated. **Billing** data needs
 an API token with Billing Read; the OAuth login cannot get that scope.
 

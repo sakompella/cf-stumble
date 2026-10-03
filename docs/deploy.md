@@ -72,7 +72,7 @@ Deploy with `cf deploy`, run under Node through `pnpm exec cf`. It builds the Co
 Before you deploy:
 
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
-2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes an expired login. If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
+2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
 3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request.
 4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Query recipes", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
 5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.

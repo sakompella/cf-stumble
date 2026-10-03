@@ -7,7 +7,7 @@ description: Operate a cf-stumble instance on Cloudflare with `cf`. Use when dep
 
 Placeholders: `<worker>` is `worker.name` in `cloudflare.config.ts`. `<account-id>` comes from `pnpm exec cf accounts list`. `<container-app-id>` is the `id` of the application named `<worker>-workspacehost` in `GET /accounts/<account-id>/containers/applications`. Look each one up; never copy one from another instance.
 
-Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live call: it shows the account and refreshes an expired login.
+Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf` or `wrangler` call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
 
 ## Choose the branch
 
@@ -20,7 +20,7 @@ Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any
 
 ### 1. Prepare
 
-Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami`. List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call in `docs/agents/design/observability.md`, "Query recipes".
+Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call in `docs/agents/design/observability.md`, "Query recipes".
 
 **Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, the three `CF_ACCESS_*` secrets are listed, and no rollout is in progress.
 
@@ -42,7 +42,7 @@ Compare against what you recorded before step 2. The container application keeps
 
 ### 1. Run the command
 
-Run `pnpm exec cf auth whoami`, then `pnpm ops:check`. The account is `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. Use `--worker <worker>` for another Worker, `--since 90m|2h|1d` or `--from <ISO> [--to <ISO>]` for the window, and `--json` for parsing.
+Give `ops:check` a credential: it reads only `CLOUDFLARE_API_TOKEN` or the file named by `--token-file` (the `cf` login JSON, `~/.config/cloudflare/config/default.json`, works after `pnpm exec cf auth whoami` refreshed it; an API token with Account Analytics Read is better for repeated runs). See `docs/agents/design/observability.md`, "Checking a running deployment", "Credentials". Then run `pnpm ops:check --token-file <file>` (or without the flag when the variable is set). The account is `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. Use `--worker <worker>` for another Worker, `--since 90m|2h|1d` or `--from <ISO> [--to <ISO>]` for the window, and `--json` for parsing.
 
 ### 2. Read the result
 
@@ -68,7 +68,7 @@ Create a worktree and a staging directory with a unique Worker name and containe
 
 ### 3. Deploy and exercise
 
-Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. For the owner API, authenticate with a local Access session (`pnpm local:access-session`) or an owner-provided session. Exercise the change, then read the events with the Query recipes and `pnpm ops:check --worker <name>`.
+Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. For the owner API, authenticate with a local Access session: `pnpm local:access-session` writes a throwaway signing key and the staging Worker trusts its public key. Exercise the change, then read the events with the Query recipes and `pnpm ops:check --worker <name>`.
 
 **Complete when:** the change did what you claim, with timestamps and event names as evidence, and you recorded the container minutes used (the instances API, start to `inactive`).
 
