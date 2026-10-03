@@ -180,6 +180,10 @@ approval was always in force; nothing in this integration waits on it. The rules
 
 The container does not stop by itself while the Workspace Host exists. Computer's backend accepts the WebSocket that computerd opens back to the Host, and nothing closes it, so the open request keeps the Durable Object active and the platform never sees it as inactive. The Host therefore stops an idle container itself: after ten minutes with no Host RPC in flight, no `exec` in flight, and no turn lease open, an alarm closes the `Workspace` and destroys the container (ADR-0043). An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules`, `/tmp`, and paths outside `/workspace`. Every `exec` pulls its changes into the store before it settles. The container's idle CPU is the shim's disk walk, which polls every five seconds (ADR-0044).
 
+## Artifacts (deferred)
+
+Cloudflare Artifacts is a Git server per repository. The owner decided on 2026-10-02 to skip it for now. It does not fit the current stores: the workspace is a live POSIX working tree that a container needs, a container cannot mount the FUSE filesystem Artifacts' mount tool uses (ADR-0042), and module maps must load with no network call. One gap would fit it: cf-stumble keeps no copy of uncommitted work outside the workspace, so a reset or a project disconnect destroys it. A pilot could checkpoint uncommitted work to Artifacts before those two operations. It would need a new paid product (in open beta, billing from 2026-10-14), a Git client inside the Worker (the binding cannot write files), and a remote simulator for tests, because Artifacts has no local one. Revisit it only after the owner approves that cost.
+
 ## Deployment risk
 
 Dynamic Workers and Durable Object facets are beta, and Computer is preview software. Paid-account tests must exercise the exact Worker Loader, facet, Computer, and workspace-capability path before the project treats the integration as deployable.
