@@ -35,7 +35,7 @@ Two Wrangler files repeat these settings, because the tools that read them do no
 
 Both Wrangler files declare the Durable Objects with `exports`, not `migrations`, so a Wrangler deployment and a `cf` deployment state the same lifecycle. `test/docs/cloudflare-config-drift.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
 
-`cf deploy` was tested on a staging Worker on 2026-10-01 (cf 1.0.0-beta.9, Wrangler 4.145). `cf deploy --dry-run` passed twice, and a real `cf deploy` to an existing staging Worker succeeded with no `script_name` error. Afterward the Durable Object namespace IDs, the container application ID, the `v2` migration tag, and the Supervisor's SQLite state were unchanged. The staging WorkspaceHost data was not checked, because its new container never got an instance. A `wrangler deploy` of the `exports` configuration onto a Worker that was on `migrations` v1 and v2 also succeeded: it kept the namespace IDs and the container application, and it reported no export changes. The earlier suspicion that `cf deploy` fails like `cf dev` was wrong. Which path deploys production is the owner's decision.
+`cf deploy` was tested on a staging Worker on 2026-10-01 (cf 1.0.0-beta.9, Wrangler 4.145). `cf deploy --dry-run` passed twice, and a real `cf deploy` to an existing staging Worker succeeded with no `script_name` error. Afterward the Durable Object namespace IDs, the container application ID, the `v2` migration tag, and the Supervisor's SQLite state were unchanged. The staging WorkspaceHost data was not checked, because its new container never got an instance. A `wrangler deploy` of the `exports` configuration onto a Worker that was on `migrations` v1 and v2 also succeeded: it kept the namespace IDs and the container application, and it reported no export changes. The earlier suspicion that `cf deploy` fails like `cf dev` was wrong. The production instance of this project deploys with `cf deploy` (see "Deploy an update").
 
 `cf dev` still fails on the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object. `cf` has no `--config` flag, so a staging copy needs its own directory with `cloudflare.config.ts`, `wrangler.config.ts`, a `package.json` that declares `wrangler` and `cf`, and a `node_modules` link. Use Wrangler for the other commands `cf` lacks: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`.
 
@@ -64,6 +64,36 @@ Every later deploy keeps them. An instance whose values are still plain-text var
 `cf deploy` stops with "Aborting the upload operation because of conflicts ... remove the --strict flag" when someone last changed the live Worker through the dashboard or the script API, and it still prints "Deploy complete". Check the exit code. `wrangler secret put` does not cause this. A Worker last deployed by Wrangler or `cf` does not hit it either. The one-path rule still applies: do not alternate `wrangler deploy` and `cf deploy` on one Worker.
 
 `scripts/deploy/check-config.sh` checks that the three Access values and `CF_STUMBLE_HARNESS_COMMIT` are in your shell before you write the secrets file.
+
+## Deploy an update
+
+Deploy with `cf deploy`, run under Node through `pnpm exec cf`. It builds the Container image, which needs Docker. `cf` cannot load `cloudflare.config.ts` under Bun. Agents follow the same steps with their completion checks in `.agents/skills/cf-operations/SKILL.md`.
+
+Before you deploy:
+
+1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
+2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes an expired login. If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
+3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request.
+4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Query recipes", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
+5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
+
+Then run `pnpm exec cf deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
+
+`cf deploy` can print "Deploy complete" and still have aborted with "Aborting the upload operation because of conflicts ... remove the --strict flag". That happens when someone last changed the live Worker in the dashboard or through the script API. Check the exit code and the deployment list, not the final line. Fix it by deploying once with the settings you want, or by re-applying the dashboard change in `cloudflare.config.ts`.
+
+After the deploy, compare against what you had before:
+
+- The deployment list (`pnpm exec cf workers deployments list`, with the Worker name) shows a new version at 100%.
+- The container application keeps its id, and its version goes up. A new application id means the deploy created a second application instead of updating the first. Check that the `name` in `cloudflare.config.ts` still equals `<worker>-workspacehost`.
+- The Durable Object namespace ids for `Supervisor` and `WorkspaceHost` are unchanged, and the secret names are the same as before.
+- The Worker's Observability settings still show logs, traces, and Issues on. A configuration without `observability.issues` turns Issues off.
+- `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain. A cold start can write two to four `placement-unavailable` rows. The idle stop fires ten minutes after the last work (`workspace.container.idle-stop`).
+
+If an instance first runs a version that moved the GitHub credential under `/workspace` (commits `3adf75c` to `fad987a`), the credential on that instance's old container is lost once. Authorize GitHub again from the page, or let `GH_TOKEN` reinstall it. Later deploys keep it.
+
+For a risky change, stage it first on a separate Worker with its own name and container, then delete everything you created. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
+
+Workers Logs keeps events for 7 days. After a deploy that changes lifecycle behavior, copy out the events you need as evidence before they expire.
 
 ## Container image
 
@@ -190,4 +220,6 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 ## Cost and cleanup
 
-Workers Paid, Container time, and Workers AI requests can cost money. Delete the Worker and delete the Container application when you no longer need the instance.
+Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running; `pnpm ops:check` reports it (`docs/agents/incident-2026-09-container-cost.md`).
+
+Delete the Worker, the Container application, and the old images in the account's registry when you no longer need the instance. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `npx wrangler containers images list` and remove the ones you will not roll back to with `npx wrangler containers images delete <repository>:<tag>`.
