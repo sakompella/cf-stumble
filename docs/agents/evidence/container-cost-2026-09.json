@@ -1,0 +1,26 @@
+{
+  "note": "Aggregated from the Cloudflare billing and usage exports and from GraphQL containersUsageAdaptiveGroups, read on 2026-10-02. No account identifiers, names, or payment data.",
+  "invoice_2026_09_27": {
+    "total_usd": 10.25,
+    "workers_paid_usd": 5.0,
+    "containers_overage_usd": 4.3,
+    "remainder_usd_inferred": 0.95,
+    "billing_cycle": "2026-08-27 to 2026-09-26"
+  },
+  "containers_charge_usd_by_day": {
+    "2026-09-24": 0.2,
+    "2026-09-25": 0.61,
+    "2026-09-26": 3.49,
+    "2026-09-27": 1.82,
+    "2026-09-28": 0.52
+  },
+  "containers_charge_note": "09-24 to 09-26 are in the 09-27 invoice. 09-27 and 09-28 fall in the next cycle and were read from the usage export (vCPU, memory and disk lines summed).",
+  "running_hours_by_day_utc": {
+    "2026-09-25": 2.74,
+    "2026-09-26": 18.39,
+    "2026-09-27": 18.79,
+    "2026-09-28": 4.47
+  },
+  "running_hours_method": "allocatedMemory byte-seconds / provisioned memory (8 GiB) / 60 gives minutes per bucket; summed per day. Matched the billing totals.",
+  "container_size": "standard-3"
+}
