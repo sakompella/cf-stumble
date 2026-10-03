@@ -4,8 +4,8 @@
     "total_usd": 10.25,
     "workers_paid_usd": 5.0,
     "containers_overage_usd": 4.3,
-    "remainder_usd_inferred": 0.95,
-    "billing_cycle": "2026-08-27 to 2026-09-26"
+    "remainder_usd_unclassified": 0.95,
+    "billing_cycle_per_usage_export": "2026-08-27 to 2026-09-26"
   },
   "containers_charge_usd_by_day": {
     "2026-09-24": 0.2,

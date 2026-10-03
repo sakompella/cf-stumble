@@ -8,14 +8,14 @@ ADR-0043 and ADR-0044.
 
 ## Summary
 
-| Item                   | Value                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Invoice (2026-09-27)   | $10.25: Workers Paid $5.00, Containers overage $4.30, and $0.95 of tax and rounding (inferred)                                                    |
-| Container running time | 2.74 h on 09-25, 18.39 h on 09-26, 18.79 h on 09-27, 4.47 h on 09-28                                                                              |
-| Container size         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                   |
-| Causes                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU |
-| Fixed                  | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail                                                       |
-| Not fixed              | A client that polls a route that touches the workspace still keeps the container up. `ops:check` detects it.                                      |
+| Item                                                                                                   | Value                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Invoice (2026-09-27, as reported; the $4.30 equals the sum of the container lines in the usage export) | $10.25: Workers Paid $5.00, Containers overage $4.30, and an unclassified remainder of $0.95 (no invoice line items were read)                    |
+| Container running time                                                                                 | 2.74 h on 09-25, 18.39 h on 09-26, 18.79 h on 09-27, 4.47 h on 09-28                                                                              |
+| Container size                                                                                         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                   |
+| Causes                                                                                                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU |
+| Fixed (three of four causes)                                                                           | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail                                                       |
+| Not fixed                                                                                              | A client that polls a route that touches the workspace still keeps the container up. `ops:check` detects it.                                      |
 
 The aggregated daily charges are in `docs/agents/evidence/container-cost-2026-09.json`.
 
@@ -39,7 +39,7 @@ billing totals; they are an estimate from adaptive buckets, not physical start a
 - **2026-09-28.** 4.47 running hours ($0.52).
 - **2026-10-02.** An investigation found the causes below. Fixes were deployed the same day.
 
-The invoice of 09-27 covers the cycle from 08-27 to 09-26. Of its $4.30 overage, $3.49 is 09-26.
+The usage export reports the invoice of 09-27 as covering the cycle from 08-27 to 09-26. Of its $4.30 overage, $3.49 is 09-26.
 
 ## Root causes
 
@@ -98,7 +98,7 @@ rules that matter here:
   workspace or over 10% canceled. The 09-26 client would have fired it within the first hour.
 - `ran-past-idle`: running time beyond the idle limit after the last owner activity.
 - `unowned-cpu`: 30 minutes of CPU above about 0.1 vCPU with no owner work in the logs.
-- `running-close` and `unexplained-stop`: container stops the Host did not cause.
+- `running-close` and `unexplained-stop`: container stops that were not an intentional Host stop; their cause is unknown.
 
 `docs/agents/design/observability.md`, "Query recipes", has the queries behind each rule so you can
 run them by hand. The cost check is: compute running minutes from the usage dataset, compare them
@@ -110,7 +110,7 @@ with the days in the billing data, and expect agreement.
 - What the 09-26 client was, and why the platform canceled its calls at about 90 seconds.
 - Why the container sometimes stops early with an unknown reason after a transport close while
   `running` is `true`. It happened at about 16:03Z, 16:32Z, and 21:25Z on 2026-10-02. These are
-  platform-side; nothing in cf-stumble caused them.
+  not an intentional Host stop; the cause is unknown.
 - Which process used the CPU on 09-27. The shim walk fits the numbers and was reproduced on staging;
   no process list from that day exists.
 - Billing data needs an API token with Billing Read. The `cf` OAuth login cannot read it.
