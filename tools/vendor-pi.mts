@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
-import { Type, type Static } from "typebox";
-import { Value } from "typebox/value";
 
 /* eslint-disable max-lines -- The updater owns the generated declaration facade with the copied files. */
 
@@ -27,23 +25,6 @@ const repoRoot = resolve(import.meta.dirname, "..");
 const vendorRoot = resolve(repoRoot, "vendor/pi-v0.84.4");
 
 const defaultSource = process.env.CF_STUMBLE_PI_SOURCE ?? "/tmp/cf-stumble-pi-v0.84.4";
-
-const upstreamPinSchema = Type.Object({
-  repository: Type.String(),
-  tag: Type.String(),
-  commit: Type.String(),
-  copiedPaths: Type.Array(Type.String()),
-  command: Type.String(),
-  localOverrides: Type.Array(
-    Type.Object({
-      upstreamPath: Type.String(),
-      localPath: Type.String(),
-      purpose: Type.String(),
-    }),
-  ),
-});
-
-type ParsedUpstreamPin = Static<typeof upstreamPinSchema>;
 
 const pin: UpstreamPin = {
   repository: "https://github.com/earendil-works/pi.git",
@@ -558,6 +539,7 @@ async function declarationFiles(path: string): Promise<string[]> {
 }
 `,
   ],
+  ["UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`],
 ]);
 
 async function main(): Promise<void> {
@@ -607,12 +589,7 @@ async function updateVendorTree(sourceRoot: string): Promise<void> {
     await copyUpstreamPath(sourceRoot, copiedPath);
   }
 
-  for (const [path, contents] of generatedFiles) {
-    await writeManagedFile(path, contents);
-  }
-
-  await writeManagedFile("UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`);
-  await writeChecksums();
+  await refreshGeneratedFiles();
 }
 
 async function refreshGeneratedFiles(): Promise<void> {
@@ -620,7 +597,6 @@ async function refreshGeneratedFiles(): Promise<void> {
     await writeManagedFile(path, contents);
   }
 
-  await writeManagedFile("UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`);
   await writeChecksums();
 }
 
@@ -683,13 +659,7 @@ async function checkVendorTree(): Promise<void> {
 
   const manifest = await readChecksums();
 
-  const managedPaths = (await filesUnder(vendorRoot))
-    .map((file) => relative(vendorRoot, file))
-    .filter(
-      (path) =>
-        path !== "SHA256SUMS" && !path.startsWith("dist/") && !path.startsWith("node_modules/"),
-    )
-    .toSorted();
+  const managedPaths = await checksummedPaths();
 
   const manifestPaths = [...manifest.keys()].toSorted();
 
@@ -703,16 +673,6 @@ async function checkVendorTree(): Promise<void> {
     if (actual !== expected) {
       throw new Error(`SHA256 mismatch for ${path}`);
     }
-  }
-
-  const upstream = await readUpstreamPin();
-
-  if (
-    upstream.repository !== pin.repository ||
-    upstream.tag !== pin.tag ||
-    upstream.commit !== pin.commit
-  ) {
-    throw new Error("UPSTREAM.json does not match the Pi pin");
   }
 
   const licence = await readFile(resolve(vendorRoot, "LICENSE"), "utf8");
@@ -729,12 +689,7 @@ async function checkVendorTree(): Promise<void> {
 }
 
 async function verifyGeneratedFilesMatchTemplates(): Promise<void> {
-  const expectedFiles = new Map([
-    ...generatedFiles,
-    ["UPSTREAM.json", `${JSON.stringify(pin, undefined, 2)}\n`],
-  ]);
-
-  for (const [path, expected] of expectedFiles) {
+  for (const [path, expected] of generatedFiles) {
     const destination = resolve(vendorRoot, path);
 
     const actual = await readFile(destination, "utf8").catch((cause: unknown) => {
@@ -749,34 +704,18 @@ async function verifyGeneratedFilesMatchTemplates(): Promise<void> {
   }
 }
 
-async function readUpstreamPin(): Promise<UpstreamPin> {
-  const contents = await readFile(resolve(vendorRoot, "UPSTREAM.json"), "utf8");
-  const value: unknown = JSON.parse(contents);
-
-  if (!Value.Check(upstreamPinSchema, value)) {
-    throw new Error("UPSTREAM.json is not a valid Pi pin");
-  }
-
-  const parsed: ParsedUpstreamPin = value;
-
-  return {
-    repository: parsed.repository,
-    tag: parsed.tag,
-    commit: parsed.commit,
-    copiedPaths: parsed.copiedPaths,
-    command: parsed.command,
-    localOverrides: parsed.localOverrides,
-  };
-}
-
-async function writeChecksums(): Promise<void> {
-  const paths = (await filesUnder(vendorRoot))
+async function checksummedPaths(): Promise<string[]> {
+  return (await filesUnder(vendorRoot))
     .map((file) => relative(vendorRoot, file))
     .filter(
       (path) =>
         path !== "SHA256SUMS" && !path.startsWith("dist/") && !path.startsWith("node_modules/"),
     )
     .toSorted();
+}
+
+async function writeChecksums(): Promise<void> {
+  const paths = await checksummedPaths();
 
   const lines = await Promise.all(
     paths.map(async (path) => `${await sha256(resolve(vendorRoot, path))}  ${path}`),
