@@ -1,20 +1,25 @@
 /**
- * Plain, JSON-serializable types for one streamed model call (E5, E7): the payload shape that
- * selects Workers AI's streaming behavior, the capability a streaming call needs from the
- * binding, and the events this route emits while it drives one. Kept separate from
- * `model-route.ts` so that file's request/response/validation types stay the ones most readers
- * come here for.
+ * Plain, JSON-serializable types for one streamed model call: the payload shape that selects
+ * Workers AI's streaming behavior, the capability a streaming call needs from the binding, and the
+ * events this route emits while it drives one. Kept separate from `model-route.ts` so that file's
+ * request/response/validation types stay the ones most readers come here for.
  */
 
-import type { AssistantMessage, ProviderPayload } from "./model-route.js";
+import type { AssistantMessage, RouteMessage, ToolDefinition } from "./model-route.js";
 
 /**
- * The same fixed-model, fixed-reasoning payload `ProviderPayload` builds, with the one extra
- * field the Workers AI binding's TypeScript overloads key their streaming return type on: passing
- * `stream: true` on the input is what turns `Ai.run`'s return type from a buffered object into a
+ * The fixed-reasoning payload for one call to the fixed model. `stream: true` is the field the
+ * Workers AI binding's TypeScript overloads key their streaming return type on: passing it on the
+ * input is what turns `Ai.run`'s return type from a buffered object into a
  * `Promise<ReadableStream>` of provider-native Server-Sent Events.
  */
-export type StreamingProviderPayload = ProviderPayload & Readonly<{ stream: true }>;
+export type StreamingProviderPayload = Readonly<{
+  messages: ReadonlyArray<RouteMessage>;
+  tools?: ReadonlyArray<ToolDefinition>;
+  reasoning_effort: "low";
+  max_tokens: number;
+  stream: true;
+}>;
 
 /**
  * The capability a streaming call needs from the Workers AI binding: pass the fixed model and a

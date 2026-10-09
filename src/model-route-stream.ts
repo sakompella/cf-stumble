@@ -1,15 +1,14 @@
 /// <reference types="@cloudflare/workers-types" />
 
 /**
- * The streaming half of the model route (E5, E7): drive one Workers AI streaming call, translate
- * its provider-native Server-Sent Events into this route's own plain `ModelStreamEvent` protocol
- * (`./model-route-stream-parse.ts` does the untrusted per-chunk parsing), and expose the two
- * public entry points `ModelRoute.runStream` and tests/fakes need.
+ * The streaming half of the model route: build the payload for the one fixed model, drive one
+ * Workers AI streaming call, and translate its provider-native Server-Sent Events into the plain
+ * `ModelStreamEvent` protocol that `ModelRoute.runStream` returns. `./model-route-stream-parse.ts`
+ * does the untrusted per-chunk parsing.
  */
 
 import { parseProviderChunk } from "./model-route-stream-parse.js";
-import { MODEL, normalizeResponse } from "./model-route.js";
-import type { ModelRouteRequest, ModelRouteResponse, ProviderResult } from "./model-route.js";
+import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
 import type {
   ModelStreamEvent,
   ModelStreamInference,
@@ -18,26 +17,47 @@ import type {
   ToolCallDelta,
 } from "./model-route-events.js";
 
-/** The same output budget the buffered path uses (`model-route.ts`). */
+// The only model the immutable host selects. Two deployed facts pin it. Turns first saved an empty
+// assistant message, because this model answers in `reasoning_content` and the default output
+// budget was spent there, hence `MAX_OUTPUT_TOKENS`. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
+// then failed every call: its schema takes `messages[].content` as a string, and Pi sends parts.
+const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
+
+const REASONING_EFFORT = "low" as const;
+
 const MAX_OUTPUT_TOKENS = 4096;
 
-function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
-  const tools = request.tools;
+type ProviderResult = Readonly<{
+  response?: string | null;
+  tool_calls?: ReadonlyArray<ToolCall>;
+}>;
 
-  return tools === undefined
-    ? {
-        messages: request.messages,
-        reasoning_effort: "low",
-        max_tokens: MAX_OUTPUT_TOKENS,
-        stream: true,
-      }
-    : {
-        messages: request.messages,
-        tools,
-        reasoning_effort: "low",
-        max_tokens: MAX_OUTPUT_TOKENS,
-        stream: true,
-      };
+function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
+  const fixed = {
+    reasoning_effort: REASONING_EFFORT,
+    max_tokens: MAX_OUTPUT_TOKENS,
+    stream: true,
+  } as const;
+
+  return request.tools === undefined
+    ? { messages: request.messages, ...fixed }
+    : { messages: request.messages, tools: request.tools, ...fixed };
+}
+
+export function normalizeResponse(raw: ProviderResult): AssistantMessage {
+  const content = raw.response ?? null;
+  const toolCalls: ToolCall[] = [];
+
+  if (raw.tool_calls !== undefined) {
+    for (const tc of raw.tool_calls) {
+      toolCalls.push({
+        id: tc.id,
+        function: { name: tc.function.name, arguments: tc.function.arguments },
+      });
+    }
+  }
+
+  return { role: "assistant", content, tool_calls: toolCalls };
 }
 
 /**
@@ -296,34 +316,6 @@ export function streamModelEvents(
         emit({ type: "error", error: { code: "model-unavailable" } });
       }
 
-      controller.close();
-    },
-  });
-}
-
-const DEFAULT_ESTIMATED_USAGE: ModelUsage = { inputTokens: 0, outputTokens: 0, estimated: true };
-
-/**
- * Encode one finished {@link ModelRouteResponse} as the single-event NDJSON stream
- * `ModelRoute.runStream` produces when a provider reports its entire reply in one chunk — the
- * behavior this route falls back to correctly if the real, unverified assumption that Workers AI
- * streams incremental deltas turns out false. Also lets a test or fake that already scripts a
- * buffered {@link ModelRouteResponse} produce the equivalent streaming shape without a live
- * provider.
- */
-export function encodeModelRouteResponseAsStream(
-  response: ModelRouteResponse,
-  usage?: ModelUsage,
-): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  const event: ModelStreamEvent = response.ok
-    ? { type: "done", message: response.message, usage: usage ?? DEFAULT_ESTIMATED_USAGE }
-    : { type: "error", error: response.error };
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       controller.close();
     },
   });

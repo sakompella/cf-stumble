@@ -3,7 +3,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { startFacetTurn } from "../../../src/facet/generation-0/facet-turn.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
-import { encodeModelRouteResponseAsStream } from "../../../src/model-route.js";
+import { encodeModelRouteResponseAsStream } from "./facet-turn-helpers.js";
 import type { ModelRouteRequest, ModelRouteResponse } from "../../../src/model-route.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
 
@@ -34,9 +34,6 @@ function scriptedRoute(script: string): ModelCapability {
   }
 
   return {
-    run(_request: ModelRouteRequest): Promise<ModelRouteResponse> {
-      return Promise.resolve(next());
-    },
     runStream(_request: ModelRouteRequest) {
       return Promise.resolve(encodeModelRouteResponseAsStream(next()));
     },

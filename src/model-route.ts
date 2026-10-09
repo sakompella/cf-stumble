@@ -3,7 +3,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { streamModelEvents, streamingBindingCall } from "./model-route-stream.js";
 
-export { streamModelEvents, encodeModelRouteResponseAsStream } from "./model-route-stream.js";
+export { streamModelEvents } from "./model-route-stream.js";
 
 export type {
   ModelStreamEvent,
@@ -12,16 +12,6 @@ export type {
   StreamingProviderPayload,
   ToolCallDelta,
 } from "./model-route-events.js";
-
-// The only model the immutable host selects. Two deployed facts pin it. Turns first saved an empty
-// assistant message, because this model answers in `reasoning_content` and the default output
-// budget was spent there, hence `MAX_OUTPUT_TOKENS`. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
-// then failed every call: its schema takes `messages[].content` as a string, and Pi sends parts.
-export const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
-
-const REASONING_EFFORT = "low" as const;
-
-const MAX_OUTPUT_TOKENS = 4096;
 
 const MAX_REQUEST_BYTES = 1_048_576;
 
@@ -82,28 +72,10 @@ export type ValidationFailure = Readonly<{
   error: Readonly<{ code: "invalid-request"; reason: string }>;
 }>;
 
-// -- Provider payload (internal) --------------------------------------------
-
-export type ProviderPayload = Readonly<{
-  messages: ReadonlyArray<RouteMessage>;
-  tools?: ReadonlyArray<ToolDefinition>;
-  reasoning_effort: "low";
-  max_tokens: number;
-}>;
-
-export type ProviderResult = Readonly<{
-  response?: string | null;
-  tool_calls?: ReadonlyArray<ToolCall>;
-}>;
-
-export type ModelInference = {
-  run(model: string, input: ProviderPayload): Promise<ProviderResult>;
-};
-
 // -- Untrusted boundary accessor ---------------------------------------------
 //
-// Shared with `model-route-stream.ts`, which parses the provider's own untrusted stream chunks
-// with the same accessors rather than a second copy of this narrowing.
+// Shared with `model-route-stream-parse.ts`, which parses the provider's own untrusted stream
+// chunks with the same accessors rather than a second copy of this narrowing.
 
 declare const untrustedBrand: unique symbol;
 
@@ -275,70 +247,14 @@ export function validateRequest(raw: unknown): Readonly<{ ok: true }> | Validati
   return validateMessages(msgs) ?? { ok: true };
 }
 
-// -- Provider payload construction ------------------------------------------
-
-export function buildProviderPayload(request: ModelRouteRequest): ProviderPayload {
-  const fixed = { reasoning_effort: REASONING_EFFORT, max_tokens: MAX_OUTPUT_TOKENS } as const;
-
-  return request.tools === undefined
-    ? { messages: request.messages, ...fixed }
-    : { messages: request.messages, tools: request.tools, ...fixed };
-}
-
-// -- Response normalization -------------------------------------------------
-
-export function normalizeResponse(raw: ProviderResult): AssistantMessage {
-  const content = raw.response ?? null;
-  const toolCalls: ToolCall[] = [];
-
-  if (raw.tool_calls !== undefined) {
-    for (const tc of raw.tool_calls) {
-      toolCalls.push({
-        id: tc.id,
-        function: { name: tc.function.name, arguments: tc.function.arguments },
-      });
-    }
-  }
-
-  return { role: "assistant", content, tool_calls: toolCalls };
-}
-
-// -- Core invocation --------------------------------------------------------
-
-export async function invokeModel(
-  ai: ModelInference,
-  request: ModelRouteRequest,
-): Promise<ModelRouteResponse> {
-  try {
-    return {
-      ok: true,
-      message: normalizeResponse(await ai.run(MODEL, buildProviderPayload(request))),
-    };
-  } catch {
-    return { ok: false, error: { code: "model-unavailable" } };
-  }
-}
-
 // -- Service binding entrypoint ---------------------------------------------
 
 type ModelRouteEnv = Readonly<{ AI: Ai }>;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv> {
-  /** @deprecated Buffered path for the legacy `runGeneration0Turn` (T7 deletes it); delete this with {@link ModelInference} and {@link invokeModel} once that caller is gone. */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
-  run(request: unknown): Promise<ModelRouteResponse | ValidationFailure> {
-    const validation = validateRequest(request);
-
-    if (!validation.ok) return Promise.resolve(validation);
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: validateRequest checked every field of the closed message union.
-    const validated = request as ModelRouteRequest;
-
-    return invokeModel({ run: (model, input) => this.env.AI.run(model, input) }, validated);
-  }
-
-  /** The streaming path (E5, E7): incremental events instead of one buffered message. Every
-   * failure after validation becomes an event on the returned stream, which is what lets this
-   * cross the RPC boundary as a plain byte stream (ADR-0035), like `MainFacetTarget.startTurn`. */
+  /** Answers with incremental model events. Every failure after validation becomes an event on the
+   * returned stream, which is what lets this cross the RPC boundary as a plain byte stream
+   * (ADR-0035), like `MainFacetTarget.startTurn`. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
   runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
     const validation = validateRequest(request);

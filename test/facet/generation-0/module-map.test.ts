@@ -97,7 +97,7 @@ test("the host model route satisfies the capability the facet declares", async (
   const modelRoute = workerExports.ModelRoute({});
   const capability: ModelCapability = modelRoute;
 
-  await expect(capability.run({ messages: [] })).resolves.toEqual({
+  await expect(capability.runStream({ messages: [] })).resolves.toEqual({
     ok: false,
     error: { code: "invalid-request", reason: "messages must be a non-empty array" },
   });

@@ -20,6 +20,31 @@ function fakeStreamInference(providerStream: ReadableStream<Uint8Array>): ModelS
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
+const MULTI_TURN_REQUEST: ModelRouteRequest = {
+  messages: [
+    { role: "system", content: "You are a coding assistant." },
+    { role: "user", content: "Read file.txt" },
+    {
+      role: "assistant",
+      content: null,
+      tool_calls: [
+        { id: "call_abc123", function: { name: "read_file", arguments: '{"path":"file.txt"}' } },
+      ],
+    },
+    { role: "tool", tool_call_id: "call_abc123", content: "file contents here" },
+  ],
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "read_file",
+        description: "Read a file",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+      },
+    },
+  ],
+};
+
 /** One SSE line carrying a fragment of one tool call's arguments for slot 0. */
 function toolCallChunk(argsFragment: string): string {
   return sseLine({
@@ -53,6 +78,32 @@ test("delivers byte chunks in order and reports exhaustion without reporting can
 
   await cancelledReader.cancel();
   expect(cancelled).toEqual([]);
+});
+
+test("sends the whole conversation and its tools to the one fixed model", async () => {
+  const calls: Array<{ model: string; input: StreamingProviderPayload }> = [];
+
+  const ai: ModelStreamInference = {
+    run(model, input) {
+      calls.push({ model, input });
+
+      return Promise.resolve(rawByteStream([encoder.encode(DONE_LINE)]));
+    },
+  };
+
+  await collectEvents(streamModelEvents(ai, MULTI_TURN_REQUEST));
+  expect(calls).toEqual([
+    {
+      model: "@cf/zai-org/glm-5.3-flash",
+      input: {
+        messages: MULTI_TURN_REQUEST.messages,
+        tools: MULTI_TURN_REQUEST.tools,
+        reasoning_effort: "low",
+        max_tokens: 4096,
+        stream: true,
+      },
+    },
+  ]);
 });
 
 test("assembles a tool call whose arguments arrive split across several chunks", async () => {

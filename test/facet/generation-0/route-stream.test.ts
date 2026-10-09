@@ -1,15 +1,13 @@
 import { expect, test } from "vitest";
-import { encodeModelRouteResponseAsStream } from "../../../src/model-route.js";
 import { createRouteStreamFn, ROUTE_MODEL } from "../../../src/facet/generation-0/route-stream.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
 import type {
   ModelRouteRequest,
-  ModelRouteResponse,
   ModelStreamEvent,
   ValidationFailure,
 } from "../../../src/model-route.js";
 import type { StreamFn } from "@cf-stumble/pi";
-import { says } from "./facet-turn-helpers.js";
+import { encodeModelRouteResponseAsStream, says } from "./facet-turn-helpers.js";
 
 /** `@cf-stumble/pi` exports `StreamFn` but not the `Context` it receives; derive both, as
  * `route-stream.ts` itself does, rather than restating the shape here. */
@@ -48,9 +46,6 @@ function fakeModel(
 
   return {
     calls,
-    run(): Promise<ModelRouteResponse | ValidationFailure> {
-      throw new Error("this test only drives the streaming path");
-    },
     runStream(request: ModelRouteRequest) {
       calls.push(request);
 

@@ -1,93 +1,10 @@
 import { expect, test } from "vitest";
+import { normalizeResponse } from "../src/model-route-stream.js";
 import {
   validateRequest,
-  buildProviderPayload,
-  normalizeResponse,
-  invokeModel,
-  type ModelRouteRequest,
-  type ModelRouteResponse,
   type AssistantMessage,
-  type ModelInference,
   type ValidationFailure,
 } from "../src/model-route.js";
-
-const MULTI_TURN_REQUEST: ModelRouteRequest = {
-  messages: [
-    { role: "system", content: "You are a coding assistant." },
-    { role: "user", content: "Read file.txt" },
-    {
-      role: "assistant",
-      content: null,
-      tool_calls: [
-        { id: "call_abc123", function: { name: "read_file", arguments: '{"path":"file.txt"}' } },
-      ],
-    },
-    { role: "tool", tool_call_id: "call_abc123", content: "file contents here" },
-  ],
-  tools: [
-    {
-      type: "function",
-      function: {
-        name: "read_file",
-        description: "Read a file",
-        parameters: { type: "object", properties: { path: { type: "string" } } },
-      },
-    },
-  ],
-};
-
-test("sends the whole conversation and its tools to the one fixed model", async () => {
-  const request = MULTI_TURN_REQUEST;
-
-  const calls: Array<{ model: string; input: unknown }> = [];
-
-  const ai: ModelInference = {
-    run(model, input) {
-      calls.push({ model, input });
-
-      return Promise.resolve({ response: "Here are the file contents." });
-    },
-  };
-
-  const result = await invokeModel(ai, request);
-  expect(result).toEqual({
-    ok: true,
-    message: {
-      role: "assistant",
-      content: "Here are the file contents.",
-      tool_calls: [],
-    },
-  } satisfies ModelRouteResponse);
-  expect(calls).toEqual([
-    {
-      model: "@cf/zai-org/glm-5.3-flash",
-      input: {
-        messages: request.messages,
-        tools: request.tools,
-        reasoning_effort: "low",
-        max_tokens: 4096,
-      },
-    },
-  ]);
-});
-
-test("builds provider payload with fixed model and low reasoning effort", () => {
-  const request: ModelRouteRequest = {
-    messages: [
-      { role: "system", content: "System" },
-      { role: "user", content: "Hello" },
-    ],
-  };
-
-  expect(buildProviderPayload(request)).toEqual({
-    messages: [
-      { role: "system", content: "System" },
-      { role: "user", content: "Hello" },
-    ],
-    reasoning_effort: "low",
-    max_tokens: 4096,
-  });
-});
 
 test("rejects a message with an unknown role", () => {
   const r = validateRequest({
@@ -222,20 +139,6 @@ test("normalizes a response with tool calls", () => {
     content: null,
     tool_calls: [{ id: "c1", function: { name: "read", arguments: '{"p":"a"}' } }],
   } satisfies AssistantMessage);
-});
-
-test("redacts inference failures to a stable safe error", async () => {
-  const ai: ModelInference = {
-    run() {
-      return Promise.reject(new Error("provider secret leaked"));
-    },
-  };
-
-  const r = await invokeModel(ai, { messages: [{ role: "user", content: "Hi" }] });
-  expect(r).toEqual({
-    ok: false,
-    error: { code: "model-unavailable" },
-  } satisfies ModelRouteResponse);
 });
 
 test("validates a correct simple request", () => {

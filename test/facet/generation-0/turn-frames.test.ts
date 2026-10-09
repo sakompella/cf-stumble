@@ -10,11 +10,7 @@ import {
 } from "./facet-turn-helpers.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/index.js";
-import type {
-  ModelRouteRequest,
-  ModelStreamEvent,
-  ValidationFailure,
-} from "../../../src/model-route.js";
+import type { ModelRouteRequest, ModelStreamEvent } from "../../../src/model-route.js";
 
 const TERMINAL = new Set(["completed", "failed", "rejected"]);
 
@@ -33,10 +29,6 @@ class DeltaRoute implements ModelCapability {
 
   constructor(chunks: readonly string[]) {
     this.#chunks = chunks;
-  }
-
-  run(): Promise<ValidationFailure> {
-    return Promise.resolve({ ok: false, error: { code: "invalid-request", reason: "unused" } });
   }
 
   runStream(request: ModelRouteRequest): Promise<ReadableStream<Uint8Array>> {

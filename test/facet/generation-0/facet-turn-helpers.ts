@@ -8,10 +8,10 @@ import type {
   Generation0Capabilities,
   ModelCapability,
 } from "../../../src/facet/generation-0/index.js";
-import { encodeModelRouteResponseAsStream } from "../../../src/model-route.js";
 import type {
   ModelRouteRequest,
   ModelRouteResponse,
+  ModelStreamEvent,
   ToolCall,
   ValidationFailure,
 } from "../../../src/model-route.js";
@@ -21,14 +21,37 @@ import type { FakeProjectCapability } from "./fake-project-capability.js";
 type ScriptedToolArguments = Readonly<Record<string, string>>;
 
 /**
+ * The single-event NDJSON stream `ModelRoute.runStream` produces when a provider reports its whole
+ * reply in one chunk. A scripted answer carries no usage, so a `done` event reports zero tokens,
+ * marked as an estimate.
+ */
+export function encodeModelRouteResponseAsStream(
+  response: ModelRouteResponse,
+): ReadableStream<Uint8Array> {
+  const event: ModelStreamEvent = response.ok
+    ? {
+        type: "done",
+        message: response.message,
+        usage: { inputTokens: 0, outputTokens: 0, estimated: true },
+      }
+    : { type: "error", error: response.error };
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(`${JSON.stringify(event)}\n`));
+      controller.close();
+    },
+  });
+}
+
+/**
  * A model route that answers from a script. The facet's own route-backed stream function runs
  * unchanged on top of it, so these turns exercise the same request conversion a real route would
  * receive while the test still chooses every assistant message.
  *
- * `runStream` is what `route-stream.ts` actually calls; it encodes the same scripted answer as the
- * single-event NDJSON stream a provider that answers in one chunk would produce, so these turns
- * exercise the real streaming seam (parsing, assembly, `done`/`error` termination) rather than a
- * second, parallel fake protocol.
+ * `runStream` encodes each scripted answer as the single-event NDJSON stream a provider that
+ * answers in one chunk would produce, so these turns exercise the real streaming seam (parsing,
+ * assembly, `done`/`error` termination) rather than a second, parallel fake protocol.
  */
 export class ScriptedRoute implements ModelCapability {
   readonly requests: ModelRouteRequest[] = [];
@@ -38,14 +61,10 @@ export class ScriptedRoute implements ModelCapability {
     this.#answers = [...answers];
   }
 
-  run(request: ModelRouteRequest): Promise<ModelRouteResponse> {
+  runStream(request: ModelRouteRequest): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
     this.requests.push(request);
 
-    return Promise.resolve(this.#answers.shift() ?? says(""));
-  }
-
-  runStream(request: ModelRouteRequest): Promise<ReadableStream<Uint8Array> | ValidationFailure> {
-    return this.run(request).then((response) => encodeModelRouteResponseAsStream(response));
+    return Promise.resolve(encodeModelRouteResponseAsStream(this.#answers.shift() ?? says("")));
   }
 }
 

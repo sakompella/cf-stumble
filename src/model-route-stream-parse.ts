@@ -1,14 +1,14 @@
 /**
- * Defensive parsing of one provider Server-Sent Event chunk (E5, E7). This is the provider's own
- * untrusted output, so it gets the same boundary treatment `model-route.ts` gives untrusted
- * request input (ADR-0035): every field is narrowed before use, and an unrecognized shape
- * degrades to "nothing understood on this line" rather than throwing.
+ * Defensive parsing of one provider Server-Sent Event chunk. This is the provider's own untrusted
+ * output, so it gets the same boundary treatment `model-route.ts` gives untrusted request input
+ * (ADR-0035): every field is narrowed before use, and an unrecognized shape degrades to "nothing
+ * understood on this line" rather than throwing.
  *
- * UNVERIFIED against the real paid runtime (see `.audit/v0/tasks/T4.md`): whether
- * `@cf/zai-org/glm-5.3-flash` actually reports `tool_calls` incrementally, fragment by fragment,
- * or only complete in one final chunk. Either behavior parses correctly here — a
- * complete-in-one-chunk provider just means every tool call's `argumentsDelta` arrives in a
- * single `tool-call-delta` event instead of several.
+ * The deployed model streams its text and tool calls in `choices[0].delta` (see
+ * `firstChoiceDelta`). The repository does not record whether it sends a tool call's arguments
+ * fragment by fragment or complete in one chunk. Either behavior parses correctly here: a
+ * complete-in-one-chunk provider just means every tool call's `argumentsDelta` arrives in a single
+ * `tool-call-delta` event instead of several.
  */
 
 import { asUntrusted, field } from "./model-route.js";
