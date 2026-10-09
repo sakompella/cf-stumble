@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isRecord } from "../../src/untrusted.js";
 
 /**
- * Vitest runs `test/**` and `src/**` only. The vendored lint-rule tests under `tools/` use Oxlint's
+ * Vitest runs `test/**` only. The vendored lint-rule tests under `tools/` use Oxlint's
  * RuleTester and a native Oxlint CLI run, so `pnpm test:tools` runs them with `node --test`
  * instead. Node exits 0 when its pattern matches no file, so a narrowed or stale pattern would
  * pass silently; this check ties the pattern to the files that exist and to `pnpm verify`.

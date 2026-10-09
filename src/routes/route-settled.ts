@@ -67,8 +67,9 @@ function settledLevel(outcome: ApplicationOutcome, durationMs: number): LogLevel
 /**
  * Run one owner API request. A request that reaches the workspace gets a fresh `requestId` and
  * writes one `route.settled` event when its response is ready. Other requests run quietly with no
- * id. A turn's response is a stream, so its event marks the headers; `turn.settled` is the end. If
- * the handler throws there is no response, so that event has `status` and `phase` `null`.
+ * id. A turn's response is a stream, so its event marks the headers; `turn.settled` is the end. A
+ * handler that throws settles as a 500 `fault` with its redacted cause logged by the owner API;
+ * `status` and `phase` are `null` only if the route wrapper itself throws.
  */
 export async function settleRoute(
   request: Request,
