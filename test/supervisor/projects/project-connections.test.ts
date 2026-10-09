@@ -1,4 +1,4 @@
-// oxlint-disable max-lines -- This file covers the connection workflow and reset regression.
+// oxlint-disable max-lines, import/max-dependencies -- This file covers the connection workflow and reset regression across the GitHub, workspace and Supervisor boundaries.
 
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
@@ -6,10 +6,10 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { newRequestId } from "../../../src/diagnostics.js";
+import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { capturedEvents, named } from "../../log-capture.js";
 import {
   GitHubConnection,
-  tenantWorkspaceName,
   type ProjectConnections,
 } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";

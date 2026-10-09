@@ -1,6 +1,5 @@
 export {
   computerExecBackend,
-  processGroupCommand,
   computerFilesystemProvider,
   durableObjectTransactions,
 } from "./computer-adapter.js";
@@ -10,10 +9,6 @@ export type {
   ExecBackend,
   ExecBackendHandle,
   ExecBackendInput,
-  ExecBackendReader,
-  ContainerRestartedError,
-  isContainerRestartedError,
-  ContainerLifecycleState,
 } from "./exec-backend.js";
 
 export type {
@@ -23,31 +18,8 @@ export type {
   ProjectTransactions,
 } from "./provider.js";
 
-export { mapProviderError } from "./provider.js";
-
 export { parseAddressedPath } from "./resolve.js";
 
 export { parseProjectBudget } from "./budget.js";
 
-export {
-  ProjectRpcTarget,
-  type ProjectContainerState,
-  type ProjectRpcTargetOptions,
-} from "./target.js";
-
-export {
-  MAX_CONCURRENT_EXECS,
-  MAX_EXEC_COMMAND_BYTES,
-  MAX_EXEC_FRAME_BYTES,
-  MAX_EXEC_TIMEOUT_MS,
-  MAX_FILE_BYTES,
-  type ExecEvent,
-  type ProjectErrorCode,
-  type ProjectFailure,
-  type ProjectFileInfo,
-  type ProjectFileKind,
-  type ProjectLstatInfo,
-  type ProjectResult,
-  type ProjectRpcTargetContract,
-  type WriteMode,
-} from "./protocol.js";
+export { ProjectRpcTarget } from "./target.js";

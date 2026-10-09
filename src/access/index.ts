@@ -25,13 +25,7 @@ export { presentedAccessToken, withoutAccessCredentials } from "./credentials.js
 
 export { deriveSupervisorName, verifyAccessToken } from "./verification.js";
 
-export type {
-  AccessIdentity,
-  AccessVerificationReason,
-  AccessVerificationResult,
-  DeriveSupervisorNameInput,
-  VerifyAccessTokenInput,
-} from "./verification.js";
+export type { VerifyAccessTokenInput } from "./verification.js";
 
 export interface AccessWorkerEnvironment {
   readonly CF_ACCESS_TEAM_DOMAIN: string;

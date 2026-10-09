@@ -1,16 +1,12 @@
 import type { MainFacetCapabilities } from "../../facet/index.js";
 import type { StartupCheckOutcome } from "./body.js";
 
-export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
-
 import { parseGenerationLabel } from "../generations/index.js";
 import { timed, type TimedOutcome } from "../../diagnostics.js";
 import type { HarnessArtifacts } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
 import { startupModuleMap } from "./module-map.js";
 import type { StartupModuleMapProblem, StartupModuleMapSource } from "./module-map.js";
-
-export type { StartupModuleMapSource } from "./module-map.js";
 
 import type {
   Generation,
@@ -23,9 +19,9 @@ import type {
  * A generous bound, because the check has to cover a Dynamic Worker load and a cold Durable
  * Object start. Nothing local can measure what production needs, so tests pass their own.
  */
-export const STARTUP_CHECK_DEADLINE_MS = 5_000;
+const STARTUP_CHECK_DEADLINE_MS = 5_000;
 
-export const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
+const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
 
 /** What a startup check reads, records and mounts through. The Supervisor builds it once. */
 export type StartupCheckHost = Readonly<{
@@ -41,7 +37,7 @@ export type StartupCheckOptions = {
   readonly maxBodyBytes?: number;
 };
 
-export type StartupCheckReport = StartupCheckOutcome & {
+type StartupCheckReport = StartupCheckOutcome & {
   readonly generation: Generation;
   readonly effect: "recorded" | "no-op";
 };

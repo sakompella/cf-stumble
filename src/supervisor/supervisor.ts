@@ -5,8 +5,15 @@
 // the binding or add a second object to route through. Each method below delegates to the module
 // that owns the work.
 
+// oxlint-disable import/max-dependencies -- The Supervisor is where every group meets, so it imports each of them.
+
 import { DurableObject } from "cloudflare:workers";
-import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
+import {
+  isTimeoutFailure,
+  logRedactedCause,
+  parseRequestId,
+  timedWorkspaceRpc,
+} from "../diagnostics.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -18,7 +25,6 @@ import {
   ProjectConnections,
   runProjectTurn,
   startFacetTurn,
-  tenantWorkspaceName,
   type FacetTurnHandoff,
   type ConnectRepositoryResult,
   type DisconnectRepositoryResult,
@@ -36,8 +42,6 @@ import {
   type TurnStartContext,
   timedTurnMount,
   timedTurnProvision,
-  parseRequestId,
-  timedWorkspaceRpc,
 } from "./projects/index.js";
 import {
   Generations,
@@ -47,6 +51,7 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
+import { tenantWorkspaceName } from "../workspace-names.js";
 import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
 import {
   HarnessArtifacts,

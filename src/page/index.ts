@@ -2,7 +2,7 @@ import { OWNER_PAGE_BODY } from "./markup.js";
 import { OWNER_PAGE_SCRIPT } from "./script.js";
 import { OWNER_PAGE_STYLES } from "./styles.js";
 
-export { OWNER_PAGE_CLASSES, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "./element-ids.js";
+export { OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "./element-ids.js";
 
 /**
  * The whole owner page: one HTML document with an inline stylesheet and an inline script and no

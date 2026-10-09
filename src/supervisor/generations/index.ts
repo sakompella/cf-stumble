@@ -25,13 +25,11 @@ import type { GenerationRow } from "./row.js";
 export { parseGenerationLabel } from "./generation.js";
 
 export type {
-  ActivationResult,
   ActiveGeneration,
   Generation,
   GenerationLabel,
   GenerationStatus,
   PreparationCheckProblem,
-  PreparationCheckOutcome,
   PreparationCheckResult,
 } from "./generation.js";
 

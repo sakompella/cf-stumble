@@ -20,7 +20,7 @@ export type ModuleMapProblem =
   | StoredModuleMapProblem
   | HarnessBuildProblem;
 
-export type ModuleMapResult = Result<MainHarnessArtifactInput, ModuleMapProblem>;
+type ModuleMapResult = Result<MainHarnessArtifactInput, ModuleMapProblem>;
 
 /**
  * Why the main facet could not be mounted. `no-active-generation` is not a fault: no generation is
@@ -207,7 +207,7 @@ export { mainFacetName } from "./facet-name.js";
 
 export { MODULE_MAP_CHUNK_BYTES, ModuleMapStore } from "./store.js";
 
-export type { ModuleMapStorage, StoredModuleMap, StoredModuleMapProblem } from "./store.js";
+export type { ModuleMapStorage } from "./store.js";
 
 export {
   WorkspaceModuleMapBuilder,
@@ -217,7 +217,6 @@ export {
 } from "./builder.js";
 
 export {
-  CommitBuildWorkspace,
   WorkspaceHostModuleMapBuilder,
   type BuildWorkspaceHost,
   type BuildWorkspaceNamespace,
@@ -229,9 +228,6 @@ export {
   planHarnessBuild,
   type BuiltModuleMapFile,
   type HarnessBuildConfiguration,
-  type HarnessBuildPlan,
-  type HarnessBuildProblem,
-  type HarnessBuildStepName,
 } from "./build-plan.js";
 
 export { canonicalModuleMap, encodeModuleMap } from "./module-map.js";

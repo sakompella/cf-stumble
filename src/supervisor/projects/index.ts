@@ -1,4 +1,4 @@
-export { ConnectedProjects, type ConnectedProject } from "./connected-projects.js";
+export { ConnectedProjects } from "./connected-projects.js";
 
 // The connection surface is written in terms of the tenant the boundary verified and of the two
 // workspace views it uses, so the group states them here rather than making every consumer reach
@@ -19,77 +19,30 @@ export {
   type GitHubConnectionStatus,
 } from "./github-connection.js";
 
-export {
-  GitHubConnectionStore,
-  type CredentialSource,
-  type PendingAuthorization,
-  type RecordedConnection,
-} from "./github-connection-store.js";
+export { GitHubConnectionStore } from "./github-connection-store.js";
 
 export {
   ProjectConnections,
-  type ConnectRepositoryProblem,
   type ConnectRepositoryResult,
   type DisconnectRepositoryResult,
   type ProjectListView,
-  type ProjectUseProblem,
-  type ProjectUseResult,
 } from "./project-connections.js";
 
 export { startFacetTurn } from "./project-turn.js";
 
 export {
-  PROJECT_TURN_PROMPT_MAX_LENGTH,
   runProjectTurn,
   type FacetTurnHandoff,
   type ProjectTurnRun,
   type ProjectTurnRunProblemCode,
   type RunProjectTurnInput,
-  type TurnAttribution,
   type TurnStartContext,
-  type TurnThreads,
 } from "./turn-run.js";
 
-export {
-  PROJECT_TURN_FRAME_MAX_BYTES,
-  parseFacetFrameLine,
-  type ProjectTurnFrame,
-  type TurnStreamProblem,
-} from "./turn-frames.js";
+export { PROJECT_TURN_FRAME_MAX_BYTES } from "./turn-frames.js";
 
-export { TurnBound } from "./turn-bound.js";
+export { timedTurnMount, timedTurnProvision } from "./turn-log.js";
 
-export {
-  timedTurnMount,
-  timedTurnProvision,
-  turnFields,
-  turnTrace,
-  type TurnTrace,
-} from "./turn-log.js";
+export type { ProjectTurnFacet, ProjectTurnStart } from "./project-turn.js";
 
-export { readTurnStream, type ReadTurnStreamInput } from "./turn-stream.js";
-
-export {
-  endTurn,
-  type StreamEnding,
-  type TurnSettlement,
-  type TurnThreadWrites,
-} from "./turn-settle.js";
-
-// The Supervisor names its own workspace and hands that name to both the project path here and the
-// build path in `artifacts`. It reaches the one definition through this group rather than deriving
-// a second one, which is the drift E3 recorded.
-export { tenantWorkspaceName } from "../../workspace-names.js";
-
-export { parseRequestId, timedWorkspaceRpc } from "../../diagnostics.js";
-
-export type {
-  MountServingGeneration,
-  ProjectTurnFacet,
-  ProjectTurnInput,
-  ProjectTurnRefusal,
-  ProjectTurnRequest,
-  ProjectTurnStart,
-} from "./project-turn.js";
-
-export type { ProjectWorkspaceHost, ProjectWorkspaceNamespace } from "./project-workspace.js";
+export type { ProjectWorkspaceNamespace } from "./project-workspace.js";
