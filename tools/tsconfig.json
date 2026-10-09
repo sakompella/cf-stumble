@@ -9,6 +9,7 @@
     "access-session.mts",
     "build-loaded-execution-env-fixture.mts",
     "build-generation-0.mts",
+    "module-map-build.mts",
     "vendor-pi.mts",
     "verify-project-protocol.mts",
     "browser-harness/**/*.mts",
