@@ -6,6 +6,7 @@
 // that owns the work.
 
 import { DurableObject } from "cloudflare:workers";
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -42,7 +43,6 @@ import {
   type Generation,
   type PreparationCheck,
 } from "./generations/index.js";
-import { FacetRelay } from "./relay/index.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
 import {
@@ -88,7 +88,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
   private readonly generations: Generations;
   private readonly artifacts: HarnessArtifacts;
-  private readonly relay: FacetRelay;
   private readonly threads: ProjectThreads;
   /** The tenant's connected repositories, their GitHub authorization, and their provisioning. */
   private readonly connections: ProjectConnections;
@@ -116,7 +115,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       this.workspaceName,
     );
     this.control = new GenerationControl(this.generations);
-    this.relay = new FacetRelay();
     this.connections = new ProjectConnections({
       storage: ctx.storage,
       workspaceName: this.workspaceName,
@@ -379,14 +377,47 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
-  /** Relay one request to the generation that serves, or serve nothing when none is active. */
+  /**
+   * Relay one request to the generation that serves. A mount failure with no active generation is
+   * not a fault: the Supervisor holds no built-in code, so there is nothing to serve until the
+   * owner submits a harness commit and activates the generation the Supervisor labels. It answers
+   * 503 and says so. Every other mount failure is a fault of the active generation, and answers
+   * 500.
+   */
   override fetch(request: Request): Promise<Response> {
     const mainFacet = this.mountServing(this.generations.active());
 
     if (mainFacet.isErr()) {
-      return Promise.resolve(this.relay.mountFailureResponse(mainFacet.error));
+      return Promise.resolve(
+        mainFacet.error.code === "no-active-generation"
+          ? Response.json({ ok: false, problem: { code: mainFacet.error.code } }, { status: 503 })
+          : new Response("Cannot mount main facet", { status: 500 }),
+      );
     }
 
-    return this.relay.forward(request, mainFacet.value.fetcher);
+    return forwardToFacet(request, mainFacet.value.fetcher);
+  }
+}
+
+/** Forward a request to the facet and hand back its own status, headers and bytes. */
+export async function forwardToFacet(
+  request: Request,
+  fetcher: Pick<Fetcher, "fetch">,
+): Promise<Response> {
+  try {
+    return await fetcher.fetch(request);
+  } catch (cause) {
+    // The caller sees only the generic 502 below, on purpose (ADR-0035): a broken generation and a
+    // Loader or RPC transport failure must look identical from outside. An operator still needs to
+    // tell them apart, so the discarded cause is logged, redacted, with the request line, which is
+    // all the activation context this function receives.
+    logRedactedCause(
+      `supervisor.relay.forward ${request.method} ${new URL(request.url).pathname}: ${
+        isTimeoutFailure(cause) ? "timeout" : "main-facet-failed-before-headers"
+      }`,
+      cause,
+    );
+
+    return new Response("Main facet failed before response headers", { status: 502 });
   }
 }

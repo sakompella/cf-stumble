@@ -14,7 +14,7 @@ The **supervisor** is the immutable half. It lives in the Supervisor Durable Obj
 
 Version 0 has no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing. The earlier design put a second Pi-derived fork in the Supervisor and gave it recovery episodes, eligibility rules and relay evidence. Handoff decision 7 deleted all of it and kept the turn lease. A future multi-user or self-healing version can add it back, and this paragraph is the record that it once existed.
 
-The interface between the supervisor and a main facet is ordinary Worker `fetch(Request): Promise<Response>` forwarding today: `FacetRelay.forward` calls the facet's `fetch` and returns its response unchanged (`src/supervisor/relay/index.ts`, `src/supervisor/supervisor.ts`). It uses the platform's native interface and keeps the permanent contract small. ADR-0003 does not fix this as a durable commitment, so a future redesign may still replace it.
+The interface between the supervisor and a main facet is ordinary Worker `fetch(Request): Promise<Response>` forwarding today: `forwardToFacet` calls the facet's `fetch` and returns its response unchanged (`src/supervisor/supervisor.ts`). It uses the platform's native interface and keeps the permanent contract small. ADR-0003 does not fix this as a durable commitment, so a future redesign may still replace it.
 
 Generation 0 is the first mutable main harness, initially based closely on Pi. It is not a special rollback target; it is the first generation like any other.
 

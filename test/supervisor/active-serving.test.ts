@@ -2,8 +2,9 @@
 
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
-import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { afterEach, expect, test, vi } from "vitest";
+import { containsCredential } from "../../src/github/index.js";
+import { forwardToFacet, type Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateGeneration, activeSupervisor, artifact, submitCandidate } from "./helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
@@ -32,6 +33,10 @@ export class MainFacet extends DurableObject {
 }
 `,
   );
+}
+
+function relayRequest(path: string, init?: RequestInit): Request {
+  return new Request(`https://cf-stumble.test${path}`, init);
 }
 
 async function activateServingCandidate(
@@ -119,4 +124,61 @@ test("keeps the active retained artifact when a failed candidate cannot activate
 
   expect(activation).toEqual({ ok: false, problem: { code: "not-ready" } });
   expect(await response.text()).toBe("candidate serving body");
+});
+
+test("relays an ordinary request and response without changing either side", async () => {
+  const control = await activeSupervisor("relay-preserves-http");
+
+  const response = await control.fetch(
+    relayRequest("/facet/relay/echo?query=preserved", {
+      method: "POST",
+      headers: { "x-request-header": "request header" },
+      body: "request body",
+    }),
+  );
+
+  expect(response.status).toBe(201);
+  expect(response.headers.get("x-facet-method")).toBe("POST");
+  expect(response.headers.get("x-facet-path")).toBe("/facet/relay/echo");
+  expect(response.headers.get("x-facet-request-header")).toBe("request header");
+  expect(response.headers.get("x-facet-response-header")).toBe("preserved");
+  expect(await response.text()).toBe("request body");
+});
+
+/**
+ * The public 502 tells a caller nothing, on purpose: a broken generation and a Loader or RPC
+ * transport failure must look identical to the caller. An operator still needs to tell them
+ * apart, so the discarded cause must reach a log, redacted, without changing the response at all.
+ */
+test("logs the discarded cause of a pre-header failure without changing the public 502", async () => {
+  const control = await activeSupervisor("relay-pre-header-failure");
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await control.fetch(relayRequest("/facet/relay/pre-header-failure"));
+
+  expect(response.status).toBe(502);
+  expect(await response.text()).toBe("Main facet failed before response headers");
+  expect(loggedErrors, "the discarded cause must reach an operator log").toHaveBeenCalledTimes(1);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("facet failed before headers");
+
+  loggedErrors.mockRestore();
+});
+
+test("redacts a token-shaped pre-header failure cause", async () => {
+  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const token = `ghp_${"a".repeat(36)}`;
+
+  const response = await forwardToFacet(relayRequest("/facet/relay/pre-header-failure"), {
+    fetch: () => {
+      throw new Error(`facet failed before headers: ${token}`);
+    },
+  });
+
+  expect(response.status).toBe(502);
+  const logged = loggedErrors.mock.calls[0]?.join(" ") ?? "";
+  expect(logged).toContain("main-facet-failed-before-headers");
+  expect(containsCredential(logged), "the operator log must redact token-shaped causes").toBe(
+    false,
+  );
 });
