@@ -102,9 +102,9 @@ test("removes only the clone and staging directory", async () => {
     projectDirectory(sampleProjectOne.id),
     `${projectDirectory(sampleProjectOne.id)}.provisioning`,
   ]);
-  expect(operations.sources[0]).toContain(`rm -rf`);
-  expect(operations.sources[0]).toContain(projectDirectory(sampleProjectOne.id));
-  expect(operations.sources[0]).toContain(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
+  expect(operations.sources[0]?.split("\n").at(-1)).toBe(
+    `rm -rf -- ${shellQuote(projectDirectory(sampleProjectOne.id))} ${shellQuote(`${projectDirectory(sampleProjectOne.id)}.provisioning`)}`,
+  );
   expect(operations.sources[0]).not.toContain("/workspace/harness");
 });
 

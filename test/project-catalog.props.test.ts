@@ -135,8 +135,8 @@ test("gives distinct repositories distinct ids and one repository one id", () =>
 /**
  * Every id becomes a directory under /workspace/projects, a URL path segment, and a SQLite key,
  * and the Workspace Host checks it again with `parseProjectId`. The provisioning script also
- * names `<id>.provisioning` and `<id>.provision-lock` beside it, so an id must never contain a dot
- * or it could name another project's staging directory.
+ * names `<id>.provisioning` beside it, so an id must never contain a dot or it could name another
+ * project's staging directory.
  */
 test("derives an id for every GitHub repository name that is safe as a path segment", () => {
   hegel.test((tc) => {

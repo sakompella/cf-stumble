@@ -60,9 +60,8 @@ adds four to six characters for the names people use and keeps the directory nam
 cost is a length limit: an id longer than `PROJECT_ID_LIMIT` (200 characters) is refused, which
 only a name with dozens of dots or underscores reaches. An id uses only lower-case letters, digits,
 and hyphens, so no id can name the `<id>.provisioning` directory that provisioning keeps beside a
-clone, or the `<id>.provision-lock` directory that earlier versions kept there. Only `github.com`
-URLs of exactly `owner/repository` derive an
-id, because these naming rules are GitHub's.
+clone. Only `github.com` URLs of exactly `owner/repository` derive an id, because these naming
+rules are GitHub's.
 
 If a repository's id is already stored for a different repository, or the repository is already
 stored under a different id, cf-stumble refuses the connection with `project-id-conflict`. With
@@ -93,7 +92,7 @@ If provisioning fails, cf-stumble removes a project it has just recorded. Provis
 
 The owner can call `POST /api/projects/{id}/disconnect` with an `Origin` exactly matching the request origin. The route refuses an invalid or unknown project id, the harness project, and a project with an active turn. An expired lease can be reclaimed (`src/routes/projects.ts:99-115,245-267`; `src/supervisor/supervisor.ts:252-262`).
 
-On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone, its `.provisioning` directory, and the `.provision-lock` directory that earlier versions locked with (`src/supervisor/supervisor.ts:253-261`; `src/supervisor/projects/project-connections.ts:311-343`; `src/workspace/project-removal.ts:52-75`). The removal command first takes the project's provision lock, the same lock the clone step takes. When workspace cleanup succeeds, disconnect deletes uncommitted work in that clone. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
+On success, the Supervisor removes the project thread and catalog row, then asks the Workspace Host to remove the clone and its `.provisioning` directory (`src/supervisor/supervisor.ts:253-261`; `src/supervisor/projects/project-connections.ts:311-343`; `src/workspace/project-removal.ts:53-81`). The removal command first takes the project's provision lock, the same lock the clone step takes. When workspace cleanup succeeds, disconnect deletes uncommitted work in that clone. Workspace removal is best effort: `ok: true, workspace: "failed"` means the thread and catalog row are gone even though workspace cleanup failed. A refusal leaves the project connected.
 
 Two mechanisms keep a disconnect from overlapping other work on the same project. Inside one Supervisor, connection (from recording the row through provisioning), disconnect, and provisioning on use run one at a time for each project id (`src/supervisor/projects/project-lifecycle-queue.ts`). The Supervisor removes the thread inside that same operation, so no turn can start between the thread removal and the row removal. The queue exists only in memory. It moves on when the removal RPC returns, fails, or times out, and it is lost when the platform replaces the Supervisor instance, while the removal command may still be running in the workspace. The provision lock covers that case.
 

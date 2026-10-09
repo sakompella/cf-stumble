@@ -60,14 +60,12 @@ function removedDirectories(projectId: ProjectId): readonly [string, string] {
 /**
  * Remove only the project clone and its staging directory, while holding the project's provision
  * lock. The Supervisor orders its own requests, but a removal can outlive the RPC that asked for
- * it, and the lock is what keeps a later clone out of the directory it is deleting. The
- * `.provision-lock` directory is what earlier versions locked with; nothing uses it now, so it is
- * removed as a remnant.
+ * it, and the lock is what keeps a later clone out of the directory it is deleting.
  */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
-  const [root, staging] = removedDirectories(request.projectId);
+  const removed = removedDirectories(request.projectId).map((path) => shellQuote(path));
 
   return {
     kind: "run-command",
@@ -75,7 +73,7 @@ export function planProjectRemovalRequest(
       "set -eu",
       `lock=${shellQuote(projectProvisionLockPath(request.projectId))}`,
       ...holdProvisionLock(),
-      `rm -rf -- ${[root, staging, `${root}.provision-lock`].map((path) => shellQuote(path)).join(" ")}`,
+      `rm -rf -- ${removed.join(" ")}`,
     ].join("\n"),
     cwd: "/",
     timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,

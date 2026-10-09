@@ -126,12 +126,7 @@ export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   ...HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name),
 ];
 
-/**
- * The file the harness provision step locks with `holdProvisionLock`.
- *
- * Earlier builds locked with a `harness.provision-lock` directory beside the checkout. That
- * directory is ignored, not deleted.
- */
+/** The file the harness provision step locks with `holdProvisionLock`. */
 export const HARNESS_PROVISION_LOCK = "/tmp/cf-stumble-harness-provision.lock";
 
 /**
