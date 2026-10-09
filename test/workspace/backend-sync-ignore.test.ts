@@ -1,7 +1,6 @@
 import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
 import { expect, test } from "vitest";
 import { withWorkspaceSyncIgnore } from "../../src/workspace/backend-sync-ignore.js";
-import { workspaceBackendForHost } from "../../src/workspace/host.js";
 
 type SyncRPC = BackendHandle["rpc"]["sync"];
 
@@ -108,24 +107,6 @@ test("preserves caller ignores while adding node_modules", async () => {
   expect(inputs).toEqual([
     { after: { rev: 3, path: "/project" }, ignore: [".cache", "node_modules"] },
   ]);
-});
-
-test("WorkspaceHost constructs its Workspace with the sync-ignore backend", async () => {
-  const inputs: FetchChangesInput[] = [];
-
-  const { backend } = backendWith((input) => {
-    inputs.push(input);
-
-    return Promise.resolve({
-      currentCursor: { rev: 1, path: null },
-      appliedPushCursor: { rev: 1, path: null },
-      stream: new ReadableStream(),
-    });
-  });
-
-  await (await connect(workspaceBackendForHost(backend))).rpc.sync.fetchChanges({});
-
-  expect(inputs).toEqual([{ ignore: ["node_modules"] }]);
 });
 
 test("delegates every backend and RPC operation other than fetchChanges", async () => {

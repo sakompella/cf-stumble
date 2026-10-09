@@ -55,8 +55,6 @@ export type ExecEvent =
       error: { code: "backend-unavailable" | "container-restarted" };
     };
 
-export type StartExecInput = { command: string; cwd?: string; timeoutMs?: number };
-
 export interface ProjectRpcTargetContract {
   lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>>;
   readFile(path: unknown): Promise<ProjectResult<Uint8Array>>;

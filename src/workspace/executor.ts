@@ -115,14 +115,6 @@ async function executePlan(
   command: string,
 ): Promise<WorkspaceResult> {
   switch (plan.kind) {
-    case "read-file": {
-      if (!(await isSymlinkFree(operations, plan.path))) {
-        return { ok: false, error: { code: "path-outside-root" } };
-      }
-
-      return { ok: true, result: { kind: "file", content: await operations.readFile(plan.path) } };
-    }
-
     case "write-file": {
       if (!(await isSymlinkFree(operations, plan.path))) {
         return { ok: false, error: { code: "path-outside-root" } };

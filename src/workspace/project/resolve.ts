@@ -48,10 +48,6 @@ export function parseAddressedPath(input: unknown): ProjectResult<readonly strin
   return ok(segments);
 }
 
-export function providerPathOf(segments: readonly string[]): string {
-  return segments.length === 0 ? WORKSPACE_ROOT : `${WORKSPACE_ROOT}/${segments.join("/")}`;
-}
-
 export function addressedPathOf(segments: readonly string[]): string {
   return segments.length === 0 ? "/" : `/${segments.join("/")}`;
 }
@@ -295,4 +291,4 @@ export function resolveCanonicalPath(
   return ok(addressedFromProviderPath(outcome.value.path));
 }
 
-export { addressedFromProviderPath, isWithinRoot, joinOne };
+export { joinOne };

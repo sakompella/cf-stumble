@@ -186,7 +186,7 @@ export async function timed<T>(
 }
 
 /** How often a Workspace Host RPC reports that it is still waiting. */
-export const WORKSPACE_RPC_WATCH_INTERVAL_MS = 30_000;
+const WORKSPACE_RPC_WATCH_INTERVAL_MS = 30_000;
 
 /**
  * Measure one Supervisor-side Workspace Host RPC and make a long wait visible. The warning timer

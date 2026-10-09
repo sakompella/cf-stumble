@@ -44,7 +44,7 @@ import { PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
 import { afterIdleStop, WorkspaceIdleController } from "./idle-controller.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
-import { withWorkspaceSyncIgnore, type WorkspaceBackendLifecycle } from "./backend-sync-ignore.js";
+import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
 import { observeBackendClose, type BackendCloseTrigger } from "./container-exit.js";
 
 export { parseProjectBudget };
@@ -114,14 +114,6 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
   return storage as DurableObjectStorageLike;
 }
 
-/** Keep the backend decoration at the Workspace Host construction seam. */
-export function workspaceBackendForHost(
-  backend: WorkspaceBackend,
-  lifecycle?: WorkspaceBackendLifecycle,
-): WorkspaceBackend {
-  return withWorkspaceSyncIgnore(backend, lifecycle);
-}
-
 /** Restore the managed instructions after reset, without replacing an existing file. */
 type ManagedInstructionOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
@@ -183,7 +175,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
-    this.#workspaceBackend = workspaceBackendForHost(this.#containerBackend, {
+    this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, {
       connected: (runtimeId) => {
         this.#containerLifecycle.connected(runtimeId);
         logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });

@@ -49,6 +49,5 @@ export {
   type ProjectLstatInfo,
   type ProjectResult,
   type ProjectRpcTargetContract,
-  type StartExecInput,
   type WriteMode,
 } from "./protocol.js";
