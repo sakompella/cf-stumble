@@ -83,8 +83,6 @@ Cloudflare Issues and Workers traces are on for this Worker (`observability.issu
 
 **Not configured.** Issues automations, such as alerts or webhooks, are account resources in the dashboard. This repository creates none.
 
-**Test warning.** `pnpm test` prints "Unexpected fields found in observability field: issues" for `wrangler.test.jsonc`. The vitest plugin bundles Wrangler 4.126, which does not know the field yet. The warning is harmless, and the file must keep the field so that the drift test passes.
-
 ## Checking a running deployment
 
 `pnpm ops:check` reads one time window from the live account and applies nine rules. It prints one line when everything is fine:
