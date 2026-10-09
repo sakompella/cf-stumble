@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 /**
  * The owner page is one plain HTML document behind Cloudflare Access. These tests hold the three
  * properties the rest of version 0 depends on: a browser gets the page, a machine keeps the
@@ -9,7 +7,7 @@
  * the request boundary, so it stays readable as one thing.
  */
 
-import { SELF, env } from "cloudflare:test";
+import { env, exports as workerExports } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS } from "../../src/page/index.js";
 import { isOwnerPageRequest, ownerPageResponse } from "../../src/routes/index.js";
@@ -43,7 +41,6 @@ function ownerToken(key: SigningKey): Promise<string> {
 /** The verified-owner environment. Configured keys keep the whole check local to this process. */
 function workerEnvironment(key: SigningKey) {
   return {
-    // oxlint-disable-next-line typescript/no-deprecated -- The Worker test environment is supplied by the Cloudflare Vitest plugin.
     ...env,
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: accessAudience,
@@ -92,8 +89,7 @@ test("only GET / is the owner page", () => {
 });
 
 test("an unauthenticated browser request never receives the owner page", async () => {
-  // oxlint-disable-next-line typescript/no-deprecated
-  const response = await SELF.fetch(pageRequest({ accept: BROWSER_ACCEPT }));
+  const response = await workerExports.default.fetch(pageRequest({ accept: BROWSER_ACCEPT }));
   const body = await response.text();
 
   expect(response.status).toBe(401);

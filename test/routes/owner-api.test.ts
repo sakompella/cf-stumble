@@ -1,6 +1,4 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
-import { SELF } from "cloudflare:test";
+import { exports as workerExports } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
@@ -142,8 +140,7 @@ test("resets the workspace and reports what it reset", async () => {
 });
 
 test("an unauthenticated project disconnect cannot reach the owner API", async () => {
-  // oxlint-disable-next-line typescript/no-deprecated
-  const response = await SELF.fetch(
+  const response = await workerExports.default.fetch(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/disconnect", {
       method: "POST",
     }),
@@ -154,8 +151,7 @@ test("an unauthenticated project disconnect cannot reach the owner API", async (
 });
 
 test("an unauthenticated workspace reset cannot reach the owner API", async () => {
-  // oxlint-disable-next-line typescript/no-deprecated
-  const response = await SELF.fetch(
+  const response = await workerExports.default.fetch(
     new Request("https://cf-stumble.test/api/workspace/reset", { method: "POST" }),
   );
 
@@ -189,8 +185,9 @@ test("returns JSON 404 for unknown route and method pairs", async () => {
 });
 
 test("an unauthenticated request cannot reach an owner API route", async () => {
-  // oxlint-disable-next-line typescript/no-deprecated
-  const response = await SELF.fetch(new Request("https://cf-stumble.test/api/status"));
+  const response = await workerExports.default.fetch(
+    new Request("https://cf-stumble.test/api/status"),
+  );
 
   expect(response.status).toBe(401);
   expect(await response.text()).toBe("Unauthorized");
@@ -214,12 +211,9 @@ test("an unauthenticated request cannot reach a generation control route", async
     }),
   );
 
-  // oxlint-disable-next-line typescript/no-deprecated
-  const activateResponse = await SELF.fetch(activate);
-  // oxlint-disable-next-line typescript/no-deprecated
-  const rollbackResponse = await SELF.fetch(rollback);
-  // oxlint-disable-next-line typescript/no-deprecated
-  const submitResponse = await SELF.fetch(submit);
+  const activateResponse = await workerExports.default.fetch(activate);
+  const rollbackResponse = await workerExports.default.fetch(rollback);
+  const submitResponse = await workerExports.default.fetch(submit);
 
   expect([activateResponse.status, rollbackResponse.status, submitResponse.status]).toEqual([
     401, 401, 401,

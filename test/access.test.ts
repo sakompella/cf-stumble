@@ -1,9 +1,7 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 // The test deliberately builds varied claim dictionaries to exercise the untrusted JWT boundary.
 // oxlint-disable typescript/no-misused-spread, eslint/max-lines-per-function
 
-import { SELF } from "cloudflare:test";
+import { exports as workerExports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
 import {
   authenticateAccessRequest,
@@ -187,9 +185,7 @@ describe("Cloudflare Access JWT verification", () => {
   });
 
   test("the Worker rejects an unauthenticated request before Supervisor routing", async () => {
-    // `SELF` is the plugin's Worker entry-point fixture in this repository.
-    // oxlint-disable-next-line typescript/no-deprecated
-    const response = await SELF.fetch(new Request("https://cf-stumble.test/"));
+    const response = await workerExports.default.fetch(new Request("https://cf-stumble.test/"));
     expect(response.status).toBe(401);
   });
 });

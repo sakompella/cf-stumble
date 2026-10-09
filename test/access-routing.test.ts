@@ -1,6 +1,4 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
-import { env } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import { deriveSupervisorName } from "../src/access/index.js";
 import worker from "../src/worker.js";
@@ -17,7 +15,6 @@ const browserAccept = "text/html,application/xhtml+xml";
 
 function workerEnvironment(key: SigningKey) {
   return {
-    // oxlint-disable-next-line typescript/no-deprecated
     ...env,
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: accessAudience,
@@ -41,9 +38,7 @@ async function supervisorSpy() {
     audience: accessAudience,
   });
 
-  // oxlint-disable-next-line typescript/no-deprecated
   const supervisor = env.SUPERVISOR.getByName(name);
-  // oxlint-disable-next-line typescript/no-deprecated
   vi.spyOn(env.SUPERVISOR, "getByName").mockReturnValue(supervisor);
   let received: Request | undefined;
 

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 /**
  * A Cloudflare Access policy verifies who a caller is; `CF_ACCESS_OWNER_SUB` decides whether that
  * caller is the one owner this Worker is built for. These tests hold the second gate to its
@@ -12,7 +10,7 @@
 // token and environment, so the block runs long.
 // oxlint-disable eslint/max-lines-per-function
 
-import { env } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
 import { authenticateAccessRequest, type AccessWorkerEnvironment } from "../src/access/index.js";
 import worker from "../src/worker.js";
@@ -53,7 +51,6 @@ function requestWith(token: string): Request {
 /** A full `Cloudflare.Env` for a direct `worker.fetch` call, with Access fields overridden. */
 function workerEnvironment(key: SigningKey, ownerSub: string) {
   return {
-    // oxlint-disable-next-line typescript/no-deprecated -- The Worker test environment is supplied by the Cloudflare Vitest plugin.
     ...env,
     ...environment(key, ownerSub),
   };

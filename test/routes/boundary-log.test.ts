@@ -1,6 +1,4 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
-import { env } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import worker from "../../src/worker.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
@@ -28,7 +26,6 @@ afterEach(() => {
 
 function workerEnvironment(key: SigningKey, ownerSubject = accessOwnerSubject) {
   return {
-    // oxlint-disable-next-line typescript/no-deprecated
     ...env,
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: accessAudience,

@@ -1,6 +1,4 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
-import { env as workerTestEnv } from "cloudflare:test";
+import { env as workerTestEnv } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import { authenticateAccessRequest } from "../src/access/index.js";
 import worker from "../src/worker.js";
@@ -213,7 +211,6 @@ test("the Worker answers 503 for a JWKS key-service failure, not 401", async () 
   vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network unreachable"));
 
   const response = await worker.fetch(request(signed), {
-    // oxlint-disable-next-line typescript/no-deprecated -- The Worker test environment is supplied by the Cloudflare Vitest plugin.
     ...workerTestEnv,
     CF_ACCESS_TEAM_DOMAIN: "workeroutage.cloudflareaccess.com",
     CF_ACCESS_AUD: audience,
