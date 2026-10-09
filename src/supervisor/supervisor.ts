@@ -57,7 +57,7 @@ import type {
 } from "../workspace/index.js";
 import {
   checkGenerationStartup,
-  prepareGenerationStartup,
+  type StartupCheckHost,
   type StartupCheckOptions,
   type StartupCheckResult,
 } from "./startup-check/index.js";
@@ -88,6 +88,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
   private readonly generations: Generations;
   private readonly artifacts: HarnessArtifacts;
+  private readonly startupCheckHost: StartupCheckHost;
   private readonly threads: ProjectThreads;
   /** The tenant's connected repositories, their GitHub authorization, and their provisioning. */
   private readonly connections: ProjectConnections;
@@ -114,6 +115,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       env.WORKSPACE_HOST,
       this.workspaceName,
     );
+    this.startupCheckHost = {
+      ctx,
+      loader: env.LOADER,
+      artifacts: this.artifacts,
+      generations: this.generations,
+      modelRoute: () => this.modelRoute(),
+    };
     this.control = new GenerationControl(this.generations);
     this.connections = new ProjectConnections({
       storage: ctx.storage,
@@ -149,13 +157,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     options?: StartupCheckOptions,
   ): Promise<StartupCheckResult> {
     return checkGenerationStartup(
-      this.ctx,
-      this.env.LOADER,
-      this.artifacts,
-      this.generations,
+      this.startupCheckHost,
       label,
-      artifact,
-      this.modelRoute(),
+      { kind: "submitted", input: artifact },
       options,
     );
   }
@@ -166,15 +170,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * generation.
    */
   prepareGeneration(label: number, options?: StartupCheckOptions): Promise<StartupCheckResult> {
-    return prepareGenerationStartup(
-      this.ctx,
-      this.env.LOADER,
-      this.artifacts,
-      this.generations,
-      label,
-      this.modelRoute(),
-      options,
-    );
+    return checkGenerationStartup(this.startupCheckHost, label, { kind: "prepared" }, options);
   }
 
   getActiveGeneration(): ActiveGeneration {

@@ -25,7 +25,7 @@ test("the Supervisor stub type offers controlGeneration and no raw generation mu
   expectTypeOf(control).toHaveProperty("controlGeneration");
 });
 
-test("startup checking maps TaggedErrors to plain RPC values", async () => {
+test("startup checking returns plain RPC values", async () => {
   const control = supervisor("plain-startup-check-result");
 
   const submission = await control.controlGeneration({

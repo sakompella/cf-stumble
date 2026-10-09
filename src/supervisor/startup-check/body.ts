@@ -1,5 +1,3 @@
-import type { Deadline } from "./deadline.js";
-
 export type StartupCheckStage =
   | "ready"
   | "mount-failed"
@@ -16,10 +14,34 @@ export type StartupCheckOutcome =
       readonly reason: string;
     };
 
-type ThrownValue = Error | string | number | boolean | null | undefined;
+export type ThrownValue = Error | string | number | boolean | null | undefined;
 
-function errorReason(error: ThrownValue): string {
+export function errorReason(error: ThrownValue): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export type Deadline = {
+  readonly elapsed: Promise<"elapsed">;
+  readonly cancel: () => void;
+};
+
+export function deadlineAfter(durationMs: number): Deadline {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const elapsed = new Promise<"elapsed">((resolve) => {
+    timer = setTimeout(() => {
+      resolve("elapsed");
+    }, durationMs);
+  });
+
+  return {
+    elapsed,
+    cancel: () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    },
+  };
 }
 
 export function drainResponseBody(

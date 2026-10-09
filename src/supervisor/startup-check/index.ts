@@ -1,11 +1,10 @@
-import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
+import type { MainFacetCapabilities } from "../../facet/index.js";
 import type { StartupCheckOutcome } from "./body.js";
 
 export type { StartupCheckOutcome, StartupCheckStage } from "./body.js";
 
 import { parseGenerationLabel } from "../generations/index.js";
 import { timed, type TimedOutcome } from "../../diagnostics.js";
-import type { GenerationLabel } from "../generations/index.js";
 import type { HarnessArtifacts } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
 import { startupModuleMap } from "./module-map.js";
@@ -28,6 +27,15 @@ export const STARTUP_CHECK_DEADLINE_MS = 5_000;
 
 export const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
 
+/** What a startup check reads, records and mounts through. The Supervisor builds it once. */
+export type StartupCheckHost = Readonly<{
+  ctx: DurableObjectState;
+  loader: WorkerLoader;
+  artifacts: HarnessArtifacts;
+  generations: Generations;
+  modelRoute: () => MainFacetCapabilities["MODEL"];
+}>;
+
 export type StartupCheckOptions = {
   readonly deadlineMs?: number;
   readonly maxBodyBytes?: number;
@@ -48,71 +56,21 @@ export type StartupCheckResult =
         | PreparationCheckProblem;
     };
 
-/** Check a module map the caller already holds against its labeled generation. */
-export function checkGenerationStartup(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  artifacts: HarnessArtifacts,
-  generations: Generations,
-  label: number,
-  input: MainHarnessArtifactInput,
-  modelRoute: MainFacetCapabilities["MODEL"],
-  options: StartupCheckOptions = {},
-): Promise<StartupCheckResult> {
-  return checkGenerationStartupFrom(
-    ctx,
-    loader,
-    artifacts,
-    generations,
-    label,
-    { kind: "submitted", input },
-    modelRoute,
-    options,
-  );
-}
-
 /**
- * Check a labeled generation from its harness commit alone. The module map comes from the
- * Supervisor's store, or from a build of that commit which is stored before the check runs, so a
- * generation that this reports as ready has its code stored.
+ * Check a labeled generation's module map from `source` and record the outcome against the
+ * generation. The check is logged by label and source, with how long it took and the stage it
+ * reached.
  */
-export function prepareGenerationStartup(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  artifacts: HarnessArtifacts,
-  generations: Generations,
-  label: number,
-  modelRoute: MainFacetCapabilities["MODEL"],
-  options: StartupCheckOptions = {},
-): Promise<StartupCheckResult> {
-  return checkGenerationStartupFrom(
-    ctx,
-    loader,
-    artifacts,
-    generations,
-    label,
-    { kind: "prepared" },
-    modelRoute,
-    options,
-  );
-}
-
-/** Log a check by label and source, with how long it took and the stage it reached. */
-function checkGenerationStartupFrom(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  artifacts: HarnessArtifacts,
-  generations: Generations,
+export function checkGenerationStartup(
+  host: StartupCheckHost,
   label: number,
   source: StartupModuleMapSource,
-  modelRoute: MainFacetCapabilities["MODEL"],
-  options: StartupCheckOptions,
+  options: StartupCheckOptions = {},
 ): Promise<StartupCheckResult> {
   return timed(
     "generation.preparation",
     { label, source: source.kind },
-    () =>
-      checkLabeledStartup(ctx, loader, artifacts, generations, label, source, modelRoute, options),
+    () => checkLabeledStartup(host, label, source, options),
     preparationOutcome,
   );
 }
@@ -128,76 +86,38 @@ function preparationOutcome(result: StartupCheckResult): TimedOutcome {
   };
 }
 
-function checkLabeledStartup(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  artifacts: HarnessArtifacts,
-  generations: Generations,
-  label: number,
-  source: StartupModuleMapSource,
-  modelRoute: MainFacetCapabilities["MODEL"],
-  options: StartupCheckOptions,
-): Promise<StartupCheckResult> {
-  const generationLabel = parseGenerationLabel(label);
-
-  if (generationLabel === undefined) {
-    return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label } });
-  }
-
-  const generation = generations.byLabel(generationLabel);
-
-  if (generation === undefined) {
-    return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label } });
-  }
-
-  return checkKnownGenerationStartup(
-    ctx,
-    loader,
-    artifacts,
-    generations,
-    generationLabel,
-    generation,
-    source,
-    modelRoute,
-    options,
-  );
-}
-
 /**
  * A module map that cannot be obtained records no preparation check. A missing build workspace or
  * a store that refused the write is not evidence about the candidate, and the active generation
  * keeps serving.
  */
-async function checkKnownGenerationStartup(
-  ctx: DurableObjectState,
-  loader: WorkerLoader,
-  artifacts: HarnessArtifacts,
-  generations: Generations,
-  generationLabel: GenerationLabel,
-  generation: Generation,
+async function checkLabeledStartup(
+  host: StartupCheckHost,
+  label: number,
   source: StartupModuleMapSource,
-  modelRoute: MainFacetCapabilities["MODEL"],
   options: StartupCheckOptions,
 ): Promise<StartupCheckResult> {
-  const moduleMap = await startupModuleMap(artifacts, generation, generationLabel, source);
+  const generationLabel = parseGenerationLabel(label);
+
+  const generation =
+    generationLabel === undefined ? undefined : host.generations.byLabel(generationLabel);
+
+  if (generationLabel === undefined || generation === undefined) {
+    return { ok: false, problem: { code: "unknown-generation", label } };
+  }
+
+  const moduleMap = await startupModuleMap(host.artifacts, generation, generationLabel, source);
 
   if (moduleMap.isErr()) {
     return { ok: false, problem: moduleMap.error };
   }
 
-  const outcome = await runStartupCheck(
-    ctx,
-    loader,
-    moduleMap.value,
-    generation.harnessCommit,
-    modelRoute,
-    {
-      deadlineMs: options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
-      maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
-    },
-  );
+  const outcome = await runStartupCheck(host, moduleMap.value, generation.harnessCommit, {
+    deadlineMs: options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
+    maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
+  });
 
-  const recorded = generations.recordPreparationCheck(
+  const recorded = host.generations.recordPreparationCheck(
     generationLabel,
     outcome.stage === "ready" ? "passed" : "failed",
   );
