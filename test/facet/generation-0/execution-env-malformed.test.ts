@@ -33,7 +33,6 @@ const unknownExecFailures: readonly { name: string; target: MalformedTargetFacto
   {
     name: "a rejected startExec RPC call",
     target: () => ({
-      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Test double: simulating an arbitrary RPC rejection value.
       startExec: () => Promise.reject(new Error("rpc down")),
       kill: () => Promise.resolve(),
     }),

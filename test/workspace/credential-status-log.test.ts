@@ -119,7 +119,6 @@ test("a status read that throws is one error event and still the public unavaila
 class RecordingHost implements CredentialWorkspaceHost {
   readonly received: (string | undefined)[] = [];
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host RPC boundary this test drives.
   credential(
     _request: GitHubCredentialRequest,
     requestId?: string,

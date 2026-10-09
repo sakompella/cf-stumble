@@ -30,7 +30,6 @@ test("marks an in-flight read as container-restarted after the runtime generatio
         kill: () => Promise.resolve(),
       }),
   };
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fake implements the runtime slice used by this adapter.
 
   const backend = computerExecBackend(
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fake implements the runtime slice used by this adapter.

@@ -247,7 +247,6 @@ async function repositoryAccess(
   };
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A caught value can be anything.
 function failureLabel(cause: unknown): string {
   if (isTimeoutFailure(cause)) return "timeout";
 
@@ -263,7 +262,6 @@ export async function executeGitHubCredentialRequest(
      * so a credential that only the container's disk holds is never reported as installed.
      */
     installOperations: WorkspaceOperations;
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public credential request is parsed at this boundary.
     request: unknown;
     /** Names the owner request this call serves, for the log only. It changes no behavior. */
     requestId?: RequestId | undefined;

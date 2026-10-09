@@ -39,7 +39,6 @@ const FAKE_TOKEN = fakeToken("ghp_cfstumbleFAKEtokenFAKEtoken0123456789");
 class ThrowingWorkspaceHost implements CredentialWorkspaceHost {
   cause: Error = new Error("rpc session was shut down");
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host RPC boundary this test drives.
   credential(_request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
     return Promise.reject(this.cause);
   }

@@ -23,7 +23,6 @@ export function capturedEvents(): () => LogFields[] {
     );
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A console argument can be anything; this guard is what proves it is an event.
 function isLogFields(value: unknown): value is LogFields {
   return typeof value === "object" && value !== null;
 }
@@ -33,7 +32,6 @@ export function named(events: readonly LogFields[], event: string): LogFields[] 
   return events.filter((entry) => entry.event === event);
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A console argument can be anything; this guard is what proves it is text.
 function isText(value: unknown): value is string {
   return typeof value === "string";
 }

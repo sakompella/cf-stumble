@@ -42,7 +42,6 @@ function renderText(value: RenderText): string {
 }
 
 // The stubs mirror the renderer's free helper names, so renaming a helper should fail this test.
-// oxlint-disable-next-line eslint/max-lines-per-function
 function turnRenderer(visible: string[]): TurnRenderer {
   const node = (textContent = ""): StubNode => ({
     textContent,
@@ -65,7 +64,7 @@ function turnRenderer(visible: string[]): TurnRenderer {
   const diffMessage = () => visible.push("diff");
   const diffUnavailableMessage = () => visible.push("diff-unavailable");
 
-  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: evaluate only the delivered turn renderer with the stubs above.
+  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion -- SAFETY: evaluate only the delivered turn renderer with the stubs above.
   const makeRenderer = new Function(
     "page",
     "document",
@@ -286,7 +285,7 @@ function controlLabelFrom(script: string): (raw: string) => number | null {
     throw new Error("the owner page carries no controlLabel function");
   }
 
-  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: the constructed function is the extracted source above, whose only added statement returns `controlLabel`.
+  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion -- SAFETY: the constructed function is the extracted source above, whose only added statement returns `controlLabel`.
   const made = new Function(`${found[0]}\nreturn controlLabel;`) as () => (
     raw: string,
   ) => number | null;

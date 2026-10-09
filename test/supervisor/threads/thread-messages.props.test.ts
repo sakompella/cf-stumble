@@ -1,4 +1,4 @@
-// oxlint-disable max-lines, max-lines-per-function, anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, typescript/no-unnecessary-type-parameters, anti-slop/require-readable-spacing, typescript/no-unsafe-assignment -- This property enumerates Pi's generated message variants and its JSON boundary.
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, typescript/no-unnecessary-type-parameters, anti-slop/require-readable-spacing, typescript/no-unsafe-assignment -- This property enumerates Pi's generated message variants and its JSON boundary.
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";

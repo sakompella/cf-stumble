@@ -265,13 +265,10 @@ async function pumpBackendEvents(
   };
 
   try {
-    // oxlint-disable-next-line eslint/no-unmodified-loop-condition -- `state.settled` is set inside `settle`, called from this same loop and from the timeout/kill triggers below.
     while (!state.settled) {
-      // oxlint-disable-next-line no-await-in-loop -- The stream's pull handler resumes each output read.
       await waitForDemand(state, controller);
 
       if (state.settled) return;
-      // oxlint-disable-next-line no-await-in-loop -- Each read must observe `state.settled` before the next.
       const read = await handle.reader.read();
 
       if (state.settled) return;

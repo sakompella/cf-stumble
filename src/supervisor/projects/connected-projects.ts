@@ -53,9 +53,7 @@ type ConnectProjectResult =
 
 /** What a caller asks for. Both fields are client text; neither becomes a path or a command. */
 interface ConnectProjectInput {
-  // oxlint-disable-next-line anti-slop/no-unknown-type-aliases -- Boundary: this is a client-supplied repository URL with no proven shape.
   readonly repositoryUrl: unknown;
-  // oxlint-disable-next-line anti-slop/no-unknown-type-aliases -- Boundary: this is a client-supplied display name with no proven shape.
   readonly displayName?: unknown;
 }
 

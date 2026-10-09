@@ -11,7 +11,6 @@ import {
 export const OPERATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9]+$/u;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the RPC write mode is untrusted; this is its type guard.
 export function isWriteMode(value: unknown): value is WriteMode {
   return value === "overwrite" || value === "append" || value === "create-exclusive";
 }

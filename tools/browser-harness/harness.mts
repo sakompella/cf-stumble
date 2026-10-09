@@ -1,4 +1,3 @@
-// oxlint-disable import/max-dependencies -- One facade so a surface file imports one module. The dependency count is the point: it is here instead of in every case file.
 export { OWNER_PAGE_CLASSES, OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 
 export * from "./case.mjs";

@@ -41,6 +41,6 @@ export async function collectEvents(
   const text = await new Response(stream).text();
   const lines = text.split("\n").filter((line) => line !== "");
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: every line came from the model route, which encodes exactly one ModelStreamEvent per line.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: every line came from the model route, which encodes exactly one ModelStreamEvent per line.
   return lines.map((line) => JSON.parse(line) as ModelStreamEvent);
 }

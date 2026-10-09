@@ -152,7 +152,6 @@ export async function executeHarnessBuildRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
     configuration: HarnessBuildConfiguration;
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public build request is parsed at this boundary.
     request: unknown;
   }>,
 ): Promise<WorkspaceResult> {
@@ -185,7 +184,6 @@ export async function executeHarnessBuildRequest(
 export async function executeProjectProvisionRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public provision request is parsed at this boundary.
     request: unknown;
   }>,
 ): Promise<WorkspaceResult> {
@@ -228,7 +226,6 @@ export async function executeProjectProvisionRequest(
 export async function executeProjectRemovalRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The public removal request is parsed at this boundary.
     request: unknown;
   }>,
 ): Promise<WorkspaceResult> {

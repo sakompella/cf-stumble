@@ -68,7 +68,6 @@ export class NdjsonFrameReader {
       if (this.#ended) return this.#frameBytes === 0 ? { kind: "eof" } : { kind: "malformed" };
 
       try {
-        // oxlint-disable-next-line no-await-in-loop
         const next = await this.#reader.read();
 
         if (next.done) this.#ended = true;

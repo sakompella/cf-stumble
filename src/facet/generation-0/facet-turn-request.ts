@@ -31,7 +31,7 @@ function parseTurnMessages(value: unknown): readonly AgentMessage[] | undefined 
     return [];
   }
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the value is a list, which is everything this side may claim about a conversation Pi's `Agent` will interpret.
+  // SAFETY: the value is a list, which is everything this side may claim about a conversation Pi's `Agent` will interpret.
   return Array.isArray(value) ? (value as readonly AgentMessage[]) : undefined;
 }
 

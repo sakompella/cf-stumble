@@ -63,7 +63,6 @@ async function probeRawExecFrames(
   let allFramesAreBytes = true;
 
   for (;;) {
-    // oxlint-disable-next-line no-await-in-loop -- Each physical read must be observed before the next is requested.
     const step = await reader.read();
 
     if (step.done) break;

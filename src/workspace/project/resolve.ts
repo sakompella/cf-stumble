@@ -190,7 +190,6 @@ export function resolveAddressedPath(
   let linkFollows = 0;
 
   while (queue.length > 0) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the loop guard proves the queue is non-empty.
     const segment = queue.shift()!;
 
     if (segment === ".") continue;

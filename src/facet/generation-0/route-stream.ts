@@ -55,7 +55,7 @@ function routableTools(tools: Context["tools"]): readonly PiTool[] {
   return (tools ?? []).map((tool) => ({
     name: tool.name,
     description: tool.description,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: a Pi tool's typebox schema is a JSON Schema object, which is what the route's tool definition carries.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: a Pi tool's typebox schema is a JSON Schema object, which is what the route's tool definition carries.
     parameters: tool.parameters as PiToolParameters,
   }));
 }

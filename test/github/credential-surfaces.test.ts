@@ -165,8 +165,6 @@ test("an RPC failure during authorization logs a redacted cause and never the to
   expect(logged, "the device code must never reach the log").not.toContain("device-code-secret");
 });
 
-// One test drives the whole flow, because the point is what the flow as a whole leaves behind.
-// oxlint-disable-next-line eslint/max-lines-per-function
 test("a whole authorization leaves the token in the workspace and nowhere else", async () => {
   const workspace = new FakeTenantWorkspace();
   const name = "credential-surfaces";

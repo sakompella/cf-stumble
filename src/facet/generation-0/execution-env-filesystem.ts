@@ -277,7 +277,6 @@ export async function createTempFileVia(
     const name = `${prefix.value}${crypto.randomUUID().replaceAll("-", "")}${suffix.value}`;
     const addressed = `${TEMP_DIR_ADDRESSED}/${name}`;
 
-    // oxlint-disable-next-line no-await-in-loop -- Each attempt must observe the previous failure before retrying with a new random name.
     const reply = await callProjectRpc(
       "writeFile",
       undefined,

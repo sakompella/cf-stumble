@@ -71,7 +71,6 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 2_000): Promise<v
       throw new Error("timed out waiting for the loaded isolate's exec request");
     }
 
-    // oxlint-disable-next-line no-await-in-loop -- Each poll must observe the previous one's result before the next.
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 5);
     });

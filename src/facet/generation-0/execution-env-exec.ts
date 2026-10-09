@@ -245,7 +245,6 @@ async function consumeExecStream(
 
   try {
     for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- Each event must be handled before the next is read.
       const outcome = await readNextEvent(target, operationId, frames, decoders, state, options);
 
       if (outcome.done) return outcome.result;

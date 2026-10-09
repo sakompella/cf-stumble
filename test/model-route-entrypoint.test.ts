@@ -46,7 +46,7 @@ function fakeAiBinding(answer: () => Promise<ReadableStream<Uint8Array>>): FakeB
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/require-safety-comment-for-type-assertion -- SAFETY: `runStream` reaches the binding only through `AI.run`, which this object implements with the payload type that call passes; no other member of `Ai` is reachable from it.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `runStream` reaches the binding only through `AI.run`, which this object implements with the payload type that call passes; no other member of `Ai` is reachable from it.
   return { ai: binding as Ai, calls };
 }
 
