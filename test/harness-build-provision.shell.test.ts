@@ -1,19 +1,12 @@
 import { spawn } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import { holdProvisionLock } from "../src/project-provision.js";
 import { shellQuote } from "../src/shell-quote.js";
+import { writeExecutable } from "./workspace/planned-shell-fixture.js";
 
 /**
  * These tests run the provision lock's real shell text in several real shell processes at once.
@@ -97,17 +90,20 @@ let lock = "";
 
 let eventsPath = "";
 
-let standIns = "";
+/** Written once, because macOS checks each new executable on its first run. */
+const standIns = mkdtempSync(join(tmpdir(), "provision-lock-bin-"));
+
+writeExecutable(join(standIns, "flock"), flockStandIn);
+
+afterAll(() => {
+  rmSync(standIns, { recursive: true, force: true });
+});
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "provision-lock-"));
   lock = join(root, "harness-provision.lock");
   eventsPath = join(root, "events");
-  standIns = join(root, "bin");
 
-  mkdirSync(standIns);
-  writeFileSync(join(standIns, "flock"), flockStandIn);
-  chmodSync(join(standIns, "flock"), 0o755);
   writeFileSync(eventsPath, "");
 });
 

@@ -1,7 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import {
@@ -106,14 +106,26 @@ exec "$STUB_JQ" -r "$4" "$STUB_DIR/$answer.json"
 /** A recognizable fake token the stub `gh` prints on failure, which no output may carry. */
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
+/** Shared stubs, because macOS checks each new executable on its first run (about 0.15 s). */
+const stubs = join(scratch, "bin");
+
+const stubsWithoutGh = join(scratch, "bin-without-gh");
+
+for (const bin of [stubs, stubsWithoutGh]) {
+  mkdirSync(bin);
+  writeExecutable(join(bin, "git"), STUB_GIT);
+  writeExecutable(join(bin, "flock"), FLOCK_STAND_IN);
+}
+
+writeExecutable(join(stubs, "gh"), STUB_GH);
+
 let scenarioCount = 0;
 
-/** A fresh directory holding the stubs and the canned GitHub answers for one run. */
-function prepare(scenario: Scenario): string {
+/** A fresh directory holding the canned GitHub answers for one run, and the stubs it runs with. */
+function prepare(scenario: Scenario) {
   scenarioCount += 1;
   const directory = join(scratch, String(scenarioCount));
-  const bin = join(directory, "bin");
-  execFileSync("mkdir", ["-p", bin, join(directory, "tmp")]);
+  execFileSync("mkdir", ["-p", join(directory, "tmp")]);
 
   writeFileSync(join(directory, "repository.json"), scenario.repository.body);
   writeFileSync(join(directory, "repository.exit"), String(scenario.repository.exitCode));
@@ -127,21 +139,16 @@ function prepare(scenario: Scenario): string {
     if (answer.raw === true) writeFileSync(join(directory, `${name}.raw`), answer.body);
   }
 
-  if (scenario.gh !== false) writeExecutable(join(bin, "gh"), STUB_GH);
-
-  writeExecutable(join(bin, "git"), STUB_GIT);
-  writeExecutable(join(bin, "flock"), FLOCK_STAND_IN);
-
   if (scenario.existingClone === true) writeFileSync(join(directory, "existing-clone"), "");
 
-  return directory;
+  return { directory, bin: scenario.gh === false ? stubsWithoutGh : stubs };
 }
 
-function run(directory: string, source: string) {
+function run({ directory, bin }: ReturnType<typeof prepare>, source: string) {
   return spawnSync("/bin/sh", ["-c", source], {
     encoding: "utf8",
     env: {
-      PATH: `${join(directory, "bin")}:/usr/bin:/bin`,
+      PATH: `${bin}:/usr/bin:/bin`,
       STUB_DIR: directory,
       STUB_JQ: jq,
       STUB_SECRET: FAKE_TOKEN,
@@ -151,10 +158,8 @@ function run(directory: string, source: string) {
 }
 
 function verdict(scenario: Scenario): string {
-  const directory = prepare(scenario);
-
   const ran = run(
-    directory,
+    prepare(scenario),
     [repositorySizeVerdictSource(project.repositoryUrl), REPOSITORY_SIZE_VERDICT_FUNCTION].join(
       "\n",
     ),
@@ -170,17 +175,17 @@ function verdict(scenario: Scenario): string {
 
 /** The real clone step, with `/workspace` and `/tmp` moved under this run's scratch directory. */
 function clone(scenario: Scenario) {
-  const directory = prepare(scenario);
+  const prepared = prepare(scenario);
 
   const step = projectProvisionStep(planProjectProvision(project), "clone");
 
   if (step.name !== "clone") throw new Error("the clone step must be the command step");
 
-  const ran = run(directory, underScratch(step.source, directory));
+  const ran = run(prepared, underScratch(step.source, prepared.directory));
 
   const log = (name: string) =>
-    existsSync(join(directory, name))
-      ? execFileSync("cat", [join(directory, name)], { encoding: "utf8" })
+    existsSync(join(prepared.directory, name))
+      ? execFileSync("cat", [join(prepared.directory, name)], { encoding: "utf8" })
       : "";
 
   return { status: ran.status, stderr: ran.stderr, gitLog: log("git.log"), ghLog: log("gh.log") };
