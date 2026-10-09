@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
+import { fixtureMainHarnessCommit } from "../facet/fixture.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activateFixtureGeneration,

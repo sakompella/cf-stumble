@@ -3,7 +3,7 @@ import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { WorkspaceHostModuleMapBuilder } from "../../../src/supervisor/artifacts/index.js";
 import { HARNESS_BUILD_STEP_NAMES, type HarnessBuildRequest } from "../../../src/harness-build.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
-import { fixtureMainHarnessArtifact } from "../../../src/facet/fixture.js";
+import { fixtureMainHarnessArtifact } from "../../facet/fixture.js";
 
 const commit = testHarnessCommit("30000000000000000000000000000000000000ab");
 

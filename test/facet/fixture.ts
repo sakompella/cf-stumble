@@ -1,13 +1,9 @@
-import type { MainHarnessArtifactInput } from "./artifact.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 
 /**
  * A hand-written main-facet module map for tests, and the invented harness commit that labels it.
- * Production reaches no code here: the deploy procedure submits the deployed harness commit and
- * the Supervisor builds it, so nothing under `src/` may import this file.
- * `test/facet/fixture-reach.test.ts` checks that.
- *
- * Tests import it directly rather than through `./index.js`, which is what keeps it out of the
- * production surface. It stays beside `artifact.ts` because it is one input to that parser.
+ * Production never uses it: the deploy procedure submits the deployed harness commit and the
+ * Supervisor builds it.
  */
 export const fixtureMainHarnessCommit = "f53a0e1c1bdbe213ab700a84b1db23615cc24b02";
 
@@ -25,7 +21,6 @@ export class MainFacet extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.bindingNames = Object.keys(env).sort();
-    this.model = env.MODEL;
   }
 
   async fetch(request) {
@@ -40,10 +35,6 @@ export class MainFacet extends DurableObject {
 
     if (path === "/facet/bindings") {
       return Response.json(this.bindingNames);
-    }
-
-    if (path === "/facet/model") {
-      return Response.json(await this.model.run({ prompt: await request.text() }));
     }
 
     if (path === "/facet/outbound") {

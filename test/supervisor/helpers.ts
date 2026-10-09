@@ -5,7 +5,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
 import { sampleCatalog } from "../project-fixtures.js";
-import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../../src/facet/fixture.js";
+import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../facet/fixture.js";
 import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
