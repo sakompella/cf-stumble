@@ -29,11 +29,12 @@ export type HarnessModuleMapBuilder = Readonly<{
 
 /**
  * The only operations a build needs from its workspace. It stays narrower than the operations the
- * project capability offers: a build runs commands and reads its own output, nothing else.
+ * project capability offers: a build runs its planned steps and reads its own module map, nothing
+ * else.
  */
 export type BuildWorkspace = Readonly<{
-  runCommand(source: string, cwd: string): Promise<CommandOutput>;
-  readFile(path: string): Promise<string>;
+  runStep(step: HarnessBuildStep): Promise<CommandOutput>;
+  readModuleMap(): Promise<string>;
 }>;
 
 /** Builds a labeled harness commit in the scratch subtree kept apart from every repository. */
@@ -77,7 +78,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     let output: CommandOutput;
 
     try {
-      output = await this.workspace.runCommand(step.source, step.cwd);
+      output = await this.workspace.runStep(step);
     } catch (error) {
       // `build-workspace-unavailable` says nothing about which of the workspace, the container or
       // the connection to them gave way, and each of those failed at least once during this
@@ -114,7 +115,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     let encoded: string;
 
     try {
-      encoded = await this.workspace.readFile(path);
+      encoded = await this.workspace.readModuleMap();
     } catch (error) {
       logRedactedCause(`harness-build.output ${path}: build-output-missing`, error);
 

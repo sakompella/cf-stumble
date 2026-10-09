@@ -1,11 +1,11 @@
 import type { HarnessCommit } from "../../harness-commit.js";
 import { classifyWorkspaceAnswer, timedWorkspaceRpc } from "../../diagnostics.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
-import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../harness-build.js";
+import { HARNESS_BUILD_CONFIGURATION } from "../../harness-build.js";
 import type {
   HarnessBuildConfiguration,
-  HarnessBuildPlan,
   HarnessBuildRequest,
+  HarnessBuildStep,
 } from "../../harness-build.js";
 import type { CommandOutput, WorkspaceResult } from "../../workspace/index.js";
 import { WorkspaceModuleMapBuilder } from "./builder.js";
@@ -25,14 +25,10 @@ export type BuildWorkspaceNamespace = Readonly<{
   getByName(name: string): BuildWorkspaceHost;
 }>;
 
-function unreachable(reason: string): Error {
-  return new Error(reason);
-}
-
 /**
- * The `BuildWorkspace` the builder runs against, bound to one harness commit. It plans that
- * commit itself, so it can name the planned step the Workspace Host should run instead of sending
- * command text, and it refuses any command or path that is not part of that commit's build.
+ * The `BuildWorkspace` the builder runs against, bound to one harness commit. It sends the
+ * Workspace Host a step's name, never its command text: the Host plans the same commit itself and
+ * runs only the step of that name.
  */
 export class CommitBuildWorkspace implements BuildWorkspace {
   /**
@@ -46,27 +42,13 @@ export class CommitBuildWorkspace implements BuildWorkspace {
    */
   private readonly host: () => BuildWorkspaceHost;
   private readonly harnessCommit: HarnessCommit;
-  private readonly plan: HarnessBuildPlan;
 
-  constructor(
-    host: () => BuildWorkspaceHost,
-    configuration: HarnessBuildConfiguration,
-    harnessCommit: HarnessCommit,
-  ) {
+  constructor(host: () => BuildWorkspaceHost, harnessCommit: HarnessCommit) {
     this.host = host;
     this.harnessCommit = harnessCommit;
-    this.plan = planHarnessBuild(configuration, harnessCommit);
   }
 
-  async runCommand(source: string, cwd: string): Promise<CommandOutput> {
-    const step = this.plan.steps.find(
-      (planned) => planned.source === source && planned.cwd === cwd,
-    );
-
-    if (step === undefined) {
-      throw unreachable("a build workspace runs only the planned steps of its own commit");
-    }
-
+  async runStep(step: HarnessBuildStep): Promise<CommandOutput> {
     const result = await timedWorkspaceRpc(
       { method: "build", step: step.name },
       () =>
@@ -80,11 +62,11 @@ export class CommitBuildWorkspace implements BuildWorkspace {
     );
 
     if (!result.ok) {
-      throw unreachable(`the build workspace refused the ${step.name} step: ${result.error.code}`);
+      throw new Error(`the build workspace refused the ${step.name} step: ${result.error.code}`);
     }
 
     if (result.result.kind !== "command") {
-      throw unreachable(`the ${step.name} step returned ${result.result.kind}, not a command`);
+      throw new Error(`the ${step.name} step returned ${result.result.kind}, not a command`);
     }
 
     return {
@@ -94,11 +76,7 @@ export class CommitBuildWorkspace implements BuildWorkspace {
     };
   }
 
-  async readFile(path: string): Promise<string> {
-    if (path !== this.plan.moduleMapPath) {
-      throw unreachable("a build workspace reads only its own module map");
-    }
-
+  async readModuleMap(): Promise<string> {
     const result = await timedWorkspaceRpc(
       { method: "build", step: "output" },
       () =>
@@ -111,11 +89,11 @@ export class CommitBuildWorkspace implements BuildWorkspace {
     );
 
     if (!result.ok) {
-      throw unreachable(`the build output could not be read: ${result.error.code}`);
+      throw new Error(`the build output could not be read: ${result.error.code}`);
     }
 
     if (result.result.kind !== "command") {
-      throw unreachable(`the build output returned ${result.result.kind}, not a command`);
+      throw new Error(`the build output returned ${result.result.kind}, not a command`);
     }
 
     if (result.result.exitCode !== 0) {
@@ -182,7 +160,6 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
     // The name is the tenant's own, never request data.
     const workspace = new CommitBuildWorkspace(
       () => this.namespace.getByName(this.workspaceName),
-      this.configuration,
       harnessCommit,
     );
 

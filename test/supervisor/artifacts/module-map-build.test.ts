@@ -12,6 +12,7 @@ import type {
   BuildWorkspace,
   HarnessBuildConfiguration,
 } from "../../../src/supervisor/artifacts/index.js";
+import type { HarnessBuildStep } from "../../../src/harness-build.js";
 import type { CommandOutput } from "../../../src/workspace/index.js";
 import { PROJECTS_DIRECTORY, WORKSPACE_ROOT } from "../../../src/workspace-layout.js";
 
@@ -45,11 +46,11 @@ function succeeded(): CommandOutput {
 }
 
 /**
- * Stands in for the Computer build workspace. It records the commands it was asked to run and
- * returns whatever the test placed at the build's output path.
+ * Stands in for the Computer build workspace. It records the steps it was asked to run and
+ * returns whatever the test placed as the build's module map.
  */
 class FakeBuildWorkspace implements BuildWorkspace {
-  readonly commands: { readonly source: string; readonly cwd: string }[] = [];
+  readonly steps: HarnessBuildStep[] = [];
   private readonly outputs: readonly (string | undefined)[];
   private readonly failing: string | undefined;
   private readonly unavailable: boolean;
@@ -67,26 +68,26 @@ class FakeBuildWorkspace implements BuildWorkspace {
     this.unavailable = options.unavailable ?? false;
   }
 
-  runCommand(source: string, cwd: string): Promise<CommandOutput> {
-    this.commands.push({ source, cwd });
+  runStep(step: HarnessBuildStep): Promise<CommandOutput> {
+    this.steps.push(step);
 
     if (this.unavailable) {
       return Promise.reject(new Error("the build workspace is gone"));
     }
 
     return Promise.resolve(
-      this.failing !== undefined && source.includes(this.failing)
+      this.failing !== undefined && step.source.includes(this.failing)
         ? { stdout: "", stderr: "build failed", exitCode: 3 }
         : succeeded(),
     );
   }
 
-  readFile(path: string): Promise<string> {
+  readModuleMap(): Promise<string> {
     const output = this.outputs[this.reads];
     this.reads += 1;
 
     if (output === undefined) {
-      return Promise.reject(new Error(`no build output at ${path}`));
+      return Promise.reject(new Error("no build output"));
     }
 
     return Promise.resolve(output);
@@ -168,9 +169,9 @@ test("an unavailable build workspace logs its cause with every credential redact
   const jwt = syntheticJwt();
 
   const workspace: BuildWorkspace = {
-    runCommand: () =>
+    runStep: () =>
       Promise.reject(new Error(`container refused ${jwt.token} for x:${FAKE_TOKEN}@github.com`)),
-    readFile: () => Promise.reject(new Error("a failed step reads no output")),
+    readModuleMap: () => Promise.reject(new Error("a failed step reads no output")),
   };
 
   const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
@@ -192,16 +193,16 @@ test("missing build output logs its cause with every credential redacted", async
   const jwt = syntheticJwt();
 
   const workspace: BuildWorkspace = {
-    runCommand: () => Promise.resolve(succeeded()),
-    readFile: (path) =>
-      Promise.reject(new Error(`no file at ${path}; request carried ${jwt.token} ${FAKE_TOKEN}`)),
+    runStep: () => Promise.resolve(succeeded()),
+    readModuleMap: () =>
+      Promise.reject(new Error(`no file; request carried ${jwt.token} ${FAKE_TOKEN}`)),
   };
 
   const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
 
   expect(built.isErr() ? built.error.code : "ok").toBe("build-output-missing");
-  expect(textLines(errors).join("\n"), "the cause still names the path it read").toContain(
-    `no file at /harness-builds/${commit}/build/module-map.json`,
+  expect(textLines(errors).join("\n"), "the log still names the path the build reads").toContain(
+    `harness-build.output /harness-builds/${commit}/build/module-map.json: build-output-missing: no file`,
   );
 
   const logged = everythingLogged();

@@ -2,7 +2,6 @@ import { expect, test } from "vitest";
 import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
-  CommitBuildWorkspace,
   encodeModuleMap,
   HARNESS_BUILD_CONFIGURATION,
   WorkspaceHostModuleMapBuilder,
@@ -217,33 +216,4 @@ test("a refused build workspace stays a typed failure", async () => {
   }
 
   expect(built.error).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
-});
-
-test("refuses a command the build plan does not contain", async () => {
-  const host = new FakeBuildHost();
-  const workspace = new CommitBuildWorkspace(() => host, HARNESS_BUILD_CONFIGURATION, commit);
-
-  await expect(workspace.runCommand("whoami", "/")).rejects.toThrow(/planned steps/u);
-  await expect(workspace.runCommand(plan.steps[0].source, "/")).rejects.toThrow(/planned steps/u);
-  await expect(
-    workspace.runCommand("./test.sh", HARNESS_BUILD_CONFIGURATION.buildRoot),
-  ).rejects.toThrow(/planned steps/u);
-  expect(host.requests, "a refused command never reaches the workspace host").toEqual([]);
-});
-
-test("refuses a read that escapes the commit's build directory", async () => {
-  const host = new FakeBuildHost();
-  const workspace = new CommitBuildWorkspace(() => host, HARNESS_BUILD_CONFIGURATION, commit);
-
-  for (const path of [
-    "/workspace/readme.md",
-    `${plan.directory}/../../project/readme.md`,
-    `${HARNESS_BUILD_CONFIGURATION.buildRoot}/other/build/module-map.json`,
-    plan.moduleMapPath.replace("module-map.json", "secret.json"),
-  ]) {
-    await expect(workspace.readFile(path)).rejects.toThrow(/its own module map/u);
-  }
-
-  expect(host.requests, "a refused read never reaches the workspace host").toEqual([]);
-  await expect(workspace.readFile(plan.moduleMapPath)).resolves.toBe(moduleMapFile());
 });
