@@ -8,7 +8,7 @@ import {
   toAddressedPath,
 } from "./execution-env-paths.js";
 import { isNull, isProjectLstatValue, isUint8Array, parseEnvelope } from "./execution-env-rpc.js";
-import type { ProjectLstatValue } from "./execution-env-rpc.js";
+import type { ParsedEnvelope, ProjectLstatValue } from "./execution-env-rpc.js";
 
 /**
  * The read/write/stat file operations `createFacetExecutionEnv` needs from the project RPC target.
@@ -62,6 +62,53 @@ function translatePath(
   };
 }
 
+type ProjectReply<T> = Exclude<ParsedEnvelope<T>, { readonly kind: "malformed" }>;
+
+/**
+ * Calls one project RPC and parses its reply. A rejected call or a malformed reply becomes an
+ * `unknown` error that names the RPC; a failure reply is left for the caller to read.
+ */
+async function callProjectRpc<T>(
+  rpc: keyof FsTarget,
+  path: string | undefined,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Boundary: the reply is unproven until `parseEnvelope` narrows it.
+  call: () => Promise<unknown>,
+  isValue: (value: unknown) => value is T,
+): Promise<Result<ProjectReply<T>, FileError>> {
+  let raw: unknown;
+
+  try {
+    raw = await call();
+  } catch {
+    return { ok: false, error: new FileError("unknown", `${rpc} RPC rejected`, path) };
+  }
+
+  const envelope = parseEnvelope(raw, isValue);
+
+  if (envelope.kind === "malformed")
+    return { ok: false, error: new FileError("unknown", `malformed ${rpc} response`, path) };
+
+  return { ok: true, value: envelope };
+}
+
+/** {@link callProjectRpc}, with a failure reply mapped to Pi's own `FileError`. */
+async function callProject<T>(
+  rpc: keyof FsTarget,
+  path: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Boundary: the reply is unproven until `parseEnvelope` narrows it.
+  call: () => Promise<unknown>,
+  isValue: (value: unknown) => value is T,
+): Promise<Result<T, FileError>> {
+  const reply = await callProjectRpc(rpc, path, call, isValue);
+
+  if (!reply.ok) return reply;
+
+  if (reply.value.kind === "failure")
+    return { ok: false, error: mapProjectError(reply.value.error.code, path) };
+
+  return { ok: true, value: reply.value.value };
+}
+
 export function absolutePathVia(
   cwd: string,
   path: string,
@@ -72,34 +119,23 @@ export function absolutePathVia(
   return resolveAbsolute(cwd, path);
 }
 
-export async function readBinaryFileVia(
+export function readBinaryFileVia(
   cwd: string,
   target: FsTarget,
   path: string,
   abortSignal: AbortSignal | undefined,
 ): Promise<Result<Uint8Array, FileError>> {
-  if (isAborted(abortSignal)) return abortedError(path);
+  if (isAborted(abortSignal)) return Promise.resolve(abortedError(path));
   const translated = translatePath(cwd, path);
 
-  if (!translated.ok) return translated;
+  if (!translated.ok) return Promise.resolve(translated);
 
-  let raw: unknown;
-
-  try {
-    raw = await target.readFile(translated.value.addressed);
-  } catch {
-    return { ok: false, error: new FileError("unknown", "readFile RPC rejected", path) };
-  }
-
-  const envelope = parseEnvelope(raw, isUint8Array);
-
-  if (envelope.kind === "malformed")
-    return { ok: false, error: new FileError("unknown", "malformed readFile response", path) };
-
-  if (envelope.kind === "failure")
-    return { ok: false, error: mapProjectError(envelope.error.code, path) };
-
-  return { ok: true, value: envelope.value };
+  return callProject(
+    "readFile",
+    path,
+    () => target.readFile(translated.value.addressed),
+    isUint8Array,
+  );
 }
 
 export async function readTextFileVia(
@@ -130,21 +166,14 @@ export async function writeVia(
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- `content` is Pi's own union parameter, not an untrusted boundary value; this distinguishes its two legal shapes.
   const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
 
-  let raw: unknown;
+  const written = await callProject(
+    "writeFile",
+    path,
+    () => target.writeFile(translated.value.addressed, bytes, mode),
+    isNull,
+  );
 
-  try {
-    raw = await target.writeFile(translated.value.addressed, bytes, mode);
-  } catch {
-    return { ok: false, error: new FileError("unknown", "writeFile RPC rejected", path) };
-  }
-
-  const envelope = parseEnvelope(raw, isNull);
-
-  if (envelope.kind === "malformed")
-    return { ok: false, error: new FileError("unknown", "malformed writeFile response", path) };
-
-  if (envelope.kind === "failure")
-    return { ok: false, error: mapProjectError(envelope.error.code, path) };
+  if (!written.ok) return written;
 
   return { ok: true, value: undefined };
 }
@@ -162,23 +191,16 @@ async function lstatVia(
 
   if (!translated.ok) return translated;
 
-  let raw: unknown;
+  const stat = await callProject(
+    "lstat",
+    path,
+    () => target.lstat(translated.value.addressed),
+    isProjectLstatValue,
+  );
 
-  try {
-    raw = await target.lstat(translated.value.addressed);
-  } catch {
-    return { ok: false, error: new FileError("unknown", "lstat RPC rejected", path) };
-  }
+  if (!stat.ok) return stat;
 
-  const envelope = parseEnvelope(raw, isProjectLstatValue);
-
-  if (envelope.kind === "malformed")
-    return { ok: false, error: new FileError("unknown", "malformed lstat response", path) };
-
-  if (envelope.kind === "failure")
-    return { ok: false, error: mapProjectError(envelope.error.code, path) };
-
-  return { ok: true, value: { absolute: translated.value.absolute, value: envelope.value } };
+  return { ok: true, value: { absolute: translated.value.absolute, value: stat.value } };
 }
 
 export async function fileInfoVia(
@@ -255,24 +277,20 @@ export async function createTempFileVia(
     const name = `${prefix.value}${crypto.randomUUID().replaceAll("-", "")}${suffix.value}`;
     const addressed = `${TEMP_DIR_ADDRESSED}/${name}`;
 
-    let raw: unknown;
+    // oxlint-disable-next-line no-await-in-loop -- Each attempt must observe the previous failure before retrying with a new random name.
+    const reply = await callProjectRpc(
+      "writeFile",
+      undefined,
+      () => target.writeFile(addressed, new Uint8Array(0), "create-exclusive"),
+      isNull,
+    );
 
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- Each attempt must observe the previous failure before retrying with a new random name.
-      raw = await target.writeFile(addressed, new Uint8Array(0), "create-exclusive");
-    } catch {
-      return { ok: false, error: new FileError("unknown", "writeFile RPC rejected") };
-    }
+    if (!reply.ok) return reply;
 
-    const envelope = parseEnvelope(raw, isNull);
+    if (reply.value.kind === "ok") return { ok: true, value: fromAddressedPath(addressed) };
 
-    if (envelope.kind === "malformed")
-      return { ok: false, error: new FileError("unknown", "malformed writeFile response") };
-
-    if (envelope.kind === "ok") return { ok: true, value: fromAddressedPath(addressed) };
-
-    if (envelope.error.code !== "already-exists")
-      return { ok: false, error: mapProjectError(envelope.error.code) };
+    if (reply.value.error.code !== "already-exists")
+      return { ok: false, error: mapProjectError(reply.value.error.code) };
   }
 
   return {
