@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { ExecutionEnv } from "@cf-stumble/pi";
 import { execViaProjectTarget } from "../../../src/facet/generation-0/execution-env-exec.js";
 import { createFacetExecutionEnv } from "../../../src/facet/generation-0/execution-env.js";
 import {
@@ -193,3 +194,64 @@ test("a malformed lstat envelope from the filesystem side resolves a local FileE
     error: { code: "unknown" },
   });
 });
+
+const rejectingEnv = createFacetExecutionEnv({
+  cwd: "/workspace",
+  projectTarget: asProjectTarget({
+    readFile: () => Promise.reject(new Error("rpc down")),
+    writeFile: () => Promise.reject(new Error("rpc down")),
+    lstat: () => Promise.reject(new Error("rpc down")),
+  }),
+});
+
+const malformedEnv = createFacetExecutionEnv({
+  cwd: "/workspace",
+  projectTarget: asProjectTarget({
+    readFile: () => Promise.resolve({ nonsense: true }),
+    writeFile: () => Promise.resolve({ nonsense: true }),
+    lstat: () => Promise.resolve({ nonsense: true }),
+  }),
+});
+
+test.each([
+  {
+    name: "readBinaryFile",
+    path: "a.txt",
+    call: (env: ExecutionEnv) => env.readBinaryFile("a.txt"),
+    rejected: "readFile RPC rejected",
+    malformed: "malformed readFile response",
+  },
+  {
+    name: "writeFile",
+    path: "a.txt",
+    call: (env: ExecutionEnv) => env.writeFile("a.txt", "x"),
+    rejected: "writeFile RPC rejected",
+    malformed: "malformed writeFile response",
+  },
+  {
+    name: "fileInfo",
+    path: "a.txt",
+    call: (env: ExecutionEnv) => env.fileInfo("a.txt"),
+    rejected: "lstat RPC rejected",
+    malformed: "malformed lstat response",
+  },
+  {
+    name: "createTempFile",
+    path: undefined,
+    call: (env: ExecutionEnv) => env.createTempFile(),
+    rejected: "writeFile RPC rejected",
+    malformed: "malformed writeFile response",
+  },
+])(
+  "$name names its RPC when the call rejects or the reply is malformed",
+  async ({ path, call, rejected, malformed }) => {
+    await expect(call(rejectingEnv)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "unknown", message: rejected, path },
+    });
+    await expect(call(malformedEnv)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "unknown", message: malformed, path },
+    });
+  },
+);
