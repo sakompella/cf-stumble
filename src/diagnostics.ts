@@ -59,11 +59,16 @@ export function redactLogText(text: string, knownToken?: string): string {
   return redactCredentials(text, knownToken).replaceAll(JWT_PATTERN, REDACTED);
 }
 
+/** Redact text with every log pattern, then cut it to the length a logged cause may have. */
+export function redactedExcerpt(text: string, knownToken?: string): string {
+  return redactLogText(text, knownToken).slice(0, CAUSE_TEXT_LIMIT);
+}
+
 function causeText(cause: unknown, knownToken: string | undefined): string {
   try {
     const message = cause instanceof Error ? cause.message : String(cause);
 
-    return redactLogText(message, knownToken).slice(0, CAUSE_TEXT_LIMIT);
+    return redactedExcerpt(message, knownToken);
   } catch {
     return UNPRINTABLE_CAUSE;
   }

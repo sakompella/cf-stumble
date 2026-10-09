@@ -245,6 +245,25 @@ test("redacts an opaque token a tool echoed back, even though it matches no know
   expect(failed.error.detail).toContain(REDACTED);
 });
 
+const ACCESS_JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl";
+
+test("redacts an Access JWT a tool printed, as the log does", async () => {
+  const operations = new FakeCredentialOperations();
+  operations.exitCode = 1;
+  operations.stderr = `gh: request carried ${ACCESS_JWT}`;
+
+  const failed = await credential(operations, {
+    kind: "github-credential",
+    step: "install",
+    token: FAKE_TOKEN,
+  });
+
+  expect(failed).toEqual({
+    ok: false,
+    error: { code: "credential-command-failed", detail: `gh: request carried ${REDACTED}` },
+  });
+});
+
 test("reports a workspace image without gh instead of pretending to install", async () => {
   const operations = new FakeCredentialOperations();
   operations.stdout = "tooling-missing";
@@ -278,7 +297,7 @@ test("asks git whether a repository is readable, and redacts what git says when 
   const granted = new FakeCredentialOperations();
   granted.stdout = "granted";
   const denied = new FakeCredentialOperations();
-  denied.stdout = `denied fatal: could not read from https://user:${FAKE_TOKEN}@github.com/o/r`;
+  denied.stdout = `denied fatal: could not read from https://user:${FAKE_TOKEN}@github.com/o/r ${ACCESS_JWT}`;
 
   const allowed = await credential(granted, {
     kind: "github-credential",
@@ -308,6 +327,7 @@ test("asks git whether a repository is readable, and redacts what git says when 
 
   expect(refused.result.granted).toBe(false);
   expect(refused.result.detail).not.toContain(FAKE_TOKEN);
+  expect(refused.result.detail).not.toContain(ACCESS_JWT);
   expect(refused.result.detail).toContain(REDACTED);
 });
 

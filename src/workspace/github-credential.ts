@@ -1,6 +1,7 @@
 import {
   isTimeoutFailure,
   logRedactedCause,
+  redactedExcerpt,
   timed,
   requestIdFields,
   type RequestId,
@@ -12,7 +13,6 @@ import {
   parseCredentialStatus,
   parseGitHubToken,
   parseRepositoryAccess,
-  redactCredentials,
   repositoryAccessSource,
   type GitHubCredentialState,
   type GitHubCredentialStatus,
@@ -78,7 +78,7 @@ function failed(
 ) {
   return {
     ok: false,
-    error: { code, detail: redactCredentials(detail, knownToken).slice(0, 400) },
+    error: { code, detail: redactedExcerpt(detail, knownToken) },
   } as const;
 }
 
@@ -242,7 +242,7 @@ async function repositoryAccess(
     result: {
       kind: "repository-access",
       granted: access.granted,
-      detail: access.granted ? "" : redactCredentials(access.detail).slice(0, 400),
+      detail: access.granted ? "" : redactedExcerpt(access.detail),
     },
   };
 }

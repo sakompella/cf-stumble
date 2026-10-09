@@ -1,3 +1,4 @@
+import { logRedactedCause } from "../../diagnostics.js";
 import type { ProjectErrorCode } from "./protocol.js";
 
 /** The metadata this target needs about one filesystem node. Mirrors `VirtualStatsLike`. */
@@ -76,7 +77,7 @@ export function mapProviderError(error: unknown): ProjectErrorCode {
   // `backend-unavailable` is the one code that says nothing about what happened, and a deployed
   // write reached the agent as exactly that with the cause thrown away. What the provider actually
   // threw exists nowhere else.
-  console.error("unmapped project provider error", code ?? "no code", String(error));
+  logRedactedCause(`unmapped project provider error (${code ?? "no code"})`, error);
 
   return "backend-unavailable";
 }
