@@ -15,7 +15,7 @@ import {
 import {
   ProjectConnections,
   runProjectTurn,
-  streamProjectTurn,
+  startFacetTurn,
   tenantWorkspaceName,
   type FacetTurnHandoff,
   type ConnectRepositoryResult,
@@ -335,7 +335,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   ): Promise<ProjectTurnStart> {
     const generation = context.attribution.active.generation;
 
-    return streamProjectTurn({
+    return startFacetTurn({
       projectId,
       request,
       catalog: this.connections.catalog(),

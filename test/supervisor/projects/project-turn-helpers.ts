@@ -1,5 +1,5 @@
 import { Result } from "better-result";
-import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
+import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
 import { readFrames } from "../../facet/generation-0/facet-turn-helpers.js";
@@ -48,7 +48,7 @@ export async function turnRecordingProvisioning(
 ): Promise<RecordedTurn> {
   const reconciled: string[] = [];
 
-  const start = await streamProjectTurn({
+  const start = await startFacetTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
     provision: (project) => {
@@ -115,7 +115,7 @@ export function turnFor(
   tenantWorkspace: string = workspaceName,
   signal: AbortSignal = runningTurn(),
 ): Promise<ProjectTurnStart> {
-  return streamProjectTurn({
+  return startFacetTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
     provision: provisioned,
@@ -129,7 +129,7 @@ export function turnFor(
 
 /** A turn asked for while no generation serves, so nothing is mounted to run it. */
 export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<ProjectTurnStart> {
-  return streamProjectTurn({
+  return startFacetTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.err({ code: "no-active-generation" })),
     provision: provisioned,

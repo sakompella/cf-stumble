@@ -8,7 +8,7 @@ import {
   sampleProjectOne,
 } from "../../project-fixtures.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
-import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
+import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import {
   provisionProjectWorkspace,
@@ -103,7 +103,7 @@ test("a harness turn waits for a project provision in the shared workspace", asy
     startTurn: () => Promise.resolve(new ReadableStream<Uint8Array>()),
   };
 
-  const harness = streamProjectTurn({
+  const harness = startFacetTurn({
     namespace: delayed.namespace,
     mount: () => {
       mounted = true;

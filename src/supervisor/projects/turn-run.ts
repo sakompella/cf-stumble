@@ -2,9 +2,9 @@
 
 import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
-import { projectTurnStream } from "./turn-stream.js";
-import type { TurnThreadWrites } from "./turn-settle.js";
-import { logEvent, logRedactedCause, timed, type TimedOutcome } from "../../diagnostics.js";
+import { readTurnStream } from "./turn-stream.js";
+import { releaseLease, type TurnThreadWrites } from "./turn-settle.js";
+import { logEvent, timed, type TimedOutcome } from "../../diagnostics.js";
 import { logLeaseAbandoned, turnFields, turnTrace, type TurnTrace } from "./turn-log.js";
 import type { ActiveGeneration } from "../generations/index.js";
 import type {
@@ -249,16 +249,7 @@ function streamOrAbandon(
 
 function abandonTurn(input: RunProjectTurnInput, turn: AdmittedTurn, why: string): void {
   turn.bound.stop();
-
-  try {
-    input.threads.abandonTurn(turn.projectId, turn.leaseId);
-  } catch (cause) {
-    // A Durable Object can close while this cleanup write is in flight. The lease row then
-    // remains protected by its deadline, so a later admission can reclaim it; do not replace the
-    // start error with the cleanup error or let the route skip this record entirely.
-    logRedactedCause(`turn-abandon.${why}: lease-release-failed`, cause);
-  }
-
+  releaseLease({ ...turn, threads: input.threads }, `turn-abandon.${why}`);
   logLeaseAbandoned(turn.trace, why, "warn");
 }
 
@@ -331,7 +322,7 @@ function streamAdmittedTurn(
   turn: AdmittedTurn,
   frames: ReadableStream<Uint8Array>,
 ): ReadableStream<Uint8Array> {
-  return projectTurnStream({
+  return readTurnStream({
     projectId: turn.projectId,
     leaseId: turn.leaseId,
     frames,

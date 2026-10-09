@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { parseProjectId } from "../../../src/project-catalog.js";
 import type { ProjectId } from "../../../src/project-catalog.js";
 import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
-import { projectTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
+import { readTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
 import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
 import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/turn-frames.js";
 import type { ProjectThreadResult } from "../../../src/supervisor/threads/index.js";
@@ -42,7 +42,7 @@ function splitBytes(bytes: Uint8Array, points: readonly number[]): Uint8Array[] 
 async function readTurn(chunks: readonly Uint8Array[]): Promise<readonly unknown[]> {
   const releases: unknown[] = [];
 
-  const stream = projectTurnStream({
+  const stream = readTurnStream({
     projectId,
     leaseId: "lease-property",
     threads: {

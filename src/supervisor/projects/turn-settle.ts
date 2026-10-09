@@ -20,10 +20,7 @@ export type StreamEnding =
   | Readonly<{ kind: "cancelled" }>
   | Readonly<{ kind: "timed-out" }>;
 
-/** What the turn is written down as: one frame for the browser. */
-export type TurnEnd = Readonly<{ frame: ProjectTurnFrame }>;
-
-/** Everything the settlement needs. `projectTurnStream` holds it for the length of one turn. */
+/** Everything the settlement needs. `readTurnStream` holds it for the length of one turn. */
 export type TurnSettlement = Readonly<{
   projectId: string;
   leaseId: string;
@@ -32,24 +29,27 @@ export type TurnSettlement = Readonly<{
 }>;
 
 /**
- * A turn that ended without producing a conversation the Supervisor may keep. The lease goes back
- * immediately rather than at its deadline, so the project is free for the next turn.
+ * Give a turn's lease back immediately rather than at its deadline, so the project is free for the
+ * next turn. Storage can close while a turn is ending. The lease deadline still fences a later
+ * admission, so a failed release is logged under `context` and never replaces the error or the
+ * terminal frame the caller already has.
  */
-function releaseLease(turn: TurnSettlement): void {
+export function releaseLease(
+  turn: Pick<TurnSettlement, "projectId" | "leaseId" | "threads">,
+  context: string,
+): void {
   try {
     turn.threads.abandonTurn(turn.projectId, turn.leaseId);
   } catch (cause) {
-    // Storage can close while a stream is settling. The lease deadline still fences a later
-    // admission, and cleanup must not turn an otherwise valid terminal frame into a rejected
-    // stream.
-    logRedactedCause("turn-settle: lease-release-failed", cause);
+    logRedactedCause(`${context}: lease-release-failed`, cause);
   }
 }
 
-function released(turn: TurnSettlement, frame: ProjectTurnFrame): TurnEnd {
-  releaseLease(turn);
+/** A turn that ended without producing a conversation the Supervisor may keep. */
+function released(turn: TurnSettlement, frame: ProjectTurnFrame): ProjectTurnFrame {
+  releaseLease(turn, "turn-settle");
 
-  return { frame };
+  return frame;
 }
 
 /**
@@ -72,7 +72,7 @@ function saveCompletedTurn(turn: TurnSettlement, messages: readonly unknown[]): 
 
   if (!saved.ok) {
     // Terminal success the Supervisor could not make durable is not success (ADR-0037).
-    releaseLease(turn);
+    releaseLease(turn, "turn-settle");
 
     return { kind: "save-failed", code: saved.problem.code };
   }
@@ -96,7 +96,7 @@ function saveFailedTurn(
   const saved = turn.threads.finishTurn(turn.projectId, turn.leaseId, messages, turn.now());
 
   if (!saved.ok) {
-    releaseLease(turn);
+    releaseLease(turn, "turn-settle");
   }
 
   return {
@@ -108,14 +108,14 @@ function saveFailedTurn(
 }
 
 /** The three endings a generation can state, each written down as the turn it actually was. */
-function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): TurnEnd {
+function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): ProjectTurnFrame {
   switch (frame.kind) {
     case "rejected":
       return released(turn, { kind: "turn-rejected", code: frame.code });
     case "failed":
-      return { frame: saveFailedTurn(turn, frame.code, frame.messages) };
+      return saveFailedTurn(turn, frame.code, frame.messages);
     case "completed":
-      return { frame: saveCompletedTurn(turn, frame.messages) };
+      return saveCompletedTurn(turn, frame.messages);
     default: {
       // oxlint-disable-next-line eslint/no-underscore-dangle -- Exhaustiveness guard.
       const _exhaustive: never = frame;
@@ -125,7 +125,7 @@ function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): TurnEn
 }
 
 /** The turn's ending as the one frame the browser reads. */
-export function endTurn(turn: TurnSettlement, ending: StreamEnding): TurnEnd {
+export function endTurn(turn: TurnSettlement, ending: StreamEnding): ProjectTurnFrame {
   switch (ending.kind) {
     case "terminal":
       return settleTerminal(turn, ending.frame);

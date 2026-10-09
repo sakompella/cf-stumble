@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { capturedEvents, named } from "../../log-capture.js";
 import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
-import { projectTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
+import { readTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
 import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
 import { parseProjectId } from "../../../src/project-catalog.js";
 import type { ProjectThreadResult } from "../../../src/supervisor/threads/index.js";
@@ -49,7 +49,7 @@ test("a stream that cannot create a reader abandons its lease", async () => {
 
   const bound = new TurnBound(Date.now() + 1_000, now);
 
-  const stream = projectTurnStream({
+  const stream = readTurnStream({
     projectId,
     leaseId: "lease-one",
     threads: { finishTurn: vi.fn(), abandonTurn },
@@ -78,7 +78,7 @@ test("a deadline that rejects the pending RPC read is timed out", async () => {
   const finishTurn = vi.fn();
   const bound = new TurnBound(Date.now() + 10, now);
 
-  const stream = projectTurnStream({
+  const stream = readTurnStream({
     projectId,
     leaseId: "lease-one",
     threads: { finishTurn, abandonTurn },
@@ -112,7 +112,7 @@ test("a failed lease cleanup does not replace the stream failure", async () => {
 
   const bound = new TurnBound(Date.now() + 1_000, now);
 
-  const stream = projectTurnStream({
+  const stream = readTurnStream({
     projectId,
     leaseId: "lease-one",
     threads: {

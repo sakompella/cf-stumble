@@ -4,7 +4,7 @@ import { Result } from "better-result";
 import { expect, test } from "vitest";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
-import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
+import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { says } from "../../facet/generation-0/facet-turn-helpers.js";
 
 import {
@@ -19,7 +19,7 @@ test("a harness turn reconciles before mounting the generation", async () => {
   const facet = await facetRunning([says("Nothing to do.")]);
   const events: string[] = [];
 
-  const start = await streamProjectTurn({
+  const start = await startFacetTurn({
     namespace: workspaces.namespace,
     mount: () => {
       events.push("mount");
@@ -49,7 +49,7 @@ test("a harness provision that observes cancellation never mounts", async () => 
   const controller = new AbortController();
   let mounted = false;
 
-  const start = await streamProjectTurn({
+  const start = await startFacetTurn({
     namespace: workspaces.namespace,
     mount: () => {
       mounted = true;

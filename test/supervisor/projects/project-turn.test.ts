@@ -8,7 +8,7 @@ import {
   sampleProjectTwo,
   sampleSelectableCatalog,
 } from "../../project-fixtures.js";
-import { streamProjectTurn } from "../../../src/supervisor/projects/index.js";
+import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
 import { HARNESS_DIRECTORY, projectDirectory } from "../../../src/workspace-layout.js";
 import { calls, says } from "../../facet/generation-0/facet-turn-helpers.js";
@@ -164,7 +164,7 @@ test("passes the turn cancellation signal into provisioning", async () => {
   const controller = new AbortController();
   let received: AbortSignal | undefined;
 
-  const start = await streamProjectTurn({
+  const start = await startFacetTurn({
     namespace: workspaces.namespace,
     mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
     provision: (_project, signal) => {

@@ -3,12 +3,11 @@ import {
   PROJECT_TURN_FRAME_MAX_BYTES,
   type ProjectTurnFrame,
 } from "./turn-frames.js";
-import { endTurn, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
+import { endTurn, releaseLease, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
 import type { TurnBound } from "./turn-bound.js";
 import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
-import { logRedactedCause } from "../../diagnostics.js";
 
-export type ProjectTurnStreamInput = TurnSettlement &
+export type ReadTurnStreamInput = TurnSettlement &
   Readonly<{
     frames: ReadableStream<Uint8Array>;
     /**
@@ -19,18 +18,6 @@ export type ProjectTurnStreamInput = TurnSettlement &
     /** Who this turn is in the operational log. */
     trace: TurnTrace;
   }>;
-
-function abandonFailedStream(input: ProjectTurnStreamInput): void {
-  try {
-    input.threads.abandonTurn(input.projectId, input.leaseId);
-  } catch (releaseCause) {
-    // If the Supervisor's storage connection closed, the lease deadline is the remaining fence.
-    // Cleanup must not replace the stream failure or prevent the abandonment record.
-    logRedactedCause("turn-stream: lease-release-failed", releaseCause);
-  }
-
-  logLeaseAbandoned(input.trace, "stream-failed", "error");
-}
 
 const encoder = new TextEncoder();
 
@@ -180,7 +167,7 @@ class TurnReader {
  * covers the case a disconnect never arrives: a lost facet or an interrupted host leaves a stream
  * that never ends, and the turn must still stop holding the project.
  */
-export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream<Uint8Array> {
+export function readTurnStream(input: ReadTurnStreamInput): ReadableStream<Uint8Array> {
   const state = { cancelled: false };
   let turn: TurnReader | undefined;
   const log = new TurnStreamLog(input.trace, input.now);
@@ -214,14 +201,15 @@ export function projectTurnStream(input: ProjectTurnStreamInput): ReadableStream
           () => input.bound.timedOut(),
         );
 
-        publish(log.settled(endTurn(input, ending).frame));
+        publish(log.settled(endTurn(input, ending)));
       } catch (cause) {
         // A stream can fail before its reader exists, or while settling a terminal frame. Neither
         // path reaches `endTurn`, so release the admitted lease before the stream error reaches its
         // caller. A failed stream must not make the next turn wait for this one's deadline.
         failed = true;
 
-        abandonFailedStream(input);
+        releaseLease(input, "turn-stream");
+        logLeaseAbandoned(input.trace, "stream-failed", "error");
 
         throw cause;
       } finally {

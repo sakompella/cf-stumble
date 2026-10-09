@@ -36,7 +36,7 @@ export {
   type ProjectUseResult,
 } from "./project-connections.js";
 
-export { streamProjectTurn } from "./project-turn.js";
+export { startFacetTurn } from "./project-turn.js";
 
 export {
   PROJECT_TURN_PROMPT_MAX_LENGTH,
@@ -67,12 +67,11 @@ export {
   type TurnTrace,
 } from "./turn-log.js";
 
-export { projectTurnStream, type ProjectTurnStreamInput } from "./turn-stream.js";
+export { readTurnStream, type ReadTurnStreamInput } from "./turn-stream.js";
 
 export {
   endTurn,
   type StreamEnding,
-  type TurnEnd,
   type TurnSettlement,
   type TurnThreadWrites,
 } from "./turn-settle.js";
