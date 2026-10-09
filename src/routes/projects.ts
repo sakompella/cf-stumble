@@ -1,7 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
-import { logEvent, logRedactedCause, type RequestId } from "../diagnostics.js";
-import { routePattern } from "./route-pattern.js";
+import { logRedactedCause, type RequestId } from "../diagnostics.js";
 import { markDegraded } from "./route-settled.js";
 import type {
   ConnectRepositoryResult,
@@ -37,34 +36,6 @@ export type ProjectApiSupervisor = Readonly<{
   completeGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
 }>;
-
-/**
- * A state-changing request has to come from cf-stumble's own page.
- *
- * Access sits in front of everything here, so a cross-site request cannot be a stranger's; it can
- * still be the owner's own browser driven by another site, which is what would let a page the
- * owner happens to visit start an authorization or connect a repository in their name. The
- * browser must send an `Origin` that exactly matches the request URL's origin. A missing value,
- * `null`, and every other value are refused.
- *
- * Every caller refuses the request when this answers true, so the refusal is logged here, once:
- * the route pattern and which kind of origin it was, never the origin itself.
- */
-export function isCrossOriginMutation(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  const url = new URL(request.url);
-  const crossOrigin = origin === null || origin !== url.origin;
-
-  if (crossOrigin) {
-    logEvent("warn", "route.cross-origin-refused", {
-      route: routePattern(url.pathname),
-      method: request.method,
-      origin: origin === null ? "missing" : origin === "null" ? "null" : "foreign",
-    });
-  }
-
-  return crossOrigin;
-}
 
 const CONNECT_STATUS = {
   "invalid-repository-url": 400,
@@ -256,10 +227,6 @@ export function routeProjectApiRequest(
 
   if (!isPost || !mutation) {
     return undefined;
-  }
-
-  if (isCrossOriginMutation(request)) {
-    return Promise.resolve(jsonError(403, "cross-origin-request"));
   }
 
   if (pathname === "/api/projects/connect") {

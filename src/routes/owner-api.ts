@@ -1,4 +1,4 @@
-import { logRedactedCause, timed, type RequestId } from "../diagnostics.js";
+import { logEvent, logRedactedCause, timed, type RequestId } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
 import type { VerifiedAccessScope } from "../supervisor/projects/index.js";
 import type { ProjectThreadResult } from "../supervisor/threads/index.js";
@@ -11,11 +11,7 @@ import {
 import { jsonError } from "./json.js";
 import { routePattern } from "./route-pattern.js";
 import { settleRoute } from "./route-settled.js";
-import {
-  isCrossOriginMutation,
-  routeProjectApiRequest,
-  type ProjectApiSupervisor,
-} from "./projects.js";
+import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
 
 type WorkspaceResetResult = Readonly<{
@@ -61,14 +57,7 @@ function notFound(): Promise<Response> {
   return Promise.resolve(jsonError(404, "not-found"));
 }
 
-async function workspaceResetResponse(
-  request: Request,
-  supervisor: OwnerApiSupervisor,
-): Promise<Response> {
-  if (isCrossOriginMutation(request)) {
-    return jsonError(403, "cross-origin-request");
-  }
-
+async function workspaceResetResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
   return Response.json(
     await timed(
       "workspace.reset",
@@ -136,6 +125,35 @@ export function routeOwnerApiRequest(
 }
 
 /**
+ * The owner API treats every `POST` as a state change, so each one has to come from cf-stumble's
+ * own page.
+ *
+ * Access sits in front of everything here, so a cross-site request cannot be a stranger's; it can
+ * still be the owner's own browser driven by another site, which is what would let a page the
+ * owner happens to visit start an authorization or connect a repository in their name. The
+ * browser must send an `Origin` that exactly matches the request URL's origin. A missing value,
+ * `null`, and every other value are refused.
+ *
+ * The refusal is logged here: the route pattern and which kind of origin it was, never the origin
+ * itself.
+ */
+function isCrossOriginMutation(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  const url = new URL(request.url);
+  const crossOrigin = origin === null || origin !== url.origin;
+
+  if (crossOrigin) {
+    logEvent("warn", "route.cross-origin-refused", {
+      route: routePattern(url.pathname),
+      method: request.method,
+      origin: origin === null ? "missing" : origin === "null" ? "null" : "foreign",
+    });
+  }
+
+  return crossOrigin;
+}
+
+/**
  * A thrown Supervisor error is logged, redacted, and answered with a bare 500, because its text can
  * come from a generation's code or a workspace command and is not this boundary's to hand out.
  */
@@ -145,6 +163,10 @@ async function dispatchOwnerApiRequest(
   scope: VerifiedAccessScope,
   requestId: RequestId | undefined,
 ): Promise<Response> {
+  if (request.method === "POST" && isCrossOriginMutation(request)) {
+    return jsonError(403, "cross-origin-request");
+  }
+
   try {
     return await ownerApiRoute(request, supervisor, scope, requestId);
   } catch (cause) {
@@ -194,7 +216,7 @@ function ownerApiRoute(
   }
 
   if (isPost && pathname === "/api/workspace/reset") {
-    return workspaceResetResponse(request, supervisor);
+    return workspaceResetResponse(supervisor);
   }
 
   const thread = threadRoute(pathname);
@@ -208,10 +230,6 @@ function ownerApiRoute(
   }
 
   if (isPost && thread.isReset) {
-    if (isCrossOriginMutation(request)) {
-      return Promise.resolve(jsonError(403, "cross-origin-request"));
-    }
-
     return threadResponse(() => supervisor.startFreshProjectThread(thread.projectId));
   }
 

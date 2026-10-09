@@ -4,7 +4,7 @@ export { isOwnerPageRequest, ownerPageResponse } from "./page.js";
 
 export { routeOwnerApiRequest } from "./owner-api.js";
 
-export { isCrossOriginMutation, routeProjectApiRequest } from "./projects.js";
+export { routeProjectApiRequest } from "./projects.js";
 
 export { routeProjectTurnRequest } from "./turns.js";
 

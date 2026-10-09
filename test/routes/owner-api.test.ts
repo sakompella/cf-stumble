@@ -171,7 +171,10 @@ test("returns JSON 404 for unknown route and method pairs", async () => {
   );
 
   const unknownMethod = await routeOwnerApiRequest(
-    new Request("https://cf-stumble.test/api/status", { method: "POST" }),
+    new Request("https://cf-stumble.test/api/status", {
+      method: "POST",
+      headers: { origin: "https://cf-stumble.test" },
+    }),
     supervisor(),
     ownerScope,
   );
@@ -238,4 +241,21 @@ test("keeps the generation control routes POST-only", async () => {
 
   expect(getActivate.status).toBe(404);
   expect(getSubmit.status).toBe(404);
+});
+
+test("refuses a cross-origin POST before it looks for a route", async () => {
+  const response = await routeOwnerApiRequest(
+    new Request("https://cf-stumble.test/api/unknown", {
+      method: "POST",
+      headers: { origin: "https://evil.example" },
+    }),
+    supervisor(),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(403);
+  await expect(response.json()).resolves.toEqual({
+    ok: false,
+    error: { code: "cross-origin-request" },
+  });
 });

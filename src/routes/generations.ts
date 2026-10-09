@@ -3,7 +3,6 @@ import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 import type { GenerationControlResult, GenerationRequest } from "../supervisor/control/index.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import { hasExactKeys, isCount, isRecord, jsonError, readJson } from "./json.js";
-import { isCrossOriginMutation } from "./projects.js";
 
 export type GenerationControlSupervisor = {
   readonly controlGeneration: (request: GenerationRequest) => Promise<GenerationControlResult>;
@@ -101,10 +100,6 @@ export async function handleGenerationControl(
   supervisor: GenerationControlSupervisor,
   kind: ControlCommandKind,
 ): Promise<Response> {
-  if (isCrossOriginMutation(request)) {
-    return jsonError(403, "cross-origin-request");
-  }
-
   const body = parseGenerationControlBody(await readJson(request));
 
   if (body === undefined) {
@@ -144,10 +139,6 @@ export async function handleGenerationSubmission(
   request: Request,
   supervisor: GenerationSubmissionSupervisor,
 ): Promise<Response> {
-  if (isCrossOriginMutation(request)) {
-    return jsonError(403, "cross-origin-request");
-  }
-
   const body = parseGenerationSubmissionBody(await readJson(request));
 
   if (body === undefined) {

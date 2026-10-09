@@ -1,6 +1,5 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
-import { isCrossOriginMutation } from "./projects.js";
 import type { ProjectTurnRun, ProjectTurnRunProblemCode } from "../supervisor/projects/index.js";
 
 /**
@@ -108,13 +107,7 @@ async function turnResponse(
       );
 }
 
-/**
- * Route one project turn, or answer `undefined` so the owner API can try its other routes.
- *
- * Starting a turn is a state change — it takes the project's turn slot and writes its thread — so
- * it is refused across origins for the reason `routeProjectApiRequest` documents: Access proves
- * the owner, not which page the owner's browser was on.
- */
+/** Route one project turn, or answer `undefined` so the owner API can try its other routes. */
 export function routeProjectTurnRequest(
   request: Request,
   supervisor: TurnApiSupervisor,
@@ -123,10 +116,6 @@ export function routeProjectTurnRequest(
 
   if (projectId === undefined || request.method !== "POST") {
     return undefined;
-  }
-
-  if (isCrossOriginMutation(request)) {
-    return Promise.resolve(jsonError(403, "cross-origin-request"));
   }
 
   return turnResponse(request, supervisor, projectId);
