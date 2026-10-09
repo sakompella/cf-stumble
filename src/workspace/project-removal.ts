@@ -3,7 +3,7 @@ import { parseProjectId, type ProjectId } from "../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../selectable-projects.js";
 import { shellQuote } from "../shell-quote.js";
 import { projectDirectory } from "../workspace-layout.js";
-import { holdProjectProvisionLock, projectProvisionLockPath } from "../project-provision.js";
+import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import type { WorkspaceOperations } from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
@@ -74,7 +74,7 @@ export function planProjectRemovalRequest(
     source: [
       "set -eu",
       `lock=${shellQuote(projectProvisionLockPath(request.projectId))}`,
-      ...holdProjectProvisionLock(),
+      ...holdProvisionLock(),
       `rm -rf -- ${[root, staging, `${root}.provision-lock`].map((path) => shellQuote(path)).join(" ")}`,
     ].join("\n"),
     cwd: "/",

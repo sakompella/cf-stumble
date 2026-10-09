@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { holdProvisionLock } from "../src/harness-build-provision.js";
+import { holdProvisionLock } from "../src/project-provision.js";
 import { shellQuote } from "../src/shell-quote.js";
 
 /**

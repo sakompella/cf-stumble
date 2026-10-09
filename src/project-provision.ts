@@ -101,45 +101,86 @@ export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] =
 ];
 
 /**
- * One project's provision lock: a kernel `flock` on a file in the container's own `/tmp`, taken by
- * the clone step and by project removal. The id alphabet is letters, digits, and `-`, so the name
- * is safe in a path, and one project's lock never orders another project's work.
- *
- * Nothing records a pid, so there is no stale owner to detect or take over. The kernel releases the
- * lock when the last process holding the descriptor exits, and a container restart ends every such
- * process. The file stays out of `/workspace`, which Computer copies to and from its store, so that
- * copying cannot replace the file that holders and contenders lock. Nothing deletes it: a waiter
- * that locked a deleted file would not exclude a newcomer that created a fresh one.
+ * One project's provision lock, taken by the clone step and by project removal. The id alphabet is
+ * letters, digits, and `-`, so the name is safe in a path, and one project's lock never orders
+ * another project's work.
  */
 export function projectProvisionLockPath(projectId: ProjectId): string {
   return `/tmp/cf-stumble-project-${projectId}.provision.lock`;
 }
 
 /**
- * Shell lines that hold the project's provision lock for the rest of the command. They read the
- * lock path from `$lock`. Descriptor 9 stays open in the shell and in every process it starts, so a
- * `git clone` or `rm` that outlives a killed shell keeps the lock until it exits too.
+ * Shell lines that hold a provision lock for the rest of the command: a kernel `flock` on the file
+ * named by `$lock`, which the caller sets first and keeps in the container's own `/tmp`.
+ *
+ * Nothing records a pid, so there is no stale owner to detect or take over. The kernel releases the
+ * lock when the last process holding the descriptor exits, and a container restart ends every such
+ * process. The file stays out of `/workspace`, which Computer copies to and from its store, so that
+ * copying cannot replace the file that holders and contenders lock. Nothing deletes it: a waiter
+ * that locked a deleted file would not exclude a newcomer that created a fresh one.
+ *
+ * Descriptor 9 stays open in the shell and in every process it starts. The pinned computerd runner
+ * signals only the direct shell (see `processGroupCommand`), and a provision step does not run
+ * through that wrapper, so a `git clone` or `rm` that outlives a killed shell keeps the lock until
+ * it exits too.
  */
-export function holdProjectProvisionLock(): readonly string[] {
+export function holdProvisionLock(): readonly string[] {
   return ['exec 9>"$lock"', "flock 9"];
 }
 
+const CLONE_INTO_STAGING = `git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging"`;
+
 /**
- * Reconcile the project directory against the repository the catalog names for this project.
+ * Under the provision lock, make `$repository` a clone of `$expected_remote` whose Git directory is
+ * `$git_dir`. The caller sets those variables, `$lock`, and `$staging` first. The harness checkout
+ * and every project clone use this one block.
  *
  * Reconciling means "a clone of the expected remote is here", never "the working tree matches
  * origin". The workspace is a development machine (ADR-0039), so the user's uncommitted work and
- * unpushed commits live in that tree and a restart must not touch it. An existing clone is
+ * unpushed commits live in that tree and a restart or build must not touch it. An existing clone is
  * therefore only checked, and a mismatched origin fails the step.
  *
  * Nothing here deletes a directory it did not create. A populated directory that is not a Git
  * repository fails the step and is left exactly as it was found: deleting it is how a restart
  * would silently destroy work, and this step cannot tell salvage from rubbish. The clone lands in
- * a fixed staging directory and moves into place only after it succeeds, so an interrupted run
- * leaves the previous state rather than a half-populated project root that the next run would read
- * as a repository. The staging name is fixed rather than per-process so the next run clears what a
- * killed run left behind. `rmdir` removes the project root only when it is an empty directory,
- * which is the one case where there is nothing to lose.
+ * the staging directory and moves into place only after it succeeds, so an interrupted run leaves
+ * the previous state rather than a half-populated root that the next run would read as a
+ * repository. The staging name is fixed rather than per-process, and the `EXIT` trap is set only
+ * once the lock is held, so the next run clears what a killed run left behind in the durable
+ * workspace. `rmdir` removes the root only when it is an empty directory, which is the one case
+ * where there is nothing to lose.
+ *
+ * `beforeClone` runs only when a new clone is needed. `cloneIntoStaging` replaces the plain clone
+ * command, for a caller that maps a clone failure to its own exit code.
+ */
+export function reconcileClone(
+  steps: Readonly<{ beforeClone?: readonly string[]; cloneIntoStaging?: readonly string[] }> = {},
+): readonly string[] {
+  const { beforeClone = [], cloneIntoStaging = [`  ${CLONE_INTO_STAGING}`] } = steps;
+
+  return [
+    ...holdProvisionLock(),
+    "trap 'rm -rf \"$staging\"' EXIT",
+    'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
+    '  if test -e "$repository" && test -n "$(ls -A "$repository" 2>/dev/null)"; then',
+    '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
+    "    exit 1",
+    "  fi",
+    ...beforeClone,
+    '  rm -rf "$staging"',
+    ...cloneIntoStaging,
+    '  git -C "$staging" config core.fileMode false',
+    '  rmdir "$repository" 2>/dev/null || true',
+    '  mv "$staging" "$repository"',
+    "fi",
+    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
+    'test "$actual_remote" = "$expected_remote"',
+  ];
+}
+
+/**
+ * Reconcile the project directory against the repository the catalog names for this project, with
+ * the shared clone block (`reconcileClone`).
  *
  * The project's provision lock (`projectProvisionLockPath`) orders this step with other clone
  * steps and with project removal for the same project. Commands a turn runs do not take it.
@@ -157,7 +198,6 @@ export function holdProjectProvisionLock(): readonly string[] {
  * is configuration rather than a constant, and hand-written escaping is what turns a quoting
  * helper into an injection.
  */
-// oxlint-disable-next-line max-lines-per-function -- This shell keeps locking, clone, and reconciliation atomic.
 function cloneProjectRepository(
   configuration: ProjectProvisionConfiguration,
   project: Project,
@@ -177,40 +217,32 @@ function cloneProjectRepository(
     `expected_remote=${shellQuote(repositoryUrl)}`,
     repositorySizeVerdictSource(repositoryUrl),
     'mkdir -p "$projects"',
-    ...holdProjectProvisionLock(),
-    "trap 'rm -rf \"$staging\"' EXIT",
-    'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
-    '  if test -e "$repository" && test -n "$(ls -A "$repository" 2>/dev/null)"; then',
-    '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
-    "    exit 1",
-    "  fi",
-    // Only a named ceiling refuses. Any other output, even an unexpected one, lets the clone
-    // proceed, so the check cannot fail closed on something it did not measure.
-    `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
-    '  case "$size_verdict" in',
-    "    tree-truncated | too-many-files | working-tree-too-large | repository-too-large)",
-    '      printf "repository exceeds a workspace size limit: %s\\n" "$size_verdict" >&2',
-    `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
-    "      ;;",
-    "  esac",
-    '  rm -rf "$staging"',
-    `  if clone_output="$(git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging" 2>&1)"; then`,
-    "    :",
-    "  else",
-    "    clone_exit=$?",
-    `    if printf '%s\\n' "$clone_output" | grep -Eiq 'no space left on device|disk quota exceeded|not enough space'; then`,
-    '      printf "repository clone exceeded workspace capacity\\n" >&2',
-    `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
-    "    fi",
-    '    printf "%s\\n" "$clone_output" >&2',
-    '    exit "$clone_exit"',
-    "  fi",
-    '  git -C "$staging" config core.fileMode false',
-    '  rmdir "$repository" 2>/dev/null || true',
-    '  mv "$staging" "$repository"',
-    "fi",
-    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
-    'test "$actual_remote" = "$expected_remote"',
+    ...reconcileClone({
+      beforeClone: [
+        // Only a named ceiling refuses. Any other output, even an unexpected one, lets the clone
+        // proceed, so the check cannot fail closed on something it did not measure.
+        `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
+        '  case "$size_verdict" in',
+        "    tree-truncated | too-many-files | working-tree-too-large | repository-too-large)",
+        '      printf "repository exceeds a workspace size limit: %s\\n" "$size_verdict" >&2',
+        `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
+        "      ;;",
+        "  esac",
+      ],
+      cloneIntoStaging: [
+        `  if clone_output="$(${CLONE_INTO_STAGING} 2>&1)"; then`,
+        "    :",
+        "  else",
+        "    clone_exit=$?",
+        `    if printf '%s\\n' "$clone_output" | grep -Eiq 'no space left on device|disk quota exceeded|not enough space'; then`,
+        '      printf "repository clone exceeded workspace capacity\\n" >&2',
+        `      exit ${PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE}`,
+        "    fi",
+        '    printf "%s\\n" "$clone_output" >&2',
+        '    exit "$clone_exit"',
+        "  fi",
+      ],
+    }),
     'clone_size_kb="$(du -sk -- "$repository" | cut -f1)"',
     `printf "${PROJECT_CLONE_SIZE_MARKER}%s\\n" "$clone_size_kb"`,
   ].join("\n");

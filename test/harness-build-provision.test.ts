@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
 import {
   HARNESS_PROVISION_LOCK,
-  holdProvisionLock,
   provisionHarnessRepository,
 } from "../src/harness-build-provision.js";
+import { holdProvisionLock } from "../src/project-provision.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../src/harness-build.js";
 import { shellQuote } from "../src/shell-quote.js";
 import { WORKSPACE_ROOT } from "../src/workspace-layout.js";

@@ -11,7 +11,7 @@ import {
   type CommandOutput,
 } from "../../src/workspace/index.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
-import { holdProjectProvisionLock, projectProvisionLockPath } from "../../src/project-provision.js";
+import { holdProvisionLock, projectProvisionLockPath } from "../../src/project-provision.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
@@ -117,9 +117,7 @@ test("holds the project's container-local lock before removing anything", () => 
   const lock = projectProvisionLockPath(sampleProjectOne.id);
 
   expect(lock.startsWith("/tmp/")).toBe(true);
-  expect(plan.source).toContain(
-    `lock=${shellQuote(lock)}\n${holdProjectProvisionLock().join("\n")}\n`,
-  );
+  expect(plan.source).toContain(`lock=${shellQuote(lock)}\n${holdProvisionLock().join("\n")}\n`);
   const removal = plan.source.split("\n").find((line) => line.startsWith("rm -rf --"));
 
   expect(plan.source.indexOf("flock 9")).toBeLessThan(plan.source.indexOf("rm -rf --"));

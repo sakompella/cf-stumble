@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import {
-  holdProjectProvisionLock,
+  holdProvisionLock,
   MANAGED_AGENT_INSTRUCTIONS,
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
@@ -111,7 +111,7 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
   const source = cloneSource(projectOne);
 
   expect(source).toContain(`lock=${shellQuote(projectProvisionLockPath(projectOne.id))}\n`);
-  expect(source.indexOf(holdProjectProvisionLock().join("\n"))).toBeLessThan(
+  expect(source.indexOf(holdProvisionLock().join("\n"))).toBeLessThan(
     source.indexOf("rev-parse --is-bare-repository"),
   );
   expect(

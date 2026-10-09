@@ -1,6 +1,6 @@
 import { durableGitHubConfigurationSource } from "./github/index.js";
 import { shellQuote } from "./shell-quote.js";
-import { PROJECT_CLONE_DEPTH } from "./project-provision.js";
+import { reconcileClone } from "./project-provision.js";
 import { WORKSPACE_ROOT } from "./workspace-layout.js";
 import type { HarnessBuildConfiguration } from "./harness-build.js";
 import type { HarnessCommit } from "./harness-commit.js";
@@ -13,59 +13,12 @@ import type { HarnessCommit } from "./harness-commit.js";
  */
 
 /**
- * The provision lock: a kernel `flock` on a file in the container's own `/tmp`. Nothing records a
- * pid, so there is no stale owner to detect or take over. The kernel releases the lock when the
- * last process holding the descriptor exits, and a container restart ends every such process. The
- * file stays out of `/workspace`, which Computer copies to and from its store, so that copying
- * cannot replace the file that holders and contenders lock.
+ * The file the harness provision step locks with `holdProvisionLock`.
  *
  * Earlier builds locked with a `harness.provision-lock` directory beside the checkout. That
  * directory is ignored, not deleted.
  */
 export const HARNESS_PROVISION_LOCK = "/tmp/cf-stumble-harness-provision.lock";
-
-/**
- * Hold the provision lock for the rest of the step. The text reads the lock path from the shell
- * variable `lock`, which the caller sets first.
- *
- * Descriptor 9 stays open in the shell and in every process it starts. The pinned computerd runner
- * signals only the direct shell (see `processGroupCommand`), and a build step does not run through
- * that wrapper, so a `git clone` can outlive a timed-out step. The lock stays held until it exits.
- */
-export function holdProvisionLock(): readonly string[] {
-  return ['exec 9>"$lock"', "flock 9"];
-}
-
-/**
- * Make the harness repository exist and point at the configured remote.
- *
- * The harness directory is the owner's editable checkout in the shared workspace (ADR-0038), not
- * scratch this function owns, so a build never replaces it. An existing repository is only
- * checked; a directory that is populated but is not a repository fails the step and is left as it
- * was found; and a fresh clone lands in a staging directory beside the root and moves into place
- * once it is complete, so an interrupted provision leaves the owner with what was there rather than
- * with neither the previous checkout nor a usable replacement. The staging name is fixed rather
- * than per-process, so the next provision clears what a killed one left behind in the durable
- * workspace. `rmdir` removes the root only when it is an empty directory, which is the one case
- * where there is nothing to lose.
- */
-function reconcileHarnessRepository(): readonly string[] {
-  return [
-    'if ! test "$(git --git-dir="$git_dir" rev-parse --is-bare-repository 2>/dev/null)" = false; then',
-    '  if test -e "$repository" && test -n "$(ls -A "$repository" 2>/dev/null)"; then',
-    '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
-    "    exit 1",
-    "  fi",
-    '  rm -rf "$staging"',
-    `  git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging"`,
-    '  git -C "$staging" config core.fileMode false',
-    '  rmdir "$repository" 2>/dev/null || true',
-    '  mv "$staging" "$repository"',
-    "fi",
-    'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
-    'test "$actual_remote" = "$expected_remote"',
-  ];
-}
 
 /**
  * Obtain the requested commit. A commit submitted after this checkout was provisioned is not here
@@ -88,6 +41,12 @@ function obtainHarnessCommit(): readonly string[] {
   ];
 }
 
+/**
+ * Make the harness repository exist and point at the configured remote, then obtain the requested
+ * commit. The harness directory is the owner's editable checkout in the shared workspace
+ * (ADR-0038), not scratch a build owns, so the shared clone block only checks an existing checkout
+ * and never replaces it.
+ */
 export function provisionHarnessRepository(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
@@ -102,9 +61,7 @@ export function provisionHarnessRepository(
     `staging=${shellQuote(`${configuration.harnessRepositoryRoot}.provisioning`)}`,
     `expected_remote=${shellQuote(configuration.harnessGitRemote)}`,
     `commit=${shellQuote(harnessCommit)}`,
-    ...holdProvisionLock(),
-    "trap 'rm -rf \"$staging\"' EXIT",
-    ...reconcileHarnessRepository(),
+    ...reconcileClone(),
     ...obtainHarnessCommit(),
   ].join("\n");
 }
