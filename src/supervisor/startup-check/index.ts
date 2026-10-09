@@ -1,3 +1,4 @@
+import { Result } from "better-result";
 import type { MainFacetCapabilities } from "../../facet/index.js";
 import type { StartupCheckOutcome } from "./body.js";
 
@@ -8,12 +9,7 @@ import { runStartupCheck } from "./candidate.js";
 import { startupModuleMap } from "./module-map.js";
 import type { StartupModuleMapProblem, StartupModuleMapSource } from "./module-map.js";
 
-import type {
-  Generation,
-  Generations,
-  PreparationCheckProblem,
-  PreparationCheckResult,
-} from "../generations/index.js";
+import type { Generation, Generations, PreparationCheckProblem } from "../generations/index.js";
 
 /**
  * A generous bound, because the check has to cover a Dynamic Worker load and a cold Durable
@@ -42,15 +38,14 @@ type StartupCheckReport = StartupCheckOutcome & {
   readonly effect: "recorded" | "no-op";
 };
 
+type StartupCheckProblem =
+  | { readonly code: "unknown-generation"; readonly label: number }
+  | StartupModuleMapProblem
+  | PreparationCheckProblem;
+
 export type StartupCheckResult =
   | { readonly ok: true; readonly report: StartupCheckReport }
-  | {
-      readonly ok: false;
-      readonly problem:
-        | { readonly code: "unknown-generation"; readonly label: number }
-        | StartupModuleMapProblem
-        | PreparationCheckProblem;
-    };
+  | { readonly ok: false; readonly problem: StartupCheckProblem };
 
 /**
  * Check a labeled generation's module map from `source` and record the outcome against the
@@ -66,7 +61,7 @@ export function checkGenerationStartup(
   return timed(
     "generation.preparation",
     { label, source: source.kind },
-    () => checkLabeledStartup(host, label, source, options),
+    async () => plainStartupCheck(await checkLabeledStartup(host, label, source, options)),
     preparationOutcome,
   );
 }
@@ -92,20 +87,20 @@ async function checkLabeledStartup(
   label: number,
   source: StartupModuleMapSource,
   options: StartupCheckOptions,
-): Promise<StartupCheckResult> {
+): Promise<Result<StartupCheckReport, StartupCheckProblem>> {
   const generationLabel = parseGenerationLabel(label);
 
   const generation =
     generationLabel === undefined ? undefined : host.generations.byLabel(generationLabel);
 
   if (generationLabel === undefined || generation === undefined) {
-    return { ok: false, problem: { code: "unknown-generation", label } };
+    return Result.err({ code: "unknown-generation", label });
   }
 
   const moduleMap = await startupModuleMap(host.artifacts, generation, generationLabel, source);
 
   if (moduleMap.isErr()) {
-    return { ok: false, problem: moduleMap.error };
+    return Result.err(moduleMap.error);
   }
 
   const outcome = await runStartupCheck(host, moduleMap.value, generation.harnessCommit, {
@@ -113,28 +108,22 @@ async function checkLabeledStartup(
     maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
   });
 
-  const recorded = host.generations.recordPreparationCheck(
-    generationLabel,
-    outcome.stage === "ready" ? "passed" : "failed",
-  );
-
-  return startupCheckResult(outcome, recorded);
+  return host.generations
+    .recordPreparationCheck(generationLabel, outcome.stage === "ready" ? "passed" : "failed")
+    .map((recorded): StartupCheckReport => ({
+      ...outcome,
+      generation: recorded.generation,
+      effect: recorded.effect,
+    }));
 }
 
-function startupCheckResult(
-  outcome: StartupCheckOutcome,
-  recorded: PreparationCheckResult,
+// The check composes a Result and converts once, here, because the Supervisor returns this union
+// over RPC from checkGenerationStartup and prepareGeneration (ADR-0035).
+function plainStartupCheck(
+  result: Result<StartupCheckReport, StartupCheckProblem>,
 ): StartupCheckResult {
-  if (recorded.isErr()) {
-    return { ok: false, problem: recorded.error };
-  }
-
-  return {
-    ok: true,
-    report: {
-      ...outcome,
-      generation: recorded.value.generation,
-      effect: recorded.value.effect,
-    },
-  };
+  return result.match<StartupCheckResult>({
+    ok: (report) => ({ ok: true, report }),
+    err: (problem) => ({ ok: false, problem }),
+  });
 }
