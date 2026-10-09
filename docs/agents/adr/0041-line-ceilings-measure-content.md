@@ -33,11 +33,5 @@ A physical file may now exceed 300 lines because of required spacing. Split a mo
 content crosses the budget or an architectural review finds a real seam with better locality or a
 deeper interface.
 
-Every size directive in the tree was audited by deleting it and running the gate. Nine exist, eight
-of them load-bearing. Three file-level `max-lines` exceptions remain, on `tools/vendor-pi.mts` at
-752 counted lines, `src/supervisor/supervisor.ts` at 307, and `src/workspace/project/exec-operation.ts`
-at 332. Five `max-lines-per-function` exceptions remain on test functions, in
-`test/access-cookie.test.ts` at 143, `test/access.test.ts` at 91, `test/access-owner.test.ts` at 77,
-`test/github/credential-surfaces.test.ts` at 53, and
-`test/facet/generation-0/execution-env-loaded.test.ts` at 51. The ninth, on
-`src/supervisor/projects/turn-run.ts`, suppressed nothing at `541a484` and is deleted here.
+An exception must carry its reason, in the directive or in the comment above it.
+`git grep -n max-lines -- src test tools` lists the exceptions.
