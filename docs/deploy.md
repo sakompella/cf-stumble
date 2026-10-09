@@ -18,7 +18,7 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 ## Deploy with the button
 
-Select the button in the README. Cloudflare copies the public source repository into your GitHub account, lets you choose names, provisions the resources declared in `wrangler.jsonc`, sets up Workers Builds, builds the project, and deploys it.
+Select the button at the top of this page. Cloudflare copies the public source repository into your GitHub account, lets you choose names, provisions the resources declared in `wrangler.jsonc`, sets up Workers Builds, builds the project, and deploys it.
 
 The button does not configure Cloudflare Access. It also does not provision Containers. Workers Builds builds the Container image, but Cloudflare must create the Container application as part of the deployment. The button declares no secrets, so the first deploy works without them. Until you set the Access secrets below, the Worker refuses every request. Complete the Access setup before you use the app.
 
@@ -183,7 +183,7 @@ Set the `GH_TOKEN` secret if you want an unattended run to authorize without a p
 
 The sidebar also contains the harness project. It selects `/workspace/harness`, which is a Git clone of the harness repository. It is not a second connected repository or a separate workspace.
 
-A connection is refused when GitHub's complete tree reports more than 3,000 files or 150 MB of current-tree blobs. The existing truncated-tree and 5,000,000 KB repository-history limits still apply. This check queries GitHub's API with the `GH_TOKEN` secret. If you authorize only through the interactive device flow and never set `GH_TOKEN`, the query runs unauthenticated. GitHub answers an unauthenticated request for a private repository the same way it answers one that does not exist, so the check cannot read the repository and skips it. The clone that follows does not enforce the file-count or byte ceiling: it only fails when the workspace runs out of disk space. A private repository connected without `GH_TOKEN` can exceed both ceilings and still connect.
+A connection is refused when GitHub's complete tree reports more than 3,000 files or 150 MB of current-tree blobs. The existing truncated-tree and 5,000,000 KB repository-history limits still apply. This check queries GitHub's API with the `GH_TOKEN` secret. If you authorize only through the interactive device flow and never set `GH_TOKEN`, the query runs unauthenticated. GitHub answers an unauthenticated request for a private repository the same way it answers one that does not exist, so the check cannot read the repository and skips it. The clone step then measures the repository again with the workspace's own `gh` credential and refuses one over a ceiling. A repository it cannot measure is cloned anyway. See `docs/agents/design/github-connection.md`, "Connecting a repository".
 
 To remove a connected project, send the owner-only `POST /api/projects/{id}/disconnect` request with the page's exact `Origin`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
 
@@ -214,7 +214,7 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 ## Known untested areas
 
-- Compaction across a reload has not been tested. Pi owns compaction, and this project has no forced-compaction test.
+- Compaction across a reload is tested locally (`test/facet/generation-0/compaction.test.ts`), not on a deployment. Pi owns compaction.
 - The Deploy to Cloudflare button flow has not been recorded against a clean account. The deployed instance has been tested after the button flow. On an empty instance, the owner submitted and activated a generation, then served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
 - The deployed probe tested Access token verification with an injected key. It did not prove that a real Cloudflare Access application admits the configured owner.
 

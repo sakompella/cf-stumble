@@ -32,13 +32,10 @@ request, so record these three facts with the deploy.
    Worker checks the `sub` itself, so an Access policy that admitted a second identity would still
    be refused here; the two are configured to agree, and the Worker is the one that fails closed.
 3. **No bypass, service-token, or "everyone" rule** on the application, and no second policy. The
-   Worker takes the tenant from the verified token alone: it refuses any request that also carries
-   a `tenant`, `identity`, `audience`, `workspace`, or `supervisor` query parameter, or the matching
-   `x-cf-stumble-*` header, with `400` rather than serving it and ignoring the field.
+   Worker takes the tenant from the verified token alone.
 
-`test/access/tenant-selection.test.ts` and `test/access-owner.test.ts` hold the Worker side of this
-to its contract locally. The application and policy themselves are deployed configuration, so they
-are checked when the owner deploys.
+`test/access-owner.test.ts` holds the Worker side of this to its contract locally. The application
+and policy themselves are deployed configuration, so they are checked when the owner deploys.
 
 `CF_STUMBLE_HARNESS_COMMIT` must be a full SHA-1 or SHA-256 Git object ID in lowercase hexadecimal, because a generation is one specific labeled commit (ADR-0002). A branch name or a short ref fails the guard rather than the submission.
 
