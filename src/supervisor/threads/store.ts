@@ -81,14 +81,6 @@ export class ThreadStore {
         turn_holder_id TEXT
       );
     `);
-
-    const columns = this.sql
-      .exec<{ readonly name: string }>("PRAGMA table_info(project_threads)")
-      .toArray();
-
-    if (!columns.some((column) => column.name === "turn_holder_id")) {
-      this.sql.exec("ALTER TABLE project_threads ADD COLUMN turn_holder_id TEXT");
-    }
   }
 
   read(project: SelectableProject): ThreadResult {

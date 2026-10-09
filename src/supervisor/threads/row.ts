@@ -9,8 +9,7 @@ export type ThreadRow = {
   readonly revision: number;
   readonly turn_active: number;
   readonly turn_deadline_at: number | null;
-  readonly turn_lease_id?: string | null;
-  readonly turn_holder_id?: string | null;
+  readonly turn_holder_id: string | null;
 };
 
 /**
