@@ -1,14 +1,11 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type --
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof --
 // Runtime guards and envelope parsing for values that arrive from the project RPC target. A real
 // Workers RPC hop, or a target this adapter does not fully trust, can hand back anything at all —
 // these functions narrow that `unknown` value to a known shape or report it as malformed, rather
 // than assuming its declared TypeScript type still describes what actually arrived.
 
+import { isRecord } from "../../untrusted.js";
 import type { ProjectFileInfo, ProjectFileKind } from "../../workspace/project/protocol.js";
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 export function isNull(value: unknown): value is null {
   return value === null;

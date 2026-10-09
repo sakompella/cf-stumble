@@ -1,7 +1,8 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // This adapter turns a verified token into the one name the Supervisor is addressed by.
-// oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof
+// oxlint-disable anti-slop/no-runtime-typeof
+import { isRecord } from "../untrusted.js";
 import { presentedAccessToken } from "./credentials.js";
 import {
   certsUrl,
@@ -203,10 +204,6 @@ function accessConfiguration(env: AccessWorkerEnvironment): AccessConfiguration 
     explicitKeys,
     certsUrl: certsUrl(issuer),
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** The one admitted result. The Supervisor's name and the scope it was derived from travel together. */

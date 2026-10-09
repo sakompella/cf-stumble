@@ -1,4 +1,4 @@
-import { isRecord } from "../../src/routes/json.js";
+import { isRecord } from "../../src/untrusted.js";
 
 /**
  * The two Wrangler files, read as text. Vite resolves the glob at build time, so this reads no

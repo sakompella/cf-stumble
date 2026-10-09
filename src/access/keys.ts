@@ -1,9 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // The JWKS document is untrusted input, so keys are parsed before the verifier ever sees them.
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type
+// oxlint-disable anti-slop/no-unknown-parameters
 import { Result } from "better-result";
 import { logRedactedCause } from "../diagnostics.js";
+import { isRecord } from "../untrusted.js";
 
 export type AccessFetch = typeof fetch;
 
@@ -42,10 +43,6 @@ let publicKeyCache: CachedPublicKeys | undefined;
 let publicKeyRefreshAllowedAt = 0;
 
 let publicKeyFetchInFlight: Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> | undefined;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isPublicJwk(value: unknown): value is AccessPublicKey {
   if (!isRecord(value) || typeof value.kty !== "string") {

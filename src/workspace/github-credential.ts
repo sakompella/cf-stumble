@@ -25,7 +25,7 @@ import {
   type CommandOutput,
   type WorkspaceOperations,
 } from "./executor.js";
-import { asUntrusted, field, fieldsAreExactly } from "./untrusted.js";
+import { asUntrusted, field, hasExactKeys } from "../untrusted.js";
 
 /**
  * The Workspace Host's credential surface: install the workspace's GitHub credential, report what
@@ -99,7 +99,7 @@ export function parseGitHubCredentialRequest(
 
   switch (field(request, "step")) {
     case "install": {
-      if (!fieldsAreExactly(request, ["kind", "step", "token"])) return invalidRequest();
+      if (!hasExactKeys(request, ["kind", "step", "token"])) return invalidRequest();
       const token = parseGitHubToken(field(request, "token"));
 
       return token === undefined
@@ -108,11 +108,11 @@ export function parseGitHubCredentialRequest(
     }
 
     case "status":
-      return fieldsAreExactly(request, ["kind", "step"])
+      return hasExactKeys(request, ["kind", "step"])
         ? { kind: "github-credential", step: "status" }
         : invalidRequest();
     case "verify-repository": {
-      if (!fieldsAreExactly(request, ["kind", "step", "repositoryUrl"])) return invalidRequest();
+      if (!hasExactKeys(request, ["kind", "step", "repositoryUrl"])) return invalidRequest();
       const repositoryUrl = canonicalRepositoryUrl(field(request, "repositoryUrl"));
 
       return repositoryUrl === undefined

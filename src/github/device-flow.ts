@@ -1,5 +1,7 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof -- GitHub's device-flow responses are parsed at this boundary.
 
+import { isRecord } from "../untrusted.js";
+
 /**
  * GitHub's OAuth device flow, as the two calls cf-stumble makes and the values it may keep.
  *
@@ -80,10 +82,6 @@ export type DeviceRedemption =
   | Readonly<{ kind: "expired" }>
   | Readonly<{ kind: "denied" }>
   | Readonly<{ kind: "unavailable" }>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function positiveSeconds(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : fallback;

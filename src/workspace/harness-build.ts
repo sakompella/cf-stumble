@@ -10,7 +10,7 @@ import {
 import { shellQuote } from "../shell-quote.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import { WORKSPACE_ROOT } from "../workspace-layout.js";
-import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
+import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 /** A build request whose commit passed `parseHarnessCommit`. Only this form reaches a command. */
 export type ParsedHarnessBuildRequest =
@@ -49,7 +49,7 @@ export function parseHarnessBuildRequest(
 
   switch (kind) {
     case "build-step": {
-      if (!fieldsAreExactly(request, ["kind", "harnessCommit", "step"])) return invalidRequest();
+      if (!hasExactKeys(request, ["kind", "harnessCommit", "step"])) return invalidRequest();
       const harnessCommit = parsedCommit(request);
 
       if (harnessCommit === undefined) return invalidRequest();
@@ -61,7 +61,7 @@ export function parseHarnessBuildRequest(
     }
 
     case "build-output": {
-      if (!fieldsAreExactly(request, ["kind", "harnessCommit"])) return invalidRequest();
+      if (!hasExactKeys(request, ["kind", "harnessCommit"])) return invalidRequest();
       const harnessCommit = parsedCommit(request);
 
       return harnessCommit === undefined ? invalidRequest() : { kind, harnessCommit };

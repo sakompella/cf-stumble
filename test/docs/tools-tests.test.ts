@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRecord } from "../../src/routes/json.js";
+import { isRecord } from "../../src/untrusted.js";
 
 /**
  * Vitest runs `test/**` and `src/**` only. The vendored lint-rule tests under `tools/` use Oxlint's

@@ -14,7 +14,7 @@ import {
 import { projectDirectory, projectGitDirectory } from "../workspace-layout.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import type { WorkspaceOperations } from "./executor.js";
-import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
+import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 /**
  * What a caller may ask the workspace to provision: one project of the tenant's catalog and one
@@ -83,7 +83,7 @@ export function parseProjectProvisionRequest(
 
   if (field(request, "kind") !== "provision-project") return invalidRequest();
 
-  if (!fieldsAreExactly(request, ["kind", "projectId", "repositoryUrl", "step"])) {
+  if (!hasExactKeys(request, ["kind", "projectId", "repositoryUrl", "step"])) {
     return invalidRequest();
   }
 

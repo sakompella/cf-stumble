@@ -2,7 +2,8 @@
 import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 import type { GenerationControlResult, GenerationRequest } from "../supervisor/control/index.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
-import { hasExactKeys, isCount, isRecord, jsonError, readJson } from "./json.js";
+import { hasExactKeys, isRecord } from "../untrusted.js";
+import { isCount, jsonError, readJson } from "./json.js";
 
 export type GenerationControlSupervisor = {
   readonly controlGeneration: (request: GenerationRequest) => Promise<GenerationControlResult>;

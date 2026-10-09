@@ -1,6 +1,7 @@
-// oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-known-value-widening, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof -- GitHub's JSON response is parsed at this API boundary.
+// oxlint-disable anti-slop/no-known-value-widening, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof -- GitHub's JSON response is parsed at this API boundary.
 
 import type { PublicRepositoryUrl } from "../project-catalog.js";
+import { isRecord } from "../untrusted.js";
 import type { GitHubFetch, GitHubToken } from "./device-flow.js";
 
 /** Each API request has a short bound so a connection is not held by GitHub. */
@@ -57,10 +58,6 @@ export function repositorySizeReason(measured: RepositorySizeLookup): Repository
   if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
 
   return "within-limits";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** The REST path of one repository, such as `repos/owner/name`, as both `fetch` and `gh api` use it. */

@@ -2,7 +2,8 @@
 // arrives as an argument of an RPC method the Supervisor calls on this facet, so nothing about its
 // shape is proven until these functions prove it.
 
-import { isPlainObject, isString } from "./plain-values.js";
+import { isRecord } from "../../untrusted.js";
+import { isString } from "./plain-values.js";
 import type { AgentMessage } from "@cf-stumble/pi";
 
 /**
@@ -35,7 +36,7 @@ function parseTurnMessages(value: unknown): readonly AgentMessage[] | undefined 
 }
 
 export function parseFacetTurnRequest(value: unknown): FacetTurnRequest | undefined {
-  if (!isPlainObject(value)) return undefined;
+  if (!isRecord(value)) return undefined;
   const { prompt, messages } = value;
 
   if (!isString(prompt)) return undefined;

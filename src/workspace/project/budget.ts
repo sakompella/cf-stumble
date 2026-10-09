@@ -1,4 +1,4 @@
-import { asUntrusted, field, fieldsAreExactly } from "../untrusted.js";
+import { asUntrusted, field, hasExactKeys } from "../../untrusted.js";
 
 /** Parse the optional turn budget without letting untrusted data enter the capability. */
 export function parseProjectBudget(
@@ -12,7 +12,7 @@ export function parseProjectBudget(
 
   const request = asUntrusted(value);
 
-  if (!fieldsAreExactly(request, ["remainingMs"])) return undefined;
+  if (!hasExactKeys(request, ["remainingMs"])) return undefined;
 
   const remainingMs = field(request, "remainingMs");
 

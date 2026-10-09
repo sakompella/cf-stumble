@@ -6,7 +6,7 @@ import { projectDirectory } from "../workspace-layout.js";
 import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import type { WorkspaceOperations } from "./executor.js";
-import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
+import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 /** The only workspace removal request. Its paths are derived from the parsed id. */
 export type ProjectRemovalRequest = Readonly<{
@@ -40,7 +40,7 @@ export function parseProjectRemovalRequest(
 
   if (
     field(request, "kind") !== "remove-project" ||
-    !fieldsAreExactly(request, ["kind", "projectId"])
+    !hasExactKeys(request, ["kind", "projectId"])
   ) {
     return invalidRequest();
   }

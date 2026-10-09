@@ -1,7 +1,8 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // JWT parsing is the trust boundary. These checks intentionally validate unknown token data.
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof, typescript/no-redundant-type-constituents
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof, typescript/no-redundant-type-constituents
+import { isRecord } from "../untrusted.js";
 import type { AccessPublicKey } from "./keys.js";
 
 /** The only token field used to route an authenticated request. */
@@ -42,10 +43,6 @@ interface JwtClaims {
   readonly exp: number;
   readonly nbf?: number;
   readonly sub: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function decodePart(part: string): Uint8Array | undefined {

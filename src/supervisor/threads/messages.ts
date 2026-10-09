@@ -1,6 +1,7 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type -- This file is the parse boundary for a stored thread. A row read back from SQLite is decoded JSON with no proven shape, so these functions work in open records and runtime kinds until they have proved one.
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- This file is the parse boundary for a stored thread. A row read back from SQLite is decoded JSON with no proven shape, so these functions work in open records and runtime kinds until they have proved one.
 import { Result, TaggedError } from "better-result";
 import type { AgentMessage } from "@cf-stumble/pi";
+import { isRecord } from "../../untrusted.js";
 import {
   storedFieldRules,
   THREAD_MESSAGE_FIELDS,
@@ -20,10 +21,6 @@ export class ThreadMessagesUnreadable extends TaggedError("ThreadMessagesUnreada
 
 function unreadable(reason: string): Result<never, ThreadMessagesUnreadable> {
   return Result.err(new ThreadMessagesUnreadable({ reason, message: reason }));
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isThreadMessageRole(value: unknown): value is ThreadMessageRole {
@@ -97,7 +94,7 @@ function restoredMessage(
 }
 
 function parseThreadMessage(value: unknown): Result<AgentMessage, ThreadMessagesUnreadable> {
-  if (!isPlainObject(value)) {
+  if (!isRecord(value)) {
     return unreadable("a stored thread entry is not an object");
   }
 

@@ -1,5 +1,5 @@
 import { truncateTail } from "@cf-stumble/pi";
-import { isPlainObject } from "./plain-values.js";
+import { isRecord } from "../../untrusted.js";
 import { TOOL_RESULT_DISPLAY_MAX_BYTES, TOOL_RESULT_DISPLAY_MAX_LINES } from "./turn-policy.js";
 import type { AgentEvent, AgentMessage } from "@cf-stumble/pi";
 import type { PiAgentTurnState } from "./pi-agent-turn.js";
@@ -71,7 +71,7 @@ function toolResultText(message: Extract<AgentMessage, { role: "toolResult" }>):
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- Boundary: Pi types a tool call's arguments as an open value, so the shape is proven here.
 function toolArguments(args: unknown): Record<string, unknown> {
-  return isPlainObject(args) ? args : {};
+  return isRecord(args) ? args : {};
 }
 
 /**

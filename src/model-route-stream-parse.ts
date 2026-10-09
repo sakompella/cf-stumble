@@ -11,8 +11,7 @@
  * `tool-call-delta` event instead of several.
  */
 
-import { asUntrusted, field } from "./model-route.js";
-import type { UntrustedObject } from "./model-route.js";
+import { asUntrusted, field, type UntrustedObject } from "./untrusted.js";
 import type { ToolCallDelta } from "./model-route-events.js";
 
 /** One provider stream chunk's fields this route understands, after defensive parsing. */

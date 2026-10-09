@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import cloudflareConfig from "../../cloudflare.config.js";
-import { isRecord } from "../../src/routes/json.js";
+import { isRecord } from "../../src/untrusted.js";
 import { parsedConfig } from "./wrangler-files.js";
 
 /**

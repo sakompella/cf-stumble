@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
+// oxlint-disable anti-slop/no-unknown-returns -- Request JSON is parsed and validated at this HTTP boundary.
 
 /**
  * Every owner API failure that is not a Supervisor decision uses one of these codes. The codes name
@@ -17,16 +17,6 @@ export type ApiErrorCode =
 
 export function jsonError(status: number, code: ApiErrorCode): Response {
   return Response.json({ ok: false, error: { code } }, { status });
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const keys = Object.keys(value).toSorted();
-
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
 export function isCount(value: unknown): value is number {

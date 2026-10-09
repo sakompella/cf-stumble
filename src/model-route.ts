@@ -2,6 +2,7 @@
 
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { streamModelEvents, streamingBindingCall } from "./model-route-stream.js";
+import { asUntrusted, field, hasOwn, type UntrustedObject } from "./untrusted.js";
 
 export { streamModelEvents } from "./model-route-stream.js";
 
@@ -71,32 +72,6 @@ export type ValidationFailure = Readonly<{
   ok: false;
   error: Readonly<{ code: "invalid-request"; reason: string }>;
 }>;
-
-// -- Untrusted boundary accessor ---------------------------------------------
-//
-// Shared with `model-route-stream-parse.ts`, which parses the provider's own untrusted stream
-// chunks with the same accessors rather than a second copy of this narrowing.
-
-declare const untrustedBrand: unique symbol;
-
-/** Parsed JSON object whose fields have not been validated yet. */
-export type UntrustedObject = object & { readonly [untrustedBrand]: never };
-
-// oxlint-disable-next-line anti-slop/no-object-parameters -- Boundary: accepts the narrowed object from a typeof guard.
-export function asUntrusted(value: object): UntrustedObject {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: caller confirmed object and non-null.
-  return value as UntrustedObject;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Boundary accessor: returns the raw value for the caller to narrow.
-export function field(obj: UntrustedObject, key: string): unknown {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-unsafe-dictionary-type -- SAFETY: branded untrusted object; Record<string, unknown> is the correct representation for an unvalidated JSON object whose fields the caller will narrow.
-  return (obj as Record<string, unknown>)[key];
-}
-
-export function hasOwn(obj: UntrustedObject, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(obj, key);
-}
 
 // -- Validation (pure, plain values per ADR-0035) ---------------------------
 

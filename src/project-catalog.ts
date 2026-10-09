@@ -1,4 +1,6 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof -- Catalog configuration and project selection are parsed at these boundaries.
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Catalog configuration and project selection are parsed at these boundaries.
+
+import { isRecord } from "./untrusted.js";
 
 /**
  * A project id: lower-case words joined by single hyphens, optionally followed by `--` and a
@@ -234,10 +236,6 @@ export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): s
   const segments = new URL(repositoryUrl).pathname.split("/").filter((part) => part.length > 0);
 
   return segments.slice(-2).join("/");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function parseProject(value: unknown): Project | undefined {
