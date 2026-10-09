@@ -218,6 +218,22 @@ test("rollback requires a target generation that has been active before", async 
   });
 });
 
+test("a stale rollback request leaves the active generation unchanged", async () => {
+  const control = supervisor("control-stale-rollback");
+  await activateFixtureGeneration(control);
+  const replacement = await readyGeneration(control, commits.first);
+  const beforeActivation = await control.getActiveGeneration();
+  await activateGeneration(control, replacement);
+  const active = await control.getActiveGeneration();
+
+  const result = await control.controlGeneration(
+    request(user, { kind: "rollback", label: 0, observedEpoch: beforeActivation.epoch }),
+  );
+
+  expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
+  expect(await control.getActiveGeneration()).toEqual(active);
+});
+
 test("activating the active generation with its current epoch is a no-op, but a stale epoch rejects", async () => {
   const control = supervisor("control-activate-no-op");
   await activateFixtureGeneration(control);
