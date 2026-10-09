@@ -105,4 +105,4 @@ console.log(`Subject:     ${session.subject}`);
 
 console.log("The token stays in that ignored file. Send it as the Cf-Access-Jwt-Assertion header,");
 
-console.log("or as the CF_Authorization cookie once the Worker accepts the cookie.");
+console.log("or as the CF_Authorization cookie.");

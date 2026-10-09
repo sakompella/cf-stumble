@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the Worker locally with the throwaway Access session from scripts/local/access-session.mjs.
+# Run the Worker locally with the throwaway Access session that `pnpm local:access-session` writes.
 #
 # Cloudflare Access sits in front of the deployed Worker, not in front of `wrangler dev`. This
 # script supplies the same configuration values the deployed Worker reads, so local runs
@@ -34,7 +34,7 @@ printf 'Local Access session: team %s, audience %s\n' "$TEAM_DOMAIN" "$AUDIENCE"
 # Durable Object binding that `cloudflare.config.ts` writes for the Worker itself ("defined on
 # another Worker") once a Container is attached to that Durable Object. `wrangler.jsonc` is kept
 # equal to `cloudflare.config.ts` by test/docs/cloudflare-config-drift.test.ts.
-exec wrangler dev \
+exec pnpm exec wrangler dev \
   --var "CF_ACCESS_TEAM_DOMAIN:$TEAM_DOMAIN" \
   --var "CF_ACCESS_AUD:$AUDIENCE" \
   --var "CF_ACCESS_PUBLIC_KEYS:$PUBLIC_KEYS" \

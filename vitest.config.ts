@@ -14,9 +14,8 @@ export default defineConfig({
         plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.test.jsonc" } })],
         test: {
           name: "workers",
-          include: ["test/**/*.test.ts", "test/**/*.workers.ts", "src/**/*.test.ts"],
+          include: ["test/**/*.test.ts"],
           exclude: [...defaultExclude, "**/*.props.test.ts", "**/*.shell.test.ts"],
-          typecheck: { enabled: false },
         },
       },
       {
@@ -25,7 +24,6 @@ export default defineConfig({
           include: ["test/**/*.props.test.ts", "test/**/*.shell.test.ts"],
           environment: "node",
           pool: "forks",
-          typecheck: { enabled: false },
         },
       },
     ],
