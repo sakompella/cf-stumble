@@ -209,7 +209,7 @@ export class ThreadStore {
   ): ThreadResult {
     const stored = serializeThreadMessages(messages);
 
-    return this.releaseLease(project, leaseId, (current, claim) => {
+    return this.withLeaseClaim(project, leaseId, (current, claim) => {
       const decision = decideFinishTurn(project.id, current, claim, now);
 
       switch (decision.kind) {
@@ -254,7 +254,7 @@ export class ThreadStore {
 
   /** Give the turn slot back without writing a conversation, for the lease that holds it. */
   abandonTurn(project: SelectableProject, leaseId: string): ThreadResult {
-    return this.releaseLease(project, leaseId, (current, claim) => {
+    return this.withLeaseClaim(project, leaseId, (current, claim) => {
       const decision = decideAbandonTurn(project.id, current, claim);
 
       switch (decision.kind) {
@@ -273,17 +273,17 @@ export class ThreadStore {
     });
   }
 
-  /** Read the thread and the lease claim, then let `release` decide and write, in one transaction. */
-  private releaseLease(
+  /** Read the thread and the lease claim, then let `decide` judge and write, in one transaction. */
+  private withLeaseClaim(
     project: SelectableProject,
     leaseId: string,
-    release: (current: ProjectThread, claim: TurnLeaseClaim) => ThreadResult,
+    decide: (current: ProjectThread, claim: TurnLeaseClaim) => ThreadResult,
   ): ThreadResult {
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
 
       return current.ok
-        ? release(current.thread, this.leaseClaim(project, leaseId))
+        ? decide(current.thread, this.leaseClaim(project, leaseId))
         : rejected(current.problem);
     });
   }
