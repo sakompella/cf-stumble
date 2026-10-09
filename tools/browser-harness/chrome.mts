@@ -1,6 +1,6 @@
 import { collectBrowserErrors } from "./browser-errors.mjs";
 import type { CdpConnection, CdpResult } from "./cdp.mjs";
-import type { JsonValue } from "./json.mjs";
+import type { JsonValue } from "../json.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 
 /**

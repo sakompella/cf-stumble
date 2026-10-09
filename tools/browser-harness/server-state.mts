@@ -2,7 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { initialProjects, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import { INITIAL_GENERATION, type GenerationState } from "./fixtures-generation.mjs";
 import { initialThread, type StoredThread } from "./fixtures-thread.mjs";
-import type { JsonValue } from "./json.mjs";
+import type { JsonValue } from "../json.mjs";
 
 /**
  * Everything the stub remembers, and the one thing a case can only learn from the stub.

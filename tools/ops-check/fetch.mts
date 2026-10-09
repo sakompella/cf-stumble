@@ -11,7 +11,7 @@ import {
   parseJsonRecordText,
   type JsonRecord,
   type JsonValue,
-} from "../browser-harness/json.mts";
+} from "../json.mts";
 import {
   BUCKET_MS,
   type RunningInstance,

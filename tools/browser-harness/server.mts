@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { parseScenario, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import type { GenerationRecord, GenerationState } from "./fixtures-generation.mjs";
 import { threadSummary, type ThreadState } from "./fixtures-thread.mjs";
-import { parseJsonRecordText, type JsonValue } from "./json.mjs";
+import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
   acceptsHtml,
   sendJson,

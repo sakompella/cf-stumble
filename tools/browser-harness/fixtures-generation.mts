@@ -1,5 +1,5 @@
 import type { HarnessScenario } from "./fixtures.mjs";
-import type { JsonValue } from "./json.mjs";
+import type { JsonValue } from "../json.mjs";
 
 /**
  * The generation ledger the stub keeps, and what each generation command does to it.

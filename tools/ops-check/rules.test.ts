@@ -5,7 +5,7 @@ import { bucketsOf, canceledInvocationRow, eventRow, input, logs, metrics } from
 import { BUCKET_MS, MINUTE_MS, type CheckInput } from "./model.mts";
 import { runChecks } from "./check.mts";
 import { CALM, firing, START, WINDOW, withLogs } from "./rule-helpers.mts";
-import type { JsonRecord } from "../browser-harness/json.mts";
+import type { JsonRecord } from "../json.mts";
 
 function settled(
   index: number,

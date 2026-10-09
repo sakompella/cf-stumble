@@ -10,7 +10,7 @@ import {
   isJsonString,
   type JsonRecord,
   type JsonValue,
-} from "../browser-harness/json.mts";
+} from "../json.mts";
 import { routePattern } from "../../src/routes/route-pattern.ts";
 import { METRICS_ROW_LIMIT, TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
 import type {

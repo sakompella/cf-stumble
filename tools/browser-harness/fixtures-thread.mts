@@ -6,7 +6,7 @@ import {
   HARNESS_PROJECT_URL,
   HARNESS_SELF_PROJECT_ID,
 } from "./fixtures.mjs";
-import type { JsonValue } from "./json.mjs";
+import type { JsonValue } from "../json.mjs";
 import { textMessage, type StoredMessage } from "./turn-messages.mjs";
 
 /**

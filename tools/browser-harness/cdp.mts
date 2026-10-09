@@ -6,7 +6,7 @@ import {
   parseJsonRecordText,
   type JsonRecord,
   type JsonValue,
-} from "./json.mjs";
+} from "../json.mjs";
 
 /**
  * The DevTools Protocol connection, and the one place a DevTools message is turned from text into

@@ -48,7 +48,7 @@ example. Nothing in this directory needs to be read to write a passing case.
 | `chrome.mts`                                                             | one tab: real mouse, keyboard, viewport, and evaluation                            |
 | `chrome-binary.mts`, `chrome-launch.mts`                                 | finding the browser executable, and starting it with a fresh profile               |
 | `smoke.mts`                                                              | the `--only SMOKE` run as its own entrypoint                                       |
-| `cdp.mts`, `json.mts`, `browser-errors.mts`                              | the DevTools socket, JSON as a closed type, and the browser's own fault channels   |
+| `cdp.mts`, `browser-errors.mts`                                          | the DevTools socket and the browser's own fault channels                           |
 | `server.mts`, `server-routes.mts`, `server-turn.mts`, `server-state.mts` | the stub: routes, the streaming turn with its barrier, and everything it remembers |
 | `fixtures*.mts`, `turn-*.mts`                                            | the recorded worlds: projects, threads, generations, and turn frames               |
 | `page-*.mts`, `selectors.mts`                                            | typed readers and actions over the rendered page                                   |

@@ -2,7 +2,7 @@ import type { ServerResponse } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames.js";
 import type { HarnessScenario } from "./fixtures.mjs";
-import { isJsonRecord, isJsonString, type JsonValue } from "./json.mjs";
+import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import { sendJson } from "./server-routes.mjs";
 import { freshStreamWatch, threadOf, waitUntil, type ScenarioState } from "./server-state.mjs";
 import { turnScript } from "./turn-fixture.mjs";

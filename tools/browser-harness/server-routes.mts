@@ -4,7 +4,7 @@ import { ownerPageHtml } from "../../src/page/index.js";
 import { NEW_PROJECT, authorizationPayload, connectPayload, projectsPayload } from "./fixtures.mjs";
 import { runGenerationCommand, statusPayload, submitGeneration } from "./fixtures-generation.mjs";
 import { threadPayload } from "./fixtures-thread.mjs";
-import { isJsonNumber, isJsonRecord, isJsonString, type JsonValue } from "./json.mjs";
+import { isJsonNumber, isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import { threadOf, type ScenarioState } from "./server-state.mjs";
 
 /**

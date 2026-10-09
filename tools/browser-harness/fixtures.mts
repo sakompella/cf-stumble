@@ -1,5 +1,5 @@
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
-import type { JsonValue } from "./json.mjs";
+import type { JsonValue } from "../json.mjs";
 
 /**
  * The worlds the harness server can serve, and the recorded answers that are the same in all of

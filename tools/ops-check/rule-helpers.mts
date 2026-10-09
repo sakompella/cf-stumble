@@ -1,6 +1,6 @@
 import { runChecks } from "./check.mts";
 import { at, input, logs, metrics } from "./fixtures.mts";
-import type { JsonRecord } from "../browser-harness/json.mts";
+import type { JsonRecord } from "../json.mts";
 import { MINUTE_MS, type CheckInput, type RuleId } from "./model.mts";
 
 export const START = at("2026-10-01T00:00:00Z");

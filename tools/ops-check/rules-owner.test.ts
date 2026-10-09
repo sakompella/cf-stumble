@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { bucketsOf, eventRow, input, logs, metrics } from "./fixtures.mts";
 import { BUCKET_MS, MINUTE_MS } from "./model.mts";
 import { firing, START, WINDOW } from "./rule-helpers.mts";
-import type { JsonRecord } from "../browser-harness/json.mts";
+import type { JsonRecord } from "../json.mts";
 
 describe("rule c: what owns container time", () => {
   const hot = (buckets: number) =>

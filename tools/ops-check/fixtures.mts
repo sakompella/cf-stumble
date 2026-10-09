@@ -5,7 +5,7 @@
  * appears. Each scenario is parsed through the same code the CLI uses, so a change to a response
  * shape breaks a test here, not a live run.
  */
-import type { JsonRecord, JsonValue } from "../browser-harness/json.mts";
+import type { JsonRecord, JsonValue } from "../json.mts";
 import { BUCKET_MS, HOUR_MS, MINUTE_MS, type CheckInput, type TimeWindow } from "./model.mts";
 import { DEFAULT_IDLE_LIMIT_MS } from "./thresholds.mts";
 import { parseMetrics, parseTelemetry } from "./parse.mts";

@@ -1,5 +1,5 @@
 import type { BrowserPage } from "./chrome.mjs";
-import { isJsonRecord, type JsonRecord, type JsonValue } from "./json.mjs";
+import { isJsonRecord, type JsonRecord, type JsonValue } from "../json.mjs";
 import type { RecordedRequest } from "./server-state.mjs";
 
 /**

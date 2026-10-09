@@ -1,9 +1,10 @@
 /**
  * JSON as a closed type, and the two guards that open it.
  *
- * The harness handles JSON from two directions: DevTools replies coming in, and stub API payloads
- * going out. Both are JSON and nothing wider, so neither needs `unknown`. Stating that here once
- * keeps every reader in the harness working with a value contract instead of an escape hatch.
+ * The browser harness handles JSON from two directions: DevTools replies coming in, and stub API
+ * payloads going out. `ops:check` reads Cloudflare API replies. All of it is JSON and nothing
+ * wider, so none of it needs `unknown`. Stating that here once keeps every reader in both tools
+ * working with a value contract instead of an escape hatch.
  */
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonRecord;
 
