@@ -34,10 +34,6 @@ export type ThreadProblem =
   /** The Supervisor wrote this row and cannot read it back, so the row is damaged. */
   | Readonly<{ code: "unreadable-thread"; projectId: ProjectId; reason: string }>;
 
-export type ThreadResult =
-  | Readonly<{ ok: true; thread: ProjectThread }>
-  | Readonly<{ ok: false; problem: ThreadProblem }>;
-
 /**
  * What a caller sending a project id can be told. The two extra codes are the catalog's, because a
  * client names a project by a string and the server decides whether that string is a project at

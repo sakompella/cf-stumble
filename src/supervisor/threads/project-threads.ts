@@ -1,12 +1,14 @@
 // oxlint-disable anti-slop/no-unknown-parameters -- Every project id here arrives from a client through Durable Object RPC, so it is a string with no proven meaning until the catalog resolves it.
 
+import { Result } from "better-result";
 import { parseAgentMessages } from "./messages.js";
-import { ThreadStore, type ThreadLeaseResult, type ThreadRemovalResult } from "./store.js";
+import { ThreadStore, type ThreadLease } from "./store.js";
 import {
   serializedThread,
+  type ProjectThread,
+  type ProjectThreadProblem,
   type ProjectThreadResult,
   type ProjectTurnLeaseResult,
-  type ThreadResult,
 } from "./thread.js";
 import {
   resolveSelectableProject,
@@ -24,12 +26,7 @@ import {
  */
 type ProjectCatalogSource = () => SelectableCatalog;
 
-type ResolvedProject =
-  | Readonly<{ ok: true; project: SelectableProject }>
-  | Readonly<{
-      ok: false;
-      problem: Readonly<{ code: "invalid-project-id" | "unknown-project-id" }>;
-    }>;
+type CatalogProblem = Readonly<{ code: "invalid-project-id" | "unknown-project-id" }>;
 
 export type DisconnectProjectResult =
   | Readonly<{ ok: true }>
@@ -61,15 +58,13 @@ export class ProjectThreads {
   }
 
   read(projectId: unknown): ProjectThreadResult {
-    const resolved = this.resolve(projectId);
-
-    return resolved.ok ? serialized(this.store.read(resolved.project)) : resolved;
+    return plainThread(this.resolve(projectId).andThen((project) => this.store.read(project)));
   }
 
   startFreshThread(projectId: unknown): ProjectThreadResult {
-    const resolved = this.resolve(projectId);
-
-    return resolved.ok ? serialized(this.store.startFreshThread(resolved.project)) : resolved;
+    return plainThread(
+      this.resolve(projectId).map((project) => this.store.startFreshThread(project)),
+    );
   }
 
   /**
@@ -82,11 +77,11 @@ export class ProjectThreads {
     now: number,
     leaseMs: number,
   ): ProjectTurnLeaseResult {
-    const resolved = this.resolve(projectId);
-
-    return resolved.ok
-      ? serializedLease(this.store.startTurn(resolved.project, expectedRevision, now, leaseMs))
-      : resolved;
+    return plainLease(
+      this.resolve(projectId).andThen((project) =>
+        this.store.startTurn(project, expectedRevision, now, leaseMs),
+      ),
+    );
   }
 
   finishTurn(
@@ -95,78 +90,65 @@ export class ProjectThreads {
     messages: unknown,
     now: number,
   ): ProjectThreadResult {
-    const resolved = this.resolve(projectId);
-
-    if (!resolved.ok) {
-      return resolved;
-    }
-
-    const parsed = parseAgentMessages(messages);
-
-    if (parsed.isErr()) {
-      return {
-        ok: false,
-        problem: {
-          code: "invalid-messages",
-          projectId: resolved.project.id,
-          reason: parsed.error.reason,
-        },
-      };
-    }
-
-    return serialized(this.store.finishTurn(resolved.project, parsed.value, now, leaseId));
+    return plainThread(
+      this.resolve(projectId).andThen((project) =>
+        parseAgentMessages(messages)
+          .mapError((unreadable): ProjectThreadProblem => ({
+            code: "invalid-messages",
+            projectId: project.id,
+            reason: unreadable.reason,
+          }))
+          .andThen((parsed) => this.store.finishTurn(project, parsed, now, leaseId)),
+      ),
+    );
   }
 
   abandonTurn(projectId: unknown, leaseId: string): ProjectThreadResult {
-    const resolved = this.resolve(projectId);
-
-    return resolved.ok ? serialized(this.store.abandonTurn(resolved.project, leaseId)) : resolved;
+    return plainThread(
+      this.resolve(projectId).andThen((project) => this.store.abandonTurn(project, leaseId)),
+    );
   }
 
   disconnectProject(projectId: unknown, now: number): DisconnectProjectResult {
     const resolved = this.resolve(projectId);
 
-    if (!resolved.ok) return resolved;
+    if (resolved.isErr()) return { ok: false, problem: resolved.error };
 
-    if (resolved.project.kind === "harness") {
+    if (resolved.value.kind === "harness") {
       return { ok: false, problem: { code: "harness-project" } };
     }
 
-    const removed: ThreadRemovalResult = this.store.remove(resolved.project, now);
-
-    if (!removed.ok) {
-      if (removed.problem.code === "turn-active") {
-        return { ok: false, problem: removed.problem };
-      }
-
-      return { ok: false, problem: { code: "unknown-project-id" } };
-    }
-
-    return { ok: true };
+    return this.store.remove(resolved.value, now).match<DisconnectProjectResult>({
+      ok: () => ({ ok: true }),
+      err: (problem) =>
+        problem.code === "turn-active"
+          ? { ok: false, problem }
+          : { ok: false, problem: { code: "unknown-project-id" } },
+    });
   }
 
-  private resolve(projectId: unknown): ResolvedProject {
+  private resolve(projectId: unknown): Result<SelectableProject, CatalogProblem> {
     const resolution = resolveSelectableProject(projectId, this.catalog());
 
-    return resolution.ok
-      ? { ok: true, project: resolution.project }
-      : { ok: false, problem: { code: resolution.reason } };
+    return resolution.ok ? Result.ok(resolution.project) : Result.err({ code: resolution.reason });
   }
 }
 
-function serialized(result: ThreadResult): ProjectThreadResult {
-  return result.ok ? { ok: true, thread: serializedThread(result.thread) } : result;
+// The thread surface composes Results and converts once, here, because these plain unions are what
+// getProjectThread and startFreshProjectThread return over Supervisor RPC (ADR-0035).
+function plainThread(result: Result<ProjectThread, ProjectThreadProblem>): ProjectThreadResult {
+  return result.match<ProjectThreadResult>({
+    ok: (thread) => ({ ok: true, thread: serializedThread(thread) }),
+    err: (problem) => ({ ok: false, problem }),
+  });
 }
 
-function serializedLease(result: ThreadLeaseResult): ProjectTurnLeaseResult {
-  if (!result.ok) return result;
-
-  return result.lease.reclaimed
-    ? {
-        ok: true,
-        thread: serializedThread(result.lease.thread),
-        leaseId: result.lease.leaseId,
-        reclaimed: true,
-      }
-    : { ok: true, thread: serializedThread(result.lease.thread), leaseId: result.lease.leaseId };
+function plainLease(result: Result<ThreadLease, ProjectThreadProblem>): ProjectTurnLeaseResult {
+  return result.match<ProjectTurnLeaseResult>({
+    ok: ({ thread, leaseId, reclaimed }) =>
+      reclaimed
+        ? { ok: true, thread: serializedThread(thread), leaseId, reclaimed: true }
+        : { ok: true, thread: serializedThread(thread), leaseId },
+    err: (problem) => ({ ok: false, problem }),
+  });
 }
