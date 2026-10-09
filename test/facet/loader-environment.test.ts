@@ -23,7 +23,7 @@ import type { MainFacetTarget } from "../../src/facet/index.js";
  * The checks below hold that line from two directions: the platform refuses the serialization, and
  * the loader-environment type has no slot to put it in while the surface that does accept it takes
  * it per call. That a mounted facet's environment holds only `MODEL` is already checked by
- * `test/facet/facet-spike.test.ts`, against a facet the Supervisor really mounted.
+ * `test/facet/mounted-facet.test.ts`, against a facet the Supervisor really mounted.
  */
 
 const modelRoute = workerExports.ModelRoute({});

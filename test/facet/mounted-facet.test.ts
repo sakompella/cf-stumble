@@ -21,14 +21,14 @@ afterEach(async () => {
 });
 
 test("forwards an ordinary request to the main facet", async () => {
-  const response = await facetRequest("facet-spike-ping", "/facet/ping");
+  const response = await facetRequest("mounted-facet-ping", "/facet/ping");
 
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("pong");
 });
 
 test("runs the main facet with only the model capability", async () => {
-  const response = await facetRequest("facet-spike-bindings", "/facet/bindings");
+  const response = await facetRequest("mounted-facet-bindings", "/facet/bindings");
 
   expect(response.status).toBe(200);
   expect(await response.json(), "the running facet must receive only the model capability").toEqual(
@@ -37,7 +37,7 @@ test("runs the main facet with only the model capability", async () => {
 });
 
 test("blocks ambient outbound requests from the main facet", async () => {
-  const response = await facetRequest("facet-spike-outbound", "/facet/outbound");
+  const response = await facetRequest("mounted-facet-outbound", "/facet/outbound");
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ ok: false, error: "outbound-blocked" });
