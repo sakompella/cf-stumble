@@ -9,7 +9,7 @@
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
     "typecheck": "tsc --noEmit",
     "typecheck:tools": "tsc --noEmit -p tools",
-    "lint": "oxlint --type-aware --max-warnings=0",
+    "lint": "oxlint --type-aware --max-warnings=0 --report-unused-disable-directives",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "build:pi": "pnpm --filter @cf-stumble/pi build",

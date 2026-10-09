@@ -1,5 +1,4 @@
-// The test deliberately builds varied claim dictionaries to exercise the untrusted JWT boundary.
-// oxlint-disable typescript/no-misused-spread, eslint/max-lines-per-function
+// oxlint-disable eslint/max-lines-per-function -- One describe callback registers every claim case for the untrusted JWT boundary.
 
 import { exports as workerExports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";

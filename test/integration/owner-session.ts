@@ -32,7 +32,6 @@ export async function ownerSession(keyName: string) {
   });
 
   const environment = {
-    // oxlint-disable-next-line typescript/no-deprecated
     ...env,
     CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     CF_ACCESS_AUD: accessAudience,
