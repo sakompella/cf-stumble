@@ -192,6 +192,22 @@ test.each([
   expect(afterwards).toEqual({ state: "disconnected" });
 });
 
+test("keeps the authorization when GitHub cannot answer, so the owner can retry", async () => {
+  const subject = tenant("authorization-unavailable", [deviceReply, { error: "server_error" }]);
+  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+
+  const failed = await subject.connections((connections) =>
+    connections.completeAuthorization(owner, NOW + 1_000),
+  );
+
+  const afterwards = await subject.connections((connections) =>
+    connections.connectionStatus(NOW + 1_000),
+  );
+
+  expect(failed).toEqual({ ok: false, problem: "provider-unavailable" });
+  expect(afterwards).toMatchObject({ state: "awaiting-authorization" });
+});
+
 test("drops an authorization the owner never finished, rather than keeping the code", async () => {
   const subject = tenant("authorization-expires", [deviceReply, { access_token: FAKE_TOKEN }]);
   await subject.connections((connections) => connections.startAuthorization(owner, NOW));

@@ -3,10 +3,12 @@ import {
   parseGitHubToken,
   requestDeviceAuthorization,
   redeemDeviceAuthorization,
+  type DeviceRedemption,
   type GitHubCredentialStatus,
   type GitHubFetch,
   type GitHubToken,
 } from "../../github/index.js";
+import { logEvent, type LogLevel } from "../../diagnostics.js";
 import {
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
@@ -15,12 +17,6 @@ import {
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
 import type { CredentialSource, GitHubConnectionStore } from "./github-connection-store.js";
-import {
-  logAuthorization,
-  logCredentialEnsure,
-  logCredentialInstall,
-  redemptionOutcome,
-} from "./github-connection-log.js";
 
 /**
  * The workspace's GitHub authorization, as the rest of cf-stumble sees it.
@@ -93,6 +89,73 @@ function reconnect(
 /** One owner's authorization: the scope T3a verified, and never a field a request supplied. */
 function sameOwner(scope: VerifiedAccessScope, identity: string, audience: string): boolean {
   return scope.identity === identity && scope.audience === audience;
+}
+
+/**
+ * How the workspace's GitHub credential appears in the operational log. A status becomes one
+ * outcome word: its state, or the reason a reconnect is required. Nothing here reads a token, a
+ * device code, a user code, or a login, so none of them can reach the log through these helpers.
+ */
+function outcome(status: GitHubConnectionStatus): string {
+  return status.state === "reconnect-required" ? status.reason : status.state;
+}
+
+/** A credential GitHub refused is the fault that went unnoticed for days, so it is an error. */
+function level(status: GitHubConnectionStatus): LogLevel {
+  if (status.state === "connected" || status.state === "awaiting-authorization") return "info";
+
+  return status.state === "reconnect-required" && status.reason === "credential-rejected"
+    ? "error"
+    : "warn";
+}
+
+function logCredentialInstall(source: CredentialSource, status: GitHubConnectionStatus): void {
+  logEvent(level(status), "github-credential.install", { source, outcome: outcome(status) });
+}
+
+/** One unattended repair: what the credential was, whether a fallback exists, and what it became. */
+function logCredentialEnsure(
+  before: GitHubConnectionStatus,
+  fallbackConfigured: boolean,
+  after: GitHubConnectionStatus,
+): void {
+  logEvent(level(after), "github-credential.ensure", {
+    before: outcome(before),
+    fallbackConfigured,
+    outcome: outcome(after),
+  });
+}
+
+/** One step of the device authorization, as the kind of answer it reached. */
+function logAuthorization(
+  step: "start" | "complete",
+  result: GitHubAuthorizationProblem | "started" | "authorized" | "pending",
+): void {
+  const refused = result !== "started" && result !== "authorized" && result !== "pending";
+
+  logEvent(refused ? "warn" : "info", `github-authorization.${step}`, { outcome: result });
+}
+
+/** A redemption that returned no token. Retrying while GitHub waits is the ordinary `pending`. */
+function unredeemedOutcome(
+  kind: Exclude<DeviceRedemption["kind"], "authorized">,
+): "pending" | GitHubAuthorizationProblem {
+  switch (kind) {
+    case "pending":
+    case "slow-down":
+      return "pending";
+    case "expired":
+      return "authorization-expired";
+    case "denied":
+      return "authorization-denied";
+    case "unavailable":
+      return "provider-unavailable";
+    default: {
+      const exhaustive: never = kind;
+
+      return exhaustive;
+    }
+  }
 }
 
 /** A status read stops at `signal` and logs under `requestId`; neither changes the answer. */
@@ -232,37 +295,25 @@ export class GitHubConnection {
       this.environment.fetcher,
     );
 
-    logAuthorization("complete", redemptionOutcome(redeemed.kind));
+    if (redeemed.kind === "authorized") {
+      logAuthorization("complete", "authorized");
+      this.store.clearAuthorization();
 
-    switch (redeemed.kind) {
-      case "authorized": {
-        this.store.clearAuthorization();
-
-        return {
-          ok: true,
-          status: await this.install(redeemed.token, "device-authorization", now),
-        };
-      }
-
-      case "pending":
-      case "slow-down":
-        return { ok: true, status: await this.status(now) };
-      case "expired":
-        this.store.clearAuthorization();
-
-        return { ok: false, problem: "authorization-expired" };
-      case "denied":
-        this.store.clearAuthorization();
-
-        return { ok: false, problem: "authorization-denied" };
-      case "unavailable":
-        return { ok: false, problem: "provider-unavailable" };
-      default: {
-        const exhaustive: never = redeemed;
-
-        return exhaustive;
-      }
+      return { ok: true, status: await this.install(redeemed.token, "device-authorization", now) };
     }
+
+    const unredeemed = unredeemedOutcome(redeemed.kind);
+    logAuthorization("complete", unredeemed);
+
+    if (unredeemed === "pending") {
+      return { ok: true, status: await this.status(now) };
+    }
+
+    if (redeemed.kind === "expired" || redeemed.kind === "denied") {
+      this.store.clearAuthorization();
+    }
+
+    return { ok: false, problem: unredeemed };
   }
 
   private async install(
