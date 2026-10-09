@@ -85,7 +85,7 @@ Version 0 deliberately postponed these:
 - combined project and harness views;
 - public signup, teams, roles, invitations, tenant administration, or a custom account system;
 - provider selection and subscription login; and
-- a better cache policy, alarms, and thread migrations.
+- a better cache policy and thread migrations.
 
 Ideas outside version 0: `patch.md` profiles; code-server; Cloudflare OS Gadget or Blueprint
 compatibility; issue triage, CI webhooks, and a product-level pull-request workflow; custom Git

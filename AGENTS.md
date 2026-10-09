@@ -36,4 +36,4 @@ Deploying with `cf deploy`, checking a deployment or runtime with `pnpm ops:chec
 
 ### Project architecture
 
-For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, implementation plan, and Computer evidence. Everything under `docs/agents/` is agent-generated. Agents must never edit `README.md`, including to fix formatting or a failing check. Tell the owner when it needs a change.
+For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, Computer integration, and current status. Everything under `docs/agents/` is agent-generated. Agents must never edit `README.md`, including to fix formatting or a failing check. Tell the owner when it needs a change.

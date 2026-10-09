@@ -67,7 +67,7 @@ Because ids are injective and ignore case, a stored row with a repository's id h
 repository. Connecting it again, in any spelling or case, converges on the existing project.
 `ConnectedProjects.connect` refuses a URL that derives the harness entry's id with
 `project-id-conflict`. A row stored under the id rule before this one gets no special handling,
-because deployed data is disposable; disconnecting that project removes the row.
+because deployed data is disposable; disconnecting that project removes the row. Connecting the same repository URL again fails with a 500 until that project is disconnected.
 
 ## Connecting a repository
 
