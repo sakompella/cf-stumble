@@ -42,10 +42,12 @@ export function holdProvisionLock(): readonly string[] {
  * The harness directory is the owner's editable checkout in the shared workspace (ADR-0038), not
  * scratch this function owns, so a build never replaces it. An existing repository is only
  * checked; a directory that is populated but is not a repository fails the step and is left as it
- * was found; and a fresh clone lands beside the root and moves into place once it is complete, so
- * an interrupted provision leaves the owner with what was there rather than with neither the
- * previous checkout nor a usable replacement. `rmdir` removes the root only when it is an empty
- * directory, which is the one case where there is nothing to lose.
+ * was found; and a fresh clone lands in a staging directory beside the root and moves into place
+ * once it is complete, so an interrupted provision leaves the owner with what was there rather than
+ * with neither the previous checkout nor a usable replacement. The staging name is fixed rather
+ * than per-process, so the next provision clears what a killed one left behind in the durable
+ * workspace. `rmdir` removes the root only when it is an empty directory, which is the one case
+ * where there is nothing to lose.
  */
 function reconcileHarnessRepository(): readonly string[] {
   return [
@@ -54,12 +56,11 @@ function reconcileHarnessRepository(): readonly string[] {
     '    printf "%s is not a git repository and is not empty\\n" "$repository" >&2',
     "    exit 1",
     "  fi",
-    '  incoming="${repository}.incoming.$$"',
-    '  rm -rf "$incoming"',
-    `  git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$incoming"`,
-    '  git -C "$incoming" config core.fileMode false',
+    '  rm -rf "$staging"',
+    `  git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging"`,
+    '  git -C "$staging" config core.fileMode false',
     '  rmdir "$repository" 2>/dev/null || true',
-    '  mv "$incoming" "$repository"',
+    '  mv "$staging" "$repository"',
     "fi",
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
     'test "$actual_remote" = "$expected_remote"',
@@ -98,9 +99,11 @@ export function provisionHarnessRepository(
     `lock=${shellQuote(HARNESS_PROVISION_LOCK)}`,
     `repository=${shellQuote(configuration.harnessRepositoryRoot)}`,
     `git_dir=${shellQuote(configuration.harnessGitDir)}`,
+    `staging=${shellQuote(`${configuration.harnessRepositoryRoot}.provisioning`)}`,
     `expected_remote=${shellQuote(configuration.harnessGitRemote)}`,
     `commit=${shellQuote(harnessCommit)}`,
     ...holdProvisionLock(),
+    "trap 'rm -rf \"$staging\"' EXIT",
     ...reconcileHarnessRepository(),
     ...obtainHarnessCommit(),
   ].join("\n");

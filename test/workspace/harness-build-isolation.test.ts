@@ -14,8 +14,8 @@ import {
 /**
  * What a build is allowed to write in the one shared workspace (ADR-0038). It extracts into scratch
  * that holds no repository, and it never replaces the checkout the owner edits. These are read as
- * planned text: no test in this repository runs a shell, so a green run shows what the plan asks
- * for, not what `git` and `rm` then do with it.
+ * planned text, so a green run shows what the plan asks for, not what `git` and `rm` then do with
+ * it. `harness-build-provision-staging.shell.test.ts` runs the provision step in a real shell.
  */
 
 const commit = testHarnessCommit("5000000000000000000000000000000000000002");
@@ -67,7 +67,7 @@ test("a build never replaces the editable harness checkout", () => {
 
   expect(
     provision.source.indexOf(
-      'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$incoming"',
+      'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
     ),
     "a replacement clone must land beside the repository, not on top of it",
   ).toBeGreaterThan(0);
@@ -81,8 +81,8 @@ test("a build never replaces the editable harness checkout", () => {
   ).toContain('    printf "%s is not a git repository and is not empty\\n" "$repository" >&2');
   expect(provision.source).toContain(
     [
-      '  git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$incoming"',
-      '  git -C "$incoming" config core.fileMode false',
+      '  git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
+      '  git -C "$staging" config core.fileMode false',
       '  rmdir "$repository" 2>/dev/null || true',
     ].join("\n"),
   );
