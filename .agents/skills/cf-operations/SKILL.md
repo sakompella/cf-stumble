@@ -22,7 +22,7 @@ Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any
 
 Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call in `docs/agents/design/observability.md`, "Query recipes".
 
-**Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, the three `CF_ACCESS_*` secrets are listed, and no rollout is in progress.
+**Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB` are listed, `CF_ACCESS_PUBLIC_KEYS` is not, and no rollout is in progress.
 
 ### 2. Deploy
 

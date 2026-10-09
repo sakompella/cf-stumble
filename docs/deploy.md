@@ -47,12 +47,13 @@ Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change 
 
 Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them and no plain-text variables. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
 
-| Secret                                                          | Required by the Worker | Purpose                                                          |
-| --------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes                    | The Access check. Without them the Worker refuses every request. |
-| `HARNESS_REPOSITORY_URL`                                        | No                     | The fork the instance builds its harness from.                   |
-| `GITHUB_OAUTH_CLIENT_ID`                                        | No                     | The GitHub OAuth app for the device flow.                        |
-| `GH_TOKEN`                                                      | No                     | An unattended-run GitHub credential.                             |
+| Secret                                                          | Required by the Worker       | Purpose                                                                               |
+| --------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes                          | The Access check. Without them the Worker refuses every request.                      |
+| `HARNESS_REPOSITORY_URL`                                        | No                           | The fork the instance builds its harness from.                                        |
+| `GITHUB_OAUTH_CLIENT_ID`                                        | No                           | The GitHub OAuth app for the device flow.                                             |
+| `GH_TOKEN`                                                      | No                           | An unattended-run GitHub credential.                                                  |
+| `CF_ACCESS_PUBLIC_KEYS`                                         | Must be absent in production | Replaces the Access signing keys with local ones. Staging and local development only. |
 
 Set them in one of two ways, after the Access login for the three Access values:
 
@@ -73,7 +74,7 @@ Before you deploy:
 
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
 2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
-3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request.
+3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`, and does not show `CF_ACCESS_PUBLIC_KEYS`. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request. `CF_ACCESS_PUBLIC_KEYS` replaces the Access signing keys, so anyone who holds the matching private key could sign in as the owner.
 4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Query recipes", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
 5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
 
