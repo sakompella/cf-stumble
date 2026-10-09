@@ -26,6 +26,9 @@ This is outside the commit gate. It needs a local Chromium and about half a minu
 surface, and `pnpm verify` has to stay fast enough to run before every commit. `--only smoke` is
 the fast check that the harness itself still works.
 
+`pnpm test:browser` is a separate Playwright check, also outside the gate. It reloads the page after
+a turn and checks that the saved prompt and reply come back (`tools/playwright/`).
+
 ## Write a case
 
 Read [CASES.md](./CASES.md). It is the whole contract: the module layout, the exported type, what a
@@ -43,6 +46,8 @@ example. Nothing in this directory needs to be read to write a passing case.
 | `harness.mts`                                                            | the one module a case imports                                                      |
 | `browser.mts`                                                            | the Chrome process and the tabs opened in it                                       |
 | `chrome.mts`                                                             | one tab: real mouse, keyboard, viewport, and evaluation                            |
+| `chrome-binary.mts`, `chrome-launch.mts`                                 | finding the browser executable, and starting it with a fresh profile               |
+| `smoke.mts`                                                              | the `--only SMOKE` run as its own entrypoint                                       |
 | `cdp.mts`, `json.mts`, `browser-errors.mts`                              | the DevTools socket, JSON as a closed type, and the browser's own fault channels   |
 | `server.mts`, `server-routes.mts`, `server-turn.mts`, `server-state.mts` | the stub: routes, the streaming turn with its barrier, and everything it remembers |
 | `fixtures*.mts`, `turn-*.mts`                                            | the recorded worlds: projects, threads, generations, and turn frames               |
