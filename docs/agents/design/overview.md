@@ -75,6 +75,25 @@ The first version should provide:
 
 A broad administration console, configuration editor, metrics dashboard, and browser IDE can wait. The first UI only needs to support the agent conversation and the small amount of generation information the user needs.
 
+## Not built yet
+
+Version 0 deliberately postponed these:
+
+- an automatic promotion rule, or activating a fallback automatically;
+- letting the agent repair itself, submit generations, or approve changes through replay tests;
+- reconnect, resume, steering, and background turns beyond what a correct streamed turn needs;
+- combined project and harness views;
+- public signup, teams, roles, invitations, tenant administration, or a custom account system;
+- provider selection and subscription login; and
+- a better cache policy, alarms, and thread migrations.
+
+Ideas outside version 0: `patch.md` profiles; code-server; Cloudflare OS Gadget or Blueprint
+compatibility; issue triage, CI webhooks, and a product-level pull-request workflow; custom Git
+object storage, Artifacts compatibility, and a Git protocol server; skills, MCP, plugin, and tool
+marketplaces; a metrics dashboard, full admin console, canaries, quarantine, attestations, and
+garbage collection; and distributed-systems demos such as a Durable Object-backed Trustix log, an
+R2 Nix cache, a rate limiter, and a sharded KV store.
+
 ## Open design questions
 
 The main open questions are:
