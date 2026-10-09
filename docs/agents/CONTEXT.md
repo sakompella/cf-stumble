@@ -6,11 +6,7 @@ cf-stumble is a personal agent with a mutable main harness. This glossary names 
 
 **Main harness**:
 The mutable agent harness that performs the user's work. A generation supplies one version of it.
-_Avoid_: supervisor, recovery harness
-
-**Recovery harness**:
-Version 0 has no recovery harness. The owner recovers by rolling back to a generation that already ran. That loads its stored module map without rebuilding and does not use a second Pi-derived fork.
-_Avoid_: Generation 0, main harness
+_Avoid_: supervisor
 
 **Supervisor Durable Object**:
 The primary Durable Object for a cf-stumble instance. It manages main-harness facets, protects generation state, and decides whether requested generation changes may occur. It is not a facet.
@@ -25,7 +21,7 @@ A specific, labeled Git commit in the harness repository. The Supervisor records
 _Avoid_: ordinary commit, revision, version
 
 **Generation 0**:
-The first labeled mutable main-harness commit, initially based closely on Pi. It is not a special recovery target.
+The first labeled mutable main-harness commit, initially based closely on Pi. It is not a special rollback target.
 
 **Active generation**:
 The generation currently selected and running as the main harness.
@@ -61,7 +57,7 @@ has its own directory and Git history, but the directories are not security boun
 
 **Accumulated context**:
 Pi thread history, compacted context, and other useful context that can survive a change of
-main-harness generation. Its storage layout remains open.
+main-harness generation.
 
 **Worker-shell**:
 Computer's text-oriented execution backend, including host-forwarded Git.

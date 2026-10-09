@@ -48,9 +48,9 @@ A project Git commit is just a Git commit. A harness commit becomes a generation
 
 A new main-harness revision may be submitted as a **generation candidate**. The Supervisor labels the specific harness commit, checks it, records the result against that generation, and decides whether it may run. The current implementation submits over `POST /api/generations/submit` (`src/routes/generations.ts`); ADR-0003 does not fix this transport as a durable commitment.
 
-The user or mutable main harness may also request that the supervisor activate a specific existing generation or return to an earlier one. Naming a target is not the same as controlling the live system. The supervisor validates the request and performs or rejects the state change; mutable code cannot write the protected generation state directly or bypass recovery checks.
+The owner may also request that the supervisor activate a specific existing generation or return to an earlier one. ADR-0024 lets the mutable main harness make the same requests, but version 0 does not build that path, so only the owner sends generation requests. Naming a target is not the same as controlling the live system. The supervisor validates the request and performs or rejects the state change; mutable code cannot write the protected generation state directly or bypass the supervisor's checks.
 
-A newly started generation should pass a basic cold-start check before normal use. A generation may later become known good after enough successful real work, but the threshold and evidence are not settled. Twenty successful turns was an illustrative number, not a product requirement.
+A newly started generation should pass a basic cold-start check before normal use.
 
 ## Runtime and Computer
 
@@ -69,11 +69,11 @@ The first version should provide:
 - a streaming conversation with the Pi-based main harness;
 - a collapsible left sidebar for connected GitHub projects;
 - enough project access to complete a real coding task;
-- visible generation and recovery state;
+- visible generation state;
 - generation candidate submission and checked activation requests; and
-- a small recovery path that can return to usable code.
+- rollback to a generation that already ran.
 
-A broad administration console, configuration editor, metrics dashboard, and browser IDE can wait. The first UI only needs to support the agent conversation and the small amount of generation and recovery information the user needs.
+A broad administration console, configuration editor, metrics dashboard, and browser IDE can wait. The first UI only needs to support the agent conversation and the small amount of generation information the user needs.
 
 ## Open design questions
 
@@ -81,16 +81,15 @@ The main open questions are:
 
 - whether ordinary `fetch` forwarding stays the supervisor-to-facet interface, or a future
   redesign replaces it (current implementation: `fetch`, see "The two harnesses" above);
-- what makes a generation known good;
-- what happens to a running turn when its browser disconnects;
-- recovery limits and timeouts; and
-- whether the current module-map build path (see "Runtime and Computer" below) stays the way
+- what happens to a running turn when its browser disconnects; and
+- whether the current module-map build path (see "Runtime and Computer" above) stays the way
   executable Worker modules are produced, identified, and retained.
 
-What the main harness can request, and how the supervisor authenticates and checks it, is
-implemented: Cloudflare Access sets the owner principal before routing, and the owner API exposes
-generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`,
-`src/routes/generations.ts`).
+In version 0 only the owner sends generation requests. Cloudflare Access sets the owner principal
+before routing, and the owner API exposes generation submission, activation, and rollback
+(`src/worker.ts`, `src/routes/owner-api.ts`, `src/routes/generations.ts`). The harness request path
+is not built: the main facet's only capability is the model route (`src/facet/index.ts`), so it
+cannot reach the supervisor's generation controls.
 
 The cold-start check is settled by ADR-0029. ADR-0037 settles UI transport. The host selects the
 Workers AI model through its binding. A caller cannot select the model, effort, or endpoint, as the
