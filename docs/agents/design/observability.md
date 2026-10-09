@@ -330,11 +330,21 @@ lease id's last 8 characters), and `generation` (the label the turn was admitted
 - **Extra Durable Object residency from the stop observer.** The platform documents that a
   pending `monitor()` call keeps the Durable Object from being evicted until the container exits
   or for up to 15 minutes, and that a later operation can extend its time in memory. The stop
-  observer adds one such call per runtime. Computer already makes the same call just before a
-  launch returns. The residency the extra call adds has not been measured. The owner decided on 2026-10-02 to
-  keep the call and accept that small cost: the stop events are worth it, and the idle stop
-  (ADR-0043) now bounds how long the container runs. The alternative, reading Computer's cached exit
-  state and billing data from outside, was considered and set aside.
+  observer adds one such call per runtime. Computer keeps its own pending `monitor()` on the same
+  container, armed just before a launch returns and again on every adopting connect, so the
+  observer's call can extend residency only by the time between the two arming points. The
+  residency the extra call adds has not been measured. The owner decided on 2026-10-02 to keep the
+  call and accept that small cost: the stop events are worth it, and the idle stop (ADR-0043) now
+  bounds how long the container runs.
+- **Why the observer does not read Computer's stored exit.** Computer 0.3.0 keeps the last exit in
+  a module-level `WeakMap` keyed by the Durable Object's `ctx`, so it lives in memory only. It holds
+  only `{ reason, exitedAt }`, and every launch and every adopting connect clears it. Reading it
+  before the next start, instead of calling `monitor()`, was examined and rejected. It would miss
+  idle stops, because nothing keeps the Workspace Host in memory after one, and an evicted instance
+  loses the record. It would log a stop only at the next launch, possibly hours late and outside
+  the window `ops:check` reads. It would also lose the structured exit code, which only the
+  `monitor()` rejection carries. Accounting from billing data outside the Worker was also
+  considered and set aside.
 - **Why the platform stopped a container.** The monitor reports an exit, not a cause. The log
   writes `reasonSource: "unknown"` for any exit the Host did not cause.
 - **Computer's view of an idle stop.** An idle stop calls the platform's `destroy` directly, because
