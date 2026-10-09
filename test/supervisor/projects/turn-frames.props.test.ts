@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-known-value-widening, max-lines-per-function, anti-slop/require-readable-spacing, anti-slop/no-runtime-typeof -- Generated frames intentionally use a local wire-shape oracle.
+// oxlint-disable anti-slop/no-known-value-widening, max-lines-per-function, anti-slop/no-runtime-typeof -- Generated frames intentionally use a local wire-shape oracle.
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
@@ -12,6 +12,7 @@ type JsonValue =
   | string
   | JsonValue[]
   | { readonly [key: string]: JsonValue };
+
 type JsonObject = { readonly [key: string]: JsonValue };
 
 type FrameKind =
@@ -36,7 +37,9 @@ const kinds = gs.sampledFrom([
 ] as const);
 
 const shortText = gs.text({ alphabet: "abc XYZ012-é", maxSize: 12 });
+
 const code = gs.sampledFrom(["model-call-limit", "model-error"] as const);
+
 const rejectedCode = gs.sampledFrom([
   "invalid-project-capability",
   "invalid-turn-request",
@@ -65,6 +68,7 @@ function drawJson(tc: hegel.TestCase, depth = 0): JsonValue {
 
       return values.map((value) => (value % 2 === 0 ? value : drawJson(tc, depth + 1)));
     }
+
     case "object": {
       const count = tc.draw(gs.integers({ minValue: 0, maxValue: 3 }));
       const result: Record<string, JsonValue> = {};
@@ -174,9 +178,11 @@ test("parsing drops arbitrary extra frame fields and forwards exactly the declar
 test("dropping any declared frame field makes the frame malformed", () => {
   hegel.test((tc) => {
     const { kind, frame } = drawFrame(tc);
+
     const required = Object.keys(frame).filter(
       (field) => !(kind === "tool-start" && field === "arguments"),
     );
+
     const missing = tc.draw(gs.sampledFrom(required));
     const incomplete = { ...frame };
     delete incomplete[missing];

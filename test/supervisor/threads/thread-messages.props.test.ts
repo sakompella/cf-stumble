@@ -1,4 +1,4 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, typescript/no-unnecessary-type-parameters, anti-slop/require-readable-spacing, typescript/no-unsafe-assignment -- This property enumerates Pi's generated message variants and its JSON boundary.
+// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, typescript/no-unnecessary-type-parameters, typescript/no-unsafe-assignment -- This property enumerates Pi's generated message variants and its JSON boundary.
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
@@ -17,11 +17,17 @@ type JsonValue =
   | string
   | JsonValue[]
   | { readonly [key: string]: JsonValue };
+
 type Role = AgentMessage["role"];
+
 type UserMessage = Extract<AgentMessage, { role: "user" }>;
+
 type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
+
 type ToolResultMessage = Extract<AgentMessage, { role: "toolResult" }>;
+
 type BashExecutionMessage = Extract<AgentMessage, { role: "bashExecution" }>;
+
 type CustomMessage = Extract<AgentMessage, { role: "custom" }>;
 
 const roles = gs.sampledFrom([
@@ -33,7 +39,9 @@ const roles = gs.sampledFrom([
   "branchSummary",
   "compactionSummary",
 ] as const);
+
 const text = gs.text({ alphabet: "abc XYZ012-é", maxSize: 16 });
+
 const timestamp = gs.integers({ minValue: 0, maxValue: 2 ** 40 });
 
 function drawJson(tc: hegel.TestCase, depth = 0): JsonValue {
@@ -55,8 +63,10 @@ function drawJson(tc: hegel.TestCase, depth = 0): JsonValue {
     case "object": {
       const result: Record<string, JsonValue> = {};
       const count = tc.draw(gs.integers({ minValue: 0, maxValue: 3 }));
+
       for (let index = 0; index < count; index += 1)
         result[`nested${index}`] = drawJson(tc, depth + 1);
+
       return result;
     }
   }
@@ -95,6 +105,7 @@ function drawAssistantMessage(tc: hegel.TestCase): AssistantMessage {
     endTurn: _endTurn,
     ...base
   } = THREAD_MESSAGE_SAMPLES.assistant;
+
   const message: AssistantMessage = { ...base, role: "assistant", timestamp: tc.draw(timestamp) };
 
   setIfDefined(message, "responseModel", optionalString(tc));
@@ -123,6 +134,7 @@ function drawToolResultMessage(tc: hegel.TestCase): ToolResultMessage {
     addedToolNames: _addedToolNames,
     ...base
   } = THREAD_MESSAGE_SAMPLES.toolResult;
+
   const message: ToolResultMessage = {
     ...base,
     role: "toolResult",
@@ -140,6 +152,7 @@ function drawToolResultMessage(tc: hegel.TestCase): ToolResultMessage {
     "addedToolNames",
     tc.draw(gs.booleans()) ? THREAD_MESSAGE_SAMPLES.toolResult.addedToolNames : undefined,
   );
+
   return message;
 }
 
@@ -150,6 +163,7 @@ function drawBashExecutionMessage(tc: hegel.TestCase): BashExecutionMessage {
     excludeFromContext: _exclude,
     ...base
   } = THREAD_MESSAGE_SAMPLES.bashExecution;
+
   const message: BashExecutionMessage = {
     ...base,
     role: "bashExecution",
@@ -166,6 +180,7 @@ function drawBashExecutionMessage(tc: hegel.TestCase): BashExecutionMessage {
   );
   setIfDefined(message, "fullOutputPath", optionalString(tc));
   setIfDefined(message, "excludeFromContext", optionalBoolean(tc));
+
   return message;
 }
 
@@ -173,6 +188,7 @@ function drawCustomMessage(tc: hegel.TestCase): CustomMessage {
   const { details: _details, ...base } = THREAD_MESSAGE_SAMPLES.custom;
   const message: CustomMessage = { ...base, role: "custom", timestamp: tc.draw(timestamp) };
   setIfDefined(message, "details", optionalJson(tc));
+
   return message;
 }
 
@@ -208,7 +224,9 @@ function normalizeJson(value: unknown): unknown {
 
 function parsedMessages(value: string): readonly AgentMessage[] {
   const parsed = parseThreadMessages(value);
+
   if (parsed.isErr()) throw new Error(parsed.error.reason);
+
   return parsed.value;
 }
 
@@ -251,7 +269,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function storedEntry(message: AgentMessage): Record<string, unknown> {
   const decoded: unknown = JSON.parse(serializeThreadMessages([message]));
+
   if (!Array.isArray(decoded) || !isRecord(decoded[0])) throw new Error("expected one object");
+
   return decoded[0];
 }
 
@@ -261,19 +281,25 @@ function malformedEntry(
   tc: hegel.TestCase,
 ): Record<string, unknown> {
   const entry = storedEntry(message);
+
   switch (mutation) {
     case "missing-required":
       delete entry[tc.draw(gs.sampledFrom(requiredFields[message.role]))];
+
       return entry;
     case "unknown-field":
       entry.injected = drawJson(tc);
+
       return entry;
     case "wrong-kind": {
       const target = wrongKindFields.find(({ role }) => role === message.role);
+
       if (target === undefined) throw new Error("no wrong-kind target");
       entry[target.field] = target.value;
+
       return entry;
     }
+
     default:
       throw new Error("unknown mutation");
   }
@@ -282,6 +308,7 @@ function malformedEntry(
 test("generated missing, unknown, and wrong-kind fields are rejected", () => {
   hegel.test((tc) => {
     const message = drawMessage(tc, tc.draw(roles));
+
     const mutation = tc.draw(
       gs.sampledFrom(["missing-required", "unknown-field", "wrong-kind"] as const),
     );
