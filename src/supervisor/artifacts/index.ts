@@ -89,16 +89,14 @@ export class HarnessArtifacts {
       return Result.err(built.error);
     }
 
-    const validated = validatedBuild(validatedCommit, built.value);
-
-    return validated.isErr() ? Result.err(validated.error) : this.store.write(validated.value);
+    return validatedBuild(validatedCommit, built.value).andThen((artifact) =>
+      this.store.write(artifact),
+    );
   }
 
   /** Store a module map the caller already holds, replacing whatever that commit had stored. */
   retain(input: MainHarnessArtifactInput): ModuleMapResult {
-    const parsed = MainHarnessArtifact.parse(input);
-
-    return parsed.isErr() ? Result.err(parsed.error) : this.store.write(parsed.value);
+    return MainHarnessArtifact.parse(input).andThen((artifact) => this.store.write(artifact));
   }
 
   /**
