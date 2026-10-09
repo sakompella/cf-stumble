@@ -205,7 +205,7 @@ async function admitted(
  * credential, and one whose verified identity is not the configured owner. The owner check runs on
  * a verified identity but strictly before a Supervisor
  * name is derived, so a non-owner never causes a Durable Object, a workspace, or a capability to
- * exist. This Worker has exactly one owner (goal criterion 2) and no default identity to fall back
+ * exist. This Worker has exactly one owner and no default identity to fall back
  * on, so a missing owner subject is a configuration failure rather than an open door.
  */
 export async function authenticateAccessRequest(

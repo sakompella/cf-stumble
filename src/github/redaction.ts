@@ -2,10 +2,10 @@
  * One place decides what a credential looks like in text, because redaction is only worth anything
  * if every surface agrees.
  *
- * Goal criterion 3 says a credential never appears in a tracked file, an application log, a
- * browser response, a stored module map, or saved facet state. Most of that is structural: no type that
- * crosses those boundaries has a token field, and the token a device authorization returns is
- * installed into the workspace and then dropped. This module covers the remaining path, which is
+ * A credential must never appear in a tracked file, an application log, a browser response, a
+ * stored module map, or saved facet state. Most of that is structural: no type that crosses those
+ * boundaries has a token field, and the token a device authorization returns is installed into
+ * the workspace and then dropped. This module covers the remaining path, which is
  * text a tool printed: `git` and `gh` write URLs and error messages, and a caller that forwards
  * that text unread would carry a token out of the workspace inside a diagnostic string.
  *

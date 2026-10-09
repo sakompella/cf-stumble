@@ -6,8 +6,8 @@ import { isRecord } from "../untrusted.js";
  * GitHub's OAuth device flow, as the two calls cf-stumble makes and the values it may keep.
  *
  * ADR-0039 separates repository authorization from Cloudflare Access: signing in proves who the
- * owner is, and this flow is what grants the workspace repository access. Q2 chose the device
- * flow, so the only thing a browser ever sees is a verification URL and a short user code, and the
+ * owner is, and this flow is what grants the workspace repository access. With the device
+ * flow, the only thing a browser ever sees is a verification URL and a short user code, and the
  * access token exists in one place — the reply to the redemption call below, which the caller
  * installs into the workspace's `gh` configuration and then drops.
  *

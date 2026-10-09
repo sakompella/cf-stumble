@@ -44,11 +44,9 @@ export const PROJECTS_DIRECTORY = `${WORKSPACE_ROOT}/projects`;
  * Where a build extracts a labeled commit: the container's own filesystem, not the workspace.
  *
  * Everything under `WORKSPACE_ROOT` is durable, and Computer routes it through the Durable Object
- * that hosts the workspace. A build installs 186 packages, about fifty thousand files, and doing
- * that inside the workspace reset the Durable Object mid-build ("Durable Object connection closed
- * because the object was reset"), which reached the browser as `build-workspace-unavailable`. The
- * deployed builds that survived took eleven to twenty-one minutes and left the workspace so large
- * that an ordinary two second command took over five minutes afterwards.
+ * that hosts the workspace. A build installs about fifty thousand files, and doing that inside the
+ * workspace reset the Durable Object mid-build and left the workspace slow for every later command
+ * (`docs/release/v0/evidence/deployed-plumbing-probe.md`).
  *
  * A build needs scratch space, not durable space. Computer validates a command's working directory
  * against the workspace, so every build step runs with a working directory inside the workspace and

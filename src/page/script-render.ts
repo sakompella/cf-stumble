@@ -12,7 +12,7 @@ import { OWNER_PAGE_CLASSES as CLASS, OWNER_PAGE_IDS as ID } from "./element-ids
  * default, so a hundred-line command output costs one summary line until a reader opens it; the
  * Supervisor already bounds what a tool may return, and this second bound covers what the browser
  * lays out. A result that looks like a unified diff is rendered line by line with its adds and
- * removes marked, which is what makes goal criterion 4's diff readable rather than a wall of text.
+ * removes marked, which keeps a diff readable rather than a wall of text.
  */
 export const OWNER_PAGE_SCRIPT_RENDER = `
   var DISPLAY_MAX_CHARACTERS = 20000;

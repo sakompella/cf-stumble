@@ -35,10 +35,8 @@ export type HarnessBuildConfiguration = Readonly<{
   harnessGitRemote: string;
   /**
    * The phases that turn an extracted commit into a module map, in the order they run. They are
-   * separate because one command was not survivable: three deployed builds of one commit died at
-   * 671 s, 692 s and 696 s, one of them with an empty stdout and an empty stderr, and the whole
-   * eleven minutes reported nothing about which phase was running. A phase is its own step, so it
-   * is its own RPC, its own exit code and its own bounded tail.
+   * separate so a failure names the phase that was running: a phase is its own step, so it is its
+   * own RPC, its own exit code and its own bounded tail.
    *
    * Order is a dependency, not a preference. An extracted commit contains neither `node_modules`
    * nor Pi's generated `dist/`, so the install comes first and esbuild cannot resolve
@@ -236,15 +234,15 @@ function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildSte
  * between builds, because the store is keyed by package content and concurrent writes to it are
  * the package manager's problem, not this plan's.
  *
- * Same-commit concurrency (T1a's handed-over race). The isolate step still deletes and recreates a
- * directory keyed only by the commit, because both sides of the build plan the same steps from the
- * commit alone and a per-build directory name would have to travel in the request to stay
- * agreeable. Two things make that safe instead. The scratch subtree now lives inside the tenant's
- * own workspace rather than in a globally named build container, so two tenants building one
- * commit no longer share a filesystem at all; and `WorkspaceHostModuleMapBuilder` admits one build
- * per commit at a time, so a second request for a commit already building joins that build instead
- * of starting a rival one that would delete its tree. Nothing here schedules or queues: a build
- * either is the one in flight or waits for its result.
+ * Same-commit concurrency. The isolate step deletes and recreates a directory keyed only by the
+ * commit, because both sides of the build plan the same steps from the commit alone and a
+ * per-build directory name would have to travel in the request to stay agreeable. Two things make
+ * that safe instead. The scratch directory belongs to the tenant's own container rather than a
+ * globally named build container, so two tenants building one commit share no filesystem at all;
+ * and `WorkspaceHostModuleMapBuilder` admits one build per commit at a time, so a second request
+ * for a commit already building joins that build instead of starting a rival one that would delete
+ * its tree. Nothing here schedules or queues: a build either is the one in flight or waits for its
+ * result.
  *
  * Blast radius: `buildRoot` holds no repository, so the delete can only ever remove a previous
  * extraction of the same commit. The invariant below refuses a configuration in which the harness

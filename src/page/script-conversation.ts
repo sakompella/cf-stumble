@@ -11,8 +11,8 @@ import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
  * schema would break on the next Pi version.
  *
  * A fresh thread needs two clicks. The first arms it and says what it does; the second sends it.
- * That is the explicit action goal criterion 5 asks for, and it is why a reader cannot lose a
- * conversation by pressing the wrong button once.
+ * Replacing a conversation is therefore an explicit action, and a reader cannot lose one by
+ * pressing the wrong button once.
  */
 export const OWNER_PAGE_SCRIPT_CONVERSATION = `
   function contentText(content) {

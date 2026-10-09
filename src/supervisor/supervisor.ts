@@ -276,8 +276,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * Start and finish the GitHub device authorization (ADR-0039, Q2). The scope is the one T3a
-   * verified at the boundary, and the authorization is bound to it: a redemption presented by a
+   * Start and finish the GitHub device authorization (ADR-0039). The scope is the one the Access
+   * check verified at the boundary, and the authorization is bound to it: a redemption presented by a
    * different verified owner, or a second redemption of a consumed code, is refused.
    */
   startGitHubAuthorization(

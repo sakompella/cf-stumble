@@ -122,7 +122,7 @@ const OWNER_PAGE_SIDEBAR = `
  * The generation drawer. The active label and the observed epoch stay visible beside the
  * conversation; submission, activation, and rollback live inside a `<details>` element that is
  * closed by default, so the controls are one click away without taking the reader's attention
- * from the turn (Q4).
+ * from the turn.
  *
  * `<details>` is the whole mechanism: the browser gives it keyboard focus, an accessible expanded
  * state, and no script. Activation and rollback send the epoch this page rendered from
@@ -209,7 +209,7 @@ const OWNER_PAGE_GENERATION_DRAWER = `
 
 /**
  * The whole document body: a sidebar of connected projects, the conversation, and the generation
- * drawer above it (goal criterion 4, Q4).
+ * drawer above it.
  *
  * There is no free-text project field. A project is something the tenant connected, so the page
  * reads `GET /api/projects` and the reader picks from that list; a typed id could only name a

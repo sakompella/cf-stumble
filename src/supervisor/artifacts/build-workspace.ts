@@ -34,11 +34,9 @@ export class CommitBuildWorkspace implements BuildWorkspace {
   /**
    * A fresh stub for every call, not one stub for the whole build.
    *
-   * A build is minutes long and its steps are separate calls. A deployed build spent five and a
-   * half minutes installing packages, and the call that read the module map it had just written
-   * failed with "this Durable Object instance is no longer active": the Workspace Host had
-   * restarted, and the stub taken before the build had died with it. A stub is cheap, so each call
-   * takes its own.
+   * A build is minutes long and its steps are separate calls. The Workspace Host can restart
+   * meanwhile ("this Durable Object instance is no longer active"), and a stub taken before the
+   * build would die with it. A stub is cheap, so each call takes its own.
    */
   private readonly host: () => BuildWorkspaceHost;
   private readonly harnessCommit: HarnessCommit;

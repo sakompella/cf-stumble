@@ -27,7 +27,7 @@ export type CaseContext = Readonly<{
 }>;
 
 export type HarnessCase = Readonly<{
-  /** The case id from `.audit/v0/web-test-cases.md`, which names the surface before the dash. */
+  /** The case id, such as `CHAT-2`; the text before the dash names the surface. */
   id: string;
   title: string;
   rank: "must" | "should";

@@ -23,7 +23,7 @@ import {
 const MAX_SYMLINK_FOLLOWS = 40;
 
 /**
- * Parses an `unknown` RPC argument into path components addressed beneath the project root, e.g.
+ * Parses an `unknown` RPC argument into path components addressed beneath the workspace root, e.g.
  * `"/src/index.ts"` -> `["src", "index.ts"]` and `"/"` -> `[]`. Rejects anything that is not a
  * clean, already-normalized absolute address: a non-string, a backslash, a NUL byte, a missing
  * leading slash, or any `.`/`..`/empty segment (which would otherwise hide a lexical escape).
