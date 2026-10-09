@@ -189,18 +189,6 @@ export class Generations {
       .map((row) => generationFromRow(row));
   }
 
-  latestPreparationCheck(label: GenerationLabel): PreparationCheck | undefined {
-    return this.preparationChecks.latest(label);
-  }
-
-  latestPreparationCheckId(): number {
-    return this.preparationChecks.latestId();
-  }
-
-  latestActivationId(label: GenerationLabel): number | undefined {
-    return this.activationHistory.latestId(label);
-  }
-
   preparationCheckHistory(label: GenerationLabel): readonly PreparationCheck[] {
     return this.preparationChecks.all(label);
   }
@@ -275,6 +263,5 @@ export class Generations {
       activationId,
     );
     this.activationHistory.recordActive(label);
-    this.activationHistory.record(label, activationId);
   }
 }
