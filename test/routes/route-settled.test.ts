@@ -60,7 +60,6 @@ test("a connection read logs one info event, and the Supervisor receives the sam
       method: "GET",
       status: 200,
       applicationOutcome: "ok",
-      clientAborted: null,
       phase: "body",
     }),
   ]);
@@ -120,42 +119,6 @@ test("a refused request is a warning", async () => {
     route: "/api/workspace/reset",
     status: 403,
     applicationOutcome: "refused",
-  });
-});
-
-test("a client that left is an error, so Issues records the request that may hold the workspace", async () => {
-  const events = capturedEvents();
-  const controller = new AbortController();
-  controller.abort();
-
-  await routeOwnerApiRequest(
-    get("/api/projects", { signal: controller.signal }),
-    supervisor(),
-    ownerScope,
-  );
-
-  expect(named(events(), "route.settled").at(0)).toMatchObject({
-    level: "error",
-    applicationOutcome: "ok",
-    clientAborted: true,
-  });
-});
-
-test("a refused request from a client that left stays a warning", async () => {
-  const events = capturedEvents();
-  const controller = new AbortController();
-  controller.abort();
-
-  await routeOwnerApiRequest(
-    new Request(`${ORIGIN}/api/workspace/reset`, { method: "POST", signal: controller.signal }),
-    supervisor(),
-    ownerScope,
-  );
-
-  expect(named(events(), "route.settled").at(0)).toMatchObject({
-    level: "warn",
-    applicationOutcome: "refused",
-    clientAborted: true,
   });
 });
 

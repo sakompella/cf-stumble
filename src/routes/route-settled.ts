@@ -66,32 +66,14 @@ const HELD_WORKSPACE_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_M
 
 /**
  * Cloudflare Issues records `error` events and ignores `warn`, so the level decides whether an
- * operator sees a request. A request is an `error` when it faulted, when the client left before the
- * response was ready (the workspace call it started may still be running), or when it ran at least
- * as long as one workspace call's budget. A refusal is not held work when the client leaves, so it stays a warning.
- * `degraded` and `refused` responses otherwise stay warnings: they tell the owner something, and
- * they did not hold the workspace.
+ * operator sees a request. A request is an `error` when it faulted or when it ran at least as long
+ * as one workspace call's budget. `degraded` and `refused` responses otherwise stay warnings: they
+ * tell the owner something, and they did not hold the workspace.
  */
-function settledLevel(
-  outcome: ApplicationOutcome,
-  aborted: true | null,
-  durationMs: number,
-): LogLevel {
+function settledLevel(outcome: ApplicationOutcome, durationMs: number): LogLevel {
   if (durationMs >= HELD_WORKSPACE_MS) return "error";
 
-  // `aborted` is only ever `true` under `enable_request_signal`, which the Worker does not set.
-  if (aborted === true && outcome !== "refused") return "error";
-
   return LEVEL[outcome];
-}
-
-/**
- * `true` when the runtime aborted the request signal, `null` otherwise. The runtime aborts it only
- * under the `enable_request_signal` compatibility flag, so a live signal proves nothing and `false`
- * would be a guess.
- */
-function abortedOrNull(request: Request): true | null {
-  return request.signal.aborted ? true : null;
 }
 
 /**
@@ -116,15 +98,13 @@ export async function settleRoute(
   try {
     const response = await withRouteSpan({ requestId, route: pattern }, () => run(requestId));
     const outcome = applicationOutcome(response);
-    const aborted = abortedOrNull(request);
     const durationMs = Date.now() - startedAt;
 
-    logEvent(settledLevel(outcome, aborted, durationMs), "route.settled", {
+    logEvent(settledLevel(outcome, durationMs), "route.settled", {
       ...fields,
       status: response.status,
       applicationOutcome: outcome,
       durationMs,
-      clientAborted: aborted,
       phase: route === STREAMED_ROUTE && response.status === 200 ? "headers" : "body",
     });
 
@@ -135,7 +115,6 @@ export async function settleRoute(
       status: null,
       applicationOutcome: "fault",
       durationMs: Date.now() - startedAt,
-      clientAborted: abortedOrNull(request),
       phase: null,
     });
 

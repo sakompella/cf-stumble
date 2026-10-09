@@ -71,7 +71,7 @@ Cloudflare Issues and Workers traces are on for this Worker (`observability.issu
 
 **Find a request's trace.** Every request that writes `route.settled` runs inside a span named `owner-api.route`. The span has two attributes: `request.id`, the same value as `requestId` in the log events, and `http.route`, the route pattern. To follow one request, copy `requestId` from its `route.settled` event. In the Observability query builder, add the filter `request.id = <id>` (checked on production on 2026-10-02). It returns the `owner-api.route` span. That span's `traceId` returns the whole trace, including the Durable Object RPC and SQL spans. The span is a child of the platform's handler span, because the pinned `@cloudflare/workers-types` and the local workerd have no `tracing.getActiveSpan`, although current Cloudflare docs and the workerd main branch do. When a pinned version has it, move the attributes onto the handler span and drop the extra span. The fetch, binding, and Worker-to-Durable-Object spans for that request appear below it. A turn's span ends when the stream starts, like `phase: "headers"`, so later turn work can appear as children that outlive it. Requests that write no `route.settled` event have no such span.
 
-**What Issues catches.** Issues records uncaught exceptions, failed invocations, 5xx responses, `console.error` output, and stack traces, and it groups them. `logEvent` writes events at level `error` with `console.error`, so a `route.settled` event at `error` appears in Issues. Today only two things reach Issues from `route.settled`: a fault, and a request that ran for at least 901 seconds. A client that left also logs at `error`, but only under the `enable_request_signal` compatibility flag, which this Worker does not set (see "Route events and request ids").
+**What Issues catches.** Issues records uncaught exceptions, failed invocations, 5xx responses, `console.error` output, and stack traces, and it groups them. `logEvent` writes events at level `error` with `console.error`, so a `route.settled` event at `error` appears in Issues. Only two things reach Issues from `route.settled`: a fault, and a request that ran for at least 901 seconds.
 
 **What Issues misses.**
 
@@ -248,27 +248,20 @@ caused. For the project list and the GitHub connection read, it is sent to the S
 Workspace Host as an explicit argument of each call, not stored as shared state, so overlapping
 requests keep separate ids. Other routes do not pass it on.
 
-| Event           | Level                                                                                                                                                                                                             | Fields                                                                                                                                                                                                                                                            | Written when                                                                                                                                                                                                                     |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `route.settled` | info when `ok`; warn when `degraded` or `refused`; error when `fault`, when `durationMs` reached the workspace budget (901 s), or when the client left (only under `enable_request_signal`; a refusal stays warn) | `requestId`, `route` (a pattern), `method`, `status` (`null` if the handler threw), `applicationOutcome` (`ok`, `degraded`, `refused`, or `fault`), `durationMs`, `clientAborted` (`true` or `null`), `phase` (`headers`, `body`, or `null` if the handler threw) | The route's response was ready. It covers the project list, the GitHub connection, authorization start and complete, connect, disconnect, generation submission, workspace reset, and project turns. Other routes write nothing. |
+| Event           | Level                                                                                                                           | Fields                                                                                                                                                                                                                        | Written when                                                                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `route.settled` | info when `ok`; warn when `degraded` or `refused`; error when `fault` or when `durationMs` reached the workspace budget (901 s) | `requestId`, `route` (a pattern), `method`, `status` (`null` if the handler threw), `applicationOutcome` (`ok`, `degraded`, `refused`, or `fault`), `durationMs`, `phase` (`headers`, `body`, or `null` if the handler threw) | The route's response was ready. It covers the project list, the GitHub connection, authorization start and complete, connect, disconnect, generation submission, workspace reset, and project turns. Other routes write nothing. |
 
 - `applicationOutcome` follows the status (`refused` for 4xx, `fault` for 5xx). `degraded` is a 200
   that still reports a problem: today, a GitHub connection in `reconnect-required`.
 - The level decides what Cloudflare Issues shows, because Issues records `error` events and ignores
   `warn`. A request is an `error` when it faulted, or when `durationMs` reached the workspace
   command budget plus its margin (901 seconds): it ran at least as long as one workspace call's
-  budget, so it held the workspace. A request is also an `error` when the client left before the
-  response was ready, except a refusal, but that branch fires only under `enable_request_signal`,
-  which this Worker does not set, so it is dead today. A `degraded` or `refused` response that
-  returned in time stays a warning: it tells the owner something, and it did not hold the
-  workspace.
+  budget, so it held the workspace. A `degraded` or `refused` response that returned in time stays
+  a warning: it tells the owner something, and it did not hold the workspace.
 - `phase: "body"` means the response was complete. A turn's response is a stream, so its event has
   `phase: "headers"`. It says the stream started, not that the turn ended. `turn.settled` is the end
   of a turn.
-- `clientAborted` is `true` when the runtime aborted the request signal and `null` otherwise. The
-  runtime aborts that signal only under the `enable_request_signal` compatibility flag, and
-  `wrangler.jsonc` does not set it, so `null` means unknown, not "the client stayed". Even with the
-  flag, a client disconnect usually cancels the invocation, so `true` will be rare.
 - Only the project list, the connection read, and the credential calls under them carry the id to
   the Supervisor and the Workspace Host. The other routes write `route.settled` with an id that
   appears on no other event.
