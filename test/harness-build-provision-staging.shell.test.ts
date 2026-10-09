@@ -3,8 +3,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, expect, test } from "vitest";
-import { provisionHarnessRepository } from "../src/harness-build-provision.js";
-import { HARNESS_BUILD_CONFIGURATION } from "../src/harness-build.js";
+import { HARNESS_BUILD_CONFIGURATION, provisionHarnessRepository } from "../src/harness-build.js";
 import { testHarnessCommit } from "./harness-commit-fixtures.js";
 import {
   FLOCK_STAND_IN,

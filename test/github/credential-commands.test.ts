@@ -4,8 +4,10 @@ import {
   installCredentialSource,
   repositoryAccessSource,
 } from "../../src/github/index.js";
-import { provisionHarnessRepository } from "../../src/harness-build-provision.js";
-import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
+import {
+  HARNESS_BUILD_CONFIGURATION,
+  provisionHarnessRepository,
+} from "../../src/harness-build.js";
 import {
   planProjectProvision,
   projectProvisionConfiguration,
