@@ -1,4 +1,5 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type -- This module is the parse boundary for a generation's turn stream. A generation is mutable harness code, so nothing it writes into a frame has a proven shape until these functions prove it.
+import { isRecord } from "../../untrusted.js";
 
 /**
  * The turn stream, in both of its forms.
@@ -79,10 +80,6 @@ type ParsedFacetFrame =
   | Readonly<{ kind: "forwarded"; frame: ProjectTurnFrame }>
   | Readonly<{ kind: "terminal"; frame: FacetTerminalFrame }>
   | Readonly<{ kind: "invalid"; problem: TurnStreamProblem }>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
