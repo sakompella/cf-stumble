@@ -9,3 +9,10 @@
  * same kind of work over the same network.
  */
 export const WORKSPACE_COMMAND_TIMEOUT_MS = 900_000;
+
+/** Time reserved for an RPC to settle after its container command ceiling. */
+export const WORKSPACE_RPC_TIMEOUT_MARGIN_MS = 1_000;
+
+/** The longest one Workspace Host RPC may run: the command ceiling plus its settling margin. */
+export const WORKSPACE_RPC_TIMEOUT_MS =
+  WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;

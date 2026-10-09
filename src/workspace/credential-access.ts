@@ -1,15 +1,15 @@
 import { Result } from "better-result";
 import {
+  classifyWorkspaceAnswer,
   isTimeoutFailure,
   logRedactedCause,
   timedWorkspaceRpc,
-  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
   requestIdFields,
   type RequestId,
 } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 
 /**
  * The Workspace Host credential surface as its caller uses it, and the three questions the caller
@@ -31,8 +31,6 @@ export type CredentialWorkspaceHost = Readonly<{
 export type CredentialWorkspaceNamespace = Readonly<{
   getByName(name: string): CredentialWorkspaceHost;
 }>;
-
-const WORKSPACE_RPC_TIMEOUT_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 function signalAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
@@ -81,7 +79,7 @@ async function ask(
     const answered = await timedWorkspaceRpc(
       { ...requestIdFields(input.requestId), method: "credential", step: request.step },
       () => input.namespace.getByName(input.workspaceName).credential(request, input.requestId),
-      (result) => (result.ok ? { outcome: "ok" } : { outcome: result.error.code, level: "warn" }),
+      classifyWorkspaceAnswer,
       WORKSPACE_RPC_TIMEOUT_MS,
     );
 

@@ -188,9 +188,6 @@ export async function timed<T>(
 /** How often a Workspace Host RPC reports that it is still waiting. */
 export const WORKSPACE_RPC_WATCH_INTERVAL_MS = 30_000;
 
-/** Time reserved for an RPC to settle after its container command ceiling. */
-export const WORKSPACE_RPC_TIMEOUT_MARGIN_MS = 1_000;
-
 /**
  * Measure one Supervisor-side Workspace Host RPC and make a long wait visible. The warning timer
  * belongs to this call, so a settled RPC clears it before it can report again. `timeoutMs` bounds
@@ -218,6 +215,15 @@ export async function timedWorkspaceRpc<T>(
   } finally {
     clearInterval(waitingTimer);
   }
+}
+
+type WorkspaceAnswer =
+  | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; error: Readonly<{ code: string }> }>;
+
+/** Log a Workspace Host answer as `ok`, or as its problem code at warn level. */
+export function classifyWorkspaceAnswer(answered: WorkspaceAnswer): TimedOutcome {
+  return answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" };
 }
 
 async function boundedRpc<T>(run: () => Promise<T>, timeoutMs: number | undefined): Promise<T> {

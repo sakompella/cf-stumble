@@ -5,9 +5,9 @@ import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   provisionProjectWorkspace,
-  PROVISION_RPC_TIMEOUT_MS,
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 
@@ -69,14 +69,14 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
 
   await Promise.resolve();
   controller.abort();
-  vi.advanceTimersByTime(PROVISION_RPC_TIMEOUT_MS);
+  vi.advanceTimersByTime(WORKSPACE_RPC_TIMEOUT_MS);
   await vi.runAllTimersAsync();
 
   const result = await provisioning;
   expect(result.isErr()).toBe(true);
   expect(named(events(), "workspace.rpc").at(-1)).toMatchObject({
     outcome: "threw",
-    durationMs: PROVISION_RPC_TIMEOUT_MS,
+    durationMs: WORKSPACE_RPC_TIMEOUT_MS,
   });
   vi.useRealTimers();
 });

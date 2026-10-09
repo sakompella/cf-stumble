@@ -36,7 +36,6 @@ import {
   clearWorkspaceProvision,
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
-  PROVISION_RPC_TIMEOUT_MS,
   type CredentialWorkspaceNamespace,
   type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
@@ -50,6 +49,7 @@ import {
   timedWorkspaceRpc,
   type RequestId,
 } from "../../diagnostics.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
@@ -494,7 +494,7 @@ export class ProjectConnections {
           // may still hold it, so it can return with a replacement container. It is not a removal.
           return { outcome: answered.ok ? "failed" : answered.error.code, level: "error" };
         },
-        PROVISION_RPC_TIMEOUT_MS,
+        WORKSPACE_RPC_TIMEOUT_MS,
       );
 
       return result.ok && result.result.kind === "command" && result.result.exitCode === 0

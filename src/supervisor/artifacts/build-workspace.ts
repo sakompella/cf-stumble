@@ -1,6 +1,6 @@
 import type { HarnessCommit } from "../../harness-commit.js";
-import { timedWorkspaceRpc, WORKSPACE_RPC_TIMEOUT_MARGIN_MS } from "../../diagnostics.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import { classifyWorkspaceAnswer, timedWorkspaceRpc } from "../../diagnostics.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { HARNESS_BUILD_CONFIGURATION, planHarnessBuild } from "../../harness-build.js";
 import type {
   HarnessBuildConfiguration,
@@ -28,8 +28,6 @@ export type BuildWorkspaceNamespace = Readonly<{
 function unreachable(reason: string): Error {
   return new Error(reason);
 }
-
-const BUILD_RPC_TIMEOUT_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 /**
  * The `BuildWorkspace` the builder runs against, bound to one harness commit. It plans that
@@ -77,9 +75,8 @@ export class CommitBuildWorkspace implements BuildWorkspace {
           harnessCommit: this.harnessCommit,
           step: step.name,
         }),
-      (answered) =>
-        answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
-      BUILD_RPC_TIMEOUT_MS,
+      classifyWorkspaceAnswer,
+      WORKSPACE_RPC_TIMEOUT_MS,
     );
 
     if (!result.ok) {
@@ -109,9 +106,8 @@ export class CommitBuildWorkspace implements BuildWorkspace {
           kind: "build-output",
           harnessCommit: this.harnessCommit,
         }),
-      (answered) =>
-        answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
-      BUILD_RPC_TIMEOUT_MS,
+      classifyWorkspaceAnswer,
+      WORKSPACE_RPC_TIMEOUT_MS,
     );
 
     if (!result.ok) {

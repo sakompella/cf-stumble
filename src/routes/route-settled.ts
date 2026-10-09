@@ -1,11 +1,5 @@
-import {
-  logEvent,
-  type LogLevel,
-  newRequestId,
-  type RequestId,
-  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
-} from "../diagnostics.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import { logEvent, type LogLevel, newRequestId, type RequestId } from "../diagnostics.js";
+import { WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { routePattern } from "./route-pattern.js";
 import { withRouteSpan } from "./route-span.js";
 
@@ -59,19 +53,13 @@ const LEVEL = {
 } as const satisfies Record<ApplicationOutcome, LogLevel>;
 
 /**
- * The longest a workspace call may run, command budget plus margin. A request that ran at least
- * this long ran at least as long as one workspace call's budget, so it held the workspace.
- */
-const HELD_WORKSPACE_MS = WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
-
-/**
  * Cloudflare Issues records `error` events and ignores `warn`, so the level decides whether an
  * operator sees a request. A request is an `error` when it faulted or when it ran at least as long
  * as one workspace call's budget. `degraded` and `refused` responses otherwise stay warnings: they
  * tell the owner something, and they did not hold the workspace.
  */
 function settledLevel(outcome: ApplicationOutcome, durationMs: number): LogLevel {
-  if (durationMs >= HELD_WORKSPACE_MS) return "error";
+  if (durationMs >= WORKSPACE_RPC_TIMEOUT_MS) return "error";
 
   return LEVEL[outcome];
 }

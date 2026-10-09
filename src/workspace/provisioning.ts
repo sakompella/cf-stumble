@@ -1,11 +1,11 @@
 // oxlint-disable max-lines -- Project and harness provisioning share one workspace exclusion.
 import { Result } from "better-result";
 import {
+  classifyWorkspaceAnswer,
   logEvent,
   logRedactedCause,
   timed,
   timedWorkspaceRpc,
-  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
   type TimedOutcome,
 } from "../diagnostics.js";
 import {
@@ -24,7 +24,10 @@ import type { HarnessBuildRequest } from "../harness-build.js";
 import type { WorkspaceResult } from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
 import type { ProjectRemovalWorkspaceHost } from "./project-removal.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import {
+  WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
+  WORKSPACE_RPC_TIMEOUT_MS,
+} from "../workspace-command-timeout.js";
 
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
 export type ProvisionWorkspaceHost = Readonly<{
@@ -138,9 +141,8 @@ function runProjectHostStep(
         repositoryUrl: project.repositoryUrl,
         step,
       }),
-    (answered) =>
-      answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
-    PROVISION_RPC_TIMEOUT_MS,
+    classifyWorkspaceAnswer,
+    WORKSPACE_RPC_TIMEOUT_MS,
   );
 }
 
@@ -258,16 +260,14 @@ async function runHarnessStep(
         ? await timedWorkspaceRpc(
             { method: "build", step },
             () => host.build({ kind: "build-step", harnessCommit, step }),
-            (answered) =>
-              answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
-            PROVISION_RPC_TIMEOUT_MS,
+            classifyWorkspaceAnswer,
+            WORKSPACE_RPC_TIMEOUT_MS,
           )
         : await timedWorkspaceRpc(
             { method: "ensureManagedInstructions", step },
             () => host.ensureManagedInstructions(),
-            (answered) =>
-              answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" },
-            PROVISION_RPC_TIMEOUT_MS,
+            classifyWorkspaceAnswer,
+            WORKSPACE_RPC_TIMEOUT_MS,
           );
   } catch (error) {
     logRedactedCause(`harness-provision.${step}: workspace-unavailable`, error);
@@ -318,20 +318,13 @@ type ActiveProvision = Readonly<{
   startedAt: number;
 }>;
 
-/** The host kills a command at its ceiling; this margin covers the RPC's final settling turn. */
-export const PROVISION_STALE_MARGIN_MS = WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
-
-/** Each Workspace Host call has the command ceiling plus its RPC settling margin. */
-export const PROVISION_RPC_TIMEOUT_MS =
-  WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
-
 const PROVISION_PLAN_STEP_COUNT = Math.max(
   PROJECT_PROVISION_STEP_NAMES.length,
   HARNESS_PROVISION_STEP_NAMES.length,
 );
 
 export const PROVISION_STALE_AFTER_MS =
-  PROVISION_PLAN_STEP_COUNT * PROVISION_RPC_TIMEOUT_MS + PROVISION_STALE_MARGIN_MS;
+  PROVISION_PLAN_STEP_COUNT * WORKSPACE_RPC_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 /**
  * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn
