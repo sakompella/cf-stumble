@@ -1,11 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  containerStatusIndicatesReplacement,
   observeBackendClose,
   readContainerStatus,
   type BackendCloseTrigger,
   recordWorkspaceBackendClosed,
   type WorkspaceContainerStatus,
-} from "../../src/workspace/backend-sync-ignore.js";
+} from "../../src/workspace/container-exit.js";
 import { capturedEvents, named } from "../log-capture.js";
 
 afterEach(() => {
@@ -24,11 +25,7 @@ test("a transport close after an observed exit is one event with the exit fields
   await closeWith(() =>
     Promise.resolve({
       running: false,
-      exit: {
-        reason: "Container exited with unexpected exit code: 1",
-        exitCode: 1,
-        signal: "SIGKILL",
-      },
+      exit: { reason: "Container exited with unexpected exit code: 1", exitedAt: 0 },
     }),
   );
 
@@ -40,11 +37,18 @@ test("a transport close after an observed exit is one event with the exit fields
       running: false,
       reasonCode: "unexpected-exit-code",
       exitCode: 1,
-      signal: "SIGKILL",
       statusReadOutcome: "ok",
     }),
   ]);
   expect(JSON.stringify(events())).not.toContain("unexpected exit code: 1");
+});
+
+test.each([
+  [{ running: true, exit: null }, false],
+  [{ running: false, exit: null }, true],
+  [{ running: true, exit: { reason: "exited normally", exitedAt: 0 } }, true],
+] as const)("detects a replacement only from an exited or stopped status", (status, expected) => {
+  expect(containerStatusIndicatesReplacement(status)).toBe(expected);
 });
 
 test("a transport close while the container still runs claims no stop or exit", async () => {
@@ -55,7 +59,6 @@ test("a transport close while the container still runs claims no stop or exit", 
   expect(named(events(), "workspace.backend.closed").at(0)).toMatchObject({
     running: true,
     exitCode: null,
-    signal: null,
     statusReadOutcome: "ok",
   });
 

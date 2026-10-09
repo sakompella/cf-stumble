@@ -44,12 +44,8 @@ import { PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
 import { afterIdleStop, WorkspaceIdleController } from "./idle-controller.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
-import {
-  observeBackendClose,
-  withWorkspaceSyncIgnore,
-  type BackendCloseTrigger,
-  type WorkspaceBackendLifecycle,
-} from "./backend-sync-ignore.js";
+import { withWorkspaceSyncIgnore, type WorkspaceBackendLifecycle } from "./backend-sync-ignore.js";
+import { observeBackendClose, type BackendCloseTrigger } from "./container-exit.js";
 
 export { parseProjectBudget };
 

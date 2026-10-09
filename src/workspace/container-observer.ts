@@ -4,8 +4,8 @@ import type {
   IWorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
-import { containerReasonCode } from "./backend-sync-ignore.js";
-import { NORMAL_STOP, stopCause, stopLevel, type StopCause } from "./container-stop-cause.js";
+import { containerReasonCode, NORMAL_STOP, stopCause, stopLevel } from "./container-exit.js";
+import type { StopCause } from "./container-exit.js";
 
 type LaunchKind = "start" | "restart";
 
@@ -288,7 +288,6 @@ export class ObservedWorkspaceContainer implements IWorkspaceContainerAPI {
       reasonCode,
       reasonSource: intentional ? "application-intent" : "unknown",
       exitCode: cause.exitCode,
-      signal: null,
       expected: intentional ? true : null,
     });
   }

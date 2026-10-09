@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { containerReasonCode } from "../../src/workspace/backend-sync-ignore.js";
+import { containerReasonCode } from "../../src/workspace/container-exit.js";
 import { ObservedWorkspaceContainer } from "../../src/workspace/container-observer.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
