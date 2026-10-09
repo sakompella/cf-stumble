@@ -17,12 +17,9 @@ import { projectIdForRepository, resolveProject } from "../../../src/project-cat
 
 const NOW = 1_700_000_000_000;
 
-function withProjects<T>(
-  name: string,
-  use: (projects: ConnectedProjects, state: DurableObjectState) => T,
-): Promise<T> {
+function withProjects<T>(name: string, use: (projects: ConnectedProjects) => T): Promise<T> {
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
-    use(new ConnectedProjects(state.storage), state),
+    use(new ConnectedProjects(state.storage)),
   );
 }
 
@@ -150,39 +147,6 @@ test("converges on one project when the same repository is written in another ca
       project: { repositoryUrl: "https://github.com/Sample/My.Repo" },
     });
     expect(projects.list()).toHaveLength(1);
-  });
-});
-
-/**
- * Before ids were injective, `sample/my.repo` was stored as `sample-my-repo`. Such a row still
- * owns its id and its URL, so neither `sample/my-repo`, which now derives that id, nor
- * `sample/my.repo` itself, which now derives a new one, may take over its thread and directory.
- */
-test("refuses to repoint a project an earlier id rule stored", async () => {
-  await withProjects("catalog-conflict", (projects, state) => {
-    state.storage.sql.exec(
-      `INSERT INTO connected_projects (project_id, display_name, repository_url, connected_at)
-       VALUES (?, ?, ?, ?)`,
-      "sample-my-repo",
-      "sample/my.repo",
-      "https://github.com/sample/my.repo",
-      NOW,
-    );
-
-    for (const repositoryUrl of [
-      "https://github.com/sample/my-repo",
-      "https://github.com/sample/my.repo",
-      "https://github.com/Sample/My.Repo.git",
-    ]) {
-      expect(projects.connect({ repositoryUrl }, NOW + 1)).toEqual({
-        ok: false,
-        problem: { code: "project-id-conflict" },
-      });
-    }
-
-    expect(projects.list().map((project) => [project.id, project.repositoryUrl])).toEqual([
-      ["sample-my-repo", "https://github.com/sample/my.repo"],
-    ]);
   });
 });
 

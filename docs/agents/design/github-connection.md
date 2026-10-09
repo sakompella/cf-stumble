@@ -63,12 +63,11 @@ and hyphens, so no id can name the `<id>.provisioning` directory that provisioni
 clone. Only `github.com` URLs of exactly `owner/repository` derive an id, because these naming
 rules are GitHub's.
 
-If a repository's id is already stored for a different repository, or the repository is already
-stored under a different id, cf-stumble refuses the connection with `project-id-conflict`. With
-injective ids, only a row that the earlier rule stored can cause this. cf-stumble does not repoint
-an existing project at a different clone, because the project's thread and files belong to the
-repository it was stored for. The same repository written in another case converges on the
-existing project.
+Because ids are injective and ignore case, a stored row with a repository's id holds that same
+repository. Connecting it again, in any spelling or case, converges on the existing project.
+`ConnectedProjects.connect` refuses a URL that derives the harness entry's id with
+`project-id-conflict`. A row stored under the id rule before this one gets no special handling,
+because deployed data is disposable; disconnecting that project removes the row.
 
 ## Connecting a repository
 
