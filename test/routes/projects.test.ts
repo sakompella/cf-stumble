@@ -34,7 +34,7 @@ function get(path: string): Request {
 type RequestBody =
   | Readonly<{
       repositoryUrl?: string | number;
-      displayName?: string;
+      displayName?: string | number | null;
       tenant?: string;
       identity?: string;
       token?: string;
@@ -145,6 +145,8 @@ test("connects the repository the body names, and nothing else it carries", asyn
 test.each([
   [{ repositoryUrl: 7 }],
   [{ displayName: "no url" }],
+  [{ repositoryUrl: "https://github.com/sample/repo-1", displayName: 7 }],
+  [{ repositoryUrl: "https://github.com/sample/repo-1", displayName: null }],
   [{ repositoryUrl: "https://github.com/sample/repo-1", tenant: "someone-else" }],
   [{ repositoryUrl: "https://github.com/sample/repo-1", token: FAKE_TOKEN }],
   ["not an object"],

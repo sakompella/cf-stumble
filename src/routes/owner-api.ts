@@ -42,8 +42,9 @@ async function workspaceResetResponse(supervisor: OwnerApiSupervisor): Promise<R
   );
 }
 
-/** The active generation and the epoch a control request must observe. */
 /**
+ * The active generation and the epoch a control request must observe.
+ *
  * `generation` and `activationId` are written out as `null` when there is none, rather than left
  * off. `Response.json` drops an undefined field, so an instance with nothing active answered
  * `{"activeGeneration":{"epoch":0}}`, which reads like an active generation at epoch 0 to anyone
@@ -61,11 +62,11 @@ async function statusResponse(supervisor: OwnerApiSupervisor): Promise<Response>
   });
 }
 
-async function threadResponse(
-  read: () => Promise<ProjectThreadResult>,
-  // Naming a project the catalog does not have is a 404, because the client asked for something
-  // that does not exist. Anything else is a fault about the thread it did name.
-): Promise<Response> {
+/**
+ * Naming a project the catalog does not have is a 404, because the client asked for something that
+ * does not exist. Anything else is a fault about the thread it did name.
+ */
+async function threadResponse(read: () => Promise<ProjectThreadResult>): Promise<Response> {
   const result = await read();
 
   if (result.ok) {
@@ -112,7 +113,7 @@ export function routeOwnerApiRequest(
 function isCrossOriginMutation(request: Request): boolean {
   const origin = request.headers.get("origin");
   const url = new URL(request.url);
-  const crossOrigin = origin === null || origin !== url.origin;
+  const crossOrigin = origin !== url.origin;
 
   if (crossOrigin) {
     logEvent("warn", "route.cross-origin-refused", {

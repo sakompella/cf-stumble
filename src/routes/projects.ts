@@ -131,14 +131,13 @@ function connectRequest(
     return undefined;
   }
 
-  if (withName && typeof value.displayName !== "string") {
+  const displayName = withName ? value.displayName : undefined;
+
+  if (displayName !== undefined && typeof displayName !== "string") {
     return undefined;
   }
 
-  return {
-    repositoryUrl: value.repositoryUrl,
-    displayName: withName && typeof value.displayName === "string" ? value.displayName : void 0,
-  };
+  return { repositoryUrl: value.repositoryUrl, displayName };
 }
 
 async function connectResponse(
