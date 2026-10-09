@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { ProjectConnections } from "../../../src/supervisor/projects/index.js";
+import { GitHubConnection, GitHubConnectionStore } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
@@ -51,7 +51,7 @@ function githubReplying(replies: readonly Reply[]): GitHubFetch {
 
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
-  connections<T>(use: (connections: ProjectConnections) => Promise<T>): Promise<T>;
+  github<T>(use: (github: GitHubConnection) => Promise<T>): Promise<T>;
 }
 
 /** `configured` is false for the deployment that has no GitHub OAuth client id yet. */
@@ -62,11 +62,11 @@ function tenant(name: string, replies: readonly Reply[], configured = true): Ten
 
   return {
     workspace,
-    connections: (use) =>
+    github: (use) =>
       runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
         use(
-          new ProjectConnections({
-            storage: state.storage,
+          new GitHubConnection({
+            store: new GitHubConnectionStore(state.storage),
             workspaceName: tenantWorkspaceName(name),
             namespace: workspace.namespace,
             environment: { clientId, fallbackToken: undefined, fetcher },
@@ -83,11 +83,9 @@ afterEach(async () => {
 test("shows the verification page and the user code, and never the device code", async () => {
   const subject = tenant("authorization-start", [deviceReply]);
 
-  const started = await subject.connections((connections) =>
-    connections.startAuthorization(owner, NOW),
-  );
+  const started = await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const status = await subject.connections((connections) => connections.connectionStatus(NOW));
+  const status = await subject.github((github) => github.status(NOW));
 
   expect(started).toEqual({
     ok: true,
@@ -108,10 +106,10 @@ test("installs the token into the workspace and returns a status without it", as
     { access_token: FAKE_TOKEN, token_type: "bearer" },
   ]);
 
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const completed = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 1_000),
+  const completed = await subject.github((github) =>
+    github.completeAuthorization(owner, NOW + 1_000),
   );
 
   expect(completed).toEqual({
@@ -131,26 +129,22 @@ test("keeps waiting while the owner is still at GitHub's page", async () => {
     { error: "authorization_pending" },
   ]);
 
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const polled = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 1_000),
-  );
+  const polled = await subject.github((github) => github.completeAuthorization(owner, NOW + 1_000));
 
   expect(polled).toMatchObject({ ok: true, status: { state: "awaiting-authorization" } });
 });
 
 test("refuses a redemption by any owner other than the one that started it", async () => {
   const subject = tenant("authorization-other-owner", [deviceReply, { access_token: FAKE_TOKEN }]);
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const refused = await subject.connections((connections) =>
-    connections.completeAuthorization(otherOwner, NOW + 1_000),
+  const refused = await subject.github((github) =>
+    github.completeAuthorization(otherOwner, NOW + 1_000),
   );
 
-  const stillWaiting = await subject.connections((connections) =>
-    connections.connectionStatus(NOW + 1_000),
-  );
+  const stillWaiting = await subject.github((github) => github.status(NOW + 1_000));
 
   expect(refused).toEqual({ ok: false, problem: "not-the-initiating-owner" });
   expect(stillWaiting).toMatchObject({ state: "awaiting-authorization" });
@@ -159,14 +153,12 @@ test("refuses a redemption by any owner other than the one that started it", asy
 
 test("redeems one authorization once, so a replayed completion finds nothing", async () => {
   const subject = tenant("authorization-replay", [deviceReply, { access_token: FAKE_TOKEN }]);
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const first = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 1_000),
-  );
+  const first = await subject.github((github) => github.completeAuthorization(owner, NOW + 1_000));
 
-  const replayed = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 2_000),
+  const replayed = await subject.github((github) =>
+    github.completeAuthorization(owner, NOW + 2_000),
   );
 
   expect(first).toMatchObject({ ok: true });
@@ -178,15 +170,11 @@ test.each([
   [{ error: "access_denied" }, "authorization-denied"],
 ])("ends the authorization when GitHub answers %j", async (reply, problem) => {
   const subject = tenant(`authorization-${problem}`, [deviceReply, reply]);
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const ended = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 1_000),
-  );
+  const ended = await subject.github((github) => github.completeAuthorization(owner, NOW + 1_000));
 
-  const afterwards = await subject.connections((connections) =>
-    connections.connectionStatus(NOW + 1_000),
-  );
+  const afterwards = await subject.github((github) => github.status(NOW + 1_000));
 
   expect(ended).toEqual({ ok: false, problem });
   expect(afterwards).toEqual({ state: "disconnected" });
@@ -194,15 +182,11 @@ test.each([
 
 test("keeps the authorization when GitHub cannot answer, so the owner can retry", async () => {
   const subject = tenant("authorization-unavailable", [deviceReply, { error: "server_error" }]);
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const failed = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 1_000),
-  );
+  const failed = await subject.github((github) => github.completeAuthorization(owner, NOW + 1_000));
 
-  const afterwards = await subject.connections((connections) =>
-    connections.connectionStatus(NOW + 1_000),
-  );
+  const afterwards = await subject.github((github) => github.status(NOW + 1_000));
 
   expect(failed).toEqual({ ok: false, problem: "provider-unavailable" });
   expect(afterwards).toMatchObject({ state: "awaiting-authorization" });
@@ -210,10 +194,10 @@ test("keeps the authorization when GitHub cannot answer, so the owner can retry"
 
 test("drops an authorization the owner never finished, rather than keeping the code", async () => {
   const subject = tenant("authorization-expires", [deviceReply, { access_token: FAKE_TOKEN }]);
-  await subject.connections((connections) => connections.startAuthorization(owner, NOW));
+  await subject.github((github) => github.startAuthorization(owner, NOW));
 
-  const afterWindow = await subject.connections((connections) =>
-    connections.completeAuthorization(owner, NOW + 900_001),
+  const afterWindow = await subject.github((github) =>
+    github.completeAuthorization(owner, NOW + 900_001),
   );
 
   expect(afterWindow).toEqual({ ok: false, problem: "no-pending-authorization" });
@@ -222,9 +206,7 @@ test("drops an authorization the owner never finished, rather than keeping the c
 test("refuses to start without a configured GitHub OAuth client", async () => {
   const subject = tenant("authorization-unconfigured", [deviceReply], false);
 
-  const started = await subject.connections((connections) =>
-    connections.startAuthorization(owner, NOW),
-  );
+  const started = await subject.github((github) => github.startAuthorization(owner, NOW));
 
   expect(started).toEqual({ ok: false, problem: "not-configured" });
 });

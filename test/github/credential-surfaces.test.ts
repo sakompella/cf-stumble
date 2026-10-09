@@ -4,9 +4,8 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { containsCredential } from "../../src/github/index.js";
-import { ProjectConnections } from "../../src/supervisor/projects/index.js";
-import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
+import { tenantConnections } from "../supervisor/projects/tenant-connections.js";
 import type { GitHubFetch } from "../../src/github/index.js";
 import type { VerifiedAccessScope } from "../../src/access/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
@@ -140,21 +139,16 @@ test("an RPC failure during authorization logs a redacted cause and never the to
   const completed = await runInDurableObject(
     env.SUPERVISOR.getByName(name),
     async (_instance, state) => {
-      const connections = new ProjectConnections({
-        storage: state.storage,
-        workspaceName: tenantWorkspaceName(name),
-        namespace: workspace.namespace,
-        environment: {
-          clientId: "Iv1.cfstumbleFAKE",
-          fallbackToken: undefined,
-          fetcher: githubReplying(),
-        },
+      const { github } = tenantConnections(state.storage, name, workspace, {
+        clientId: "Iv1.cfstumbleFAKE",
+        fallbackToken: undefined,
+        fetcher: githubReplying(),
       });
 
-      await connections.startAuthorization(owner, NOW);
+      await github.startAuthorization(owner, NOW);
       workspace.unavailable = true;
 
-      return connections.completeAuthorization(owner, NOW + 1_000);
+      return github.completeAuthorization(owner, NOW + 1_000);
     },
   );
 
@@ -181,19 +175,14 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
   const stored = await runInDurableObject(
     env.SUPERVISOR.getByName(name),
     async (_instance, state) => {
-      const connections = new ProjectConnections({
-        storage: state.storage,
-        workspaceName: tenantWorkspaceName(name),
-        namespace: workspace.namespace,
-        environment: {
-          clientId: "Iv1.cfstumbleFAKE",
-          fallbackToken: undefined,
-          fetcher: githubReplying(),
-        },
+      const { github, connections } = tenantConnections(state.storage, name, workspace, {
+        clientId: "Iv1.cfstumbleFAKE",
+        fallbackToken: undefined,
+        fetcher: githubReplying(),
       });
 
-      const started = await connections.startAuthorization(owner, NOW);
-      const completed = await connections.completeAuthorization(owner, NOW + 1_000);
+      const started = await github.startAuthorization(owner, NOW);
+      const completed = await github.completeAuthorization(owner, NOW + 1_000);
       const connected = await connections.connect(REPOSITORY, "Repo one", NOW + 2_000);
       const listed = await connections.list(NOW + 3_000);
       const status = await connections.connectionStatus(NOW + 4_000);
@@ -242,19 +231,14 @@ test("no log line at any level carries the token, and the install is logged with
   const name = "credential-surfaces-log";
 
   await runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
-    const connections = new ProjectConnections({
-      storage: state.storage,
-      workspaceName: tenantWorkspaceName(name),
-      namespace: workspace.namespace,
-      environment: {
-        clientId: "Iv1.cfstumbleFAKE",
-        fallbackToken: undefined,
-        fetcher: githubReplying(),
-      },
+    const { github, connections } = tenantConnections(state.storage, name, workspace, {
+      clientId: "Iv1.cfstumbleFAKE",
+      fallbackToken: undefined,
+      fetcher: githubReplying(),
     });
 
-    await connections.startAuthorization(owner, NOW);
-    await connections.completeAuthorization(owner, NOW + 1_000);
+    await github.startAuthorization(owner, NOW);
+    await github.completeAuthorization(owner, NOW + 1_000);
     await connections.connect(REPOSITORY, "Repo one", NOW + 2_000);
   });
 
@@ -281,14 +265,13 @@ test("an unattended run logs that its credential came from the configured token"
   const name = "credential-surfaces-configured-token";
 
   await runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
-    const connections = new ProjectConnections({
-      storage: state.storage,
-      workspaceName: tenantWorkspaceName(name),
-      namespace: workspace.namespace,
-      environment: { clientId: undefined, fallbackToken: FAKE_TOKEN, fetcher: githubReplying() },
+    const { github } = tenantConnections(state.storage, name, workspace, {
+      clientId: undefined,
+      fallbackToken: FAKE_TOKEN,
+      fetcher: githubReplying(),
     });
 
-    await connections.ensureCredential(NOW);
+    await github.ensureCredential(NOW);
   });
 
   const logged = events();

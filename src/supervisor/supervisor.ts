@@ -13,6 +13,8 @@ import {
   type GenerationRequest,
 } from "./control/index.js";
 import {
+  GitHubConnection,
+  GitHubConnectionStore,
   ProjectConnections,
   runProjectTurn,
   startFacetTurn,
@@ -25,6 +27,7 @@ import {
   type ProjectRemovalWorkspaceNamespace,
   type VerifiedAccessScope,
   type GitHubAuthorizationOutcome,
+  type GitHubConnectionEnvironment,
   type GitHubConnectionStatus,
   type ProjectListView,
   type ProjectTurnRun,
@@ -90,7 +93,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly artifacts: HarnessArtifacts;
   private readonly startupCheckHost: StartupCheckHost;
   private readonly threads: ProjectThreads;
-  /** The tenant's connected repositories, their GitHub authorization, and their provisioning. */
+  /** The workspace's GitHub credential and the device authorization that installs it. */
+  private readonly github: GitHubConnection;
+  /** The tenant's connected repositories and their provisioning. */
   private readonly connections: ProjectConnections;
   /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
   private readonly workspaceName: string;
@@ -123,15 +128,25 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       modelRoute: () => this.modelRoute(),
     };
     this.control = new GenerationControl(this.generations);
+
+    const environment: GitHubConnectionEnvironment = {
+      clientId: env.GITHUB_OAUTH_CLIENT_ID,
+      fallbackToken: env.GH_TOKEN,
+      fetcher: (url, init) => fetch(url, init),
+    };
+
+    this.github = new GitHubConnection({
+      store: new GitHubConnectionStore(ctx.storage),
+      workspaceName: this.workspaceName,
+      namespace: env.WORKSPACE_HOST,
+      environment,
+    });
     this.connections = new ProjectConnections({
       storage: ctx.storage,
       workspaceName: this.workspaceName,
       namespace: env.WORKSPACE_HOST,
-      environment: {
-        clientId: env.GITHUB_OAUTH_CLIENT_ID,
-        fallbackToken: env.GH_TOKEN,
-        fetcher: (url, init) => fetch(url, init),
-      },
+      environment,
+      github: this.github,
     });
     // One catalog reaches the thread surface and the turn path, read at each call so a repository
     // connected a moment ago resolves without restarting this object.
@@ -269,14 +284,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     scope: VerifiedAccessScope,
     now: number = Date.now(),
   ): Promise<GitHubAuthorizationOutcome> {
-    return this.connections.startAuthorization(scope, now);
+    return this.github.startAuthorization(scope, now);
   }
 
   completeGitHubAuthorization(
     scope: VerifiedAccessScope,
     now: number = Date.now(),
   ): Promise<GitHubAuthorizationOutcome> {
-    return this.connections.completeAuthorization(scope, now);
+    return this.github.completeAuthorization(scope, now);
   }
 
   /**

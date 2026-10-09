@@ -210,7 +210,6 @@ export { MODULE_MAP_CHUNK_BYTES, ModuleMapStore } from "./store.js";
 export type { ModuleMapStorage, StoredModuleMap, StoredModuleMapProblem } from "./store.js";
 
 export {
-  absentModuleMapBuilder,
   WorkspaceModuleMapBuilder,
   type BuildWorkspace,
   type HarnessBuildResult,

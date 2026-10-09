@@ -7,9 +7,13 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { newRequestId } from "../../../src/diagnostics.js";
 import { capturedEvents, named } from "../../log-capture.js";
-import { GitHubConnection, ProjectConnections } from "../../../src/supervisor/projects/index.js";
-import { tenantWorkspaceName } from "../../../src/workspace-names.js";
+import {
+  GitHubConnection,
+  tenantWorkspaceName,
+  type ProjectConnections,
+} from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
+import { tenantConnections, type TenantConnections } from "./tenant-connections.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
 
@@ -56,11 +60,13 @@ const deviceReply = {
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
   connections<T>(use: (connections: ProjectConnections) => Promise<T>): Promise<T>;
+  github<T>(use: (github: GitHubConnection) => Promise<T>): Promise<T>;
 }
 
 /**
- * One tenant: a real `ProjectConnections` over the Supervisor's own storage, the fake workspace,
- * and a scripted GitHub. Each call re-reads storage, so a test can watch state persist.
+ * One tenant: a real `ProjectConnections` and `GitHubConnection` over the Supervisor's own
+ * storage, the fake workspace, and a scripted GitHub. Each call re-reads storage, so a test can
+ * watch state persist.
  */
 function tenant(
   name: string,
@@ -73,23 +79,21 @@ function tenant(
 ): Tenant {
   const workspace = options.workspace ?? new FakeTenantWorkspace();
 
+  const inTenant = <T>(use: (built: TenantConnections) => Promise<T>): Promise<T> =>
+    runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
+      use(
+        tenantConnections(state.storage, name, workspace, {
+          clientId: options.clientId ?? CLIENT_ID,
+          fallbackToken: options.fallbackToken,
+          fetcher: githubReplying(options.replies ?? [deviceReply]),
+        }),
+      ),
+    );
+
   return {
     workspace,
-    connections: (use) =>
-      runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
-        use(
-          new ProjectConnections({
-            storage: state.storage,
-            workspaceName: tenantWorkspaceName(name),
-            namespace: workspace.namespace,
-            environment: {
-              clientId: options.clientId ?? CLIENT_ID,
-              fallbackToken: options.fallbackToken,
-              fetcher: githubReplying(options.replies ?? [deviceReply]),
-            },
-          }),
-        ),
-      ),
+    connections: (use) => inTenant((built) => use(built.connections)),
+    github: (use) => inTenant((built) => use(built.github)),
   };
 }
 
@@ -547,7 +551,7 @@ test("still attempts the clone without a credential, so a public repository re-c
 test("asks for a reconnection after a restart left the workspace without a credential", async () => {
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("credential-after-restart", { workspace, fallbackToken: FAKE_TOKEN });
-  await subject.connections((connections) => connections.ensureCredential(NOW));
+  await subject.github((github) => github.ensureCredential(NOW));
   const connected = await subject.connections((connections) => connections.connectionStatus(NOW));
 
   // A recreated container keeps the tenant's storage and loses the workspace filesystem, so `gh`
@@ -559,9 +563,7 @@ test("asks for a reconnection after a restart left the workspace without a crede
     connections.connectionStatus(NOW + 1),
   );
 
-  const repaired = await subject.connections((connections) =>
-    connections.ensureCredential(NOW + 2),
-  );
+  const repaired = await subject.github((github) => github.ensureCredential(NOW + 2));
 
   expect(connected).toMatchObject({ state: "connected", source: "configured-token" });
   expect(reported).toEqual({ state: "reconnect-required", reason: "credential-missing" });
@@ -575,7 +577,7 @@ test("clears cached GitHub status after resetting the workspace", async () => {
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("reset-clears-connection", { workspace, fallbackToken: FAKE_TOKEN });
 
-  await subject.connections((connections) => connections.ensureCredential(NOW));
+  await subject.github((github) => github.ensureCredential(NOW));
   await subject.connections((connections) => {
     connections.resetWorkspace();
 
@@ -587,9 +589,9 @@ test("clears cached GitHub status after resetting the workspace", async () => {
     subject.connections((connections) => connections.connectionStatus(NOW + 1)),
   ).resolves.toEqual({ state: "disconnected" });
 
-  await expect(
-    subject.connections((connections) => connections.ensureCredential(NOW + 2)),
-  ).resolves.toMatchObject({ state: "connected", source: "configured-token" });
+  await expect(subject.github((github) => github.ensureCredential(NOW + 2))).resolves.toMatchObject(
+    { state: "connected", source: "configured-token" },
+  );
 });
 
 test("reports a reconnect requirement rather than a connection it cannot use", async () => {
@@ -626,7 +628,7 @@ test("reports a workspace it cannot reach as a reconnect requirement, never as c
   workspace.unavailable = true;
   const subject = tenant("workspace-unavailable", { workspace, fallbackToken: FAKE_TOKEN });
 
-  const status = await subject.connections((connections) => connections.ensureCredential(NOW));
+  const status = await subject.github((github) => github.ensureCredential(NOW));
 
   expect(status).toEqual({ state: "reconnect-required", reason: "workspace-unavailable" });
 });
@@ -636,7 +638,7 @@ test("shows a workspace image without gh instead of installing one", async () =>
   workspace.credentialState = "tooling-missing";
   const subject = tenant("tooling-missing", { workspace, fallbackToken: FAKE_TOKEN });
 
-  const status = await subject.connections((connections) => connections.ensureCredential(NOW));
+  const status = await subject.github((github) => github.ensureCredential(NOW));
 
   expect(status).toEqual({ state: "tooling-missing" });
 });

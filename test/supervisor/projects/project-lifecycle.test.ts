@@ -3,9 +3,9 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { ProjectConnections } from "../../../src/supervisor/projects/index.js";
-import { tenantWorkspaceName } from "../../../src/workspace-names.js";
+import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
+import { tenantConnections } from "./tenant-connections.js";
 
 /**
  * Overlapping lifecycle operations on one project id. The fake workspace holds a chosen command
@@ -36,17 +36,12 @@ function withConnections<T>(
 ): Promise<T> {
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
     use(
-      new ProjectConnections({
-        storage: state.storage,
-        workspaceName: tenantWorkspaceName(name),
-        namespace: workspace.namespace,
-        environment: {
-          clientId: undefined,
-          fallbackToken: FAKE_TOKEN,
-          // No size metadata: the preflight is skipped, which keeps these tests about ordering.
-          fetcher: () => Promise.resolve(Response.json({})),
-        },
-      }),
+      tenantConnections(state.storage, name, workspace, {
+        clientId: undefined,
+        fallbackToken: FAKE_TOKEN,
+        // No size metadata: the preflight is skipped, which keeps these tests about ordering.
+        fetcher: () => Promise.resolve(Response.json({})),
+      }).connections,
     ),
   );
 }

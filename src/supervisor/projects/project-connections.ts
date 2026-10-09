@@ -13,13 +13,11 @@ import {
   type GitHubFetch,
   type GitHubToken,
 } from "../../github/index.js";
-import {
+import type {
   GitHubConnection,
-  type GitHubAuthorizationOutcome,
-  type GitHubConnectionEnvironment,
-  type GitHubConnectionStatus,
+  GitHubConnectionEnvironment,
+  GitHubConnectionStatus,
 } from "./github-connection.js";
-import { GitHubConnectionStore } from "./github-connection-store.js";
 import {
   canonicalRepositoryUrl,
   parseProjectId,
@@ -41,15 +39,15 @@ import {
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
-// oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, and telemetry boundaries.
-import type { VerifiedAccessScope } from "../../access/index.js";
 import {
   logEvent,
   logRedactedCause,
   timedWorkspaceRpc,
   type RequestId,
 } from "../../diagnostics.js";
+// oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, thread, and telemetry boundaries.
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import type { DisconnectProjectResult } from "../threads/index.js";
 
 /**
  * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
@@ -91,23 +89,15 @@ async function repositorySizeAllowed(
   return reason === undefined || reason === "within-limits";
 }
 
-type DisconnectRefusal = Readonly<{
-  ok: false;
-  problem: Readonly<{
-    code: "invalid-project-id" | "unknown-project-id" | "harness-project" | "turn-active";
-    deadlineAt?: number;
-  }>;
-}>;
-
 export type DisconnectRepositoryResult =
   | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
-  | DisconnectRefusal;
+  | Extract<DisconnectProjectResult, { ok: false }>;
 
 /**
  * Removes the project's thread, or refuses because a turn still owns it. It runs inside the
  * disconnect's ordered operation, so no turn can be admitted between it and the row removal.
  */
-export type ReleaseProjectThread = () => Readonly<{ ok: true }> | DisconnectRefusal;
+export type ReleaseProjectThread = () => DisconnectProjectResult;
 
 export type ConnectRepositoryProblem = Readonly<{
   code:
@@ -151,7 +141,10 @@ export interface ProjectConnectionsInput {
     ProvisionWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace &
     ProjectRemovalWorkspaceNamespace;
-  readonly environment: GitHubConnectionEnvironment;
+  /** The size check asks GitHub for repository metadata with the connection's token and fetcher. */
+  readonly environment: Pick<GitHubConnectionEnvironment, "fallbackToken" | "fetcher">;
+  /** The tenant's one GitHub connection. The Supervisor builds it and serves its authorization. */
+  readonly github: GitHubConnection;
 }
 
 export class ProjectConnections {
@@ -172,12 +165,7 @@ export class ProjectConnections {
     this.namespace = input.namespace;
     this.repositorySizeToken = parseGitHubToken(input.environment.fallbackToken);
     this.githubFetcher = input.environment.fetcher;
-    this.github = new GitHubConnection({
-      store: new GitHubConnectionStore(input.storage),
-      workspaceName: input.workspaceName,
-      namespace: input.namespace,
-      environment: input.environment,
-    });
+    this.github = input.github;
   }
 
   /**
@@ -210,25 +198,6 @@ export class ProjectConnections {
 
       return { state: "reconnect-required", reason: "workspace-unavailable" };
     }
-  }
-
-  /**
-   * Make the workspace's credential usable if that is possible without a human, and report what it
-   * can do. A turn and a connection both want this before they touch a repository.
-   */
-  ensureCredential(now: number): Promise<GitHubConnectionStatus> {
-    return this.github.ensureCredential(now);
-  }
-
-  startAuthorization(scope: VerifiedAccessScope, now: number): Promise<GitHubAuthorizationOutcome> {
-    return this.github.startAuthorization(scope, now);
-  }
-
-  completeAuthorization(
-    scope: VerifiedAccessScope,
-    now: number,
-  ): Promise<GitHubAuthorizationOutcome> {
-    return this.github.completeAuthorization(scope, now);
   }
 
   /**

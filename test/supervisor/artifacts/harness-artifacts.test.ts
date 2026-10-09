@@ -8,7 +8,6 @@ import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { loadMainFacet } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import {
-  absentModuleMapBuilder,
   encodeModuleMap,
   HarnessArtifacts,
   ModuleMapStore,
@@ -61,6 +60,12 @@ class CountingBuilder implements HarnessModuleMapBuilder {
     return Promise.resolve(Result.ok(builtModuleMap(harnessCommit)));
   }
 }
+
+/** A Supervisor with no build workspace: a module map the store lacks cannot be had. */
+const absentModuleMapBuilder: HarnessModuleMapBuilder = {
+  build: (harnessCommit) =>
+    Promise.resolve(Result.err({ code: "build-workspace-unavailable", harnessCommit })),
+};
 
 class RefusingBuilder implements HarnessModuleMapBuilder {
   build(harnessCommit: string): Promise<HarnessBuildResult> {
