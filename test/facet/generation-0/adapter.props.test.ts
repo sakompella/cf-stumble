@@ -3,9 +3,8 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
 import {
-  isResponseError,
   piContextToRouteRequest,
-  routeResponseToPiAssistant,
+  routeMessageToPiAssistant,
   type PiAssistantMessage,
   type PiContentBlock,
   type PiMessage,
@@ -47,18 +46,11 @@ test("every tool-argument string becomes a plain non-array object", () => {
       ),
     );
 
-    const result = routeResponseToPiAssistant({
-      ok: true,
-      message: {
-        role: "assistant",
-        content: null,
-        tool_calls: [{ id: "call", function: { name: "run", arguments: argumentsText } }],
-      },
+    const result = routeMessageToPiAssistant({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "call", function: { name: "run", arguments: argumentsText } }],
     });
-
-    expect(isResponseError(result)).toBe(false);
-
-    if (isResponseError(result)) throw new Error("expected a successful assistant response");
 
     const call = result.content[0];
 
@@ -95,11 +87,7 @@ function assertRouteAssistantRoundTrip(tc: hegel.TestCase): void {
     })),
   };
 
-  const pi = routeResponseToPiAssistant({ ok: true, message: routeMessage });
-
-  expect(isResponseError(pi)).toBe(false);
-
-  if (isResponseError(pi)) throw new Error("expected a successful assistant response");
+  const pi = routeMessageToPiAssistant(routeMessage);
 
   const mapped = piContextToRouteRequest({ messages: [pi] }).messages[0];
 

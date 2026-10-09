@@ -1,10 +1,10 @@
 import type {
   ModelRouteRequest,
-  ModelRouteResponse,
   AssistantMessage as RouteAssistantMessage,
   ToolDefinition,
   RouteMessage,
 } from "../../model-route.js";
+import { ZERO_USAGE } from "./stream-assembler.js";
 
 // -- Narrow Pi shapes the adapter consumes ----------------------------------
 //
@@ -83,21 +83,6 @@ export type PiContext = Readonly<{
   messages: ReadonlyArray<PiMessage>;
   tools?: ReadonlyArray<PiTool>;
 }>;
-
-// -- Conversion errors ------------------------------------------------------
-
-export type AdapterError = Readonly<{
-  code: "unknown-role" | "model-unavailable";
-  detail: string;
-}>;
-
-export function isAdapterError(value: ModelRouteRequest | AdapterError): value is AdapterError {
-  return "code" in value;
-}
-
-export function isResponseError(value: PiAssistantMessage | AdapterError): value is AdapterError {
-  return "code" in value;
-}
 
 // -- Pi Context -> ModelRouteRequest ----------------------------------------
 
@@ -194,16 +179,7 @@ export function piContextToRouteRequest(context: PiContext): ModelRouteRequest {
   return { messages };
 }
 
-// -- ModelRouteResponse -> Pi AssistantMessage -------------------------------
-
-const ZERO_USAGE: PiUsage = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
+// -- Route AssistantMessage -> Pi AssistantMessage ---------------------------
 
 function routeToolCallToPi(tc: RouteAssistantMessage["tool_calls"][number]): PiToolCall {
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Boundary: JSON.parse of tool arguments returns an unvalidated object from the model route.
@@ -227,26 +203,18 @@ function routeToolCallToPi(tc: RouteAssistantMessage["tool_calls"][number]): PiT
 }
 
 /**
- * Convert a successful {@link ModelRouteResponse} into a Pi-shaped assistant
- * message.
+ * Convert the route's final assistant message into a Pi-shaped assistant message.
  *
- * Returns an {@link AdapterError} when the route reports a model failure.
  * Never selects a model, sets reasoning effort, or accesses credentials.
  */
-export function routeResponseToPiAssistant(
-  response: ModelRouteResponse,
-): PiAssistantMessage | AdapterError {
-  if (!response.ok) {
-    return { code: "model-unavailable", detail: response.error.code };
-  }
-
+export function routeMessageToPiAssistant(message: RouteAssistantMessage): PiAssistantMessage {
   const content: PiContentBlock[] = [];
 
-  if (response.message.content !== null) {
-    content.push({ type: "text", text: response.message.content });
+  if (message.content !== null) {
+    content.push({ type: "text", text: message.content });
   }
 
-  for (const tc of response.message.tool_calls) {
+  for (const tc of message.tool_calls) {
     content.push(routeToolCallToPi(tc));
   }
 
@@ -257,7 +225,7 @@ export function routeResponseToPiAssistant(
     provider: "cloudflare-workers-ai",
     model: "adapter-passthrough",
     usage: ZERO_USAGE,
-    stopReason: response.message.tool_calls.length > 0 ? "toolUse" : "stop",
+    stopReason: message.tool_calls.length > 0 ? "toolUse" : "stop",
     timestamp: Date.now(),
   };
 }

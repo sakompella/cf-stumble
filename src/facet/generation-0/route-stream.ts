@@ -10,11 +10,7 @@ type Context = Parameters<StreamFn>[1];
 type Message = Context["messages"][number];
 
 import { assistantShell, TurnAssembler } from "./stream-assembler.js";
-import {
-  isResponseError,
-  piContextToRouteRequest,
-  routeResponseToPiAssistant,
-} from "./workers-ai-adapter.js";
+import { piContextToRouteRequest, routeMessageToPiAssistant } from "./workers-ai-adapter.js";
 import type { PiMessage, PiTextContent, PiTool, PiToolParameters } from "./workers-ai-adapter.js";
 import type { ModelCapability } from "./capabilities.js";
 import type { ModelStreamEvent, ValidationFailure } from "../../model-route.js";
@@ -123,13 +119,7 @@ function applyModelStreamEvent(
 
       return;
     case "done": {
-      const assistant = routeResponseToPiAssistant({ ok: true, message: event.message });
-
-      if (isResponseError(assistant)) {
-        assembler.fail(stream, "error", assistant.detail);
-
-        return;
-      }
+      const assistant = routeMessageToPiAssistant(event.message);
 
       assembler.finish(stream, {
         ...assistantShell(

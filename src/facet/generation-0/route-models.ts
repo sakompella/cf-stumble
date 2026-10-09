@@ -7,17 +7,9 @@ import type {
   Models,
   StreamFn,
 } from "@cf-stumble/pi";
+import { ZERO_USAGE } from "./stream-assembler.js";
 
 const NO_REGISTRY = "this generation reaches one fixed model route, not a provider registry";
-
-const NO_USAGE: AssistantMessage["usage"] = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
 
 function unavailable<T>(): Promise<T> {
   return Promise.reject(new Error(NO_REGISTRY));
@@ -39,7 +31,7 @@ function unavailableStream(model: Model<Api>): AssistantMessageEventStream {
       api: model.api,
       provider: model.provider,
       model: model.id,
-      usage: NO_USAGE,
+      usage: ZERO_USAGE,
       stopReason: "error",
       errorMessage: NO_REGISTRY,
       timestamp: Date.now(),

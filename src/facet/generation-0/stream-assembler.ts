@@ -28,7 +28,7 @@ export const ROUTE_MODEL = {
   maxTokens: 4096,
 } satisfies Model<Api>;
 
-const ZERO_USAGE: AssistantMessage["usage"] = {
+export const ZERO_USAGE: AssistantMessage["usage"] = {
   input: 0,
   output: 0,
   cacheRead: 0,

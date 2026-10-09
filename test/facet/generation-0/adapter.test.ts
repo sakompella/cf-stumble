@@ -1,15 +1,13 @@
 import { expect, test } from "vitest";
 import {
   piContextToRouteRequest,
-  routeResponseToPiAssistant,
-  isResponseError,
+  routeMessageToPiAssistant,
   type PiAssistantMessage,
   type PiContext,
   type PiToolResultMessage,
   type PiUsage,
-  type AdapterError,
 } from "../../../src/facet/generation-0/workers-ai-adapter.js";
-import type { ModelRouteResponse } from "../../../src/model-route.js";
+import type { AssistantMessage as RouteAssistantMessage } from "../../../src/model-route.js";
 
 const ZERO: PiUsage = {
   input: 0,
@@ -36,27 +34,16 @@ function piAssistant(
   };
 }
 
-function expectPi(v: PiAssistantMessage | AdapterError): PiAssistantMessage {
-  expect(isResponseError(v)).toBe(false);
-
-  if (isResponseError(v)) throw new Error("error");
-
-  return v;
-}
-
-function tcRes(id: string, name: string, args: string): ModelRouteResponse {
+function tcMsg(id: string, name: string, args: string): RouteAssistantMessage {
   return {
-    ok: true,
-    message: {
-      role: "assistant",
-      content: null,
-      tool_calls: [{ id, function: { name, arguments: args } }],
-    },
+    role: "assistant",
+    content: null,
+    tool_calls: [{ id, function: { name, arguments: args } }],
   };
 }
 
-function txtRes(t: string): ModelRouteResponse {
-  return { ok: true, message: { role: "assistant", content: t, tool_calls: [] } };
+function txtMsg(t: string): RouteAssistantMessage {
+  return { role: "assistant", content: t, tool_calls: [] };
 }
 
 function piTr(id: string, name: string, text: string): PiToolResultMessage {
@@ -136,9 +123,7 @@ test("assistant tool call arguments serialised to JSON", () => {
 });
 
 test("tool result maps role and id within the ordered context", () => {
-  const assistant = expectPi(
-    routeResponseToPiAssistant(tcRes("call_42", "read_file", '{"path":"a.txt"}')),
-  );
+  const assistant = routeMessageToPiAssistant(tcMsg("call_42", "read_file", '{"path":"a.txt"}'));
 
   const request = piContextToRouteRequest({
     systemPrompt: "Help.",
@@ -190,39 +175,23 @@ test("Pi tools mapped to route tool definitions", () => {
 });
 
 test("route text response becomes Pi text content with stop", () => {
-  const pi = expectPi(routeResponseToPiAssistant(txtRes("done")));
+  const pi = routeMessageToPiAssistant(txtMsg("done"));
   expect(pi.content).toEqual([{ type: "text", text: "done" }]);
   expect(pi.stopReason).toBe("stop");
 });
 
 test("route tool call response becomes Pi toolCall content with toolUse", () => {
-  const pi = expectPi(routeResponseToPiAssistant(tcRes("c7", "bash", '{"cmd":"ls"}')));
+  const pi = routeMessageToPiAssistant(tcMsg("c7", "bash", '{"cmd":"ls"}'));
   expect(pi.stopReason).toBe("toolUse");
   expect(pi.content).toEqual([
     { type: "toolCall", id: "c7", name: "bash", arguments: { cmd: "ls" } },
   ]);
 });
 
-test("route error returns AdapterError", () => {
-  expect(routeResponseToPiAssistant({ ok: false, error: { code: "model-unavailable" } })).toEqual({
-    code: "model-unavailable",
-    detail: "model-unavailable",
-  } satisfies AdapterError);
-});
-
 test.each([["not-json{"], ['"just a string"']])(
   "invalid tool args %s recovered as empty object",
   (args) => {
-    const pi = expectPi(
-      routeResponseToPiAssistant({
-        ok: true,
-        message: {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ id: "c1", function: { name: "r", arguments: args } }],
-        },
-      }),
-    );
+    const pi = routeMessageToPiAssistant(tcMsg("c1", "r", args));
 
     if (pi.content[0]?.type === "toolCall") expect(pi.content[0].arguments).toEqual({});
     else expect.unreachable("expected toolCall");
@@ -248,7 +217,7 @@ test("route request carries no provider override fields", () => {
 });
 
 test("Pi output carries zero usage and synthetic provider tag", () => {
-  const pi = expectPi(routeResponseToPiAssistant(txtRes("hi")));
+  const pi = routeMessageToPiAssistant(txtMsg("hi"));
   expect(pi.api).toBe("workers-ai");
   expect(pi.provider).toBe("cloudflare-workers-ai");
   expect(pi.model).toBe("adapter-passthrough");
