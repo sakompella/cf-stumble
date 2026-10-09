@@ -2,7 +2,6 @@
 
 // This adapter turns a verified token into the one name the Supervisor is addressed by.
 // oxlint-disable anti-slop/no-runtime-typeof
-import { isRecord } from "../untrusted.js";
 import { presentedAccessToken } from "./credentials.js";
 import {
   certsUrl,
@@ -14,7 +13,8 @@ import {
 } from "./keys.js";
 import {
   deriveSupervisorName,
-  verifyAccessToken,
+  parseAccessToken,
+  verifyParsedAccessToken,
   type AccessIdentity,
   type AccessVerificationReason,
   type AccessVerificationResult,
@@ -89,38 +89,20 @@ function ownerVerificationFailure(
   return identity === ownerSubject ? undefined : { ok: false, reason: "not-owner" };
 }
 
-function tokenKeyId(token: string): string | undefined {
-  const encodedHeader = token.split(".")[0];
-
-  if (encodedHeader === undefined) {
-    return undefined;
-  }
-
-  try {
-    const base64 = encodedHeader.replaceAll("-", "+").replaceAll("_", "/");
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
-    const decoded: unknown = JSON.parse(atob(padded));
-
-    return isRecord(decoded) && typeof decoded.kid === "string" ? decoded.kid : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 type BoundaryVerificationResult =
   | AccessVerificationResult
   | { readonly ok: false; readonly reason: "invalid-configuration" | "key-service-unavailable" };
 
 async function verifyUsingAccessKeys(
-  input: VerifyAccessTokenInput,
+  input: Omit<VerifyAccessTokenInput, "publicKeys">,
   explicitKeys: readonly AccessPublicKey[] | undefined,
   url: string | undefined,
   fetcher: AccessFetch,
   webCrypto: Crypto,
 ): Promise<BoundaryVerificationResult> {
-  const parsed = await verifyAccessToken(input, webCrypto);
+  const parsed = parseAccessToken(input.token);
 
-  if (!parsed.ok && parsed.reason !== "invalid-signature") {
+  if (!parsed.ok) {
     return parsed;
   }
 
@@ -140,14 +122,14 @@ async function verifyUsingAccessKeys(
     publicKeys = loaded.value;
   }
 
-  let verified = await verifyAccessToken({ ...input, publicKeys }, webCrypto);
+  let verified = await verifyParsedAccessToken(parsed.token, { ...input, publicKeys }, webCrypto);
 
   if (
     !verified.ok &&
     explicitKeys === undefined &&
     url !== undefined &&
     verified.reason === "invalid-signature" &&
-    !hasMatchingKid(publicKeys, input.token)
+    !hasMatchingKid(publicKeys, parsed.token.header.kid)
   ) {
     const refreshed = await fetchPublicKeys(url, fetcher, true);
 
@@ -155,15 +137,17 @@ async function verifyUsingAccessKeys(
       return { ok: false, reason: "key-service-unavailable" };
     }
 
-    verified = await verifyAccessToken({ ...input, publicKeys: refreshed.value }, webCrypto);
+    verified = await verifyParsedAccessToken(
+      parsed.token,
+      { ...input, publicKeys: refreshed.value },
+      webCrypto,
+    );
   }
 
   return verified;
 }
 
-function hasMatchingKid(publicKeys: readonly AccessPublicKey[], token: string): boolean {
-  const kid = tokenKeyId(token);
-
+function hasMatchingKid(publicKeys: readonly AccessPublicKey[], kid: string | undefined): boolean {
   return kid !== undefined && publicKeys.some((key) => key.kid === kid);
 }
 
@@ -249,7 +233,6 @@ export async function authenticateAccessRequest(
       token,
       issuer: configuration.issuer,
       audience: configuration.audience,
-      publicKeys: [],
       now,
     },
     configuration.explicitKeys,

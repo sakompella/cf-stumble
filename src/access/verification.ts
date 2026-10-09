@@ -210,7 +210,7 @@ async function verifiesSignature(
   return false;
 }
 
-type ParsedToken = {
+export type ParsedAccessToken = {
   readonly header: JwtHeader;
   readonly claimsPart: string;
   readonly signature: Uint8Array;
@@ -218,10 +218,10 @@ type ParsedToken = {
 };
 
 type TokenParsingResult =
-  | { readonly ok: true; readonly token: ParsedToken }
+  | { readonly ok: true; readonly token: ParsedAccessToken }
   | { readonly ok: false; readonly reason: "malformed-token" | "unsupported-algorithm" };
 
-function parseToken(token: string): TokenParsingResult {
+export function parseAccessToken(token: string): TokenParsingResult {
   const parts = token.split(".");
 
   if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
@@ -259,21 +259,30 @@ function parseToken(token: string): TokenParsingResult {
       };
 }
 
-export async function verifyAccessToken(
+export function verifyAccessToken(
   input: VerifyAccessTokenInput,
   webCrypto: Crypto = crypto,
 ): Promise<AccessVerificationResult> {
-  const parsedToken = parseToken(input.token);
+  const parsedToken = parseAccessToken(input.token);
 
   if (!parsedToken.ok) {
-    return parsedToken;
+    return Promise.resolve(parsedToken);
   }
 
+  return verifyParsedAccessToken(parsedToken.token, input, webCrypto);
+}
+
+/** Check the signature with `input.publicKeys`, then the claims, of a token that already parsed. */
+export async function verifyParsedAccessToken(
+  token: ParsedAccessToken,
+  input: Omit<VerifyAccessTokenInput, "token">,
+  webCrypto: Crypto,
+): Promise<AccessVerificationResult> {
   if (
     !(await verifiesSignature(
-      parsedToken.token.header,
-      parsedToken.token.signingInput,
-      parsedToken.token.signature,
+      token.header,
+      token.signingInput,
+      token.signature,
       input.publicKeys,
       webCrypto,
     ))
@@ -281,7 +290,7 @@ export async function verifyAccessToken(
     return { ok: false, reason: "invalid-signature" };
   }
 
-  const parsedClaims = parseClaims(decodeJson(parsedToken.token.claimsPart));
+  const parsedClaims = parseClaims(decodeJson(token.claimsPart));
 
   if (!parsedClaims.ok) {
     return parsedClaims;
