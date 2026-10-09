@@ -8,11 +8,7 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   provisionHarnessRepository,
 } from "../../src/harness-build.js";
-import {
-  planProjectProvision,
-  projectProvisionConfiguration,
-  projectProvisionStep,
-} from "../../src/project-provision.js";
+import { planProjectProvision, projectProvisionStep } from "../../src/project-provision.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH } from "../../src/workspace-layout.js";
@@ -49,10 +45,7 @@ test("the install command still takes the token from standard input only", () =>
 });
 
 test("clone and harness provisioning export the durable configuration for private repositories", () => {
-  const plan = planProjectProvision(
-    projectProvisionConfiguration(sampleProjectOne.id),
-    sampleProjectOne,
-  );
+  const plan = planProjectProvision(sampleProjectOne);
 
   const step = projectProvisionStep(plan, "clone");
   const clone = step.name === "clone" ? step.source : "";

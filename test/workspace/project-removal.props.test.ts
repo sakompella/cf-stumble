@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import {
   planProjectProvision,
-  projectProvisionConfiguration,
   projectProvisionLockPath,
   projectProvisionStep,
 } from "../../src/project-provision.js";
@@ -116,10 +115,7 @@ function removalSource(): string {
 }
 
 function cloneSource(): string {
-  const step = projectProvisionStep(
-    planProjectProvision(projectProvisionConfiguration(sampleProjectOne.id), sampleProjectOne),
-    "clone",
-  );
+  const step = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
 
   if (step.name !== "clone") throw new Error("the clone step must be the command step");
 

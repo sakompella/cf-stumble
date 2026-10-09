@@ -16,7 +16,6 @@ import { parseProjectCatalog, type Project } from "../../src/project-catalog.js"
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   planProjectProvision,
-  projectProvisionConfiguration,
   projectProvisionStep,
 } from "../../src/project-provision.js";
 import {
@@ -173,10 +172,7 @@ function verdict(scenario: Scenario): string {
 function clone(scenario: Scenario) {
   const directory = prepare(scenario);
 
-  const step = projectProvisionStep(
-    planProjectProvision(projectProvisionConfiguration(project.id), project),
-    "clone",
-  );
+  const step = projectProvisionStep(planProjectProvision(project), "clone");
 
   if (step.name !== "clone") throw new Error("the clone step must be the command step");
 

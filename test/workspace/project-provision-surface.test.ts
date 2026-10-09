@@ -3,7 +3,6 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeou
 import {
   MANAGED_AGENT_INSTRUCTIONS,
   planProjectProvision,
-  projectProvisionConfiguration,
   projectProvisionStep,
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
@@ -62,10 +61,7 @@ function pathParts(path: string): string[] {
 }
 
 function cloneSource(): string {
-  const step = projectProvisionStep(
-    planProjectProvision(projectProvisionConfiguration(projectOne.id), projectOne),
-    "clone",
-  );
+  const step = projectProvisionStep(planProjectProvision(projectOne), "clone");
 
   if (step.name !== "clone") {
     throw new Error("the clone step must be the command step");

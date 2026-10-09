@@ -4,7 +4,6 @@ import {
   MANAGED_AGENT_INSTRUCTIONS,
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
-  projectProvisionConfiguration,
   projectProvisionLockPath,
   projectProvisionStep,
 } from "../../src/project-provision.js";
@@ -35,7 +34,7 @@ const projectOne = sampleProjectOne;
 const projectTwo = sampleProjectTwo;
 
 function planFor(project: Project) {
-  return planProjectProvision(projectProvisionConfiguration(project.id), project);
+  return planProjectProvision(project);
 }
 
 function cloneSource(project: Project): string {
@@ -176,14 +175,14 @@ test("writes the managed instructions above every repository in the workspace", 
 });
 
 test("gives each project its own directory inside the one workspace", () => {
-  const one = projectProvisionConfiguration(projectOne.id);
-  const two = projectProvisionConfiguration(projectTwo.id);
+  const one = projectDirectory(projectOne.id);
+  const two = projectDirectory(projectTwo.id);
 
-  expect(one.projectRoot).toBe(projectDirectory(projectOne.id));
-  expect(one.projectGitDir).toBe(`${one.projectRoot}/.git`);
-  expect(one.projectRoot).not.toBe(two.projectRoot);
+  expect(cloneSource(projectOne)).toContain(`repository=${shellQuote(one)}\n`);
+  expect(cloneSource(projectOne)).toContain(`git_dir=${shellQuote(`${one}/.git`)}\n`);
+  expect(one).not.toBe(two);
   expect(
-    [one.projectRoot, two.projectRoot, HARNESS_DIRECTORY].some((directory, index, all) =>
+    [one, two, HARNESS_DIRECTORY].some((directory, index, all) =>
       all.some((other, otherIndex) => otherIndex !== index && other.startsWith(`${directory}/`)),
     ),
     "no repository may sit inside another",

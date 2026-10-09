@@ -4,7 +4,6 @@ import { parsePublicRepositoryUrl } from "../../src/project-catalog.js";
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
   planProjectProvision,
-  projectProvisionConfiguration,
   projectProvisionStep,
 } from "../../src/project-provision.js";
 import { sampleProjectOne } from "../project-fixtures.js";
@@ -15,10 +14,7 @@ import { sampleProjectOne } from "../project-fixtures.js";
  */
 
 function cloneSource(): string {
-  const step = projectProvisionStep(
-    planProjectProvision(projectProvisionConfiguration(sampleProjectOne.id), sampleProjectOne),
-    "clone",
-  );
+  const step = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
 
   if (step.name !== "clone") throw new Error("the clone step must be the command step");
 

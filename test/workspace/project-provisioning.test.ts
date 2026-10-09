@@ -2,11 +2,11 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import {
   MANAGED_AGENT_INSTRUCTIONS,
-  projectProvisionConfiguration,
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
+import { MANAGED_AGENT_INSTRUCTIONS_PATH } from "../../src/workspace-layout.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
@@ -248,7 +248,7 @@ test("repeats the clone after the instructions step failed, rather than resuming
   expect(stepsOf(host)).toEqual(["clone", "instructions", "clone", "instructions"]);
   expect(host.plans.at(-1)).toEqual({
     kind: "write-file",
-    path: projectProvisionConfiguration(projectOne.id).agentInstructionsPath,
+    path: MANAGED_AGENT_INSTRUCTIONS_PATH,
     content: MANAGED_AGENT_INSTRUCTIONS,
   });
 });

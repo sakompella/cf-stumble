@@ -30,34 +30,6 @@ export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
 export const PROJECT_CLONE_SIZE_MARKER = "cf-stumble-clone-size-kb=";
 
 /**
- * Where one catalog project's repository lands in the tenant's shared workspace, and where the
- * managed agent instructions go.
- *
- * The directories come from `workspace-layout.ts`, which owns the whole layout, so a project's
- * clone is a sibling of the harness checkout and of every other project rather than a container of
- * its own (ADR-0038). `agentInstructionsPath` sits above every clone for the reason
- * `workspace-layout.ts` records: a managed file written inside a repository would either overwrite
- * the repository's own `AGENTS.md` or appear in the diff the user reviews.
- *
- * This module is shared by the workspace that provisions and the caller that asks for it, so both
- * plan a project the same way. It holds plain values only, and imports no platform API.
- */
-export type ProjectProvisionConfiguration = Readonly<{
-  projectRoot: string;
-  projectGitDir: string;
-  agentInstructionsPath: string;
-}>;
-
-/** The layout one project is provisioned into. Derived from the id, never from a request field. */
-export function projectProvisionConfiguration(projectId: ProjectId): ProjectProvisionConfiguration {
-  return {
-    projectRoot: projectDirectory(projectId),
-    projectGitDir: projectGitDirectory(projectId),
-    agentInstructionsPath: MANAGED_AGENT_INSTRUCTIONS_PATH,
-  };
-}
-
-/**
  * The instructions cf-stumble manages for the shared workspace. The second paragraph is the
  * instruction ADR-0039 requires, because that ADR is what grants the workspace a shell, ordinary
  * development tools, and unrestricted egress.
@@ -198,22 +170,18 @@ export function reconcileClone(
  * is configuration rather than a constant, and hand-written escaping is what turns a quoting
  * helper into an injection.
  */
-function cloneProjectRepository(
-  configuration: ProjectProvisionConfiguration,
-  project: Project,
-): string {
+function cloneProjectRepository(project: Project): string {
   const { repositoryUrl } = project;
-  const lock = projectProvisionLockPath(project.id);
-  const staging = `${configuration.projectRoot}.provisioning`;
+  const root = projectDirectory(project.id);
 
   return [
     "set -eu",
     ...durableGitHubConfigurationSource(),
     `projects=${shellQuote(PROJECTS_DIRECTORY)}`,
-    `lock=${shellQuote(lock)}`,
-    `repository=${shellQuote(configuration.projectRoot)}`,
-    `git_dir=${shellQuote(configuration.projectGitDir)}`,
-    `staging=${shellQuote(staging)}`,
+    `lock=${shellQuote(projectProvisionLockPath(project.id))}`,
+    `repository=${shellQuote(root)}`,
+    `git_dir=${shellQuote(projectGitDirectory(project.id))}`,
+    `staging=${shellQuote(`${root}.provisioning`)}`,
     `expected_remote=${shellQuote(repositoryUrl)}`,
     repositorySizeVerdictSource(repositoryUrl),
     'mkdir -p "$projects"',
@@ -249,27 +217,33 @@ function cloneProjectRepository(
 }
 
 /**
- * Plan the whole of one project's provisioning. The plan is derived from the configuration and the
- * catalog project alone, so two runs for one project produce the same steps and a resumed run asks
- * for exactly what the interrupted one did.
+ * Plan the whole of one project's provisioning. The plan is derived from the catalog project alone,
+ * so two runs for one project produce the same steps and a resumed run asks for exactly what the
+ * interrupted one did.
+ *
+ * Every path comes from `workspace-layout.ts`, which owns the whole layout. A project's clone is a
+ * sibling of the harness checkout and of every other project rather than a container of its own
+ * (ADR-0038), and the managed instructions sit above every clone for the reason that module
+ * records: a managed file written inside a repository would either overwrite the repository's own
+ * `AGENTS.md` or appear in the diff the user reviews.
+ *
+ * This module is shared by the workspace that provisions and the caller that asks for it, so both
+ * plan a project the same way. It holds plain values only, and imports no platform API.
  */
-export function planProjectProvision(
-  configuration: ProjectProvisionConfiguration,
-  project: Project,
-): ProjectProvisionPlan {
+export function planProjectProvision(project: Project): ProjectProvisionPlan {
   return {
     projectId: project.id,
     steps: [
       {
         name: "clone",
-        source: cloneProjectRepository(configuration, project),
+        source: cloneProjectRepository(project),
         // The clone moves the project root into place, so it cannot run inside it, and the
         // workspace root may not exist yet on a cold container.
         cwd: "/",
       },
       {
         name: "instructions",
-        path: configuration.agentInstructionsPath,
+        path: MANAGED_AGENT_INSTRUCTIONS_PATH,
         content: MANAGED_AGENT_INSTRUCTIONS,
       },
     ],

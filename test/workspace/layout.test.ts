@@ -5,7 +5,8 @@ import {
 } from "../../src/facet/generation-0/execution-env-paths.js";
 import { parseAddressedPath } from "../../src/workspace/project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
-import { projectProvisionConfiguration } from "../../src/project-provision.js";
+import { planProjectProvision, projectProvisionStep } from "../../src/project-provision.js";
+import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   BUILD_SCRATCH_ROOT,
@@ -69,10 +70,18 @@ test("the build configuration and project provisioning read this layout", () => 
   expect(HARNESS_BUILD_CONFIGURATION.buildRoot).toBe(BUILD_SCRATCH_ROOT);
   expect(HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot).toBe(HARNESS_DIRECTORY);
   expect(HARNESS_BUILD_CONFIGURATION.harnessGitDir).toBe(HARNESS_GIT_DIRECTORY);
-  expect(projectProvisionConfiguration(projectOne.id)).toEqual({
-    projectRoot: projectDirectory(projectOne.id),
-    projectGitDir: projectGitDirectory(projectOne.id),
-    agentInstructionsPath: MANAGED_AGENT_INSTRUCTIONS_PATH,
+
+  const plan = planProjectProvision(projectOne);
+  const clone = projectProvisionStep(plan, "clone");
+
+  expect(clone.name === "clone" ? clone.source : "").toContain(
+    [
+      `repository=${shellQuote(projectDirectory(projectOne.id))}`,
+      `git_dir=${shellQuote(projectGitDirectory(projectOne.id))}`,
+    ].join("\n"),
+  );
+  expect(projectProvisionStep(plan, "instructions")).toMatchObject({
+    path: MANAGED_AGENT_INSTRUCTIONS_PATH,
   });
 });
 

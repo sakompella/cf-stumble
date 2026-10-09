@@ -2,7 +2,6 @@ import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
-  projectProvisionConfiguration,
   projectProvisionStep,
   type ProjectProvisionStepName,
 } from "../project-provision.js";
@@ -12,6 +11,7 @@ import {
   projectIdForRepository,
   type Project,
 } from "../project-catalog.js";
+import { projectDirectory, projectGitDirectory } from "../workspace-layout.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import type { WorkspaceOperations } from "./executor.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
@@ -104,10 +104,7 @@ export function parseProjectProvisionRequest(
  * server-side configuration.
  */
 export function planProjectProvisionRequest(request: ParsedProjectProvisionRequest): WorkspacePlan {
-  const step = projectProvisionStep(
-    planProjectProvision(projectProvisionConfiguration(request.project.id), request.project),
-    request.step,
-  );
+  const step = projectProvisionStep(planProjectProvision(request.project), request.step);
 
   switch (step.name) {
     case "clone":
@@ -161,7 +158,8 @@ export async function cloneMarkersAreDurable(
   operations: WorkspaceOperations,
   project: Project,
 ): Promise<boolean> {
-  const { projectRoot, projectGitDir } = projectProvisionConfiguration(project.id);
+  const projectRoot = projectDirectory(project.id);
+  const projectGitDir = projectGitDirectory(project.id);
 
   if ((await operations.lstat(projectRoot)) !== "directory") return false;
 
