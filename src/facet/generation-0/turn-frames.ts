@@ -12,7 +12,7 @@ import type { ModelTurnAccounting } from "./model-accounting.js";
  * arrives. `tool-start` carries the arguments the model chose, and `tool-result` carries the
  * bounded text the tool answered with, which is what shows a command's output.
  *
- * `diff` is the turn's own statement about what it changed (goal criterion 4). It is not a tool
+ * `diff` is the turn's own statement about what it changed. It is not a tool
  * result: the harness runs the diff itself after the model has stopped, so a turn that touched
  * files shows its work whether or not the model asked for it. `diff-unavailable` carries the
  * reason the repository could not answer, because "the diff is missing" and "the diff is empty"

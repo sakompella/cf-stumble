@@ -13,7 +13,7 @@ import {
  *
  * No test here runs a shell, so what a green run shows is which requests are accepted, how the
  * token is handed over, what text the commands are, and what the surface returns. The two
- * properties that matter for goal criterion 3 are checked directly: the token reaches the install
+ * credential properties are checked directly: the token reaches the install
  * command on standard input and nothing else, and it appears in no command line and no result.
  */
 

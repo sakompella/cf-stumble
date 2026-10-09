@@ -1,6 +1,6 @@
 /**
  * What the owner page is made of: the sidebar of connected projects, the streaming conversation,
- * the collapsible tool detail, and the generation drawer (goal criterion 4, Q4).
+ * the collapsible tool detail, and the generation drawer.
  *
  * These tests read the document the browser receives. They cannot prove the page behaves, because
  * no DOM runs here — that is the browser harness in `tools/browser-harness/`. What they hold is

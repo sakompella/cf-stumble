@@ -20,7 +20,7 @@ import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/i
  *
  * A generation is mutable harness code, so its stream is input: it can be malformed, oversized,
  * truncated, or say that the turn ended twice. None of those may save arbitrary state or count as
- * success (goal criterion 6).
+ * success.
  */
 
 const conversation = [THREAD_MESSAGE_SAMPLES.user, THREAD_MESSAGE_SAMPLES.assistant];

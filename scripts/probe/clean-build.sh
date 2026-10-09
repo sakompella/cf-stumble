@@ -10,8 +10,8 @@
 # `build:artifact` script the Supervisor runs.
 #
 # It builds the commit twice into separate directories with separate stores and compares the two
-# module maps byte for byte. That is a fast pre-check for goal criterion 7, NOT the criterion
-# itself: criterion 7 requires two clean builds inside Computer, which this script never touches.
+# module maps byte for byte. That is a fast pre-check, NOT the release proof: the proof is two
+# clean builds of one labeled commit inside Computer, which this script never touches.
 #
 # Usage:
 #   scripts/probe/clean-build.sh [commit-ish]     # default: HEAD

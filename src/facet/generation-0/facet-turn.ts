@@ -76,7 +76,7 @@ async function pumpTurn(
     signal,
   });
 
-  // The turn's own diff, asked for here rather than in the system prompt (goal criterion 4). It
+  // The turn's own diff, asked for here rather than in the system prompt. It
   // runs after the model has stopped and before the terminal frame, so a turn that used a tool
   // which can change a file ends by showing what changed even when the model never mentioned it.
   // A failed turn gets one too: it may have changed files before it failed.

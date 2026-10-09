@@ -22,9 +22,8 @@ import type { GitHubFetch } from "../../../src/github/index.js";
  *
  * The workspace is the fake in `fake-tenant-workspace.ts`, which runs the real credential and
  * provision surfaces over a fake shell, and GitHub is a scripted provider. What these tests hold
- * is the order of the steps, the binding of an authorization to the owner who started it, and the
- * negative goal criterion 3 asks for: a recognizable fake token reaches the workspace install and
- * appears in no status, no stored row, and no value a caller could return to a browser.
+ * is the order of the steps, the binding of an authorization to the owner who started it, and a
+ * negative check: a recognizable fake token reaches the workspace install and appears in no status, no stored row, and no value a caller could return to a browser.
  */
 
 const NOW = 1_700_000_000_000;

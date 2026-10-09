@@ -92,7 +92,7 @@ test("a turn shows what it changed without the model asking for a diff", async (
 
   const frames = await completedTurn(workspaces, facet, projectOne.id);
 
-  // Goal criterion 4, and the round-2 review's objection to how it was proved before: the script
+  // The turn's own diff, proved against the review's objection to the earlier proof: the script
   // above contains no `git diff`, and this workspace's exec backend answers that command by
   // diffing the bytes the turn wrote across the RPC hop rather than by replaying a fixed string.
   expect(

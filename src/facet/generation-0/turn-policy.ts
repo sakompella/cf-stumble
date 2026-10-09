@@ -32,7 +32,7 @@ export const TURN_TOOL_TIMEOUT_RESERVE_MS = 60_000;
  * Repeating those numbers here means a frame never truncates a result Pi already bounded, and it
  * bounds a result from any future tool that does not bound its own.
  *
- * The turn's own diff frame is bounded by the same two limits (goal criterion 4): a forty-line
+ * The turn's own diff frame is bounded by the same two limits: a forty-line
  * diff is roughly two kilobytes, so it arrives whole, and a diff of a whole repository still
  * cannot make one frame unbounded.
  */
@@ -44,8 +44,8 @@ export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
  * The command this generation runs itself at the end of a turn that could have changed a file, and
  * the seconds it may take.
  *
- * Goal criterion 4 wants a turn that shows what changed. Asking the model to run `git diff` made
- * that a hope about the model: the route is a flash model at low reasoning effort, and skipping
+ * A turn should show what changed. Asking the model to run `git diff` made that a hope about the
+ * model: the route is a flash model at low reasoning effort, and skipping
  * one clause of a system prompt is an ordinary event there. So the diff is a property of the turn
  * instead. The harness runs this command through the same project capability the `bash` tool uses,
  * after the model has stopped, and publishes the result as the turn's own frame.
@@ -53,7 +53,7 @@ export const TOOL_RESULT_DISPLAY_MAX_BYTES = 50 * 1_024;
  * `HEAD` rather than the working tree alone, because a turn that staged or ran the project's own
  * check should still show its work. A file the turn created and never added to the index is not in
  * this diff; `git status` would be a second command and a second frame, which is more than
- * criterion 4 asks for.
+ * the turn's diff needs.
  */
 export const TURN_DIFF_COMMAND = "git --no-pager diff HEAD";
 

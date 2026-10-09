@@ -153,8 +153,8 @@ a commit into a temporary directory outside the repository, isolates `HOME` so p
 empty store, builds the commit twice, and compares the two module maps byte for byte. Keep its
 output with the release evidence.
 
-The script is a pre-check, not the proof goal criterion 7 asks for. Criterion 7 requires two clean
-Computer builds of one labeled commit, and this script never starts a container.
+The script is a pre-check, not the release proof. The proof is two clean Computer builds of one
+labeled commit, and this script never starts a container.
 
 If `scripts/probe/clean-build.sh` or the `probe:clean-build` script is missing, this checklist
 fails and the release stops. `test/supervisor/artifacts/build-command.test.ts` checks that both are

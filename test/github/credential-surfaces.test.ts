@@ -11,7 +11,7 @@ import type { VerifiedAccessScope } from "../../src/access/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 
 /**
- * Goal criterion 3, stated as a negative and checked: a credential appears in no tracked file, no
+ * The credential rule, stated as a negative and checked: a credential appears in no tracked file, no
  * application log, no browser response, no stored module map, and no saved state.
  *
  * The token here is recognizable on purpose. One authorization is driven end to end against the

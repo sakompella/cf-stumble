@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 import { deriveSupervisorName } from "../../src/access/index.js";
