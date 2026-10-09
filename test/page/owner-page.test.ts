@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 /**
  * What the owner page is made of: the sidebar of connected projects, the streaming conversation,
  * the collapsible tool detail, and the generation drawer (goal criterion 4, Q4).

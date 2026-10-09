@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 // JWT parsing is the trust boundary. These checks intentionally validate unknown token data.
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof, typescript/no-redundant-type-constituents
 import { isRecord } from "../untrusted.js";

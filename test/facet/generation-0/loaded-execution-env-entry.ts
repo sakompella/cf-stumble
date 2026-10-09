@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@cf-stumble/pi";
 import { createFacetExecutionEnv } from "../../../src/facet/generation-0/execution-env.js";

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { Result } from "better-result";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";

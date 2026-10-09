@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 // The JWKS document is untrusted input, so keys are parsed before the verifier ever sees them.
 // oxlint-disable anti-slop/no-unknown-parameters
 import { Result } from "better-result";

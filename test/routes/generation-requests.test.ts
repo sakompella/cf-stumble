@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { expect, test } from "vitest";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { GenerationRequest } from "../../src/supervisor/control/index.js";

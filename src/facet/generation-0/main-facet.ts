@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { DurableObject } from "cloudflare:workers";
 import { startFacetTurn } from "./facet-turn.js";
 import { handleGeneration0Request } from "./request-handler.js";

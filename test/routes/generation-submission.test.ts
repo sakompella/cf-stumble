@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { afterEach, expect, test, vi } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
 import { routeOwnerApiRequest } from "../../src/routes/index.js";

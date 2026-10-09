@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 /**
  * The startup-check response (ADR-0029). `GET /` is an ordinary request that must stay cheap and
  * deterministic: it reads no capability, so a passing check proves this generation's request

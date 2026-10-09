@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { Result } from "better-result";
 import { logRedactedCause } from "../../diagnostics.js";
 import { MainHarnessArtifact } from "../../facet/index.js";

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 /**
  * What cf-stumble remembers about the workspace's GitHub authorization, which is deliberately not
  * a credential.

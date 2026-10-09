@@ -1,5 +1,4 @@
 // oxlint-disable import/max-dependencies -- Workspace Host owns the platform and all workspace surfaces.
-/// <reference types="@cloudflare/workers-types" />
 
 // oxlint-disable max-lines -- The Workspace Host class exposes one narrow method per workspace capability.
 

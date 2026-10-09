@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { startFacetTurn } from "../../../src/facet/generation-0/facet-turn.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";

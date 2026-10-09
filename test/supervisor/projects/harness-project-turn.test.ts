@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { Result } from "better-result";
 import { expect, test } from "vitest";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";

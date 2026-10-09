@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 /**
  * Cloudflare Access sets the `CF_Authorization` cookie for a signed-in browser, and a browser
  * navigation cannot send the `cf-access-jwt-assertion` header. The cookie must therefore be

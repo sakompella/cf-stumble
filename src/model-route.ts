@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { streamModelEvents, streamingBindingCall } from "./model-route-stream.js";
 import { asUntrusted, field, hasOwn, type UntrustedObject } from "./untrusted.js";

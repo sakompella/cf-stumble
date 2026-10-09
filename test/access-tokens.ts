@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 /**
  * Access tokens for tests. Every Access test needs a real signature over real claims, because a
  * fake verifier would prove nothing about the boundary. Keys are generated in the test process,

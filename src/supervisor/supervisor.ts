@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 // oxlint-disable max-lines -- One Durable Object class is one RPC surface: the runtime exposes the
 // methods declared here, so moving a group of them into another file would either hide them from
 // the binding or add a second object to route through. Each method below delegates to the module

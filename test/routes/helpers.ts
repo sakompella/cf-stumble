@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
 import {
   emptyThread,

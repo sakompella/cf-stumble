@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { Result } from "better-result";
 import { MainHarnessArtifact } from "./artifact.js";
 import type { ModelRoute } from "../model-route.js";

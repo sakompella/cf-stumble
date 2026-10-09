@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 /**
  * The streaming half of the model route: build the payload for the one fixed model, drive one
  * Workers AI streaming call, and translate its provider-native Server-Sent Events into the plain

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 // This adapter turns a verified token into the one name the Supervisor is addressed by.
 // oxlint-disable anti-slop/no-runtime-typeof
 import { presentedAccessToken } from "./credentials.js";

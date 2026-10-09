@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 // oxlint-disable max-lines -- Thread storage keeps its transaction shells together.
 import type { AgentMessage } from "@cf-stumble/pi";
 import {

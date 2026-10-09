@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 /**
  * Cloudflare Access presents the same signed token two ways: the `cf-access-jwt-assertion`
  * header on proxied requests, and the `CF_Authorization` cookie a browser sends when the person

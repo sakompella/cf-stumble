@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 // oxlint-disable max-lines -- Connection reconciliation includes the size guard and clone failure mapping.
 
 import { ConnectedProjects } from "./connected-projects.js";

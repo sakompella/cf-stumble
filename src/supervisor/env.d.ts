@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import type * as WorkerModule from "../worker.js";
 import type { Supervisor } from "./supervisor.js";
 import type { WorkspaceHost } from "../workspace/index.js";

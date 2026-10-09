@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { afterEach, expect, test, vi } from "vitest";
 import { everythingLogged, textLines } from "../../log-capture.js";
 import { syntheticJwt } from "../../synthetic-jwt.js";

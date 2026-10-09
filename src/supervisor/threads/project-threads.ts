@@ -1,5 +1,4 @@
 // oxlint-disable anti-slop/no-unknown-parameters -- Every project id here arrives from a client through Durable Object RPC, so it is a string with no proven meaning until the catalog resolves it.
-/// <reference types="@cloudflare/workers-types" />
 
 import { parseAgentMessages } from "./messages.js";
 import { ThreadStore, type ThreadLeaseResult, type ThreadRemovalResult } from "./store.js";

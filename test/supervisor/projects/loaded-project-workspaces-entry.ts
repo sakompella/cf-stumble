@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
