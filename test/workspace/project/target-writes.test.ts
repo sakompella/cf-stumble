@@ -1,4 +1,5 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { everythingLogged } from "../../log-capture.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
   FakeExecBackend,
@@ -112,6 +113,29 @@ test.each<readonly [string, string]>([
 
   const result = await target.lstat("/anything");
   expect(result).toEqual({ ok: false, error: { code: expected, path: "/anything" } });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+test("an unmapped provider code is redacted like the error it came with", async () => {
+  const token = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
+
+  const target = new ProjectRpcTarget(
+    throwingProvider(token),
+    new FakeProjectTransactions(),
+    new FakeExecBackend(),
+  );
+
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await expect(target.lstat("/anything")).resolves.toEqual({
+    ok: false,
+    error: { code: "backend-unavailable", path: "/anything" },
+  });
+  expect(everythingLogged()).not.toContain(token);
+  expect(everythingLogged()).toContain("[redacted]");
 });
 
 test("a thrown non-error value is backend-unavailable", async () => {
