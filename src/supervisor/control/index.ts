@@ -2,7 +2,7 @@ import { Result } from "better-result";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
 import { logCommit, logEvent, type LogFields } from "../../diagnostics.js";
-import type { Generations } from "../generations/index.js";
+import type { GenerationLabel, Generations } from "../generations/index.js";
 import type { ControlProblemCode, GenerationControlResult, GenerationRequest } from "./request.js";
 
 export type {
@@ -13,6 +13,8 @@ export type {
 } from "./request.js";
 
 type ControlOutcome = Extract<GenerationControlResult, { readonly ok: true }>["outcome"];
+
+type ActivationKind = Exclude<ControlOutcome["kind"], "candidate-submitted">;
 
 // Control runs on Result internally and converts to the plain GenerationControlResult union once,
 // in execute(), because that value crosses the Supervisor RPC boundary and is written to SQLite.
@@ -61,9 +63,14 @@ export class GenerationControl {
       case "submit-candidate":
         return this.submit(request.command.harnessCommit);
       case "activate":
-        return this.activate(request.command.label, request.command.observedEpoch);
+        return this.activate("activated", request.command.label, request.command.observedEpoch);
       case "rollback":
-        return this.rollback(request.command.label, request.command.observedEpoch);
+        return this.activate(
+          "rolled-back",
+          request.command.label,
+          request.command.observedEpoch,
+          (generationLabel) => this.rollbackProblem(generationLabel),
+        );
       default:
         return impossible(request.command);
     }
@@ -87,7 +94,13 @@ export class GenerationControl {
     return Result.ok(outcome);
   }
 
-  private activate(label: number, observedEpoch: number): ControlDecision {
+  /** `guard` runs before the activation decider, so a rollback reports its own refusal first. */
+  private activate(
+    kind: ActivationKind,
+    label: number,
+    observedEpoch: number,
+    guard?: (generationLabel: GenerationLabel) => ControlProblemCode | undefined,
+  ): ControlDecision {
     if (observedEpoch !== this.generations.active().epoch) {
       return rejected("stale-epoch");
     }
@@ -98,10 +111,16 @@ export class GenerationControl {
       return rejected("invalid-generation-label");
     }
 
+    const refusal = guard?.(generationLabel);
+
+    if (refusal !== undefined) {
+      return rejected(refusal);
+    }
+
     return this.generations
       .activateInTransaction(generationLabel)
       .map((activation): ControlOutcome => ({
-        kind: "activated",
+        kind,
         generation: activation.generation,
         epoch: activation.epoch,
         effect: activation.effect,
@@ -109,40 +128,18 @@ export class GenerationControl {
       .mapError((problem) => problem.code);
   }
 
-  private rollback(label: number, observedEpoch: number): ControlDecision {
-    if (observedEpoch !== this.generations.active().epoch) {
-      return rejected("stale-epoch");
-    }
-
-    const generationLabel = parseGenerationLabel(label);
-
-    if (generationLabel === undefined) {
-      return rejected("invalid-generation-label");
-    }
-
-    const target = this.generations.byLabel(generationLabel);
+  private rollbackProblem(label: GenerationLabel): ControlProblemCode | undefined {
+    const target = this.generations.byLabel(label);
 
     if (target === undefined) {
-      return rejected("unknown-generation");
+      return "unknown-generation";
     }
 
     if (target.status !== "ready") {
-      return rejected("not-ready");
+      return "not-ready";
     }
 
-    if (!this.generations.hasBeenActive(generationLabel)) {
-      return rejected("not-previously-active");
-    }
-
-    return this.generations
-      .activateInTransaction(generationLabel)
-      .map((activation): ControlOutcome => ({
-        kind: "rolled-back",
-        generation: activation.generation,
-        epoch: activation.epoch,
-        effect: activation.effect,
-      }))
-      .mapError((problem) => problem.code);
+    return this.generations.hasBeenActive(label) ? undefined : "not-previously-active";
   }
 }
 

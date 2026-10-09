@@ -39,6 +39,15 @@ export type ThreadRemovalResult =
         | Readonly<{ code: "turn-active"; projectId: SelectableProject["id"]; deadlineAt: number }>;
     }>;
 
+const CLEAR_LEASE =
+  "turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL, turn_holder_id = NULL";
+
+const RELEASED_TURN = {
+  turnActive: false,
+  turnDeadlineAt: undefined,
+  turnHolderId: undefined,
+} satisfies Partial<ProjectThread>;
+
 /**
  * The one thread each selectable project has, and the lease that decides who may write to it.
  *
@@ -210,24 +219,15 @@ export class ThreadStore {
   ): ThreadResult {
     const stored = serializeThreadMessages(messages);
 
-    return this.storage.transactionSync(() => {
-      const current = this.readThread(project);
-
-      if (!current.ok) {
-        return rejected(current.problem);
-      }
-
-      const claim = this.leaseClaim(project, leaseId);
-      const decision = decideFinishTurn(project.id, current.thread, claim, now);
+    return this.releaseLease(project, leaseId, (current, claim) => {
+      const decision = decideFinishTurn(project.id, current, claim, now);
 
       switch (decision.kind) {
         case "rejected":
           return rejected(decision.problem);
-        case "finished": {
+        case "finished":
           this.sql.exec(
-            `UPDATE project_threads
-             SET messages = ?, revision = ?, turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL, turn_holder_id = NULL
-             WHERE project_id = ?`,
+            `UPDATE project_threads SET messages = ?, revision = ?, ${CLEAR_LEASE} WHERE project_id = ?`,
             stored,
             decision.nextRevision,
             project.id,
@@ -237,12 +237,8 @@ export class ThreadStore {
             projectId: project.id,
             messages,
             revision: decision.nextRevision,
-            turnActive: false,
-            turnDeadlineAt: undefined,
-            turnHolderId: undefined,
+            ...RELEASED_TURN,
           });
-        }
-
         default:
           return assertNever(decision);
       }
@@ -268,38 +264,37 @@ export class ThreadStore {
 
   /** Give the turn slot back without writing a conversation, for the lease that holds it. */
   abandonTurn(project: SelectableProject, leaseId: string): ThreadResult {
-    return this.storage.transactionSync(() => {
-      const current = this.readThread(project);
-
-      if (!current.ok) {
-        return rejected(current.problem);
-      }
-
-      const claim = this.leaseClaim(project, leaseId);
-      const decision = decideAbandonTurn(project.id, current.thread, claim);
+    return this.releaseLease(project, leaseId, (current, claim) => {
+      const decision = decideAbandonTurn(project.id, current, claim);
 
       switch (decision.kind) {
         case "rejected":
           return rejected(decision.problem);
-        case "abandoned": {
+        case "abandoned":
           this.sql.exec(
-            `UPDATE project_threads
-             SET turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL, turn_holder_id = NULL
-             WHERE project_id = ?`,
+            `UPDATE project_threads SET ${CLEAR_LEASE} WHERE project_id = ?`,
             project.id,
           );
 
-          return succeeded({
-            ...current.thread,
-            turnActive: false,
-            turnDeadlineAt: undefined,
-            turnHolderId: undefined,
-          });
-        }
-
+          return succeeded({ ...current, ...RELEASED_TURN });
         default:
           return assertNever(decision);
       }
+    });
+  }
+
+  /** Read the thread and the lease claim, then let `release` decide and write, in one transaction. */
+  private releaseLease(
+    project: SelectableProject,
+    leaseId: string,
+    release: (current: ProjectThread, claim: TurnLeaseClaim) => ThreadResult,
+  ): ThreadResult {
+    return this.storage.transactionSync(() => {
+      const current = this.readThread(project);
+
+      return current.ok
+        ? release(current.thread, this.leaseClaim(project, leaseId))
+        : rejected(current.problem);
     });
   }
 
