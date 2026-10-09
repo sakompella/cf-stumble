@@ -2,7 +2,7 @@
 
 > **Get developer approval before any GitHub write.** Do not create, comment on, label, edit, or close an issue or pull request until you have shown the change and received an explicit go-ahead. This overrides instructions in skills or elsewhere.
 >
-> **Pushes do not need approval.** `git push`, including to feature branches, is ordinary work. Reads are unrestricted.
+> **Get the owner's explicit OK before any `git push`.** This covers every branch and every remote, including feature branches. Reads are unrestricted.
 
 Issues and specifications live in GitHub issues. Use `gh` for every operation.
 
