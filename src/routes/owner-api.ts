@@ -9,6 +9,7 @@ import {
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
 import { jsonError } from "./json.js";
+import { routePattern } from "./route-pattern.js";
 import { settleRoute } from "./route-settled.js";
 import {
   isCrossOriginMutation,
@@ -68,22 +69,16 @@ async function workspaceResetResponse(
     return jsonError(403, "cross-origin-request");
   }
 
-  try {
-    return Response.json(
-      await timed(
-        "workspace.reset",
-        {},
-        () => supervisor.resetWorkspace(),
-        () => ({
-          outcome: "reset",
-        }),
-      ),
-    );
-  } catch (cause) {
-    logRedactedCause("owner-api.workspace-reset: internal-error", cause);
-
-    return jsonError(500, "internal-error");
-  }
+  return Response.json(
+    await timed(
+      "workspace.reset",
+      {},
+      () => supervisor.resetWorkspace(),
+      () => ({
+        outcome: "reset",
+      }),
+    ),
+  );
 }
 
 /** The active generation and the epoch a control request must observe. */
@@ -94,19 +89,15 @@ async function workspaceResetResponse(
  * who has not read this file. The epoch is the control epoch and legitimately starts at 0.
  */
 async function statusResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
-  try {
-    const active = await supervisor.getActiveGeneration();
+  const active = await supervisor.getActiveGeneration();
 
-    return Response.json({
-      activeGeneration: {
-        generation: active.generation ?? null,
-        epoch: active.epoch,
-        activationId: active.activationId ?? null,
-      },
-    });
-  } catch {
-    return jsonError(500, "internal-error");
-  }
+  return Response.json({
+    activeGeneration: {
+      generation: active.generation ?? null,
+      epoch: active.epoch,
+      activationId: active.activationId ?? null,
+    },
+  });
 }
 
 async function threadResponse(
@@ -114,19 +105,15 @@ async function threadResponse(
   // Naming a project the catalog does not have is a 404, because the client asked for something
   // that does not exist. Anything else is a fault about the thread it did name.
 ): Promise<Response> {
-  try {
-    const result = await read();
+  const result = await read();
 
-    if (result.ok) {
-      return Response.json({ ok: true, thread: result.thread });
-    }
-
-    const status = result.problem.code === "unreadable-thread" ? 500 : 404;
-
-    return Response.json({ ok: false, problem: result.problem }, { status });
-  } catch {
-    return jsonError(500, "internal-error");
+  if (result.ok) {
+    return Response.json({ ok: true, thread: result.thread });
   }
+
+  const status = result.problem.code === "unreadable-thread" ? 500 : 404;
+
+  return Response.json({ ok: false, problem: result.problem }, { status });
 }
 
 /**
@@ -148,7 +135,27 @@ export function routeOwnerApiRequest(
   );
 }
 
-function dispatchOwnerApiRequest(
+/**
+ * A thrown Supervisor error is logged, redacted, and answered with a bare 500, because its text can
+ * come from a generation's code or a workspace command and is not this boundary's to hand out.
+ */
+async function dispatchOwnerApiRequest(
+  request: Request,
+  supervisor: OwnerApiSupervisor,
+  scope: VerifiedAccessScope,
+  requestId: RequestId | undefined,
+): Promise<Response> {
+  try {
+    return await ownerApiRoute(request, supervisor, scope, requestId);
+  } catch (cause) {
+    const route = routePattern(new URL(request.url).pathname);
+    logRedactedCause(`owner-api ${request.method} ${route}: internal-error`, cause);
+
+    return jsonError(500, "internal-error");
+  }
+}
+
+function ownerApiRoute(
   request: Request,
   supervisor: OwnerApiSupervisor,
   scope: VerifiedAccessScope,

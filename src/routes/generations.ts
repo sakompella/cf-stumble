@@ -114,16 +114,12 @@ export async function handleGenerationControl(
     );
   }
 
-  try {
-    return Response.json(
-      await supervisor.controlGeneration({
-        principal: { kind: "user" },
-        command: command(kind, body),
-      }),
-    );
-  } catch {
-    return jsonError(500, "internal-error");
-  }
+  return Response.json(
+    await supervisor.controlGeneration({
+      principal: { kind: "user" },
+      command: command(kind, body),
+    }),
+  );
 }
 
 /**
@@ -158,24 +154,20 @@ export async function handleGenerationSubmission(
     return jsonError(400, "invalid-submission-request");
   }
 
-  try {
-    const submitted = await supervisor.controlGeneration({
-      principal: { kind: "user" },
-      command: { kind: "submit-candidate", harnessCommit: body.harnessCommit },
-    });
+  const submitted = await supervisor.controlGeneration({
+    principal: { kind: "user" },
+    command: { kind: "submit-candidate", harnessCommit: body.harnessCommit },
+  });
 
-    if (!submitted.ok) {
-      return Response.json(submitted);
-    }
-
-    const result: GenerationSubmissionResult = {
-      ok: true,
-      outcome: submitted.outcome,
-      preparation: await supervisor.prepareGeneration(submitted.outcome.generation.label),
-    };
-
-    return Response.json(result);
-  } catch {
-    return jsonError(500, "internal-error");
+  if (!submitted.ok) {
+    return Response.json(submitted);
   }
+
+  const result: GenerationSubmissionResult = {
+    ok: true,
+    outcome: submitted.outcome,
+    preparation: await supervisor.prepareGeneration(submitted.outcome.generation.label),
+  };
+
+  return Response.json(result);
 }

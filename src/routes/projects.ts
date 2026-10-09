@@ -101,20 +101,14 @@ async function disconnectResponse(
   projectId: string,
   supervisor: ProjectApiSupervisor,
 ): Promise<Response> {
-  try {
-    const result = await supervisor.disconnectProject(projectId);
+  const result = await supervisor.disconnectProject(projectId);
 
-    return result.ok
-      ? Response.json(result)
-      : Response.json(
-          { ok: false, problem: result.problem },
-          { status: DISCONNECT_STATUS[result.problem.code] },
-        );
-  } catch (cause) {
-    logRedactedCause("routes.projects.disconnect: internal-error", cause);
-
-    return jsonError(500, "internal-error");
-  }
+  return result.ok
+    ? Response.json(result)
+    : Response.json(
+        { ok: false, problem: result.problem },
+        { status: DISCONNECT_STATUS[result.problem.code] },
+      );
 }
 
 const AUTHORIZATION_STATUS = {
@@ -199,42 +193,34 @@ async function connectResponse(
     return jsonError(400, "invalid-connect-request");
   }
 
-  try {
-    const result = await supervisor.connectProject(body.repositoryUrl, body.displayName);
+  const result = await supervisor.connectProject(body.repositoryUrl, body.displayName);
 
-    if (!result.ok) {
-      return Response.json(
-        { ok: false, problem: result.problem, github: result.github },
-        { status: CONNECT_STATUS[result.problem.code] },
-      );
-    }
-
-    return Response.json({
-      ok: true,
-      project: result.project,
-      alreadyConnected: result.alreadyConnected,
-      github: result.github,
-    });
-  } catch {
-    return jsonError(500, "internal-error");
+  if (!result.ok) {
+    return Response.json(
+      { ok: false, problem: result.problem, github: result.github },
+      { status: CONNECT_STATUS[result.problem.code] },
+    );
   }
+
+  return Response.json({
+    ok: true,
+    project: result.project,
+    alreadyConnected: result.alreadyConnected,
+    github: result.github,
+  });
 }
 
 async function authorizationResponse(
   outcome: () => Promise<GitHubAuthorizationOutcome>,
 ): Promise<Response> {
-  try {
-    const result = await outcome();
+  const result = await outcome();
 
-    return result.ok
-      ? Response.json({ ok: true, github: result.status })
-      : Response.json(
-          { ok: false, problem: { code: result.problem } },
-          { status: AUTHORIZATION_STATUS[result.problem] },
-        );
-  } catch {
-    return jsonError(500, "internal-error");
-  }
+  return result.ok
+    ? Response.json({ ok: true, github: result.status })
+    : Response.json(
+        { ok: false, problem: { code: result.problem } },
+        { status: AUTHORIZATION_STATUS[result.problem] },
+      );
 }
 
 /**

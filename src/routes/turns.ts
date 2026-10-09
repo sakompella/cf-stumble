@@ -2,7 +2,6 @@
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
 import { isCrossOriginMutation } from "./projects.js";
 import type { ProjectTurnRun, ProjectTurnRunProblemCode } from "../supervisor/projects/index.js";
-import { logRedactedCause } from "../diagnostics.js";
 
 /**
  * The one entry a browser has to the coding half of cf-stumble: `POST /api/projects/{id}/turn`.
@@ -99,22 +98,14 @@ async function turnResponse(
     return jsonError(400, "invalid-turn-request");
   }
 
-  try {
-    const run = await supervisor.runProjectTurn(projectId, prompt);
+  const run = await supervisor.runProjectTurn(projectId, prompt);
 
-    return run.ok
-      ? turnStreamResponse(run.frames)
-      : Response.json(
-          { ok: false, problem: { code: run.problem.code } },
-          { status: TURN_STATUS[run.problem.code] },
-        );
-  } catch (cause) {
-    // Nothing of the exception reaches the client: a turn runs a generation's code and a
-    // workspace's commands, and their failure text is not this boundary's to hand out.
-    logRedactedCause("turns: internal-error", cause);
-
-    return jsonError(500, "internal-error");
-  }
+  return run.ok
+    ? turnStreamResponse(run.frames)
+    : Response.json(
+        { ok: false, problem: { code: run.problem.code } },
+        { status: TURN_STATUS[run.problem.code] },
+      );
 }
 
 /**
