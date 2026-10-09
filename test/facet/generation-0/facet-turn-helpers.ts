@@ -9,13 +9,18 @@ import type {
   ModelCapability,
 } from "../../../src/facet/generation-0/index.js";
 import type {
+  AssistantMessage,
   ModelRouteRequest,
-  ModelRouteResponse,
   ModelStreamEvent,
   ToolCall,
   ValidationFailure,
 } from "../../../src/model-route.js";
 import type { FakeProjectCapability } from "./fake-project-capability.js";
+
+/** A scripted answer: a whole assistant message, or the model being unavailable. */
+export type ModelRouteResponse =
+  | Readonly<{ ok: true; message: AssistantMessage }>
+  | Readonly<{ ok: false; error: Readonly<{ code: "model-unavailable" }> }>;
 
 /** Tool arguments a scripted assistant message asks for. Every stock tool takes strings. */
 type ScriptedToolArguments = Readonly<Record<string, string>>;

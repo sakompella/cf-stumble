@@ -1,8 +1,8 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { startFacetTurn } from "../../../src/facet/generation-0/facet-turn.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
-import { encodeModelRouteResponseAsStream } from "./facet-turn-helpers.js";
-import type { ModelRouteRequest, ModelRouteResponse } from "../../../src/model-route.js";
+import { encodeModelRouteResponseAsStream, type ModelRouteResponse } from "./facet-turn-helpers.js";
+import type { ModelRouteRequest } from "../../../src/model-route.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
 
 /**

@@ -9,9 +9,8 @@ import {
   FakeProjectTransactions,
 } from "../../workspace/project/fakes.js";
 import { GitDiffExecBackend } from "./git-diff-exec-backend.js";
-import { calls, encode, readFrames, says } from "./facet-turn-helpers.js";
+import { calls, encode, readFrames, says, type ModelRouteResponse } from "./facet-turn-helpers.js";
 import type { FacetTurnRequest } from "../../../src/facet/generation-0/facet-turn.js";
-import type { ModelRouteResponse } from "../../../src/model-route.js";
 import type LoadedFacetTurnEntry from "./loaded-facet-turn-entry.js";
 
 /**

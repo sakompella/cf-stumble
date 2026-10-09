@@ -2,10 +2,12 @@ import { Result } from "better-result";
 import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
-import { readFrames } from "../../facet/generation-0/facet-turn-helpers.js";
+import {
+  readFrames,
+  type ModelRouteResponse,
+} from "../../facet/generation-0/facet-turn-helpers.js";
 import { loadFixtureEntrypoint } from "../../loaded-fixture.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/facet-turn.js";
-import type { ModelRouteResponse } from "../../../src/model-route.js";
 import type {
   ProjectTurnFacet,
   ProjectTurnStart,

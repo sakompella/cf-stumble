@@ -62,10 +62,6 @@ export type ModelRouteRequest = Readonly<{
   tools?: ReadonlyArray<ToolDefinition>;
 }>;
 
-export type ModelRouteResponse =
-  | Readonly<{ ok: true; message: AssistantMessage }>
-  | Readonly<{ ok: false; error: Readonly<{ code: "model-unavailable" }> }>;
-
 export type ValidationFailure = Readonly<{
   ok: false;
   error: Readonly<{ code: "invalid-request"; reason: string }>;
