@@ -4,8 +4,6 @@ import { OWNER_PAGE_STYLES } from "./styles.js";
 
 export { OWNER_PAGE_CLASSES, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "./element-ids.js";
 
-export type { OwnerPageId } from "./element-ids.js";
-
 /**
  * The whole owner page: one HTML document with an inline stylesheet and an inline script and no
  * external asset, so the Content Security Policy the route sends can refuse every other origin.
