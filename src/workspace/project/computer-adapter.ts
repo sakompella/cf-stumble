@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceRuntimeEvent } from "@cloudflare/computer";
+import { shellQuote } from "../../shell-quote.js";
 import { ContainerRestartedError, type ContainerLifecycleState } from "./exec-backend.js";
 import type {
   BackendExecEvent,
@@ -58,10 +59,6 @@ export function durableObjectTransactions(storage: DurableObjectStorage): Projec
  * so this wrapper keeps a TERM trap in the session leader and sends SIGKILL to the complete process
  * group. A nested shell keeps the trap installed even when the command uses `exec`.
  */
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
 export function processGroupCommand(command: string): string {
   const body = `trap 'kill -s KILL 0' TERM INT HUP; /bin/sh -c ${shellQuote(command)} & wait $!`;
 

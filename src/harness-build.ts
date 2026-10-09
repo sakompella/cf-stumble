@@ -11,8 +11,6 @@ import {
 } from "./workspace-layout.js";
 import type { HarnessCommit } from "./harness-commit.js";
 
-export { shellQuote };
-
 export type HarnessBuildPhaseName = "install" | "build-pi" | "build-module-map";
 
 /** One phase of a build: a name a failure can report, and the command that phase runs. */

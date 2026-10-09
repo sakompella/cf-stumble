@@ -3,11 +3,11 @@ import {
   harnessBuildStep,
   HARNESS_BUILD_STEP_NAMES,
   planHarnessBuild,
-  shellQuote,
   type HarnessBuildConfiguration,
   type HarnessBuildPlan,
   type HarnessBuildStepName,
 } from "../harness-build.js";
+import { shellQuote } from "../shell-quote.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import { WORKSPACE_ROOT } from "../workspace-layout.js";
 import { asUntrusted, field, fieldsAreExactly, type UntrustedObject } from "./untrusted.js";
