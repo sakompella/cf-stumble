@@ -171,17 +171,15 @@ Shift-Tab is `press("Tab", ["Shift"])`. Control-Enter is `press("Enter", ["Contr
 
 ## Waits and samplers
 
-| Function                   | Signature                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `waitForSettledReads`      | `(page, timeoutMs?) => Promise<void>`                                                                         |
-| `waitForThreadOk`          | `(page, timeoutMs?) => Promise<void>`                                                                         |
-| `waitForText`              | `(page, elementId: string, needle: string, timeoutMs?) => Promise<void>`                                      |
-| `waitForTurnEnded`         | `(page, timeoutMs?) => Promise<void>`                                                                         |
-| `waitForToolCount`         | `(page, count: number, timeoutMs?) => Promise<void>`                                                          |
-| `waitForTranscriptText`    | `(page, needle: string, timeoutMs?) => Promise<void>`                                                         |
-| `waitForTranscriptEntries` | `(page, count: number, timeoutMs?) => Promise<void>`                                                          |
-| `sampleWhile`              | `<T>(read: () => Promise<T>, keep: (sample: T) => boolean, intervalMs?, timeoutMs?) => Promise<readonly T[]>` |
-| `sleep`                    | `(ms: number) => Promise<void>`                                                                               |
+| Function                | Signature                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `waitForSettledReads`   | `(page, timeoutMs?) => Promise<void>`                                                                         |
+| `waitForThreadOk`       | `(page, timeoutMs?) => Promise<void>`                                                                         |
+| `waitForText`           | `(page, elementId: string, needle: string, timeoutMs?) => Promise<void>`                                      |
+| `waitForTurnEnded`      | `(page, timeoutMs?) => Promise<void>`                                                                         |
+| `waitForTranscriptText` | `(page, needle: string, timeoutMs?) => Promise<void>`                                                         |
+| `sampleWhile`           | `<T>(read: () => Promise<T>, keep: (sample: T) => boolean, intervalMs?, timeoutMs?) => Promise<readonly T[]>` |
+| `sleep`                 | `(ms: number) => Promise<void>`                                                                               |
 
 `sampleWhile` returns every sample it took plus the one that ended it, which is what proves a
 streamed count never went down.
@@ -191,24 +189,23 @@ streamed count never went down.
 Each returns one snapshot taken in one round trip, so a snapshot cannot mix two moments of a
 running turn.
 
-| Reader                               | Answers                                                                                                                                                                            |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `readTurn(page)`                     | `turnState`, `assistantCharacters`, `assistantBlocks`, `tools`, `finishedTools`, `entries`, `sendDisabled`, `cancelDisabled`                                                       |
-| `readThread(page)`                   | `project`, `state`, `revision`, `turnActive`, `messageCount`, `freshStatus`, `pageError`, `prompt`                                                                                 |
-| `readGeneration(page)`               | the active bar (`activeLabel`, `activeCommit`, `activeStatus`, `epoch`, `lastRead`), `drawerOpen`, and every submit, activate, and rollback result and input                       |
-| `readConversation(page)`             | `messages`, `roles`, `firstText`, `allText`, `tools`, `toolSummaries`, `openTools`, truncation-note counts, `createdImages`, `createdScripts`, `title`                             |
-| `readTranscript(page)`               | `readonly { kind: string; text: string }[]` in render order; `kind` is `user`, `assistant`, `tool`, `diff`, `diff unavailable`, `terminal`, or `terminal problem`                  |
-| `readTools(page)`                    | per disclosure: `summary`, `open`, `failed`, `output`, `outputLength`, `serverTruncated`, `displayShortened`                                                                       |
-| `readDiffs(page)`                    | tool-patch counts and turn-diff counts separately, plus `diffText`, `unavailableMessages`, `unavailableText`                                                                       |
-| `readProjectList(page)`              | `status`, `projects`, `labels`, `locations`, `selected`, `ariaCurrent`, GitHub state and detail, `connectStatus`, verification link `href`/`target`/`rel`/text, `credentialInputs` |
-| `readLayout(page)`                   | `layoutClass`, sidebar and conversation boxes, viewport size, `toggleExpanded`, `toggleLabel`, `drawerOpen`; a collapsed element reads 0                                           |
-| `readBox(page, selector)`            | `present`, `visible`, `width`, `height`, `top`, `right`, `bottom`, `left`                                                                                                          |
-| `readPageMetrics(page)`              | `scrollWidth`, `clientWidth`, `horizontalOverflow`, `scrollHeight`, `clientHeight`, viewport size, `bodyWidth`, `bodyLeft`                                                         |
-| `readScroll(page, elementId)`        | `scrollHeight`, `clientHeight`, `height`, `scrollable`, `overflowY`                                                                                                                |
-| `readFocus(page)`                    | `id`, `tag`, `className`, `projectId`, `text`, `visible`, `outlineStyle`, `outlineWidth`, `boxShadow`                                                                              |
-| `readAccessibleNode(page, selector)` | `role`, `name`, `ignored` from Chrome's own accessibility tree                                                                                                                     |
-| `readFocusedAccessibleNode(page)`    | the same for whatever holds focus                                                                                                                                                  |
-| `readText(page, elementId)`          | one element's text                                                                                                                                                                 |
+| Reader                            | Answers                                                                                                                                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `readTurn(page)`                  | `turnState`, `assistantCharacters`, `assistantBlocks`, `tools`, `finishedTools`, `entries`, `sendDisabled`, `cancelDisabled`                                                       |
+| `readThread(page)`                | `project`, `state`, `revision`, `turnActive`, `messageCount`, `freshStatus`, `pageError`, `prompt`                                                                                 |
+| `readGeneration(page)`            | the active bar (`activeLabel`, `activeCommit`, `activeStatus`, `epoch`, `lastRead`), `drawerOpen`, and every submit, activate, and rollback result and input                       |
+| `readConversation(page)`          | `messages`, `roles`, `firstText`, `allText`, `tools`, `toolSummaries`, `openTools`, truncation-note counts, `createdImages`, `createdScripts`, `title`                             |
+| `readTranscript(page)`            | `readonly { kind: string; text: string }[]` in render order; `kind` is `user`, `assistant`, `tool`, `diff`, `diff unavailable`, `terminal`, or `terminal problem`                  |
+| `readTools(page)`                 | per disclosure: `summary`, `open`, `failed`, `output`, `outputLength`, `serverTruncated`, `displayShortened`                                                                       |
+| `readDiffs(page)`                 | tool-patch counts and turn-diff counts separately, plus `diffText`, `unavailableMessages`, `unavailableText`                                                                       |
+| `readProjectList(page)`           | `status`, `projects`, `labels`, `locations`, `selected`, `ariaCurrent`, GitHub state and detail, `connectStatus`, verification link `href`/`target`/`rel`/text, `credentialInputs` |
+| `readLayout(page)`                | `layoutClass`, sidebar and conversation boxes, viewport size, `toggleExpanded`, `toggleLabel`, `drawerOpen`; a collapsed element reads 0                                           |
+| `readBox(page, selector)`         | `present`, `visible`, `width`, `height`, `top`, `right`, `bottom`, `left`                                                                                                          |
+| `readPageMetrics(page)`           | `scrollWidth`, `clientWidth`, `horizontalOverflow`, `scrollHeight`, `clientHeight`, viewport size, `bodyWidth`, `bodyLeft`                                                         |
+| `readScroll(page, elementId)`     | `scrollHeight`, `clientHeight`, `height`, `scrollable`, `overflowY`                                                                                                                |
+| `readFocus(page)`                 | `id`, `tag`, `className`, `projectId`, `text`, `visible`, `outlineStyle`, `outlineWidth`, `boxShadow`                                                                              |
+| `readFocusedAccessibleNode(page)` | `role`, `name`, `ignored` of whatever holds focus, from Chrome's own accessibility tree                                                                                            |
+| `readText(page, elementId)`       | one element's text                                                                                                                                                                 |
 
 ## The stub
 

@@ -65,17 +65,6 @@ export function waitForTurnEnded(page: BrowserPage, timeoutMs = 30_000): Promise
   );
 }
 
-export function waitForToolCount(
-  page: BrowserPage,
-  count: number,
-  timeoutMs = 20_000,
-): Promise<void> {
-  return page.waitFor(
-    `document.querySelectorAll("details.tool-call").length >= ${count}`,
-    timeoutMs,
-  );
-}
-
 export function waitForTranscriptText(
   page: BrowserPage,
   needle: string,
@@ -83,17 +72,6 @@ export function waitForTranscriptText(
 ): Promise<void> {
   return page.waitFor(
     `${textExpression(ID.messageList)}.includes(${JSON.stringify(needle)})`,
-    timeoutMs,
-  );
-}
-
-export function waitForTranscriptEntries(
-  page: BrowserPage,
-  count: number,
-  timeoutMs = 20_000,
-): Promise<void> {
-  return page.waitFor(
-    `(document.getElementById(${JSON.stringify(ID.messageList)})?.children.length ?? 0) >= ${count}`,
     timeoutMs,
   );
 }

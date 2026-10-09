@@ -5,37 +5,9 @@ import {
   assertSame,
   focusDocument,
   readFocus,
+  readFocusedAccessibleNode,
   type HarnessCase,
 } from "../harness.mjs";
-import type { BrowserPage } from "../harness.mjs";
-
-type Ax = Readonly<{ role: string; name: string; ignored: boolean }>;
-
-async function readAx(page: BrowserPage): Promise<Ax> {
-  const evaluated = await page.command("Runtime.evaluate", {
-    expression: "document.activeElement",
-    returnByValue: false,
-  });
-
-  const objectId = evaluated.text("result.objectId");
-
-  if (objectId === undefined) return { role: "", name: "", ignored: true };
-
-  try {
-    const tree = await page.command("Accessibility.getPartialAXTree", {
-      objectId,
-      fetchRelatives: false,
-    });
-
-    return {
-      role: tree.text("nodes.0.role.value") ?? "",
-      name: tree.text("nodes.0.name.value") ?? "",
-      ignored: tree.value("nodes.0.ignored") === true,
-    };
-  } finally {
-    await page.command("Runtime.releaseObject", { objectId });
-  }
-}
 
 const EXPECTED = [
   { id: ID.refreshStatusButton, name: "Refresh status" },
@@ -65,7 +37,7 @@ export const CASES: readonly HarnessCase[] = [
       for (const [index, expected] of EXPECTED.entries()) {
         await page.press("Tab");
         const focus = await readFocus(page);
-        const ax = await readAx(page);
+        const ax = await readFocusedAccessibleNode(page);
         assert(focus.visible, `tab stop ${expected.name} is not visible`);
         assert(
           focus.outlineStyle !== "none" && focus.outlineWidth >= 2,

@@ -11,26 +11,22 @@ import type { BrowserPage } from "./chrome.mjs";
 
 export type AccessibleNode = Readonly<{ role: string; name: string; ignored: boolean }>;
 
-const MISSING: AccessibleNode = { role: "", name: "", ignored: true };
+/** The role and name of whatever holds focus, which is what a tab-order case walks. */
+export async function readFocusedAccessibleNode(page: BrowserPage): Promise<AccessibleNode> {
+  const evaluated = await page.command("Runtime.evaluate", {
+    expression: "document.activeElement",
+    returnByValue: false,
+  });
 
-async function accessibleNodeOf(page: BrowserPage, expression: string): Promise<AccessibleNode> {
-  const evaluated = await page.command("Runtime.evaluate", { expression, returnByValue: false });
   const objectId = evaluated.text("result.objectId");
 
   if (objectId === undefined) {
-    return MISSING;
+    return { role: "", name: "", ignored: true };
   }
 
   try {
-    const requested = await page.command("DOM.requestNode", { objectId });
-    const nodeId = requested.count("nodeId");
-
-    if (nodeId === undefined || nodeId === 0) {
-      return MISSING;
-    }
-
     const tree = await page.command("Accessibility.getPartialAXTree", {
-      nodeId,
+      objectId,
       fetchRelatives: false,
     });
 
@@ -42,13 +38,4 @@ async function accessibleNodeOf(page: BrowserPage, expression: string): Promise<
   } finally {
     await page.command("Runtime.releaseObject", { objectId });
   }
-}
-
-export function readAccessibleNode(page: BrowserPage, selector: string): Promise<AccessibleNode> {
-  return accessibleNodeOf(page, `document.querySelector(${JSON.stringify(selector)})`);
-}
-
-/** The role and name of whatever holds focus, which is what a tab-order case walks. */
-export function readFocusedAccessibleNode(page: BrowserPage): Promise<AccessibleNode> {
-  return accessibleNodeOf(page, "document.activeElement");
 }
