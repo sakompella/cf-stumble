@@ -15,14 +15,14 @@ import type {
 import type { ProjectTurnRefusal, ProjectTurnStart } from "./project-turn.js";
 
 /** The longest prompt one turn accepts. Longer input is a refused request, not a truncated one. */
-export const PROJECT_TURN_PROMPT_MAX_LENGTH = 32_000;
+const PROJECT_TURN_PROMPT_MAX_LENGTH = 32_000;
 
 /**
  * The thread surface one turn drives: admission here, and the two writes the running turn makes.
  * `ProjectThreads` satisfies it, and the read and the admission take the client's project id so
  * the catalog resolves it there rather than here.
  */
-export type TurnThreads = TurnThreadWrites &
+type TurnThreads = TurnThreadWrites &
   Readonly<{
     read(projectId: unknown): ProjectThreadResult;
     startTurn(
@@ -57,7 +57,7 @@ export type TurnStartContext = Readonly<{
 }>;
 
 /** The generation a turn runs on, read once at admission and never re-read. */
-export type TurnAttribution = Readonly<{ active: ActiveGeneration }>;
+type TurnAttribution = Readonly<{ active: ActiveGeneration }>;
 
 export type ProjectTurnRunProblemCode =
   | ProjectThreadProblem["code"]

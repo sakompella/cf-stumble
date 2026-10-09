@@ -31,7 +31,7 @@ function ownsTurn(claim: TurnLeaseClaim): boolean {
   return claim.held !== undefined && claim.held === claim.presented;
 }
 
-export type StartTurnDecision =
+type StartTurnDecision =
   | Readonly<{ kind: "rejected"; problem: ThreadProblem }>
   | Readonly<{ kind: "started"; revision: number }>;
 
@@ -58,7 +58,7 @@ export function decideStartTurn(
   return { kind: "started", revision: current.revision };
 }
 
-export type FinishTurnDecision =
+type FinishTurnDecision =
   | Readonly<{ kind: "rejected"; problem: ThreadProblem }>
   | Readonly<{ kind: "finished"; nextRevision: number }>;
 
@@ -86,11 +86,11 @@ export function decideFinishTurn(
   return { kind: "finished", nextRevision: current.revision + 1 };
 }
 
-export type AbandonTurnDecision =
+type AbandonTurnDecision =
   | Readonly<{ kind: "rejected"; problem: ThreadProblem }>
   | Readonly<{ kind: "abandoned" }>;
 
-export type RemoveThreadDecision =
+type RemoveThreadDecision =
   | Readonly<{
       kind: "rejected";
       problem: Readonly<{ code: "turn-active"; projectId: ProjectId; deadlineAt: number }>;

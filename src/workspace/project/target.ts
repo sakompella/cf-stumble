@@ -39,9 +39,9 @@ import {
 
 type StartedExec = { operationId: string; events: ReadableStream<Uint8Array> };
 
-export type ProjectContainerState = Readonly<{ generation: number }>;
+type ProjectContainerState = Readonly<{ generation: number }>;
 
-export type ProjectRpcTargetOptions = Readonly<{
+type ProjectRpcTargetOptions = Readonly<{
   /** The turn's remaining budget, already parsed by WorkspaceHost. */
   remainingMs?: number;
   /** Changes whenever the Workspace Host observes a container replacement. */

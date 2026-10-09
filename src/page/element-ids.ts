@@ -70,7 +70,7 @@ export const OWNER_PAGE_IDS = {
   rollbackEffect: "rollback-effect",
 } as const;
 
-export type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];
+type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];
 
 /** Every identifier the static markup must contain. */
 export const OWNER_PAGE_ELEMENT_IDS: readonly OwnerPageId[] = Object.values(OWNER_PAGE_IDS);

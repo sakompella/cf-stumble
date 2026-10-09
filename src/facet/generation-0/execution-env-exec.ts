@@ -270,7 +270,7 @@ function startExecFailure(code: string): ExecResult {
   return { ok: false, error: new ExecutionError("spawn_error", message) };
 }
 
-export type ExecTurnBudget = Readonly<{
+type ExecTurnBudget = Readonly<{
   deadlineAt: number;
   now: () => number;
 }>;

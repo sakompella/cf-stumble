@@ -82,7 +82,7 @@ async function isSymlinkFree(operations: WorkspaceOperations, path: string): Pro
 }
 
 /** A command the server planned: its text, where it runs, and how long it may take. */
-export type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
+type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
 
 /**
  * Run one planned command and log it by `command`, the planned step's name, with its exit code and

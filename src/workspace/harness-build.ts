@@ -13,7 +13,7 @@ import { WORKSPACE_ROOT } from "../workspace-layout.js";
 import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 /** A build request whose commit passed `parseHarnessCommit`. Only this form reaches a command. */
-export type ParsedHarnessBuildRequest =
+type ParsedHarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: HarnessCommit; step: HarnessBuildStepName }>
   | Readonly<{ kind: "build-output"; harnessCommit: HarnessCommit }>;
 

@@ -87,7 +87,7 @@ function failed(
  * repository URL has to canonicalize, so nothing that reaches a command is request text the
  * caller invented.
  */
-export function parseGitHubCredentialRequest(
+function parseGitHubCredentialRequest(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the credential surface's RPC boundary.
   value: unknown,
 ): GitHubCredentialRequest | GitHubCredentialResult {

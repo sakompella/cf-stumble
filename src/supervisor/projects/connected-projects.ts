@@ -25,7 +25,7 @@ import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
  * Nothing here is credential-bearing. A row is an id, a name a person chose, a public repository
  * URL, and when it was connected.
  */
-export type ConnectedProject = Readonly<{
+type ConnectedProject = Readonly<{
   id: ProjectId;
   displayName: string;
   repositoryUrl: PublicRepositoryUrl;
@@ -43,16 +43,16 @@ type ConnectedProjectRow = {
  * Why a repository did not become a project. Ids are injective, so two different repositories never
  * reduce to one id; a conflict means the URL derives the harness entry's id.
  */
-export type ConnectProjectProblem = Readonly<{
+type ConnectProjectProblem = Readonly<{
   code: "invalid-repository-url" | "project-id-conflict";
 }>;
 
-export type ConnectProjectResult =
+type ConnectProjectResult =
   | Readonly<{ ok: true; project: Project; alreadyConnected: boolean }>
   | Readonly<{ ok: false; problem: ConnectProjectProblem }>;
 
 /** What a caller asks for. Both fields are client text; neither becomes a path or a command. */
-export interface ConnectProjectInput {
+interface ConnectProjectInput {
   // oxlint-disable-next-line anti-slop/no-unknown-type-aliases -- Boundary: this is a client-supplied repository URL with no proven shape.
   readonly repositoryUrl: unknown;
   // oxlint-disable-next-line anti-slop/no-unknown-type-aliases -- Boundary: this is a client-supplied display name with no proven shape.

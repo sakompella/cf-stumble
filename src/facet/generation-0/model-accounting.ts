@@ -1,5 +1,5 @@
 /** The terminal outcomes of one model-route call, kept separate from provider text and errors. */
-export type ModelCallOutcome = "completed" | "failed" | "aborted";
+type ModelCallOutcome = "completed" | "failed" | "aborted";
 
 /**
  * Numeric accounting a facet can carry in its terminal frame. It contains no prompt, output, or

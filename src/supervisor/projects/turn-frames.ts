@@ -75,7 +75,7 @@ export type ProjectTurnFrame =
   | Readonly<{ kind: "timed-out" }>;
 
 /** One proven frame of a generation's stream: something to forward, or the turn's ending. */
-export type ParsedFacetFrame =
+type ParsedFacetFrame =
   | Readonly<{ kind: "forwarded"; frame: ProjectTurnFrame }>
   | Readonly<{ kind: "terminal"; frame: FacetTerminalFrame }>
   | Readonly<{ kind: "invalid"; problem: TurnStreamProblem }>;

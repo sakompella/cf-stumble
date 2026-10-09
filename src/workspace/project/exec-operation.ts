@@ -11,7 +11,7 @@ import {
 } from "./exec-backend.js";
 import { MAX_EXEC_FRAME_BYTES, type ExecEvent } from "./protocol.js";
 
-export type ExecKillReason = "manual" | "end-turn" | "turn-end";
+type ExecKillReason = "manual" | "end-turn" | "turn-end";
 
 export type ExecSettlement = Readonly<{
   outcome: Extract<ExecEvent, { kind: "terminal" }>["outcome"];

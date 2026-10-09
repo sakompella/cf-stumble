@@ -10,7 +10,7 @@
  * was obtained, and when. The access token itself is never here — it is installed into the
  * workspace's `gh` configuration and dropped (ADR-0039), so this table cannot leak one.
  */
-export type PendingAuthorization = Readonly<{
+type PendingAuthorization = Readonly<{
   deviceCode: string;
   userCode: string;
   verificationUri: string;
@@ -23,7 +23,7 @@ export type PendingAuthorization = Readonly<{
 /** How the workspace got the credential it has. The configured token is a test path, and says so. */
 export type CredentialSource = "device-authorization" | "configured-token";
 
-export type RecordedConnection = Readonly<{
+type RecordedConnection = Readonly<{
   login: string;
   source: CredentialSource;
   connectedAt: number;

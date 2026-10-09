@@ -23,7 +23,7 @@ import {
  * request. A catalog captured in the constructor would answer `unknown-project-id` for it until
  * the object was evicted.
  */
-export type ProjectCatalogSource = () => SelectableCatalog;
+type ProjectCatalogSource = () => SelectableCatalog;
 
 type ResolvedProject =
   | Readonly<{ ok: true; project: SelectableProject }>

@@ -31,11 +31,11 @@ export type StoredModuleMapProblem =
   | { readonly code: "artifact-write-failed"; readonly harnessCommit: string };
 
 /** A read either found a complete stored module map or found none. Neither answer builds. */
-export type StoredModuleMap =
+type StoredModuleMap =
   | Readonly<{ kind: "stored"; moduleMap: MainHarnessArtifactInput }>
   | Readonly<{ kind: "absent" }>;
 
-export type StoredModuleMapResult = Result<StoredModuleMap, StoredModuleMapProblem>;
+type StoredModuleMapResult = Result<StoredModuleMap, StoredModuleMapProblem>;
 
 type ManifestRow = { readonly chunk_count: number; readonly byte_count: number };
 

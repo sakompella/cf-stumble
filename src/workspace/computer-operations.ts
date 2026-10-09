@@ -25,7 +25,7 @@ function isNotFound(error: unknown): boolean {
  * can fail and report `pending`, or skip entries it could not apply. The container shows the change
  * either way, but a replacement container starts from the store.
  */
-export type CommandSync = "require-complete" | "not-required";
+type CommandSync = "require-complete" | "not-required";
 
 function syncIsComplete(sync: ExecSyncResult): boolean {
   return sync.status === "complete" && sync.skipped.length === 0;

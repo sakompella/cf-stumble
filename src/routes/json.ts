@@ -5,7 +5,7 @@
  * the fault in the request or the route, never the cause inside the Supervisor, so no internal
  * error text or credential can reach the client.
  */
-export type ApiErrorCode =
+type ApiErrorCode =
   | "invalid-submission-request"
   | "invalid-activation-request"
   | "invalid-rollback-request"

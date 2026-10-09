@@ -29,7 +29,7 @@ const FORBIDDEN_FIELDS: readonly string[] = [
 
 // -- Closed message union ---------------------------------------------------
 
-export type SystemMessage = Readonly<{ role: "system"; content: string }>;
+type SystemMessage = Readonly<{ role: "system"; content: string }>;
 
 export type UserMessage = Readonly<{ role: "user"; content: string }>;
 

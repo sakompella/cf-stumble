@@ -69,11 +69,11 @@ function splitTarget(target: string): string[] {
   return target.split("/").filter((part) => part.length > 0);
 }
 
-export type ResolveOutcome =
+type ResolveOutcome =
   | { kind: "resolved"; path: string; stat: ProjectStat }
   | { kind: "missing"; parentPath: string; name: string };
 
-export interface ResolveOptions {
+interface ResolveOptions {
   /** Follow the addressed path's own final component if it is a symlink. */
   followFinalSymlink: boolean;
   /** Create missing intermediate directories (never the final component) as plain directories. */

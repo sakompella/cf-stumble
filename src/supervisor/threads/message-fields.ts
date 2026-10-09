@@ -35,7 +35,7 @@ type StoredFields<R extends ThreadMessageRole> = {
 };
 
 /** The field rules of one role, read without knowing which role it is. */
-export interface StoredFieldRules {
+interface StoredFieldRules {
   readonly [field: string]: StoredFieldRule;
 }
 

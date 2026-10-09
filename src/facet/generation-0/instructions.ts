@@ -7,14 +7,14 @@ import type { ExecutionEnv } from "@cf-stumble/pi";
  * file: a sibling project's instructions live under a different working directory and cannot be
  * reached by this name, even though both clones share one workspace (ADR-0038).
  */
-export const REPOSITORY_INSTRUCTIONS_FILE = "AGENTS.md";
+const REPOSITORY_INSTRUCTIONS_FILE = "AGENTS.md";
 
 /**
  * What one turn found. Each part is absent rather than empty when the file does not exist, because
  * "no repository instructions" and "an empty AGENTS.md" are different facts and only the first is
  * the ordinary case.
  */
-export type TurnInstructions = Readonly<{
+type TurnInstructions = Readonly<{
   managed: string | undefined;
   repository: string | undefined;
 }>;

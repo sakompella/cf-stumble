@@ -24,7 +24,7 @@ export type GenerationState = {
   readonly activationId: number;
 };
 
-export type ActivationDecision =
+type ActivationDecision =
   | { readonly kind: "rejected"; readonly problem: ActivationProblem }
   | { readonly kind: "no-op"; readonly generation: Generation; readonly epoch: number }
   | {
@@ -59,7 +59,7 @@ export function decideActivation(
   };
 }
 
-export type PreparationCheckDecision =
+type PreparationCheckDecision =
   | { readonly kind: "rejected"; readonly problem: PreparationCheckProblem }
   | {
       readonly kind: "record";

@@ -63,7 +63,7 @@ type WorkspaceContainerReset = Readonly<{
 }>;
 
 /** The same launch settings the container backend uses for a fresh workspace connection. */
-export const WORKSPACE_CONTAINER_RESET_SPEC = {
+const WORKSPACE_CONTAINER_RESET_SPEC = {
   env: { PORT: "8080", MOUNT_POINT: "/workspace" },
   enableInternet: true,
 } as const satisfies ContainerLaunchSpec;

@@ -238,7 +238,7 @@ export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): s
   return segments.slice(-2).join("/");
 }
 
-export function parseProject(value: unknown): Project | undefined {
+function parseProject(value: unknown): Project | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -287,7 +287,7 @@ export function parseProjectCatalog(value: unknown): ProjectCatalog | undefined 
   return Object.freeze(projects);
 }
 
-export type ProjectResolution =
+type ProjectResolution =
   | Readonly<{ ok: true; project: Project }>
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 

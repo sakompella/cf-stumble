@@ -8,7 +8,7 @@ import { withRouteSpan } from "./route-span.js";
  * status that still tells the owner something is wrong, such as a GitHub connection that needs to
  * be reconnected.
  */
-export type ApplicationOutcome = "ok" | "degraded" | "refused" | "fault";
+type ApplicationOutcome = "ok" | "degraded" | "refused" | "fault";
 
 /** Owner API routes that reach the workspace, by method and route pattern. */
 const WORKSPACE_ROUTES: ReadonlySet<string> = new Set([

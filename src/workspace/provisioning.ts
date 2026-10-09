@@ -61,7 +61,7 @@ export type HarnessProvisionWorkspaceNamespace = Readonly<{
  * Why project provisioning stopped. These stay plain values: a caller that has to report the
  * outcome over RPC can return one unchanged (ADR-0035).
  */
-export type ProjectProvisionProblem =
+type ProjectProvisionProblem =
   | Readonly<{
       code: "project-not-in-catalog";
       reason: "invalid-project-id" | "unknown-project-id";
@@ -78,19 +78,19 @@ export type ProjectProvisionProblem =
       step: ProjectProvisionStepName;
     }>;
 
-export type ProvisionedProjectWorkspace = Readonly<{
+type ProvisionedProjectWorkspace = Readonly<{
   projectId: ProjectId;
   workspaceName: string;
 }>;
 
-export type HarnessProvisionStepName = "provision" | "instructions";
+type HarnessProvisionStepName = "provision" | "instructions";
 
 const HARNESS_PROVISION_STEP_NAMES: readonly HarnessProvisionStepName[] = [
   "provision",
   "instructions",
 ];
 
-export type HarnessProvisionProblem =
+type HarnessProvisionProblem =
   | Readonly<{
       code: "harness-provision-step-failed";
       step: HarnessProvisionStepName;
@@ -101,9 +101,9 @@ export type HarnessProvisionProblem =
       step: HarnessProvisionStepName;
     }>;
 
-export type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
+type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
 
-export interface ProvisionProjectWorkspaceInput {
+interface ProvisionProjectWorkspaceInput {
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
   /** The client-supplied project id. The catalog resolves it before anything is provisioned. */
@@ -114,7 +114,7 @@ export interface ProvisionProjectWorkspaceInput {
   readonly signal?: AbortSignal | undefined;
 }
 
-export interface ProvisionHarnessWorkspaceInput {
+interface ProvisionHarnessWorkspaceInput {
   readonly workspaceName: string;
   /** The active generation's validated commit, which the build provisioner obtains if needed. */
   readonly harnessCommit: HarnessCommit;

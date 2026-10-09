@@ -1,6 +1,6 @@
 import { MAX_EXEC_FRAME_BYTES } from "../../workspace/project/protocol.js";
 
-export type FrameOutcome =
+type FrameOutcome =
   | { readonly kind: "value"; readonly value: unknown }
   | { readonly kind: "malformed" }
   | { readonly kind: "eof" }

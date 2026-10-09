@@ -11,7 +11,7 @@ export type ProjectActivity = Readonly<{
 }>;
 
 /** The effects the controller needs. Tests supply fakes; the Host supplies the real ones. */
-export type IdleControllerPorts = Readonly<{
+type IdleControllerPorts = Readonly<{
   nowMs(): number;
   idleLimitMs: number;
   /** Persist an alarm. The controller logs a rejection and tries again on the next activity. */
@@ -24,7 +24,7 @@ export type IdleControllerPorts = Readonly<{
 }>;
 
 /** How an idle stop ended. */
-export type IdleStopOutcome = "stopped" | "not-running" | "skipped-busy" | "threw";
+type IdleStopOutcome = "stopped" | "not-running" | "skipped-busy" | "threw";
 
 /**
  * Tracks the Workspace Host's work and arms the alarm that later checks for idleness (ADR-0036: the

@@ -6,7 +6,7 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
  * project path cannot run a harness build step, even though one Durable Object class serves both
  * surfaces.
  */
-export type ProjectWorkspaceHost = Readonly<{
+type ProjectWorkspaceHost = Readonly<{
   project(): Promise<ProjectRpcTargetContract>;
 }>;
 

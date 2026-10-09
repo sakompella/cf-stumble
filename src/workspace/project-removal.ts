@@ -14,7 +14,7 @@ export type ProjectRemovalRequest = Readonly<{
   projectId: string;
 }>;
 
-export type ParsedProjectRemovalRequest = Readonly<{
+type ParsedProjectRemovalRequest = Readonly<{
   kind: "remove-project";
   projectId: ProjectId;
 }>;

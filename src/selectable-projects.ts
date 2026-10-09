@@ -44,10 +44,10 @@ function harnessProjectId(): ProjectId {
  * {@link RepositoryProject} first, so no code path can ask the harness entry for a connection it
  * was never going to have.
  */
-export type HarnessProject = Readonly<{ kind: "harness"; id: ProjectId; displayName: string }>;
+type HarnessProject = Readonly<{ kind: "harness"; id: ProjectId; displayName: string }>;
 
 /** One connected repository, as the same sidebar offers it. */
-export type RepositoryProject = Project & Readonly<{ kind: "repository" }>;
+type RepositoryProject = Project & Readonly<{ kind: "repository" }>;
 
 /**
  * What the owner may select to work in: one of the connected repositories, or the harness.
@@ -86,7 +86,7 @@ export function selectableCatalog(projects: ProjectCatalog): SelectableCatalog {
   return Object.freeze([...projects.map((project) => repositoryProject(project)), HARNESS_PROJECT]);
 }
 
-export type SelectableResolution =
+type SelectableResolution =
   | Readonly<{ ok: true; project: SelectableProject }>
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 

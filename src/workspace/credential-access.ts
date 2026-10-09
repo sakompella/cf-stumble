@@ -41,13 +41,13 @@ function signalAborted(signal: AbortSignal | undefined): boolean {
  * Workspace Host that threw, refused, or answered with the wrong shape: from the caller's side
  * these are one fact, that the workspace could not be asked.
  */
-export type WorkspaceCredentialProblem = Readonly<{
+type WorkspaceCredentialProblem = Readonly<{
   code: "credential-workspace-unavailable" | "credential-install-failed";
   detail: string;
 }>;
 
 /** What an install achieved. A workspace image without `gh` is a state, not a crash. */
-export type CredentialInstallation = "installed" | "tooling-missing";
+type CredentialInstallation = "installed" | "tooling-missing";
 
 export interface WorkspaceCredentialInput {
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
@@ -59,11 +59,11 @@ export interface WorkspaceCredentialInput {
   readonly requestId?: RequestId | undefined;
 }
 
-export interface InstallWorkspaceCredentialInput extends WorkspaceCredentialInput {
+interface InstallWorkspaceCredentialInput extends WorkspaceCredentialInput {
   readonly token: GitHubToken;
 }
 
-export interface RepositoryAccessInput extends WorkspaceCredentialInput {
+interface RepositoryAccessInput extends WorkspaceCredentialInput {
   readonly repositoryUrl: string;
 }
 

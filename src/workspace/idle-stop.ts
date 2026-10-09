@@ -22,7 +22,7 @@ export type WorkspaceActivity = Readonly<{
   leaseEndsAtMs: number | null;
 }>;
 
-export type IdleStopDecision =
+type IdleStopDecision =
   | Readonly<{ kind: "stop"; idleForMs: number }>
   | Readonly<{ kind: "check-at"; atMs: number }>;
 

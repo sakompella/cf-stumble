@@ -13,7 +13,7 @@ import {
   writeVia,
 } from "./execution-env-filesystem.js";
 
-export interface FacetExecutionEnvLocal {
+interface FacetExecutionEnvLocal {
   /**
    * Where the turn starts. It is the selected project's directory in the shared workspace, so
    * relative paths land in that repository, and it is only a starting point: every path this

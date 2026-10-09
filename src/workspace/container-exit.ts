@@ -7,7 +7,7 @@ export function containerStatusIndicatesReplacement(status: WorkspaceContainerSt
   return !status.running || status.exit !== null;
 }
 
-export type ContainerReasonCode =
+type ContainerReasonCode =
   | "not-reported"
   | "unexpected-exit-code"
   | "normal-exit"
@@ -33,14 +33,14 @@ export function containerReasonCode(reason: string | undefined): ContainerReason
   return "unknown";
 }
 
-export function containerExitCode(reason: string | undefined): number | null {
+function containerExitCode(reason: string | undefined): number | null {
   const match = /exit code[=: ]+(\d+)/iu.exec(reason ?? "");
 
   return match === null ? null : Number(match[1]);
 }
 
 /** One status read: what it returned, or that it failed. */
-export type ContainerStatusRead =
+type ContainerStatusRead =
   | { readonly read: "ok"; readonly status: WorkspaceContainerStatus }
   | { readonly read: "failed" };
 

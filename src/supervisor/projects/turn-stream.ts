@@ -7,7 +7,7 @@ import { endTurn, releaseLease, type StreamEnding, type TurnSettlement } from ".
 import type { TurnBound } from "./turn-bound.js";
 import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
 
-export type ReadTurnStreamInput = TurnSettlement &
+type ReadTurnStreamInput = TurnSettlement &
   Readonly<{
     frames: ReadableStream<Uint8Array>;
     /**

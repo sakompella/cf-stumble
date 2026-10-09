@@ -1,4 +1,4 @@
-export type StartupCheckStage =
+type StartupCheckStage =
   | "ready"
   | "mount-failed"
   | "headers-not-received"

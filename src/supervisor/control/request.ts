@@ -23,7 +23,7 @@ export type ControlProblemCode =
   | "revoked-capability"
   | "stale-epoch";
 
-export type CommandEffect = "activated" | "no-op";
+type CommandEffect = "activated" | "no-op";
 
 export type GenerationControlResult =
   | {

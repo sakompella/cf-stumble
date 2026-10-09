@@ -210,7 +210,7 @@ async function verifiesSignature(
   return false;
 }
 
-export type ParsedAccessToken = {
+type ParsedAccessToken = {
   readonly header: JwtHeader;
   readonly claimsPart: string;
   readonly signature: Uint8Array;
@@ -319,7 +319,7 @@ export async function verifyParsedAccessToken(
   return { ok: true, identity: claims.sub };
 }
 
-export interface DeriveSupervisorNameInput {
+interface DeriveSupervisorNameInput {
   readonly identity: AccessIdentity;
   readonly audience: string;
 }

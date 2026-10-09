@@ -18,7 +18,7 @@ import { GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH } from "../workspac
  * most, a login name or a Git error, and the caller redacts what it forwards regardless.
  */
 
-export const GITHUB_HOSTNAME = "github.com";
+const GITHUB_HOSTNAME = "github.com";
 
 /**
  * Shell lines that point `gh` and Git's global configuration at the durable workspace paths.

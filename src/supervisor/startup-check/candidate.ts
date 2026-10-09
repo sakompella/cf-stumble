@@ -5,7 +5,7 @@ import { deadlineAfter, drainResponseBody, errorReason } from "./body.js";
 import type { Deadline, StartupCheckOutcome, ThrownValue } from "./body.js";
 import type { StartupCheckHost } from "./index.js";
 
-export type StartupRequestBounds = Readonly<{
+type StartupRequestBounds = Readonly<{
   deadlineMs: number;
   maxBodyBytes: number;
 }>;

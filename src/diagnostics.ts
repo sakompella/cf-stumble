@@ -87,7 +87,7 @@ export function logRedactedCause(context: string, cause: unknown, knownToken?: s
 }
 
 /** A value one structured log field may hold. There is no field type for free text or objects. */
-export type LogValue = string | number | boolean | null;
+type LogValue = string | number | boolean | null;
 
 export type LogFields = Readonly<Record<string, LogValue>>;
 

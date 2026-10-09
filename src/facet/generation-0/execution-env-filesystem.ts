@@ -24,9 +24,9 @@ const MAX_TEMP_FILE_ATTEMPTS = 16;
 
 /** The one failure shape every unsupported or already-aborted method resolves to. Named (rather
  * than an inline anonymous object type) so it composes into `Result<T, FileError>` for any `T`. */
-export type FileFailure = Readonly<{ ok: false; error: FileError }>;
+type FileFailure = Readonly<{ ok: false; error: FileError }>;
 
-export function abortedError(path?: string): FileFailure {
+function abortedError(path?: string): FileFailure {
   return {
     ok: false,
     error: new FileError("aborted", "the abort signal was already aborted", path),

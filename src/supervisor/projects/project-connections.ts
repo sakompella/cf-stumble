@@ -97,9 +97,9 @@ export type DisconnectRepositoryResult =
  * Removes the project's thread, or refuses because a turn still owns it. It runs inside the
  * disconnect's ordered operation, so no turn can be admitted between it and the row removal.
  */
-export type ReleaseProjectThread = () => DisconnectProjectResult;
+type ReleaseProjectThread = () => DisconnectProjectResult;
 
-export type ConnectRepositoryProblem = Readonly<{
+type ConnectRepositoryProblem = Readonly<{
   code:
     | "invalid-repository-url"
     | "project-id-conflict"
@@ -121,7 +121,7 @@ export type ConnectRepositoryResult =
   | Readonly<{ ok: false; problem: ConnectRepositoryProblem; github: GitHubConnectionStatus }>;
 
 /** Why a project could not be provisioned when it was used. */
-export type ProjectUseProblem = Readonly<{
+type ProjectUseProblem = Readonly<{
   code:
     | "invalid-project-id"
     | "unknown-project-id"
@@ -129,11 +129,11 @@ export type ProjectUseProblem = Readonly<{
     | "provisioning-failed";
 }>;
 
-export type ProjectUseResult =
+type ProjectUseResult =
   | Readonly<{ ok: true; project: Project }>
   | Readonly<{ ok: false; problem: ProjectUseProblem }>;
 
-export interface ProjectConnectionsInput {
+interface ProjectConnectionsInput {
   readonly storage: DurableObjectStorage;
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;

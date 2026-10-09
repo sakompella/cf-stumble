@@ -15,7 +15,7 @@ export function isUint8Array(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array;
 }
 
-export type EnvelopeFailure = { readonly code: string; readonly path?: string };
+type EnvelopeFailure = { readonly code: string; readonly path?: string };
 
 export type ParsedEnvelope<T> =
   | { readonly kind: "ok"; readonly value: T }
@@ -47,7 +47,7 @@ function isProjectFileKind(value: unknown): value is ProjectFileKind {
   return typeof value === "string" && PROJECT_FILE_KINDS.has(value);
 }
 
-export function isProjectFileInfo(value: unknown): value is ProjectFileInfo {
+function isProjectFileInfo(value: unknown): value is ProjectFileInfo {
   return (
     isRecord(value) &&
     typeof value.name === "string" &&
@@ -58,7 +58,7 @@ export function isProjectFileInfo(value: unknown): value is ProjectFileInfo {
   );
 }
 
-export type ParsedCanonicalPath =
+type ParsedCanonicalPath =
   | { readonly ok: true; readonly value: string }
   | { readonly ok: false; readonly error: EnvelopeFailure };
 

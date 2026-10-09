@@ -11,10 +11,10 @@ import {
 } from "./workspace-layout.js";
 import type { HarnessCommit } from "./harness-commit.js";
 
-export type HarnessBuildPhaseName = "install" | "build-pi" | "build-module-map";
+type HarnessBuildPhaseName = "install" | "build-pi" | "build-module-map";
 
 /** One phase of a build: a name a failure can report, and the command that phase runs. */
-export type HarnessBuildPhase = Readonly<{ name: HarnessBuildPhaseName; command: string }>;
+type HarnessBuildPhase = Readonly<{ name: HarnessBuildPhaseName; command: string }>;
 
 /**
  * Where and how one labeled harness commit becomes a module map. Version 0 has one build path, so

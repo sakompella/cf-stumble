@@ -5,7 +5,7 @@ type SyncRPC = BackendHandle["rpc"]["sync"];
 
 type FetchChangesInput = Parameters<SyncRPC["fetchChanges"]>[0];
 
-export interface WorkspaceBackendLifecycle {
+interface WorkspaceBackendLifecycle {
   connected?(runtimeId: string | undefined): void;
   closed?(): void;
   failed?(): void;

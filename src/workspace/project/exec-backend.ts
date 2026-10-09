@@ -5,7 +5,7 @@ export type BackendExecEvent =
   | { name: "exit"; exitCode: number };
 
 /** A minimal, `ReadableStreamDefaultReader`-shaped pull interface over `BackendExecEvent`s. */
-export interface ExecBackendReader {
+interface ExecBackendReader {
   read(): Promise<{ done: false; value: BackendExecEvent } | { done: true; value?: undefined }>;
   cancel(): Promise<void>;
 }

@@ -34,25 +34,25 @@ export type ProjectTurnFacet = Readonly<{
  * It takes a {@link Project}, so the harness selection uses the separate generation-bound
  * provisioner instead of inventing a repository-less catalog project.
  */
-export type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Promise<boolean>;
+type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Promise<boolean>;
 
 /** Reconciles the editable harness checkout before its working directory is mounted. */
-export type ProvisionHarness = (signal: AbortSignal) => Promise<boolean>;
+type ProvisionHarness = (signal: AbortSignal) => Promise<boolean>;
 
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
-export type MountServingGeneration = () => Promise<
+type MountServingGeneration = () => Promise<
   Result<{ readonly fetcher: ProjectTurnFacet }, MainFacetMountProblem>
 >;
 
 /** What a caller asks for. Both untrusted fields are named here so no shell has to declare one. */
-export interface ProjectTurnRequest {
+interface ProjectTurnRequest {
   /** The client-supplied project id. The catalog resolves it before anything is named. */
   readonly projectId: unknown;
   /** The turn request. The generation parses it; nothing on this side reads it. */
   readonly request: unknown;
 }
 
-export interface ProjectTurnInput extends ProjectTurnRequest {
+interface ProjectTurnInput extends ProjectTurnRequest {
   /**
    * The tenant's one workspace. The Supervisor derives this name from its own server-derived
    * tenant key, so it is not a field of {@link ProjectTurnRequest} and a client cannot present

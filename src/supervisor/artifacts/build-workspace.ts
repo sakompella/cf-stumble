@@ -30,7 +30,7 @@ export type BuildWorkspaceNamespace = Readonly<{
  * Workspace Host a step's name, never its command text: the Host plans the same commit itself and
  * runs only the step of that name.
  */
-export class CommitBuildWorkspace implements BuildWorkspace {
+class CommitBuildWorkspace implements BuildWorkspace {
   /**
    * A fresh stub for every call, not one stub for the whole build.
    *

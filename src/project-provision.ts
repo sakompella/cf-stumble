@@ -18,7 +18,7 @@ import {
  * history available through an explicit `git fetch`. Blob filtering keeps the durable clone small;
  * Git fetches a blob only when a command needs it.
  */
-export const PROJECT_CLONE_DEPTH = 50;
+const PROJECT_CLONE_DEPTH = 50;
 
 /**
  * Exit code reserved for a clone rejected for size: the workspace ran out of disk, or the size
@@ -57,11 +57,11 @@ export type ProjectProvisionStepName = "clone" | "instructions";
  * instructions are a file whose content the server decides, so writing them through the
  * filesystem keeps the managed text out of any command line.
  */
-export type ProjectProvisionStep =
+type ProjectProvisionStep =
   | Readonly<{ name: "clone"; source: string; cwd: string }>
   | Readonly<{ name: "instructions"; path: string; content: string }>;
 
-export type ProjectProvisionPlan = Readonly<{
+type ProjectProvisionPlan = Readonly<{
   projectId: ProjectId;
   steps: readonly [ProjectProvisionStep, ...ProjectProvisionStep[]];
 }>;

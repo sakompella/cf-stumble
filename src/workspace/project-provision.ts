@@ -36,7 +36,7 @@ export type ProjectProvisionRequest = Readonly<{
 }>;
 
 /** A provision request whose project the catalog resolved. Only this form reaches a command. */
-export type ParsedProjectProvisionRequest = Readonly<{
+type ParsedProjectProvisionRequest = Readonly<{
   kind: "provision-project";
   project: Project;
   step: ProjectProvisionStepName;
@@ -125,7 +125,7 @@ export function planProjectProvisionRequest(request: ParsedProjectProvisionReque
 }
 
 /** The `url` of `[remote "origin"]` in a Git config file, or nothing. */
-export function originUrl(config: string): string | undefined {
+function originUrl(config: string): string | undefined {
   let inOrigin = false;
 
   for (const line of config.split(/\r?\n/u)) {

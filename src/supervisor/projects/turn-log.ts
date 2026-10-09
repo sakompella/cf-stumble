@@ -38,7 +38,7 @@ export function turnFields(trace: TurnTrace): LogFields {
 }
 
 /** The frames a generation forwarded, counted by kind. The frames themselves are never logged. */
-export type ForwardedFrameCounts = Readonly<{
+type ForwardedFrameCounts = Readonly<{
   text: number;
   toolStart: number;
   toolResult: number;
@@ -46,7 +46,7 @@ export type ForwardedFrameCounts = Readonly<{
   diffUnavailable: number;
 }>;
 
-export const NO_FRAMES: ForwardedFrameCounts = {
+const NO_FRAMES: ForwardedFrameCounts = {
   text: 0,
   toolStart: 0,
   toolResult: 0,
@@ -55,10 +55,7 @@ export const NO_FRAMES: ForwardedFrameCounts = {
 };
 
 /** Count one forwarded frame. A terminal frame is the settlement, so it is not counted here. */
-export function countFrame(
-  counts: ForwardedFrameCounts,
-  frame: ProjectTurnFrame,
-): ForwardedFrameCounts {
+function countFrame(counts: ForwardedFrameCounts, frame: ProjectTurnFrame): ForwardedFrameCounts {
   switch (frame.kind) {
     case "text":
       return { ...counts, text: counts.text + 1 };

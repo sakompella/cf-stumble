@@ -33,7 +33,7 @@ export type PiAgentTurnState = Readonly<
   Pick<AgentState, "systemPrompt" | "model" | "thinkingLevel" | "messages">
 >;
 
-export type PiAgentTurnProblem = Readonly<{
+type PiAgentTurnProblem = Readonly<{
   code: "model-call-limit" | "model-error";
 }>;
 
@@ -46,7 +46,7 @@ export type PiAgentTurnOutcome =
       model: ModelTurnAccounting;
     }>;
 
-export type PiAgentTurnRequest = Readonly<{
+type PiAgentTurnRequest = Readonly<{
   prompt: string;
   state: PiAgentTurnState;
   env: ExecutionEnv;

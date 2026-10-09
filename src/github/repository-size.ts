@@ -40,7 +40,7 @@ export type RepositorySizeReason =
   | "repository-too-large"
   | "within-limits";
 
-export type RepositorySizeLookup = Readonly<{
+type RepositorySizeLookup = Readonly<{
   sizeKb: number;
   blobCount: number;
   blobBytes: number;

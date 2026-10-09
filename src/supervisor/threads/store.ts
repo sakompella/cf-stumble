@@ -20,7 +20,7 @@ import {
 } from "./thread.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 
-export type ThreadLease = Readonly<{
+type ThreadLease = Readonly<{
   thread: ProjectThread;
   leaseId: string;
   reclaimed: boolean;

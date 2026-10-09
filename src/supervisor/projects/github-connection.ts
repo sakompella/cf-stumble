@@ -72,7 +72,7 @@ export interface GitHubConnectionEnvironment {
   readonly fetcher: GitHubFetch;
 }
 
-export interface GitHubConnectionInput {
+interface GitHubConnectionInput {
   readonly store: GitHubConnectionStore;
   /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;

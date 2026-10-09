@@ -33,15 +33,15 @@ export function parseGitHubToken(value: unknown): GitHubToken | undefined {
   return value as GitHubToken;
 }
 
-export const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
+const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
-export const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
+const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 /**
  * `repo` is what a coding agent needs to clone, push, and open a pull request in a private
  * repository. Nothing here asks for organization administration or user data scopes.
  */
-export const GITHUB_DEVICE_SCOPE = "repo";
+const GITHUB_DEVICE_SCOPE = "repo";
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
@@ -53,7 +53,7 @@ export type GitHubFetch = (url: string, init: RequestInit) => Promise<Response>;
  * redeems the authorization, so it stays server-side and never reaches a browser or a log. The
  * other three fields are exactly what the owner needs to see.
  */
-export type DeviceAuthorization = Readonly<{
+type DeviceAuthorization = Readonly<{
   deviceCode: string;
   userCode: string;
   verificationUri: string;
@@ -65,9 +65,9 @@ export type DeviceAuthorization = Readonly<{
  * Why no authorization started. `not-configured` means this deployment has no GitHub OAuth client
  * id, which is the owner's setup step rather than a caller's mistake.
  */
-export type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
+type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
 
-export type DeviceAuthorizationStart =
+type DeviceAuthorizationStart =
   | Readonly<{ ok: true; authorization: DeviceAuthorization }>
   | Readonly<{ ok: false; problem: DeviceFlowProblem }>;
 
@@ -144,7 +144,7 @@ export function parseDeviceRedemption(value: unknown): DeviceRedemption {
 }
 
 /** One JSON object as GitHub returned it. The two parsers above turn it into a domain value. */
-export type GitHubDeviceReply = Readonly<Record<string, unknown>>;
+type GitHubDeviceReply = Readonly<Record<string, unknown>>;
 
 async function postForm(
   url: string,

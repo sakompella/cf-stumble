@@ -13,9 +13,9 @@ import { ZERO_USAGE } from "./stream-assembler.js";
 
 export type PiTextContent = Readonly<{ type: "text"; text: string }>;
 
-export type PiThinkingContent = Readonly<{ type: "thinking"; thinking: string }>;
+type PiThinkingContent = Readonly<{ type: "thinking"; thinking: string }>;
 
-export type PiToolCall = Readonly<{
+type PiToolCall = Readonly<{
   type: "toolCall";
   id: string;
   name: string;
@@ -25,7 +25,7 @@ export type PiToolCall = Readonly<{
 
 export type PiContentBlock = PiTextContent | PiThinkingContent | PiToolCall;
 
-export type PiUserMessage = Readonly<{
+type PiUserMessage = Readonly<{
   role: "user";
   content: string | ReadonlyArray<PiTextContent>;
   timestamp: number;

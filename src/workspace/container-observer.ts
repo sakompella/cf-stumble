@@ -23,7 +23,7 @@ function observeSafely(step: () => void): void {
 }
 
 /** Why the Workspace Host asked the container to launch. */
-export type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "workspace-reset";
+type ContainerWakeTrigger = "backend-connect" | "backend-recovery" | "workspace-reset";
 
 /**
  * The container API the backend and the Host use, with each launch logged. It delegates every call

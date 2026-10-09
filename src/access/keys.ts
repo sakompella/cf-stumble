@@ -16,7 +16,7 @@ export type AccessFetch = typeof fetch;
  * rather than folding it into `invalid-signature`. The cause itself is logged for operators at the
  * point it is discarded, not carried on this value.
  */
-export type KeyLoadFailure = Readonly<{ code: "key-service-unavailable" }>;
+type KeyLoadFailure = Readonly<{ code: "key-service-unavailable" }>;
 
 /**
  * A signing key this module accepted. `JsonWebKey` in workers-types has no `kid`, and Access
@@ -83,7 +83,7 @@ function isPublicJwk(value: unknown): value is AccessPublicKey {
   return false;
 }
 
-export function parsePublicKeys(value: unknown): readonly AccessPublicKey[] | undefined {
+function parsePublicKeys(value: unknown): readonly AccessPublicKey[] | undefined {
   const keys = Array.isArray(value)
     ? value
     : isRecord(value) && Array.isArray(value.keys)
