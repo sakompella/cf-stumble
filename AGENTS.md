@@ -18,7 +18,7 @@ When you create or edit prose documentation, read `docs/agents/writing-style.md`
 
 Run `pnpm verify` before you claim anything works. It runs `build:pi`, `verify:vendor`, `verify:project-protocol`, typecheck, tools typecheck, format check, lint, `test:tools`, `build:module-map`, `build:loaded-execution-env-fixture`, and the full test suite in that order. `test:tools` runs the tests under `tools/` (the vendored lint rules and `ops:check`) with `node --test`, because Vitest only collects `test/`. It takes about 90 seconds on the Mac. The order matters: type errors make the type-aware lint rules report noise about `error` types instead of the real fault, and formatting changes what lint sees, since wrapping a long line has pushed a file over `max-lines` here before.
 
-After a staging deploy or an e2e run, run `pnpm ops:check` (see `docs/agents/design/observability.md`, "Checking a running deployment") before you claim it works. `pnpm verify` cannot see runtime faults such as a poller or an idle container that keeps running. `test/github/repository-size-guard.props.test.ts` is known to time out at 5 s when the machine is busy; run it again alone before you suspect your change.
+After a staging deploy or an e2e run, run `pnpm ops:check` (see `docs/agents/design/observability.md`, "Checking a running deployment") before you claim it works. `pnpm verify` cannot see runtime faults such as a poller or an idle container that keeps running. When the machine is busy, a test can exceed Vitest's default 5 s timeout; run that test again alone before you suspect your change.
 
 A tracked `.githooks/pre-commit` runs the same command and blocks the commit when it fails. `pnpm format` fixes formatting; nothing else in the gate is auto-fixable.
 
