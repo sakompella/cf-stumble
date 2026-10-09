@@ -42,10 +42,10 @@ async function absoluteOrPath(
 /**
  * Load the instructions this turn runs under, through the same execution adapter its tools use.
  *
- * The managed file is the one cf-stumble provisions for the whole workspace (T3a owns its path);
- * the repository file is whatever the selected project keeps. A missing or unreadable file is
- * simply absent: a project without an `AGENTS.md` is normal, and a turn must not fail because the
- * workspace has not been provisioned yet.
+ * The managed file is the one cf-stumble provisions for the whole workspace, at the path
+ * `workspace-layout.ts` owns; the repository file is whatever the selected project keeps. A missing
+ * or unreadable file is simply absent: a project without an `AGENTS.md` is normal, and a turn must
+ * not fail because the workspace has not been provisioned yet.
  *
  * When the working directory is the workspace root the two names address one file. It is reported
  * as the managed one only, so a turn started there does not receive the same text twice.

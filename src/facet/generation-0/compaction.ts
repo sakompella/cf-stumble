@@ -92,9 +92,8 @@ export function estimateThreadTokens(messages: readonly AgentMessage[]): number 
 
 /**
  * Pi's own compaction decision, asked against this generation's declared budget rather than the
- * route's context window. `ROUTE_MODEL` reports a zero window, and `shouldCompact` reads its
- * argument as `tokens > window - reserveTokens`, so a zero window is not a disabled trigger: it
- * makes every conversation, including an empty one, exceed the threshold.
+ * route's context window. `shouldCompact` reads its argument as `tokens > window - reserveTokens`,
+ * so the budget, not `ROUTE_MODEL.contextWindow`, sets when a thread compacts.
  */
 export function needsCompaction(
   messages: readonly AgentMessage[],

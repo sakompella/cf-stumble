@@ -266,8 +266,8 @@ function streamOnce(
 
 /**
  * Drives Pi's `Agent` from the host model route. `model.runStream` answers with incremental
- * events as the provider produces them (E5, E7); this pushes each into Pi's own
- * `AssistantMessageEvent` protocol as it arrives instead of buffering the whole reply first.
+ * events as the provider produces them; this pushes each into Pi's own `AssistantMessageEvent`
+ * protocol as it arrives instead of buffering the whole reply first.
  *
  * Every failure — a route that rejects, reports a model problem, or answers with content this
  * generation cannot represent — becomes an `error` event. Pi records that on the agent's state,

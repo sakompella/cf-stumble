@@ -270,14 +270,6 @@ function startExecFailure(code: string): ExecResult {
   return { ok: false, error: new ExecutionError("spawn_error", message) };
 }
 
-/**
- * Implements Pi's `Shell.exec` against the six-method project RPC target: starts the command,
- * decodes its `ReadableStream<Uint8Array>` of newline-delimited JSON frames back into events with
- * `NdjsonFrameReader`, invokes Pi's `onStdout`/`onStderr` callbacks before the terminal event
- * resolves this call, and never throws or rejects. An environment override this target cannot
- * honor, an already-aborted signal, a malformed target response, a truncated byte frame, or a
- * rejected RPC call all resolve to a typed `ExecutionError` instead.
- */
 export type ExecTurnBudget = Readonly<{
   deadlineAt: number;
   now: () => number;
@@ -293,6 +285,14 @@ function turnBudgetError(): ExecResult {
   };
 }
 
+/**
+ * Implements Pi's `Shell.exec` against the six-method project RPC target: starts the command,
+ * decodes its `ReadableStream<Uint8Array>` of newline-delimited JSON frames back into events with
+ * `NdjsonFrameReader`, invokes Pi's `onStdout`/`onStderr` callbacks before the terminal event
+ * resolves this call, and never throws or rejects. An environment override this target cannot
+ * honor, an already-aborted signal, a malformed target response, a truncated byte frame, or a
+ * rejected RPC call all resolve to a typed `ExecutionError` instead.
+ */
 export async function execViaProjectTarget(
   cwd: string,
   target: ExecTarget,

@@ -5,15 +5,14 @@ import type { ModelUsage, ToolCallDelta } from "../../model-route.js";
  * The model descriptor Pi's `Agent` needs in its state. Every field the host actually decides —
  * which model, which reasoning effort, which endpoint, which credential — lives behind the model
  * route in the immutable `src/model-route.ts`, so nothing here selects anything. This describes
- * the route, not a model, which is why its costs and its context window are zero: Generation 0 has
- * no way to learn the real values and must not invent them.
+ * the route, not a model. Its costs are zero because Generation 0 has no way to learn the real
+ * prices and must not invent them.
  *
- * The two numbers are not zero, and that is deployed evidence rather than taste. With a zero
- * window and a zero output budget, every deployed turn saved an assistant message with empty
- * content while the route itself streamed the text: Pi sizes a response against these numbers, and
- * zero leaves no room for one. They mirror what the host route asks for in `model-route.ts`, which
- * is the only place that selects a model, so this describes the route rather than choosing
- * anything.
+ * The context window and the output budget are not zero, and that is deployed evidence rather
+ * than taste. With a zero window and a zero output budget, every deployed turn saved an assistant
+ * message with empty content while the route itself streamed the text: Pi sizes a response against
+ * these numbers, and zero leaves no room for one. They mirror what the host route asks for in
+ * `model-route-stream.ts`, which is the only place that selects a model.
  */
 export const ROUTE_MODEL = {
   id: "host-model-route",

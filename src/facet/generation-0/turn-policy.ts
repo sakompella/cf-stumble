@@ -64,13 +64,9 @@ export const TURN_DIFF_TIMEOUT_SECONDS = 90;
  * When this generation compacts one thread, and how much of it survives.
  *
  * `contextBudgetTokens` is this generation's own bound on a thread, not the route's context
- * window. The route does not report one: `ROUTE_MODEL` declares `contextWindow: 0` because
- * Generation 0 cannot learn the real number and must not invent it. Passing that zero to Pi's
- * `shouldCompact` would not disable compaction — the test in
- * `test/facet/generation-0/compaction.test.ts` shows `tokens > 0 - reserveTokens` is true for an
- * empty conversation — so this generation would compact every turn. A declared budget is the
- * honest alternative: like {@link MAX_MODEL_CALLS} it is a bound this harness chooses and can
- * state, not a measurement it pretends to have.
+ * window. It sits below `ROUTE_MODEL.contextWindow`, so a thread compacts before it fills the
+ * route's window. Like {@link MAX_MODEL_CALLS} it is a bound this harness chooses and can state,
+ * not a measurement it pretends to have.
  *
  * The settings stay Pi's defaults except `keepRecentTokens`, which must be well below the
  * threshold `contextBudgetTokens - reserveTokens` or compaction would retain everything it was
