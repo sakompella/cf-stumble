@@ -9,7 +9,7 @@ import {
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
 import { jsonError } from "./json.js";
-import { routePattern } from "./route-pattern.js";
+import { projectIdFromPath, routePattern } from "./route-pattern.js";
 import { settleRoute } from "./route-settled.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
@@ -28,34 +28,6 @@ export type OwnerApiSupervisor = GenerationControlSupervisor &
     readonly startFreshProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
     readonly resetWorkspace: () => Promise<WorkspaceResetResult>;
   };
-
-/**
- * The project id a client named, still a plain string. The Supervisor resolves it against the
- * catalog; this route only takes it out of the path, so an id the catalog does not know reaches
- * the Supervisor and comes back as `unknown-project-id` rather than being guessed at here.
- */
-function threadRoute(
-  pathname: string,
-): { readonly projectId: string; readonly isReset: boolean } | undefined {
-  const matched = /^\/api\/projects\/([^/]+)\/thread(\/fresh)?$/u.exec(pathname);
-  const encodedProjectId = matched?.[1];
-
-  if (encodedProjectId === undefined) {
-    return undefined;
-  }
-
-  try {
-    const projectId = decodeURIComponent(encodedProjectId);
-
-    return projectId.length === 0 ? undefined : { projectId, isReset: matched?.[2] === "/fresh" };
-  } catch {
-    return undefined;
-  }
-}
-
-function notFound(): Promise<Response> {
-  return Promise.resolve(jsonError(404, "not-found"));
-}
 
 async function workspaceResetResponse(supervisor: OwnerApiSupervisor): Promise<Response> {
   return Response.json(
@@ -219,19 +191,17 @@ function ownerApiRoute(
     return workspaceResetResponse(supervisor);
   }
 
-  const thread = threadRoute(pathname);
+  const threadProjectId = projectIdFromPath(pathname, "/thread");
 
-  if (thread === undefined) {
-    return notFound();
+  if (isGet && threadProjectId !== undefined) {
+    return threadResponse(() => supervisor.getProjectThread(threadProjectId));
   }
 
-  if (isGet && !thread.isReset) {
-    return threadResponse(() => supervisor.getProjectThread(thread.projectId));
+  const freshProjectId = projectIdFromPath(pathname, "/thread/fresh");
+
+  if (isPost && freshProjectId !== undefined) {
+    return threadResponse(() => supervisor.startFreshProjectThread(freshProjectId));
   }
 
-  if (isPost && thread.isReset) {
-    return threadResponse(() => supervisor.startFreshProjectThread(thread.projectId));
-  }
-
-  return notFound();
+  return Promise.resolve(jsonError(404, "not-found"));
 }

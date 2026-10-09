@@ -1,5 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
+import { projectIdFromPath } from "./route-pattern.js";
 import type { ProjectTurnRun, ProjectTurnRunProblemCode } from "../supervisor/projects/index.js";
 
 /**
@@ -42,23 +43,6 @@ const TURN_STATUS = {
   "workspace-unavailable": 503,
   "turn-not-started": 503,
 } as const satisfies Record<ProjectTurnRunProblemCode, number>;
-
-/** The project id a client named, still a plain string. The Supervisor resolves it. */
-function turnRoute(pathname: string): string | undefined {
-  const encodedProjectId = /^\/api\/projects\/([^/]+)\/turn$/u.exec(pathname)?.[1];
-
-  if (encodedProjectId === undefined) {
-    return undefined;
-  }
-
-  try {
-    const projectId = decodeURIComponent(encodedProjectId);
-
-    return projectId.length === 0 ? undefined : projectId;
-  } catch {
-    return undefined;
-  }
-}
 
 function turnPrompt(value: unknown): string | undefined {
   if (!isRecord(value) || !hasExactKeys(value, ["prompt"]) || typeof value.prompt !== "string") {
@@ -112,7 +96,7 @@ export function routeProjectTurnRequest(
   request: Request,
   supervisor: TurnApiSupervisor,
 ): Promise<Response> | undefined {
-  const projectId = turnRoute(new URL(request.url).pathname);
+  const projectId = projectIdFromPath(new URL(request.url).pathname, "/turn");
 
   if (projectId === undefined || request.method !== "POST") {
     return undefined;

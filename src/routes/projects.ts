@@ -1,6 +1,7 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
 import { hasExactKeys, isRecord, jsonError, readJson } from "./json.js";
 import { logRedactedCause, type RequestId } from "../diagnostics.js";
+import { projectIdFromPath } from "./route-pattern.js";
 import { markDegraded } from "./route-settled.js";
 import type {
   ConnectRepositoryResult,
@@ -53,20 +54,6 @@ const DISCONNECT_STATUS = {
   "harness-project": 400,
   "turn-active": 409,
 } as const;
-
-function disconnectProjectId(pathname: string): string | undefined {
-  const encoded = /^\/api\/projects\/([^/]+)\/disconnect$/u.exec(pathname)?.[1];
-
-  if (encoded === undefined) return undefined;
-
-  try {
-    const projectId = decodeURIComponent(encoded);
-
-    return projectId.length === 0 ? undefined : projectId;
-  } catch {
-    return undefined;
-  }
-}
 
 async function disconnectResponse(
   projectId: string,
@@ -217,7 +204,7 @@ export function routeProjectApiRequest(
     return connectionResponse(supervisor, requestId);
   }
 
-  const disconnectedProjectId = disconnectProjectId(pathname);
+  const disconnectedProjectId = projectIdFromPath(pathname, "/disconnect");
 
   const mutation =
     pathname === "/api/projects/connect" ||

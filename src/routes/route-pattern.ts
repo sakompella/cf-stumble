@@ -32,3 +32,25 @@ export function routePattern(pathname: string): string {
 
   return pathname.startsWith("/api/") ? "/api/unknown" : "relay";
 }
+
+/**
+ * The project id a client named in `/api/projects/{id}{suffix}`, decoded but still a plain string.
+ * The Supervisor resolves it against the catalog, so an id the catalog does not know comes back as
+ * `unknown-project-id` rather than being guessed at here. An empty or undecodable id is no id.
+ */
+export function projectIdFromPath(
+  pathname: string,
+  suffix: "/thread" | "/thread/fresh" | "/turn" | "/disconnect",
+): string | undefined {
+  const [, encodedProjectId, rest] = /^\/api\/projects\/([^/]+)(\/.+)$/u.exec(pathname) ?? [];
+
+  if (encodedProjectId === undefined || rest !== suffix) return undefined;
+
+  try {
+    const projectId = decodeURIComponent(encodedProjectId);
+
+    return projectId.length === 0 ? undefined : projectId;
+  } catch {
+    return undefined;
+  }
+}
