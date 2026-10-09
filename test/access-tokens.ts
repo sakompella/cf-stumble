@@ -39,7 +39,7 @@ function encodeBytes(bytes: Uint8Array): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-function encode(value: string): string {
+export function encode(value: string): string {
   return encodeBytes(new TextEncoder().encode(value));
 }
 

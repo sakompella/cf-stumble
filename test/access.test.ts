@@ -16,6 +16,7 @@ import {
   accessIssuer as issuer,
   accessNow as now,
   accessOwnerSubject,
+  encode,
   signAccessToken,
   signingKey,
   type SigningAlgorithm,
@@ -148,6 +149,27 @@ describe("Cloudflare Access JWT verification", () => {
       ok: false,
       reason: "missing-identity",
     });
+  });
+
+  test.each(["none", "HS256", "RS512"])("refuses a token whose header names %s", async (alg) => {
+    const signed = await validToken("RS256");
+    const [, claims, signature] = signed.token.split(".");
+    const header = encode(JSON.stringify({ alg, kid: signed.key.publicJwk.kid }));
+
+    await expect(
+      verifyAccessToken(input(`${header}.${claims}.${signature}`, signed.key)),
+    ).resolves.toEqual({ ok: false, reason: "unsupported-algorithm" });
+  });
+
+  test("refuses a key with the token's kid that is published for another algorithm", async () => {
+    const signed = await validToken("RS256");
+    const otherFamily = await signingKey(signed.key.publicJwk.kid, "ES256");
+
+    for (const publicJwk of [{ ...signed.key.publicJwk, alg: "ES256" }, otherFamily.publicJwk]) {
+      await expect(
+        verifyAccessToken({ ...input(signed.token, signed.key), publicKeys: [publicJwk] }),
+      ).resolves.toEqual({ ok: false, reason: "invalid-signature" });
+    }
   });
 
   test("rejects an unauthenticated request before configuration or routing", async () => {
