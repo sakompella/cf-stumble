@@ -5,6 +5,8 @@ import {
   diffLineKind,
   looksLikeDiff,
   savedTranscript,
+  textEntry,
+  TranscriptEntry,
 } from "../../../src/page/client/transcript.js";
 
 test("a saved conversation shows text blocks and tool results, and nothing it cannot read", () => {
@@ -29,6 +31,87 @@ test("a saved conversation shows text blocks and tool results, and nothing it ca
   ]);
   expect(Option.isNone(savedTranscript("{"))).toBe(true);
   expect(Option.isNone(savedTranscript("{}"))).toBe(true);
+});
+
+/**
+ * One saved message of each kind the reader handles, as stored JSON, with each tool call id passed
+ * through `id`. Tool `a` gets two results with other messages between them, so the later result
+ * replaces the earlier block; `orphan` has no earlier block, and `b` follows the second `a`.
+ */
+function mixedMessages(id: (toolCallId: string) => string): readonly string[] {
+  return [
+    { role: "user", content: "hi" },
+    {
+      role: "assistant",
+      content: [{ type: "text", text: "a" }, { type: "thinking" }, { type: "text", text: "b" }],
+    },
+    { role: "toolResult", toolCallId: id("a"), toolName: "read", content: "one", isError: false },
+    { role: "custom", content: 5 },
+    "not a message",
+    null,
+    7,
+    {},
+    { role: 3, content: "a role that is not text" },
+    {
+      role: "toolResult",
+      toolCallId: id("orphan"),
+      toolName: "bash",
+      content: [{ type: "text", text: "x" }],
+      isError: true,
+    },
+    { role: "assistant", content: "between" },
+    { role: "toolResult", toolCallId: id("a"), toolName: "write", content: "two", isError: true },
+    { role: "toolResult", toolCallId: id("b"), toolName: "ls", content: "three" },
+    { role: "system" },
+  ].map((message) => JSON.stringify(message));
+}
+
+function finishedTool(
+  toolCallId: string,
+  summary: string,
+  content: string,
+  isFailed: boolean,
+): TranscriptEntry {
+  return TranscriptEntry.Tool({
+    toolCallId,
+    summary,
+    maybeOutput: Option.some({ content, isServerTruncated: false }),
+    isFailed,
+  });
+}
+
+function mixedTranscript(id: (toolCallId: string) => string): readonly TranscriptEntry[] {
+  return [
+    textEntry("user", "you", "hi"),
+    textEntry("assistant", "assistant", "ab"),
+    finishedTool(id("a"), "write — failed", "two", true),
+    textEntry("system", "custom", ""),
+    finishedTool(id("orphan"), "bash — failed", "x", true),
+    textEntry("assistant", "assistant", "between"),
+    finishedTool(id("b"), "ls — done", "three", false),
+    textEntry("system", "system", ""),
+  ];
+}
+
+function sameId(toolCallId: string): string {
+  return toolCallId;
+}
+
+test("a saved conversation keeps its exact entries, and a repeated tool id keeps one block", () => {
+  const saved = `[${mixedMessages(sameId).join(",")}]`;
+
+  expect(Option.getOrThrow(savedTranscript(saved))).toStrictEqual(mixedTranscript(sameId));
+});
+
+test("a long saved conversation reads as its parts read alone", () => {
+  const copies = Array.from(
+    { length: 4_000 },
+    (_, copy) => (toolCallId: string) => `${toolCallId}-${copy}`,
+  );
+
+  const saved = `[${copies.flatMap(mixedMessages).join(",")}]`;
+
+  expect(Option.getOrThrow(savedTranscript(saved))).toStrictEqual(copies.flatMap(mixedTranscript));
 });
 
 test("output is bounded to what the page lays out", () => {
