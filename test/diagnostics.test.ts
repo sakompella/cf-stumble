@@ -11,7 +11,7 @@ import { syntheticJwt } from "./synthetic-jwt.js";
 
 /**
  * `logRedactedCause` and `isTimeoutFailure` sit inside catch blocks whose whole job is to turn an
- * arbitrary thrown value into one generic, stable public result (ADR-0035). A cause is caller
+ * arbitrary thrown value into one generic, stable public result (ADR-0045). A cause is caller
  * input from the diagnostics module's point of view: it can be anything a dependency throws,
  * including a hostile object whose own `toString` or `message` getter throws. Rendering that
  * cause for the log must not itself throw, or the catch path these helpers serve fails instead of

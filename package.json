@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@cloudflare/computer": "file:vendor/cloudflare-computer-0.3.0.tgz",
-    "better-result": "3.0.1",
     "effect": "4.0.0"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 /**
  * Defensive parsing of one provider Server-Sent Event chunk. This is the provider's own untrusted
  * output, so it gets the same boundary treatment `model-route.ts` gives untrusted request input
- * (ADR-0035): every field is narrowed before use, and an unrecognized shape degrades to "nothing
+ * (ADR-0045): every field is narrowed before use, and an unrecognized shape degrades to "nothing
  * understood on this line" rather than throwing.
  *
  * The deployed model streams its text and tool calls in `choices[0].delta` (see

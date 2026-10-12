@@ -142,7 +142,7 @@ test("a write with a stale expected revision fails and leaves the conversation u
     ok: false,
     problem: { code: "stale-revision", projectId: "sample-project-one", currentRevision: 1 },
   });
-  // A thread crosses the object boundary as a plain value, never a class instance (ADR-0035).
+  // A thread crosses the object boundary as a plain value, never a class instance (ADR-0045).
   const read = await control.getProjectThread("sample-project-one");
   expect(Object.getPrototypeOf(read)).toBe(Object.prototype);
   expect(read).toMatchObject({ ok: true, thread: { messageCount: firstTurn.length, revision: 1 } });

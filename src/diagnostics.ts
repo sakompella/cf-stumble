@@ -1,7 +1,7 @@
 /**
  * A thrown effect failure never reaches its caller unexplained. `execute*` and `ask` shells
  * across the workspace and artifact boundaries catch whatever their operation threw and answer
- * with one of a few stable, public codes (ADR-0035): a token-install RPC failure and a filesystem
+ * with one of a few stable, public codes (ADR-0045): a token-install RPC failure and a filesystem
  * failure both become `workspace-unavailable`, and a caller cannot and should not tell them apart.
  * An operator still needs to, so this module gives every one of those catch blocks one line that
  * logs the cause it just discarded, redacted the same way any other text `git` or `gh` printed is

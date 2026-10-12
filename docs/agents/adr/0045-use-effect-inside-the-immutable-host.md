@@ -6,15 +6,16 @@ The immutable host composes asynchronous work and recoverable failures with Effe
 the Worker, Cloudflare Access verification, the owner routes, the model route, the Supervisor, the
 Workspace Host, and the GitHub code. An operation that can fail in an expected way fails with a
 tagged error in its Effect error channel, and the code that knows what the failure means handles it
-by its tag. This replaces better-result and ADR-0035. The owner asked for the port on 2026-10-12.
+by its tag. This replaced better-result and ADR-0035, which is deleted (Git keeps it). The owner
+asked for the port on 2026-10-12.
 
 The host moves to Effect in complete caller groups. Each group's callers move with it, and the
 better-result API it replaces is deleted in the same change. One call path uses one style from
 end to end: no path converts a better-result `Result` into an Effect and back, and no subsystem
-keeps a Promise API beside an Effect API for the same operation. Until the last group moves,
-ADR-0035 still describes the code that uses better-result.
+keeps a Promise API beside an Effect API for the same operation. Waves 1, 2 and 3 removed the last
+better-result import, and the package is gone.
 
-**Boundaries stay plain.** ADR-0035's reasons still hold. Workers RPC copies a returned value and
+**Boundaries stay plain.** Workers RPC copies a returned value and
 drops its behavior, and it refuses application-defined classes. SQLite rows, module maps, and
 values in a facet's environment outlive the isolate that wrote them. So Workers RPC results, HTTP
 JSON, SQLite rows, module maps, and facet environments carry plain values with the stable codes

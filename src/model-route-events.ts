@@ -57,7 +57,7 @@ export type ModelUsage = Readonly<{
 /**
  * The plain, JSON-serializable events this route emits for one streamed turn. Every event is one
  * NDJSON line inside the `ReadableStream<Uint8Array>` `ModelRoute.runStream` returns, which is what
- * keeps the RPC envelope plain across the Worker boundary (ADR-0035): nothing here is a class
+ * keeps the RPC envelope plain across the Worker boundary (ADR-0045): nothing here is a class
  * instance, only data the caller's own isolate parses.
  */
 export type ModelStreamEvent =

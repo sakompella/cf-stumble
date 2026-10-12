@@ -67,7 +67,7 @@ export type ValidationFailure = Readonly<{
   error: Readonly<{ code: "invalid-request"; reason: string }>;
 }>;
 
-// -- Validation (pure, plain values per ADR-0035) ---------------------------
+// -- Validation (pure, plain values per ADR-0045) ---------------------------
 
 function fail(reason: string): ValidationFailure {
   return { ok: false, error: { code: "invalid-request", reason } };
@@ -223,7 +223,7 @@ type ModelRouteEnv = Readonly<{ AI: Ai }>;
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv> {
   /** Answers with incremental model events. Every failure after validation becomes an event on the
    * returned stream, which is what lets this cross the RPC boundary as a plain byte stream
-   * (ADR-0035), like `MainFacetTarget.startTurn`. */
+   * (ADR-0045), like `MainFacetTarget.startTurn`. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
   runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
     const validation = validateRequest(request);
