@@ -1,4 +1,6 @@
 import { expect, test } from "vitest";
+import { resultOf } from "../../effect-result.js";
+import * as Result from "effect/Result";
 import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
@@ -73,14 +75,14 @@ test("builds a labeled commit through the named build workspace", async () => {
   const host = new FakeBuildHost();
   const { builder, namespace } = builderFor(host);
 
-  const built = await builder.build(commit);
+  const built = await resultOf(builder.build(commit));
 
-  if (built.isErr()) {
-    throw new Error(`a successful build must produce a module map: ${built.error.code}`);
+  if (Result.isFailure(built)) {
+    throw new Error(`a successful build must produce a module map: ${built.failure.code}`);
   }
 
-  expect(built.value.harnessCommit).toBe(commit);
-  expect(encodeModuleMap(built.value)).toBe(
+  expect(built.success.harnessCommit).toBe(commit);
+  expect(encodeModuleMap(built.success)).toBe(
     encodeModuleMap({
       harnessCommit: commit,
       entryModule: "main.js",
@@ -99,7 +101,7 @@ test("builds a labeled commit through the named build workspace", async () => {
 test("offline fake workspace schedules missing repository provisioning before a labeled checkout", async () => {
   const host = new FakeBuildHost();
 
-  await builderFor(host).builder.build(commit);
+  await resultOf(builderFor(host).builder.build(commit));
 
   expect(plan.steps[0]?.source).toContain('exec 9>"$lock"\nflock 9');
   expect(plan.steps[0]?.source).toContain(
@@ -125,15 +127,15 @@ test("offline fake workspace retries provisioning after an interrupted labeled c
   const { builder } = builderFor(host);
   host.failingStep = "checkout";
 
-  const interrupted = await builder.build(commit);
+  const interrupted = await resultOf(builder.build(commit));
   host.failingStep = undefined;
-  const resumed = await builder.build(commit);
+  const resumed = await resultOf(builder.build(commit));
 
-  if (interrupted.isOk() || resumed.isErr()) {
+  if (Result.isSuccess(interrupted) || Result.isFailure(resumed)) {
     throw new Error("the fake checkout interruption must recover on the next build request");
   }
 
-  expect(interrupted.error).toEqual({
+  expect(interrupted.failure).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
     step: "checkout",
@@ -154,9 +156,9 @@ test("offline fake workspace refuses an unexpected origin before the labeled che
   const host = new FakeBuildHost();
   host.failingStep = "provision";
 
-  const built = await builderFor(host).builder.build(commit);
+  const built = await resultOf(builderFor(host).builder.build(commit));
 
-  if (built.isOk()) {
+  if (Result.isSuccess(built)) {
     throw new Error("a refused provision must not reach checkout");
   }
 
@@ -164,7 +166,7 @@ test("offline fake workspace refuses an unexpected origin before the labeled che
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
   );
   expect(plan.steps[0]?.source).toContain('test "$actual_remote" = "$expected_remote"');
-  expect(built.error).toEqual({
+  expect(built.failure).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
     step: "provision",
@@ -183,19 +185,20 @@ test("reports missing and invalid build output as plain typed failures", async (
   withoutEntry.output = JSON.stringify({ entryModule: "main.js", modules: [helperModule] });
 
   const results = [
-    await builderFor(missing).builder.build(commit),
-    await builderFor(invalid).builder.build(commit),
-    await builderFor(withoutEntry).builder.build(commit),
+    await resultOf(builderFor(missing).builder.build(commit)),
+    await resultOf(builderFor(invalid).builder.build(commit)),
+    await resultOf(builderFor(withoutEntry).builder.build(commit)),
   ];
 
-  expect(results.map((result) => (result.isErr() ? result.error : "ok"))).toEqual([
+  expect(results.map((result) => (Result.isFailure(result) ? result.failure : "ok"))).toEqual([
     { code: "build-output-missing", harnessCommit: commit },
     { code: "build-output-invalid", harnessCommit: commit, reason: "invalid-artifact" },
     { code: "build-output-invalid", harnessCommit: commit, reason: "entry-module-not-found" },
   ]);
   expect(
     results.every(
-      (result) => result.isErr() && Object.getPrototypeOf(result.error) === Object.prototype,
+      (result) =>
+        Result.isFailure(result) && Object.getPrototypeOf(result.failure) === Object.prototype,
     ),
     "a build failure stays a plain value the Supervisor can return",
   ).toBe(true);
@@ -209,11 +212,11 @@ test("a refused build workspace stays a typed failure", async () => {
     return Promise.resolve({ ok: false, error: { code: "unknown-command" } });
   };
 
-  const built = await builderFor(host).builder.build(commit);
+  const built = await resultOf(builderFor(host).builder.build(commit));
 
-  if (built.isOk()) {
+  if (Result.isSuccess(built)) {
     throw new Error("a refused build must not produce a module map");
   }
 
-  expect(built.error).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
+  expect(built.failure).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
 });

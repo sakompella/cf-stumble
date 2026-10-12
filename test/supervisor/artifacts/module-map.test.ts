@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import { canonicalModuleMap, encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
@@ -8,11 +9,11 @@ const harnessCommit = "5000000000000000000000000000000000000001";
 function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
   const parsed = MainHarnessArtifact.parse(input);
 
-  if (parsed.isErr()) {
-    throw new Error(`the test module map must parse: ${parsed.error.code}`);
+  if (Result.isFailure(parsed)) {
+    throw new Error(`the test module map must parse: ${parsed.failure.code}`);
   }
 
-  return canonicalModuleMap(parsed.value);
+  return canonicalModuleMap(parsed.success);
 }
 
 function moduleMap(

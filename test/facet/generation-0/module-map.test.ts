@@ -3,6 +3,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import * as Result from "effect/Result";
 import { loadMainFacet } from "../../../src/facet/index.js";
 import { parseHarnessCommit } from "../../../src/harness-commit.js";
 import { moduleMapFromBuildOutput } from "../../../src/supervisor/artifacts/index.js";
@@ -61,15 +62,17 @@ test("the written file parses into a module map the Supervisor build path accept
   if (harnessCommit === undefined) return;
 
   const validated = moduleMapFromBuildOutput(harnessCommit, await builtModuleMap());
-  expect(validated.isOk()).toBe(true);
+  expect(Result.isSuccess(validated)).toBe(true);
 
-  if (validated.isErr()) return;
+  if (Result.isFailure(validated)) return;
 
-  expect(validated.value.harnessCommit).toBe(GENERATION_0_COMMIT);
+  expect(validated.success.harnessCommit).toBe(GENERATION_0_COMMIT);
 
   const modelRoute = workerExports.ModelRoute({});
-  const loaded = loadMainFacet(env.LOADER, validated.value, { MODEL: modelRoute });
-  expect(loaded.isOk(), "the built module map must load through the facet loader").toBe(true);
+  const loaded = loadMainFacet(env.LOADER, validated.success, { MODEL: modelRoute });
+  expect(Result.isSuccess(loaded), "the built module map must load through the facet loader").toBe(
+    true,
+  );
 });
 
 test("a cold facet from the built module map passes the GET / startup check", async () => {
@@ -78,12 +81,12 @@ test("a cold facet from the built module map passes the GET / startup check", as
   if (harnessCommit === undefined) throw new Error("the test commit must be a Git object ID");
   const validated = moduleMapFromBuildOutput(harnessCommit, await builtModuleMap());
 
-  if (validated.isErr())
-    throw new Error(`the built module map must validate: ${validated.error.code}`);
+  if (Result.isFailure(validated))
+    throw new Error(`the built module map must validate: ${validated.failure.code}`);
 
   const control = env.SUPERVISOR.getByName("generation-0-module-map");
   const label = await submitCandidate(control, GENERATION_0_COMMIT);
-  const checked = await control.checkGenerationStartup(label, validated.value);
+  const checked = await control.checkGenerationStartup(label, validated.success);
 
   expect(checked.ok).toBe(true);
 

@@ -1,4 +1,4 @@
-import type { Result } from "better-result";
+import type * as Result from "effect/Result";
 import type { HarnessCommit } from "../../harness-commit.js";
 
 export type GenerationStatus = "candidate" | "ready" | "failed";
@@ -41,7 +41,7 @@ export type PreparationCheckProblem =
       readonly recorded: GenerationStatus;
     };
 
-export type PreparationCheckResult = Result<
+export type PreparationCheckResult = Result.Result<
   {
     readonly generation: Generation;
     readonly epoch: number;
@@ -54,7 +54,7 @@ export type ActivationProblem =
   | { readonly code: "unknown-generation"; readonly label: number }
   | { readonly code: "not-ready"; readonly label: number };
 
-export type ActivationResult = Result<
+export type ActivationResult = Result.Result<
   {
     readonly generation: Generation;
     readonly epoch: number;

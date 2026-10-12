@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";
 import { PreparationChecks } from "./preparation-checks.js";
@@ -111,7 +111,7 @@ export class Generations {
 
       switch (decision.kind) {
         case "rejected":
-          return Result.err(decision.problem);
+          return Result.fail(decision.problem);
         case "record":
           this.preparationChecks.record(label, decision.outcome);
 
@@ -125,7 +125,7 @@ export class Generations {
 
           this.writeEpoch(decision.nextEpoch);
 
-          return Result.ok({
+          return Result.succeed({
             generation: decision.generation,
             epoch: decision.nextEpoch,
             effect: decision.effect,
@@ -141,9 +141,9 @@ export class Generations {
 
     switch (decision.kind) {
       case "rejected":
-        return Result.err(decision.problem);
+        return Result.fail(decision.problem);
       case "no-op":
-        return Result.ok({
+        return Result.succeed({
           generation: decision.generation,
           epoch: decision.epoch,
           effect: "no-op",
@@ -151,7 +151,7 @@ export class Generations {
       case "activate":
         this.applyActivation(label, decision.nextEpoch, decision.nextActivationId);
 
-        return Result.ok({
+        return Result.succeed({
           generation: decision.generation,
           epoch: decision.nextEpoch,
           effect: "activated",

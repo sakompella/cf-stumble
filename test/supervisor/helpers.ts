@@ -3,6 +3,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
+import * as Result from "effect/Result";
 import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
 import { sampleCatalog } from "../project-fixtures.js";
 import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../facet/fixture.js";
@@ -62,14 +63,14 @@ export function storeModuleMap(
   return runInDurableObject(control, (_instance, state) => {
     const parsed = MainHarnessArtifact.parse(input);
 
-    if (parsed.isErr()) {
-      throw new Error(`a stored module map must parse: ${parsed.error.code}`);
+    if (Result.isFailure(parsed)) {
+      throw new Error(`a stored module map must parse: ${parsed.failure.code}`);
     }
 
-    const written = new ModuleMapStore(state.storage).write(parsed.value);
+    const written = new ModuleMapStore(state.storage).write(parsed.success);
 
-    if (written.isErr()) {
-      throw new Error(`a stored module map must be written: ${written.error.code}`);
+    if (Result.isFailure(written)) {
+      throw new Error(`a stored module map must be written: ${written.failure.code}`);
     }
   });
 }

@@ -6,6 +6,7 @@
 // oxlint-disable import/max-dependencies -- The Supervisor is where every group meets, so it imports each of them.
 
 import { DurableObject } from "cloudflare:workers";
+import * as Result from "effect/Result";
 import {
   isTimeoutFailure,
   logRedactedCause,
@@ -48,6 +49,7 @@ import {
   type Generation,
   type PreparationCheck,
 } from "./generations/index.js";
+import { runAtEntryPoint } from "../run-entry-point.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
 import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
@@ -177,11 +179,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     artifact: MainHarnessArtifactInput,
     options?: StartupCheckOptions,
   ): Promise<StartupCheckResult> {
-    return checkGenerationStartup(
-      this.startupCheckHost,
-      label,
-      { kind: "submitted", input: artifact },
-      options,
+    return runAtEntryPoint(
+      checkGenerationStartup(
+        this.startupCheckHost,
+        label,
+        { kind: "submitted", input: artifact },
+        options,
+      ),
     );
   }
 
@@ -191,7 +195,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * generation.
    */
   prepareGeneration(label: number, options?: StartupCheckOptions): Promise<StartupCheckResult> {
-    return checkGenerationStartup(this.startupCheckHost, label, { kind: "prepared" }, options);
+    return runAtEntryPoint(
+      checkGenerationStartup(this.startupCheckHost, label, { kind: "prepared" }, options),
+    );
   }
 
   getActiveGeneration(): ActiveGeneration {
@@ -404,15 +410,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   override fetch(request: Request): Promise<Response> {
     const mainFacet = this.mountServing(this.generations.active());
 
-    if (mainFacet.isErr()) {
+    if (Result.isFailure(mainFacet)) {
+      const { code } = mainFacet.failure;
+
       return Promise.resolve(
-        mainFacet.error.code === "no-active-generation"
-          ? Response.json({ ok: false, problem: { code: mainFacet.error.code } }, { status: 503 })
+        code === "no-active-generation"
+          ? Response.json({ ok: false, problem: { code } }, { status: 503 })
           : new Response("Cannot mount main facet", { status: 500 }),
       );
     }
 
-    return forwardToFacet(request, mainFacet.value.fetcher);
+    return forwardToFacet(request, mainFacet.success.fetcher);
   }
 }
 
@@ -424,7 +432,7 @@ export async function forwardToFacet(
   try {
     return await fetcher.fetch(request);
   } catch (cause) {
-    // The caller sees only the generic 502 below, on purpose (ADR-0035): a broken generation and a
+    // The caller sees only the generic 502 below, on purpose (ADR-0045): a broken generation and a
     // Loader or RPC transport failure must look identical from outside. An operator still needs to
     // tell them apart, so the discarded cause is logged, redacted, with the request line, which is
     // all the activation context this function receives.

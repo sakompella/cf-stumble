@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "./artifact.js";
 import type { ModelRoute } from "../model-route.js";
 import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
@@ -75,23 +75,18 @@ export function loadMainFacet(
   loader: WorkerLoader,
   input: MainHarnessArtifactInput,
   capabilities: MainFacetCapabilities,
-): Result<
+): Result.Result<
   {
     readonly worker: WorkerStub;
     readonly facetClass: DurableObjectClass<MainFacetTarget>;
   },
   MainHarnessArtifactProblem
 > {
-  const artifact = MainHarnessArtifact.parse(input);
+  return MainHarnessArtifact.parse(input).pipe(
+    Result.map((artifact) => {
+      const worker = loadArtifact(loader, artifact, capabilities);
 
-  if (artifact.isErr()) {
-    return Result.err(artifact.error);
-  }
-
-  const worker = loadArtifact(loader, artifact.value, capabilities);
-
-  return Result.ok({
-    worker,
-    facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet"),
-  });
+      return { worker, facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet") };
+    }),
+  );
 }

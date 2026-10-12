@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { logRedactedCause } from "../../diagnostics.js";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
@@ -33,7 +33,7 @@ type StoredModuleMap =
   | Readonly<{ kind: "stored"; moduleMap: MainHarnessArtifactInput }>
   | Readonly<{ kind: "absent" }>;
 
-type StoredModuleMapResult = Result<StoredModuleMap, StoredModuleMapProblem>;
+type StoredModuleMapResult = Result.Result<StoredModuleMap, StoredModuleMapProblem>;
 
 type ManifestRow = { readonly chunk_count: number; readonly byte_count: number };
 
@@ -79,7 +79,7 @@ export class ModuleMapStore {
       .toArray()[0];
 
     if (manifest === undefined) {
-      return Result.ok({ kind: "absent" });
+      return Result.succeed({ kind: "absent" });
     }
 
     const chunks = this.storage.sql
@@ -92,7 +92,7 @@ export class ModuleMapStore {
     const bytes = assembled(manifest, chunks);
 
     if (bytes === undefined) {
-      return Result.err({ code: "stored-module-map-incomplete", harnessCommit });
+      return Result.fail({ code: "stored-module-map-incomplete", harnessCommit });
     }
 
     return decoded(bytes, harnessCommit);
@@ -103,7 +103,9 @@ export class ModuleMapStore {
    * `transactionSync`, so a restart between two statements sees the map that was there before or
    * the whole new one, never a map missing a module.
    */
-  write(artifact: MainHarnessArtifact): Result<MainHarnessArtifactInput, StoredModuleMapProblem> {
+  write(
+    artifact: MainHarnessArtifact,
+  ): Result.Result<MainHarnessArtifactInput, StoredModuleMapProblem> {
     const moduleMap = canonicalModuleMap(artifact);
     const bytes = new TextEncoder().encode(encodeModuleMap(moduleMap));
     const chunks = chunked(bytes);
@@ -118,10 +120,10 @@ export class ModuleMapStore {
         cause,
       );
 
-      return Result.err({ code: "artifact-write-failed", harnessCommit: artifact.harnessCommit });
+      return Result.fail({ code: "artifact-write-failed", harnessCommit: artifact.harnessCommit });
     }
 
-    return Result.ok(moduleMap);
+    return Result.succeed(moduleMap);
   }
 
   private replace(
@@ -189,14 +191,14 @@ function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleM
   try {
     value = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
   } catch {
-    return Result.err({ code: "corrupt-artifact", harnessCommit });
+    return Result.fail({ code: "corrupt-artifact", harnessCommit });
   }
 
   const parsed = MainHarnessArtifact.parse(value);
 
-  if (parsed.isErr() || parsed.value.harnessCommit !== harnessCommit) {
-    return Result.err({ code: "corrupt-artifact", harnessCommit });
+  if (Result.isFailure(parsed) || parsed.success.harnessCommit !== harnessCommit) {
+    return Result.fail({ code: "corrupt-artifact", harnessCommit });
   }
 
-  return Result.ok({ kind: "stored", moduleMap: canonicalModuleMap(parsed.value) });
+  return Result.succeed({ kind: "stored", moduleMap: canonicalModuleMap(parsed.success) });
 }

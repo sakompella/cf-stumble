@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import { loadMainFacet } from "../../facet/index.js";
 import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 import { mainFacetName } from "../artifacts/index.js";
@@ -71,8 +72,8 @@ function mountCandidateFacet(
   try {
     const loadedFacet = loadMainFacet(host.loader, input, { MODEL: modelRoute });
 
-    if (loadedFacet.isErr()) {
-      return { ok: false, reason: loadedFacet.error.code };
+    if (Result.isFailure(loadedFacet)) {
+      return { ok: false, reason: loadedFacet.failure.code };
     }
 
     const name = mainFacetName(harnessCommit, "candidate");
@@ -80,7 +81,7 @@ function mountCandidateFacet(
 
     return {
       ok: true,
-      fetcher: host.ctx.facets.get(name, () => ({ class: loadedFacet.value.facetClass })),
+      fetcher: host.ctx.facets.get(name, () => ({ class: loadedFacet.success.facetClass })),
     };
   } catch {
     return { ok: false, reason: "candidate facet could not mount" };

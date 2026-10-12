@@ -1,4 +1,5 @@
-import { Result } from "better-result";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { loadMainFacet, MainHarnessArtifact } from "../../facet/index.js";
 import type {
   MainFacetCapabilities,
@@ -19,8 +20,6 @@ export type ModuleMapProblem =
   | MainHarnessArtifactProblem
   | StoredModuleMapProblem
   | HarnessBuildProblem;
-
-type ModuleMapResult = Result<MainHarnessArtifactInput, ModuleMapProblem>;
 
 /**
  * Why the main facet could not be mounted. `no-active-generation` is not a fault: no generation is
@@ -66,37 +65,37 @@ export class HarnessArtifacts {
    * fails preparation, because a generation that becomes ready must have its code stored; nothing
    * later is allowed to rebuild it.
    */
-  async prepare(harnessCommit: string): Promise<ModuleMapResult> {
-    const validatedCommit = parseHarnessCommit(harnessCommit);
+  prepare(harnessCommit: string): Effect.Effect<MainHarnessArtifactInput, ModuleMapProblem> {
+    return Effect.gen({ self: this }, function* () {
+      const validatedCommit = parseHarnessCommit(harnessCommit);
 
-    if (validatedCommit === undefined) {
-      return Result.err({ code: "invalid-harness-commit", harnessCommit });
-    }
+      if (validatedCommit === undefined) {
+        return yield* Effect.fail<ModuleMapProblem>({
+          code: "invalid-harness-commit",
+          harnessCommit,
+        });
+      }
 
-    const stored = this.store.read(validatedCommit);
+      const stored = yield* Effect.fromResult(this.store.read(validatedCommit));
 
-    if (stored.isErr()) {
-      return Result.err(stored.error);
-    }
+      if (stored.kind === "stored") {
+        return stored.moduleMap;
+      }
 
-    if (stored.value.kind === "stored") {
-      return Result.ok(stored.value.moduleMap);
-    }
+      const built = yield* this.builder.build(validatedCommit);
+      const artifact = yield* Effect.fromResult(validatedBuild(validatedCommit, built));
 
-    const built = await this.builder.build(validatedCommit);
-
-    if (built.isErr()) {
-      return Result.err(built.error);
-    }
-
-    return validatedBuild(validatedCommit, built.value).andThen((artifact) =>
-      this.store.write(artifact),
-    );
+      return yield* Effect.fromResult(this.store.write(artifact));
+    });
   }
 
   /** Store a module map the caller already holds, replacing whatever that commit had stored. */
-  retain(input: MainHarnessArtifactInput): ModuleMapResult {
-    return MainHarnessArtifact.parse(input).andThen((artifact) => this.store.write(artifact));
+  retain(
+    input: MainHarnessArtifactInput,
+  ): Result.Result<MainHarnessArtifactInput, ModuleMapProblem> {
+    return MainHarnessArtifact.parse(input).pipe(
+      Result.flatMap((artifact) => this.store.write(artifact)),
+    );
   }
 
   /**
@@ -108,28 +107,19 @@ export class HarnessArtifacts {
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
-  ): Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem> {
-    const moduleMap = this.load(active);
-
-    if (moduleMap.isErr()) {
-      return Result.err(moduleMap.error);
-    }
-
-    const artifact = moduleMap.value;
-    const loadedFacet = loadMainFacet(loader, artifact, { MODEL: modelRoute });
-
-    if (loadedFacet.isErr()) {
-      return Result.err(loadedFacet.error);
-    }
-
-    return Result.ok({
-      fetcher: facets.get<MainFacetTarget>(
-        mainFacetName(artifact.harnessCommit, "serving"),
-        () => ({
-          class: loadedFacet.value.facetClass,
-        }),
+  ): Result.Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem> {
+    return this.load(active).pipe(
+      Result.flatMap((artifact) =>
+        loadMainFacet(loader, artifact, { MODEL: modelRoute }).pipe(
+          Result.map((loadedFacet) => ({
+            fetcher: facets.get<MainFacetTarget>(
+              mainFacetName(artifact.harnessCommit, "serving"),
+              () => ({ class: loadedFacet.facetClass }),
+            ),
+          })),
+        ),
       ),
-    });
+    );
   }
 
   /**
@@ -139,29 +129,31 @@ export class HarnessArtifacts {
    * than rebuilding it. A generation only becomes ready once `prepare` or `retain` stored its map,
    * so activation and rollback both load bytes that are already there.
    */
-  private load(active: ActiveGeneration): Result<MainHarnessArtifactInput, MainFacetMountProblem> {
+  private load(
+    active: ActiveGeneration,
+  ): Result.Result<MainHarnessArtifactInput, MainFacetMountProblem> {
     if (active.generation === undefined) {
-      return Result.err({ code: "no-active-generation" });
+      return Result.fail({ code: "no-active-generation" });
     }
 
     const harnessCommit = parseHarnessCommit(active.generation.harnessCommit);
 
     if (harnessCommit === undefined) {
-      return Result.err({
+      return Result.fail({
         code: "invalid-harness-commit",
         harnessCommit: active.generation.harnessCommit,
       });
     }
 
-    const stored = this.store.read(harnessCommit);
-
-    if (stored.isErr()) {
-      return Result.err(stored.error);
-    }
-
-    return stored.value.kind === "stored"
-      ? Result.ok(stored.value.moduleMap)
-      : Result.err({ code: "stored-module-map-absent", harnessCommit });
+    return this.store
+      .read(harnessCommit)
+      .pipe(
+        Result.flatMap((stored): Result.Result<MainHarnessArtifactInput, MainFacetMountProblem> =>
+          stored.kind === "stored"
+            ? Result.succeed(stored.moduleMap)
+            : Result.fail({ code: "stored-module-map-absent", harnessCommit }),
+        ),
+      );
   }
 }
 
@@ -172,26 +164,26 @@ export class HarnessArtifacts {
 function validatedBuild(
   harnessCommit: HarnessCommit,
   built: MainHarnessArtifactInput,
-): Result<MainHarnessArtifact, ModuleMapProblem> {
+): Result.Result<MainHarnessArtifact, ModuleMapProblem> {
   const parsed = MainHarnessArtifact.parse(built);
 
-  if (parsed.isErr()) {
-    return Result.err({
+  if (Result.isFailure(parsed)) {
+    return Result.fail({
       code: "build-output-invalid",
       harnessCommit,
-      reason: parsed.error.code,
+      reason: parsed.failure.code,
     });
   }
 
-  if (parsed.value.harnessCommit !== harnessCommit) {
-    return Result.err({
+  if (parsed.success.harnessCommit !== harnessCommit) {
+    return Result.fail({
       code: "build-output-invalid",
       harnessCommit,
       reason: "invalid-harness-commit",
     });
   }
 
-  return Result.ok(parsed.value);
+  return parsed;
 }
 
 /**
@@ -210,7 +202,7 @@ export type { ModuleMapStorage } from "./store.js";
 export {
   WorkspaceModuleMapBuilder,
   type BuildWorkspace,
-  type HarnessBuildResult,
+  type HarnessBuild,
   type HarnessModuleMapBuilder,
 } from "./builder.js";
 

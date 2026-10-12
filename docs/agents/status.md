@@ -111,5 +111,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     `script-src 'self'` policy behind real Cloudflare Access need a staging check, and so does
     Worker startup time: local `wrangler check startup` profiles hold too few samples to compare.
     Wave 1 moved the Worker's request, Cloudflare Access, the owner API routes, and the model
-    route's provider stream to Effect; better-result is gone from them. The page itself, the
-    Supervisor, and the Workspace Host have not moved yet.
+    route's provider stream to Effect; better-result is gone from them. Wave 2 moved the
+    Supervisor's module maps, builds, startup checks, generation control, and thread store:
+    asynchronous work is an Effect, synchronous stores and parsers return `effect/Result`, and the
+    RPC values are unchanged. The page itself, the Workspace Host, and the turn lifetime have not
+    moved yet; GitHub connection and project connection code still read the Workspace Host's
+    better-result values.

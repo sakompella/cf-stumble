@@ -1,4 +1,7 @@
+import * as Effect from "effect/Effect";
+import type * as Result from "effect/Result";
 import type { HarnessCommit } from "../../harness-commit.js";
+import { runAtEntryPoint } from "../../run-entry-point.js";
 import { classifyWorkspaceAnswer, timedWorkspaceRpc } from "../../diagnostics.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../harness-build.js";
@@ -9,7 +12,7 @@ import type {
 } from "../../harness-build.js";
 import type { CommandOutput, WorkspaceResult } from "../../workspace/index.js";
 import { WorkspaceModuleMapBuilder } from "./builder.js";
-import type { BuildWorkspace, HarnessBuildResult, HarnessModuleMapBuilder } from "./builder.js";
+import type { BuildWorkspace, HarnessBuild, HarnessModuleMapBuilder } from "./builder.js";
 
 /** The Workspace Host build surface as the Supervisor uses it: a commit and a planned step. */
 export type BuildWorkspaceHost = Readonly<{
@@ -121,12 +124,16 @@ class CommitBuildWorkspace implements BuildWorkspace {
  *
  * Two tenants cannot collide at all, because the workspace name is the tenant's own and each
  * tenant's scratch subtree lives in that tenant's container.
+ *
+ * A build in flight is a native Promise of its settled result, run as its own program. It belongs
+ * to every caller that joined it, so no one caller's fiber runs it, and a caller that stops
+ * waiting does not stop it or drop it from the map before it settles.
  */
 export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
   private readonly namespace: BuildWorkspaceNamespace;
   private readonly workspaceName: string;
   private readonly configuration: HarnessBuildConfiguration;
-  private readonly inFlight = new Map<HarnessCommit, Promise<HarnessBuildResult>>();
+  private readonly inFlight = new Map<HarnessCommit, Promise<SettledBuild>>();
 
   constructor(
     namespace: BuildWorkspaceNamespace,
@@ -138,14 +145,18 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
     this.configuration = configuration;
   }
 
-  build(harnessCommit: HarnessCommit): Promise<HarnessBuildResult> {
-    const building = this.inFlight.get(harnessCommit);
+  build(harnessCommit: HarnessCommit): HarnessBuild {
+    return Effect.suspend(() => {
+      const settled = this.inFlight.get(harnessCommit) ?? this.start(harnessCommit);
 
-    if (building !== undefined) {
-      return building;
-    }
+      return Effect.promise(() => settled).pipe(
+        Effect.flatMap((result) => Effect.fromResult(result)),
+      );
+    });
+  }
 
-    const started = this.runBuild(harnessCommit).finally(() => {
+  private start(harnessCommit: HarnessCommit): Promise<SettledBuild> {
+    const started = runAtEntryPoint(Effect.result(this.runBuild(harnessCommit))).finally(() => {
       this.inFlight.delete(harnessCommit);
     });
 
@@ -154,7 +165,7 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
     return started;
   }
 
-  private runBuild(harnessCommit: HarnessCommit): Promise<HarnessBuildResult> {
+  private runBuild(harnessCommit: HarnessCommit): HarnessBuild {
     // The name is the tenant's own, never request data.
     const workspace = new CommitBuildWorkspace(
       () => this.namespace.getByName(this.workspaceName),
@@ -164,3 +175,6 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
     return new WorkspaceModuleMapBuilder(workspace, this.configuration).build(harnessCommit);
   }
 }
+
+/** A build that has finished, with its outcome as a value, so every caller that joined it reads it. */
+type SettledBuild = Result.Result<Effect.Success<HarnessBuild>, Effect.Error<HarnessBuild>>;

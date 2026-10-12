@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import type { Project } from "../../project-catalog.js";
 import { timedWorkspaceRpc } from "../../diagnostics.js";
 import { waitForWorkspaceProvision } from "../../workspace/index.js";
@@ -7,7 +8,6 @@ import {
   type SelectableProject,
 } from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
-import type { Result } from "better-result";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { MainFacetMountProblem } from "../artifacts/index.js";
 import type { ProjectWorkspaceNamespace } from "./project-workspace.js";
@@ -41,7 +41,7 @@ type ProvisionHarness = (signal: AbortSignal) => Promise<boolean>;
 
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
 type MountServingGeneration = () => Promise<
-  Result<{ readonly fetcher: ProjectTurnFacet }, MainFacetMountProblem>
+  Result.Result<{ readonly fetcher: ProjectTurnFacet }, MainFacetMountProblem>
 >;
 
 /** What a caller asks for. Both untrusted fields are named here so no shell has to declare one. */
@@ -165,8 +165,8 @@ export async function startFacetTurn(input: ProjectTurnInput): Promise<ProjectTu
 
   const mounted = await input.mount();
 
-  if (mounted.isErr()) {
-    return { ok: false, reason: mountRefusal(mounted.error.code) };
+  if (Result.isFailure(mounted)) {
+    return { ok: false, reason: mountRefusal(mounted.failure.code) };
   }
 
   if (input.signal.aborted) {
@@ -196,7 +196,7 @@ export async function startFacetTurn(input: ProjectTurnInput): Promise<ProjectTu
   if (!(await workspaceIsAvailable(input))) return NOT_STARTED;
 
   try {
-    const frames = await mounted.value.fetcher.startTurn(
+    const frames = await mounted.success.fetcher.startTurn(
       capability,
       input.request,
       selectedWorkingDirectory(selected),

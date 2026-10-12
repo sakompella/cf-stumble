@@ -1,8 +1,10 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
+// oxlint-disable import/max-dependencies -- These logs come from the Supervisor RPC surface, the builder, and the Workspace Host fixtures together, so this file reaches each of them.
 
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import { resultOf } from "../effect-result.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { capturedEvents, named } from "../log-capture.js";
@@ -129,10 +131,12 @@ test("each build step logs its name, duration, and outcome, and stops at the one
   const events = capturedEvents();
   const commit = testHarnessCommit("6000000000000000000000000000000000000005");
 
-  await new WorkspaceHostModuleMapBuilder(
-    namespaceFor(new StepHost("checkout")),
-    "generation-log-build-workspace",
-  ).build(commit);
+  await resultOf(
+    new WorkspaceHostModuleMapBuilder(
+      namespaceFor(new StepHost("checkout")),
+      "generation-log-build-workspace",
+    ).build(commit),
+  );
 
   const steps = named(events(), "harness-build.step");
   expect(steps.map((step) => [step.step, step.outcome])).toEqual([

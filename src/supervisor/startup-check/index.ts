@@ -1,9 +1,10 @@
-import { Result } from "better-result";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import type { MainFacetCapabilities } from "../../facet/index.js";
 import type { StartupCheckOutcome } from "./body.js";
 
 import { parseGenerationLabel } from "../generations/index.js";
-import { timed, type TimedOutcome } from "../../diagnostics.js";
+import { timedEffect, type TimedOutcome } from "../../diagnostics.js";
 import type { HarnessArtifacts } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
 import { startupModuleMap } from "./module-map.js";
@@ -50,30 +51,36 @@ export type StartupCheckResult =
 /**
  * Check a labeled generation's module map from `source` and record the outcome against the
  * generation. The check is logged by label and source, with how long it took and the stage it
- * reached.
+ * reached. The Supervisor returns the plain union over RPC from checkGenerationStartup and
+ * prepareGeneration (ADR-0045), so every expected failure is already a value here.
  */
 export function checkGenerationStartup(
   host: StartupCheckHost,
   label: number,
   source: StartupModuleMapSource,
   options: StartupCheckOptions = {},
-): Promise<StartupCheckResult> {
-  return timed(
-    "generation.preparation",
-    { label, source: source.kind },
-    async () => plainStartupCheck(await checkLabeledStartup(host, label, source, options)),
-    preparationOutcome,
+): Effect.Effect<StartupCheckResult> {
+  return checkLabeledStartup(host, label, source, options).pipe(
+    timedEffect("generation.preparation", { label, source: source.kind }, preparationOutcome),
+    Effect.match({
+      onSuccess: (report): StartupCheckResult => ({ ok: true, report }),
+      onFailure: (problem): StartupCheckResult => ({ ok: false, problem }),
+    }),
   );
 }
 
 /** The stage the check reached, never its reason text: that is whatever the harness threw. */
-function preparationOutcome(result: StartupCheckResult): TimedOutcome {
-  if (!result.ok) return { outcome: result.problem.code, level: "warn" };
+function preparationOutcome(
+  result: Result.Result<StartupCheckReport, StartupCheckProblem>,
+): TimedOutcome {
+  if (Result.isFailure(result)) return { outcome: result.failure.code, level: "warn" };
+
+  const report = result.success;
 
   return {
-    outcome: result.report.stage,
-    level: result.report.stage === "ready" ? "info" : "warn",
-    fields: { effect: result.report.effect },
+    outcome: report.stage,
+    level: report.stage === "ready" ? "info" : "warn",
+    fields: { effect: report.effect },
   };
 }
 
@@ -82,48 +89,38 @@ function preparationOutcome(result: StartupCheckResult): TimedOutcome {
  * a store that refused the write is not evidence about the candidate, and the active generation
  * keeps serving.
  */
-async function checkLabeledStartup(
+function checkLabeledStartup(
   host: StartupCheckHost,
   label: number,
   source: StartupModuleMapSource,
   options: StartupCheckOptions,
-): Promise<Result<StartupCheckReport, StartupCheckProblem>> {
-  const generationLabel = parseGenerationLabel(label);
+): Effect.Effect<StartupCheckReport, StartupCheckProblem> {
+  return Effect.gen(function* () {
+    const generationLabel = parseGenerationLabel(label);
 
-  const generation =
-    generationLabel === undefined ? undefined : host.generations.byLabel(generationLabel);
+    const generation =
+      generationLabel === undefined ? undefined : host.generations.byLabel(generationLabel);
 
-  if (generationLabel === undefined || generation === undefined) {
-    return Result.err({ code: "unknown-generation", label });
-  }
+    if (generationLabel === undefined || generation === undefined) {
+      return yield* Effect.fail<StartupCheckProblem>({ code: "unknown-generation", label });
+    }
 
-  const moduleMap = await startupModuleMap(host.artifacts, generation, generationLabel, source);
+    const moduleMap = yield* startupModuleMap(host.artifacts, generation, generationLabel, source);
 
-  if (moduleMap.isErr()) {
-    return Result.err(moduleMap.error);
-  }
+    const outcome = yield* Effect.promise(() =>
+      runStartupCheck(host, moduleMap, generation.harnessCommit, {
+        deadlineMs: options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
+        maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
+      }),
+    );
 
-  const outcome = await runStartupCheck(host, moduleMap.value, generation.harnessCommit, {
-    deadlineMs: options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
-    maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
-  });
+    const recorded = yield* Effect.fromResult(
+      host.generations.recordPreparationCheck(
+        generationLabel,
+        outcome.stage === "ready" ? "passed" : "failed",
+      ),
+    );
 
-  return host.generations
-    .recordPreparationCheck(generationLabel, outcome.stage === "ready" ? "passed" : "failed")
-    .map((recorded): StartupCheckReport => ({
-      ...outcome,
-      generation: recorded.generation,
-      effect: recorded.effect,
-    }));
-}
-
-// The check composes a Result and converts once, here, because the Supervisor returns this union
-// over RPC from checkGenerationStartup and prepareGeneration (ADR-0035).
-function plainStartupCheck(
-  result: Result<StartupCheckReport, StartupCheckProblem>,
-): StartupCheckResult {
-  return result.match<StartupCheckResult>({
-    ok: (report) => ({ ok: true, report }),
-    err: (problem) => ({ ok: false, problem }),
+    return { ...outcome, generation: recorded.generation, effect: recorded.effect };
   });
 }

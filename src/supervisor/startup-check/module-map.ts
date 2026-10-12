@@ -1,4 +1,5 @@
-import { Result } from "better-result";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
@@ -24,34 +25,41 @@ export type StartupModuleMapProblem =
     };
 
 /** Obtain the module map a startup check should mount, without changing any generation state. */
-export async function startupModuleMap(
+export function startupModuleMap(
   artifacts: HarnessArtifacts,
   generation: Generation,
   label: GenerationLabel,
   source: StartupModuleMapSource,
-): Promise<Result<MainHarnessArtifactInput, StartupModuleMapProblem>> {
+): Effect.Effect<MainHarnessArtifactInput, StartupModuleMapProblem> {
   if (source.kind === "prepared") {
-    const prepared = await artifacts.prepare(generation.harnessCommit);
-
-    return prepared.isErr() ? Result.err(prepared.error) : Result.ok(prepared.value);
+    return artifacts.prepare(generation.harnessCommit);
   }
 
-  const parsed = MainHarnessArtifact.parse(source.input);
+  return Effect.suspend(() =>
+    Effect.fromResult(submittedModuleMap(artifacts, generation, label, source.input)),
+  );
+}
 
-  if (parsed.isErr()) {
-    return Result.err(parsed.error);
+function submittedModuleMap(
+  artifacts: HarnessArtifacts,
+  generation: Generation,
+  label: GenerationLabel,
+  input: MainHarnessArtifactInput,
+): Result.Result<MainHarnessArtifactInput, StartupModuleMapProblem> {
+  const parsed = MainHarnessArtifact.parse(input);
+
+  if (Result.isFailure(parsed)) {
+    return Result.fail(parsed.failure);
   }
 
-  if (parsed.value.harnessCommit !== generation.harnessCommit) {
-    return Result.err({
+  if (parsed.success.harnessCommit !== generation.harnessCommit) {
+    return Result.fail({
       code: "artifact-harness-commit-mismatch",
       label,
       generationHarnessCommit: generation.harnessCommit,
-      artifactHarnessCommit: parsed.value.harnessCommit,
+      artifactHarnessCommit: parsed.success.harnessCommit,
     });
   }
 
-  const retained = artifacts.retain(source.input);
-
-  return retained.isErr() ? Result.err(retained.error) : Result.ok(retained.value);
+  return artifacts.retain(input);
 }

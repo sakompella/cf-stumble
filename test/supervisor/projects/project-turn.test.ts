@@ -1,8 +1,8 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
-import { Result } from "better-result";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import * as Result from "effect/Result";
 import {
   sampleProjectOne,
   sampleProjectTwo,
@@ -166,7 +166,7 @@ test("passes the turn cancellation signal into provisioning", async () => {
 
   const start = await startFacetTurn({
     namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
+    mount: () => Promise.resolve(Result.succeed({ fetcher: facet })),
     provision: (_project, signal) => {
       received = signal;
       controller.abort();

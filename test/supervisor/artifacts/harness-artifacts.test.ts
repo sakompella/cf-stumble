@@ -2,8 +2,10 @@
 
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { Result } from "better-result";
 import { afterEach, expect, test } from "vitest";
+import { resultOf } from "../../effect-result.js";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { loadMainFacet } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
@@ -13,7 +15,7 @@ import {
   ModuleMapStore,
 } from "../../../src/supervisor/artifacts/index.js";
 import type {
-  HarnessBuildResult,
+  HarnessBuild,
   HarnessModuleMapBuilder,
   ModuleMapStorage,
 } from "../../../src/supervisor/artifacts/index.js";
@@ -54,30 +56,27 @@ export default { fetch() { return new Response(body); } };
 class CountingBuilder implements HarnessModuleMapBuilder {
   builds = 0;
 
-  build(harnessCommit: string): Promise<HarnessBuildResult> {
+  build(harnessCommit: string): HarnessBuild {
     this.builds += 1;
 
-    return Promise.resolve(Result.ok(builtModuleMap(harnessCommit)));
+    return Effect.succeed(builtModuleMap(harnessCommit));
   }
 }
 
 /** A Supervisor with no build workspace: a module map the store lacks cannot be had. */
 const absentModuleMapBuilder: HarnessModuleMapBuilder = {
-  build: (harnessCommit) =>
-    Promise.resolve(Result.err({ code: "build-workspace-unavailable", harnessCommit })),
+  build: (harnessCommit) => Effect.fail({ code: "build-workspace-unavailable", harnessCommit }),
 };
 
 class RefusingBuilder implements HarnessModuleMapBuilder {
-  build(harnessCommit: string): Promise<HarnessBuildResult> {
-    return Promise.resolve(
-      Result.err({
-        code: "build-step-failed",
-        harnessCommit,
-        step: "build-pi",
-        exitCode: 2,
-        diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
-      }),
-    );
+  build(harnessCommit: string): HarnessBuild {
+    return Effect.fail({
+      code: "build-step-failed",
+      harnessCommit,
+      step: "build-pi",
+      exitCode: 2,
+      diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
+    });
   }
 }
 
@@ -113,20 +112,22 @@ test("builds, validates, stores, then loads a module map when nothing is stored"
   const builder = new CountingBuilder();
 
   const prepared = await runInDurableObject(control, async (_instance, state) => {
-    const moduleMap = await new HarnessArtifacts(state.storage, builder).prepare(commits.built);
+    const moduleMap = await resultOf(
+      new HarnessArtifacts(state.storage, builder).prepare(commits.built),
+    );
 
-    if (moduleMap.isErr()) {
-      throw new Error(`a successful build must prepare: ${moduleMap.error.code}`);
+    if (Result.isFailure(moduleMap)) {
+      throw new Error(`a successful build must prepare: ${moduleMap.failure.code}`);
     }
 
     const stored = new ModuleMapStore(state.storage).read(testHarnessCommit(commits.built));
 
     return {
-      moduleMap: moduleMap.value,
+      moduleMap: moduleMap.success,
       storedSameBytes:
-        stored.isOk() &&
-        stored.value.kind === "stored" &&
-        encodeModuleMap(stored.value.moduleMap) === encodeModuleMap(moduleMap.value),
+        Result.isSuccess(stored) &&
+        stored.success.kind === "stored" &&
+        encodeModuleMap(stored.success.moduleMap) === encodeModuleMap(moduleMap.success),
     };
   });
 
@@ -137,11 +138,11 @@ test("builds, validates, stores, then loads a module map when nothing is stored"
 
   const loaded = loadMainFacet(env.LOADER, prepared.moduleMap, { MODEL: modelRoute });
 
-  if (loaded.isErr()) {
-    throw new Error(`the built module map must load: ${loaded.error.code}`);
+  if (Result.isFailure(loaded)) {
+    throw new Error(`the built module map must load: ${loaded.failure.code}`);
   }
 
-  const response = await loaded.value.worker.getEntrypoint().fetch("https://main-facet.invalid/");
+  const response = await loaded.success.worker.getEntrypoint().fetch("https://main-facet.invalid/");
 
   expect(response.status).toBe(200);
   expect(await response.text()).toBe("built module map");
@@ -152,20 +153,22 @@ test("prepares a stored module map without rebuilding it", async () => {
   const builder = new CountingBuilder();
 
   const prepared = await runInDurableObject(control, async (_instance, state) => {
-    const first = await new HarnessArtifacts(state.storage, builder).prepare(commits.stored);
-
-    // A second preparation with no build workspace: only the store can answer this one.
-    const second = await new HarnessArtifacts(state.storage, absentModuleMapBuilder).prepare(
-      commits.stored,
+    const first = await resultOf(
+      new HarnessArtifacts(state.storage, builder).prepare(commits.stored),
     );
 
-    if (first.isErr() || second.isErr()) {
+    // A second preparation with no build workspace: only the store can answer this one.
+    const second = await resultOf(
+      new HarnessArtifacts(state.storage, absentModuleMapBuilder).prepare(commits.stored),
+    );
+
+    if (Result.isFailure(first) || Result.isFailure(second)) {
       throw new Error("a stored module map must prepare twice");
     }
 
     return {
-      first: encodeModuleMap(first.value),
-      second: encodeModuleMap(second.value),
+      first: encodeModuleMap(first.success),
+      second: encodeModuleMap(second.success),
     };
   });
 
@@ -177,12 +180,12 @@ test("reports a failed build and stores nothing", async () => {
   const control = supervisor("prepare-reports-failed-build");
 
   const outcome = await runInDurableObject(control, async (_instance, state) => {
-    const prepared = await new HarnessArtifacts(state.storage, new RefusingBuilder()).prepare(
-      commits.failed,
+    const prepared = await resultOf(
+      new HarnessArtifacts(state.storage, new RefusingBuilder()).prepare(commits.failed),
     );
 
     return {
-      problem: prepared.isErr() ? prepared.error : undefined,
+      problem: Result.isFailure(prepared) ? prepared.failure : undefined,
       rows: state.storage.sql
         .exec<{ readonly n: number }>(
           "SELECT COUNT(*) AS n FROM module_map_manifests WHERE harness_commit = ?",
@@ -211,12 +214,13 @@ test("fails preparation when the store refuses the write", async () => {
   const control = supervisor("prepare-fails-on-unstorable-map");
 
   const problem = await runInDurableObject(control, async (_instance, state) => {
-    const prepared = await new HarnessArtifacts(
-      refusingStorage(state.storage),
-      new CountingBuilder(),
-    ).prepare(commits.unstorable);
+    const prepared = await resultOf(
+      new HarnessArtifacts(refusingStorage(state.storage), new CountingBuilder()).prepare(
+        commits.unstorable,
+      ),
+    );
 
-    return prepared.isErr() ? prepared.error : undefined;
+    return Result.isFailure(prepared) ? prepared.failure : undefined;
   });
 
   expect(problem).toEqual({
@@ -230,9 +234,11 @@ test("refuses a commit that is not a harness commit without building", async () 
   const builder = new CountingBuilder();
 
   const problem = await runInDurableObject(control, async (_instance, state) => {
-    const prepared = await new HarnessArtifacts(state.storage, builder).prepare(commits.invalid);
+    const prepared = await resultOf(
+      new HarnessArtifacts(state.storage, builder).prepare(commits.invalid),
+    );
 
-    return prepared.isErr() ? prepared.error : undefined;
+    return Result.isFailure(prepared) ? prepared.failure : undefined;
   });
 
   expect(problem).toEqual({ code: "invalid-harness-commit", harnessCommit: commits.invalid });

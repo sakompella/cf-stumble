@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import {
   sampleCatalog,
@@ -106,7 +106,7 @@ test("a harness turn waits for a project provision in the shared workspace", asy
     mount: () => {
       mounted = true;
 
-      return Promise.resolve(Result.ok({ fetcher: facet }));
+      return Promise.resolve(Result.succeed({ fetcher: facet }));
     },
     provision: () => Promise.resolve(true),
     catalog: sampleSelectableCatalog,

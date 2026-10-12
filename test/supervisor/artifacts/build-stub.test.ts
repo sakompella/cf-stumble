@@ -1,4 +1,6 @@
 import { expect, test } from "vitest";
+import { resultOf } from "../../effect-result.js";
+import * as Result from "effect/Result";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { WorkspaceHostModuleMapBuilder } from "../../../src/supervisor/artifacts/index.js";
 import { HARNESS_BUILD_STEP_NAMES, type HarnessBuildRequest } from "../../../src/harness-build.js";
@@ -48,9 +50,9 @@ test("takes a fresh workspace stub for every call in one build", async () => {
     "tenant-workspace",
   );
 
-  const built = await builder.build(commit);
+  const built = await resultOf(builder.build(commit));
 
-  expect(built.isOk(), "the build reads its own output").toBe(true);
+  expect(Result.isSuccess(built), "the build reads its own output").toBe(true);
   expect(
     hosts.length,
     "a build that held one stub died with the Workspace Host it was taken from, minutes earlier",
