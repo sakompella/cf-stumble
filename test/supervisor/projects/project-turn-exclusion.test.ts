@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import {
@@ -104,20 +105,22 @@ test("a harness turn waits for a project provision in the shared workspace", asy
     startTurn: () => Promise.resolve(new ReadableStream<Uint8Array>()),
   };
 
-  const harness = startFacetTurn({
-    namespace: delayed.namespace,
-    mount: () => {
-      mounted = true;
+  const harness = Effect.runPromise(
+    startFacetTurn({
+      namespace: delayed.namespace,
+      mount: () => {
+        mounted = true;
 
-      return Promise.resolve(Result.succeed({ fetcher: facet }));
-    },
-    provision: () => Promise.resolve(true),
-    catalog: sampleSelectableCatalog,
-    workspaceName: workspace,
-    projectId: HARNESS_PROJECT_ID,
-    request: { prompt: "do the work", state: null },
-    signal: new AbortController().signal,
-  });
+        return Effect.succeed({ fetcher: facet });
+      },
+      provision: () => Effect.succeed(true),
+      catalog: sampleSelectableCatalog,
+      workspaceName: workspace,
+      projectId: HARNESS_PROJECT_ID,
+      request: { prompt: "do the work", state: null },
+      signal: new AbortController().signal,
+    }),
+  );
 
   await Promise.resolve();
   expect(mounted, "the harness must not mount while provisioning can still write").toBe(false);

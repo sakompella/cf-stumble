@@ -1,4 +1,5 @@
-import * as Result from "effect/Result";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { expect, test } from "vitest";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
@@ -66,8 +67,8 @@ function recorder(answer: (events: string[]) => Promise<void> = () => Promise.re
 }
 
 type Steps = Readonly<{
-  provisionHarness?: () => Promise<boolean>;
-  provision?: () => Promise<boolean>;
+  provisionHarness?: () => Effect.Effect<boolean>;
+  provision?: () => Effect.Effect<boolean>;
   mount?: () => void;
 }>;
 
@@ -77,30 +78,33 @@ function startIn(
   signal: AbortSignal,
   steps: Steps = {},
 ): Promise<ProjectTurnStart> {
-  return startFacetTurn({
-    namespace: recorded.namespace,
-    mount: () => {
-      recorded.events.push("mount");
-      steps.mount?.();
+  return Effect.runPromise(
+    startFacetTurn({
+      namespace: recorded.namespace,
+      mount: () =>
+        Effect.sync(() => {
+          recorded.events.push("mount");
+          steps.mount?.();
 
-      return Promise.resolve(Result.succeed({ fetcher: recorded.facet }));
-    },
-    provision: () => {
-      recorded.events.push("provision");
+          return { fetcher: recorded.facet };
+        }),
+      provision: () => {
+        recorded.events.push("provision");
 
-      return steps.provision?.() ?? Promise.resolve(true);
-    },
-    provisionHarness: () => {
-      recorded.events.push("provision-harness");
+        return steps.provision?.() ?? Effect.succeed(true);
+      },
+      provisionHarness: () => {
+        recorded.events.push("provision-harness");
 
-      return steps.provisionHarness?.() ?? Promise.resolve(true);
-    },
-    catalog: sampleSelectableCatalog,
-    workspaceName,
-    projectId,
-    request: { prompt: "do the work", state: null },
-    signal,
-  });
+        return steps.provisionHarness?.() ?? Effect.succeed(true);
+      },
+      catalog: sampleSelectableCatalog,
+      workspaceName,
+      projectId,
+      request: { prompt: "do the work", state: null },
+      signal,
+    }),
+  );
 }
 
 test("a harness turn reconciles its checkout, then mounts, then obtains the capability", async () => {
@@ -125,7 +129,7 @@ test("a harness checkout that cannot be reconciled is never mounted", async () =
   const recorded = recorder();
 
   const start = await startIn(recorded, HARNESS_PROJECT_ID, new AbortController().signal, {
-    provisionHarness: () => Promise.resolve(false),
+    provisionHarness: () => Effect.succeed(false),
   });
 
   expect(start).toEqual({ ok: false, reason: "workspace-unavailable" });
@@ -136,7 +140,7 @@ test("a repository whose clone cannot be reconciled obtains no capability", asyn
   const recorded = recorder();
 
   const start = await startIn(recorded, sampleProjectOne.id, new AbortController().signal, {
-    provision: () => Promise.resolve(false),
+    provision: () => Effect.succeed(false),
   });
 
   expect(start).toEqual({ ok: false, reason: "workspace-unavailable" });
@@ -181,4 +185,45 @@ test("a facet that answers after the turn ended has its stream cancelled", async
 
   expect(start).toEqual({ ok: false, reason: "turn-not-started" });
   expect(recorded.streams).toEqual([{ cancelled: true }]);
+});
+
+test("a start interrupted while the facet answers cancels the stream that arrives later", async () => {
+  let answer: ((frames: ReadableStream<Uint8Array>) => void) | undefined;
+  let cancelled = false;
+  const recorded = recorder();
+
+  const facet: ProjectTurnFacet = {
+    startTurn: () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  };
+
+  const starting = Effect.runFork(
+    startFacetTurn({
+      namespace: recorded.namespace,
+      mount: () => Effect.succeed({ fetcher: facet }),
+      provision: () => Effect.succeed(true),
+      catalog: sampleSelectableCatalog,
+      workspaceName,
+      projectId: sampleProjectOne.id,
+      request: { prompt: "do the work", state: null },
+      signal: new AbortController().signal,
+    }),
+  );
+
+  await scheduler.wait(10);
+  expect(answer, "the facet was asked to begin").toBeDefined();
+  await Effect.runPromise(Fiber.interrupt(starting));
+
+  answer?.(
+    new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    }),
+  );
+  await scheduler.wait(10);
+
+  expect(cancelled).toBe(true);
 });

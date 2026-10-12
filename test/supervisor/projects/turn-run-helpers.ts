@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { Generations } from "../../../src/supervisor/generations/index.js";
 import {
   runProjectTurn,
@@ -52,7 +53,7 @@ export interface ScriptedGeneration {
  * a whole turn goes through here, so a change to how a turn is run changes this one place.
  */
 export function admitTurn(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
-  return runProjectTurn(input);
+  return Effect.runPromise(runProjectTurn(input));
 }
 
 function streamWithThrowingReader(): ReadableStream<Uint8Array> {
@@ -245,18 +246,18 @@ function turnInput(
       script.handoff?.(request);
 
       if (script.stallStart === true) {
-        return new Promise<ProjectTurnStart>(() => {});
+        return Effect.never;
       }
 
       if (script.throwStart === true) {
-        return Promise.reject(new Error("start failed"));
+        return Effect.die(new Error("start failed"));
       }
 
       if (script.throwStreamReader === true) {
-        return Promise.resolve({ ok: true, frames: streamWithThrowingReader() });
+        return Effect.succeed({ ok: true, frames: streamWithThrowingReader() });
       }
 
-      return Promise.resolve(script.refuseStart ?? { ok: true, frames: generation.stream });
+      return Effect.succeed(script.refuseStart ?? { ok: true, frames: generation.stream });
     },
     now: () => NOW,
     leaseMs: PROJECT_TURN_LEASE_MS,

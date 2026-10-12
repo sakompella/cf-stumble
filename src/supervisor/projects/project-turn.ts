@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import type { Project } from "../../project-catalog.js";
 import { timedWorkspaceRpc } from "../../diagnostics.js";
@@ -34,14 +35,15 @@ export type ProjectTurnFacet = Readonly<{
  * It takes a {@link Project}, so the harness selection uses the separate generation-bound
  * provisioner instead of inventing a repository-less catalog project.
  */
-type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Promise<boolean>;
+type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Effect.Effect<boolean>;
 
 /** Reconciles the editable harness checkout before its working directory is mounted. */
-type ProvisionHarness = (signal: AbortSignal) => Promise<boolean>;
+type ProvisionHarness = (signal: AbortSignal) => Effect.Effect<boolean>;
 
 /** Mounts the generation that serves. The Supervisor owns the loader, facets, and module maps. */
-type MountServingGeneration = () => Promise<
-  Result.Result<{ readonly fetcher: ProjectTurnFacet }, MainFacetMountProblem>
+type MountServingGeneration = () => Effect.Effect<
+  { readonly fetcher: ProjectTurnFacet },
+  MainFacetMountProblem
 >;
 
 /** What a caller asks for. Both untrusted fields are named here so no shell has to declare one. */
@@ -100,21 +102,23 @@ function mountRefusal(problemCode: string): "no-active-generation" | "mount-fail
 
 type WorkspacePreparation = "ready" | "aborted" | "unavailable";
 
-async function prepareWorkspace(
+function prepareWorkspace(
   input: ProjectTurnInput,
   selected: SelectableProject,
-): Promise<WorkspacePreparation> {
-  if (!(await workspaceIsAvailable(input))) return "aborted";
+): Effect.Effect<WorkspacePreparation> {
+  return Effect.gen(function* () {
+    if (!(yield* workspaceIsAvailable(input))) return "aborted";
 
-  if (
-    selected.kind === "harness" &&
-    input.provisionHarness !== undefined &&
-    !(await input.provisionHarness(input.signal))
-  ) {
-    return input.signal.aborted ? "aborted" : "unavailable";
-  }
+    if (
+      selected.kind === "harness" &&
+      input.provisionHarness !== undefined &&
+      !(yield* input.provisionHarness(input.signal))
+    ) {
+      return input.signal.aborted ? "aborted" : "unavailable";
+    }
 
-  return input.signal.aborted ? "aborted" : "ready";
+    return input.signal.aborted ? "aborted" : "ready";
+  });
 }
 
 /**
@@ -142,90 +146,126 @@ async function prepareWorkspace(
  * turn off from the files it is working in. Releasing the lease at the turn's end, which
  * `facet/generation-0/project-capability.ts` does, is what ends the whole chain.
  */
-export async function startFacetTurn(input: ProjectTurnInput): Promise<ProjectTurnStart> {
-  const resolved = resolveSelectableProject(input.projectId, input.catalog);
+export function startFacetTurn(input: ProjectTurnInput): Effect.Effect<ProjectTurnStart> {
+  return Effect.gen(function* () {
+    const resolved = resolveSelectableProject(input.projectId, input.catalog);
 
-  if (!resolved.ok) {
-    return { ok: false, reason: resolved.reason };
-  }
+    if (!resolved.ok) {
+      return { ok: false, reason: resolved.reason };
+    }
 
-  const selected = resolved.project;
+    const selected = resolved.project;
 
-  if (input.signal.aborted) {
-    return NOT_STARTED;
-  }
+    if (input.signal.aborted) {
+      return NOT_STARTED;
+    }
 
-  const preparation = await prepareWorkspace(input, selected);
+    const preparation = yield* prepareWorkspace(input, selected);
 
-  if (preparation === "aborted") return NOT_STARTED;
+    if (preparation === "aborted") return NOT_STARTED;
 
-  if (preparation === "unavailable") {
-    return { ok: false, reason: "workspace-unavailable" };
-  }
+    if (preparation === "unavailable") {
+      return { ok: false, reason: "workspace-unavailable" };
+    }
 
-  const mounted = await input.mount();
+    const mounted = yield* Effect.result(input.mount());
 
-  if (Result.isFailure(mounted)) {
-    return { ok: false, reason: mountRefusal(mounted.failure.code) };
-  }
+    if (Result.isFailure(mounted)) {
+      return { ok: false, reason: mountRefusal(mounted.failure.code) };
+    }
 
-  if (input.signal.aborted) {
-    return NOT_STARTED;
-  }
+    if (input.signal.aborted) {
+      return NOT_STARTED;
+    }
 
-  // Connected repositories are reconciled after the generation is mounted. Their checkout does not
-  // determine whether this generation exists, while the harness checkout does.
-  if (selected.kind === "repository" && !(await input.provision(selected, input.signal))) {
-    return { ok: false, reason: "workspace-unavailable" };
-  }
+    // Connected repositories are reconciled after the generation is mounted. Their checkout does
+    // not determine whether this generation exists, while the harness checkout does.
+    if (selected.kind === "repository" && !(yield* input.provision(selected, input.signal))) {
+      return { ok: false, reason: "workspace-unavailable" };
+    }
 
-  if (input.signal.aborted) {
-    return NOT_STARTED;
-  }
+    if (input.signal.aborted) {
+      return NOT_STARTED;
+    }
 
-  const capability = await obtainCapability(input);
+    const capability = yield* obtainCapability(input);
 
-  if (capability === undefined) {
-    return { ok: false, reason: "workspace-unavailable" };
-  }
+    if (capability === null) {
+      return { ok: false, reason: "workspace-unavailable" };
+    }
 
-  if (input.signal.aborted) {
-    return NOT_STARTED;
-  }
+    if (input.signal.aborted) {
+      return NOT_STARTED;
+    }
 
-  if (!(await workspaceIsAvailable(input))) return NOT_STARTED;
+    if (!(yield* workspaceIsAvailable(input))) return NOT_STARTED;
 
-  try {
-    const frames = await mounted.success.fetcher.startTurn(
-      capability,
-      input.request,
-      selectedWorkingDirectory(selected),
+    const frames = yield* facetStream(() =>
+      mounted.success.fetcher.startTurn(
+        capability,
+        input.request,
+        selectedWorkingDirectory(selected),
+      ),
     );
 
-    return endedBeforeItBegan(input, frames);
-  } catch {
-    return NOT_STARTED;
-  }
+    return frames === null ? NOT_STARTED : endedBeforeItBegan(input, frames);
+  });
 }
 
 /** Ask the tenant's Workspace Host for the project capability, or learn that it cannot answer. */
-async function obtainCapability(
-  input: ProjectTurnInput,
-): Promise<ProjectRpcTargetContract | undefined> {
-  try {
-    return await timedWorkspaceRpc(
+function obtainCapability(input: ProjectTurnInput): Effect.Effect<ProjectRpcTargetContract | null> {
+  return Effect.promise(() =>
+    timedWorkspaceRpc(
       { method: "project" },
       () => input.namespace.getByName(input.workspaceName).project(),
       () => ({ outcome: "ok" }),
-    );
-  } catch {
-    return undefined;
-  }
+    ).then(
+      (capability) => capability,
+      () => null,
+    ),
+  );
 }
 
 /** Wait for provision before generation or capability admission, including harness turns. */
-function workspaceIsAvailable(input: ProjectTurnInput): Promise<boolean> {
+function workspaceIsAvailable(input: ProjectTurnInput): Effect.Effect<boolean> {
   return waitForWorkspaceProvision(input.workspaceName, input.signal);
+}
+
+/**
+ * Ask the facet to begin, or learn that it could not. A facet's answer is a live stream with work
+ * already running behind it, so a start interrupted while the answer is on its way cancels that
+ * stream when it arrives instead of leaving it unread.
+ */
+function facetStream(
+  begin: () => Promise<ReadableStream<Uint8Array>>,
+): Effect.Effect<ReadableStream<Uint8Array> | null> {
+  return Effect.suspend(() => {
+    let answer: Promise<ReadableStream<Uint8Array> | null>;
+
+    try {
+      answer = begin().then(
+        (frames) => frames,
+        () => null,
+      );
+    } catch {
+      return Effect.succeed(null);
+    }
+
+    return Effect.promise(() => answer).pipe(
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          void answer.then(cancelUnread);
+        }),
+      ),
+    );
+  });
+}
+
+function cancelUnread(frames: ReadableStream<Uint8Array> | null): void {
+  frames?.cancel().then(
+    () => {},
+    () => {},
+  );
 }
 
 /**
@@ -241,10 +281,7 @@ function endedBeforeItBegan(
     return { ok: true, frames };
   }
 
-  frames.cancel().then(
-    () => {},
-    () => {},
-  );
+  cancelUnread(frames);
 
   return NOT_STARTED;
 }

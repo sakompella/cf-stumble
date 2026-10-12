@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { runInDurableObject, reset } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test } from "vitest";
 import { runProjectTurn } from "../../../src/supervisor/projects/index.js";
 import { ProjectThreads } from "../../../src/supervisor/threads/index.js";
@@ -45,18 +46,20 @@ test("reclaiming a previous instance lease is logged with its lease suffix", asy
     const second = threadsOf(state, "instance-b");
     first.startTurn("sample-project-one", 0, NOW, PROJECT_TURN_LEASE_MS);
 
-    return runProjectTurn({
-      projectId: "sample-project-one",
-      prompt: "do the work",
-      threads: second,
-      attribution: () => ({
-        active: { generation: undefined, epoch: 0, activationId: undefined },
+    return Effect.runPromise(
+      runProjectTurn({
+        projectId: "sample-project-one",
+        prompt: "do the work",
+        threads: second,
+        attribution: () => ({
+          active: { generation: undefined, epoch: 0, activationId: undefined },
+        }),
+        start: () => Effect.succeed({ ok: false, reason: "workspace-unavailable" as const }),
+        now: () => NOW,
+        leaseMs: PROJECT_TURN_LEASE_MS,
+        deadlineMs: PROJECT_TURN_LEASE_MS,
       }),
-      start: () => Promise.resolve({ ok: false, reason: "workspace-unavailable" as const }),
-      now: () => NOW,
-      leaseMs: PROJECT_TURN_LEASE_MS,
-      deadlineMs: PROJECT_TURN_LEASE_MS,
-    });
+    );
   });
 
   const [reclaimed] = named(events(), "turn.lease-reclaimed");

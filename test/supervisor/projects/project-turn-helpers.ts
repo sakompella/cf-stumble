@@ -1,4 +1,4 @@
-import * as Result from "effect/Result";
+import * as Effect from "effect/Effect";
 import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
@@ -31,7 +31,7 @@ const OPENING = { prompt: "do the work", state: null };
  * These tests drive their own Workspace Host stand-in, which holds the files the turn works on
  * already. Provisioning is exercised by the provisioning tests; here it only has to not refuse.
  */
-const provisioned = (): Promise<boolean> => Promise.resolve(true);
+const provisioned = (): Effect.Effect<boolean> => Effect.succeed(true);
 
 /** One turn, and the projects whose clone the start path reconciled before running it. */
 export interface RecordedTurn {
@@ -50,25 +50,27 @@ export async function turnRecordingProvisioning(
 ): Promise<RecordedTurn> {
   const reconciled: string[] = [];
 
-  const start = await startFacetTurn({
-    namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.succeed({ fetcher: facet })),
-    provision: (project) => {
-      reconciled.push(project.id);
+  const start = await Effect.runPromise(
+    startFacetTurn({
+      namespace: workspaces.namespace,
+      mount: () => Effect.succeed({ fetcher: facet }),
+      provision: (project) => {
+        reconciled.push(project.id);
 
-      return Promise.resolve(true);
-    },
-    provisionHarness: () => {
-      reconciled.push("harness");
+        return Effect.succeed(true);
+      },
+      provisionHarness: () => {
+        reconciled.push("harness");
 
-      return Promise.resolve(true);
-    },
-    catalog: sampleSelectableCatalog,
-    workspaceName,
-    projectId,
-    request: OPENING,
-    signal: runningTurn(),
-  });
+        return Effect.succeed(true);
+      },
+      catalog: sampleSelectableCatalog,
+      workspaceName,
+      projectId,
+      request: OPENING,
+      signal: runningTurn(),
+    }),
+  );
 
   return { start, provisioned: reconciled };
 }
@@ -117,30 +119,34 @@ export function turnFor(
   tenantWorkspace: string = workspaceName,
   signal: AbortSignal = runningTurn(),
 ): Promise<ProjectTurnStart> {
-  return startFacetTurn({
-    namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.succeed({ fetcher: facet })),
-    provision: provisioned,
-    catalog: sampleSelectableCatalog,
-    workspaceName: tenantWorkspace,
-    projectId,
-    request: OPENING,
-    signal,
-  });
+  return Effect.runPromise(
+    startFacetTurn({
+      namespace: workspaces.namespace,
+      mount: () => Effect.succeed({ fetcher: facet }),
+      provision: provisioned,
+      catalog: sampleSelectableCatalog,
+      workspaceName: tenantWorkspace,
+      projectId,
+      request: OPENING,
+      signal,
+    }),
+  );
 }
 
 /** A turn asked for while no generation serves, so nothing is mounted to run it. */
 export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<ProjectTurnStart> {
-  return startFacetTurn({
-    namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.fail({ code: "no-active-generation" })),
-    provision: provisioned,
-    catalog: sampleSelectableCatalog,
-    workspaceName,
-    projectId: sampleProjectOne.id,
-    request: OPENING,
-    signal: runningTurn(),
-  });
+  return Effect.runPromise(
+    startFacetTurn({
+      namespace: workspaces.namespace,
+      mount: () => Effect.fail({ code: "no-active-generation" }),
+      provision: provisioned,
+      catalog: sampleSelectableCatalog,
+      workspaceName,
+      projectId: sampleProjectOne.id,
+      request: OPENING,
+      signal: runningTurn(),
+    }),
+  );
 }
 
 export async function completedTurn(

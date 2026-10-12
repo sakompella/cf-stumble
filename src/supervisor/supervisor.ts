@@ -6,6 +6,7 @@
 // oxlint-disable import/max-dependencies -- The Supervisor is where every group meets, so it imports each of them.
 
 import { DurableObject } from "cloudflare:workers";
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import {
   isTimeoutFailure,
@@ -337,16 +338,18 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the prompt is client text; `runProjectTurn` validates it.
     prompt: unknown,
   ): Promise<ProjectTurnRun> {
-    return runProjectTurn({
-      projectId,
-      prompt,
-      threads: this.threads,
-      attribution: () => ({ active: this.generations.active() }),
-      start: (project, request, context) => this.startTurnStream(project, request, context),
-      now: () => Date.now(),
-      leaseMs: PROJECT_TURN_LEASE_MS,
-      deadlineMs: PROJECT_TURN_DEADLINE_MS,
-    });
+    return runAtEntryPoint(
+      runProjectTurn({
+        projectId,
+        prompt,
+        threads: this.threads,
+        attribution: () => ({ active: this.generations.active() }),
+        start: (project, request, context) => this.startTurnStream(project, request, context),
+        now: () => Date.now(),
+        leaseMs: PROJECT_TURN_LEASE_MS,
+        deadlineMs: PROJECT_TURN_DEADLINE_MS,
+      }),
+    );
   }
 
   /**
@@ -359,7 +362,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     projectId: string,
     request: FacetTurnHandoff,
     context: TurnStartContext,
-  ): Promise<ProjectTurnStart> {
+  ): Effect.Effect<ProjectTurnStart> {
     const generation = context.attribution.active.generation;
 
     return startFacetTurn({
@@ -370,33 +373,33 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       namespace: this.env.WORKSPACE_HOST,
       signal: context.signal,
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
-      // on the same generation it was admitted against (`turn-run.ts`). Mounting is synchronous
-      // now; the turn path keeps its asynchronous mount contract, so this adapts here.
+      // on the same generation it was admitted against (`turn-run.ts`).
       mount: () =>
-        timedTurnMount(context.trace, () => this.mountServing(context.attribution.active)),
+        Effect.suspend(() => Effect.fromResult(this.mountServing(context.attribution.active))).pipe(
+          timedTurnMount(context.trace),
+        ),
       // The harness checkout is owned by the active generation's repository. Reconcile it before
       // mounting so a reset cannot leave Computer with a missing working directory.
       provisionHarness:
         generation === undefined
           ? undefined
           : (signal) =>
-              timedTurnProvision(
-                context.trace,
-                "harness",
-                () => this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
-                (ready) => (ready ? undefined : "unavailable"),
+              Effect.promise(() =>
+                this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
+              ).pipe(
+                timedTurnProvision(context.trace, "harness", (ready) =>
+                  ready ? undefined : "unavailable",
+                ),
               ),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
-      provision: async (project, signal) =>
-        (
-          await timedTurnProvision(
-            context.trace,
-            "repository",
-            () => this.connections.ensureProvisioned(project.id, signal),
-            (used) => (used.ok ? undefined : used.problem.code),
-          )
-        ).ok,
+      provision: (project, signal) =>
+        Effect.promise(() => this.connections.ensureProvisioned(project.id, signal)).pipe(
+          timedTurnProvision(context.trace, "repository", (used) =>
+            used.ok ? undefined : used.problem.code,
+          ),
+          Effect.map((used) => used.ok),
+        ),
     });
   }
 

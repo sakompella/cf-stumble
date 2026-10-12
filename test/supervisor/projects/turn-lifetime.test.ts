@@ -3,6 +3,8 @@
 // oxlint-disable max-lines, import/max-dependencies -- One file holds every lifetime rule of a turn, so the rules can be read side by side, against the real thread store.
 
 import { reset, runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { parseProjectId } from "../../../src/project-catalog.js";
 import { Generations } from "../../../src/supervisor/generations/index.js";
@@ -19,10 +21,11 @@ import {
   type ScriptedGeneration,
   type TurnScript,
 } from "./turn-run-helpers.js";
-import type {
-  ProjectTurnStart,
-  RunProjectTurnInput,
-  TurnStartContext,
+import {
+  runProjectTurn,
+  type ProjectTurnStart,
+  type RunProjectTurnInput,
+  type TurnStartContext,
 } from "../../../src/supervisor/projects/index.js";
 import type { ProjectTurnFrame } from "../../../src/supervisor/projects/turn-frames.js";
 
@@ -81,7 +84,7 @@ function turnInput(
 }
 
 function startingWith(generation: ScriptedGeneration): RunProjectTurnInput["start"] {
-  return () => Promise.resolve({ ok: true, frames: generation.stream });
+  return () => Effect.succeed({ ok: true, frames: generation.stream });
 }
 
 function frameOf(chunk: ReadableStreamReadResult<Uint8Array>): ProjectTurnFrame | undefined {
@@ -120,11 +123,12 @@ function startingLate(
   delayMs: number,
   seen?: (context: TurnStartContext) => void,
 ): RunProjectTurnInput["start"] {
-  return async (_project, _request, context) => {
+  return (_project, _request, context) => {
     seen?.(context);
-    await scheduler.wait(delayMs);
 
-    return { ok: true, frames: generation.stream } satisfies ProjectTurnStart;
+    return Effect.promise(() => scheduler.wait(delayMs)).pipe(
+      Effect.as({ ok: true, frames: generation.stream } satisfies ProjectTurnStart),
+    );
   };
 }
 
@@ -186,7 +190,7 @@ test("a browser that cancels reaches the generation and gives the project back",
       turnInput(state, threads, (_project, _request, context) => {
         signal = context.signal;
 
-        return Promise.resolve({ ok: true, frames: generation.stream });
+        return Effect.succeed({ ok: true, frames: generation.stream });
       }),
     );
 
@@ -574,7 +578,7 @@ test("the turn's signal is aborted once the turn has settled", async () => {
       turnInput(state, threads, (_project, _request, context) => {
         signal = context.signal;
 
-        return Promise.resolve({ ok: true, frames: generation.stream });
+        return Effect.succeed({ ok: true, frames: generation.stream });
       }),
     );
 
@@ -590,4 +594,60 @@ test("the turn's signal is aborted once the turn has settled", async () => {
   expect(observed.abortedWhileStreaming).toBe(false);
   expect(observed.frames.at(-1)).toMatchObject({ kind: "saved" });
   expect(observed.abortedAfter).toBe(true);
+});
+
+test("a terminal frame read before the deadline stands, however long the cancel takes", async () => {
+  const control = await supervisor("turn-lifetime-slow-cancel");
+  await activateFixtureGeneration(control);
+
+  const observed = await runInDurableObject(control, async (_instance, state) => {
+    const threads = threadsIn(state);
+    const encoder = new TextEncoder();
+
+    // The generation answers with its terminal frame at once, but acknowledges the cancel that
+    // follows it only after the deadline has passed, as a slow RPC stream can.
+    const frames = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(`${JSON.stringify(completed)}\n`));
+      },
+      cancel: () => scheduler.wait(150),
+    });
+
+    const run = await admitTurn(
+      turnInput(state, threads, () => Effect.succeed({ ok: true, frames }), { deadlineMs: 50 }),
+    );
+
+    if (!run.ok) throw new Error(`the turn must start; it was refused with ${run.problem.code}`);
+
+    return { frames: await framesOf(run.frames), revision: revision(threads) };
+  });
+
+  expect(observed.frames).toEqual([
+    { kind: "saved", revision: 1, messageCount: conversation.length },
+  ]);
+  expect(observed.revision).toBe(1);
+});
+
+test("a turn interrupted while its start runs gives the lease back and cancels the late stream", async () => {
+  const control = await supervisor("turn-lifetime-interrupted-start");
+  await activateFixtureGeneration(control);
+
+  const observed = await runInDurableObject(control, async (_instance, state) => {
+    const threads = threadsIn(state);
+    const generation = scriptedGeneration();
+
+    const running = Effect.runFork(
+      runProjectTurn(turnInput(state, threads, startingLate(generation, 50))),
+    );
+
+    await scheduler.wait(10);
+    const heldWhileStarting = turnActive(threads);
+    await Effect.runPromise(Fiber.interrupt(running));
+    const heldAfterInterrupt = turnActive(threads);
+    await scheduler.wait(100);
+
+    return { heldWhileStarting, heldAfterInterrupt, cancelled: generation.cancelled() };
+  });
+
+  expect(observed).toEqual({ heldWhileStarting: true, heldAfterInterrupt: false, cancelled: true });
 });

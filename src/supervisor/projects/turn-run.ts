@@ -1,11 +1,16 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- The project id and the prompt arrive from a client through the Worker, so neither has a proven shape until this module proves it.
+// oxlint-disable max-lines, import/max-dependencies -- One module holds a turn from admission to the hand-off of its stream, so the order of admission, start, and abandonment reads in one place.
 
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
 import { readTurnStream } from "./turn-stream.js";
 import { releaseLease, type TurnThreadWrites } from "./turn-settle.js";
-import { logEvent, timed, type TimedOutcome } from "../../diagnostics.js";
+import { logEvent, timedEffect, type TimedOutcome } from "../../diagnostics.js";
 import { logLeaseAbandoned, turnFields, turnTrace, type TurnTrace } from "./turn-log.js";
 import type { ActiveGeneration } from "../generations/index.js";
 import type {
@@ -80,7 +85,7 @@ export type RunProjectTurnInput = Readonly<{
     projectId: string,
     request: FacetTurnHandoff,
     context: TurnStartContext,
-  ) => Promise<ProjectTurnStart>;
+  ) => Effect.Effect<ProjectTurnStart>;
   now: () => number;
   leaseMs: number;
   deadlineMs: number;
@@ -123,18 +128,23 @@ type AdmittedTurn = Readonly<{
  * runs on, both read once here and never read again. Only then does the work start, and the saved
  * conversation reaches the generation as history the server holds rather than as trusted history
  * a request supplied.
+ *
+ * The program ends when the browser has its answer. A started turn's answer carries a stream that
+ * owns the rest of the turn, including its lease (`turn-stream.ts`).
  */
-export async function runProjectTurn(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
-  const run = await admitAndStart(input);
-
-  if (!run.ok) {
-    logEvent(INPUT_REFUSALS.has(run.problem.code) ? "info" : "warn", "turn.refused", {
-      projectId: typeof input.projectId === "string" ? input.projectId : null,
-      code: run.problem.code,
-    });
-  }
-
-  return run;
+export function runProjectTurn(input: RunProjectTurnInput): Effect.Effect<ProjectTurnRun> {
+  return admitAndStart(input).pipe(
+    Effect.tap((run) =>
+      Effect.sync(() => {
+        if (!run.ok) {
+          logEvent(INPUT_REFUSALS.has(run.problem.code) ? "info" : "warn", "turn.refused", {
+            projectId: typeof input.projectId === "string" ? input.projectId : null,
+            code: run.problem.code,
+          });
+        }
+      }),
+    ),
+  );
 }
 
 /** Refusals that describe the request rather than the Supervisor, so they are not degraded. */
@@ -144,23 +154,29 @@ const INPUT_REFUSALS: ReadonlySet<ProjectTurnRunProblemCode> = new Set([
   "unknown-project-id",
 ]);
 
-async function admitAndStart(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
+/** A turn the store admitted, or the refusal that stopped it first. */
+type Admission =
+  | Readonly<{ admitted: true; turn: AdmittedTurn; request: FacetTurnHandoff }>
+  | Readonly<{ admitted: false; refusal: ProjectTurnRun }>;
+
+/** Validate, read, and admit, in one synchronous step: no other request runs in between. */
+function admit(input: RunProjectTurnInput): Admission {
   const prompt = parsePrompt(input.prompt);
 
   if (prompt === undefined) {
-    return refused("invalid-prompt");
+    return { admitted: false, refusal: refused("invalid-prompt") };
   }
 
   const current = input.threads.read(input.projectId);
 
   if (!current.ok) {
-    return refused(current.problem.code);
+    return { admitted: false, refusal: refused(current.problem.code) };
   }
 
   const history = parseThreadMessages(current.thread.conversation);
 
   if (Result.isFailure(history)) {
-    return refused("unreadable-thread");
+    return { admitted: false, refusal: refused("unreadable-thread") };
   }
 
   const attribution = input.attribution();
@@ -174,22 +190,55 @@ async function admitAndStart(input: RunProjectTurnInput): Promise<ProjectTurnRun
   );
 
   if (!admitted.ok) {
-    return refused(admitted.problem.code);
+    return { admitted: false, refusal: refused(admitted.problem.code) };
   }
 
-  const turn = admittedTurn(input, admitted, attribution, admittedAt);
-  let started: ProjectTurnStart | "timed-out";
+  return {
+    admitted: true,
+    turn: admittedTurn(input, admitted, attribution, admittedAt),
+    request: { prompt, messages: history.success },
+  };
+}
 
-  try {
-    started = await boundedStart(input, turn, { prompt, messages: history.success });
-  } catch (error) {
-    // A lost RPC rejects instead of returning a refusal. The route deliberately turns that
-    // exception into `internal-error`, but this lease still belongs to this turn and must be
-    // released before the exception crosses the boundary.
-    abandonTurn(input, turn, "start-threw");
-    throw error;
-  }
+/**
+ * Admit the turn, start it, and hand its lease to the stream or give it back. Only the wait for
+ * the start can be interrupted: once the start has answered, the hand-off runs whole, so the lease
+ * always ends up owned by exactly one of the stream or the abandonment.
+ */
+function admitAndStart(input: RunProjectTurnInput): Effect.Effect<ProjectTurnRun> {
+  return Effect.gen(function* () {
+    const admission = yield* Effect.sync(() => admit(input));
 
+    if (!admission.admitted) return admission.refusal;
+
+    const { turn } = admission;
+
+    return yield* Effect.uninterruptibleMask((restore) =>
+      restore(boundedStart(input, turn, admission.request)).pipe(
+        // A lost RPC rejects instead of returning a refusal. The route deliberately turns that
+        // exception into `internal-error`, but this lease still belongs to this turn and must be
+        // released before the exception crosses the boundary.
+        Effect.onError((cause) =>
+          Effect.sync(() => {
+            abandonTurn(
+              input,
+              turn,
+              Cause.hasInterruptsOnly(cause) ? "start-interrupted" : "start-threw",
+            );
+          }),
+        ),
+        Effect.map((started) => handOff(input, turn, started)),
+      ),
+    );
+  });
+}
+
+/** Give the started turn's lease to its stream, or back to the store with the reason it ended. */
+function handOff(
+  input: RunProjectTurnInput,
+  turn: AdmittedTurn,
+  started: ProjectTurnStart | "timed-out",
+): ProjectTurnRun {
   if (started === "timed-out") {
     abandonTurn(input, turn, "start-timed-out");
 
@@ -263,54 +312,65 @@ function abandonTurn(input: RunProjectTurnInput, turn: AdmittedTurn, why: string
  * spent out of the same budget the stream then reads from, so the turn cannot take its deadline
  * twice and cannot outlive the lease that admitted it.
  *
- * A start that loses that race is cancelled, not dropped. The bound has already aborted the
- * turn's signal, which is what stops a mount or a provisioning step that has not finished; a
- * facet that answers anyway answers with a live stream, and that stream is cancelled here. Without
- * this, a generation that returned one second late would go on running its tools in the tenant's
- * one shared workspace (ADR-0038) while the project's lease had already gone back and a
- * replacement turn had been admitted to it.
+ * The start runs as its own fiber, which this turn joins rather than owns. Some of its steps cannot
+ * be recalled once sent, such as a provisioning plan that holds the workspace exclusion until its
+ * Workspace Host RPC returns, and the turn must answer at its bound rather than when those return.
+ * So a start that loses the race is left to finish on its own, as a Promise would be, and is
+ * cancelled, not dropped. The bound has already aborted the turn's signal, which is what stops a
+ * mount or a provisioning step that has not finished; interrupting the fiber would only stop it
+ * waiting, not stop the native work. A facet that answers anyway answers with a live stream, and
+ * that stream is cancelled here. Without this, a generation that returned one second late would
+ * go on running its tools in the tenant's one shared workspace (ADR-0038) while the project's lease
+ * had already gone back and a replacement turn had been admitted to it.
  */
-async function boundedStart(
+function boundedStart(
   input: RunProjectTurnInput,
   turn: AdmittedTurn,
   request: FacetTurnHandoff,
-): Promise<ProjectTurnStart | "timed-out"> {
+): Effect.Effect<ProjectTurnStart | "timed-out"> {
   const context: TurnStartContext = {
     attribution: turn.attribution,
     signal: turn.bound.signal,
     trace: turn.trace,
   };
 
-  const started = input.start(turn.projectId, request, context);
+  return Effect.gen(function* () {
+    const starting = yield* Effect.forkDetach(
+      Effect.exit(input.start(turn.projectId, request, context)),
+      { startImmediately: true },
+    );
 
-  const outcome = await timed(
-    "turn.started",
-    turnFields(turn.trace),
-    () => Promise.race([started, turn.bound.whenTimedOut()]),
-    startOutcome,
-  );
-
-  if (outcome !== "timed-out") {
-    return outcome;
-  }
-
-  started.then(cancelOrphanedStart, () => {
-    // A start that failed after the bound left nothing running to cancel.
+    return yield* turn.bound
+      .within(Fiber.join(starting).pipe(Effect.flatten), "timed-out" as const)
+      .pipe(
+        timedEffect("turn.started", turnFields(turn.trace), startOutcome),
+        // Nobody takes the start's stream if the turn stopped waiting for it: at the bound, or
+        // because this program was interrupted.
+        Effect.onExit((waited) =>
+          Effect.sync(() => {
+            if (Exit.isFailure(waited) || waited.value === "timed-out") {
+              starting.addObserver(cancelOrphanedStart);
+            }
+          }),
+        ),
+      );
   });
-
-  return "timed-out";
 }
 
-function startOutcome(outcome: ProjectTurnStart | "timed-out"): TimedOutcome {
+function startOutcome(started: Result.Result<ProjectTurnStart | "timed-out">): TimedOutcome {
+  if (Result.isFailure(started)) return started.failure;
+
+  const outcome = started.success;
+
   if (outcome === "timed-out") return { outcome, level: "error" };
 
   return outcome.ok ? { outcome: "started" } : { outcome: outcome.reason, level: "warn" };
 }
 
 /** Ends the work behind a start nobody is waiting for any more. */
-function cancelOrphanedStart(started: ProjectTurnStart): void {
-  if (started.ok) {
-    started.frames.cancel().then(
+function cancelOrphanedStart(ended: Exit.Exit<Exit.Exit<ProjectTurnStart>>): void {
+  if (Exit.isSuccess(ended) && Exit.isSuccess(ended.value) && ended.value.value.ok) {
+    ended.value.value.frames.cancel().then(
       () => {},
       () => {},
     );

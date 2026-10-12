@@ -1,5 +1,6 @@
+import type * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { logEvent, timed, type LogFields, type LogLevel } from "../../diagnostics.js";
+import { logEvent, timedEffect, type LogFields, type LogLevel } from "../../diagnostics.js";
 import type { ProjectTurnFrame } from "./turn-frames.js";
 
 /**
@@ -187,34 +188,28 @@ export function logLeaseAbandoned(trace: TurnTrace, why: string, level: LogLevel
   logEvent(level, "turn.lease-abandoned", { ...turnFields(trace), why });
 }
 
-/** Mount the admitted generation and log how long it took and whether it mounted. */
+/** Log how long mounting the admitted generation took and whether it mounted. */
 export function timedTurnMount<T, E extends Readonly<{ code: string }>>(
   trace: TurnTrace,
-  mount: () => Result.Result<T, E>,
-): Promise<Result.Result<T, E>> {
-  return timed(
-    "turn.mounted",
-    turnFields(trace),
-    () => Promise.resolve(mount()),
-    (mounted) =>
-      Result.isSuccess(mounted)
-        ? { outcome: "mounted" }
-        : { outcome: mounted.failure.code, level: "warn" },
+): <R>(mount: Effect.Effect<T, E, R>) => Effect.Effect<T, E, R> {
+  return timedEffect("turn.mounted", turnFields(trace), (mounted) =>
+    Result.isSuccess(mounted)
+      ? { outcome: "mounted" }
+      : { outcome: mounted.failure.code, level: "warn" },
   );
 }
 
 /**
- * Reconcile the selected checkout before the turn uses it, and log how long that took.
- * `failure` names the problem code of a provision that did not leave the checkout ready.
+ * Log how long reconciling the selected checkout took before the turn uses it. `failure` names
+ * the problem code of a provision that did not leave the checkout ready.
  */
 export function timedTurnProvision<T>(
   trace: TurnTrace,
   target: "harness" | "repository",
-  provision: () => Promise<T>,
   failure: (value: T) => string | undefined,
-): Promise<T> {
-  return timed("turn.provisioned", { ...turnFields(trace), target }, provision, (value) => {
-    const code = failure(value);
+): <R>(provision: Effect.Effect<T, never, R>) => Effect.Effect<T, never, R> {
+  return timedEffect("turn.provisioned", { ...turnFields(trace), target }, (provisioned) => {
+    const code = Result.isSuccess(provisioned) ? failure(provisioned.success) : undefined;
 
     return code === undefined ? { outcome: "ready" } : { outcome: code, level: "warn" };
   });
