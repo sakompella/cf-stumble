@@ -14,12 +14,12 @@ import { defineTaggedUnion } from "foldkit/schema";
  * output stay text and cannot become markup this page executes.
  */
 
-export const ToolOutput = Schema.Struct({
+const ToolOutput = Schema.Struct({
   content: Schema.String,
   isServerTruncated: Schema.Boolean,
 });
 
-export type ToolOutput = typeof ToolOutput.Type;
+type ToolOutput = typeof ToolOutput.Type;
 
 export const TranscriptEntry = defineTaggedUnion({
   Text: { role: Schema.String, who: Schema.String, text: Schema.String },

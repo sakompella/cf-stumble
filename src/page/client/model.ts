@@ -17,13 +17,13 @@ export const Project = Schema.Struct({
 
 export type Project = typeof Project.Type;
 
-export const GitHubConnection = Schema.Struct({
+const GitHubConnection = Schema.Struct({
   state: Schema.String,
   detail: Schema.String,
   verificationUri: Schema.String,
 });
 
-export type GitHubConnection = typeof GitHubConnection.Type;
+type GitHubConnection = typeof GitHubConnection.Type;
 
 /** What a response said about the GitHub connection: a state the page knows how to word, or not. */
 export const GitHubReport = defineTaggedUnion({

@@ -54,7 +54,7 @@ export type HarnessProvisionWorkspaceNamespace = Readonly<{
 }>;
 
 /** The catalog does not name this project, so nothing was provisioned. */
-export class ProjectNotInCatalog extends Data.TaggedError("ProjectNotInCatalog")<{
+class ProjectNotInCatalog extends Data.TaggedError("ProjectNotInCatalog")<{
   readonly reason: "invalid-project-id" | "unknown-project-id";
 }> {
   get code(): "project-not-in-catalog" {
@@ -104,7 +104,7 @@ const HARNESS_PROVISION_STEP_NAMES: readonly HarnessProvisionStepName[] = [
 ];
 
 /** The harness checkout's reconcile command exited with a nonzero code. */
-export class HarnessProvisionStepFailed extends Data.TaggedError("HarnessProvisionStepFailed")<{
+class HarnessProvisionStepFailed extends Data.TaggedError("HarnessProvisionStepFailed")<{
   readonly step: HarnessProvisionStepName;
   readonly exitCode: number;
 }> {
@@ -114,7 +114,7 @@ export class HarnessProvisionStepFailed extends Data.TaggedError("HarnessProvisi
 }
 
 /** The workspace could not run a harness step, answered wrongly, or the turn ended first. */
-export class HarnessProvisionWorkspaceUnavailable extends Data.TaggedError(
+class HarnessProvisionWorkspaceUnavailable extends Data.TaggedError(
   "HarnessProvisionWorkspaceUnavailable",
 )<{ readonly step: HarnessProvisionStepName }> {
   get code(): "harness-provision-workspace-unavailable" {

@@ -37,7 +37,7 @@ export class WorkspaceSyncIncomplete extends Error {
 }
 
 /** Computer, its container, or the store rejected an operation. `cause` is what it threw. */
-export class WorkspaceUnavailable extends Data.TaggedError("WorkspaceUnavailable")<{
+class WorkspaceUnavailable extends Data.TaggedError("WorkspaceUnavailable")<{
   readonly cause: unknown;
 }> {}
 
