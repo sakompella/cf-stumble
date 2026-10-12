@@ -66,12 +66,31 @@ rules are GitHub's.
 Because ids are injective and ignore case, a stored row with a repository's id holds that same
 repository. Connecting it again, in any spelling or case, converges on the existing project.
 `ConnectedProjects.connect` refuses a URL that derives the harness entry's id with
-`project-id-conflict`. A row stored under the id rule before this one gets no special handling,
-because deployed data is disposable; disconnecting that project removes the row. Until then, such a row
-can misbehave in three ways. Connecting the same URL again fails with a 500 on the unique URL
+`project-id-conflict`. A row stored under the id rule before this one gets no special handling in
+`connect`. Such a row can misbehave in three ways. Connecting the same URL again fails with a 500 on the unique URL
 constraint. Connecting it in a different case adds a second row. Connecting a different repository
-whose new id equals the old row's id returns the old repository as already connected. Reset the
-Supervisor's state, or prove no such row exists, before deploying over data from before `8d0469f`.
+whose new id equals the old row's id returns the old repository as already connected. A
+`project_threads` table created before the `turn_holder_id` column has the same origin: the thread
+store's queries select that column and fail on the old table.
+
+Nobody can read production's Supervisor SQLite to prove that it holds neither, so the Supervisor
+resets its own state once instead (`resetLegacySupervisorStateOnce` in
+`src/supervisor/legacy-state-reset.ts`). The Supervisor's constructor calls it before any store
+opens its tables. The first time, it drops every Supervisor table except `github_authorization` and
+`github_connection`, writes a marker row in `legacy_state_reset`, and logs
+`supervisor.legacy-state-reset` with the row count of each dropped table. It does all of this in
+one transaction, so a crash leaves either the old state or the reset state. The stores then
+recreate their tables empty. On every later construction the marker is present and the reset does
+nothing, so data written after the reset stays. A new, empty Supervisor gets the marker and nothing
+else.
+
+The reset keeps the two GitHub tables because they record how the workspace got its credential.
+The credential itself lives in the Workspace Host, and the reset never calls the Workspace Host or
+touches workspace files, R2, or KV, so the owner does not sign in to GitHub again. Everything else
+in the Supervisor is gone: generations, module maps, the active generation, connected projects, and
+threads. After the first deploy that runs the reset, the owner reconnects each repository and
+submits, prepares, and activates a generation again; a rollback has no earlier generation to
+return to. The reset is deleted once production has run it.
 
 ## Connecting a repository
 

@@ -34,6 +34,13 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance
   secrets".
+- **Reset Supervisor state once instead of migrating it** (owner, October 2026). Production's
+  Supervisor SQLite may hold project rows from before `8d0469f` or a thread table from before
+  `turn_holder_id`, and nobody can read it to check. The first construction after the deploy of the
+  current `main` drops every Supervisor table except `github_authorization` and
+  `github_connection`, then writes a marker so that it never runs again. The owner keeps the GitHub
+  connection but must reconnect repositories and prepare and activate a generation again. See
+  `design/github-connection.md`, "The connected project list".
 
 ## Open items
 
@@ -86,3 +93,7 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     fence). Whether the repository size thresholds in `src/github/repository-size.ts` need an ADR.
     A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched on
     2026-09-27; the note is lost and nothing was decided.
+15. **Remove the one-time Supervisor reset.** After the first production deploy of the current
+    `main`, check the production log for one `supervisor.legacy-state-reset` event, then delete
+    `src/supervisor/legacy-state-reset.ts`, its call in the Supervisor's constructor, and its test.
+    The `legacy_state_reset` table can stay.
