@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { authenticateAccessRequest, deriveSupervisorName } from "../src/access/index.js";
+import { accessResult, supervisorNameFor } from "./access-results.js";
 import {
   accessAudience as audience,
   accessNow as now,
@@ -42,7 +42,7 @@ test("concurrent requests for two owners share one key load and keep their own i
 
   const results = await Promise.all(
     owners.map(async (owner) =>
-      authenticateAccessRequest(
+      accessResult(
         request(await token(key, owner, issuerUrl)),
         {
           CF_ACCESS_TEAM_DOMAIN: "twoowners.cloudflareaccess.com",
@@ -61,7 +61,7 @@ test("concurrent requests for two owners share one key load and keep their own i
     await Promise.all(
       owners.map(async (owner) => ({
         ok: true,
-        supervisorName: await deriveSupervisorName({ identity: owner, audience }),
+        supervisorName: await supervisorNameFor({ identity: owner, audience }),
         scope: { identity: owner, audience },
       })),
     ),

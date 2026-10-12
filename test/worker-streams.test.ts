@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import worker from "../src/worker.js";
-import { deriveSupervisorName } from "../src/access/index.js";
+import { supervisorNameFor } from "./access-results.js";
 import {
   accessAudience,
   accessIssuer,
@@ -70,11 +70,7 @@ function heldStream(first: string): HeldStream {
 }
 
 async function ownersSupervisor() {
-  const name = await deriveSupervisorName({
-    identity: accessOwnerSubject,
-    audience: accessAudience,
-  });
-
+  const name = await supervisorNameFor({ identity: accessOwnerSubject, audience: accessAudience });
   const supervisor = env.SUPERVISOR.getByName(name);
   vi.spyOn(env.SUPERVISOR, "getByName").mockReturnValue(supervisor);
 

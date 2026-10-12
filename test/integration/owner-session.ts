@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
-import { deriveSupervisorName } from "../../src/access/index.js";
+import { supervisorNameFor } from "../access-results.js";
 import worker from "../../src/worker.js";
 import {
   accessAudience,
@@ -48,7 +48,7 @@ export async function ownerSession(keyName: string) {
       environment,
     );
 
-  const supervisorName = await deriveSupervisorName({
+  const supervisorName = await supervisorNameFor({
     identity: accessOwnerSubject,
     audience: accessAudience,
   });

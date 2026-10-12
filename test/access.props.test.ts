@@ -2,11 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import {
-  authenticateAccessRequest,
-  deriveSupervisorName,
-  verifyAccessToken,
-} from "../src/access/index.js";
+import { accessResult, supervisorNameFor, verificationResult } from "./access-results.js";
 import {
   accessAgentClientId,
   accessAudience,
@@ -35,7 +31,7 @@ test("accepts a signed token exactly when now is between nbf and exp", async () 
       sub: "owner-1",
     });
 
-    const result = await verifyAccessToken({
+    const result = await verificationResult({
       token,
       issuer: accessIssuer,
       audience: accessAudience,
@@ -62,7 +58,7 @@ test("admits the owner's sub or the configured agent token, and nothing else", a
   const key = await signingKey("agent-token-property", "ES256");
   const publicKeys = JSON.stringify({ keys: [key.publicJwk] });
 
-  const ownerName = await deriveSupervisorName({
+  const ownerName = await supervisorNameFor({
     identity: accessOwnerSubject,
     audience: accessAudience,
   });
@@ -86,7 +82,7 @@ test("admits the owner's sub or the configured agent token, and nothing else", a
       ...(commonName === null ? undefined : { common_name: commonName }),
     };
 
-    const result = await authenticateAccessRequest(
+    const result = await accessResult(
       new Request("https://cf-stumble.test/", {
         headers: { "cf-access-jwt-assertion": await signAccessToken(key, claims) },
       }),

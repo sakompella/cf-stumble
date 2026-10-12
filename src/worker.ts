@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import { authenticateAccessRequest, withoutAccessCredentials } from "./access/index.js";
-import type { AccessRequestResult } from "./access/index.js";
+import { admitAccessRequest, withoutAccessCredentials } from "./access/index.js";
+import type { AccessRefusalReason, AdmittedAccess } from "./access/index.js";
 import { ownerPageResponse, routeOwnerApiRequest, routePattern } from "./routes/index.js";
 import { logEvent, type LogLevel } from "./diagnostics.js";
 import { runAtEntryPoint } from "./run-entry-point.js";
@@ -21,11 +21,7 @@ export { ModelRoute } from "./model-route.js";
  * `invalid-signature` from the body alone, and the operator evidence lives in the log
  * `logRedactedCause` wrote when the key load failed, not in this response.
  */
-function refusal(
-  reason: Exclude<AccessRequestResult, { ok: true }>["reason"],
-  request: Request,
-  pathname: string,
-): Response {
+function refusal(reason: AccessRefusalReason, request: Request, pathname: string): Response {
   const status =
     reason === "invalid-configuration" ? 500 : reason === "key-service-unavailable" ? 503 : 401;
 
@@ -65,21 +61,19 @@ function ownerResponse(pathname: string, response: Response): Response {
   return pathname.startsWith("/api/") || pathname === "/health" ? noStore(response) : response;
 }
 
-async function ownerRequest(request: Request, env: Cloudflare.Env): Promise<Response> {
-  const pathname = new URL(request.url).pathname;
-  const access = await authenticateAccessRequest(request, env);
-
-  if (!access.ok) {
-    return ownerResponse(pathname, refusal(access.reason, request, pathname));
-  }
-
+function admittedRequest(
+  request: Request,
+  env: Cloudflare.Env,
+  access: AdmittedAccess,
+  pathname: string,
+): Effect.Effect<Response> {
   // Liveness, answered by this Worker alone. Everything else that is not an owner API route is
   // relayed to the active generation, so before the first generation exists it answers 503
   // `no-active-generation`, and a deployment had no way to say "I am running" while that was
   // true. It stays behind Access, because the Worker refuses every route until Access is
   // configured and a liveness hole would be the one exception.
   if (request.method === "GET" && pathname === "/health") {
-    return ownerResponse(pathname, Response.json({ ok: true }));
+    return Effect.succeed(ownerResponse(pathname, Response.json({ ok: true })));
   }
 
   // A browser navigation to `GET /` receives the owner page, and a request for the page's current
@@ -88,22 +82,37 @@ async function ownerRequest(request: Request, env: Cloudflare.Env): Promise<Resp
   const page = ownerPageResponse(request);
 
   if (page !== undefined) {
-    return page;
+    return Effect.succeed(page);
   }
 
   const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
 
   if (pathname.startsWith("/api/")) {
-    return ownerResponse(pathname, await routeOwnerApiRequest(request, supervisor, access.scope));
+    return Effect.promise(() => routeOwnerApiRequest(request, supervisor, access.scope)).pipe(
+      Effect.map((response) => ownerResponse(pathname, response)),
+    );
   }
 
-  return supervisor.fetch(withoutAccessCredentials(request));
+  // A relayed response is the generation's, body and all. A rejected relay is a defect, which
+  // rejects the Worker's Promise as it always did.
+  return Effect.promise(() => supervisor.fetch(withoutAccessCredentials(request)));
+}
+
+function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
+  const pathname = new URL(request.url).pathname;
+
+  return admitAccessRequest(request, env).pipe(
+    Effect.matchEffect({
+      onFailure: (refused) =>
+        Effect.succeed(ownerResponse(pathname, refusal(refused.reason, request, pathname))),
+      onSuccess: (access) => admittedRequest(request, env, access, pathname),
+    }),
+  );
 }
 
 export default {
-  // The request still runs as one Promise. Later changes move its steps into the Effect program,
-  // and this is the one place that interprets it.
+  // The one place the request program is interpreted (ADR-0045).
   fetch(request: Request, env: Cloudflare.Env): Promise<Response> {
-    return runAtEntryPoint(Effect.promise(() => ownerRequest(request, env)));
+    return runAtEntryPoint(Effect.suspend(() => ownerRequest(request, env)));
   },
 };

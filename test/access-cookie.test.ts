@@ -9,11 +9,8 @@
 
 import { describe, expect, test } from "vitest";
 import type { AccessWorkerEnvironment } from "../src/access/index.js";
-import {
-  authenticateAccessRequest,
-  deriveSupervisorName,
-  presentedAccessToken,
-} from "../src/access/index.js";
+import { presentedAccessToken } from "../src/access/index.js";
+import { accessResult, supervisorNameFor } from "./access-results.js";
 import {
   accessAudience,
   accessIssuer,
@@ -54,14 +51,8 @@ function requestWith(headers: Record<string, string>): Request {
 function authenticate(
   headers: Record<string, string>,
   keys: readonly JsonWebKey[],
-): ReturnType<typeof authenticateAccessRequest> {
-  return authenticateAccessRequest(
-    requestWith(headers),
-    environment(keys),
-    accessNow,
-    crypto,
-    refuseNetwork,
-  );
+): ReturnType<typeof accessResult> {
+  return accessResult(requestWith(headers), environment(keys), accessNow, crypto, refuseNetwork);
 }
 
 describe("Access cookie authentication", () => {
@@ -73,7 +64,7 @@ describe("Access cookie authentication", () => {
       authenticate({ cookie: `CF_Authorization=${token}` }, [key.publicJwk]),
     ).resolves.toStrictEqual({
       ok: true,
-      supervisorName: await deriveSupervisorName({
+      supervisorName: await supervisorNameFor({
         identity: "owner-1",
         audience: accessAudience,
       }),
