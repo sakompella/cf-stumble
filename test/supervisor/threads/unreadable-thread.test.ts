@@ -43,7 +43,7 @@ afterEach(async () => {
 test("a damaged thread row is reported as unreadable by every read and turn step", async () => {
   const control = await damagedThread("thread-unreadable");
 
-  expect(await control.getProjectThread(PROJECT_ID)).toEqual(UNREADABLE);
+  expect(await control.getProjectThread(PROJECT_ID)).toStrictEqual(UNREADABLE);
   expect(await startProjectTurn(control, PROJECT_ID, 0, NOW, LEASE_MS)).toEqual(UNREADABLE);
   expect(await finishProjectTurn(control, PROJECT_ID, "lease", [], NOW)).toEqual(UNREADABLE);
   expect(await abandonProjectTurn(control, PROJECT_ID, "lease")).toEqual(UNREADABLE);
