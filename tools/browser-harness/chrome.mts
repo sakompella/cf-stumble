@@ -182,6 +182,8 @@ export class BrowserPage {
         buttons: type === "mouseReleased" ? 0 : 1,
       });
     }
+
+    await this.settleInput();
   }
 
   /** Focus a field, select whatever it holds, and insert text over it as typed input. */
@@ -201,11 +203,13 @@ export class BrowserPage {
     }
 
     await this.command("Input.insertText", { text });
+    await this.settleInput();
   }
 
   /** Insert text into whatever holds focus, which is the only way a keyboard-only case may type. */
   async insertText(text: string): Promise<void> {
     await this.command("Input.insertText", { text });
+    await this.settleInput();
   }
 
   /**
@@ -230,6 +234,19 @@ export class BrowserPage {
         text: type === "keyDown" && modifiers === 0 ? descriptor.text : "",
       });
     }
+
+    await this.settleInput();
+  }
+
+  /**
+   * Wait until the page has painted twice since the last input. A page may render the effect of an
+   * input in its next animation frame rather than inside the event handler (the Foldkit owner page
+   * does), and an owner sees the page only after a paint, so every input waits for one.
+   */
+  private async settleInput(): Promise<void> {
+    await this.evaluate<boolean>(
+      "new Promise((settled) => requestAnimationFrame(() => requestAnimationFrame(() => settled(true))))",
+    );
   }
 
   /** Resize the viewport, which is how the harness checks the narrow and the wide layout. */

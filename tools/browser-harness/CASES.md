@@ -159,6 +159,10 @@ produce itself, so an element the layout collapsed or covered fails the click.
 
 Shift-Tab is `press("Tab", ["Shift"])`. Control-Enter is `press("Enter", ["Control"])`.
 
+`click`, `type`, `insertText`, and `press` return after the page has painted twice. The owner
+page renders in its next animation frame, as Foldkit does, so a read straight after an input sees
+what an owner would see.
+
 ## Actions
 
 | Function        | Signature                                                                                               |
