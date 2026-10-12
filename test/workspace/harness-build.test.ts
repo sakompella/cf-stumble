@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import {
@@ -74,11 +75,13 @@ class FakeBuildOperations implements WorkspaceOperations {
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
 function build(operations: FakeBuildOperations, request: unknown) {
-  return executeHarnessBuildRequest({
-    configuration: HARNESS_BUILD_CONFIGURATION,
-    operations,
-    request,
-  });
+  return Effect.runPromise(
+    executeHarnessBuildRequest({
+      configuration: HARNESS_BUILD_CONFIGURATION,
+      operations,
+      request,
+    }),
+  );
 }
 
 test("rejects an invalid harness commit fixture", () => {

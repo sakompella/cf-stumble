@@ -1,3 +1,5 @@
+// oxlint-disable import/max-dependencies -- The abort cases need the provisioner, its fake host, the log capture, and the outcome helpers.
+import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { capturedEvents, named } from "../log-capture.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
@@ -10,6 +12,7 @@ import {
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
+import { runToResult } from "./workspace-results.js";
 
 class AbortAwareHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
@@ -33,15 +36,17 @@ test("does not start the next provisioning step after the turn aborts", async ()
   const controller = new AbortController();
   host.controller = controller;
 
-  const result = await provisionProjectWorkspace({
-    workspaceName: tenantWorkspaceName("provisioning-abort-at-boundary"),
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: namespaceFor(host),
-    signal: controller.signal,
-  });
+  const result = await runToResult(
+    provisionProjectWorkspace({
+      workspaceName: tenantWorkspaceName("provisioning-abort-at-boundary"),
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(host),
+      signal: controller.signal,
+    }),
+  );
 
-  expect(result.isErr()).toBe(true);
+  expect(Result.isFailure(result)).toBe(true);
   expect(host.requests.map(({ step }) => step)).toEqual(["clone"]);
 });
 
@@ -59,13 +64,15 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
 
   const controller = new AbortController();
 
-  const provisioning = provisionProjectWorkspace({
-    workspaceName: tenantWorkspaceName("provisioning-abort-bounded"),
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: namespaceFor(host),
-    signal: controller.signal,
-  });
+  const provisioning = runToResult(
+    provisionProjectWorkspace({
+      workspaceName: tenantWorkspaceName("provisioning-abort-bounded"),
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(host),
+      signal: controller.signal,
+    }),
+  );
 
   await Promise.resolve();
   controller.abort();
@@ -73,7 +80,7 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
   await vi.runAllTimersAsync();
 
   const result = await provisioning;
-  expect(result.isErr()).toBe(true);
+  expect(Result.isFailure(result)).toBe(true);
   expect(named(events(), "workspace.rpc").at(-1)).toMatchObject({
     outcome: "threw",
     durationMs: WORKSPACE_RPC_TIMEOUT_MS,

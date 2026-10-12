@@ -1,3 +1,5 @@
+// oxlint-disable max-lines, import/max-dependencies -- The exclusion cases share one fake host, its timers, and the outcome helpers.
+import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
@@ -14,6 +16,7 @@ import {
   type ProjectProvisionRequest,
 } from "../../src/workspace/project-provision.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
+import { runToResult } from "./workspace-results.js";
 
 class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
@@ -81,21 +84,25 @@ test("serializes different projects in one shared workspace", async () => {
   const namespace = namespaceFor(delayed.host);
   const sharedWorkspace = tenantWorkspaceName("different-projects-shared-workspace");
 
-  const first = provisionProjectWorkspace({
-    workspaceName: sharedWorkspace,
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace,
-  });
+  const first = runToResult(
+    provisionProjectWorkspace({
+      workspaceName: sharedWorkspace,
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace,
+    }),
+  );
 
   await delayed.started;
 
-  const second = provisionProjectWorkspace({
-    workspaceName: sharedWorkspace,
-    projectId: sampleProjectTwo.id,
-    catalog: sampleCatalog,
-    namespace,
-  });
+  const second = runToResult(
+    provisionProjectWorkspace({
+      workspaceName: sharedWorkspace,
+      projectId: sampleProjectTwo.id,
+      catalog: sampleCatalog,
+      namespace,
+    }),
+  );
 
   await Promise.resolve();
 
@@ -103,8 +110,8 @@ test("serializes different projects in one shared workspace", async () => {
 
   delayed.release();
 
-  expect((await first).isOk()).toBe(true);
-  expect((await second).isOk()).toBe(true);
+  expect(Result.isSuccess(await first)).toBe(true);
+  expect(Result.isSuccess(await second)).toBe(true);
   expect(delayed.host.requests.map((request) => request.projectId)).toEqual([
     sampleProjectOne.id,
     sampleProjectOne.id,
@@ -118,23 +125,27 @@ test("serializes replacement provisioning until an aborted run has finished", as
   const workspaceName = tenantWorkspaceName("provisioning-serializes-replacement");
   const controller = new AbortController();
 
-  const first = provisionProjectWorkspace({
-    workspaceName,
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: namespaceFor(delayed.host),
-    signal: controller.signal,
-  });
+  const first = runToResult(
+    provisionProjectWorkspace({
+      workspaceName,
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(delayed.host),
+      signal: controller.signal,
+    }),
+  );
 
   await delayed.started;
   controller.abort();
 
-  const replacement = provisionProjectWorkspace({
-    workspaceName,
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: namespaceFor(delayed.host),
-  });
+  const replacement = runToResult(
+    provisionProjectWorkspace({
+      workspaceName,
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(delayed.host),
+    }),
+  );
 
   await Promise.resolve();
 
@@ -145,8 +156,8 @@ test("serializes replacement provisioning until an aborted run has finished", as
 
   delayed.release();
 
-  expect((await first).isErr()).toBe(true);
-  expect((await replacement).isOk()).toBe(true);
+  expect(Result.isFailure(await first)).toBe(true);
+  expect(Result.isSuccess(await replacement)).toBe(true);
   expect(delayed.host.requests.map((request) => request.step)).toEqual([
     "clone",
     "clone",
@@ -166,25 +177,29 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
   const host = new NeverSettlingProvisionHost();
   const namespace = namespaceFor(host);
 
-  const first = provisionProjectWorkspace({
-    workspaceName: tenantWorkspaceName("never-settling-original"),
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace,
-  });
+  const first = runToResult(
+    provisionProjectWorkspace({
+      workspaceName: tenantWorkspaceName("never-settling-original"),
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace,
+    }),
+  );
 
   await Promise.resolve();
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const controller = new AbortController();
 
-    const retry = provisionProjectWorkspace({
-      workspaceName: tenantWorkspaceName("never-settling-original"),
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
-      namespace,
-      signal: controller.signal,
-    });
+    const retry = runToResult(
+      provisionProjectWorkspace({
+        workspaceName: tenantWorkspaceName("never-settling-original"),
+        projectId: sampleProjectOne.id,
+        catalog: sampleCatalog,
+        namespace,
+        signal: controller.signal,
+      }),
+    );
 
     controller.abort();
 
@@ -199,7 +214,9 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
     expect(outcome).not.toBe("timed-out");
 
     if (outcome !== "timed-out") {
-      expect(outcome.isErr() && outcome.error.code).toBe("provision-workspace-unavailable");
+      expect(Result.isFailure(outcome) && outcome.failure.code).toBe(
+        "provision-workspace-unavailable",
+      );
     }
   }
 
@@ -230,20 +247,24 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
   const workspaceName = tenantWorkspaceName("waits-through-stale-provision");
 
   try {
-    void provisionProjectWorkspace({
-      workspaceName,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
-      namespace,
-    });
+    void runToResult(
+      provisionProjectWorkspace({
+        workspaceName,
+        projectId: sampleProjectOne.id,
+        catalog: sampleCatalog,
+        namespace,
+      }),
+    );
     await Promise.resolve();
 
-    const waiter = provisionProjectWorkspace({
-      workspaceName,
-      projectId: sampleProjectTwo.id,
-      catalog: sampleCatalog,
-      namespace,
-    });
+    const waiter = runToResult(
+      provisionProjectWorkspace({
+        workspaceName,
+        projectId: sampleProjectTwo.id,
+        catalog: sampleCatalog,
+        namespace,
+      }),
+    );
 
     const timeout = new Promise<"timed-out">((resolve) => {
       setTimeout(() => {
@@ -259,7 +280,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
     expect(outcome).not.toBe("timed-out");
 
     if (outcome === "timed-out") throw new Error("waiter did not pass the stale ceiling");
-    expect(outcome.isOk()).toBe(true);
+    expect(Result.isSuccess(outcome)).toBe(true);
   } finally {
     vi.useRealTimers();
   }
@@ -271,21 +292,25 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
   const namespace = namespaceFor(delayed.host);
 
   try {
-    const first = provisionProjectWorkspace({
-      workspaceName: tenantWorkspaceName("normal-waiter-timer"),
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
-      namespace,
-    });
+    const first = runToResult(
+      provisionProjectWorkspace({
+        workspaceName: tenantWorkspaceName("normal-waiter-timer"),
+        projectId: sampleProjectOne.id,
+        catalog: sampleCatalog,
+        namespace,
+      }),
+    );
 
     await delayed.started;
 
-    const second = provisionProjectWorkspace({
-      workspaceName: tenantWorkspaceName("normal-waiter-timer"),
-      projectId: sampleProjectTwo.id,
-      catalog: sampleCatalog,
-      namespace,
-    });
+    const second = runToResult(
+      provisionProjectWorkspace({
+        workspaceName: tenantWorkspaceName("normal-waiter-timer"),
+        projectId: sampleProjectTwo.id,
+        catalog: sampleCatalog,
+        namespace,
+      }),
+    );
 
     await Promise.resolve();
 
@@ -294,8 +319,8 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
 
     delayed.release();
 
-    expect((await first).isOk()).toBe(true);
-    expect((await second).isOk()).toBe(true);
+    expect(Result.isSuccess(await first)).toBe(true);
+    expect(Result.isSuccess(await second)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   } finally {
     vi.useRealTimers();
@@ -348,13 +373,13 @@ test("drops an in-flight provision after the Workspace Host command ceiling", as
   };
 
   try {
-    void provisionProjectWorkspace(input);
+    void runToResult(provisionProjectWorkspace(input));
     await Promise.resolve();
     vi.setSystemTime(initialTime + PROVISION_STALE_AFTER_MS + 1);
 
-    const replacement = await provisionProjectWorkspace(input);
+    const replacement = await runToResult(provisionProjectWorkspace(input));
 
-    expect(replacement.isOk()).toBe(true);
+    expect(Result.isSuccess(replacement)).toBe(true);
     expect(host.requests.map((request) => request.step)).toEqual([
       "clone",
       "clone",

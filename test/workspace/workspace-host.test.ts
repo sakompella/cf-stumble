@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
   executeHarnessBuildRequest,
@@ -45,11 +46,13 @@ test("configures the container backend for direct egress", () => {
 });
 
 test("returns a build result as a plain value", async () => {
-  const result = await executeHarnessBuildRequest({
-    configuration: HARNESS_BUILD_CONFIGURATION,
-    operations: new FakeOperations(),
-    request: { kind: "build-output", harnessCommit: commit },
-  });
+  const result = await Effect.runPromise(
+    executeHarnessBuildRequest({
+      configuration: HARNESS_BUILD_CONFIGURATION,
+      operations: new FakeOperations(),
+      request: { kind: "build-output", harnessCommit: commit },
+    }),
+  );
 
   expect(result).toEqual({
     ok: true,
@@ -102,14 +105,14 @@ class ManagedInstructionsOperations implements WorkspaceOperations {
 test("writes managed instructions only when the workspace reset removed them", async () => {
   const operations = new ManagedInstructionsOperations();
 
-  await expect(ensureManagedInstructions(operations)).resolves.toMatchObject({
+  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toMatchObject({
     ok: true,
     result: { kind: "written" },
   });
   expect(operations.writes).toHaveLength(1);
 
   operations.existing = "file";
-  await expect(ensureManagedInstructions(operations)).resolves.toMatchObject({
+  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toMatchObject({
     ok: true,
     result: { kind: "written" },
   });

@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { afterIdleStop, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import type { ExecBackend } from "../../src/workspace/project/exec-backend.js";
@@ -52,7 +53,7 @@ test("the controller says an idle stop is in progress from its first step", asyn
   clock.now = 11_000;
 
   expect(idle.stopping()).toBe(false);
-  const alarm = idle.onAlarm();
+  const alarm = Effect.runPromise(idle.onAlarm());
   expect(idle.stopping()).toBe(true);
 
   release.open();
@@ -67,7 +68,7 @@ test.each(["close", "destroy"] as const)(
     const { idle, clock, calls, release } = gated(phase);
     idle.begin()();
     clock.now = 11_000;
-    const alarm = idle.onAlarm();
+    const alarm = Effect.runPromise(idle.onAlarm());
     await tick();
     const started: string[] = [];
 

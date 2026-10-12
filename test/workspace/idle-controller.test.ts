@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import { capturedEvents, named } from "../log-capture.js";
@@ -128,7 +129,7 @@ test("an alarm before the limit re-arms for the moment the limit passes", async 
   const { idle, clock, alarms } = controller();
   idle.begin()();
   clock.now = 6_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(alarms).toEqual([11_000, 11_000]);
   expect(named(events(), "workspace.idle-check")).toEqual([
@@ -147,7 +148,7 @@ test("an alarm while work is in flight checks again a full limit later and stops
   idle.begin();
   idle.touch();
   clock.now = 20_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(alarms.at(-1)).toBe(30_000);
   expect(calls).toEqual([]);
@@ -159,7 +160,7 @@ test("an alarm that finds the container stopped arms nothing and stops nothing",
   idle.begin()();
   state.running = false;
   clock.now = 20_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(alarms).toHaveLength(1);
   expect(calls).toEqual([]);
@@ -174,7 +175,7 @@ test("an alarm at the limit closes the Workspace, destroys the container, and lo
   const { idle, clock, alarms, calls } = controller();
   idle.begin()();
   clock.now = 11_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(calls).toEqual(["close", "destroy"]);
   expect(alarms, "a stopped container is not checked again").toHaveLength(1);
@@ -197,7 +198,7 @@ test("one millisecond before the limit nothing stops", async () => {
   const { idle, clock, calls } = controller();
   idle.begin()();
   clock.now = 10_999;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(calls).toEqual([]);
 });
@@ -206,11 +207,11 @@ test("no stop while a turn lease is open, then a stop one limit after it ends", 
   const { idle, clock, calls } = controller();
   idle.leaseUntil(30_000);
   clock.now = 20_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
   expect(calls).toEqual([]);
 
   clock.now = 40_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
   expect(calls).toEqual(["close", "destroy"]);
 });
 
@@ -225,7 +226,7 @@ test("work that begins during the close keeps the container, and the check is re
 
   idle.begin()();
   clock.now = 11_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(calls).toEqual(["close"]);
   expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
@@ -245,7 +246,7 @@ test("a turn lease taken during the close keeps the container, and the check is 
 
   idle.begin()();
   clock.now = 11_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(calls).toEqual(["close"]);
   expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
@@ -259,7 +260,7 @@ test("work that begins during the stop waits for it through settled()", async ()
   idle.begin()();
   clock.now = 11_000;
 
-  const alarm = idle.onAlarm();
+  const alarm = Effect.runPromise(idle.onAlarm());
   let waited = false;
   void idle.settled().then(() => {
     waited = true;
@@ -276,7 +277,7 @@ test("a failed close is logged and the container is still destroyed", async () =
   const { idle, clock, calls } = controller({ closeFails: true });
   idle.begin()();
   clock.now = 11_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(calls).toEqual(["close", "destroy"]);
   expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
@@ -289,7 +290,7 @@ test("a failed destroy is a warning that checks again one limit later", async ()
   const { idle, clock, alarms } = controller({ destroyFails: true });
   idle.begin()();
   clock.now = 11_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(named(events(), "workspace.container.idle-stop")).toEqual([
     expect.objectContaining({ level: "warn", outcome: "threw", runningBefore: true }),
@@ -308,7 +309,7 @@ test("a container that exits during the close is not destroyed", async () => {
 
   idle.begin()();
   clock.now = 11_000;
-  await idle.onAlarm();
+  await Effect.runPromise(idle.onAlarm());
 
   expect(calls).toEqual(["close"]);
   expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
@@ -321,7 +322,7 @@ test("a second alarm during a stop does not start another", async () => {
   idle.begin()();
   clock.now = 11_000;
 
-  await Promise.all([idle.onAlarm(), idle.onAlarm()]);
+  await Promise.all([Effect.runPromise(idle.onAlarm()), Effect.runPromise(idle.onAlarm())]);
 
   expect(calls).toEqual(["close", "destroy"]);
 });

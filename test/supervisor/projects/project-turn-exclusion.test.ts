@@ -1,4 +1,5 @@
 import { Result } from "better-result";
+import * as EffectResult from "effect/Result";
 import { expect, test } from "vitest";
 import {
   sampleCatalog,
@@ -16,6 +17,7 @@ import {
 } from "../../../src/workspace/index.js";
 import type { ProjectWorkspaceNamespace } from "../../../src/supervisor/projects/index.js";
 import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
+import { runToResult } from "../../workspace/workspace-results.js";
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the fake facet never calls this capability; the test only observes when it is obtained.
 const unusedCapability = {} as ProjectRpcTargetContract;
@@ -86,12 +88,14 @@ test("a harness turn waits for a project provision in the shared workspace", asy
   const delayed = delayedWorkspace();
   const workspace = tenantWorkspaceName("harness-waits-for-provision");
 
-  const first = provisionProjectWorkspace({
-    workspaceName: workspace,
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: delayed.namespace,
-  });
+  const first = runToResult(
+    provisionProjectWorkspace({
+      workspaceName: workspace,
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: delayed.namespace,
+    }),
+  );
 
   await delayed.started;
 
@@ -122,7 +126,7 @@ test("a harness turn waits for a project provision in the shared workspace", asy
 
   delayed.release();
 
-  expect((await first).isOk()).toBe(true);
+  expect(EffectResult.isSuccess(await first)).toBe(true);
   expect((await harness).ok).toBe(true);
   expect(delayed.projectCalls()).toBe(1);
 });

@@ -1,8 +1,10 @@
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import {
   isTimeoutFailure,
   logRedactedCause,
   redactedExcerpt,
-  timed,
+  timedEffect,
   requestIdFields,
   type RequestId,
 } from "../diagnostics.js";
@@ -19,12 +21,17 @@ import {
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import { runLoggedCommand } from "./executor.js";
 import {
-  runLoggedCommand,
+  answerFailures,
+  thrownBy,
+  workspaceEffects,
   WorkspaceSyncIncomplete,
   type CommandOutput,
+  type WorkspaceEffects,
+  type WorkspaceFault,
   type WorkspaceOperations,
-} from "./executor.js";
+} from "./operations.js";
 import { asUntrusted, field, hasExactKeys } from "../untrusted.js";
 
 /**
@@ -132,19 +139,24 @@ function parseGitHubCredentialRequest(
  * no process list or shell history can hold it. `gh` writes it to its own configuration, which is
  * the credential itself. Only a failed durable sync needs a cleanup, which `runInstall` does.
  */
-async function installCredential(
-  operations: Readonly<{ lenient: WorkspaceOperations; durable: WorkspaceOperations }>,
+function installCredential(
+  operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
-): Promise<GitHubCredentialResult> {
-  const output = await runInstall(operations, token);
+): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
+  return runInstall(operations, token).pipe(
+    Effect.map((output): GitHubCredentialResult => {
+      if (output.exitCode !== 0) {
+        return failed("credential-command-failed", output.stderr, token);
+      }
 
-  if (output.exitCode !== 0) {
-    return failed("credential-command-failed", output.stderr, token);
-  }
-
-  return output.stdout.trim() === "tooling-missing"
-    ? { ok: true, result: { kind: "credential-status", state: "tooling-missing", login: void 0 } }
-    : { ok: true, result: { kind: "credential-installed" } };
+      return output.stdout.trim() === "tooling-missing"
+        ? {
+            ok: true,
+            result: { kind: "credential-status", state: "tooling-missing", login: void 0 },
+          }
+        : { ok: true, result: { kind: "credential-installed" } };
+    }),
+  );
 }
 
 /**
@@ -155,146 +167,161 @@ async function installCredential(
  * failed, and a container replacement would then lose it. A best-effort logout makes the
  * container match the failure. The original failure still propagates.
  */
-async function runInstall(
-  operations: Readonly<{ lenient: WorkspaceOperations; durable: WorkspaceOperations }>,
+function runInstall(
+  operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
-): Promise<CommandOutput> {
-  try {
-    return await runLoggedCommand(
-      operations.durable,
-      "github-credential.install",
-      { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
-      { stdin: `${token}\n` },
-    );
-  } catch (cause) {
-    if (cause instanceof WorkspaceSyncIncomplete) {
-      await runLoggedCommand(operations.lenient, "github-credential.logout", {
+): Effect.Effect<CommandOutput, WorkspaceFault> {
+  return runLoggedCommand(
+    operations.durable,
+    "github-credential.install",
+    { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+    { stdin: `${token}\n` },
+  ).pipe(
+    Effect.catchTag("WorkspaceSyncIncomplete", (incomplete) =>
+      runLoggedCommand(operations.lenient, "github-credential.logout", {
         source: logoutCredentialSource(),
         cwd: "/",
         timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
-        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A caught value can be anything.
-      }).catch((logoutCause: unknown) => {
-        logRedactedCause(
-          `github-credential.logout: ${failureLabel(logoutCause)}`,
-          logoutCause,
-          token,
-        );
-      });
-    }
-
-    throw cause;
-  }
+      }).pipe(
+        Effect.asVoid,
+        answerFailures((thrown) => {
+          logRedactedCause(`github-credential.logout: ${failureLabel(thrown)}`, thrown, token);
+        }),
+        Effect.andThen(Effect.fail(incomplete)),
+      ),
+    ),
+  );
 }
 
-async function credentialStatus(
-  operations: WorkspaceOperations,
+function credentialStatus(
+  operations: WorkspaceEffects,
   requestId: RequestId | undefined,
-): Promise<GitHubCredentialStatus> {
-  const output = await runLoggedCommand(
+): Effect.Effect<GitHubCredentialStatus, WorkspaceFault> {
+  return runLoggedCommand(
     operations,
     "github-credential.status",
     { source: credentialStatusSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
     { requestId },
-  );
-
-  return parseCredentialStatus(output.stdout);
+  ).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
 }
 
 /**
- * Time the status read. `outcome` is the credential state; a command that throws is logged by
- * `timed` as `threw`. The login stays out of the event.
+ * Time the status read. `outcome` is the credential state; a command that fails is logged as
+ * `threw`. The login stays out of the event.
  */
-async function timedCredentialStatus(
-  operations: WorkspaceOperations,
+function timedCredentialStatus(
+  operations: WorkspaceEffects,
   requestId: RequestId | undefined,
-): Promise<GitHubCredentialResult> {
-  const status = await timed(
-    "github-credential.status",
-    { ...requestIdFields(requestId), timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
-    () => credentialStatus(operations, requestId),
-    ({ state }) => ({
-      outcome: state,
-      level: state === "connected" ? "info" : "warn",
-      fields: { timeout: false },
-    }),
+): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
+  return credentialStatus(operations, requestId).pipe(
+    timedEffect(
+      "github-credential.status",
+      { ...requestIdFields(requestId), timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+      (read) =>
+        Result.isSuccess(read)
+          ? {
+              outcome: read.success.state,
+              level: read.success.state === "connected" ? "info" : "warn",
+              fields: { timeout: false },
+            }
+          : {
+              outcome: "threw",
+              level: "error",
+              fields: { timeout: isTimeoutFailure(thrownBy(read.failure)) },
+            },
+    ),
+    Effect.map((status): GitHubCredentialResult => ({
+      ok: true,
+      result: { kind: "credential-status", state: status.state, login: status.login },
+    })),
   );
-
-  return {
-    ok: true,
-    result: { kind: "credential-status", state: status.state, login: status.login },
-  };
 }
 
-async function repositoryAccess(
-  operations: WorkspaceOperations,
+function repositoryAccess(
+  operations: WorkspaceEffects,
   repositoryUrl: string,
-): Promise<GitHubCredentialResult> {
-  const output = await runLoggedCommand(operations, "github-credential.verify-repository", {
+): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
+  return runLoggedCommand(operations, "github-credential.verify-repository", {
     source: repositoryAccessSource(repositoryUrl),
     cwd: "/",
     timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
-  });
+  }).pipe(
+    Effect.map((output): GitHubCredentialResult => {
+      const access = parseRepositoryAccess(output.stdout);
 
-  const access = parseRepositoryAccess(output.stdout);
-
-  return {
-    ok: true,
-    result: {
-      kind: "repository-access",
-      granted: access.granted,
-      detail: access.granted ? "" : redactedExcerpt(access.detail),
-    },
-  };
+      return {
+        ok: true,
+        result: {
+          kind: "repository-access",
+          granted: access.granted,
+          detail: access.granted ? "" : redactedExcerpt(access.detail),
+        },
+      };
+    }),
+  );
 }
 
-function failureLabel(cause: unknown): string {
-  if (isTimeoutFailure(cause)) return "timeout";
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything.
+function failureLabel(thrown: unknown): string {
+  if (isTimeoutFailure(thrown)) return "timeout";
 
-  return cause instanceof WorkspaceSyncIncomplete ? "sync-incomplete" : "workspace-unavailable";
+  return thrown instanceof WorkspaceSyncIncomplete ? "sync-incomplete" : "workspace-unavailable";
+}
+
+type CredentialSurfaceInput = Readonly<{
+  operations: WorkspaceOperations;
+  /**
+   * Operations that fail unless the workspace's durable copy is complete. The install uses them,
+   * so a credential that only the container's disk holds is never reported as installed.
+   */
+  installOperations: WorkspaceOperations;
+  request: unknown;
+  /** Names the owner request this call serves, for the log only. It changes no behavior. */
+  requestId?: RequestId | undefined;
+}>;
+
+function credentialWork(
+  parsed: GitHubCredentialRequest,
+  input: CredentialSurfaceInput,
+): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
+  switch (parsed.step) {
+    case "install":
+      return installCredential(
+        {
+          lenient: workspaceEffects(input.operations),
+          durable: workspaceEffects(input.installOperations),
+        },
+        parsed.token,
+      );
+    case "status":
+      return timedCredentialStatus(workspaceEffects(input.operations), input.requestId);
+    case "verify-repository":
+      return repositoryAccess(workspaceEffects(input.operations), parsed.repositoryUrl);
+    default: {
+      const exhaustive: never = parsed;
+
+      return exhaustive;
+    }
+  }
 }
 
 /** The credential surface's effect shell. Every failure leaves as a redacted plain value. */
-export async function executeGitHubCredentialRequest(
-  input: Readonly<{
-    operations: WorkspaceOperations;
-    /**
-     * Operations that fail unless the workspace's durable copy is complete. The install uses them,
-     * so a credential that only the container's disk holds is never reported as installed.
-     */
-    installOperations: WorkspaceOperations;
-    request: unknown;
-    /** Names the owner request this call serves, for the log only. It changes no behavior. */
-    requestId?: RequestId | undefined;
-  }>,
-): Promise<GitHubCredentialResult> {
+export function executeGitHubCredentialRequest(
+  input: CredentialSurfaceInput,
+): Effect.Effect<GitHubCredentialResult> {
   const parsed = parseGitHubCredentialRequest(input.request);
 
-  if ("ok" in parsed) return parsed;
+  if ("ok" in parsed) return Effect.succeed(parsed);
 
-  try {
-    switch (parsed.step) {
-      case "install":
-        return await installCredential(
-          { lenient: input.operations, durable: input.installOperations },
-          parsed.token,
-        );
-      case "status":
-        return await timedCredentialStatus(input.operations, input.requestId);
-      case "verify-repository":
-        return await repositoryAccess(input.operations, parsed.repositoryUrl);
-      default: {
-        const exhaustive: never = parsed;
+  return Effect.suspend(() => credentialWork(parsed, input)).pipe(
+    answerFailures((thrown): GitHubCredentialResult => {
+      logRedactedCause(
+        `github-credential.${parsed.step}: ${failureLabel(thrown)}`,
+        thrown,
+        parsed.step === "install" ? parsed.token : undefined,
+      );
 
-        return exhaustive;
-      }
-    }
-  } catch (cause) {
-    logRedactedCause(
-      `github-credential.${parsed.step}: ${failureLabel(cause)}`,
-      cause,
-      parsed.step === "install" ? parsed.token : undefined,
-    );
-
-    return failed("workspace-unavailable", "");
-  }
+      return failed("workspace-unavailable", "");
+    }),
+  );
 }

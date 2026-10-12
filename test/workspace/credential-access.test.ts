@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import { afterEach, expect, test, vi } from "vitest";
 import { textLines } from "../log-capture.js";
 import { parseGitHubToken, REDACTED, type GitHubToken } from "../../src/github/index.js";
@@ -10,6 +11,7 @@ import {
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
 } from "../../src/workspace/index.js";
+import { plainProblem, runToResult } from "./workspace-results.js";
 
 /**
  * The Supervisor's side of the credential RPC, driven against a Workspace Host binding that
@@ -57,13 +59,15 @@ test("logs the thrown cause instead of discarding it, with the install token red
   host.cause = new Error(`socket hang up while sending ${FAKE_TOKEN}`);
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const installed = await installWorkspaceCredential({
-    workspaceName: "tenant-workspace",
-    namespace: namespaceOf(host),
-    token: FAKE_TOKEN,
-  });
+  const installed = await runToResult(
+    installWorkspaceCredential({
+      workspaceName: "tenant-workspace",
+      namespace: namespaceOf(host),
+      token: FAKE_TOKEN,
+    }),
+  );
 
-  expect(installed.isErr() && installed.error).toEqual({
+  expect(Result.isFailure(installed) && plainProblem(installed.failure)).toEqual({
     code: "credential-workspace-unavailable",
     detail: "",
   });
@@ -79,12 +83,14 @@ test("logs a status read's thrown cause the same way, without a token to redact"
   host.cause = new Error("websocket is not open");
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const status = await readWorkspaceCredentialStatus({
-    workspaceName: "tenant-workspace",
-    namespace: namespaceOf(host),
-  });
+  const status = await runToResult(
+    readWorkspaceCredentialStatus({
+      workspaceName: "tenant-workspace",
+      namespace: namespaceOf(host),
+    }),
+  );
 
-  expect(status.isErr() && status.error).toEqual({
+  expect(Result.isFailure(status) && plainProblem(status.failure)).toEqual({
     code: "credential-workspace-unavailable",
     detail: "",
   });
@@ -97,13 +103,15 @@ test("distinguishes a timeout from an ordinary RPC failure in the log alone", as
   host.cause = new DOMException("the RPC call exceeded its budget", "TimeoutError");
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const access = await checkRepositoryAccess({
-    workspaceName: "tenant-workspace",
-    namespace: namespaceOf(host),
-    repositoryUrl: "https://github.com/owner/repo",
-  });
+  const access = await runToResult(
+    checkRepositoryAccess({
+      workspaceName: "tenant-workspace",
+      namespace: namespaceOf(host),
+      repositoryUrl: "https://github.com/owner/repo",
+    }),
+  );
 
-  expect(access.isErr() && access.error).toEqual({
+  expect(Result.isFailure(access) && plainProblem(access.failure)).toEqual({
     code: "credential-workspace-unavailable",
     detail: "",
   });
@@ -131,11 +139,13 @@ test("does not continue a credential step after its turn signal aborts", async (
     },
   };
 
-  const status = await readWorkspaceCredentialStatus({
-    workspaceName: "tenant-workspace",
-    namespace: namespaceOf(host),
-    signal: controller.signal,
-  });
+  const status = await runToResult(
+    readWorkspaceCredentialStatus({
+      workspaceName: "tenant-workspace",
+      namespace: namespaceOf(host),
+      signal: controller.signal,
+    }),
+  );
 
-  expect(status.isErr() && status.error.code).toBe("credential-workspace-unavailable");
+  expect(Result.isFailure(status) && status.failure.code).toBe("credential-workspace-unavailable");
 });

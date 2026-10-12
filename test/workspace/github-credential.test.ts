@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js";
 import {
@@ -101,7 +102,9 @@ type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
 function credential(operations: CredentialOperations, request: unknown) {
-  return executeGitHubCredentialRequest({ operations, installOperations: operations, request });
+  return Effect.runPromise(
+    executeGitHubCredentialRequest({ operations, installOperations: operations, request }),
+  );
 }
 
 function statusOf(result: GitHubCredentialResult): GitHubCredentialState | undefined {

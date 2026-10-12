@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
@@ -206,12 +207,14 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     this.credentialRequests.push(JSON.stringify(request));
     this.credentialRequestIds.push(requestId);
 
-    return executeGitHubCredentialRequest({
-      operations: this,
-      installOperations: this,
-      request,
-      requestId: parseRequestId(requestId),
-    });
+    return Effect.runPromise(
+      executeGitHubCredentialRequest({
+        operations: this,
+        installOperations: this,
+        request,
+        requestId: parseRequestId(requestId),
+      }),
+    );
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
@@ -220,7 +223,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
-    return executeProjectProvisionRequest({ operations: this, request });
+    return Effect.runPromise(executeProjectProvisionRequest({ operations: this, request }));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
@@ -229,11 +232,13 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
-    return executeHarnessBuildRequest({
-      configuration: HARNESS_BUILD_CONFIGURATION,
-      operations: this,
-      request,
-    });
+    return Effect.runPromise(
+      executeHarnessBuildRequest({
+        configuration: HARNESS_BUILD_CONFIGURATION,
+        operations: this,
+        request,
+      }),
+    );
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
@@ -242,7 +247,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
-    return executeProjectRemovalRequest({ operations: this, request });
+    return Effect.runPromise(executeProjectRemovalRequest({ operations: this, request }));
   }
 
   ensureManagedInstructions(): Promise<WorkspaceResult> {

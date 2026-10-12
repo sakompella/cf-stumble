@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type {
   ContainerLaunchSpec,
   ContainerRuntimeInfo,
@@ -38,7 +39,7 @@ test("wipes workspace storage before restarting the container", async () => {
     },
   };
 
-  await expect(resetWorkspaceStorage(storage, container)).resolves.toEqual({
+  await expect(Effect.runPromise(resetWorkspaceStorage(storage, container))).resolves.toEqual({
     ok: true,
     reset: "workspace",
   });
@@ -48,16 +49,18 @@ test("wipes workspace storage before restarting the container", async () => {
 test("a reset logs each step with its duration, and nothing the container answered", async () => {
   const events = capturedEvents();
 
-  await resetWorkspaceStorage(
-    { deleteAll: () => Promise.resolve() },
-    {
-      restart: () =>
-        Promise.resolve({
-          runtimeId: "reset-runtime",
-          clientSecret: "secret",
-          outcome: "launched",
-        }),
-    },
+  await Effect.runPromise(
+    resetWorkspaceStorage(
+      { deleteAll: () => Promise.resolve() },
+      {
+        restart: () =>
+          Promise.resolve({
+            runtimeId: "reset-runtime",
+            clientSecret: "secret",
+            outcome: "launched",
+          }),
+      },
+    ),
   );
 
   const steps = named(events(), "workspace.reset-step");
@@ -74,16 +77,18 @@ test("a reset logs each step with its duration, and nothing the container answer
 test("a reset logs the stop as a request and leaves the launch event to the container observer", async () => {
   const events = capturedEvents();
 
-  await resetWorkspaceStorage(
-    { deleteAll: () => Promise.resolve() },
-    {
-      restart: () =>
-        Promise.resolve({
-          runtimeId: "reset-runtime",
-          clientSecret: "secret",
-          outcome: "launched",
-        }),
-    },
+  await Effect.runPromise(
+    resetWorkspaceStorage(
+      { deleteAll: () => Promise.resolve() },
+      {
+        restart: () =>
+          Promise.resolve({
+            runtimeId: "reset-runtime",
+            clientSecret: "secret",
+            outcome: "launched",
+          }),
+      },
+    ),
   );
 
   const lifecycle = events().filter((entry) =>
@@ -103,9 +108,11 @@ test("a restart that fails is logged at error level before the failure leaves", 
   const events = capturedEvents();
 
   await expect(
-    resetWorkspaceStorage(
-      { deleteAll: () => Promise.resolve() },
-      { restart: () => Promise.reject(new Error("container would not stop")) },
+    Effect.runPromise(
+      resetWorkspaceStorage(
+        { deleteAll: () => Promise.resolve() },
+        { restart: () => Promise.reject(new Error("container would not stop")) },
+      ),
     ),
   ).rejects.toThrow("container would not stop");
 

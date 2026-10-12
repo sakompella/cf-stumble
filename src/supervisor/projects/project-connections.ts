@@ -1,5 +1,7 @@
-// oxlint-disable max-lines -- Connection reconciliation includes the size guard and clone failure mapping.
+// oxlint-disable max-lines, import/max-dependencies -- Connection reconciliation includes the size guard and clone failure mapping, and owns the GitHub, workspace, catalog, thread, and telemetry boundaries.
 
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { ConnectedProjects } from "./connected-projects.js";
 import { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";
 import type { HarnessCommit } from "../../harness-commit.js";
@@ -32,6 +34,7 @@ import {
   clearWorkspaceProvision,
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
+  ProvisionStepFailed,
   type CredentialWorkspaceNamespace,
   type HarnessProvisionWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
@@ -43,8 +46,8 @@ import {
   timedWorkspaceRpc,
   type RequestId,
 } from "../../diagnostics.js";
-// oxlint-disable-next-line import/max-dependencies -- The connection workflow owns GitHub, workspace, catalog, thread, and telemetry boundaries.
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import { runAtEntryPoint } from "../../run-entry-point.js";
 import type { DisconnectProjectResult } from "../threads/index.js";
 
 /**
@@ -68,7 +71,11 @@ async function repositorySizeAllowed(
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
 ): Promise<boolean> {
-  const measured = await lookupRepositorySize(repositoryUrl, token, fetcher);
+  const lookup = await runAtEntryPoint(
+    Effect.result(lookupRepositorySize(repositoryUrl, token, fetcher)),
+  );
+
+  const measured = Result.isSuccess(lookup) ? lookup.success : undefined;
   const reason = measured === undefined ? undefined : repositorySizeReason(measured);
 
   const outcome =
@@ -244,28 +251,24 @@ export class ProjectConnections {
       return this.refused({ code: "tooling-missing", detail: "" }, github);
     }
 
-    const access = await checkRepositoryAccess({
-      workspaceName: this.workspaceName,
-      namespace: this.namespace,
-      repositoryUrl: canonical,
-    });
+    const access = await runAtEntryPoint(
+      Effect.result(
+        checkRepositoryAccess({
+          workspaceName: this.workspaceName,
+          namespace: this.namespace,
+          repositoryUrl: canonical,
+        }),
+      ),
+    );
 
-    if (access.isErr()) {
-      return this.refused(
-        {
-          code:
-            access.error.code === "credential-workspace-unavailable"
-              ? "workspace-unavailable"
-              : "repository-not-accessible",
-          detail: access.error.detail,
-        },
-        github,
-      );
+    // The check fails only when the workspace could not be asked; a refusal is a granted: false.
+    if (Result.isFailure(access)) {
+      return this.refused({ code: "workspace-unavailable", detail: access.failure.detail }, github);
     }
 
-    if (!access.value.granted) {
+    if (!access.success.granted) {
       return this.refused(
-        { code: "repository-not-accessible", detail: access.value.detail },
+        { code: "repository-not-accessible", detail: access.success.detail },
         github,
       );
     }
@@ -325,14 +328,18 @@ export class ProjectConnections {
     harnessCommit: HarnessCommit,
     signal?: AbortSignal,
   ): Promise<boolean> {
-    const provisioned = await provisionHarnessWorkspace({
-      workspaceName: this.workspaceName,
-      harnessCommit,
-      namespace: this.namespace,
-      signal,
-    });
+    const provisioned = await runAtEntryPoint(
+      Effect.result(
+        provisionHarnessWorkspace({
+          workspaceName: this.workspaceName,
+          harnessCommit,
+          namespace: this.namespace,
+          signal,
+        }),
+      ),
+    );
 
-    return provisioned.isOk();
+    return Result.isSuccess(provisioned);
   }
 
   /**
@@ -378,19 +385,23 @@ export class ProjectConnections {
       return { ok: false, problem: { code: "provisioning-failed" } };
     }
 
-    const provisioned = await provisionProjectWorkspace({
-      workspaceName: this.workspaceName,
-      projectId: resolved.project.id,
-      catalog,
-      namespace: this.namespace,
-      signal,
-    });
+    const provisioned = await runAtEntryPoint(
+      Effect.result(
+        provisionProjectWorkspace({
+          workspaceName: this.workspaceName,
+          projectId: resolved.project.id,
+          catalog,
+          namespace: this.namespace,
+          signal,
+        }),
+      ),
+    );
 
-    if (provisioned.isErr()) {
+    if (Result.isFailure(provisioned)) {
       const diskFailure =
-        provisioned.error.code === "provision-step-failed" &&
-        provisioned.error.step === "clone" &&
-        provisioned.error.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE;
+        provisioned.failure instanceof ProvisionStepFailed &&
+        provisioned.failure.step === "clone" &&
+        provisioned.failure.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE;
 
       return {
         ok: false,
