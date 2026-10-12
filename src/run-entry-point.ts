@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
  *
  * The error channel is `never` on purpose. Every expected failure must already be turned into the
  * plain value the entry point returns, so no Effect error, `Exit`, or `Cause` reaches the platform
- * or a caller. A defect still rejects the Promise with the value that was thrown, which
+ * or a caller (ADR-0045). A defect still rejects the Promise with the value that was thrown, which
  * is what an `async` entry point that threw would do.
  */
 export function runAtEntryPoint<A>(program: Effect.Effect<A>): Promise<A> {

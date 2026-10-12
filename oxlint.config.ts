@@ -102,8 +102,9 @@ export default defineConfig({
 
   // The vendored copy also ships an opt-in `anti-slop-effect` plugin: no-manual-effect-error-tag,
   // no-manual-tag-comparison, no-manual-tagged-construction, no-service-constructor-imports and
-  // prefer-effect-match. It is deliberately not registered. This project uses better-result, not
-  // Effect (ADR 0035), and those rules are not gated on an Effect import: prefer-effect-match
-  // already reports one chained ternary in test/workspace/project/fakes.ts and demands an Effect
-  // `Match` that nothing here can import. Upstream registers this group only in Effect projects.
+  // prefer-effect-match. It is not registered yet. The host is moving to Effect (ADR-0045), but
+  // these rules are not gated on an Effect import: prefer-effect-match already reports one chained
+  // ternary in test/workspace/project/fakes.ts, and the tag rules would also report the plain
+  // `_tag` values that boundaries and pure decisions keep on purpose. Register only the rules that
+  // fit, scoped to code that has moved to Effect, once that code exists.
 });

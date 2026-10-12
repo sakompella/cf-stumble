@@ -103,3 +103,11 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     `main`, check the production log for one `supervisor.legacy-state-reset` event, then delete
     `src/supervisor/legacy-state-reset.ts`, its call in the Supervisor's constructor, and its test.
     The `legacy_state_reset` table can stay.
+16. **Port to Effect and Foldkit in progress** (owner, 2026-10-12). ADR-0045 moves the immutable
+    host from better-result to Effect, and ADR-0046 makes the owner page a Foldkit application
+    served as a hashed script file. Wave 0 added the pins, the Effect prebundle for the workers
+    test pool, `runAtEntryPoint` around the Worker's `fetch`, the hashed script route, and the size
+    budgets. It is not deployed. The script route, its `immutable` cache header, and the
+    `script-src 'self'` policy behind real Cloudflare Access need a staging check, and so does
+    Worker startup time: local `wrangler check startup` profiles hold too few samples to compare.
+    The page itself, Access, the Supervisor, and the Workspace Host have not moved yet.
