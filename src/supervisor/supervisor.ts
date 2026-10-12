@@ -233,7 +233,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
   listProjects(requestId?: unknown, now: number = Date.now()): Promise<ProjectListView> {
-    return this.connections.list(now, parseRequestId(requestId));
+    return runAtEntryPoint(this.connections.list(now, parseRequestId(requestId)));
   }
 
   getGitHubConnection(
@@ -241,7 +241,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     requestId?: unknown,
     now: number = Date.now(),
   ): Promise<GitHubConnectionStatus> {
-    return this.connections.connectionStatus(now, parseRequestId(requestId));
+    return runAtEntryPoint(this.connections.connectionStatus(now, parseRequestId(requestId)));
   }
 
   /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
@@ -274,7 +274,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     displayName: unknown,
     now: number = Date.now(),
   ): Promise<ConnectRepositoryResult> {
-    return this.connections.connect(repositoryUrl, displayName, now);
+    return runAtEntryPoint(this.connections.connect(repositoryUrl, displayName, now));
   }
 
   /** Disconnect a connected repository after its thread confirms no live turn owns it. */
@@ -283,8 +283,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     projectId: unknown,
     now: number = Date.now(),
   ): Promise<DisconnectRepositoryResult> {
-    return this.connections.disconnect(projectId, () =>
-      this.threads.disconnectProject(projectId, now),
+    return runAtEntryPoint(
+      this.connections.disconnect(projectId, () => this.threads.disconnectProject(projectId, now)),
     );
   }
 
@@ -297,14 +297,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     scope: VerifiedAccessScope,
     now: number = Date.now(),
   ): Promise<GitHubAuthorizationOutcome> {
-    return this.github.startAuthorization(scope, now);
+    return runAtEntryPoint(this.github.startAuthorization(scope, now));
   }
 
   completeGitHubAuthorization(
     scope: VerifiedAccessScope,
     now: number = Date.now(),
   ): Promise<GitHubAuthorizationOutcome> {
-    return this.github.completeAuthorization(scope, now);
+    return runAtEntryPoint(this.github.completeAuthorization(scope, now));
   }
 
   /**
@@ -384,17 +384,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         generation === undefined
           ? undefined
           : (signal) =>
-              Effect.promise(() =>
-                this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
-              ).pipe(
-                timedTurnProvision(context.trace, "harness", (ready) =>
-                  ready ? undefined : "unavailable",
+              this.connections
+                .ensureHarnessProvisioned(generation.harnessCommit, signal)
+                .pipe(
+                  timedTurnProvision(context.trace, "harness", (ready) =>
+                    ready ? undefined : "unavailable",
+                  ),
                 ),
-              ),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: (project, signal) =>
-        Effect.promise(() => this.connections.ensureProvisioned(project.id, signal)).pipe(
+        this.connections.ensureProvisioned(project.id, signal).pipe(
           timedTurnProvision(context.trace, "repository", (used) =>
             used.ok ? undefined : used.problem.code,
           ),

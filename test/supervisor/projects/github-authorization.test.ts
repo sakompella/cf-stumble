@@ -2,6 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test } from "vitest";
 import { GitHubConnection, GitHubConnectionStore } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
@@ -51,7 +52,7 @@ function githubReplying(replies: readonly Reply[]): GitHubFetch {
 
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
-  github<T>(use: (github: GitHubConnection) => Promise<T>): Promise<T>;
+  github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
 }
 
 /** `configured` is false for the deployment that has no GitHub OAuth client id yet. */
@@ -64,13 +65,15 @@ function tenant(name: string, replies: readonly Reply[], configured = true): Ten
     workspace,
     github: (use) =>
       runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
-        use(
-          new GitHubConnection({
-            store: new GitHubConnectionStore(state.storage),
-            workspaceName: tenantWorkspaceName(name),
-            namespace: workspace.namespace,
-            environment: { clientId, fallbackToken: undefined, fetcher },
-          }),
+        Effect.runPromise(
+          use(
+            new GitHubConnection({
+              store: new GitHubConnectionStore(state.storage),
+              workspaceName: tenantWorkspaceName(name),
+              namespace: workspace.namespace,
+              environment: { clientId, fallbackToken: undefined, fetcher },
+            }),
+          ),
         ),
       ),
   };

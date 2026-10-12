@@ -4,6 +4,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { newRequestId } from "../../../src/diagnostics.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
@@ -58,8 +59,8 @@ const deviceReply = {
 
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
-  connections<T>(use: (connections: ProjectConnections) => Promise<T>): Promise<T>;
-  github<T>(use: (github: GitHubConnection) => Promise<T>): Promise<T>;
+  connections<T>(use: (connections: ProjectConnections) => Effect.Effect<T>): Promise<T>;
+  github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
 }
 
 /**
@@ -78,14 +79,16 @@ function tenant(
 ): Tenant {
   const workspace = options.workspace ?? new FakeTenantWorkspace();
 
-  const inTenant = <T>(use: (built: TenantConnections) => Promise<T>): Promise<T> =>
+  const inTenant = <T>(use: (built: TenantConnections) => Effect.Effect<T>): Promise<T> =>
     runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) =>
-      use(
-        tenantConnections(state.storage, name, workspace, {
-          clientId: options.clientId ?? CLIENT_ID,
-          fallbackToken: options.fallbackToken,
-          fetcher: githubReplying(options.replies ?? [deviceReply]),
-        }),
+      Effect.runPromise(
+        use(
+          tenantConnections(state.storage, name, workspace, {
+            clientId: options.clientId ?? CLIENT_ID,
+            fallbackToken: options.fallbackToken,
+            fetcher: githubReplying(options.replies ?? [deviceReply]),
+          }),
+        ),
       ),
     );
 
@@ -497,11 +500,11 @@ test("reinstalls the configured credential before repairing a repository after a
   const subject = tenant("credential-before-use", { workspace, fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
-  await subject.connections((connections) => {
-    connections.resetWorkspace();
-
-    return Promise.resolve();
-  });
+  await subject.connections((connections) =>
+    Effect.sync(() => {
+      connections.resetWorkspace();
+    }),
+  );
   workspace.credentialState = "missing";
   const beforeUse = workspace.commands.length;
 
@@ -528,11 +531,11 @@ test("still attempts the clone without a credential, so a public repository re-c
 
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
-  await subject.connections((connections) => {
-    connections.resetWorkspace();
-
-    return Promise.resolve();
-  });
+  await subject.connections((connections) =>
+    Effect.sync(() => {
+      connections.resetWorkspace();
+    }),
+  );
   workspace.credentialState = "missing";
   const beforeUse = workspace.commands.length;
   const withoutFallback = tenant("credential-required-before-use", { workspace });
@@ -577,11 +580,11 @@ test("clears cached GitHub status after resetting the workspace", async () => {
   const subject = tenant("reset-clears-connection", { workspace, fallbackToken: FAKE_TOKEN });
 
   await subject.github((github) => github.ensureCredential(NOW));
-  await subject.connections((connections) => {
-    connections.resetWorkspace();
-
-    return Promise.resolve();
-  });
+  await subject.connections((connections) =>
+    Effect.sync(() => {
+      connections.resetWorkspace();
+    }),
+  );
   workspace.credentialState = "missing";
 
   await expect(
@@ -610,7 +613,7 @@ test.each([
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("status-rpc-failure", { workspace });
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(GitHubConnection.prototype, "status").mockRejectedValue(cause);
+  vi.spyOn(GitHubConnection.prototype, "status").mockReturnValue(Effect.die(cause));
 
   const listed = await subject.connections((connections) => connections.list(NOW));
 
@@ -649,10 +652,11 @@ test.each(["list", "connection"] as const)(
     const subject = tenant(`request-id-${read}`);
     const requestId = newRequestId();
 
-    await subject.connections(async (connections) => {
-      if (read === "list") await connections.list(NOW, requestId);
-      else await connections.connectionStatus(NOW, requestId);
-    });
+    await subject.connections((connections) =>
+      read === "list"
+        ? Effect.asVoid(connections.list(NOW, requestId))
+        : Effect.asVoid(connections.connectionStatus(NOW, requestId)),
+    );
 
     expect(subject.workspace.credentialRequestIds).toEqual([requestId]);
 

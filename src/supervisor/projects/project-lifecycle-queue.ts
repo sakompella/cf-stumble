@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type { ProjectId } from "../../project-catalog.js";
 
 /**
@@ -16,21 +17,39 @@ import type { ProjectId } from "../../project-catalog.js";
 export class ProjectLifecycleQueue {
   private readonly tails = new Map<ProjectId, Promise<void>>();
 
-  /** Start `operation` after every earlier operation for `projectId` has settled. */
-  exclusive<T>(projectId: ProjectId, operation: () => Promise<T>): Promise<T> {
-    const previous = this.tails.get(projectId) ?? Promise.resolve();
-    const result = previous.then(operation);
+  /**
+   * Run `operation` after every earlier operation for `projectId` has settled. Its place in the
+   * queue is taken when this Effect starts, which is the order callers asked in.
+   *
+   * A caller interrupted while it waits gives up its turn and never runs. Once `operation` has
+   * started it runs to the end without interruption, because its Workspace Host calls cannot be
+   * recalled: the next operation waits for that work, not only for the caller that stopped
+   * waiting. The tails are native Promises, so no request's fiber resumes another's.
+   */
+  exclusive<A, E>(projectId: ProjectId, operation: Effect.Effect<A, E>): Effect.Effect<A, E> {
+    return Effect.suspend(() => {
+      const previous = this.tails.get(projectId) ?? Promise.resolve();
+      const finished = { settle: (): void => {} };
 
-    const settled = result.then(
-      () => {},
-      () => {},
-    );
+      const own = new Promise<void>((resolve) => {
+        finished.settle = resolve;
+      });
 
-    this.tails.set(projectId, settled);
-    void settled.then(() => {
-      if (this.tails.get(projectId) === settled) this.tails.delete(projectId);
+      // Settled after every earlier operation and this one, even if this one never ran.
+      const settled = previous.then(() => own);
+      this.tails.set(projectId, settled);
+      void settled.then(() => {
+        if (this.tails.get(projectId) === settled) this.tails.delete(projectId);
+      });
+
+      return Effect.promise(() => previous).pipe(
+        Effect.andThen(Effect.uninterruptible(operation)),
+        Effect.ensuring(
+          Effect.sync(() => {
+            finished.settle();
+          }),
+        ),
+      );
     });
-
-    return result;
   }
 }

@@ -43,7 +43,10 @@ identity or a request's Durable Object stub, lives in a global layer.
   Effect at all. An asynchronous caller lifts such a value with `Effect.fromResult`. A SQL
   exception is not a `Result`: it still escapes the callback, and the transaction rolls back.
 - A streamed response body outlives the program that returned its headers. The body owns its own
-  lifetime until the turn settles, fails, is cancelled, or reaches its deadline (ADR-0037).
+  lifetime until the turn settles, fails, is cancelled, or reaches its deadline (ADR-0037). Its
+  `start` runs the body's program with `runResponseBody` in `src/run-entry-point.ts`, and its
+  `cancel` interrupts that program. The program's settlement runs uninterruptibly, so a cancel
+  cannot stop a turn between its thread write and the lease release.
 - Durable state and platform alarms stay authoritative across Durable Object eviction. A fiber or
   a finalizer does not replace them, because eviction runs neither.
 - The mutable harness, vendored Pi, and vendored Computer do not use the host's Effect. A
