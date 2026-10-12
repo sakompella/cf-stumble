@@ -3,8 +3,8 @@
  * stable identifier. The page renders what a reader must observe rather than keeping it in a
  * script variable, so a browser test reads the same values the owner reads.
  *
- * This map is the single source. The markup, the page script, and the tests all use it, so an
- * identifier cannot drift between what the page renders and what a test looks for. Elements a turn
+ * This map is the single source. The page's views and the tests both use it, so an identifier
+ * cannot drift between what the page renders and what a test looks for. Elements a turn
  * creates while it streams — one block per message, one collapsible per tool call — carry classes
  * rather than identifiers, because there is no fixed number of them to name.
  */
@@ -72,12 +72,12 @@ export const OWNER_PAGE_IDS = {
 
 type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];
 
-/** Every identifier the static markup must contain. */
+/** Every identifier the page renders. */
 export const OWNER_PAGE_ELEMENT_IDS: readonly OwnerPageId[] = Object.values(OWNER_PAGE_IDS);
 
 /**
  * The classes the streaming conversation writes. A frame arriving during a turn creates elements,
- * so these are how a reader — and a browser test — names something the markup could not declare.
+ * so these are how a reader — and a browser test — names something that has no fixed identifier.
  */
 export const OWNER_PAGE_CLASSES = {
   message: "message",

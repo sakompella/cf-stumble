@@ -1,316 +1,90 @@
 /**
- * What the owner page is made of: the sidebar of connected projects, the streaming conversation,
- * the collapsible tool detail, and the generation drawer.
+ * The document the browser receives and the script file it names.
  *
- * These tests read the document and the script file the browser receives. They cannot prove the page
- * behaves, because no DOM runs here — that is the browser harness in `tools/browser-harness/`. What they hold is
- * everything a text can hold: the identifiers a browser test acts on, the endpoints the page calls,
- * the frame vocabulary it understands, and the two rules that keep repository and model output from
- * becoming markup this page executes.
+ * These tests read text. What the Foldkit program in `src/page/client` renders and how it behaves
+ * is tested against its update function and views in `test/page/client/`, and in a real browser by
+ * `tools/browser-harness/`.
  */
 
 import { expect, test } from "vitest";
-import {
-  ownerPageHtml,
-  OWNER_PAGE_ELEMENT_IDS,
-  OWNER_PAGE_IDS,
-  OWNER_PAGE_SCRIPT_FILE,
-} from "../../src/page/index.js";
-import { OWNER_PAGE_SCRIPT_TURN } from "../../src/page/script-turn.js";
-import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames.js";
-import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
+import { ownerPageHtml, OWNER_PAGE_IDS, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
 
-/** The script the browser actually receives: the file the page names, as the Worker serves it. */
-const deliveredScript = OWNER_PAGE_SCRIPT_FILE.source;
-
-type StubNode = {
-  textContent: string;
-  appendChild(node: StubNode): void;
-};
-
-type TurnRenderer = (frame: ProjectTurnFrame) => boolean;
-
-type RenderText = string | number | boolean | null | undefined;
-
-function renderText(value: RenderText): string {
-  return value === null || value === undefined ? "" : String(value);
-}
-
-// The stubs mirror the renderer's free helper names, so renaming a helper should fail this test.
-function turnRenderer(visible: string[]): TurnRenderer {
-  const node = (textContent = ""): StubNode => ({
-    textContent,
-    appendChild(child) {
-      visible.push(child.textContent);
-    },
-  });
-
-  const assistantText: StubNode | null = null;
-  const page = { assistantText, selection: "selection" };
-
-  const documentStub = { createTextNode: (value: string) => node(value) };
-  const setText = (_id: string, value: string) => visible.push(value);
-  const text = renderText;
-  const textMessage = () => node();
-  const element = (_tag: string, _className: string) => node();
-  const messageEntry = (_className: string, _kind: string) => node();
-  const toolBlock = () => visible.push("tool-start");
-  const toolResult = () => visible.push("tool-result");
-  const diffMessage = () => visible.push("diff");
-  const diffUnavailableMessage = () => visible.push("diff-unavailable");
-
-  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion -- SAFETY: evaluate only the delivered turn renderer with the stubs above.
-  const makeRenderer = new Function(
-    "page",
-    "document",
-    "node",
-    "setText",
-    "text",
-    "textMessage",
-    "element",
-    "messageEntry",
-    "toolBlock",
-    "toolResult",
-    "diffMessage",
-    "diffUnavailableMessage",
-    `${OWNER_PAGE_SCRIPT_TURN}\nreturn applyFrame;`,
-  ) as (...args: unknown[]) => TurnRenderer;
-
-  return makeRenderer(
-    page,
-    documentStub,
-    () => null,
-    setText,
-    text,
-    textMessage,
-    element,
-    messageEntry,
-    toolBlock,
-    toolResult,
-    diffMessage,
-    diffUnavailableMessage,
-  );
-}
-
-test("the page markup carries every stable element id", () => {
-  const html = ownerPageHtml("test-nonce");
-
-  for (const id of OWNER_PAGE_ELEMENT_IDS) {
-    expect(html, `missing id ${id}`).toContain(`id="${id}"`);
+declare global {
+  interface ImportMeta {
+    glob: (
+      pattern: string,
+      options: { readonly eager: true; readonly query: "?raw"; readonly import: "default" },
+    ) => Record<string, string>;
   }
+}
 
-  expect(OWNER_PAGE_ELEMENT_IDS.length).toBe(new Set(OWNER_PAGE_ELEMENT_IDS).size);
+/** The program's own source. The bundle also holds Foldkit and Effect, whose text is not ours. */
+const clientSources = import.meta.glob("../../src/page/client/*.ts", {
+  eager: true,
+  query: "?raw",
+  import: "default",
 });
 
-test("the page loads one script, from a same-origin path that names a hash of its bytes", async () => {
+test("the document is a container for the program and one same-origin script", () => {
   const html = ownerPageHtml("test-nonce");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(deliveredScript));
-  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0"));
 
-  // The Worker lets a browser keep the script for a year, which is safe only while one path always
-  // means the same bytes. Inline code would need 'unsafe-inline' or a nonce, so there is none.
-  expect(OWNER_PAGE_SCRIPT_FILE.path).toBe(`/assets/owner-${hex.join("").slice(0, 16)}.js`);
+  expect(html).toContain(`<main id="${OWNER_PAGE_IDS.root}"></main>`);
+  expect(html).toContain('<style nonce="test-nonce">');
   expect(html.match(/<script\b[^>]*>/gu)).toEqual([
     `<script src="${OWNER_PAGE_SCRIPT_FILE.path}">`,
   ]);
-  expect(html).toContain(`<script src="${OWNER_PAGE_SCRIPT_FILE.path}"></script>`);
+});
+
+test("the script's path names a hash of its bytes", async () => {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(OWNER_PAGE_SCRIPT_FILE.source),
+  );
+
+  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0"));
+
+  // The Worker lets a browser keep the script for a year, which is safe only while one path always
+  // means the same bytes.
+  expect(OWNER_PAGE_SCRIPT_FILE.path).toBe(`/assets/owner-${hex.join("").slice(0, 16)}.js`);
 });
 
 test("the script the browser receives parses as JavaScript", () => {
-  // Every other assertion in this file matches text, and text matching cannot see a syntax
-  // error: each id still appears in the markup while none of the script runs, so the page looks
-  // right and populates nothing. Parsing the delivered script is the only check that the page
-  // can fill itself in at all.
-  const script = deliveredScript;
+  // A syntax error would leave the empty container on screen and nothing else. Parsing the
+  // delivered script is the check that the page can fill itself in at all.
+  const script = OWNER_PAGE_SCRIPT_FILE.source;
 
-  expect(script).toContain("refreshStatus");
-  expect(script).toContain("sendTurn");
-  expect(script).toContain("loadProjects");
+  expect(script.length).toBeGreaterThan(0);
   // oxlint-disable-next-line typescript/no-implied-eval -- Constructing the function is the check. It parses the script and is never called.
   expect(() => new Function(script)).not.toThrow();
 });
 
-test("the page uses only the owner JSON endpoints, on this origin", () => {
-  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
-
-  expect(html).toContain('"/api/status"');
-  expect(html).toContain('"/api/projects"');
-  expect(html).toContain('"/api/projects/"');
-  expect(html).toContain('"/thread"');
-  expect(html).toContain('"/thread/fresh"');
-  expect(html).toContain('"/turn"');
-  expect(html).toContain('"/api/projects/connect"');
-  expect(html).toContain('"/api/github/authorization"');
-  expect(html).toContain('"/api/generations/submit"');
-  expect(html).toContain('"/api/generations/" + kind');
-  expect(html).not.toMatch(/https?:\/\/(?!cf-stumble\.test)/u);
-});
-
-test("a project is chosen from the tenant's catalog, never typed in", () => {
-  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
-
-  // T6a made the catalog real, so a project id is something the Supervisor already holds. A
-  // free-text field could only name a project the tenant has not connected, and the default value
-  // this page used to carry named a placeholder that no longer exists.
-  expect(html).not.toContain("project-one");
-  expect(html).not.toContain('id="project-id-input"');
-  expect(html).not.toContain("input-project");
-});
-
-test("the sidebar can show an entry that is a checkout rather than a connection", () => {
-  const script = deliveredScript;
-
-  // The harness entry arrives in the same list with `kind: "harness"` and no repository URL, so
-  // the sidebar has to name the checkout it selects and must not count it as a connection: a page
-  // that read `repositoryUrl` for every row would show the owner an empty line and "1 connected"
-  // on a deployment where nothing is connected.
-  expect(script).toContain(`"${HARNESS_DIRECTORY}"`);
-  expect(script).toContain('"harness"');
-  expect(script).toContain("no repository connected yet");
-});
-
-test("the streaming client renders every frame the turn route emits", () => {
-  const script = deliveredScript;
-  const visible: string[] = [];
-  const render = turnRenderer(visible);
-
-  const frames: readonly (readonly [string, ProjectTurnFrame, boolean])[] = [
-    ["text", { kind: "text", text: "hello" }, false],
-    [
-      "tool-start",
-      { kind: "tool-start", toolCallId: "call-1", toolName: "read", arguments: {} },
-      false,
-    ],
-    [
-      "tool-result",
-      {
-        kind: "tool-result",
-        toolCallId: "call-1",
-        toolName: "read",
-        isError: false,
-        content: "ok",
-        truncated: false,
-      },
-      false,
-    ],
-    ["diff", { kind: "diff", content: "diff", truncated: false }, false],
-    ["diff-unavailable", { kind: "diff-unavailable", detail: "not available" }, false],
-    ["saved", { kind: "saved", revision: 1, messageCount: 1 }, true],
-    [
-      "turn-failed",
-      { kind: "turn-failed", code: "model-error", saved: false, revision: undefined },
-      true,
-    ],
-    ["turn-rejected", { kind: "turn-rejected", code: "invalid-turn-request" }, true],
-    ["save-failed", { kind: "save-failed", code: "storage-failed" }, true],
-    ["stream-invalid", { kind: "stream-invalid", code: "malformed-frame" }, true],
-    ["cancelled", { kind: "cancelled" }, true],
-    ["timed-out", { kind: "timed-out" }, true],
-  ];
-
-  for (const [kind, frame, ends] of frames) {
-    const before = visible.length;
-
-    expect(render(frame), `unexpected terminal state for ${kind}`).toBe(ends);
-    expect(visible.length, `frame kind ${kind} was not rendered`).toBeGreaterThan(before);
-  }
-
-  // Reading the body while it arrives is what makes the conversation stream rather than appear in
-  // one block when the turn ends (ADR-0037).
-  expect(script).toContain("getReader()");
-  expect(script).toContain("application/x-ndjson");
-  expect(script).toContain("AbortController");
-});
-
-test("a turn's diff renders with the tool-result colouring, and an unavailable diff states why", () => {
-  const script = deliveredScript;
-
-  // T13 added `diff` (`content`, `truncated`) and `diff-unavailable` (`detail`) to
-  // `FacetTurnFrame`/`ProjectTurnFrame`. The browser sees the frame kinds and the user-facing
-  // truncation note; private helper names are not part of the page contract.
-  expect(script).toContain("frame.detail");
-  expect(script).toContain("the harness truncated this diff");
-});
-
-test("the page never turns repository or model output into markup", () => {
-  const script = deliveredScript;
-
-  // Everything a turn shows — text, tool arguments, command output, a diff — came from a
-  // repository or a model. It reaches the document as text nodes and `textContent` only.
-  expect(script).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write/u);
-  expect(script).not.toContain("eval(");
-  expect(script).toContain("createTextNode");
-  expect(script).toContain("textContent");
-});
-
-test("every element the script reads is an element the markup renders", () => {
-  const script = deliveredScript;
-  const known = new Set<string>(OWNER_PAGE_ELEMENT_IDS);
-
-  // The script names elements through `node(id)` and `setText(id, ...)`. A literal here that the
-  // markup does not carry is a silent no-op at run time, which looks like a page that renders
-  // nothing rather than like a fault.
-  for (const found of script.matchAll(/(?:node|setText)\("([a-z-]+)"/gu)) {
-    const id = found[1] ?? "";
-    expect(known.has(id), `the script reads an element the markup lacks: ${id}`).toBe(true);
-  }
-});
-
-test("the sidebar collapses and the generation controls stay in a drawer", () => {
+test("nothing outside the nonced style and the script file can run or style the page", () => {
   const html = ownerPageHtml("test-nonce");
 
-  // Q4: the active generation stays visible, and submission, activation and rollback sit in a
-  // compact drawer on the same page.
-  expect(html).toContain(`aria-controls="${OWNER_PAGE_IDS.sidebar}"`);
-  expect(html).toContain(`aria-expanded="true"`);
-  expect(html).toContain(`<details id="${OWNER_PAGE_IDS.generationDrawer}">`);
+  // The Content Security Policy refuses inline handlers and any other origin, so the document
+  // carries neither.
+  expect(html).not.toMatch(/\son[a-z]+=/u);
+  expect(html).not.toMatch(/<(?:link|img|iframe)\b/u);
 });
 
-test("the page shows no raw JSON panel", () => {
-  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
+test("the program never writes markup, evaluates code, or stores anything", () => {
+  const files = Object.entries(clientSources);
 
-  // The primary workflow is the conversation. A reader who wants a payload has the browser's own
-  // network tools; a `<pre>` of every response is noise beside a streaming turn.
-  expect(html).not.toContain("JSON.stringify(value, null, 2)");
-  expect(html).not.toMatch(/id="[a-z-]+-raw"/u);
-});
+  expect(files.length).toBeGreaterThan(0);
 
-test("the page asks for no credential and stores none", () => {
-  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
-
-  expect(html).not.toContain("password");
-  expect(html).not.toContain("localStorage");
-  expect(html).not.toContain("sessionStorage");
-  expect(html).not.toContain("document.cookie");
-  expect(html).not.toContain("CF_Authorization");
-});
-
-/** The delivered script's own label check, extracted and run rather than matched as text. */
-function controlLabelFrom(script: string): (raw: string) => number | null {
-  const found = /\n {2}function controlLabel\(raw\) \{[\s\S]*?\n {2}\}\n/u.exec(script);
-
-  if (found === null) {
-    throw new Error("the owner page carries no controlLabel function");
+  // Everything a turn shows came from a repository or a model, so it reaches the document only as
+  // view text. The page asks for no credential and keeps none.
+  for (const [path, source] of files) {
+    expect(source, path).not.toMatch(
+      /InnerHTML|innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|localStorage|sessionStorage|indexedDB|document\.cookie|CF_Authorization/u,
+    );
   }
+});
 
-  // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-type-assertion -- SAFETY: the constructed function is the extracted source above, whose only added statement returns `controlLabel`.
-  const made = new Function(`${found[0]}\nreturn controlLabel;`) as () => (
-    raw: string,
-  ) => number | null;
-
-  return made();
-}
-
-test("a generation label names one whole generation or nothing", () => {
-  const controlLabel = controlLabelFrom(deliveredScript);
-
-  // Number.parseInt("1.5") is 1, so a page that parsed the field would activate generation 1 for a
-  // reader who typed something that names no generation at all.
-  expect(controlLabel("2")).toBe(2);
-  expect(controlLabel(" 3 ")).toBe(3);
-  expect(controlLabel("0")).toBe(0);
-  expect(controlLabel("1.5")).toBe(null);
-  expect(controlLabel("-1")).toBe(null);
-  expect(controlLabel("")).toBe(null);
-  expect(controlLabel("two")).toBe(null);
+test("the program calls only this origin", () => {
+  for (const [path, source] of Object.entries(clientSources)) {
+    // Every request is a relative path, so the policy's `connect-src 'self'` is never tested by a
+    // request the page meant to make. The GitHub verification link is data from the Worker.
+    expect(source, path).not.toMatch(/["'`]https?:\/\//u);
+  }
 });

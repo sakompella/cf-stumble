@@ -89,6 +89,20 @@ export default defineConfig({
 
   overrides: [
     {
+      // The owner page's Foldkit program. Effect and Foldkit name a tagged union's discriminant
+      // `_tag`, and a Schema is declared as a value and a type with one name
+      // (`export const Model = Schema.Struct(...)` and `export type Model = typeof Model.Type`).
+      files: ["src/page/client/**", "test/page/client/**"],
+      rules: {
+        "eslint/no-underscore-dangle": ["error", { allow: ["_tag"] }],
+        "eslint/no-redeclare": "off",
+        // Effect's `Option.some`, `Option.map`, and `Array.map` are module functions, not array
+        // methods, and their arguments are values or callbacks of a known arity. The rule reads
+        // every `.some(` and `.map(` as an array method once Effect is imported by module path.
+        "unicorn/no-array-callback-reference": "off",
+      },
+    },
+    {
       // `node:test` registers `describe` and `it` and tracks their promises itself; awaiting each
       // one at the top level would serialize the tests for no gain.
       // Test-local helper closures stay next to the test that uses them.

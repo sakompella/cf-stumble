@@ -6,8 +6,8 @@ The owner page becomes a Foldkit application: a model and an update function own
 state, views render it, and commands and subscriptions perform its requests and its streamed turn.
 esbuild bundles it into one script. The Worker serves that script as its own file from this
 origin, behind the same Access check as the page, and the browser keeps it until a release
-changes it. The owner chose Foldkit and this delivery on 2026-10-12. Until the Foldkit page
-replaces it, the same delivery carries the hand-written script in `src/page/script*.ts`.
+changes it. The owner chose Foldkit and this delivery on 2026-10-12. The program lives in
+`src/page/client`, and the served HTML holds only its container.
 
 **Why a separate file.** The Foldkit spike's bundle was 662,883 bytes, or 208,914 bytes gzip. The
 page is `no-store`, because it is rendered for one Access session, so an inline script would be
@@ -46,13 +46,18 @@ code, not part of a generation's module map.
 
 **Budgets.** `tools/bundle-budgets.test.ts`, in `pnpm test:tools`, measures the Worker upload with
 `wrangler deploy --dry-run --containers-rollout=none` and gzips at the default level, which matches
-Wrangler's own figure. The limits are the spike's measured end state plus about 10 percent.
+Wrangler's own figure. The Worker limit started at the spike's measured end state plus about 10 percent (400 KiB). After
+Waves 1 and 5 merged, the upload measured 394.54 KiB gzip with the Supervisor and Workspace Host
+waves still to come, so the limit is 600 KiB. That is far below the platform's upload limit; the
+real constraint is Worker startup time, which the release proof measures on staging.
+The page limit is the Foldkit page's measured size plus about 10 percent. The Wave 5 Worker figure
+holds the page script and Wave 0's Effect entry point, but none of the later host waves.
 
-| Measurement             | Before the port            | After Wave 0               | Spike end state                   | Limit      |
-| ----------------------- | -------------------------- | -------------------------- | --------------------------------- | ---------- |
-| Worker upload           | 744.70 KiB / 164.95 KiB gz | 802.87 KiB / 177.70 KiB gz | 1350.84 KiB / 359.99 KiB gz       | 400 KiB gz |
-| Owner page script       | inline                     | 30,189 B / 6,808 B gz      | 662,883 B / 208,914 B gz          | 230 KiB gz |
-| Page HTML on every load | 44,073 B / 10,274 B gz     | 12,089 B / 2,927 B gz      | 667,286 B / 210,256 B gz (inline) | -          |
+| Measurement             | Before the port            | After Wave 0               | Spike end state                   | After Wave 5                | Limit      |
+| ----------------------- | -------------------------- | -------------------------- | --------------------------------- | --------------------------- | ---------- |
+| Worker upload           | 744.70 KiB / 164.95 KiB gz | 802.87 KiB / 177.70 KiB gz | 1350.84 KiB / 359.99 KiB gz       | 1386.13 KiB / 365.59 KiB gz | 600 KiB gz |
+| Owner page script       | inline                     | 30,189 B / 6,808 B gz      | 662,883 B / 208,914 B gz          | 635,592 B / 200,595 B gz    | 216 KiB gz |
+| Page HTML on every load | 44,073 B / 10,274 B gz     | 12,089 B / 2,927 B gz      | 667,286 B / 210,256 B gz (inline) | 4,765 B / 1,492 B gz        | -          |
 
 **Alternatives.** An inline bundle under the page's nonce needs no new route, but repeats a large
 download on every load. Cloudflare static assets can answer before the Worker runs, so they could

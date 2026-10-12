@@ -6,5 +6,7 @@
     "lib": ["ES2023"],
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src", "test", "*.config.ts"]
+  "include": ["src", "test", "*.config.ts"],
+  // The owner page's browser program has its own tsconfig with the DOM library.
+  "exclude": ["src/page/client", "test/page/client"]
 }

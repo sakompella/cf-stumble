@@ -55,12 +55,17 @@ export function waitForThreadOk(page: BrowserPage, timeoutMs = 15_000): Promise<
   return page.waitFor(`${textExpression(ID.conversationState)} === "ok"`, timeoutMs);
 }
 
-/** A turn has ended when the page has written something other than its running wording. */
+/**
+ * A turn has ended when the page has written something other than its running wording and Send
+ * is back. The terminal frame and the end of the body arrive as separate reads, and a page may
+ * paint between them.
+ */
 export function waitForTurnEnded(page: BrowserPage, timeoutMs = 30_000): Promise<void> {
   const state = textExpression(ID.turnState);
+  const send = `document.getElementById(${JSON.stringify(ID.sendTurnButton)})`;
 
   return page.waitFor(
-    `${state} !== "" && ${state} !== "running" && ${state} !== "cancelling"`,
+    `${state} !== "" && ${state} !== "running" && ${state} !== "cancelling" && ${send}?.disabled === false`,
     timeoutMs,
   );
 }

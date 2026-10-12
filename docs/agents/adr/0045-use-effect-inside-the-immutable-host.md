@@ -66,7 +66,7 @@ to that bundle. Measured with the Worker's `fetch` running through `runAtEntryPo
 (gzip 164.95 KiB) to 805.53 KiB (gzip 178.56 KiB). The Effect spike measured about 30 KiB gzip for
 the runtime, errors, services, and layers, and about 45 KiB more for any use of `Schema`, so later
 groups use `Schema` only where it parses untrusted input. `tools/bundle-budgets.test.ts` holds the
-upload within 400 KiB gzip.
+upload within 600 KiB gzip (ADR-0046, "Budgets").
 
 **Alternatives.** Keeping better-result for results and adding Effect only for concurrency would
 leave two systems for composing failures. Publishing Effect RPC or schema envelopes across Workers

@@ -1,4 +1,4 @@
-import { OWNER_PAGE_BODY } from "./markup.js";
+import { OWNER_PAGE_IDS } from "./element-ids.js";
 import { OWNER_PAGE_SCRIPT_PATH, OWNER_PAGE_SCRIPT_SOURCE } from "./owner-script.generated.js";
 import { OWNER_PAGE_STYLES } from "./styles.js";
 
@@ -17,6 +17,9 @@ export const OWNER_PAGE_SCRIPT_FILE = {
  * The whole owner page: one HTML document with an inline stylesheet and one same-origin script,
  * so the Content Security Policy the route sends can refuse every other origin and all inline
  * code. The nonce comes from the route, which makes one per response, and admits the stylesheet.
+ *
+ * The script is the Foldkit program in `client/`. The body holds only its container, and the
+ * program renders the page into it.
  */
 export function ownerPageHtml(nonce: string): string {
   return `<!doctype html>
@@ -28,7 +31,7 @@ export function ownerPageHtml(nonce: string): string {
 <style nonce="${nonce}">${OWNER_PAGE_STYLES}</style>
 </head>
 <body>
-${OWNER_PAGE_BODY}
+<main id="${OWNER_PAGE_IDS.root}"></main>
 <script src="${OWNER_PAGE_SCRIPT_FILE.path}"></script>
 </body>
 </html>

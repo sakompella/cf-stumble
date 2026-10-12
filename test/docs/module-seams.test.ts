@@ -61,7 +61,12 @@ const groupDirectories = Object.keys(sourceFiles)
   .filter((path) => path.endsWith("/index.ts"))
   .map((path) => directoryOf(path));
 
-const publicEntrypoints = new Set(["src/workspace/project/protocol.ts"]);
+// Wire contracts another program reads directly. The owner page's browser program types the turn
+// stream from `turn-frames.ts`, and the group's index would pull Worker-only modules into it.
+const publicEntrypoints = new Set([
+  "src/workspace/project/protocol.ts",
+  "src/supervisor/projects/turn-frames.ts",
+]);
 
 function violations(): string[] {
   const found: string[] = [];
