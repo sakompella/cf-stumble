@@ -10,6 +10,7 @@
     "build-loaded-execution-env-fixture.mts",
     "build-generation-0.mts",
     "build-owner-page.mts",
+    "bundle-budgets.test.ts",
     "json.mts",
     "module-map-build.mts",
     "vendor-pi.mts",
