@@ -1,7 +1,7 @@
 import { OWNER_PAGE_IDS as ID } from "./element-ids.js";
 
 /**
- * The shared part of the inline script: element access, the one JSON fetch helper, the mutable
+ * The shared part of the page script: element access, the one JSON fetch helper, the mutable
  * page state, and the way a failure is worded. Every request is a same-origin relative path and
  * carries the Access session cookie the browser already holds, so the page asks for no credential
  * and stores none.

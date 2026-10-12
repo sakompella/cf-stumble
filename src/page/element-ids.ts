@@ -3,7 +3,7 @@
  * stable identifier. The page renders what a reader must observe rather than keeping it in a
  * script variable, so a browser test reads the same values the owner reads.
  *
- * This map is the single source. The markup, the inline script, and the tests all use it, so an
+ * This map is the single source. The markup, the page script, and the tests all use it, so an
  * identifier cannot drift between what the page renders and what a test looks for. Elements a turn
  * creates while it streams — one block per message, one collapsible per tool call — carry classes
  * rather than identifiers, because there is no fixed number of them to name.

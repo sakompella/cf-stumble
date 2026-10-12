@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { ownerPageHtml } from "../../src/page/index.js";
+import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../../src/page/index.js";
 import { NEW_PROJECT, authorizationPayload, connectPayload, projectsPayload } from "./fixtures.mjs";
 import { runGenerationCommand, statusPayload, submitGeneration } from "./fixtures-generation.mjs";
 import { threadPayload } from "./fixtures-thread.mjs";
@@ -42,12 +42,28 @@ export function sendOwnerPage(res: ServerResponse): void {
     "cache-control": "no-store",
     "content-security-policy":
       `default-src 'none'; connect-src 'self'; img-src 'self'; ` +
-      `style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; ` +
+      `style-src 'nonce-${nonce}'; script-src 'self'; ` +
       `form-action 'none'; base-uri 'none'; frame-ancestors 'none'`,
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
   });
   res.end(ownerPageHtml(nonce));
+}
+
+export function isOwnerPageScriptPath(path: string): boolean {
+  return path === OWNER_PAGE_SCRIPT_FILE.path;
+}
+
+/** The page's script file, with the headers the Worker sends. */
+export function sendOwnerPageScript(res: ServerResponse): void {
+  res.writeHead(200, {
+    "content-type": "text/javascript; charset=utf-8",
+    "cache-control": "public, max-age=31536000, immutable",
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  });
+  res.end(OWNER_PAGE_SCRIPT_FILE.source);
 }
 
 export function acceptsHtml(accept: string | undefined): boolean {

@@ -9,6 +9,7 @@
     "access-session.mts",
     "build-loaded-execution-env-fixture.mts",
     "build-generation-0.mts",
+    "build-owner-page.mts",
     "json.mts",
     "module-map-build.mts",
     "vendor-pi.mts",

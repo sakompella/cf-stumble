@@ -13,3 +13,4 @@ build/
 .hegel/
 /test-results/
 /playwright-report/
+/src/page/owner-script.generated.ts

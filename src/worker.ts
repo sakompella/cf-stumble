@@ -82,8 +82,9 @@ async function ownerRequest(request: Request, env: Cloudflare.Env): Promise<Resp
     return ownerResponse(pathname, Response.json({ ok: true }));
   }
 
-  // A browser navigation to `GET /` receives the owner page. Every other request for that path,
-  // including the Supervisor's own relayed startup check, keeps its current behavior.
+  // A browser navigation to `GET /` receives the owner page, and a request for the page's current
+  // script file receives that file. Every other request for `/`, including the Supervisor's own
+  // relayed startup check, keeps its current behavior.
   const page = ownerPageResponse(request);
 
   if (page !== undefined) {

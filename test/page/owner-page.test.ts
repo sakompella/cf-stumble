@@ -2,29 +2,26 @@
  * What the owner page is made of: the sidebar of connected projects, the streaming conversation,
  * the collapsible tool detail, and the generation drawer.
  *
- * These tests read the document the browser receives. They cannot prove the page behaves, because
- * no DOM runs here — that is the browser harness in `tools/browser-harness/`. What they hold is
+ * These tests read the document and the script file the browser receives. They cannot prove the page
+ * behaves, because no DOM runs here — that is the browser harness in `tools/browser-harness/`. What they hold is
  * everything a text can hold: the identifiers a browser test acts on, the endpoints the page calls,
  * the frame vocabulary it understands, and the two rules that keep repository and model output from
  * becoming markup this page executes.
  */
 
 import { expect, test } from "vitest";
-import { ownerPageHtml, OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "../../src/page/index.js";
+import {
+  ownerPageHtml,
+  OWNER_PAGE_ELEMENT_IDS,
+  OWNER_PAGE_IDS,
+  OWNER_PAGE_SCRIPT_FILE,
+} from "../../src/page/index.js";
 import { OWNER_PAGE_SCRIPT_TURN } from "../../src/page/script-turn.js";
 import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames.js";
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 
-/** The script the browser actually receives, taken out of the one inline `<script>` element. */
-function inlinePageScript(html: string): string {
-  const found = /<script nonce="[^"]*">([\s\S]*?)<\/script>/u.exec(html);
-
-  if (found?.[1] === undefined) {
-    throw new Error("the owner page carries no inline script");
-  }
-
-  return found[1];
-}
+/** The script the browser actually receives: the file the page names, as the Worker serves it. */
+const deliveredScript = OWNER_PAGE_SCRIPT_FILE.source;
 
 type StubNode = {
   textContent: string;
@@ -105,12 +102,26 @@ test("the page markup carries every stable element id", () => {
   expect(OWNER_PAGE_ELEMENT_IDS.length).toBe(new Set(OWNER_PAGE_ELEMENT_IDS).size);
 });
 
-test("the inline script the browser receives parses as JavaScript", () => {
+test("the page loads one script, from a same-origin path that names a hash of its bytes", async () => {
+  const html = ownerPageHtml("test-nonce");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(deliveredScript));
+  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0"));
+
+  // The Worker lets a browser keep the script for a year, which is safe only while one path always
+  // means the same bytes. Inline code would need 'unsafe-inline' or a nonce, so there is none.
+  expect(OWNER_PAGE_SCRIPT_FILE.path).toBe(`/assets/owner-${hex.join("").slice(0, 16)}.js`);
+  expect(html.match(/<script\b[^>]*>/gu)).toEqual([
+    `<script src="${OWNER_PAGE_SCRIPT_FILE.path}">`,
+  ]);
+  expect(html).toContain(`<script src="${OWNER_PAGE_SCRIPT_FILE.path}"></script>`);
+});
+
+test("the script the browser receives parses as JavaScript", () => {
   // Every other assertion in this file matches text, and text matching cannot see a syntax
   // error: each id still appears in the markup while none of the script runs, so the page looks
   // right and populates nothing. Parsing the delivered script is the only check that the page
   // can fill itself in at all.
-  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+  const script = deliveredScript;
 
   expect(script).toContain("refreshStatus");
   expect(script).toContain("sendTurn");
@@ -120,7 +131,7 @@ test("the inline script the browser receives parses as JavaScript", () => {
 });
 
 test("the page uses only the owner JSON endpoints, on this origin", () => {
-  const html = ownerPageHtml("test-nonce");
+  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
 
   expect(html).toContain('"/api/status"');
   expect(html).toContain('"/api/projects"');
@@ -136,7 +147,7 @@ test("the page uses only the owner JSON endpoints, on this origin", () => {
 });
 
 test("a project is chosen from the tenant's catalog, never typed in", () => {
-  const html = ownerPageHtml("test-nonce");
+  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
 
   // T6a made the catalog real, so a project id is something the Supervisor already holds. A
   // free-text field could only name a project the tenant has not connected, and the default value
@@ -147,7 +158,7 @@ test("a project is chosen from the tenant's catalog, never typed in", () => {
 });
 
 test("the sidebar can show an entry that is a checkout rather than a connection", () => {
-  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+  const script = deliveredScript;
 
   // The harness entry arrives in the same list with `kind: "harness"` and no repository URL, so
   // the sidebar has to name the checkout it selects and must not count it as a connection: a page
@@ -159,7 +170,7 @@ test("the sidebar can show an entry that is a checkout rather than a connection"
 });
 
 test("the streaming client renders every frame the turn route emits", () => {
-  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+  const script = deliveredScript;
   const visible: string[] = [];
   const render = turnRenderer(visible);
 
@@ -212,7 +223,7 @@ test("the streaming client renders every frame the turn route emits", () => {
 });
 
 test("a turn's diff renders with the tool-result colouring, and an unavailable diff states why", () => {
-  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+  const script = deliveredScript;
 
   // T13 added `diff` (`content`, `truncated`) and `diff-unavailable` (`detail`) to
   // `FacetTurnFrame`/`ProjectTurnFrame`. The browser sees the frame kinds and the user-facing
@@ -222,7 +233,7 @@ test("a turn's diff renders with the tool-result colouring, and an unavailable d
 });
 
 test("the page never turns repository or model output into markup", () => {
-  const script = inlinePageScript(ownerPageHtml("test-nonce"));
+  const script = deliveredScript;
 
   // Everything a turn shows — text, tool arguments, command output, a diff — came from a
   // repository or a model. It reaches the document as text nodes and `textContent` only.
@@ -233,8 +244,7 @@ test("the page never turns repository or model output into markup", () => {
 });
 
 test("every element the script reads is an element the markup renders", () => {
-  const html = ownerPageHtml("test-nonce");
-  const script = inlinePageScript(html);
+  const script = deliveredScript;
   const known = new Set<string>(OWNER_PAGE_ELEMENT_IDS);
 
   // The script names elements through `node(id)` and `setText(id, ...)`. A literal here that the
@@ -257,7 +267,7 @@ test("the sidebar collapses and the generation controls stay in a drawer", () =>
 });
 
 test("the page shows no raw JSON panel", () => {
-  const html = ownerPageHtml("test-nonce");
+  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
 
   // The primary workflow is the conversation. A reader who wants a payload has the browser's own
   // network tools; a `<pre>` of every response is noise beside a streaming turn.
@@ -266,7 +276,7 @@ test("the page shows no raw JSON panel", () => {
 });
 
 test("the page asks for no credential and stores none", () => {
-  const html = ownerPageHtml("test-nonce");
+  const html = `${ownerPageHtml("test-nonce")}\n${deliveredScript}`;
 
   expect(html).not.toContain("password");
   expect(html).not.toContain("localStorage");
@@ -292,7 +302,7 @@ function controlLabelFrom(script: string): (raw: string) => number | null {
 }
 
 test("a generation label names one whole generation or nothing", () => {
-  const controlLabel = controlLabelFrom(inlinePageScript(ownerPageHtml("test-nonce")));
+  const controlLabel = controlLabelFrom(deliveredScript);
 
   // Number.parseInt("1.5") is 1, so a page that parsed the field would activate generation 1 for a
   // reader who typed something that names no generation at all.
