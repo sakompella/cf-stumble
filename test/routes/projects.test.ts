@@ -1,6 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
-import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import type { VerifiedAccessScope } from "../../src/access/index.js";
 
@@ -47,7 +46,7 @@ test.each([
 ] as const)("maps a total connection Supervisor RPC that %s to 503", async (_kind, cause) => {
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get("/api/github/connection"),
     supervisor({ getGitHubConnection: () => Promise.reject(cause) }),
     ownerScope,
@@ -67,7 +66,7 @@ test.each([
 test("maps a total project-list Supervisor RPC failure to 503", async () => {
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get("/api/projects"),
     supervisor({ listProjects: () => Promise.reject(new Error("workspace is busy")) }),
     ownerScope,
@@ -92,7 +91,7 @@ function post(path: string, body: RequestBody, origin: string | undefined = ORIG
 }
 
 test("lists the tenant's projects and its connection status", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get("/api/projects"),
     supervisor({
       listProjects: () =>
@@ -117,7 +116,7 @@ test("lists the tenant's projects and its connection status", async () => {
 test("connects the repository the body names, and nothing else it carries", async () => {
   const sent: unknown[] = [];
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/projects/connect", {
       repositoryUrl: connectedProject.repositoryUrl,
       displayName: "Repo one",
@@ -151,7 +150,7 @@ test.each([
   [{ repositoryUrl: "https://github.com/sample/repo-1", token: FAKE_TOKEN }],
   ["not an object"],
 ])("refuses the connect body %j before it reaches the Supervisor", async (body) => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/projects/connect", body),
     supervisor(),
     ownerScope,
@@ -172,7 +171,7 @@ test.each([
   ["tooling-missing", 503],
   ["provisioning-failed", 503],
 ] as const)("answers a %s connection with %i", async (code, status) => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/projects/connect", { repositoryUrl: "https://github.com/sample/repo-1" }),
     supervisor({
       connectProject: () =>
@@ -192,7 +191,7 @@ test.each([
 test("starts an authorization for the verified owner, not for one the body names", async () => {
   const scopes: VerifiedAccessScope[] = [];
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/github/authorization", { identity: "someone-else" }),
     supervisor({
       startGitHubAuthorization: (scope) => {
@@ -235,7 +234,7 @@ test.each([
   ["provider-unavailable", 502],
   ["not-configured", 503],
 ] as const)("answers the %s authorization outcome with %i", async (problem, status) => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/github/authorization/complete", {}),
     supervisor({ completeGitHubAuthorization: () => Promise.resolve({ ok: false, problem }) }),
     ownerScope,
@@ -248,7 +247,7 @@ test.each([
 test("disconnects the project id in the path", async () => {
   let disconnected: unknown;
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post(`/api/projects/${connectedProject.id}/disconnect`, {}),
     supervisor({
       disconnectProject: (projectId) => {
@@ -279,7 +278,7 @@ test.each([
   ["harness-project", 400],
   ["turn-active", 409],
 ] as const)("answers a %s disconnect refusal with %i", async (code, status) => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post(`/api/projects/${connectedProject.id}/disconnect`, {}),
     supervisor({
       disconnectProject: () => Promise.resolve({ ok: false, problem: { code } }),
@@ -292,7 +291,7 @@ test.each([
 });
 
 test("keeps disconnect POST-only", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get(`/api/projects/${connectedProject.id}/disconnect`),
     supervisor(),
     ownerScope,
@@ -302,13 +301,9 @@ test("keeps disconnect POST-only", async () => {
 });
 
 test("keeps the project routes to their methods", async () => {
-  const postList = await routeOwnerApiRequest(post("/api/projects", {}), supervisor(), ownerScope);
+  const postList = await ownerApiResponse(post("/api/projects", {}), supervisor(), ownerScope);
 
-  const getConnect = await routeOwnerApiRequest(
-    get("/api/projects/connect"),
-    supervisor(),
-    ownerScope,
-  );
+  const getConnect = await ownerApiResponse(get("/api/projects/connect"), supervisor(), ownerScope);
 
   expect([postList.status, getConnect.status]).toEqual([404, 404]);
 });

@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { settleRoute } from "../../src/routes/route-settled.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
-import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
 /**
  * `route.settled`: one event per owner API request that reaches the workspace, with a server-made
@@ -32,7 +32,7 @@ test("a connection read logs one info event, and the Supervisor receives the sam
   const events = capturedEvents();
   const received: (string | undefined)[] = [];
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get("/api/github/connection"),
     supervisor({
       getGitHubConnection: (requestId) => {
@@ -67,7 +67,7 @@ test("a connection read logs one info event, and the Supervisor receives the sam
 test("a 200 that needs a reconnect is degraded, at warn", async () => {
   const events = capturedEvents();
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get("/api/github/connection"),
     supervisor({
       getGitHubConnection: () =>
@@ -87,7 +87,7 @@ test("a 200 that needs a reconnect is degraded, at warn", async () => {
 test("a thrown status read is a fault at error, with the status the client saw", async () => {
   const events = capturedEvents();
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     get("/api/github/connection"),
     supervisor({ getGitHubConnection: () => Promise.reject(new Error("boom")) }),
     ownerScope,
@@ -104,7 +104,7 @@ test("a thrown status read is a fault at error, with the status the client saw",
 test("a refused request is a warning", async () => {
   const events = capturedEvents();
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request(`${ORIGIN}/api/workspace/reset`, { method: "POST" }),
     supervisor(),
     ownerScope,
@@ -127,7 +127,7 @@ test("a request that ran to the workspace timeout is an error even when it succe
     .mockReturnValueOnce(0)
     .mockReturnValue(WORKSPACE_RPC_TIMEOUT_MS);
 
-  await routeOwnerApiRequest(get("/api/projects"), supervisor(), ownerScope);
+  await ownerApiResponse(get("/api/projects"), supervisor(), ownerScope);
 
   clock.mockRestore();
   expect(named(events(), "route.settled").at(0)).toMatchObject({
@@ -145,7 +145,7 @@ test("a degraded response that returned in time stays a warning", async () => {
     .mockReturnValueOnce(0)
     .mockReturnValue(WORKSPACE_RPC_TIMEOUT_MS - 1);
 
-  await routeOwnerApiRequest(
+  await ownerApiResponse(
     get("/api/github/connection"),
     supervisor({
       getGitHubConnection: () =>
@@ -166,7 +166,7 @@ test("a turn is logged at its headers without reading the stream", async () => {
   const pull = vi.fn();
   const frames = new ReadableStream<Uint8Array>({ pull }, { highWaterMark: 0 });
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/projects/sample-project-one/turn", { prompt: "do not log this prompt" }),
     supervisor({ runProjectTurn: () => Promise.resolve({ ok: true, frames }) }),
     ownerScope,
@@ -190,8 +190,8 @@ test("a turn is logged at its headers without reading the stream", async () => {
 test("requests that never touch the workspace stay quiet", async () => {
   const events = capturedEvents();
 
-  await routeOwnerApiRequest(get("/api/status"), supervisor(), ownerScope);
-  await routeOwnerApiRequest(get("/api/projects/some-id/thread"), supervisor(), ownerScope);
+  await ownerApiResponse(get("/api/status"), supervisor(), ownerScope);
+  await ownerApiResponse(get("/api/projects/some-id/thread"), supervisor(), ownerScope);
 
   expect(named(events(), "route.settled")).toEqual([]);
 });
@@ -202,7 +202,7 @@ test("overlapping requests each get their own id, whatever the client sent", asy
   const received: (string | undefined)[] = [];
 
   const routeOne = (headers: HeadersInit) =>
-    routeOwnerApiRequest(
+    ownerApiResponse(
       get(`/api/github/connection?requestId=${forged}`, { headers }),
       supervisor({
         getGitHubConnection: async (requestId) => {
@@ -233,7 +233,7 @@ test("overlapping requests each get their own id, whatever the client sent", asy
 test("the event carries the route pattern and never the path, query, or project id", async () => {
   const events = capturedEvents();
 
-  await routeOwnerApiRequest(
+  await ownerApiResponse(
     post("/api/projects/secret-project-name/disconnect?token=abc", {}),
     supervisor({
       disconnectProject: () =>
@@ -247,12 +247,12 @@ test("the event carries the route pattern and never the path, query, or project 
   expect(JSON.stringify(settled)).not.toMatch(/secret-project-name|token=abc/u);
 });
 
-test("a dispatch that rejects rethrows the same error after one fault event with no status or phase", async () => {
+test("a dispatch that fails passes on the same error after one fault event with no status or phase", async () => {
   const events = capturedEvents();
   const failure = new Error("dispatch failed");
 
   await expect(
-    settleRoute(get("/api/github/connection"), () => Promise.reject(failure)),
+    Effect.runPromise(settleRoute(get("/api/github/connection"), () => Effect.die(failure))),
   ).rejects.toBe(failure);
 
   expect(named(events(), "route.settled")).toEqual([

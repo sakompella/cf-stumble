@@ -1,12 +1,16 @@
 import { expect, test } from "vitest";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { GenerationRequest } from "../../src/supervisor/control/index.js";
-import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import {
+  controlRequest,
+  ownerApiResponse,
+  ownerApiSupervisor as supervisor,
+  ownerScope,
+} from "./helpers.js";
 
 test("activates directly with a server-derived principal", async () => {
   let received: GenerationRequest | undefined;
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
     supervisor({
       controlGeneration(request) {
@@ -32,7 +36,7 @@ test("activates directly with a server-derived principal", async () => {
 test("rolls back through the same direct control operation", async () => {
   let received: GenerationRequest | undefined;
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     controlRequest("/api/generations/rollback", JSON.stringify({ observedEpoch: 4, label: 0 })),
     supervisor({
       controlGeneration(request) {
@@ -67,7 +71,7 @@ test.each(malformedBodies)(
   async (_description, body) => {
     let invoked = false;
 
-    const response = await routeOwnerApiRequest(
+    const response = await ownerApiResponse(
       controlRequest("/api/generations/activate", body),
       supervisor({
         controlGeneration() {
@@ -89,7 +93,7 @@ test.each(malformedBodies)(
 );
 
 test("rejects a malformed rollback with its own code", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     controlRequest("/api/generations/rollback", JSON.stringify({ label: 0 })),
     supervisor(),
     ownerScope,
@@ -103,7 +107,7 @@ test("rejects a malformed rollback with its own code", async () => {
 });
 
 test("reports a control failure without echoing the internal error", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 0, label: 0 })),
     supervisor({
       controlGeneration() {

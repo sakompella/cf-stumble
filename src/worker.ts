@@ -88,7 +88,7 @@ function admittedRequest(
   const supervisor = env.SUPERVISOR.getByName(access.supervisorName);
 
   if (pathname.startsWith("/api/")) {
-    return Effect.promise(() => routeOwnerApiRequest(request, supervisor, access.scope)).pipe(
+    return routeOwnerApiRequest(request, supervisor, access.scope).pipe(
       Effect.map((response) => ownerResponse(pathname, response)),
     );
   }

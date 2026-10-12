@@ -1,6 +1,7 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
-import { hasExactKeys, isRecord } from "../untrusted.js";
-import { jsonError, readJson } from "./json.js";
+// oxlint-disable anti-slop/no-unknown-parameters -- The Supervisor RPC methods take request data as `unknown` and parse it themselves.
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
 import { logRedactedCause, type RequestId } from "../diagnostics.js";
 import { projectIdFromPath } from "./route-pattern.js";
 import { markDegraded } from "./route-settled.js";
@@ -56,18 +57,20 @@ const DISCONNECT_STATUS = {
   "turn-active": 409,
 } as const;
 
-async function disconnectResponse(
+function disconnectResponse(
   projectId: string,
   supervisor: ProjectApiSupervisor,
-): Promise<Response> {
-  const result = await supervisor.disconnectProject(projectId);
-
-  return result.ok
-    ? Response.json(result)
-    : Response.json(
-        { ok: false, problem: result.problem },
-        { status: DISCONNECT_STATUS[result.problem.code] },
-      );
+): Effect.Effect<Response, SupervisorCallFailed> {
+  return callSupervisor(() => supervisor.disconnectProject(projectId)).pipe(
+    Effect.map((result) =>
+      result.ok
+        ? Response.json(result)
+        : Response.json(
+            { ok: false, problem: result.problem },
+            { status: DISCONNECT_STATUS[result.problem.code] },
+          ),
+    ),
+  );
 }
 
 const AUTHORIZATION_STATUS = {
@@ -84,101 +87,92 @@ function reportingGitHub(response: Response, github: GitHubConnectionStatus): Re
   return github.state === "reconnect-required" ? markDegraded(response) : response;
 }
 
-async function listResponse(
-  supervisor: ProjectApiSupervisor,
-  requestId: RequestId | undefined,
-): Promise<Response> {
-  try {
-    const view = await supervisor.listProjects(requestId);
+/**
+ * The list and the connection status read the workspace. When that read fails, the owner sees the
+ * workspace as unavailable, and the cause goes to the operator log redacted.
+ */
+function workspaceUnavailable(
+  operation: "list" | "connection",
+): (failure: SupervisorCallFailed) => Effect.Effect<Response> {
+  return (failure) =>
+    Effect.sync(() => {
+      logRedactedCause(`routes.projects.${operation}: workspace-unavailable`, failure.cause);
 
-    return reportingGitHub(
-      Response.json({ ok: true, projects: view.projects, github: view.github }),
-      view.github,
-    );
-  } catch (cause) {
-    logRedactedCause("routes.projects.list: workspace-unavailable", cause);
-
-    return jsonError(503, "internal-error");
-  }
+      return jsonError(503, "internal-error");
+    });
 }
 
-async function connectionResponse(
+function listResponse(
   supervisor: ProjectApiSupervisor,
   requestId: RequestId | undefined,
-): Promise<Response> {
-  try {
-    const github = await supervisor.getGitHubConnection(requestId);
+): Effect.Effect<Response> {
+  return callSupervisor(() => supervisor.listProjects(requestId)).pipe(
+    Effect.map((view) =>
+      reportingGitHub(
+        Response.json({ ok: true, projects: view.projects, github: view.github }),
+        view.github,
+      ),
+    ),
+    Effect.catchTag("SupervisorCallFailed", workspaceUnavailable("list")),
+  );
+}
 
-    return reportingGitHub(Response.json({ ok: true, github }), github);
-  } catch (cause) {
-    logRedactedCause("routes.projects.connection: workspace-unavailable", cause);
-
-    return jsonError(503, "internal-error");
-  }
+function connectionResponse(
+  supervisor: ProjectApiSupervisor,
+  requestId: RequestId | undefined,
+): Effect.Effect<Response> {
+  return callSupervisor(() => supervisor.getGitHubConnection(requestId)).pipe(
+    Effect.map((github) => reportingGitHub(Response.json({ ok: true, github }), github)),
+    Effect.catchTag("SupervisorCallFailed", workspaceUnavailable("connection")),
+  );
 }
 
 /** The connect body: a repository URL, and optionally a name to show it under. Nothing else. */
-function connectRequest(
-  value: unknown,
-): Readonly<{ repositoryUrl: string; displayName: string | undefined }> | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
+const ConnectBody = Schema.Struct({
+  repositoryUrl: Schema.String,
+  displayName: Schema.optionalKey(Schema.String),
+});
 
-  const named = hasExactKeys(value, ["repositoryUrl"]);
-  const withName = hasExactKeys(value, ["displayName", "repositoryUrl"]);
+const connectResponse = Effect.fnUntraced(
+  function* (request: Request, supervisor: ProjectApiSupervisor) {
+    const body = yield* decodeRequestBody(request, ConnectBody);
 
-  if ((!named && !withName) || typeof value.repositoryUrl !== "string") {
-    return undefined;
-  }
-
-  const displayName = withName ? value.displayName : undefined;
-
-  if (displayName !== undefined && typeof displayName !== "string") {
-    return undefined;
-  }
-
-  return { repositoryUrl: value.repositoryUrl, displayName };
-}
-
-async function connectResponse(
-  request: Request,
-  supervisor: ProjectApiSupervisor,
-): Promise<Response> {
-  const body = connectRequest(await readJson(request));
-
-  if (body === undefined) {
-    return jsonError(400, "invalid-connect-request");
-  }
-
-  const result = await supervisor.connectProject(body.repositoryUrl, body.displayName);
-
-  if (!result.ok) {
-    return Response.json(
-      { ok: false, problem: result.problem, github: result.github },
-      { status: CONNECT_STATUS[result.problem.code] },
+    const result = yield* callSupervisor(() =>
+      supervisor.connectProject(body.repositoryUrl, body.displayName),
     );
-  }
 
-  return Response.json({
-    ok: true,
-    project: result.project,
-    alreadyConnected: result.alreadyConnected,
-    github: result.github,
-  });
-}
-
-async function authorizationResponse(
-  outcome: () => Promise<GitHubAuthorizationOutcome>,
-): Promise<Response> {
-  const result = await outcome();
-
-  return result.ok
-    ? Response.json({ ok: true, github: result.status })
-    : Response.json(
-        { ok: false, problem: { code: result.problem } },
-        { status: AUTHORIZATION_STATUS[result.problem] },
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, problem: result.problem, github: result.github },
+        { status: CONNECT_STATUS[result.problem.code] },
       );
+    }
+
+    return Response.json({
+      ok: true,
+      project: result.project,
+      alreadyConnected: result.alreadyConnected,
+      github: result.github,
+    });
+  },
+  Effect.catchTag("InvalidRequestBody", () =>
+    Effect.succeed(jsonError(400, "invalid-connect-request")),
+  ),
+);
+
+function authorizationResponse(
+  outcome: () => Promise<GitHubAuthorizationOutcome>,
+): Effect.Effect<Response, SupervisorCallFailed> {
+  return callSupervisor(outcome).pipe(
+    Effect.map((result) =>
+      result.ok
+        ? Response.json({ ok: true, github: result.status })
+        : Response.json(
+            { ok: false, problem: { code: result.problem } },
+            { status: AUTHORIZATION_STATUS[result.problem] },
+          ),
+    ),
+  );
 }
 
 /**
@@ -191,7 +185,7 @@ export function routeProjectApiRequest(
   supervisor: ProjectApiSupervisor,
   scope: VerifiedAccessScope,
   requestId?: RequestId,
-): Promise<Response> | undefined {
+): Effect.Effect<Response, SupervisorCallFailed> | undefined {
   const pathname = new URL(request.url).pathname;
   const isGet = request.method === "GET";
   const isPost = request.method === "POST";

@@ -1,6 +1,7 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
-import { hasExactKeys, isRecord } from "../untrusted.js";
-import { jsonError, readJson } from "./json.js";
+// oxlint-disable anti-slop/no-unknown-parameters -- The Supervisor RPC method takes request data as `unknown` and parses it itself.
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
 import { projectIdFromPath } from "./route-pattern.js";
 import type { ProjectTurnRun, ProjectTurnRunProblemCode } from "../supervisor/projects/index.js";
 
@@ -45,13 +46,7 @@ const TURN_STATUS = {
   "turn-not-started": 503,
 } as const satisfies Record<ProjectTurnRunProblemCode, number>;
 
-function turnPrompt(value: unknown): string | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["prompt"]) || typeof value.prompt !== "string") {
-    return undefined;
-  }
-
-  return value.prompt;
-}
+const TurnBody = Schema.Struct({ prompt: Schema.String });
 
 /**
  * The frames, as a response the browser can read while the turn runs.
@@ -71,32 +66,28 @@ function turnStreamResponse(frames: ReadableStream<Uint8Array>): Response {
   });
 }
 
-async function turnResponse(
-  request: Request,
-  supervisor: TurnApiSupervisor,
-  projectId: string,
-): Promise<Response> {
-  const prompt = turnPrompt(await readJson(request));
+const turnResponse = Effect.fnUntraced(
+  function* (request: Request, supervisor: TurnApiSupervisor, projectId: string) {
+    const { prompt } = yield* decodeRequestBody(request, TurnBody);
+    const run = yield* callSupervisor(() => supervisor.runProjectTurn(projectId, prompt));
 
-  if (prompt === undefined) {
-    return jsonError(400, "invalid-turn-request");
-  }
-
-  const run = await supervisor.runProjectTurn(projectId, prompt);
-
-  return run.ok
-    ? turnStreamResponse(run.frames)
-    : Response.json(
-        { ok: false, problem: { code: run.problem.code } },
-        { status: TURN_STATUS[run.problem.code] },
-      );
-}
+    return run.ok
+      ? turnStreamResponse(run.frames)
+      : Response.json(
+          { ok: false, problem: { code: run.problem.code } },
+          { status: TURN_STATUS[run.problem.code] },
+        );
+  },
+  Effect.catchTag("InvalidRequestBody", () =>
+    Effect.succeed(jsonError(400, "invalid-turn-request")),
+  ),
+);
 
 /** Route one project turn, or answer `undefined` so the owner API can try its other routes. */
 export function routeProjectTurnRequest(
   request: Request,
   supervisor: TurnApiSupervisor,
-): Promise<Response> | undefined {
+): Effect.Effect<Response, SupervisorCallFailed> | undefined {
   const projectId = projectIdFromPath(new URL(request.url).pathname, "/turn");
 
   if (projectId === undefined || request.method !== "POST") {

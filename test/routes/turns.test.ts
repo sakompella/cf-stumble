@@ -1,6 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
-import { ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 import { textLines } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import type { ProjectTurnRunProblemCode } from "../../src/supervisor/projects/index.js";
@@ -62,7 +61,7 @@ function streamingSupervisor(sent: unknown[]) {
 test("runs the turn the path names with the prompt the body carries, and nothing else", async () => {
   const sent: unknown[] = [];
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post(TURN_PATH, { prompt: "read the file" }),
     streamingSupervisor(sent),
     ownerScope,
@@ -87,7 +86,7 @@ test.each([
 ])("refuses the turn body %j before the Supervisor sees it", async (body) => {
   const reached: unknown[] = [];
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post(TURN_PATH, body),
     supervisor({
       runProjectTurn: (projectId) => {
@@ -121,7 +120,7 @@ test.each([
 ] as const satisfies readonly (readonly [ProjectTurnRunProblemCode, number])[])(
   "answers a %s refusal with %i",
   async (code, status) => {
-    const response = await routeOwnerApiRequest(
+    const response = await ownerApiResponse(
       post(TURN_PATH, { prompt: "do it" }),
       supervisor({ runProjectTurn: () => Promise.resolve({ ok: false, problem: { code } }) }),
       ownerScope,
@@ -135,7 +134,7 @@ test.each([
 test("a turn that throws logs a redacted cause and answers a bare fault", async () => {
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post(TURN_PATH, { prompt: "do it" }),
     supervisor({
       runProjectTurn: () =>
@@ -158,13 +157,13 @@ test("a turn that throws logs a redacted cause and answers a bare fault", async 
 test("the turn route keeps to its method and its path", async () => {
   const sent: unknown[] = [];
 
-  const read = await routeOwnerApiRequest(
+  const read = await ownerApiResponse(
     new Request(`${ORIGIN}${TURN_PATH}`),
     streamingSupervisor(sent),
     ownerScope,
   );
 
-  const nested = await routeOwnerApiRequest(
+  const nested = await ownerApiResponse(
     post(`/api/projects/${sampleProjectOne.id}/turn/fresh`, { prompt: "do it" }),
     streamingSupervisor(sent),
     ownerScope,
@@ -177,7 +176,7 @@ test("the turn route keeps to its method and its path", async () => {
 test("the project id in the path reaches the Supervisor as the client wrote it", async () => {
   const sent: unknown[] = [];
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     post("/api/projects/no%20such%20project/turn", { prompt: "do it" }),
     supervisor({
       runProjectTurn: (projectId, prompt) => {

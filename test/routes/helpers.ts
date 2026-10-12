@@ -1,4 +1,5 @@
-import type { OwnerApiSupervisor } from "../../src/routes/index.js";
+import * as Effect from "effect/Effect";
+import { routeOwnerApiRequest, type OwnerApiSupervisor } from "../../src/routes/index.js";
 import {
   emptyThread,
   serializedThread,
@@ -15,6 +16,15 @@ export const ownerScope: VerifiedAccessScope = {
   identity: "owner-subject",
   audience: "owner-api-audience",
 };
+
+/** The owner API's answer to one request, run as the Worker's entry point runs it. */
+export function ownerApiResponse(
+  request: Request,
+  supervisor: OwnerApiSupervisor,
+  scope: VerifiedAccessScope,
+): Promise<Response> {
+  return Effect.runPromise(routeOwnerApiRequest(request, supervisor, scope));
+}
 
 /** A stand-in Supervisor for boundary tests. Each test overrides only the call it exercises. */
 export function ownerApiSupervisor(
