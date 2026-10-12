@@ -39,6 +39,15 @@ export default defineConfig({
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off",
 
+    // Import Effect by module path (`effect/Effect`), not from the `effect` index. The index
+    // re-exports every module, so each workers test isolate loaded all of them (1.3 s instead of
+    // 0.36 s, before the prebundle in vitest.config.ts), and its side-effect list keeps some unused
+    // modules in the Worker bundle.
+    "eslint/no-restricted-imports": [
+      "error",
+      { paths: [{ name: "effect", message: "Import the module path, such as effect/Effect." }] },
+    ],
+
     // The default of 1 assumes a class is a whole module's worth of concept. That holds for a
     // stateful class and fails for test doubles, where a file defines one small class per
     // collaborator (`test/workspace/project/fakes.ts` has five). A ceiling still catches a real
