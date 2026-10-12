@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
@@ -19,6 +20,7 @@ import {
   type WorkspacePathKind,
   type WorkspaceResult,
 } from "../../src/workspace/index.js";
+import { runToResult } from "./workspace-results.js";
 
 /**
  * Provisioning is where a wedged workspace used to go silent. These tests read the structured
@@ -63,14 +65,16 @@ test("each provision step is logged with its duration and outcome, and never its
   const host = new ScriptedProvisionHost();
   host.cloneExit = 128;
 
-  const provisioned = await provisionProjectWorkspace({
-    workspaceName: tenantWorkspaceName("workspace-log-step"),
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: namespaceFor(host),
-  });
+  const provisioned = await runToResult(
+    provisionProjectWorkspace({
+      workspaceName: tenantWorkspaceName("workspace-log-step"),
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(host),
+    }),
+  );
 
-  expect(provisioned.isErr()).toBe(true);
+  expect(Result.isFailure(provisioned)).toBe(true);
   const steps = named(events(), "workspace.provision-step");
   expect(steps).toEqual([
     expect.objectContaining({
@@ -93,12 +97,14 @@ test("a provision that waits on the workspace exclusion logs how long and how th
   const workspaceName = tenantWorkspaceName("workspace-log-exclusion");
   host.hold();
 
-  const first = provisionProjectWorkspace({
-    workspaceName,
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
-    namespace: namespaceFor(host),
-  });
+  const first = runToResult(
+    provisionProjectWorkspace({
+      workspaceName,
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(host),
+    }),
+  );
 
   const cancelled = new AbortController();
   const waiting = waitForWorkspaceProvision(workspaceName, cancelled.signal);
@@ -107,7 +113,7 @@ test("a provision that waits on the workspace exclusion logs how long and how th
   cancelled.abort();
   expect(await waiting).toBe(false);
   host.release();
-  expect((await first).isOk()).toBe(true);
+  expect(Result.isSuccess(await first)).toBe(true);
   expect(await admitted).toBe(true);
 
   const waits = named(events(), "workspace.exclusion-wait");
@@ -189,15 +195,17 @@ test("a credential RPC to the Workspace Host is logged with its method, step, an
 
   if (token === undefined) throw new Error("the fake token must parse");
 
-  const installed = await installWorkspaceCredential({
-    workspaceName: tenantWorkspaceName("workspace-log-credential-rpc"),
-    namespace: namespaceFor({
-      credential: () => Promise.reject(new Error(`install failed for ${FAKE_TOKEN}`)),
+  const installed = await runToResult(
+    installWorkspaceCredential({
+      workspaceName: tenantWorkspaceName("workspace-log-credential-rpc"),
+      namespace: namespaceFor({
+        credential: () => Promise.reject(new Error(`install failed for ${FAKE_TOKEN}`)),
+      }),
+      token,
     }),
-    token,
-  });
+  );
 
-  expect(installed.isErr()).toBe(true);
+  expect(Result.isFailure(installed)).toBe(true);
   expect(named(events(), "workspace.rpc")).toEqual([
     expect.objectContaining({
       level: "error",
@@ -222,12 +230,16 @@ test("a plan presumed lost is logged as a stale exclusion when a new plan replac
   const input = { workspaceName, projectId: sampleProjectOne.id, catalog: sampleCatalog };
 
   try {
-    void provisionProjectWorkspace({ ...input, namespace: namespaceFor(lost) });
+    void runToResult(provisionProjectWorkspace({ ...input, namespace: namespaceFor(lost) }));
     await Promise.resolve();
     vi.setSystemTime(startedAt + PROVISION_STALE_AFTER_MS + 1);
 
     expect(
-      (await provisionProjectWorkspace({ ...input, namespace: namespaceFor(replacement) })).isOk(),
+      Result.isSuccess(
+        await runToResult(
+          provisionProjectWorkspace({ ...input, namespace: namespaceFor(replacement) }),
+        ),
+      ),
     ).toBe(true);
   } finally {
     vi.useRealTimers();

@@ -20,6 +20,8 @@ export {
 
 export {
   checkRepositoryAccess,
+  CredentialInstallFailed,
+  CredentialWorkspaceUnavailable,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
   type CredentialWorkspaceHost,
@@ -34,8 +36,13 @@ export {
 } from "./github-credential.js";
 
 export {
+  HarnessProvisionStepFailed,
+  HarnessProvisionWorkspaceUnavailable,
+  ProjectNotInCatalog,
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
+  ProvisionStepFailed,
+  ProvisionWorkspaceUnavailable,
   waitForWorkspaceProvision,
   clearWorkspaceProvision,
   PROVISION_STALE_AFTER_MS,

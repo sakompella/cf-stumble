@@ -1,15 +1,15 @@
-import { Result } from "better-result";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import {
-  classifyWorkspaceAnswer,
   isTimeoutFailure,
   logRedactedCause,
-  timedWorkspaceRpc,
   requestIdFields,
   type RequestId,
 } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import { workspaceRpc } from "./workspace-rpc.js";
 
 /**
  * The Workspace Host credential surface as its caller uses it, and the three questions the caller
@@ -37,14 +37,25 @@ function signalAborted(signal: AbortSignal | undefined): boolean {
 }
 
 /**
- * Why a credential operation produced no answer. `credential-workspace-unavailable` covers a
- * Workspace Host that threw, refused, or answered with the wrong shape: from the caller's side
- * these are one fact, that the workspace could not be asked.
+ * The workspace could not be asked: the Workspace Host threw, refused, or answered with the wrong
+ * shape. From the caller's side these are one fact. `detail` is redacted text or empty.
  */
-type WorkspaceCredentialProblem = Readonly<{
-  code: "credential-workspace-unavailable" | "credential-install-failed";
-  detail: string;
-}>;
+export class CredentialWorkspaceUnavailable extends Data.TaggedError(
+  "CredentialWorkspaceUnavailable",
+)<{ readonly detail: string }> {
+  get code(): "credential-workspace-unavailable" {
+    return "credential-workspace-unavailable";
+  }
+}
+
+/** `gh` refused the token. `detail` is its redacted standard error. */
+export class CredentialInstallFailed extends Data.TaggedError("CredentialInstallFailed")<{
+  readonly detail: string;
+}> {
+  get code(): "credential-install-failed" {
+    return "credential-install-failed";
+  }
+}
 
 /** What an install achieved. A workspace image without `gh` is a state, not a crash. */
 type CredentialInstallation = "installed" | "tooling-missing";
@@ -67,123 +78,101 @@ interface RepositoryAccessInput extends WorkspaceCredentialInput {
   readonly repositoryUrl: string;
 }
 
-async function ask(
-  input: WorkspaceCredentialInput,
-  request: GitHubCredentialRequest,
-): Promise<Result<GitHubCredentialResult, WorkspaceCredentialProblem>> {
-  if (signalAborted(input.signal)) {
-    return Result.err(unavailable(""));
-  }
-
-  try {
-    const answered = await timedWorkspaceRpc(
-      { ...requestIdFields(input.requestId), method: "credential", step: request.step },
-      () => input.namespace.getByName(input.workspaceName).credential(request, input.requestId),
-      classifyWorkspaceAnswer,
-      WORKSPACE_RPC_TIMEOUT_MS,
-    );
-
-    return signalAborted(input.signal) ? Result.err(unavailable("")) : Result.ok(answered);
-  } catch (cause) {
-    logRedactedCause(
-      `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,
-      cause,
-      request.step === "install" ? request.token : undefined,
-    );
-
-    return Result.err({ code: "credential-workspace-unavailable", detail: "" });
-  }
+function unavailable(detail = ""): CredentialWorkspaceUnavailable {
+  return new CredentialWorkspaceUnavailable({ detail });
 }
 
-function unavailable(detail: string): WorkspaceCredentialProblem {
-  return { code: "credential-workspace-unavailable", detail };
+function ask(
+  input: WorkspaceCredentialInput,
+  request: GitHubCredentialRequest,
+): Effect.Effect<GitHubCredentialResult, CredentialWorkspaceUnavailable> {
+  return Effect.gen(function* () {
+    if (signalAborted(input.signal)) return yield* unavailable();
+
+    const answered = yield* workspaceRpc(
+      { ...requestIdFields(input.requestId), method: "credential", step: request.step },
+      () => input.namespace.getByName(input.workspaceName).credential(request, input.requestId),
+      WORKSPACE_RPC_TIMEOUT_MS,
+    ).pipe(
+      Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
+        logRedactedCause(
+          `credential-access.${request.step}: ${isTimeoutFailure(cause) ? "timeout" : "credential-workspace-unavailable"}`,
+          cause,
+          request.step === "install" ? request.token : undefined,
+        );
+
+        return Effect.fail(unavailable());
+      }),
+    );
+
+    return signalAborted(input.signal) ? yield* unavailable() : answered;
+  });
 }
 
 /**
  * Install one token as the workspace's `gh` credential.
  *
  * The token travels as an argument of this one call and is never stored by the caller: after this
- * resolves, the only copy is inside the workspace's own `gh` configuration, which is where
+ * succeeds, the only copy is inside the workspace's own `gh` configuration, which is where
  * ADR-0039 puts it.
  */
-export async function installWorkspaceCredential(
+export function installWorkspaceCredential(
   input: InstallWorkspaceCredentialInput,
-): Promise<Result<CredentialInstallation, WorkspaceCredentialProblem>> {
-  const answered = await ask(input, {
-    kind: "github-credential",
-    step: "install",
-    token: input.token,
-  });
+): Effect.Effect<CredentialInstallation, CredentialWorkspaceUnavailable | CredentialInstallFailed> {
+  return ask(input, { kind: "github-credential", step: "install", token: input.token }).pipe(
+    Effect.flatMap((result) => {
+      if (!result.ok) {
+        return Effect.fail(
+          result.error.code === "credential-command-failed"
+            ? new CredentialInstallFailed({ detail: result.error.detail })
+            : unavailable(result.error.detail),
+        );
+      }
 
-  if (answered.isErr()) {
-    return Result.err(answered.error);
-  }
+      if (result.result.kind === "credential-installed")
+        return Effect.succeed("installed" as const);
 
-  const result = answered.value;
-
-  if (!result.ok) {
-    return Result.err(
-      result.error.code === "credential-command-failed"
-        ? { code: "credential-install-failed", detail: result.error.detail }
-        : unavailable(result.error.detail),
-    );
-  }
-
-  if (result.result.kind === "credential-installed") {
-    return Result.ok("installed");
-  }
-
-  return result.result.kind === "credential-status" && result.result.state === "tooling-missing"
-    ? Result.ok("tooling-missing")
-    : Result.err(unavailable(""));
+      return result.result.kind === "credential-status" && result.result.state === "tooling-missing"
+        ? Effect.succeed("tooling-missing" as const)
+        : Effect.fail(unavailable());
+    }),
+  );
 }
 
 /** Read what the workspace's credential can actually do right now. */
-export async function readWorkspaceCredentialStatus(
+export function readWorkspaceCredentialStatus(
   input: WorkspaceCredentialInput,
-): Promise<Result<GitHubCredentialStatus, WorkspaceCredentialProblem>> {
-  const answered = await ask(input, { kind: "github-credential", step: "status" });
+): Effect.Effect<GitHubCredentialStatus, CredentialWorkspaceUnavailable> {
+  return ask(input, { kind: "github-credential", step: "status" }).pipe(
+    Effect.flatMap((result) => {
+      if (!result.ok) return Effect.fail(unavailable(result.error.detail));
 
-  if (answered.isErr()) {
-    return Result.err(answered.error);
-  }
-
-  const result = answered.value;
-
-  if (!result.ok) {
-    return Result.err(unavailable(result.error.detail));
-  }
-
-  return result.result.kind === "credential-status"
-    ? Result.ok({ state: result.result.state, login: result.result.login })
-    : Result.err(unavailable(""));
+      return result.result.kind === "credential-status"
+        ? Effect.succeed({ state: result.result.state, login: result.result.login })
+        : Effect.fail(unavailable());
+    }),
+  );
 }
 
 /** Ask GitHub, through the workspace's own Git, whether this repository is readable. */
-export async function checkRepositoryAccess(
+export function checkRepositoryAccess(
   input: RepositoryAccessInput,
-): Promise<Result<RepositoryAccess, WorkspaceCredentialProblem>> {
-  const answered = await ask(input, {
+): Effect.Effect<RepositoryAccess, CredentialWorkspaceUnavailable> {
+  return ask(input, {
     kind: "github-credential",
     step: "verify-repository",
     repositoryUrl: input.repositoryUrl,
-  });
+  }).pipe(
+    Effect.flatMap((result) => {
+      if (!result.ok) return Effect.fail(unavailable(result.error.detail));
 
-  if (answered.isErr()) {
-    return Result.err(answered.error);
-  }
+      if (result.result.kind !== "repository-access") return Effect.fail(unavailable());
 
-  const result = answered.value;
-
-  if (!result.ok) {
-    return Result.err(unavailable(result.error.detail));
-  }
-
-  if (result.result.kind !== "repository-access") {
-    return Result.err(unavailable(""));
-  }
-
-  return Result.ok(
-    result.result.granted ? { granted: true } : { granted: false, detail: result.result.detail },
+      return Effect.succeed<RepositoryAccess>(
+        result.result.granted
+          ? { granted: true }
+          : { granted: false, detail: result.result.detail },
+      );
+    }),
   );
 }

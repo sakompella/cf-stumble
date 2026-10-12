@@ -8,8 +8,12 @@ import {
   type GitHubFetch,
   type GitHubToken,
 } from "../../github/index.js";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { logEvent, type LogLevel } from "../../diagnostics.js";
+import { runAtEntryPoint } from "../../run-entry-point.js";
 import {
+  CredentialInstallFailed,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
   type CredentialWorkspaceNamespace,
@@ -322,16 +326,20 @@ export class GitHubConnection {
     now: number,
     signal?: AbortSignal,
   ): Promise<GitHubConnectionStatus> {
-    const installed = await installWorkspaceCredential({
-      workspaceName: this.workspaceName,
-      namespace: this.namespace,
-      token,
-      signal,
-    });
+    const installed = await runAtEntryPoint(
+      Effect.result(
+        installWorkspaceCredential({
+          workspaceName: this.workspaceName,
+          namespace: this.namespace,
+          token,
+          signal,
+        }),
+      ),
+    );
 
-    if (installed.isErr()) {
+    if (Result.isFailure(installed)) {
       const refused = reconnect(
-        installed.error.code === "credential-install-failed"
+        installed.failure instanceof CredentialInstallFailed
           ? "credential-rejected"
           : "workspace-unavailable",
       );
@@ -342,7 +350,7 @@ export class GitHubConnection {
     }
 
     const status: GitHubConnectionStatus =
-      installed.value === "tooling-missing"
+      installed.success === "tooling-missing"
         ? { state: "tooling-missing" }
         : await this.observed(source, now, { signal });
 
@@ -357,17 +365,21 @@ export class GitHubConnection {
     at?: number,
     options: StatusReadOptions = {},
   ): Promise<GitHubConnectionStatus> {
-    const read = await readWorkspaceCredentialStatus({
-      workspaceName: this.workspaceName,
-      namespace: this.namespace,
-      ...options,
-    });
+    const read = await runAtEntryPoint(
+      Effect.result(
+        readWorkspaceCredentialStatus({
+          workspaceName: this.workspaceName,
+          namespace: this.namespace,
+          ...options,
+        }),
+      ),
+    );
 
-    if (read.isErr()) {
+    if (Result.isFailure(read)) {
       return reconnect("workspace-unavailable");
     }
 
-    return this.recorded(read.value, source, at);
+    return this.recorded(read.success, source, at);
   }
 
   private recorded(

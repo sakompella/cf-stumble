@@ -12,6 +12,7 @@ import {
 } from "../../src/workspace/index.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
+import { runToResult } from "./workspace-results.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -152,11 +153,13 @@ test("overlapping status reads keep their own request ids on the rpc events and 
   const second = newRequestId();
 
   const read = (requestId: typeof first) =>
-    readWorkspaceCredentialStatus({
-      workspaceName: "workspace",
-      namespace: { getByName: () => host },
-      requestId,
-    });
+    runToResult(
+      readWorkspaceCredentialStatus({
+        workspaceName: "workspace",
+        namespace: { getByName: () => host },
+        requestId,
+      }),
+    );
 
   await Promise.all([read(first), read(second)]);
 

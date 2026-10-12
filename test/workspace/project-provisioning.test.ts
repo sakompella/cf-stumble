@@ -1,3 +1,4 @@
+import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import {
@@ -11,11 +12,13 @@ import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   provisionProjectWorkspace,
+  ProvisionWorkspaceUnavailable,
   type ProjectProvisionRequest,
   type ProvisionWorkspaceHost,
   type WorkspacePlan,
   type WorkspaceResult,
 } from "../../src/workspace/index.js";
+import { plainProblem, runToResult } from "./workspace-results.js";
 
 /**
  * WHAT THESE TESTS ESTABLISH, AND WHAT THEY DO NOT.
@@ -102,7 +105,9 @@ function provisionerFor(host: FakeProvisionHost) {
     namespace,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
     provision: (projectId: unknown = projectOne.id) =>
-      provisionProjectWorkspace({ workspaceName, projectId, catalog: sampleCatalog, namespace }),
+      runToResult(
+        provisionProjectWorkspace({ workspaceName, projectId, catalog: sampleCatalog, namespace }),
+      ),
   };
 }
 
@@ -142,11 +147,11 @@ test("clones and then writes the managed instructions into the tenant's workspac
 
   const provisioned = await provision();
 
-  if (provisioned.isErr()) {
-    throw new Error(`provisioning a catalog project must succeed: ${provisioned.error.code}`);
+  if (Result.isFailure(provisioned)) {
+    throw new Error(`provisioning a catalog project must succeed: ${provisioned.failure.code}`);
   }
 
-  expect(provisioned.value).toEqual({ projectId: projectOne.id, workspaceName });
+  expect(provisioned.success).toEqual({ projectId: projectOne.id, workspaceName });
   expect(host.requests).toEqual([
     {
       kind: "provision-project",
@@ -203,11 +208,11 @@ test("an interrupted provision and its resumption ask for the same state", async
   host.failingStep = undefined;
   const resumed = await provision();
 
-  if (interrupted.isOk() || resumed.isErr()) {
+  if (Result.isSuccess(interrupted) || Result.isFailure(resumed)) {
     throw new Error("an interrupted clone must recover on the next provision request");
   }
 
-  expect(interrupted.error).toEqual({
+  expect(plainProblem(interrupted.failure)).toEqual({
     code: "provision-step-failed",
     projectId: projectOne.id,
     step: "clone",
@@ -236,11 +241,11 @@ test("repeats the clone after the instructions step failed, rather than resuming
   host.failingStep = undefined;
   const resumed = await provision();
 
-  if (interrupted.isOk() || resumed.isErr()) {
+  if (Result.isSuccess(interrupted) || Result.isFailure(resumed)) {
     throw new Error("a failed instructions write must recover on the next provision request");
   }
 
-  expect(interrupted.error).toEqual({
+  expect(plainProblem(interrupted.failure)).toEqual({
     code: "provision-workspace-unavailable",
     projectId: projectOne.id,
     step: "instructions",
@@ -274,7 +279,9 @@ test("refuses a project the catalog does not resolve before naming a workspace",
     await provision(7),
   ];
 
-  expect(refusals.map((refusal) => (refusal.isErr() ? refusal.error : "ok"))).toEqual([
+  expect(
+    refusals.map((refusal) => (Result.isFailure(refusal) ? plainProblem(refusal.failure) : "ok")),
+  ).toEqual([
     { code: "project-not-in-catalog", reason: "unknown-project-id" },
     { code: "project-not-in-catalog", reason: "invalid-project-id" },
     { code: "project-not-in-catalog", reason: "invalid-project-id" },
@@ -283,7 +290,7 @@ test("refuses a project the catalog does not resolve before naming a workspace",
   expect(host.requests).toEqual([]);
 });
 
-test("keeps a refused or unreachable workspace a plain typed failure", async () => {
+test("keeps a refused or unreachable workspace one typed failure", async () => {
   const refusing = new FakeProvisionHost();
   refusing.provision = (request: ProjectProvisionRequest): Promise<WorkspaceResult> => {
     refusing.requests.push(request);
@@ -303,15 +310,18 @@ test("keeps a refused or unreachable workspace a plain typed failure", async () 
 
   logged.mockRestore();
 
-  expect(results.map((result) => (result.isErr() ? result.error : "ok"))).toEqual([
+  expect(
+    results.map((result) => (Result.isFailure(result) ? plainProblem(result.failure) : "ok")),
+  ).toEqual([
     { code: "provision-workspace-unavailable", projectId: projectOne.id, step: "clone" },
     { code: "provision-workspace-unavailable", projectId: projectOne.id, step: "clone" },
   ]);
   expect(
     results.every(
-      (result) => result.isErr() && Object.getPrototypeOf(result.error) === Object.prototype,
+      (result) =>
+        Result.isFailure(result) && result.failure instanceof ProvisionWorkspaceUnavailable,
     ),
-    "a provisioning failure stays a value a caller can return over RPC",
+    "a provisioning failure is one typed error the caller handles by its class",
   ).toBe(true);
 });
 
