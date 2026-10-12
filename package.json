@@ -28,18 +28,21 @@
   },
   "dependencies": {
     "@cloudflare/computer": "file:vendor/cloudflare-computer-0.3.0.tgz",
-    "better-result": "3.0.1"
+    "better-result": "3.0.1",
+    "effect": "4.0.0"
   },
   "devDependencies": {
     "@cf-stumble/pi": "workspace:*",
     "@cloudflare/vitest-plugin": "^1.4.0",
     "@cloudflare/workers-types": "^5",
+    "@effect/platform-browser": "4.0.0",
     "@hegeldev/hegel": "0.4.5",
     "@oxlint/plugins": "^1",
     "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
     "cf": "1.0.0-beta.14",
     "esbuild": "0.28.1",
+    "foldkit": "0.168.0",
     "oxfmt": "^0.65.0",
     "oxlint": "^1",
     "oxlint-tsgolint": "^7",
