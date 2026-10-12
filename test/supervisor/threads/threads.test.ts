@@ -2,6 +2,7 @@
 
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import * as Result from "effect/Result";
 import type { AgentMessage } from "@cf-stumble/pi";
 import { parseThreadMessages } from "../../../src/supervisor/threads/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
@@ -45,11 +46,11 @@ async function conversationOf(
 
   const messages = parseThreadMessages(result.thread.conversation);
 
-  if (messages.isErr()) {
-    throw new Error(`the ${projectId} conversation must parse: ${messages.error.reason}`);
+  if (Result.isFailure(messages)) {
+    throw new Error(`the ${projectId} conversation must parse: ${messages.failure.reason}`);
   }
 
-  return messages.value;
+  return messages.success;
 }
 
 function admit(

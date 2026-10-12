@@ -53,7 +53,7 @@ export type ProjectThreadProblem =
  * `details` as `unknown`, so `AgentMessage` fails that check even though every message is plain
  * JSON that clones perfectly at runtime. A method returning `ProjectThread` therefore loses its
  * success arm at the call site, and a caller could never reach the thread it asked for. The bytes
- * cross instead, which is also what ADR-0035 asks of a value leaving this isolate; a caller that
+ * cross instead, which is also what ADR-0045 asks of a value leaving this isolate; a caller that
  * wants Pi messages back calls `parseThreadMessages` on them.
  */
 export type SerializedThread = Readonly<{

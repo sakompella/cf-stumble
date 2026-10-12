@@ -36,6 +36,11 @@ identity or a request's Durable Object stub, lives in a global layer.
   `Effect.runSync`, which throws `AsyncFiberError` if a step would suspend, so the transaction
   rolls back instead of committing part of its writes. A typed refusal decided before the first
   write is a value and does not roll back.
+- Synchronous code that can fail, such as a store, a parser, or a smart constructor like
+  `MainHarnessArtifact.parse`, returns a `Result` from `effect/Result` rather than an Effect. The
+  Supervisor's stores and generation control work this way, so their transaction callbacks run no
+  Effect at all. An asynchronous caller lifts such a value with `Effect.fromResult`. A SQL
+  exception is not a `Result`: it still escapes the callback, and the transaction rolls back.
 - A streamed response body outlives the program that returned its headers. The body owns its own
   lifetime until the turn settles, fails, is cancelled, or reaches its deadline (ADR-0037).
 - Durable state and platform alarms stay authoritative across Durable Object eviction. A fiber or

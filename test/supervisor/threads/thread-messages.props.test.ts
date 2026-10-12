@@ -2,6 +2,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
+import * as Result from "effect/Result";
 import type { AgentMessage } from "@cf-stumble/pi";
 
 import {
@@ -225,9 +226,9 @@ function normalizeJson(value: unknown): unknown {
 function parsedMessages(value: string): readonly AgentMessage[] {
   const parsed = parseThreadMessages(value);
 
-  if (parsed.isErr()) throw new Error(parsed.error.reason);
+  if (Result.isFailure(parsed)) throw new Error(parsed.failure.reason);
 
-  return parsed.value;
+  return parsed.success;
 }
 
 test("generated messages round-trip with optional fields and arbitrary order", () => {
@@ -314,7 +315,9 @@ test("generated missing, unknown, and wrong-kind fields are rejected", () => {
     );
 
     expect(
-      parseThreadMessages(JSON.stringify([malformedEntry(message, mutation, tc)])).isErr(),
+      Result.isFailure(
+        parseThreadMessages(JSON.stringify([malformedEntry(message, mutation, tc)])),
+      ),
     ).toBe(true);
   });
 });

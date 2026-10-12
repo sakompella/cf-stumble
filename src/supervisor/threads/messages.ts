@@ -1,5 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- This file is the parse boundary for a stored thread. A row read back from SQLite is decoded JSON with no proven shape, so these functions work in open records and runtime kinds until they have proved one.
-import { Result, TaggedError } from "better-result";
+import * as Data from "effect/Data";
+import * as Result from "effect/Result";
 import type { AgentMessage } from "@cf-stumble/pi";
 import { isRecord } from "../../untrusted.js";
 import {
@@ -14,13 +15,13 @@ import {
  * this means the row was corrupted rather than that a caller sent something bad, and `reason`
  * describes the entry that failed rather than restating the caller's request.
  */
-export class ThreadMessagesUnreadable extends TaggedError("ThreadMessagesUnreadable")<{
+export class ThreadMessagesUnreadable extends Data.TaggedError("ThreadMessagesUnreadable")<{
   readonly reason: string;
   readonly message: string;
 }> {}
 
-function unreadable(reason: string): Result<never, ThreadMessagesUnreadable> {
-  return Result.err(new ThreadMessagesUnreadable({ reason, message: reason }));
+function unreadable(reason: string): Result.Result<never, ThreadMessagesUnreadable> {
+  return Result.fail(new ThreadMessagesUnreadable({ reason, message: reason }));
 }
 
 function isThreadMessageRole(value: unknown): value is ThreadMessageRole {
@@ -93,7 +94,7 @@ function restoredMessage(
   return restored as AgentMessage;
 }
 
-function parseThreadMessage(value: unknown): Result<AgentMessage, ThreadMessagesUnreadable> {
+function parseThreadMessage(value: unknown): Result.Result<AgentMessage, ThreadMessagesUnreadable> {
   if (!isRecord(value)) {
     return unreadable("a stored thread entry is not an object");
   }
@@ -133,7 +134,7 @@ function parseThreadMessage(value: unknown): Result<AgentMessage, ThreadMessages
     fields.push([field, stored]);
   }
 
-  return Result.ok(restoredMessage(role, fields));
+  return Result.succeed(restoredMessage(role, fields));
 }
 
 /**
@@ -142,7 +143,7 @@ function parseThreadMessage(value: unknown): Result<AgentMessage, ThreadMessages
  */
 export function parseAgentMessages(
   value: unknown,
-): Result<readonly AgentMessage[], ThreadMessagesUnreadable> {
+): Result.Result<readonly AgentMessage[], ThreadMessagesUnreadable> {
   if (!Array.isArray(value)) {
     return unreadable("a thread is not a list of messages");
   }
@@ -153,14 +154,14 @@ export function parseAgentMessages(
   for (const entry of entries) {
     const message = parseThreadMessage(entry);
 
-    if (message.isErr()) {
-      return Result.err(message.error);
+    if (Result.isFailure(message)) {
+      return Result.fail(message.failure);
     }
 
-    messages.push(message.value);
+    messages.push(message.success);
   }
 
-  return Result.ok(messages);
+  return Result.succeed(messages);
 }
 
 /**
@@ -170,9 +171,9 @@ export function parseAgentMessages(
  */
 export function parseThreadMessages(
   stored: string | null,
-): Result<readonly AgentMessage[], ThreadMessagesUnreadable> {
+): Result.Result<readonly AgentMessage[], ThreadMessagesUnreadable> {
   if (stored === null || stored === "") {
-    return Result.ok([]);
+    return Result.succeed([]);
   }
 
   let decoded: unknown;

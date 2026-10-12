@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { startFacetTurn } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
@@ -52,7 +52,7 @@ export async function turnRecordingProvisioning(
 
   const start = await startFacetTurn({
     namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
+    mount: () => Promise.resolve(Result.succeed({ fetcher: facet })),
     provision: (project) => {
       reconciled.push(project.id);
 
@@ -119,7 +119,7 @@ export function turnFor(
 ): Promise<ProjectTurnStart> {
   return startFacetTurn({
     namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.ok({ fetcher: facet })),
+    mount: () => Promise.resolve(Result.succeed({ fetcher: facet })),
     provision: provisioned,
     catalog: sampleSelectableCatalog,
     workspaceName: tenantWorkspace,
@@ -133,7 +133,7 @@ export function turnFor(
 export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<ProjectTurnStart> {
   return startFacetTurn({
     namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.err({ code: "no-active-generation" })),
+    mount: () => Promise.resolve(Result.fail({ code: "no-active-generation" })),
     provision: provisioned,
     catalog: sampleSelectableCatalog,
     workspaceName,

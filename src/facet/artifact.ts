@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 
 export type HarnessModule = {
@@ -54,27 +54,27 @@ export class MainHarnessArtifact {
    * `isMainHarnessArtifactInput` is what turns it into the declared input type.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a built or stored module map is decoded JSON, so its shape is proven here.
-  static parse(input: unknown): Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
+  static parse(input: unknown): Result.Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
     if (!isMainHarnessArtifactInput(input)) {
-      return Result.err({ code: "invalid-artifact" });
+      return Result.fail({ code: "invalid-artifact" });
     }
 
     const moduleMap = parseModuleMap(input.entryModule, input.modules);
 
-    if (moduleMap.isErr()) {
-      return Result.err(moduleMap.error);
+    if (Result.isFailure(moduleMap)) {
+      return Result.fail(moduleMap.failure);
     }
 
     const harnessCommit = parseHarnessCommit(input.harnessCommit);
 
     if (harnessCommit === undefined) {
-      return Result.err({
+      return Result.fail({
         code: "invalid-harness-commit",
         harnessCommit: input.harnessCommit,
       });
     }
 
-    return Result.ok(new MainHarnessArtifact(harnessCommit, moduleMap.value));
+    return Result.succeed(new MainHarnessArtifact(harnessCommit, moduleMap.success));
   }
 }
 
@@ -117,12 +117,12 @@ function isMainHarnessArtifactInput(value: unknown): value is MainHarnessArtifac
 function parseModuleMap(
   entryModuleName: string,
   modules: MainHarnessArtifactInput["modules"],
-): Result<
+): Result.Result<
   readonly [entryModule: HarnessModule, ...otherModules: HarnessModule[]],
   ModuleMapProblem
 > {
   if (modules.length === 0) {
-    return Result.err({ code: "empty-module-map" });
+    return Result.fail({ code: "empty-module-map" });
   }
 
   const moduleNames = new Set<string>();
@@ -131,7 +131,7 @@ function parseModuleMap(
 
   for (const module of modules) {
     if (moduleNames.has(module.name)) {
-      return Result.err({
+      return Result.fail({
         code: "duplicate-module-name",
         moduleName: module.name,
       });
@@ -148,11 +148,11 @@ function parseModuleMap(
   }
 
   if (entryModule === undefined) {
-    return Result.err({
+    return Result.fail({
       code: "entry-module-not-found",
       entryModule: entryModuleName,
     });
   }
 
-  return Result.ok([entryModule, ...otherModules]);
+  return Result.succeed([entryModule, ...otherModules]);
 }

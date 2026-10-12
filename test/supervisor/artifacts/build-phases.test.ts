@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { resultOf } from "../../effect-result.js";
+import * as Result from "effect/Result";
 import { capturedEvents, everythingLogged, named } from "../../log-capture.js";
 import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
@@ -84,12 +86,15 @@ test("a failing phase names that phase, and the phases after it never run", asyn
     phaseNames.map(async (failing) => {
       const host = new PhaseFailingHost(failing);
 
-      const built = await new WorkspaceHostModuleMapBuilder(
-        namespaceFor(host),
-        workspaceName,
-      ).build(commit);
+      const built = await resultOf(
+        new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName).build(commit),
+      );
 
-      return { failing, error: built.isErr() ? built.error : undefined, steps: host.steps };
+      return {
+        failing,
+        error: Result.isFailure(built) ? built.failure : undefined,
+        steps: host.steps,
+      };
     }),
   );
 
@@ -141,16 +146,18 @@ afterEach(() => {
 test("a failed phase gives the owner its output tail with every credential redacted, and logs none of it", async () => {
   const events = capturedEvents();
 
-  const built = await new WorkspaceHostModuleMapBuilder(
-    namespaceFor(new TokenEchoingHost(phaseNames[0] ?? "")),
-    workspaceName,
-  ).build(commit);
+  const built = await resultOf(
+    new WorkspaceHostModuleMapBuilder(
+      namespaceFor(new TokenEchoingHost(phaseNames[0] ?? "")),
+      workspaceName,
+    ).build(commit),
+  );
 
-  if (built.isOk() || built.error.code !== "build-step-failed") {
+  if (Result.isSuccess(built) || built.failure.code !== "build-step-failed") {
     throw new Error("the phase must fail with a build-step-failed problem");
   }
 
-  const { diagnostics } = built.error;
+  const { diagnostics } = built.failure;
   expect(diagnostics.stderrTail, "the owner can read why the build failed").toContain(
     "authentication failed",
   );
@@ -173,17 +180,17 @@ test("a failed phase gives the owner its output tail with every credential redac
 test("the tail keeps the end of a long stream and says it was cut", async () => {
   const host = new LongOutputHost(phaseNames[0] ?? "");
 
-  const built = await new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName).build(
-    commit,
+  const built = await resultOf(
+    new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName).build(commit),
   );
 
-  if (built.isOk() || built.error.code !== "build-step-failed") {
+  if (Result.isSuccess(built) || built.failure.code !== "build-step-failed") {
     throw new Error("the phase must fail with a build-step-failed problem");
   }
 
-  expect(built.error.diagnostics.stderrTail).toHaveLength(2_000);
-  expect(built.error.diagnostics.stderrTail.endsWith("THE END")).toBe(true);
-  expect(built.error.diagnostics.truncated).toBe(true);
+  expect(built.failure.diagnostics.stderrTail).toHaveLength(2_000);
+  expect(built.failure.diagnostics.stderrTail.endsWith("THE END")).toBe(true);
+  expect(built.failure.diagnostics.truncated).toBe(true);
 });
 
 /** Fails the named step with exactly the output the test gives it. */
@@ -214,16 +221,18 @@ class FixedOutputHost implements BuildWorkspaceHost {
 }
 
 async function failedDiagnostics(output: Readonly<{ stdout: string; stderr: string }>) {
-  const built = await new WorkspaceHostModuleMapBuilder(
-    namespaceFor(new FixedOutputHost(phaseNames[0] ?? "", output)),
-    workspaceName,
-  ).build(commit);
+  const built = await resultOf(
+    new WorkspaceHostModuleMapBuilder(
+      namespaceFor(new FixedOutputHost(phaseNames[0] ?? "", output)),
+      workspaceName,
+    ).build(commit),
+  );
 
-  if (built.isOk() || built.error.code !== "build-step-failed") {
+  if (Result.isSuccess(built) || built.failure.code !== "build-step-failed") {
     throw new Error("the phase must fail with a build-step-failed problem");
   }
 
-  return built.error.diagnostics;
+  return built.failure.diagnostics;
 }
 
 test("a token that straddles the cut is redacted before the cut, so no fragment survives", async () => {

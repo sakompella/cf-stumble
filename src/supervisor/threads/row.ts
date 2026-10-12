@@ -1,4 +1,4 @@
-import type { Result } from "better-result";
+import * as Result from "effect/Result";
 import { parseThreadMessages, type ThreadMessagesUnreadable } from "./messages.js";
 import type { SelectableProject } from "../../selectable-projects.js";
 import type { ProjectThread } from "./thread.js";
@@ -20,13 +20,15 @@ export type ThreadRow = {
 export function threadFromRow(
   project: SelectableProject,
   row: ThreadRow,
-): Result<ProjectThread, ThreadMessagesUnreadable> {
-  return parseThreadMessages(row.messages).map((messages) => ({
-    projectId: project.id,
-    messages,
-    revision: row.revision,
-    turnActive: row.turn_active === 1,
-    turnDeadlineAt: row.turn_deadline_at ?? undefined,
-    turnHolderId: row.turn_holder_id ?? undefined,
-  }));
+): Result.Result<ProjectThread, ThreadMessagesUnreadable> {
+  return parseThreadMessages(row.messages).pipe(
+    Result.map((messages) => ({
+      projectId: project.id,
+      messages,
+      revision: row.revision,
+      turnActive: row.turn_active === 1,
+      turnDeadlineAt: row.turn_deadline_at ?? undefined,
+      turnHolderId: row.turn_holder_id ?? undefined,
+    })),
+  );
 }

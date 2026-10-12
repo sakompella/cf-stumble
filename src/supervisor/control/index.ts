@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
 import { logCommit, logEvent, type LogFields } from "../../diagnostics.js";
@@ -18,7 +18,9 @@ type ActivationKind = Exclude<ControlOutcome["kind"], "candidate-submitted">;
 
 // Control runs on Result internally and converts to the plain GenerationControlResult union once,
 // in execute(), because that value crosses the Supervisor RPC boundary and is written to SQLite.
-type ControlDecision = Result<ControlOutcome, ControlProblemCode>;
+// Everything here runs inside one `transactionSync` callback, so it is synchronous code: a Result
+// is a value, not an Effect, and nothing in the callback can suspend.
+type ControlDecision = Result.Result<ControlOutcome, ControlProblemCode>;
 
 /**
  * Applies a generation request directly to the generation tables in one Durable Object
@@ -91,7 +93,7 @@ export class GenerationControl {
       epoch: result.epoch,
     };
 
-    return Result.ok(outcome);
+    return Result.succeed(outcome);
   }
 
   /** `guard` runs before the activation decider, so a rollback reports its own refusal first. */
@@ -117,15 +119,15 @@ export class GenerationControl {
       return rejected(refusal);
     }
 
-    return this.generations
-      .activateInTransaction(generationLabel)
-      .map((activation): ControlOutcome => ({
+    return Result.mapBoth(this.generations.activateInTransaction(generationLabel), {
+      onSuccess: (activation): ControlOutcome => ({
         kind,
         generation: activation.generation,
         epoch: activation.epoch,
         effect: activation.effect,
-      }))
-      .mapError((problem) => problem.code);
+      }),
+      onFailure: (problem) => problem.code,
+    });
   }
 
   private rollbackProblem(label: GenerationLabel): ControlProblemCode | undefined {
@@ -176,13 +178,13 @@ function controlLogFields(
 }
 
 function rejected(code: ControlProblemCode): ControlDecision {
-  return Result.err(code);
+  return Result.fail(code);
 }
 
 function decisionToResult(decision: ControlDecision): GenerationControlResult {
-  return decision.match<GenerationControlResult>({
-    ok: (outcome) => ({ ok: true, outcome }),
-    err: (code) => ({ ok: false, problem: { code } }),
+  return Result.match(decision, {
+    onSuccess: (outcome): GenerationControlResult => ({ ok: true, outcome }),
+    onFailure: (code): GenerationControlResult => ({ ok: false, problem: { code } }),
   });
 }
 

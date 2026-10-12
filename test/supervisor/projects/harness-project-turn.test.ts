@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { sampleProjectOne, sampleSelectableCatalog } from "../../project-fixtures.js";
 import { HARNESS_PROJECT_ID } from "../../../src/selectable-projects.js";
@@ -22,7 +22,7 @@ test("a harness turn reconciles before mounting the generation", async () => {
     mount: () => {
       events.push("mount");
 
-      return Promise.resolve(Result.ok({ fetcher: facet }));
+      return Promise.resolve(Result.succeed({ fetcher: facet }));
     },
     provision: () => Promise.resolve(true),
     provisionHarness: () => {
@@ -52,7 +52,7 @@ test("a harness provision that observes cancellation never mounts", async () => 
     mount: () => {
       mounted = true;
 
-      return Promise.resolve(Result.ok({ fetcher: facet }));
+      return Promise.resolve(Result.succeed({ fetcher: facet }));
     },
     provision: () => Promise.resolve(true),
     provisionHarness: () => {

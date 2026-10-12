@@ -3,6 +3,7 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
+import * as Result from "effect/Result";
 import { loadMainFacet } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 
@@ -75,13 +76,13 @@ test("loads a multi-module main harness whose entry module uses an imported valu
     { MODEL: modelRoute },
   );
 
-  expect(loadedHarness.isOk()).toBe(true);
+  expect(Result.isSuccess(loadedHarness)).toBe(true);
 
-  if (loadedHarness.isErr()) {
+  if (Result.isFailure(loadedHarness)) {
     return;
   }
 
-  expect(await responseText(loadedHarness.value.worker)).toBe("from an imported module");
+  expect(await responseText(loadedHarness.success.worker)).toBe("from an imported module");
 });
 
 test("loads a one-module main harness through the artifact loader", async () => {
@@ -96,13 +97,13 @@ test("loads a one-module main harness through the artifact loader", async () => 
     { MODEL: modelRoute },
   );
 
-  expect(loadedHarness.isOk()).toBe(true);
+  expect(Result.isSuccess(loadedHarness)).toBe(true);
 
-  if (loadedHarness.isErr()) {
+  if (Result.isFailure(loadedHarness)) {
     return;
   }
 
-  expect(await responseText(loadedHarness.value.worker)).toBe("from one module");
+  expect(await responseText(loadedHarness.success.worker)).toBe("from one module");
 });
 
 test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader name", async () => {
@@ -131,19 +132,19 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
     { MODEL: modelRoute },
   );
 
-  expect(firstHarness.isOk()).toBe(true);
-  expect(secondHarness.isOk()).toBe(true);
+  expect(Result.isSuccess(firstHarness)).toBe(true);
+  expect(Result.isSuccess(secondHarness)).toBe(true);
   expect(loaderNames).toEqual([
     "2123456789abcdef0123456789abcdef01234567",
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   ]);
 
-  if (firstHarness.isErr() || secondHarness.isErr()) {
+  if (Result.isFailure(firstHarness) || Result.isFailure(secondHarness)) {
     return;
   }
 
-  expect(await responseText(firstHarness.value.worker)).toBe("first harness");
-  expect(await responseText(secondHarness.value.worker)).toBe("second harness");
+  expect(await responseText(firstHarness.success.worker)).toBe("first harness");
+  expect(await responseText(secondHarness.success.worker)).toBe("second harness");
 });
 
 test("reuses the cached Worker Loader entry when the same harness commit is loaded again", async () => {
@@ -165,16 +166,16 @@ test("reuses the cached Worker Loader entry when the same harness commit is load
     { MODEL: modelRoute },
   );
 
-  expect(firstHarness.isOk()).toBe(true);
-  expect(rebuiltHarness.isOk()).toBe(true);
+  expect(Result.isSuccess(firstHarness)).toBe(true);
+  expect(Result.isSuccess(rebuiltHarness)).toBe(true);
 
-  if (firstHarness.isErr() || rebuiltHarness.isErr()) {
+  if (Result.isFailure(firstHarness) || Result.isFailure(rebuiltHarness)) {
     return;
   }
 
-  expect(await responseText(firstHarness.value.worker)).toBe("code the commit was labeled with");
+  expect(await responseText(firstHarness.success.worker)).toBe("code the commit was labeled with");
   expect(
-    await responseText(rebuiltHarness.value.worker),
+    await responseText(rebuiltHarness.success.worker),
     "a labeled commit is immutable, so its Loader entry must not change under it",
   ).toBe("code the commit was labeled with");
 });
@@ -188,13 +189,13 @@ test("returns the raw invalid harness commit in artifact input diagnostics", () 
     { MODEL: modelRoute },
   );
 
-  expect(loadedHarness.isErr()).toBe(true);
+  expect(Result.isFailure(loadedHarness)).toBe(true);
 
-  if (loadedHarness.isOk()) {
+  if (Result.isSuccess(loadedHarness)) {
     return;
   }
 
-  expect(loadedHarness.error).toEqual({ code: "invalid-harness-commit", harnessCommit: "main" });
+  expect(loadedHarness.failure).toEqual({ code: "invalid-harness-commit", harnessCommit: "main" });
   expect(loaderNames).toEqual([]);
 });
 
@@ -212,13 +213,13 @@ test("rejects an artifact with no entry module before calling the Worker Loader"
     { MODEL: modelRoute },
   );
 
-  expect(loadedHarness.isErr()).toBe(true);
+  expect(Result.isFailure(loadedHarness)).toBe(true);
 
-  if (loadedHarness.isOk()) {
+  if (Result.isSuccess(loadedHarness)) {
     return;
   }
 
-  expect(loadedHarness.error).toEqual({
+  expect(loadedHarness.failure).toEqual({
     code: "entry-module-not-found",
     entryModule: "main.js",
   });

@@ -1,6 +1,7 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
+import * as Result from "effect/Result";
 
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
@@ -19,11 +20,11 @@ const moduleMaps = gs
 function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
   const parsed = MainHarnessArtifact.parse(input);
 
-  if (parsed.isErr()) {
-    throw new Error(`the generated module map must parse: ${parsed.error.code}`);
+  if (Result.isFailure(parsed)) {
+    throw new Error(`the generated module map must parse: ${parsed.failure.code}`);
   }
 
-  return canonicalModuleMap(parsed.value);
+  return canonicalModuleMap(parsed.success);
 }
 
 function rotated<T>(values: readonly T[], by: number): readonly T[] {

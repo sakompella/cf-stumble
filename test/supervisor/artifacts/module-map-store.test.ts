@@ -3,6 +3,7 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import * as Result from "effect/Result";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
@@ -53,11 +54,11 @@ function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
 function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
   const artifactValue = MainHarnessArtifact.parse(input);
 
-  if (artifactValue.isErr()) {
-    throw new Error(`the test module map must parse: ${artifactValue.error.code}`);
+  if (Result.isFailure(artifactValue)) {
+    throw new Error(`the test module map must parse: ${artifactValue.failure.code}`);
   }
 
-  return artifactValue.value;
+  return artifactValue.success;
 }
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
@@ -100,7 +101,7 @@ function storedKind(
   return runInDurableObject(control, (_instance, state) => {
     const found = new ModuleMapStore(state.storage).read(testHarnessCommit(harnessCommit));
 
-    return found.isErr() ? `problem:${found.error.code}` : found.value.kind;
+    return Result.isFailure(found) ? `problem:${found.failure.code}` : found.success.kind;
   });
 }
 
@@ -118,11 +119,11 @@ test("keeps a stored module map across a Durable Object eviction", async () => {
   const found = await runInDurableObject(control, (_instance, state) => {
     const read = new ModuleMapStore(state.storage).read(testHarnessCommit(commits.evicted));
 
-    if (read.isErr() || read.value.kind === "absent") {
+    if (Result.isFailure(read) || read.success.kind === "absent") {
       throw new Error("an evicted Supervisor must still hold its stored module map");
     }
 
-    return encodeModuleMap(read.value.moduleMap);
+    return encodeModuleMap(read.success.moduleMap);
   });
 
   expect(found).toBe(encodeModuleMap(input));
@@ -136,13 +137,13 @@ test("stores a module map larger than one chunk and reads back the same bytes", 
     const store = new ModuleMapStore(state.storage);
     const written = store.write(parsedArtifact(input));
 
-    if (written.isErr()) {
-      throw new Error(`a large module map must be written: ${written.error.code}`);
+    if (Result.isFailure(written)) {
+      throw new Error(`a large module map must be written: ${written.failure.code}`);
     }
 
     const read = store.read(testHarnessCommit(commits.large));
 
-    if (read.isErr() || read.value.kind === "absent") {
+    if (Result.isFailure(read) || read.success.kind === "absent") {
       throw new Error("a large module map must read back");
     }
 
@@ -160,7 +161,7 @@ test("stores a module map larger than one chunk and reads back the same bytes", 
           commits.large,
         )
         .one(),
-      sameBytes: encodeModuleMap(read.value.moduleMap) === encodeModuleMap(written.value),
+      sameBytes: encodeModuleMap(read.success.moduleMap) === encodeModuleMap(written.success),
     };
   });
 
@@ -191,8 +192,8 @@ test("a write that fails part way through leaves no partial module map", async (
     const read = store.read(testHarnessCommit(commits.atomic));
 
     return {
-      write: written.isErr() ? written.error.code : "written",
-      read: read.isErr() ? `problem:${read.error.code}` : read.value.kind,
+      write: Result.isFailure(written) ? written.failure.code : "written",
+      read: Result.isFailure(read) ? `problem:${read.failure.code}` : read.success.kind,
       rows: state.storage.sql
         .exec<{ readonly manifests: number; readonly chunks: number }>(
           `SELECT
@@ -231,7 +232,7 @@ test("logs a redacted cause instead of discarding it when the transaction throws
       parsedArtifact(input),
     );
 
-    return written.isErr() ? written.error.code : "written";
+    return Result.isFailure(written) ? written.failure.code : "written";
   });
 
   expect(outcome).toBe("artifact-write-failed");

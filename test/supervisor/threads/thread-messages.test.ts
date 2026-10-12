@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import * as Result from "effect/Result";
 import type { AgentMessage } from "@cf-stumble/pi";
 import {
   parseThreadMessages,
@@ -10,11 +11,11 @@ import { THREAD_MESSAGE_SAMPLE_LIST, THREAD_MESSAGE_SAMPLES } from "./message-sa
 function roundTrip(messages: readonly AgentMessage[]): readonly AgentMessage[] {
   const parsed = parseThreadMessages(serializeThreadMessages(messages));
 
-  if (parsed.isErr()) {
-    throw new Error(`the stored thread must read back: ${parsed.error.reason}`);
+  if (Result.isFailure(parsed)) {
+    throw new Error(`the stored thread must read back: ${parsed.failure.reason}`);
   }
 
-  return parsed.value;
+  return parsed.success;
 }
 
 function fieldsOf(message: AgentMessage): ReadonlyMap<string, unknown> {
@@ -67,16 +68,16 @@ test("an empty or absent thread reads back as an empty conversation", () => {
   const absent = parseThreadMessages(null);
   const written = parseThreadMessages(serializeThreadMessages([]));
 
-  expect(empty.isOk() && empty.value).toEqual([]);
-  expect(absent.isOk() && absent.value).toEqual([]);
-  expect(written.isOk() && written.value).toEqual([]);
+  expect(Result.isSuccess(empty) && empty.success).toEqual([]);
+  expect(Result.isSuccess(absent) && absent.success).toEqual([]);
+  expect(Result.isSuccess(written) && written.success).toEqual([]);
 });
 
 test("a stored entry with an unknown role is unreadable rather than an untyped message", () => {
   const parsed = parseThreadMessages(JSON.stringify([{ role: "telepathy", timestamp: 1 }]));
 
-  expect(parsed.isErr()).toBe(true);
-  expect(parsed.isErr() && parsed.error.reason).toContain("telepathy");
+  expect(Result.isFailure(parsed)).toBe(true);
+  expect(Result.isFailure(parsed) && parsed.failure.reason).toContain("telepathy");
 });
 
 test("a stored entry missing a required field is unreadable", () => {
@@ -84,8 +85,8 @@ test("a stored entry missing a required field is unreadable", () => {
     JSON.stringify([{ role: "compactionSummary", summary: "s", timestamp: 1 }]),
   );
 
-  expect(parsed.isErr()).toBe(true);
-  expect(parsed.isErr() && parsed.error.reason).toContain("tokensBefore");
+  expect(Result.isFailure(parsed)).toBe(true);
+  expect(Result.isFailure(parsed) && parsed.failure.reason).toContain("tokensBefore");
 });
 
 test("a stored entry whose field is the wrong kind is unreadable", () => {
@@ -93,8 +94,8 @@ test("a stored entry whose field is the wrong kind is unreadable", () => {
     JSON.stringify([{ role: "branchSummary", summary: 7, fromId: "b", timestamp: 1 }]),
   );
 
-  expect(parsed.isErr()).toBe(true);
-  expect(parsed.isErr() && parsed.error.reason).toContain("summary");
+  expect(Result.isFailure(parsed)).toBe(true);
+  expect(Result.isFailure(parsed) && parsed.failure.reason).toContain("summary");
 });
 
 test("a stored entry carrying a field no variant declares is unreadable", () => {
@@ -104,12 +105,12 @@ test("a stored entry carrying a field no variant declares is unreadable", () => 
     ]),
   );
 
-  expect(parsed.isErr()).toBe(true);
-  expect(parsed.isErr() && parsed.error.reason).toContain("injected");
+  expect(Result.isFailure(parsed)).toBe(true);
+  expect(Result.isFailure(parsed) && parsed.failure.reason).toContain("injected");
 });
 
 test("a column that is not a list of JSON objects is unreadable", () => {
-  expect(parseThreadMessages("{").isErr()).toBe(true);
-  expect(parseThreadMessages('{"role":"user"}').isErr()).toBe(true);
-  expect(parseThreadMessages("[7]").isErr()).toBe(true);
+  expect(Result.isFailure(parseThreadMessages("{"))).toBe(true);
+  expect(Result.isFailure(parseThreadMessages('{"role":"user"}'))).toBe(true);
+  expect(Result.isFailure(parseThreadMessages("[7]"))).toBe(true);
 });

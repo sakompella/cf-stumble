@@ -1,4 +1,4 @@
-import type { Result } from "better-result";
+import * as Result from "effect/Result";
 import { logEvent, timed, type LogFields, type LogLevel } from "../../diagnostics.js";
 import type { ProjectTurnFrame } from "./turn-frames.js";
 
@@ -190,14 +190,16 @@ export function logLeaseAbandoned(trace: TurnTrace, why: string, level: LogLevel
 /** Mount the admitted generation and log how long it took and whether it mounted. */
 export function timedTurnMount<T, E extends Readonly<{ code: string }>>(
   trace: TurnTrace,
-  mount: () => Result<T, E>,
-): Promise<Result<T, E>> {
+  mount: () => Result.Result<T, E>,
+): Promise<Result.Result<T, E>> {
   return timed(
     "turn.mounted",
     turnFields(trace),
     () => Promise.resolve(mount()),
     (mounted) =>
-      mounted.isOk() ? { outcome: "mounted" } : { outcome: mounted.error.code, level: "warn" },
+      Result.isSuccess(mounted)
+        ? { outcome: "mounted" }
+        : { outcome: mounted.failure.code, level: "warn" },
   );
 }
 

@@ -1,4 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { resultOf } from "../../effect-result.js";
+import * as Result from "effect/Result";
 import { everythingLogged, textLines } from "../../log-capture.js";
 import { syntheticJwt } from "../../synthetic-jwt.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
@@ -134,13 +136,15 @@ test("plans an isolated build directory outside the project workspace", () => {
 test("reports a failed archive extraction as the checkout step, not as a build failure", async () => {
   const workspace = new FakeBuildWorkspace({ failing: "git-dir=/harness/.git archive" });
 
-  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+  const built = await resultOf(
+    new WorkspaceModuleMapBuilder(workspace, configuration).build(commit),
+  );
 
-  if (built.isOk()) {
+  if (Result.isSuccess(built)) {
     throw new Error("a failed archive must not produce a module map");
   }
 
-  expect(built.error).toEqual({
+  expect(built.failure).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,
     step: "checkout",
@@ -152,13 +156,15 @@ test("reports a failed archive extraction as the checkout step, not as a build f
 test("reports an unavailable build workspace", async () => {
   const workspace = new FakeBuildWorkspace({ unavailable: true });
 
-  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+  const built = await resultOf(
+    new WorkspaceModuleMapBuilder(workspace, configuration).build(commit),
+  );
 
-  if (built.isOk()) {
+  if (Result.isSuccess(built)) {
     throw new Error("an unavailable workspace must not produce a module map");
   }
 
-  expect(built.error).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
+  expect(built.failure).toEqual({ code: "build-workspace-unavailable", harnessCommit: commit });
 });
 
 test("an unavailable build workspace logs its cause with every credential redacted", async () => {
@@ -172,9 +178,11 @@ test("an unavailable build workspace logs its cause with every credential redact
     readModuleMap: () => Promise.reject(new Error("a failed step reads no output")),
   };
 
-  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+  const built = await resultOf(
+    new WorkspaceModuleMapBuilder(workspace, configuration).build(commit),
+  );
 
-  expect(built.isErr() ? built.error.code : "ok").toBe("build-workspace-unavailable");
+  expect(Result.isFailure(built) ? built.failure.code : "ok").toBe("build-workspace-unavailable");
   expect(textLines(errors).join("\n"), "the cause still explains the failure").toMatch(
     /harness-build\.provision: build-workspace-unavailable: container refused \[redacted\]/u,
   );
@@ -196,9 +204,11 @@ test("missing build output logs its cause with every credential redacted", async
       Promise.reject(new Error(`no file; request carried ${jwt.token} ${FAKE_TOKEN}`)),
   };
 
-  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+  const built = await resultOf(
+    new WorkspaceModuleMapBuilder(workspace, configuration).build(commit),
+  );
 
-  expect(built.isErr() ? built.error.code : "ok").toBe("build-output-missing");
+  expect(Result.isFailure(built) ? built.failure.code : "ok").toBe("build-output-missing");
   expect(textLines(errors).join("\n"), "the log still names the path the build reads").toContain(
     `harness-build.output /harness-builds/${commit}/build/module-map.json: build-output-missing: no file`,
   );
@@ -223,12 +233,12 @@ test("reports missing and invalid build output", async () => {
   );
 
   const results = [
-    await missing.build(commit),
-    await unparsable.build(commit),
-    await withoutEntry.build(commit),
+    await resultOf(missing.build(commit)),
+    await resultOf(unparsable.build(commit)),
+    await resultOf(withoutEntry.build(commit)),
   ];
 
-  expect(results.map((result) => (result.isErr() ? result.error : "ok"))).toEqual([
+  expect(results.map((result) => (Result.isFailure(result) ? result.failure : "ok"))).toEqual([
     { code: "build-output-missing", harnessCommit: commit },
     { code: "build-output-invalid", harnessCommit: commit, reason: "invalid-artifact" },
     { code: "build-output-invalid", harnessCommit: commit, reason: "entry-module-not-found" },
@@ -244,11 +254,13 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
     ],
   });
 
-  const built = await new WorkspaceModuleMapBuilder(workspace, configuration).build(commit);
+  const built = await resultOf(
+    new WorkspaceModuleMapBuilder(workspace, configuration).build(commit),
+  );
 
-  if (built.isErr()) {
+  if (Result.isFailure(built)) {
     throw new Error("a valid build output must produce a module map");
   }
 
-  expect(built.value.harnessCommit).toBe(commit);
+  expect(built.success.harnessCommit).toBe(commit);
 });

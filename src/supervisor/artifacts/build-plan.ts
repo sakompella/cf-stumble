@@ -1,4 +1,4 @@
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
@@ -59,13 +59,13 @@ export type HarnessBuildProblem =
 export function moduleMapFromBuildOutput(
   harnessCommit: HarnessCommit,
   output: BuiltModuleMapFile,
-): Result<MainHarnessArtifactInput, HarnessBuildProblem> {
+): Result.Result<MainHarnessArtifactInput, HarnessBuildProblem> {
   // The build wrote this file, so the declared type describes what JSON decoding produced, not a
   // checked value. This guard keeps a non-object from throwing, and `MainHarnessArtifact.parse`
   // checks every field that can reach a module map.
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: decoded build output is untrusted.
   if (output === null || typeof output !== "object") {
-    return Result.err({ code: "build-output-invalid", harnessCommit, reason: "invalid-artifact" });
+    return Result.fail({ code: "build-output-invalid", harnessCommit, reason: "invalid-artifact" });
   }
 
   const parsed = MainHarnessArtifact.parse({
@@ -74,9 +74,13 @@ export function moduleMapFromBuildOutput(
     modules: output.modules,
   });
 
-  if (parsed.isErr()) {
-    return Result.err({ code: "build-output-invalid", harnessCommit, reason: parsed.error.code });
+  if (Result.isFailure(parsed)) {
+    return Result.fail({
+      code: "build-output-invalid",
+      harnessCommit,
+      reason: parsed.failure.code,
+    });
   }
 
-  return Result.ok(canonicalModuleMap(parsed.value));
+  return Result.succeed(canonicalModuleMap(parsed.success));
 }
