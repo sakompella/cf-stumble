@@ -1,5 +1,7 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof -- GitHub's device-flow responses are parsed at this boundary.
 
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import { isRecord } from "../untrusted.js";
 
 /**
@@ -67,9 +69,10 @@ type DeviceAuthorization = Readonly<{
  */
 type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
 
-type DeviceAuthorizationStart =
-  | Readonly<{ ok: true; authorization: DeviceAuthorization }>
-  | Readonly<{ ok: false; problem: DeviceFlowProblem }>;
+/** GitHub did not start a device authorization. */
+export class DeviceAuthorizationNotStarted extends Data.TaggedError(
+  "DeviceAuthorizationNotStarted",
+)<{ readonly problem: DeviceFlowProblem }> {}
 
 /**
  * The result of one redemption attempt. `pending` and `slow-down` are the ordinary states while
@@ -146,78 +149,89 @@ export function parseDeviceRedemption(value: unknown): DeviceRedemption {
 /** One JSON object as GitHub returned it. The two parsers above turn it into a domain value. */
 type GitHubDeviceReply = Readonly<Record<string, unknown>>;
 
-async function postForm(
+/** The device endpoint could not be reached, refused the request, or sent no JSON. */
+class DeviceEndpointUnavailable extends Data.TaggedError("DeviceEndpointUnavailable") {}
+
+function postForm(
   url: string,
   body: Record<string, string>,
   fetcher: GitHubFetch,
-): Promise<GitHubDeviceReply | undefined> {
-  const response = await fetcher(url, {
-    method: "POST",
-    headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body).toString(),
+): Effect.Effect<GitHubDeviceReply | undefined, DeviceEndpointUnavailable> {
+  return Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetcher(url, {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams(body).toString(),
+        }),
+      catch: () => new DeviceEndpointUnavailable(),
+    });
+
+    if (!response.ok) return yield* new DeviceEndpointUnavailable();
+
+    const payload: unknown = yield* Effect.tryPromise({
+      try: () => response.json(),
+      catch: () => new DeviceEndpointUnavailable(),
+    });
+
+    return isRecord(payload) ? payload : undefined;
   });
-
-  if (!response.ok) {
-    throw new Error("the GitHub device endpoint refused the request");
-  }
-
-  const payload: unknown = await response.json();
-
-  return isRecord(payload) ? payload : undefined;
 }
 
 /**
  * Ask GitHub to start one device authorization. The reply is the only place a device code exists,
  * so the caller stores it beside the owner it belongs to rather than returning it anywhere.
  */
-export async function requestDeviceAuthorization(
+export function requestDeviceAuthorization(
   clientId: string,
   fetcher: GitHubFetch,
-): Promise<DeviceAuthorizationStart> {
+): Effect.Effect<DeviceAuthorization, DeviceAuthorizationNotStarted> {
   if (clientId.trim().length === 0) {
-    return { ok: false, problem: "not-configured" };
+    return Effect.fail(new DeviceAuthorizationNotStarted({ problem: "not-configured" }));
   }
 
-  let payload: GitHubDeviceReply | undefined;
+  return postForm(
+    GITHUB_DEVICE_CODE_URL,
+    { client_id: clientId, scope: GITHUB_DEVICE_SCOPE },
+    fetcher,
+  ).pipe(
+    Effect.catchTag("DeviceEndpointUnavailable", () =>
+      Effect.fail(new DeviceAuthorizationNotStarted({ problem: "provider-unavailable" })),
+    ),
+    Effect.flatMap((payload) => {
+      const authorization = parseDeviceAuthorization(payload);
 
-  try {
-    payload = await postForm(
-      GITHUB_DEVICE_CODE_URL,
-      { client_id: clientId, scope: GITHUB_DEVICE_SCOPE },
-      fetcher,
-    );
-  } catch {
-    return { ok: false, problem: "provider-unavailable" };
-  }
-
-  const authorization = parseDeviceAuthorization(payload);
-
-  return authorization === undefined
-    ? { ok: false, problem: "provider-refused" }
-    : { ok: true, authorization };
+      return authorization === undefined
+        ? Effect.fail(new DeviceAuthorizationNotStarted({ problem: "provider-refused" }))
+        : Effect.succeed(authorization);
+    }),
+  );
 }
 
 /**
  * Redeem one device code. This is the single call that can yield a token, and it yields it to its
  * caller only: nothing here writes it down.
  */
-export async function redeemDeviceAuthorization(
+export function redeemDeviceAuthorization(
   input: Readonly<{ clientId: string; deviceCode: string }>,
   fetcher: GitHubFetch,
-): Promise<DeviceRedemption> {
-  try {
-    return parseDeviceRedemption(
-      await postForm(
-        GITHUB_ACCESS_TOKEN_URL,
-        {
-          client_id: input.clientId,
-          device_code: input.deviceCode,
-          grant_type: DEVICE_GRANT_TYPE,
-        },
-        fetcher,
-      ),
-    );
-  } catch {
-    return { kind: "unavailable" };
-  }
+): Effect.Effect<DeviceRedemption> {
+  return postForm(
+    GITHUB_ACCESS_TOKEN_URL,
+    {
+      client_id: input.clientId,
+      device_code: input.deviceCode,
+      grant_type: DEVICE_GRANT_TYPE,
+    },
+    fetcher,
+  ).pipe(
+    Effect.map((reply) => parseDeviceRedemption(reply)),
+    Effect.catchTag("DeviceEndpointUnavailable", () =>
+      Effect.succeed<DeviceRedemption>({ kind: "unavailable" }),
+    ),
+  );
 }

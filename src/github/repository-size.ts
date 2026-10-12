@@ -1,5 +1,7 @@
 // oxlint-disable anti-slop/no-known-value-widening, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof -- GitHub's JSON response is parsed at this API boundary.
 
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import type { PublicRepositoryUrl } from "../project-catalog.js";
 import { isRecord } from "../untrusted.js";
 import type { GitHubFetch, GitHubToken } from "./device-flow.js";
@@ -88,80 +90,93 @@ function apiHeaders(token: GitHubToken | undefined): Record<string, string> {
   return headers;
 }
 
-async function getJson(
+/** A size could not be measured: a request failed, was refused, or GitHub's reply was malformed. */
+export class RepositorySizeUnknown extends Data.TaggedError("RepositorySizeUnknown") {}
+
+function getJson(
   url: string,
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
-): Promise<unknown> {
-  try {
-    const response = await fetcher(url, {
-      headers: apiHeaders(token),
-      signal: AbortSignal.timeout(REPOSITORY_SIZE_TIMEOUT_MS),
+): Effect.Effect<unknown, RepositorySizeUnknown> {
+  return Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetcher(url, {
+          headers: apiHeaders(token),
+          signal: AbortSignal.timeout(REPOSITORY_SIZE_TIMEOUT_MS),
+        }),
+      catch: () => new RepositorySizeUnknown(),
     });
 
-    return response.ok ? await response.json() : undefined;
-  } catch {
-    return undefined;
-  }
+    if (!response.ok) return yield* new RepositorySizeUnknown();
+
+    return yield* Effect.tryPromise({
+      try: (): Promise<unknown> => response.json(),
+      catch: () => new RepositorySizeUnknown(),
+    });
+  });
 }
 
 /**
  * Read GitHub's repository size and working-tree blob count. Any failed, rate-limited, or
- * malformed response is unknown, not a connection refusal: cloning remains the final check.
+ * malformed response is `RepositorySizeUnknown`, not a connection refusal: cloning remains the
+ * final check.
  */
-export async function lookupRepositorySize(
+export function lookupRepositorySize(
   repositoryUrl: PublicRepositoryUrl,
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
-): Promise<RepositorySizeLookup | undefined> {
-  const apiUrl = repositoryApiUrl(repositoryUrl);
+): Effect.Effect<RepositorySizeLookup, RepositorySizeUnknown> {
+  return Effect.gen(function* () {
+    const apiUrl = repositoryApiUrl(repositoryUrl);
 
-  if (apiUrl === undefined) return undefined;
+    if (apiUrl === undefined) return yield* new RepositorySizeUnknown();
 
-  const repository = await getJson(apiUrl, token, fetcher);
-  const size = isRecord(repository) ? repository.size : undefined;
-  const defaultBranch = isRecord(repository) ? repository.default_branch : undefined;
-
-  if (
-    typeof size !== "number" ||
-    !Number.isSafeInteger(size) ||
-    size < 0 ||
-    typeof defaultBranch !== "string" ||
-    defaultBranch.length === 0
-  ) {
-    return undefined;
-  }
-
-  const tree = await getJson(
-    `${apiUrl}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
-    token,
-    fetcher,
-  );
-
-  if (!isRecord(tree) || !Array.isArray(tree.tree) || typeof tree.truncated !== "boolean") {
-    return undefined;
-  }
-
-  let blobCount = 0;
-  let blobBytes = 0;
-
-  for (const entry of tree.tree) {
-    if (!isRecord(entry) || entry.type !== "blob") continue;
-
-    const blobSize = entry.size;
+    const repository = yield* getJson(apiUrl, token, fetcher);
+    const size = isRecord(repository) ? repository.size : undefined;
+    const defaultBranch = isRecord(repository) ? repository.default_branch : undefined;
 
     if (
-      typeof blobSize !== "number" ||
-      !Number.isSafeInteger(blobSize) ||
-      blobSize < 0 ||
-      !Number.isSafeInteger(blobBytes + blobSize)
+      typeof size !== "number" ||
+      !Number.isSafeInteger(size) ||
+      size < 0 ||
+      typeof defaultBranch !== "string" ||
+      defaultBranch.length === 0
     ) {
-      return undefined;
+      return yield* new RepositorySizeUnknown();
     }
 
-    blobCount += 1;
-    blobBytes += blobSize;
-  }
+    const tree = yield* getJson(
+      `${apiUrl}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
+      token,
+      fetcher,
+    );
 
-  return { sizeKb: size, blobCount, blobBytes, truncated: tree.truncated };
+    if (!isRecord(tree) || !Array.isArray(tree.tree) || typeof tree.truncated !== "boolean") {
+      return yield* new RepositorySizeUnknown();
+    }
+
+    let blobCount = 0;
+    let blobBytes = 0;
+
+    for (const entry of tree.tree) {
+      if (!isRecord(entry) || entry.type !== "blob") continue;
+
+      const blobSize = entry.size;
+
+      if (
+        typeof blobSize !== "number" ||
+        !Number.isSafeInteger(blobSize) ||
+        blobSize < 0 ||
+        !Number.isSafeInteger(blobBytes + blobSize)
+      ) {
+        return yield* new RepositorySizeUnknown();
+      }
+
+      blobCount += 1;
+      blobBytes += blobSize;
+    }
+
+    return { sizeKb: size, blobCount, blobBytes, truncated: tree.truncated };
+  });
 }

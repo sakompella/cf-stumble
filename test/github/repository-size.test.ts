@@ -1,7 +1,25 @@
+import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { parsePublicRepositoryUrl } from "../../src/project-catalog.js";
+import { parsePublicRepositoryUrl, type PublicRepositoryUrl } from "../../src/project-catalog.js";
 import { lookupRepositorySize } from "../../src/github/repository-size.js";
-import { parseGitHubToken } from "../../src/github/device-flow.js";
+import {
+  parseGitHubToken,
+  type GitHubFetch,
+  type GitHubToken,
+} from "../../src/github/device-flow.js";
+
+/** The lookup as the assertions compare it: the measurement, or nothing when it is unknown. */
+function measure(
+  repositoryUrl: PublicRepositoryUrl,
+  credential: GitHubToken | undefined,
+  fetcher: GitHubFetch,
+) {
+  return Effect.runPromise(
+    lookupRepositorySize(repositoryUrl, credential, fetcher).pipe(
+      Effect.catchTag("RepositorySizeUnknown", () => Effect.void),
+    ),
+  );
+}
 
 const repository = parsePublicRepositoryUrl("https://github.com/owner/repo");
 
@@ -14,7 +32,7 @@ if (repository === undefined || token === undefined) {
 test("looks up the GitHub repository size with the configured credential", async () => {
   const requested: { url: string; init: RequestInit | undefined }[] = [];
 
-  const size = await lookupRepositorySize(repository, token, (url, init) => {
+  const size = await measure(repository, token, (url, init) => {
     requested.push({ url, init });
 
     return Promise.resolve(
@@ -44,7 +62,7 @@ test("allows a public repository lookup without a configured credential", async 
   let requestedInit: RequestInit | undefined;
   let count = 0;
 
-  const size = await lookupRepositorySize(repository, undefined, (_url, init) => {
+  const size = await measure(repository, undefined, (_url, init) => {
     requestedInit = init;
     count += 1;
 
@@ -69,14 +87,14 @@ test.each([
     (_url: string, _init: RequestInit) => Promise.resolve(Response.json({ size: "large" })),
   ],
 ] as const)("skips a %s response", async (_name, fetcher) => {
-  await expect(lookupRepositorySize(repository, undefined, fetcher)).resolves.toBeUndefined();
+  await expect(measure(repository, undefined, fetcher)).resolves.toBeUndefined();
 });
 
 test("skips a malformed tree response", async () => {
   let count = 0;
 
   await expect(
-    lookupRepositorySize(repository, undefined, () => {
+    measure(repository, undefined, () => {
       count += 1;
 
       return Promise.resolve(
@@ -90,7 +108,7 @@ test("skips a malformed tree response", async () => {
 
 test("skips a tree with a malformed blob size", async () => {
   await expect(
-    lookupRepositorySize(repository, undefined, (url) =>
+    measure(repository, undefined, (url) =>
       Promise.resolve(
         url.includes("/git/trees/")
           ? Response.json({ truncated: false, tree: [{ type: "blob" }] })

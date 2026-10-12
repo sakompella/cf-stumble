@@ -245,15 +245,17 @@ export class GitHubConnection {
       return { ok: false, problem: "not-configured" };
     }
 
-    const started = await requestDeviceAuthorization(clientId, this.environment.fetcher);
+    const started = await runAtEntryPoint(
+      Effect.result(requestDeviceAuthorization(clientId, this.environment.fetcher)),
+    );
 
-    logAuthorization("start", started.ok ? "started" : "provider-unavailable");
+    logAuthorization("start", Result.isSuccess(started) ? "started" : "provider-unavailable");
 
-    if (!started.ok) {
+    if (Result.isFailure(started)) {
       return { ok: false, problem: "provider-unavailable" };
     }
 
-    const authorization = started.authorization;
+    const authorization = started.success;
     this.store.startAuthorization({
       deviceCode: authorization.deviceCode,
       userCode: authorization.userCode,
@@ -294,9 +296,11 @@ export class GitHubConnection {
       return { ok: false, problem: "not-the-initiating-owner" };
     }
 
-    const redeemed = await redeemDeviceAuthorization(
-      { clientId, deviceCode: pending.deviceCode },
-      this.environment.fetcher,
+    const redeemed = await runAtEntryPoint(
+      redeemDeviceAuthorization(
+        { clientId, deviceCode: pending.deviceCode },
+        this.environment.fetcher,
+      ),
     );
 
     if (redeemed.kind === "authorized") {

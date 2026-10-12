@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
   parseDeviceAuthorization,
@@ -15,6 +16,18 @@ import {
  */
 
 const CLIENT_ID = "Iv1.cfstumbleFAKE";
+
+/** The start of an authorization as the plain outcome these assertions compare. */
+function startAuthorization(clientId: string, fetcher: GitHubFetch) {
+  return Effect.runPromise(
+    requestDeviceAuthorization(clientId, fetcher).pipe(
+      Effect.match({
+        onSuccess: (authorization) => ({ ok: true, authorization }),
+        onFailure: ({ problem }) => ({ ok: false, problem }),
+      }),
+    ),
+  );
+}
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
@@ -59,7 +72,7 @@ test("asks GitHub for a device code and keeps the codes apart", async () => {
     },
   ]);
 
-  const started = await requestDeviceAuthorization(CLIENT_ID, fetcher);
+  const started = await startAuthorization(CLIENT_ID, fetcher);
 
   expect(started).toEqual({
     ok: true,
@@ -78,7 +91,7 @@ test("asks GitHub for a device code and keeps the codes apart", async () => {
 test("refuses to start without a configured client id, and never calls the provider", async () => {
   const { fetcher, calls } = provider([]);
 
-  await expect(requestDeviceAuthorization("  ", fetcher)).resolves.toEqual({
+  await expect(startAuthorization("  ", fetcher)).resolves.toEqual({
     ok: false,
     problem: "not-configured",
   });
@@ -91,7 +104,7 @@ test.each([
 ])("reports %s rather than starting", async (_name, reply, problem) => {
   const { fetcher } = provider([reply]);
 
-  await expect(requestDeviceAuthorization(CLIENT_ID, fetcher)).resolves.toEqual({
+  await expect(startAuthorization(CLIENT_ID, fetcher)).resolves.toEqual({
     ok: false,
     problem,
   });
@@ -100,9 +113,8 @@ test.each([
 test("redeems one device code and returns the token to its caller only", async () => {
   const { fetcher, calls } = provider([{ access_token: FAKE_TOKEN, token_type: "bearer" }]);
 
-  const redeemed = await redeemDeviceAuthorization(
-    { clientId: CLIENT_ID, deviceCode: "device-code-secret" },
-    fetcher,
+  const redeemed = await Effect.runPromise(
+    redeemDeviceAuthorization({ clientId: CLIENT_ID, deviceCode: "device-code-secret" }, fetcher),
   );
 
   expect(redeemed).toEqual({ kind: "authorized", token: FAKE_TOKEN });
@@ -128,7 +140,9 @@ test("treats an unreachable provider as unavailable rather than as an authorizat
   const { fetcher } = provider(["error"]);
 
   await expect(
-    redeemDeviceAuthorization({ clientId: CLIENT_ID, deviceCode: "device-code-secret" }, fetcher),
+    Effect.runPromise(
+      redeemDeviceAuthorization({ clientId: CLIENT_ID, deviceCode: "device-code-secret" }, fetcher),
+    ),
   ).resolves.toEqual({ kind: "unavailable" });
 });
 

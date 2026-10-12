@@ -71,7 +71,11 @@ async function repositorySizeAllowed(
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
 ): Promise<boolean> {
-  const measured = await lookupRepositorySize(repositoryUrl, token, fetcher);
+  const lookup = await runAtEntryPoint(
+    Effect.result(lookupRepositorySize(repositoryUrl, token, fetcher)),
+  );
+
+  const measured = Result.isSuccess(lookup) ? lookup.success : undefined;
   const reason = measured === undefined ? undefined : repositorySizeReason(measured);
 
   const outcome =

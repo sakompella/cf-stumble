@@ -12,6 +12,7 @@ export {
 } from "./credential-commands.js";
 
 export {
+  DeviceAuthorizationNotStarted,
   parseDeviceAuthorization,
   parseDeviceRedemption,
   parseGitHubToken,
@@ -26,6 +27,7 @@ export { containsCredential, redactCredentials, REDACTED } from "./redaction.js"
 
 export {
   lookupRepositorySize,
+  RepositorySizeUnknown,
   repositorySizeReason,
   MAX_REPOSITORY_BLOB_BYTES,
   MAX_REPOSITORY_BLOB_COUNT,
