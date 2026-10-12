@@ -39,6 +39,15 @@ export default defineConfig({
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off",
 
+    // Import Effect by module path (`effect/Effect`), not from the `effect` index. The index
+    // re-exports every module, so each workers test isolate loaded all of them (1.3 s instead of
+    // 0.36 s, before the prebundle in vitest.config.ts), and its side-effect list keeps some unused
+    // modules in the Worker bundle.
+    "eslint/no-restricted-imports": [
+      "error",
+      { paths: [{ name: "effect", message: "Import the module path, such as effect/Effect." }] },
+    ],
+
     // The default of 1 assumes a class is a whole module's worth of concept. That holds for a
     // stateful class and fails for test doubles, where a file defines one small class per
     // collaborator (`test/workspace/project/fakes.ts` has five). A ceiling still catches a real
@@ -83,7 +92,7 @@ export default defineConfig({
       // `node:test` registers `describe` and `it` and tracks their promises itself; awaiting each
       // one at the top level would serialize the tests for no gain.
       // Test-local helper closures stay next to the test that uses them.
-      files: ["tools/ops-check/**/*.test.ts"],
+      files: ["tools/ops-check/**/*.test.ts", "tools/*.test.ts"],
       rules: {
         "typescript/no-floating-promises": "off",
         "unicorn/consistent-function-scoping": "off",
@@ -93,8 +102,9 @@ export default defineConfig({
 
   // The vendored copy also ships an opt-in `anti-slop-effect` plugin: no-manual-effect-error-tag,
   // no-manual-tag-comparison, no-manual-tagged-construction, no-service-constructor-imports and
-  // prefer-effect-match. It is deliberately not registered. This project uses better-result, not
-  // Effect (ADR 0035), and those rules are not gated on an Effect import: prefer-effect-match
-  // already reports one chained ternary in test/workspace/project/fakes.ts and demands an Effect
-  // `Match` that nothing here can import. Upstream registers this group only in Effect projects.
+  // prefer-effect-match. It is not registered yet. The host is moving to Effect (ADR-0045), but
+  // these rules are not gated on an Effect import: prefer-effect-match already reports one chained
+  // ternary in test/workspace/project/fakes.ts, and the tag rules would also report the plain
+  // `_tag` values that boundaries and pure decisions keep on purpose. Register only the rules that
+  // fit, scoped to code that has moved to Effect, once that code exists.
 });

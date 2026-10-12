@@ -21,7 +21,7 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0023](0023-agent-generated-docs-live-under-docs-agents.md)**: agent-authored records live under `docs/agents/`.
 - **[ADR-0028](0028-harness-artifacts-are-module-maps.md)**: a generation's executable form is a module map, and a bundle is a one-module map.
 - **[ADR-0029](0029-startup-check-is-an-ordinary-request.md)**: a generation's startup check is one bounded ordinary request, not a health protocol.
-- **[ADR-0035](0035-use-better-result-only-inside-process-boundaries.md)**: better-result represents recoverable failures only inside one Worker isolate; public and durable boundaries keep plain values.
+- **[ADR-0035](0035-use-better-result-only-inside-process-boundaries.md)**: superseded by ADR-0045 and kept until the last better-result import goes; better-result represents recoverable failures only inside one Worker isolate, and public and durable boundaries keep plain values.
 - **[ADR-0036](0036-pure-decisions-imperative-shells.md)**: decision logic is pure functions over plain values, and effects live in thin Durable Object shells that read, decide, and write.
 - **[ADR-0040](0040-harness-produces-the-turn-diff.md)**: the harness runs the repository's diff at the end of a turn that changed files, instead of asking the model to run one.
 - **[ADR-0041](0041-line-ceilings-measure-content.md)**: size ceilings count code and comments,
@@ -33,6 +33,12 @@ This directory records current decisions. Every ADR declares whether a human app
   container after ten idle minutes, because computerd's open WebSocket keeps the object active.
 - **[ADR-0044](0044-poll-the-shim-disk-walk-every-five-seconds.md)**: the workspace image polls the
   shim's disk walk every five seconds, because sync reconciles before every pull anyway.
+- **[ADR-0045](0045-use-effect-inside-the-immutable-host.md)**: the immutable host composes
+  asynchronous work and recoverable failures with Effect; boundaries keep plain values, pure
+  decisions and SQLite transactions stay synchronous, and each entry point runs its program once.
+- **[ADR-0046](0046-serve-the-owner-page-script-as-a-hashed-file.md)**: the owner page is a Foldkit
+  application whose script the Worker serves after Access as a content-hashed, immutable
+  same-origin file, under `script-src 'self'`.
 
 ## Adding a decision
 

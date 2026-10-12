@@ -7,7 +7,7 @@ import { assertSame } from "../expect.mjs";
  *
  * It is deliberately independent of the page's layout and of most of its identifiers, so it keeps
  * working while the page is being rewritten: it asserts that the document arrived, that the root
- * element the page declares is present, and that the inline script actually ran — the browser
+ * element the page declares is present, and that the page's script actually ran — the browser
  * recorded a fetch to the owner API, which only the page's own script issues. The runner's own
  * checks cover the rest, because a smoke case that also had to prove no fault occurred would be
  * asserting what every case already asserts.
@@ -31,7 +31,7 @@ export const CASES: readonly HarnessCase[] = [
         10_000,
       );
 
-      return "the document loaded, declared its root element, and its inline script called the owner API";
+      return "the document loaded, declared its root element, and its script called the owner API";
     },
   },
 ];

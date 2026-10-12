@@ -8,12 +8,12 @@ import { OWNER_PAGE_SCRIPT_STATUS } from "./script-status.js";
 import { OWNER_PAGE_SCRIPT_TURN } from "./script-turn.js";
 
 /**
- * The whole inline script: one immediately invoked function, so the page defines no global. The
+ * The whole page script: one immediately invoked function, so the page defines no global. The
  * parts are separate files only to keep each readable; they share one scope here, and function
  * declarations hoist, so the order below is about reading rather than about dependencies.
  *
  * Every handler is attached with `addEventListener`. The page carries no inline event attribute, so
- * the Content Security Policy the route sends admits this one nonced script and nothing else.
+ * the Content Security Policy the route sends admits this one same-origin script and nothing else.
  */
 const OWNER_PAGE_SCRIPT_WIRING = `
   function onClick(id, handler) {

@@ -2,6 +2,11 @@
 
 > **Review:** Agent-only
 
+> **Superseded** by [ADR-0045](0045-use-effect-inside-the-immutable-host.md). The host is moving from
+> better-result to Effect in complete caller groups. This record describes the code that still
+> uses better-result, and it is deleted with the last better-result import. Its rule that every
+> public and durable boundary keeps plain values continues in ADR-0045.
+
 cf-stumble uses the better-result library to represent failures that one function hands to another inside a single Worker isolate. A function that can fail returns a result value carrying either its success or a tagged error, and the caller must inspect that value before it can reach the success. This replaces hand-written union types whose failure arm was often assignable to some other type by coincidence, which let a later edit change a reported outcome without the compiler noticing.
 
 The library may not cross a process boundary. When a caller invokes a method on the Supervisor Durable Object, the platform copies the return value to the caller rather than sharing the original object. That copy preserves data and discards behavior. A result value is a class instance whose usefulness lies in its methods, and Cloudflare refuses to copy application-defined classes at all unless they extend the platform's remote-target base class. These do not. So a Supervisor method that returned one would either fail the call outright or hand back a value that has lost the methods its declared type still promises. TypeScript cannot warn about this, because the type is correct on both sides and only the copy in between removes the behavior. Every public Supervisor method therefore keeps returning the plain object it declares today, and the Supervisor converts each internal result into that plain object before returning it.

@@ -30,3 +30,7 @@ minimumReleaseAgeExclude:
   - "@cloudflare/config@0.24.1"
   - "@cloudflare/runtime-types@0.1.9"
   - cf@1.0.0-beta.14
+  # Foldkit 0.168.0 declares exact peers on effect 4.0.0 and @effect/platform-browser 4.0.0, which
+  # are the pinned versions. It was published on 2026-10-11, inside the release-age window, when the
+  # port to Effect and Foldkit pinned it.
+  - foldkit@0.168.0

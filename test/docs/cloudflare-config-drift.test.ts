@@ -198,6 +198,7 @@ function cloudflareFacts(): Facts {
 const WRANGLER_KEYS = [
   "$schema",
   "ai",
+  "build",
   "cache",
   "compatibility_date",
   "compatibility_flags",

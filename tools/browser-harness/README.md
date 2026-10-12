@@ -59,7 +59,8 @@ example. Nothing in this directory needs to be read to write a passing case.
 
 The stub replaces the Supervisor, because a real turn would call a paid model API. Everything the
 page can observe about its environment is kept identical: the same headers, the same Content
-Security Policy with a per-response nonce, the same API shapes, and a turn that arrives as
+Security Policy (a per-response nonce for the style, and the script file from the same origin), the
+script at the same hashed path, the same API shapes, and a turn that arrives as
 newline-delimited frames over time. The stub never fakes page behaviour — every assertion reads
 what the real page rendered.
 

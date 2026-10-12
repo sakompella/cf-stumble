@@ -7,8 +7,10 @@ import { threadSummary, type ThreadState } from "./fixtures-thread.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
   acceptsHtml,
+  isOwnerPageScriptPath,
   sendJson,
   sendOwnerPage,
+  sendOwnerPageScript,
   serveJsonRoute,
   serveThreadRoutes,
 } from "./server-routes.mjs";
@@ -25,11 +27,12 @@ import { serveTurn } from "./server-turn.mjs";
 /**
  * A local stand-in for the Worker, serving the real owner page.
  *
- * The page markup and the inline script come from `src/page`, so the harness drives the code that
+ * The page markup and its script file come from `src/page`, so the harness drives the code that
  * ships rather than a copy of it. Only the Supervisor is replaced, because a real turn would call
  * a paid model API and a real Cloudflare Access check needs a deployed environment. Everything the
  * page can observe about its own environment is kept identical: the same headers, the same policy
- * with a per-response nonce, and a turn that arrives as newline-delimited frames over time.
+ * with a per-response nonce for the style, the script at its hashed path, and a turn that arrives
+ * as newline-delimited frames over time.
  *
  * The controls a case uses are functions on {@link HarnessServer} rather than test-only HTTP
  * routes, because a case and this server share one Node process. The two routes under `/__harness`
@@ -143,6 +146,13 @@ async function handle(
   if (req.method === "GET" && path === "/" && acceptsHtml(req.headers.accept)) {
     record.status = 200;
     sendOwnerPage(res);
+
+    return;
+  }
+
+  if (req.method === "GET" && isOwnerPageScriptPath(path)) {
+    record.status = 200;
+    sendOwnerPageScript(res);
 
     return;
   }
