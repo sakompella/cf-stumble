@@ -14,12 +14,12 @@ import { defineTaggedUnion } from "foldkit/schema";
  * output stay text and cannot become markup this page executes.
  */
 
-export const ToolOutput = Schema.Struct({
+const ToolOutput = Schema.Struct({
   content: Schema.String,
   isServerTruncated: Schema.Boolean,
 });
 
-export type ToolOutput = typeof ToolOutput.Type;
+type ToolOutput = typeof ToolOutput.Type;
 
 export const TranscriptEntry = defineTaggedUnion({
   Text: { role: Schema.String, who: Schema.String, text: Schema.String },
@@ -180,41 +180,64 @@ const SavedMessage = Schema.Struct({
   isError: Schema.optional(Schema.Unknown),
 });
 
+type SavedMessage = typeof SavedMessage.Type;
+
 function asText(value: unknown): string {
   return Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
     ? String(value)
     : "";
 }
 
-function withSavedMessage(
-  transcript: readonly TranscriptEntry[],
-  message: unknown,
-): readonly TranscriptEntry[] {
-  if (!Schema.is(SavedMessage)(message)) {
-    return transcript;
-  }
+function savedToolResult(message: SavedMessage): ToolResult {
+  return {
+    toolCallId: asText(message.toolCallId),
+    toolName: asText(message.toolName),
+    content: contentText(message.content),
+    isError: message.isError === true,
+    isTruncated: false,
+  };
+}
 
-  if (message.role === "toolResult") {
-    return withToolResult(transcript, {
-      toolCallId: asText(message.toolCallId),
-      toolName: asText(message.toolName),
-      content: contentText(message.content),
-      isError: message.isError === true,
-      isTruncated: false,
-    });
-  }
-
+function savedTextEntry(message: SavedMessage): TranscriptEntry {
   const body = contentText(message.content);
 
   if (message.role === "user") {
-    return [...transcript, textEntry("user", "you", body)];
+    return textEntry("user", "you", body);
   }
 
   if (message.role === "assistant") {
-    return [...transcript, textEntry("assistant", "assistant", body)];
+    return textEntry("assistant", "assistant", body);
   }
 
-  return [...transcript, textEntry("system", message.role, body)];
+  return textEntry("system", message.role, body);
+}
+
+/**
+ * The same rule as {@link withToolResult}, in one pass: a result replaces the latest block with
+ * its id, which `toolBlocks` remembers, so a long conversation is not copied once per message.
+ */
+function savedEntries(messages: readonly unknown[]): readonly TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+  const toolBlocks = new Map<string, number>();
+
+  for (const message of messages) {
+    if (!Schema.is(SavedMessage)(message)) {
+      continue;
+    }
+
+    if (message.role !== "toolResult") {
+      entries.push(savedTextEntry(message));
+      continue;
+    }
+
+    const result = savedToolResult(message);
+    const index = toolBlocks.get(result.toolCallId) ?? entries.length;
+
+    entries[index] = finishedTool(toolStartEntry(result.toolCallId, result.toolName), result);
+    toolBlocks.set(result.toolCallId, index);
+  }
+
+  return entries;
 }
 
 /** The saved conversation as a transcript, or `None` when the stored text is not a message list. */
@@ -222,13 +245,6 @@ export function savedTranscript(conversation: string): Option.Option<readonly Tr
   return Option.flatMap(
     Option.liftThrowable((raw: string): unknown => JSON.parse(raw))(conversation),
     (messages) =>
-      globalThis.Array.isArray(messages)
-        ? Option.some(
-            messages.reduce<readonly TranscriptEntry[]>(
-              (transcript, message) => withSavedMessage(transcript, message),
-              [],
-            ),
-          )
-        : Option.none(),
+      globalThis.Array.isArray(messages) ? Option.some(savedEntries(messages)) : Option.none(),
   );
 }

@@ -70,7 +70,7 @@ export class NotOwner extends Data.TaggedError("NotOwner") {
 }
 
 /** Why a request may not act as anyone. Each refusal carries the stable code it is answered with. */
-export type AccessRefusal = TokenRejected | InvalidConfiguration | NotOwner | KeyServiceUnavailable;
+type AccessRefusal = TokenRejected | InvalidConfiguration | NotOwner | KeyServiceUnavailable;
 
 export type AccessRefusalReason = AccessRefusal["reason"];
 

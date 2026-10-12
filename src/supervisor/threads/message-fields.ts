@@ -10,7 +10,7 @@ type MessageOfRole<R extends ThreadMessageRole> = Extract<AgentMessage, { role: 
  *
  * A `pi-owned` field holds a structure whose schema belongs to Pi: a content block, a usage
  * record, a deferred handle, a tool call's arguments, a custom message's details. Storage keeps
- * those bytes and reads nothing inside them, for the reason `parsePiAgentTurnState` gives on the
+ * those bytes and reads nothing inside them, for the reason `parseTurnMessages` gives on the
  * facet side: a copy of Pi's schema here would fork it, and the next Pi upgrade would break
  * against a thread this code wrote. The kinds that are checked are the ones storage itself relies
  * on, so a corrupt row cannot present a message whose discriminating fields are the wrong kind.

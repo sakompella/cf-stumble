@@ -12,7 +12,7 @@ import { clearError, withError, type Handlers, type UpdateReturn } from "./updat
  * turn still streaming.
  */
 
-export function withGitHub(model: Model, report: GitHubReport): Model {
+function withGitHub(model: Model, report: GitHubReport): Model {
   const github =
     report._tag === "Known"
       ? report.connection
@@ -42,7 +42,7 @@ function selectProject(model: Model, project: Project): UpdateReturn {
   };
 }
 
-export function requestProjects(model: Model): UpdateReturn {
+function requestProjects(model: Model): UpdateReturn {
   return {
     model: { ...clearError(model), projectListStatus: "reading" },
     commands: [FetchProjects()],

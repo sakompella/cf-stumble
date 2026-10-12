@@ -30,11 +30,7 @@ import {
 } from "./operations.js";
 
 export {
-  answerFailures,
-  thrownBy,
-  workspaceEffects,
   WorkspaceSyncIncomplete,
-  WorkspaceUnavailable,
   type CommandOutput,
   type WorkspaceEffects,
   type WorkspaceFault,

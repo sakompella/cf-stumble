@@ -6,7 +6,7 @@ Use this file to find the repository's agent-authored domain documentation. cf-s
 
 1. Read `docs/agents/design/overview.md` for the product and its authority boundaries.
 2. Read `docs/agents/CONTEXT.md` in full for the project's terms.
-3. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change.
+3. Read `docs/agents/adr/README.md`, then the ADRs for the area you will change. ADR-0045 governs all host code outside the mutable harness, and ADR-0046 the owner page.
 4. Read `docs/agents/design/computer-integration.md` when the change touches the workspace or the build.
 5. Read `docs/agents/status.md` for what is deployed, what was decided outside an ADR, and what is still open.
 

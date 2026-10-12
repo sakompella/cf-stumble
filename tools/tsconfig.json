@@ -11,6 +11,7 @@
     "build-generation-0.mts",
     "build-owner-page.mts",
     "bundle-budgets.test.ts",
+    "foldkit-lint.test.ts",
     "json.mts",
     "module-map-build.mts",
     "vendor-pi.mts",
