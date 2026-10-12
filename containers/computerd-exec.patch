@@ -1,0 +1,221 @@
+diff --git a/packages/computerd/src/exec/runner.test.ts b/packages/computerd/src/exec/runner.test.ts
+index 09f417d..65ebb0d 100644
+--- a/packages/computerd/src/exec/runner.test.ts
++++ b/packages/computerd/src/exec/runner.test.ts
+@@ -517,3 +517,94 @@ test("a spawned command sees the allowlisted environment, not the daemon's", asy
+     dispose();
+   }
+ });
++
++test.each(["stdout", "stderr"] as const)("exec drains paused %s before recording its exit", async (name) => {
++  const { runner, dispose } = fixture();
++  const size = 128 * 1024;
++  const id = `paused-${name}`;
++  try {
++    const handle = runner.exec(`head -c ${size} /dev/zero${name === "stderr" ? " >&2" : ""}`, { id });
++    // The first queued event pauses both pipes. Let the child exit with
++    // unread pipe bytes before the subscriber starts draining them.
++    await new Promise((resolve) => setTimeout(resolve, 100));
++    const events = await drain(handle.events);
++    const bytes = events.reduce((total, event) =>
++      (event.name === "stdout" || event.name === "stderr") && event.name === name
++        ? total + event.value.byteLength : total, 0);
++    expect(bytes).toBe(size);
++    expect(events.at(-1)).toMatchObject({ name: "exit", code: 0 });
++    const replay = await drain(runner.get(id).events);
++    expect(replay).toEqual(events);
++  } finally {
++    dispose();
++  }
++});
++
++
++test("a normal background writer drains before exit", async () => {
++  const { runner, dispose } = fixture();
++  try {
++    const events = await drain(runner.exec("(sleep 0.2; echo late) & echo early").events);
++    const output = events.flatMap((event) => event.name === "stdout" ? [decode(event.value)] : []).join("");
++    expect(output).toBe("early\nlate\n");
++    expect(events.at(-1)).toMatchObject({ name: "exit", code: 0 });
++  } finally { dispose(); }
++});
++
++test("a grandchild holding stdout cannot keep a normal exit open forever", async () => {
++  const { runner, dispose } = fixture();
++  try {
++    const startedAt = Date.now();
++    const events = await drain(runner.exec("sleep 30 & echo hi").events);
++    expect(events.flatMap((event) => event.name === "stdout" ? [decode(event.value)] : []).join("")).toBe("hi\n");
++    expect(events.at(-1)).toMatchObject({ name: "exit", code: 0 });
++    expect(Date.now() - startedAt).toBeLessThan(8_000);
++  } finally { dispose(); }
++});
++
++test("timeout does not wait on a grandchild holding stdout", async () => {
++  const { runner, dispose } = fixture();
++  try {
++    const startedAt = Date.now();
++    const events = await drain(runner.exec("sleep 30 & wait", { timeoutMs: 100 }).events);
++    expect(events.at(-1)).toMatchObject({ name: "exit", code: 143 });
++    expect(Date.now() - startedAt).toBeLessThan(2_000);
++  } finally { dispose(); }
++});
++
++test("a reader that never resumes is closed by the command timeout", async () => {
++  const { runner, db, dispose } = fixture();
++  try {
++    const handle = runner.exec("head -c 131072 /dev/zero", { id: "stalled-reader", timeoutMs: 100 });
++    await new Promise((resolve) => setTimeout(resolve, 300));
++    expect(db.scalar<number>("SELECT exited_at FROM computerd_exec_meta WHERE exec_id = ?", handle.id)).not.toBeNull();
++    const events = await drain(handle.events);
++    expect(events.at(-1)?.name).toBe("exit");
++  } finally { dispose(); }
++});
++
++
++test("kill does not wait on a grandchild holding stdout", async () => {
++  const { runner, dispose } = fixture();
++  try {
++    const handle = runner.exec("sleep 30 & wait", { id: "kill-grandchild" });
++    await new Promise((resolve) => setTimeout(resolve, 50));
++    const startedAt = Date.now();
++    runner.kill(handle.id);
++    const events = await drain(handle.events);
++    expect(events.at(-1)).toMatchObject({ name: "exit", code: 143 });
++    expect(Date.now() - startedAt).toBeLessThan(2_000);
++  } finally { dispose(); }
++});
++
++test("a reader paused beyond the drain grace keeps all normal output", async () => {
++  const { runner, dispose } = fixture();
++  try {
++    const handle = runner.exec("head -c 131072 /dev/zero");
++    await new Promise((resolve) => setTimeout(resolve, 5_300));
++    const events = await drain(handle.events);
++    const bytes = events.reduce((total, event) => event.name === "stdout" ? total + event.value.byteLength : total, 0);
++    expect(bytes).toBe(131072);
++    expect(events.at(-1)).toMatchObject({ name: "exit", code: 0 });
++  } finally { dispose(); }
++});
+diff --git a/packages/computerd/src/exec/runner.ts b/packages/computerd/src/exec/runner.ts
+index 21333ea..1f523cc 100644
+--- a/packages/computerd/src/exec/runner.ts
++++ b/packages/computerd/src/exec/runner.ts
+@@ -37,6 +37,8 @@ interface ExecRecord {
+   timeoutTimer?: NodeJS.Timeout;
+   killTimer?: NodeJS.Timeout;
+   heartbeatTimer?: NodeJS.Timeout;
++  drainTimer?: NodeJS.Timeout;
++  killed?: boolean;
+ }
+ 
+ interface LiveSubscriber {
+@@ -61,6 +63,11 @@ const DEFAULTS = {
+   // After SIGTERM, give the child this long to exit on its own
+   // before sending SIGKILL.
+   killGraceMs: 5_000,
++  // After the child exits, wait this long for its stdout and stderr to
++  // reach EOF before closing them. Output still in the pipe drains at
++  // the consumer's pace; a grandchild that inherited the pipes can hold
++  // them open forever, so the wait is bounded.
++  drainGraceMs: 5_000,
+ } as const;
+ 
+ export interface RunnerInit extends RunnerOptions {
+@@ -215,6 +222,10 @@ export class Runner {
+         clearTimeout(record.heartbeatTimer);
+         record.heartbeatTimer = undefined;
+       }
++      if (record.drainTimer !== undefined) {
++        clearTimeout(record.drainTimer);
++        record.drainTimer = undefined;
++      }
+       const exitCode = mapExitCode(code, signal);
+       let seq: number;
+       try {
+@@ -236,7 +247,41 @@ export class Runner {
+       record.subscriber = undefined;
+       this.scheduleSweep();
+     };
+-    child.once("exit", finalise);
++    // Record the exit only once no more output can arrive. "exit" can
++    // fire while stdout still holds data, for example while the stream
++    // is paused for backpressure; appending that data after setExit
++    // would throw. "close" fires after the child has exited and both
++    // pipes reached EOF. If a grandchild keeps a pipe open, close the
++    // pipes after a grace period, which makes "close" fire.
++    child.once("close", finalise);
++    child.once("exit", () => {
++      if (!record.live) return;
++      const closePipes = (): void => {
++        child.stdout?.destroy();
++        child.stderr?.destroy();
++      };
++      // Timeout/cancel must not wait on a grandchild's inherited pipes.
++      if (record.killed) {
++        closePipes();
++        return;
++      }
++      const drainStartedAt = Date.now();
++      const maxDrainMs = timeoutMs > 0 ? timeoutMs : DEFAULTS.defaultTimeoutMs;
++      const checkDrain = (): void => {
++        record.drainTimer = undefined;
++        if (!record.live) return;
++        // Keep backpressure lossless for slow readers, but also bound a
++        // reader that never resumes, including commands with timeoutMs: 0.
++        if (record.subscriber?.paused && Date.now() - drainStartedAt < maxDrainMs) {
++          record.drainTimer = setTimeout(checkDrain, DEFAULTS.drainGraceMs);
++          record.drainTimer.unref?.();
++          return;
++        }
++        closePipes();
++      };
++      record.drainTimer = setTimeout(checkDrain, DEFAULTS.drainGraceMs);
++      record.drainTimer.unref?.();
++    });
+     child.once("error", (err) => {
+       if (!record.live) return;
+       const value = new TextEncoder().encode(`spawn failed: ${err.message}\n`);
+@@ -249,8 +294,14 @@ export class Runner {
+     if (timeoutMs > 0) {
+       record.timeoutTimer = setTimeout(() => {
+         if (!record.live) return;
++        record.killed = true;
+         try {
+           child.kill("SIGTERM");
++          // The shell may have exited already while output still drains.
++          if (child.exitCode !== null || child.signalCode !== null) {
++            child.stdout?.destroy();
++            child.stderr?.destroy();
++          }
+         } catch {
+           // Child already gone; finalise will sort it out.
+         }
+@@ -291,7 +342,12 @@ export class Runner {
+       throw new ExecError("ENOENT", `no exec record for id ${id}`);
+     }
+     if (!record.live) return;
++    record.killed = true;
+     record.child.kill(signal);
++    if (record.child.exitCode !== null || record.child.signalCode !== null) {
++      record.child.stdout?.destroy();
++      record.child.stderr?.destroy();
++    }
+   }
+ 
+   dispose(id: string): void {
+@@ -433,6 +489,14 @@ export class Runner {
+       clearTimeout(record.heartbeatTimer);
+       record.heartbeatTimer = undefined;
+     }
++    if (record.drainTimer !== undefined) {
++      clearTimeout(record.drainTimer);
++      record.drainTimer = undefined;
++    }
++    // Stop reading before the log goes away, or buffered output would
++    // append to a disposed log.
++    record.child.stdout?.destroy();
++    record.child.stderr?.destroy();
+     try {
+       if (record.child.exitCode === null && record.child.signalCode === null) {
+         record.child.kill("SIGKILL");

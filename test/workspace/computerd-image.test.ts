@@ -34,6 +34,14 @@ const patches = import.meta.glob("../../containers/computerd-walk.patch", {
   import: "default",
 });
 
+const execPatches = import.meta.glob("../../containers/computerd-exec.patch", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+});
+
+const execPatch = Object.values(execPatches).at(0) ?? "";
+
 const patch = Object.values(patches).at(0) ?? "";
 
 const dockerfile = Object.values(dockerfiles).at(0) ?? "";
@@ -73,6 +81,13 @@ test("the workspace image ships computerd built from source, not the prebuilt im
   expect(dockerfile).toMatch(/^COPY --from=computerd \/usr\/local\/bin\/computerd /mu);
   expect(dockerfile).not.toMatch(/^FROM ghcr\.io\/cloudflare\/computer-computerd/mu);
   expect(dockerfile).toContain("git apply /tmp/computerd-walk.patch");
+});
+
+test("the image drains command output before exit and runs the regression", () => {
+  expect(execPatch).toContain('+    child.once("close", finalise);');
+  expect(execPatch).toContain("exec drains paused %s before recording its exit");
+  expect(dockerfile).toContain("git apply /tmp/computerd-exec.patch");
+  expect(dockerfile).toContain("npx vitest run src/shim src/exec/runner.test.ts");
 });
 
 test("the build context admits every file the workspace image copies", () => {

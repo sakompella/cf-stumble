@@ -95,14 +95,17 @@ RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare
  && printf '%s  %s\n' "$UPSTREAM_COMPUTERD_SHA256" artifacts/computerd/computerd-linux-x64 \
     | sha256sum -c -
 
-# The patched computerd the image ships. The shim tests run before the executable is built.
+# The patched computerd the image ships. Shim and exec tests run before the executable is built.
 FROM computerd-source AS computerd
 COPY containers/computerd-walk.patch /tmp/computerd-walk.patch
 RUN git apply --check /tmp/computerd-walk.patch \
  && git apply /tmp/computerd-walk.patch
+COPY containers/computerd-exec.patch /tmp/computerd-exec.patch
+RUN git apply --check /tmp/computerd-exec.patch \
+ && git apply /tmp/computerd-exec.patch
 RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare/computerd \
  && npm run typecheck -w @cloudflare/computerd \
- && (cd packages/computerd && npx vitest run src/shim) \
+ && (cd packages/computerd && npx vitest run src/shim src/exec/runner.test.ts) \
  && npm run build:bin -w @cloudflare/computerd \
  && install -D -m 0755 artifacts/computerd/computerd-linux-x64 /usr/local/bin/computerd
 

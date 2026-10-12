@@ -1,6 +1,6 @@
 # Computer integration
 
-cf-stumble uses Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. ADR-0026 records the decision. The workspace image builds `computerd` from that commit with `containers/computerd-walk.patch` applied, and checks that an unpatched build reproduces the image's binary; ADR-0042 records why.
+cf-stumble uses Cloudflare Computer source commit `12336475c9fd03f5280a4537a707797fc0131fbd` with image `ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:4f07bb11b5c9235ecd7ba7a4d9a4bbad52e8fd4366d76ee3dbfa1099c9295c6f`. ADR-0026 records the decision. The workspace image builds `computerd` from that commit with `containers/computerd-walk.patch` and `containers/computerd-exec.patch` applied, and checks that an unpatched build reproduces the image's binary; ADR-0042 records why the walk is patched. The exec patch waits for the child's `close` event before recording exit, so paused stdout and stderr drain before the command log closes. Normal exits have a bounded drain grace for inherited pipes; explicit kills close the pipes at once. A paused reader can keep draining until the command timeout, without losing output at the grace boundary. The regression tests run in the image build.
 
 ## Pinned pair
 
