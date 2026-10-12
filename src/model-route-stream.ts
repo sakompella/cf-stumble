@@ -5,6 +5,8 @@
  * does the untrusted per-chunk parsing.
  */
 
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import { parseProviderChunk } from "./model-route-stream-parse.js";
 import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
 import type {
@@ -14,6 +16,7 @@ import type {
   StreamingProviderPayload,
   ToolCallDelta,
 } from "./model-route-events.js";
+import { runAtEntryPoint } from "./run-entry-point.js";
 
 // The only model the immutable host selects. Two deployed facts pin it. Turns first saved an empty
 // assistant message, because this model answers in `reasoning_content` and the default output
@@ -209,35 +212,51 @@ async function readSseLines(
 }
 
 /**
- * Read one provider SSE byte stream, emit a `ModelStreamEvent` per parsed chunk via `emit`, and
- * return the assembled `ProviderResult` plus any usage the provider reported. Throws when the
- * stream ends without a terminal `[DONE]` marker (a truncated provider stream) or exceeds the byte
- * bound; the caller turns either into a terminal `error` event rather than an uncaught rejection.
+ * The provider did not give this turn a complete answer: the binding call failed, the stream
+ * failed or ended before its terminal `[DONE]` marker, or it passed the byte bound. The caller sees
+ * one `model-unavailable` event for every one of these, and nothing of the provider's own error.
  */
-async function pumpProviderStream(
+class ModelUnavailable extends Data.TaggedError("ModelUnavailable") {}
+
+type PumpedProviderStream = Readonly<{
+  result: ProviderResult;
+  usage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
+}>;
+
+/**
+ * Read one provider SSE byte stream, emit a `ModelStreamEvent` per parsed chunk via `emit`, and
+ * return the assembled `ProviderResult` plus any usage the provider reported. The reader is
+ * cancelled however the read ends, so a stream this route stopped reading is released.
+ */
+function pumpProviderStream(
   providerStream: ReadableStream<Uint8Array>,
   emit: (event: ModelStreamEvent) => void,
-): Promise<
-  Readonly<{
-    result: ProviderResult;
-    usage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
-  }>
-> {
-  const reader = providerStream.getReader();
+): Effect.Effect<PumpedProviderStream, ModelUnavailable> {
   const accumulator = new ProviderStreamAccumulator(emit);
-  let terminated: boolean;
 
-  try {
-    terminated = await readSseLines(reader, (line) => accumulator.handleLine(line));
-  } finally {
-    await reader.cancel().catch(() => {
-      /* the stream already ended or failed; nothing more to release */
-    });
-  }
-
-  if (!terminated) throw new Error("provider stream ended before a terminal marker");
-
-  return { result: accumulator.result(), usage: accumulator.usage() };
+  return Effect.acquireUseRelease(
+    Effect.try({
+      try: () => providerStream.getReader(),
+      catch: () => new ModelUnavailable(),
+    }),
+    (reader) =>
+      Effect.tryPromise({
+        try: () => readSseLines(reader, (line) => accumulator.handleLine(line)),
+        catch: () => new ModelUnavailable(),
+      }),
+    (reader) =>
+      Effect.promise(() =>
+        reader.cancel().catch(() => {
+          /* the stream already ended or failed; nothing more to release */
+        }),
+      ),
+  ).pipe(
+    Effect.flatMap((terminated) =>
+      terminated
+        ? Effect.succeed({ result: accumulator.result(), usage: accumulator.usage() })
+        : Effect.fail(new ModelUnavailable()),
+    ),
+  );
 }
 
 const USAGE_BYTES = new TextEncoder();
@@ -279,6 +298,9 @@ function resolveUsage(
  * Drive one streamed model call and translate it into plain {@link ModelStreamEvent}s. Every
  * outcome — a provider rejection, a truncated stream, or a clean finish — becomes an event on the
  * returned stream; nothing here throws across the RPC boundary or resolves a rejected promise.
+ *
+ * The call runs in the stream's own `start`, so its lifetime is the body's, not the RPC call's
+ * that returned the stream.
  */
 export function streamModelEvents(
   ai: ModelStreamInference,
@@ -287,34 +309,38 @@ export function streamModelEvents(
   const encoder = new TextEncoder();
 
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
       function emit(event: ModelStreamEvent): void {
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       }
 
-      let providerStream: ReadableStream<Uint8Array>;
+      const turn = Effect.tryPromise({
+        try: () => ai.run(MODEL, buildStreamingProviderPayload(request)),
+        catch: () => new ModelUnavailable(),
+      }).pipe(
+        Effect.flatMap((providerStream) => pumpProviderStream(providerStream, emit)),
+        Effect.flatMap(({ result, usage }) =>
+          Effect.sync(() => {
+            emit({
+              type: "done",
+              message: normalizeResponse(result),
+              usage: resolveUsage(usage, request, result),
+            });
+          }),
+        ),
+        Effect.catchTag("ModelUnavailable", () =>
+          Effect.sync(() => {
+            emit({ type: "error", error: { code: "model-unavailable" } });
+          }),
+        ),
+        Effect.andThen(
+          Effect.sync(() => {
+            controller.close();
+          }),
+        ),
+      );
 
-      try {
-        providerStream = await ai.run(MODEL, buildStreamingProviderPayload(request));
-      } catch {
-        emit({ type: "error", error: { code: "model-unavailable" } });
-        controller.close();
-
-        return;
-      }
-
-      try {
-        const { result, usage } = await pumpProviderStream(providerStream, emit);
-        emit({
-          type: "done",
-          message: normalizeResponse(result),
-          usage: resolveUsage(usage, request, result),
-        });
-      } catch {
-        emit({ type: "error", error: { code: "model-unavailable" } });
-      }
-
-      controller.close();
+      return runAtEntryPoint(turn);
     },
   });
 }
