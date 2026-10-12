@@ -152,3 +152,111 @@ test("estimates non-zero usage, and marks it as an estimate, when the provider r
   expect(done.usage.inputTokens).toBeGreaterThan(0);
   expect(done.usage.outputTokens).toBeGreaterThan(0);
 });
+
+type HeldProviderStream = Readonly<{
+  stream: ReadableStream<Uint8Array>;
+  release: (ending: "close" | "error") => void;
+  cancelled: () => boolean;
+}>;
+
+/** A provider stream that sends `lines`, then stays open until the test releases it. */
+function heldProviderStream(lines: readonly string[]): HeldProviderStream {
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let wasCancelled = false;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(opened) {
+      controller = opened;
+
+      for (const line of lines) opened.enqueue(encoder.encode(line));
+    },
+    cancel() {
+      wasCancelled = true;
+    },
+  });
+
+  const held: HeldProviderStream = {
+    stream,
+    release: (ending) => {
+      if (ending === "close") controller?.close();
+      else controller?.error(new Error("provider connection reset"));
+    },
+    cancelled: () => wasCancelled,
+  };
+
+  return held;
+}
+
+/** One event line exactly as the route writes it. */
+function eventLine(chunk: Uint8Array | undefined): string {
+  return new TextDecoder().decode(chunk);
+}
+
+/** The rest of a stream whose reader has already been read from. */
+function remainingEvents(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): ReturnType<typeof collectEvents> {
+  return collectEvents(
+    new ReadableStream({
+      async pull(controller) {
+        const next = await reader.read();
+
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      },
+    }),
+  );
+}
+
+test("an event reaches the caller while the provider stream is still open", async () => {
+  const provider = heldProviderStream([sseLine({ response: "early" }), DONE_LINE]);
+  const reader = streamModelEvents(fakeStreamInference(provider.stream), REQUEST).getReader();
+
+  const first = await reader.read();
+  expect(eventLine(first.value)).toBe('{"type":"text-delta","delta":"early"}\n');
+
+  provider.release("close");
+  await expect(remainingEvents(reader)).resolves.toMatchObject([{ type: "done" }]);
+});
+
+test("a provider stream that fails mid-read keeps the text it sent, then errors once", async () => {
+  const provider = heldProviderStream([sseLine({ response: "partial" })]);
+  const reader = streamModelEvents(fakeStreamInference(provider.stream), REQUEST).getReader();
+
+  const first = await reader.read();
+  expect(eventLine(first.value)).toBe('{"type":"text-delta","delta":"partial"}\n');
+
+  provider.release("error");
+  await expect(remainingEvents(reader)).resolves.toEqual([
+    { type: "error", error: { code: "model-unavailable" } },
+  ]);
+});
+
+test("a provider stream past the byte bound ends in one error event and is cancelled", async () => {
+  const provider = heldProviderStream([
+    sseLine({ response: "start" }),
+    `: ${"x".repeat(8_388_608)}\n`,
+  ]);
+
+  const events = await collectEvents(
+    streamModelEvents(fakeStreamInference(provider.stream), REQUEST),
+  );
+
+  expect(events).toEqual([
+    { type: "text-delta", delta: "start" },
+    { type: "error", error: { code: "model-unavailable" } },
+  ]);
+  expect(provider.cancelled()).toBe(true);
+});
+
+test("a binding call that throws before it returns a Promise becomes one terminal error event", async () => {
+  const throwing: ModelStreamInference = {
+    run() {
+      throw new Error("binding unavailable");
+    },
+  };
+
+  await expect(collectEvents(streamModelEvents(throwing, REQUEST))).resolves.toEqual([
+    { type: "error", error: { code: "model-unavailable" } },
+  ]);
+});
