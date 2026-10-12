@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
+import * as Effect from "effect/Effect";
 import { Workspace, type ExecSyncResult } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
@@ -59,16 +60,20 @@ test("runs the install through operations that require a complete sync, and noth
   const lenient = new RecordingOperations();
   const strict = new RecordingOperations();
 
-  await executeGitHubCredentialRequest({
-    operations: lenient,
-    installOperations: strict,
-    request: installRequest,
-  });
-  await executeGitHubCredentialRequest({
-    operations: lenient,
-    installOperations: strict,
-    request: { kind: "github-credential", step: "status" },
-  });
+  await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: lenient,
+      installOperations: strict,
+      request: installRequest,
+    }),
+  );
+  await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: lenient,
+      installOperations: strict,
+      request: { kind: "github-credential", step: "status" },
+    }),
+  );
 
   expect(strict.sources).toHaveLength(1);
   expect(strict.sources[0]).toContain("gh auth login");
@@ -84,11 +89,13 @@ test("an install whose workspace copy is still pending logs the credential out a
     `post-command sync pending (exit 0, skipped 0) ${FAKE_TOKEN}`,
   );
 
-  const result = await executeGitHubCredentialRequest({
-    operations: lenient,
-    installOperations: strict,
-    request: installRequest,
-  });
+  const result = await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: lenient,
+      installOperations: strict,
+      request: installRequest,
+    }),
+  );
 
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
   expect(lenient.sources).toHaveLength(1);
@@ -104,11 +111,13 @@ test("a failed logout does not hide the incomplete sync", async () => {
   const strict = new RecordingOperations();
   strict.failure = new WorkspaceSyncIncomplete("pending");
 
-  const result = await executeGitHubCredentialRequest({
-    operations: lenient,
-    installOperations: strict,
-    request: installRequest,
-  });
+  const result = await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: lenient,
+      installOperations: strict,
+      request: installRequest,
+    }),
+  );
 
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
 });

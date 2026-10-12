@@ -18,6 +18,10 @@
  * names, codes, counts, byte sizes, and durations; `docs/agents/design/observability.md` lists
  * every event.
  */
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
 import { REDACTED, redactCredentials } from "./github/index.js";
 
 /** How much of a redacted cause reaches the log. Long enough to diagnose, short enough to bound. */
@@ -188,6 +192,52 @@ export async function timed<T>(
   });
 
   return value;
+}
+
+/**
+ * `timed` for an Effect: log the step's `outcome` and `durationMs` as `event` when it ends.
+ * `classify` sees the success or the typed failure. A defect or an interruption is logged at error
+ * level as `threw`, as `timed` logs a rejection, and the cause passes through unchanged; its text
+ * is the caller's to log with {@link logRedactedCause}.
+ */
+export function timedEffect<A, E>(
+  event: string,
+  fields: LogFields,
+  classify: (result: Result.Result<A, E>) => TimedOutcome,
+): <R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R> {
+  return (effect) =>
+    Effect.suspend(() => {
+      const startedAt = Date.now();
+
+      return Effect.onExit(effect, (exit) =>
+        Effect.sync(() => {
+          const classified = exitOutcome(exit, classify);
+          logEvent(classified.level ?? "info", event, {
+            ...fields,
+            ...classified.fields,
+            outcome: classified.outcome,
+            durationMs: Date.now() - startedAt,
+          });
+        }),
+      );
+    });
+}
+
+function exitOutcome<A, E>(
+  exit: Exit.Exit<A, E>,
+  classify: (result: Result.Result<A, E>) => TimedOutcome,
+): TimedOutcome {
+  if (Exit.isSuccess(exit)) return classify(Result.succeed(exit.value));
+
+  const error = Cause.findError(exit.cause);
+
+  if (Result.isSuccess(error)) return classify(Result.fail(error.success));
+
+  return {
+    outcome: "threw",
+    level: "error",
+    fields: { timeout: isTimeoutFailure(Cause.squash(exit.cause)) },
+  };
 }
 
 /** How often a Workspace Host RPC reports that it is still waiting. */

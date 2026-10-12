@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { capturedEvents, named } from "../log-capture.js";
@@ -140,15 +141,17 @@ class CommandOperations implements WorkspaceOperations {
 test("the Workspace Host logs a planned command by name and exit code, never its text or output", async () => {
   const events = capturedEvents();
 
-  await executeProjectProvisionRequest({
-    operations: new CommandOperations(),
-    request: {
-      kind: "provision-project",
-      projectId: sampleProjectOne.id,
-      repositoryUrl: sampleProjectOne.repositoryUrl,
-      step: "clone",
-    },
-  });
+  await Effect.runPromise(
+    executeProjectProvisionRequest({
+      operations: new CommandOperations(),
+      request: {
+        kind: "provision-project",
+        projectId: sampleProjectOne.id,
+        repositoryUrl: sampleProjectOne.repositoryUrl,
+        step: "clone",
+      },
+    }),
+  );
 
   const commands = named(events(), "workspace.command");
   expect(commands).toEqual([
@@ -165,11 +168,13 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 test("the credential install command is logged by name, and its token reaches no log", async () => {
   const events = capturedEvents();
 
-  const result = await executeGitHubCredentialRequest({
-    operations: new CommandOperations(),
-    installOperations: new CommandOperations(),
-    request: { kind: "github-credential", step: "install", token: FAKE_TOKEN },
-  });
+  const result = await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: new CommandOperations(),
+      installOperations: new CommandOperations(),
+      request: { kind: "github-credential", step: "install", token: FAKE_TOKEN },
+    }),
+  );
 
   expect(result).toMatchObject({ ok: false, error: { code: "credential-command-failed" } });
   expect(named(events(), "workspace.command")).toEqual([

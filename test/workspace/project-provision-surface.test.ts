@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
@@ -125,7 +126,7 @@ class FakeProjectOperations implements WorkspaceOperations {
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
 function provision(operations: FakeProjectOperations, request: unknown) {
-  return executeProjectProvisionRequest({ operations, request });
+  return Effect.runPromise(executeProjectProvisionRequest({ operations, request }));
 }
 
 test("plans the clone from the resolved project the caller sent, and its directory from the id", () => {

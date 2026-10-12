@@ -15,9 +15,11 @@ import {
   WorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logEvent, logRedactedCause, timed, parseRequestId } from "../diagnostics.js";
+import { logEvent, logRedactedCause, parseRequestId, timedEffect } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ObservedWorkspaceContainer } from "./container-observer.js";
@@ -41,7 +43,9 @@ import {
 import { harnessBuildConfiguration } from "../harness-build.js";
 import { PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
-import { afterIdleStop, WorkspaceIdleController } from "./idle-controller.js";
+import { afterIdleStop, trackedWork, WorkspaceIdleController } from "./idle-controller.js";
+import { answerFailures, attemptWorkspace } from "./operations.js";
+import { runAtEntryPoint } from "../run-entry-point.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
 import { observeBackendClose, type BackendCloseTrigger } from "./container-exit.js";
@@ -72,26 +76,27 @@ const WORKSPACE_CONTAINER_RESET_SPEC = {
  * storage belongs to this Workspace Host, and the restart destroys the old container replica so it
  * cannot push the deleted files back on a later workspace operation.
  */
-export async function resetWorkspaceStorage(
+export function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
   container: WorkspaceContainerReset,
-): Promise<WorkspaceResetResult> {
-  await timed(
-    "workspace.reset-step",
-    { step: "delete-all" },
-    () => storage.deleteAll(),
-    () => ({ outcome: "ok" }),
+): Effect.Effect<WorkspaceResetResult> {
+  // A step that rejects is a defect: the reset RPC rejects with what it threw, as it always has.
+  return Effect.promise(() => storage.deleteAll()).pipe(
+    timedEffect("workspace.reset-step", { step: "delete-all" }, () => ({ outcome: "ok" })),
+    Effect.andThen(
+      Effect.sync(() => {
+        logEvent("info", "workspace.container.stop-requested", { reasonCode: "workspace-reset" });
+      }),
+    ),
+    Effect.andThen(
+      Effect.promise(() => container.restart(WORKSPACE_CONTAINER_RESET_SPEC)).pipe(
+        timedEffect("workspace.reset-step", { step: "restart-container" }, (restarted) => ({
+          outcome: Result.isSuccess(restarted) ? restarted.success.outcome : "threw",
+        })),
+      ),
+    ),
+    Effect.as({ ok: true, reset: "workspace" } as const),
   );
-  logEvent("info", "workspace.container.stop-requested", { reasonCode: "workspace-reset" });
-
-  await timed(
-    "workspace.reset-step",
-    { step: "restart-container" },
-    () => container.restart(WORKSPACE_CONTAINER_RESET_SPEC),
-    (value) => ({ outcome: value.outcome }),
-  );
-
-  return { ok: true, reset: "workspace" };
 }
 
 interface WorkspaceHostEnv {
@@ -119,30 +124,36 @@ type ManagedInstructionOperations = Readonly<{
   writeFile(path: string, content: string): Promise<void>;
 }>;
 
-export async function ensureManagedInstructions(
+export function ensureManagedInstructions(
   operations: ManagedInstructionOperations,
-): Promise<WorkspaceResult> {
-  try {
+): Effect.Effect<WorkspaceResult> {
+  const lstat = (path: string) => attemptWorkspace(() => operations.lstat(path));
+
+  return Effect.gen(function* () {
     for (const path of [WORKSPACE_ROOT, MANAGED_AGENT_INSTRUCTIONS_PATH]) {
-      if ((await operations.lstat(path)) === "symbolic-link") {
-        return { ok: false, error: { code: "path-outside-root" } };
+      if ((yield* lstat(path)) === "symbolic-link") {
+        return { ok: false, error: { code: "path-outside-root" } } as const;
       }
     }
 
-    const existing = await operations.lstat(MANAGED_AGENT_INSTRUCTIONS_PATH);
+    const existing = yield* lstat(MANAGED_AGENT_INSTRUCTIONS_PATH);
 
     if (existing === undefined) {
-      await operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS);
+      yield* attemptWorkspace(() =>
+        operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS),
+      );
     } else if (existing !== "file") {
-      return { ok: false, error: { code: "workspace-unavailable" } };
+      return { ok: false, error: { code: "workspace-unavailable" } } as const;
     }
 
-    return { ok: true, result: { kind: "written" } };
-  } catch (cause) {
-    logRedactedCause("workspace.managed-instructions: workspace-unavailable", cause);
+    return { ok: true, result: { kind: "written" } } as const;
+  }).pipe(
+    answerFailures((thrown): WorkspaceResult => {
+      logRedactedCause("workspace.managed-instructions: workspace-unavailable", thrown);
 
-    return { ok: false, error: { code: "workspace-unavailable" } };
-  }
+      return { ok: false, error: { code: "workspace-unavailable" } };
+    }),
+  );
 }
 
 /**
@@ -202,18 +213,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /** Run one Host RPC as work in flight, so the idle check never counts it as quiet time. */
-  async #tracked<T>(work: () => Promise<T>): Promise<T> {
-    const end = this.#idle.begin();
-
-    try {
-      // An idle stop in progress sees this work as in flight and keeps the container; wait for it
-      // to finish closing the Workspace before touching it.
-      await this.#idle.settled();
-
-      return await work();
-    } finally {
-      end();
-    }
+  #tracked<A>(work: () => Effect.Effect<A>): Promise<A> {
+    return runAtEntryPoint(trackedWork(this.#idle, Effect.suspend(work)));
   }
 
   #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
@@ -319,21 +320,23 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
   reset(): Promise<WorkspaceResetResult> {
-    return this.#tracked(async () => {
-      try {
-        return await resetWorkspaceStorage(this.ctx.storage, {
-          restart: (spec) => this.#container.restartFor("workspace-reset", spec),
-        });
-      } finally {
-        // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
-        // deployment); rebuild it so the next operation recreates them instead of failing.
-        this.#workspace = this.#newWorkspace();
+    return this.#tracked(() =>
+      resetWorkspaceStorage(this.ctx.storage, {
+        restart: (spec) => this.#container.restartFor("workspace-reset", spec),
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
+            // deployment); rebuild it so the next operation recreates them instead of failing.
+            this.#workspace = this.#newWorkspace();
 
-        // It may also have dropped the idle alarm (the `delete_all_deletes_alarm` compatibility
-        // flag), so forget the one this instance armed; the end of this call arms a new one.
-        this.#idle.forgetAlarm();
-      }
-    });
+            // It may also have dropped the idle alarm (the `delete_all_deletes_alarm` compatibility
+            // flag), so forget the one this instance armed; the end of this call arms a new one.
+            this.#idle.forgetAlarm();
+          }),
+        ),
+      ),
+    );
   }
 
   /** Hand out a project capability bounded to one turn and this container generation. */

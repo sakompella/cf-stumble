@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
@@ -80,7 +81,7 @@ test("refuses malformed and harness removal requests", async () => {
     { kind: "remove-project", projectId: sampleProjectOne.id, extra: true },
   ]) {
     await expect(
-      executeProjectRemovalRequest({ operations, request: value }),
+      Effect.runPromise(executeProjectRemovalRequest({ operations, request: value })),
     ).resolves.toMatchObject({
       ok: false,
     });
@@ -92,7 +93,9 @@ test("refuses malformed and harness removal requests", async () => {
 test("removes only the clone and staging directory", async () => {
   const operations = new FakeOperations();
 
-  await expect(executeProjectRemovalRequest({ operations, request })).resolves.toEqual({
+  await expect(
+    Effect.runPromise(executeProjectRemovalRequest({ operations, request })),
+  ).resolves.toEqual({
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
   });
@@ -148,7 +151,9 @@ test.each([
   const operations = new FakeOperations();
   arrange(operations);
 
-  await expect(executeProjectRemovalRequest({ operations, request })).resolves.toEqual({
+  await expect(
+    Effect.runPromise(executeProjectRemovalRequest({ operations, request })),
+  ).resolves.toEqual({
     ok: false,
     error: { code: "workspace-sync-incomplete" },
   });

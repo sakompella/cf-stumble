@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { parseProjectId, type ProjectId } from "../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../selectable-projects.js";
@@ -5,7 +6,7 @@ import { shellQuote } from "../shell-quote.js";
 import { projectDirectory } from "../workspace-layout.js";
 import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
-import type { WorkspaceOperations } from "./executor.js";
+import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
 import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 /** The only workspace removal request. Its paths are derived from the parsed id. */
@@ -85,15 +86,17 @@ export function planProjectRemovalRequest(
  * nor its staging directory is there. The store is what the next container starts from, so a
  * directory still present there would come back.
  */
-export async function removalIsDurable(
-  operations: WorkspaceOperations,
+export function removalIsDurable(
+  operations: WorkspaceEffects,
   projectId: ProjectId,
-): Promise<boolean> {
-  for (const directory of removedDirectories(projectId)) {
-    if ((await operations.lstat(directory)) !== undefined) return false;
-  }
+): Effect.Effect<boolean, WorkspaceFault> {
+  return Effect.gen(function* () {
+    for (const directory of removedDirectories(projectId)) {
+      if ((yield* operations.lstat(directory)) !== undefined) return false;
+    }
 
-  return true;
+    return true;
+  });
 }
 
 export type ProjectRemovalWorkspaceHost = Readonly<{

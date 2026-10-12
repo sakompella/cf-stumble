@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
 import type { ExecBackend } from "./project/index.js";
 import { decideIdleStop, type WorkspaceActivity } from "./idle-stop.js";
@@ -232,6 +233,26 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     return "stopped";
   }
+}
+
+/**
+ * Run one unit of Host work as work in flight, so the idle check never counts it as quiet time.
+ *
+ * An idle stop in progress sees this work as in flight and keeps the container; the work waits
+ * for the stop to finish closing the Workspace before it touches it. The work is uninterruptible:
+ * the Host cannot cancel a native Computer call it has made, so an interruption waits for the work
+ * to settle, and the work stays counted until it has.
+ */
+export function trackedWork<A, E>(
+  activity: Pick<WorkspaceIdleController, "begin" | "settled">,
+  work: Effect.Effect<A, E>,
+): Effect.Effect<A, E> {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => activity.begin()),
+    () =>
+      Effect.uninterruptible(Effect.promise(() => activity.settled()).pipe(Effect.andThen(work))),
+    (end) => Effect.sync(end),
+  );
 }
 
 /**

@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import {
   PROJECT_PROVISION_STEP_NAMES,
@@ -13,7 +14,7 @@ import {
 } from "../project-catalog.js";
 import { projectDirectory, projectGitDirectory } from "../workspace-layout.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
-import type { WorkspaceOperations } from "./executor.js";
+import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
 import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 /**
@@ -154,18 +155,22 @@ function originUrl(config: string): string | undefined {
  * so an earlier incomplete copy can leave some objects or working-tree files in the store and not
  * others; this check cannot tell that from a whole clone.
  */
-export async function cloneMarkersAreDurable(
-  operations: WorkspaceOperations,
+export function cloneMarkersAreDurable(
+  operations: WorkspaceEffects,
   project: Project,
-): Promise<boolean> {
+): Effect.Effect<boolean, WorkspaceFault> {
   const projectRoot = projectDirectory(project.id);
   const projectGitDir = projectGitDirectory(project.id);
 
-  if ((await operations.lstat(projectRoot)) !== "directory") return false;
+  return Effect.gen(function* () {
+    if ((yield* operations.lstat(projectRoot)) !== "directory") return false;
 
-  if ((await operations.lstat(projectGitDir)) !== "directory") return false;
+    if ((yield* operations.lstat(projectGitDir)) !== "directory") return false;
 
-  if ((await operations.lstat(`${projectGitDir}/config`)) !== "file") return false;
+    if ((yield* operations.lstat(`${projectGitDir}/config`)) !== "file") return false;
 
-  return originUrl(await operations.readFile(`${projectGitDir}/config`)) === project.repositoryUrl;
+    const config = yield* operations.readFile(`${projectGitDir}/config`);
+
+    return originUrl(config) === project.repositoryUrl;
+  });
 }

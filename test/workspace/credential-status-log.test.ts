@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { newRequestId, parseRequestId } from "../../src/diagnostics.js";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -41,12 +42,14 @@ test("a status read logs its timed outcome and command with the request id, and 
   const events = capturedEvents();
   const requestId = newRequestId();
 
-  await executeGitHubCredentialRequest({
-    operations: connected,
-    installOperations: connected,
-    request: statusRequest,
-    requestId,
-  });
+  await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: connected,
+      installOperations: connected,
+      request: statusRequest,
+      requestId,
+    }),
+  );
 
   expect(named(events(), "github-credential.status")).toEqual([
     expect.objectContaining({
@@ -71,11 +74,13 @@ test("a status read logs its timed outcome and command with the request id, and 
 test("a status read without a request id writes no requestId field", async () => {
   const events = capturedEvents();
 
-  await executeGitHubCredentialRequest({
-    operations: connected,
-    installOperations: connected,
-    request: statusRequest,
-  });
+  await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: connected,
+      installOperations: connected,
+      request: statusRequest,
+    }),
+  );
 
   expect(named(events(), "github-credential.status").at(0)).not.toHaveProperty("requestId");
   expect(named(events(), "workspace.command").at(0)).not.toHaveProperty("requestId");
@@ -84,13 +89,15 @@ test("a status read without a request id writes no requestId field", async () =>
 test("a status state other than connected is a warning", async () => {
   const events = capturedEvents();
 
-  await executeGitHubCredentialRequest({
-    operations: operationsAnswering(() =>
-      Promise.resolve({ stdout: "missing\n", stderr: "", exitCode: 0 }),
-    ),
-    installOperations: connected,
-    request: statusRequest,
-  });
+  await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: operationsAnswering(() =>
+        Promise.resolve({ stdout: "missing\n", stderr: "", exitCode: 0 }),
+      ),
+      installOperations: connected,
+      request: statusRequest,
+    }),
+  );
 
   expect(named(events(), "github-credential.status").at(0)).toMatchObject({
     level: "warn",
@@ -102,12 +109,14 @@ test("a status read that throws is one error event and still the public unavaila
   const events = capturedEvents();
   const requestId = newRequestId();
 
-  const result = await executeGitHubCredentialRequest({
-    operations: operationsAnswering(() => Promise.reject(new Error("command timed out"))),
-    installOperations: connected,
-    request: statusRequest,
-    requestId,
-  });
+  const result = await Effect.runPromise(
+    executeGitHubCredentialRequest({
+      operations: operationsAnswering(() => Promise.reject(new Error("command timed out"))),
+      installOperations: connected,
+      request: statusRequest,
+      requestId,
+    }),
+  );
 
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
   expect(named(events(), "github-credential.status")).toEqual([
