@@ -9,6 +9,8 @@ Placeholders: `<worker>` is `worker.name` in `cloudflare.config.ts`. `<account-i
 
 Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf` or `wrangler` call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
 
+To read or operate the production owner API, never ask the owner to sign in. Send the agent service token from `.audit/local/access-service-token.json` in the owner's checkout as `CF-Access-Client-Id` and `CF-Access-Client-Secret`, and add the page's `Origin` to every `POST`. The curl recipe, and what to do if the token is refused, are in `docs/deploy.md`, "Agent access without a sign-in". Never print or log the Client Secret.
+
 ## Choose the branch
 
 - **Deploy:** an update to an instance that already exists.

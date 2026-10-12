@@ -445,6 +445,11 @@ A failed build step logs only its name, exit code, and duration. It does not log
 | `project.size-check`   | info if allowed, otherwise warn  | `project`, `sizeKb`, `blobCount`, `blobBytes`, `truncated` (each `null` when unknown), `outcome` (`allowed`, `refused`, or `skipped`), `reason` (`within-limits`, `tree-truncated`, `too-many-files`, `working-tree-too-large`, `repository-too-large`, or `lookup-failed`) | The connect preflight checks GitHub metadata after a valid URL and id, before checking workspace credentials. `skipped` proceeds, while `refused` maps to `repository-too-large` (`repositorySizeAllowed` and `ProjectConnections.connect` in `src/supervisor/projects/project-connections.ts`).             |
 | `project.disconnected` | info on removal, otherwise error | `project`, `workspace` (`removed` or `failed`)                                                                                                                                                                                                                              | The Supervisor removed the thread and catalog row and attempted workspace cleanup. A refusal writes no event; failed cleanup does not restore the row. `failed` includes a removal the durable store does not confirm (`ProjectConnections.disconnect` in `src/supervisor/projects/project-connections.ts`). |
 
+A verified service token whose Client ID is not `CF_ACCESS_AGENT_CLIENT_ID`, or any service token
+while that secret is unset, is refused as `missing-identity`, like a token with no identity at
+all. The event never records the Client ID. An admitted request writes no Access event, so the
+log does not show whether the owner or the owner's agent token made it.
+
 `route` is a pattern from `src/routes/route-pattern.ts`, never the request path: a project route
 reads `/api/projects/:projectId/turn`, an unknown API path reads `/api/unknown`, and a path the
 active generation serves reads `relay`. A GitHub credential `outcome` is the connection state, or

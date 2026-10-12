@@ -106,7 +106,11 @@ The main open questions are:
 
 In version 0 only the owner sends generation requests. Cloudflare Access sets the owner principal
 before routing, and the owner API exposes generation submission, activation, and rollback
-(`src/worker.ts`, `src/routes/owner-api.ts`, `src/routes/generations.ts`). The harness request path
+(`src/worker.ts`, `src/routes/owner-api.ts`, `src/routes/generations.ts`). The owner's own agent may
+act as the owner: Access admits its service token through a Service Auth policy, and the Worker
+resolves that token to the owner's identity when its Client ID equals `CF_ACCESS_AGENT_CLIENT_ID`.
+The token therefore reaches the owner's Supervisor, not a separate one (`src/access/index.ts`,
+`docs/deploy.md`, "Agent access without a sign-in"). The harness request path
 is not built: the main facet's only capability is the model route (`src/facet/index.ts`), so it
 cannot reach the supervisor's generation controls.
 

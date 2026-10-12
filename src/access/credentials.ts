@@ -4,12 +4,16 @@
  * is already signed in. A browser navigation cannot set a header, so the owner page needs the
  * cookie. Both carry one token, so this module only locates it; every cryptographic, issuer,
  * audience, expiry, and identity check stays in one place. Neither value is ever logged: this
- * module returns the token to the verifier and removes both forms before anything else runs.
+ * module returns the token to the verifier and removes both forms before anything else runs. It
+ * also removes a service token's Client ID and Client Secret headers, which a request may carry.
  */
 
 const ACCESS_ASSERTION_HEADER = "cf-access-jwt-assertion";
 
 const ACCESS_COOKIE_NAME = "CF_Authorization";
+
+/** A service token's own headers. Access may forward them to this Worker with its assertion. */
+const SERVICE_TOKEN_HEADERS = ["cf-access-client-id", "cf-access-client-secret"] as const;
 
 function isAccessCookie(pair: string): boolean {
   const separator = pair.indexOf("=");
@@ -66,6 +70,10 @@ function cookiesWithoutAccess(cookieHeader: string): string {
 export function withoutAccessCredentials(request: Request): Request {
   const headers = new Headers(request.headers);
   headers.delete(ACCESS_ASSERTION_HEADER);
+
+  for (const name of SERVICE_TOKEN_HEADERS) {
+    headers.delete(name);
+  }
 
   const cookieHeader = headers.get("cookie");
 

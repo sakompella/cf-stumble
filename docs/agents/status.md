@@ -32,6 +32,12 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   events do not show".
 - **Skip Cloudflare Artifacts for now.** See `design/computer-integration.md`, "Artifacts
   (deferred)".
+- **Agents use a service token instead of the owner's sign-in** (owner, 2026-10-12). The owner
+  asked for prod to be readable without signing in to Access. A Service Auth policy on the
+  `stumble` Access application admits one service token, and the Worker admits that token as the
+  owner when `CF_ACCESS_AGENT_CLIENT_ID` names it (`src/access/index.ts`). It reaches the owner's
+  Supervisor. Every other service token is still refused. See `docs/deploy.md`, "Agent access
+  without a sign-in".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance
   secrets".
 - **Reset Supervisor state once instead of migrating it** (owner, October 2026). Production's

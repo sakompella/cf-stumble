@@ -13,6 +13,9 @@ export const accessNow = 1_700_000_000;
 /** The `sub` claim every Access test environment configures as `CF_ACCESS_OWNER_SUB`. */
 export const accessOwnerSubject = "owner-1";
 
+/** The service token Client ID a test configures as `CF_ACCESS_AGENT_CLIENT_ID`. */
+export const accessAgentClientId = "0123456789abcdef0123456789abcdef.access";
+
 export type SigningAlgorithm = "RS256" | "ES256";
 
 export interface SigningKey {
@@ -27,6 +30,7 @@ export type TestClaims = {
   readonly exp?: number;
   readonly nbf?: number;
   readonly sub?: string;
+  readonly common_name?: string;
 };
 
 function encodeBytes(bytes: Uint8Array): string {

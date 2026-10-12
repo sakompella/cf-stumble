@@ -51,7 +51,7 @@ describe("Cloudflare Access JWT verification", () => {
     const signed = await validToken(algorithm);
     await expect(verifyAccessToken(input(signed.token, signed.key))).resolves.toEqual({
       ok: true,
-      identity: "user-1",
+      principal: { kind: "user", subject: "user-1" },
     });
   });
 
@@ -145,6 +145,55 @@ describe("Cloudflare Access JWT verification", () => {
     await expect(verifyAccessToken(input(missingIdentity, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "missing-identity",
+    });
+  });
+
+  test("reads a service token's Client ID from common_name when sub is empty", async () => {
+    const signed = await validToken("RS256");
+
+    const serviceToken = await signAccessToken(signed.key, {
+      iss: issuer,
+      aud: [audience],
+      exp: now + 60,
+      sub: "",
+      common_name: "client-id.access",
+    });
+
+    await expect(verifyAccessToken(input(serviceToken, signed.key))).resolves.toEqual({
+      ok: true,
+      principal: { kind: "service-token", clientId: "client-id.access" },
+    });
+  });
+
+  test("rejects an empty sub that carries no common_name", async () => {
+    const signed = await validToken("RS256");
+
+    const claims = { iss: issuer, aud: [audience], exp: now + 60, sub: "" };
+
+    for (const anonymousClaims of [claims, { ...claims, common_name: "" }]) {
+      const anonymous = await signAccessToken(signed.key, anonymousClaims);
+
+      await expect(verifyAccessToken(input(anonymous, signed.key))).resolves.toEqual({
+        ok: false,
+        reason: "missing-identity",
+      });
+    }
+  });
+
+  test("keeps a person's sub when the token also carries a common_name", async () => {
+    const signed = await validToken("RS256");
+
+    const both = await signAccessToken(signed.key, {
+      iss: issuer,
+      aud: [audience],
+      exp: now + 60,
+      sub: "user-1",
+      common_name: "client-id.access",
+    });
+
+    await expect(verifyAccessToken(input(both, signed.key))).resolves.toEqual({
+      ok: true,
+      principal: { kind: "user", subject: "user-1" },
     });
   });
 

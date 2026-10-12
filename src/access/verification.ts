@@ -6,6 +6,14 @@ import type { AccessPublicKey } from "./keys.js";
 /** The only token field used to route an authenticated request. */
 export type AccessIdentity = string;
 
+/**
+ * Who a verified token speaks for. Access signs a person's token with their stable id in `sub`. It
+ * signs a service token's with an empty `sub` and the token's Client ID in `common_name`.
+ */
+export type AccessPrincipal =
+  | { readonly kind: "user"; readonly subject: AccessIdentity }
+  | { readonly kind: "service-token"; readonly clientId: string };
+
 export type AccessVerificationReason =
   | "malformed-token"
   | "unsupported-algorithm"
@@ -18,7 +26,7 @@ export type AccessVerificationReason =
   | "missing-identity";
 
 export type AccessVerificationResult =
-  | { readonly ok: true; readonly identity: AccessIdentity }
+  | { readonly ok: true; readonly principal: AccessPrincipal }
   | { readonly ok: false; readonly reason: AccessVerificationReason };
 
 export interface VerifyAccessTokenInput {
@@ -40,7 +48,7 @@ interface JwtClaims {
   readonly aud: string | readonly string[];
   readonly exp: number;
   readonly nbf?: number;
-  readonly sub: string;
+  readonly principal: AccessPrincipal;
 }
 
 function decodePart(part: string): Uint8Array | undefined {
@@ -90,6 +98,18 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function parsePrincipal(sub: unknown, commonName: unknown): AccessPrincipal | undefined {
+  if (typeof sub === "string" && sub.length > 0) {
+    return { kind: "user", subject: sub };
+  }
+
+  const anonymous = sub === undefined || sub === "";
+
+  return anonymous && typeof commonName === "string" && commonName.length > 0
+    ? { kind: "service-token", clientId: commonName }
+    : undefined;
+}
+
 function parseClaims(
   value: unknown,
 ):
@@ -111,7 +131,9 @@ function parseClaims(
     return { ok: false, reason: "not-yet-valid" };
   }
 
-  if (typeof value.sub !== "string" || value.sub.length === 0) {
+  const principal = parsePrincipal(value.sub, value.common_name);
+
+  if (principal === undefined) {
     return { ok: false, reason: "missing-identity" };
   }
 
@@ -119,8 +141,8 @@ function parseClaims(
     ok: true,
     claims:
       value.nbf === undefined
-        ? { iss: value.iss, aud: value.aud, exp: value.exp, sub: value.sub }
-        : { iss: value.iss, aud: value.aud, exp: value.exp, nbf: value.nbf, sub: value.sub },
+        ? { iss: value.iss, aud: value.aud, exp: value.exp, principal }
+        : { iss: value.iss, aud: value.aud, exp: value.exp, nbf: value.nbf, principal },
   };
 }
 
@@ -314,7 +336,7 @@ export async function verifyParsedAccessToken(
     return { ok: false, reason: "not-yet-valid" };
   }
 
-  return { ok: true, identity: claims.sub };
+  return { ok: true, principal: claims.principal };
 }
 
 interface DeriveSupervisorNameInput {

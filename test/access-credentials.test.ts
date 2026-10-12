@@ -18,6 +18,20 @@ test("removes the Access assertion and cookie before the Supervisor sees a reque
   expect(JSON.stringify([...stripped.headers])).not.toContain("signature");
 });
 
+test("removes a service token's Client ID and Client Secret headers too", () => {
+  const stripped = withoutAccessCredentials(
+    new Request("https://stumble.example/chat", {
+      headers: {
+        "CF-Access-Client-Id": "client-id.access",
+        "CF-Access-Client-Secret": "client-secret-value",
+        "x-keep": "kept",
+      },
+    }),
+  );
+
+  expect([...stripped.headers]).toEqual([["x-keep", "kept"]]);
+});
+
 test("preserves the method and body while stripping credentials", async () => {
   const stripped = withoutAccessCredentials(
     new Request("https://stumble.example/chat", {

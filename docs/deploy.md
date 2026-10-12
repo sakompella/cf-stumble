@@ -47,13 +47,14 @@ Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change 
 
 Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them and no plain-text variables. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
 
-| Secret                                                          | Required by the Worker       | Purpose                                                                               |
-| --------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes                          | The Access check. Without them the Worker refuses every request.                      |
-| `HARNESS_REPOSITORY_URL`                                        | No                           | The fork the instance builds its harness from.                                        |
-| `GITHUB_OAUTH_CLIENT_ID`                                        | No                           | The GitHub OAuth app for the device flow.                                             |
-| `GH_TOKEN`                                                      | No                           | An unattended-run GitHub credential.                                                  |
-| `CF_ACCESS_PUBLIC_KEYS`                                         | Must be absent in production | Replaces the Access signing keys with local ones. Staging and local development only. |
+| Secret                                                          | Required by the Worker       | Purpose                                                                                         |
+| --------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes                          | The Access check. Without them the Worker refuses every request.                                |
+| `CF_ACCESS_AGENT_CLIENT_ID`                                     | No                           | The Client ID of the service token admitted as the owner. See "Agent access without a sign-in". |
+| `HARNESS_REPOSITORY_URL`                                        | No                           | The fork the instance builds its harness from.                                                  |
+| `GITHUB_OAUTH_CLIENT_ID`                                        | No                           | The GitHub OAuth app for the device flow.                                                       |
+| `GH_TOKEN`                                                      | No                           | An unattended-run GitHub credential.                                                            |
+| `CF_ACCESS_PUBLIC_KEYS`                                         | Must be absent in production | Replaces the Access signing keys with local ones. Staging and local development only.           |
 
 Set them in one of two ways, after the Access login for the three Access values:
 
@@ -74,7 +75,7 @@ Before you deploy:
 
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
 2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
-3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`, and does not show `CF_ACCESS_PUBLIC_KEYS`. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request. `CF_ACCESS_PUBLIC_KEYS` replaces the Access signing keys, so anyone who holds the matching private key could sign in as the owner.
+3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`, and does not show `CF_ACCESS_PUBLIC_KEYS`. It shows `CF_ACCESS_AGENT_CLIENT_ID` if agents reach the instance with a service token. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request. `CF_ACCESS_PUBLIC_KEYS` replaces the Access signing keys, so anyone who holds the matching private key could sign in as the owner.
 4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Query recipes", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
 5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
 
@@ -137,6 +138,39 @@ These three are not declared in the configuration, so the first deploy works bef
 Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accepts only the identity whose `sub` claim matches this value.
 
 The deployed smoke test verified the safe order. A request with no credential receives 401. A request that carries a credential while the Access values are missing receives 500 for `invalid-configuration`. This is deliberate. The Worker does not choose a default owner while configuration is incomplete.
+
+## Agent access without a sign-in
+
+An agent can read and operate the production owner API without the owner signing in to Access. It sends a Cloudflare Access service token. Access checks the token against a Service Auth policy and passes the request to the Worker with a signed assertion. A service token's assertion has an empty `sub` and carries the token's Client ID in `common_name`. The Worker checks the signature, issuer, audience, and expiry as for a person's token. Then it admits the token as the owner when `common_name` equals the `CF_ACCESS_AGENT_CLIENT_ID` secret. The agent reaches the owner's own Supervisor, so it sees the same projects and generations as the owner. Any other service token is refused with 401 (`missing-identity`), and so is every service token while the secret is unset or blank.
+
+Production was set up this way on 2026-10-12:
+
+- The service token `cf-stumble-agent` (id `4972e490-1b5d-41b8-aa0f-a688cc76b8ee`) was created with a duration of one year. The id is not a secret. The Client Secret is, and Cloudflare shows it only once, when the token is created.
+- The reusable policy "cf-stumble agent service token" (id `b9d78057-3a03-4c96-9e48-6a2fc138f3f0`) has the decision `non_identity`, which the dashboard calls Service Auth. It includes only that service token. It is attached to the `stumble` Access application at precedence 2, after the owner's Allow policy.
+- The application's session duration is 730 hours.
+- The token's values are in `.audit/local/access-service-token.json` in the owner's checkout, with mode 600. The file holds `clientId`, `clientSecret`, `tokenId`, and `expiresAt`. `.audit/` is ignored by Git, so the file is never committed.
+
+On 2026-10-12 a request with the token passed Access, and Access set a `CF_Authorization` cookie. The assertion it sent had `sub` set to `""` and `common_name` set to the Client ID. The Worker deployed then answered 401 with `missing-identity`, because it did not yet read `common_name`. A deploy that includes the agent token check fixes that.
+
+To set this up on another instance:
+
+1. Create a service token: **Zero Trust** > **Access controls** > **Service credentials** > **Service Tokens** > **Create Service Token**, or `pnpm exec cf zero-trust access service-tokens create`. Copy the Client ID and Client Secret into a local file outside Git.
+2. Add a policy to the Access application with the action Service Auth (`non_identity` in the API) and one Include rule for that service token. Without a Service Auth policy, Access sends the caller to the identity provider login.
+3. Set the Worker secret to the token's Client ID, which is also the value Access puts in `common_name`: `jq -r .clientId <file> | npx wrangler secret put CF_ACCESS_AGENT_CLIENT_ID --name <worker>`. A deploy keeps it.
+
+An agent sends the token in two headers on every request, `CF-Access-Client-Id` and `CF-Access-Client-Secret`. This command reads them from the file and pipes them to curl, so the secret does not appear in the process list:
+
+```sh
+jq -r '"CF-Access-Client-Id: \(.clientId)\nCF-Access-Client-Secret: \(.clientSecret)"' \
+  .audit/local/access-service-token.json |
+  curl -sS -H @- https://stumble.akompella.dev/api/status
+```
+
+When the token is refused, the response says which side refused it. A 401 with the body `Unauthorized` comes from the Worker: `CF_ACCESS_AGENT_CLIENT_ID` is unset or differs from the Client ID, or the deployed Worker has no agent token check. The Worker logs it as `access.refused` with `reason: "missing-identity"`. Any other refusal, such as a 403 or a redirect to the login page, comes from Access: the token is expired, revoked, or not included in the Service Auth policy, or the Client Secret is wrong.
+
+The owner API refuses a `POST` whose `Origin` header is not the page's own origin, and a service token does not change that. Add `-H 'Origin: https://stumble.akompella.dev'` to every `POST`. The Worker removes the two service token headers, like the Access assertion and cookie, before it relays a request to a generation.
+
+To replace the Client Secret, run `pnpm exec cf zero-trust access service-tokens rotate <token-id>` and write the new secret into the file. The Client ID stays the same, so the Worker secret does not change. To withdraw the token, run `pnpm exec cf zero-trust access service-tokens delete <token-id>` and delete the Worker secret. `pnpm exec cf zero-trust access applications revoke-tokens <app-id>` ends every session issued for the application, the owner's browser session included. The token expires after one year (`expiresAt` in the file). Before then, run `pnpm exec cf zero-trust access service-tokens refresh <token-id>` to extend it, and update `expiresAt`.
 
 ## Troubleshooting a hostname that serves another site
 

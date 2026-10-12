@@ -15,6 +15,7 @@ import { describe, expect, test } from "vitest";
 import { authenticateAccessRequest, type AccessWorkerEnvironment } from "../src/access/index.js";
 import worker from "../src/worker.js";
 import {
+  accessAgentClientId,
   accessAudience as audience,
   accessIssuer as issuer,
   accessOwnerSubject,
@@ -30,6 +31,17 @@ function tokenFor(key: SigningKey, subject: string): Promise<string> {
     aud: [audience],
     exp: Math.floor(Date.now() / 1000) + 600,
     sub: subject,
+  });
+}
+
+/** A service token's assertion: Access leaves `sub` empty and puts the Client ID in `common_name`. */
+function serviceTokenFor(key: SigningKey, clientId: string): Promise<string> {
+  return signAccessToken(key, {
+    iss: issuer,
+    aud: [audience],
+    exp: Math.floor(Date.now() / 1000) + 600,
+    sub: "",
+    common_name: clientId,
   });
 }
 
@@ -148,4 +160,114 @@ describe("the owner allowlist", () => {
       ).resolves.toStrictEqual({ ok: false, reason: "invalid-configuration" });
     },
   );
+});
+
+describe("the owner's agent service token", () => {
+  function agentEnvironment(
+    key: SigningKey,
+    agentClientId: string | undefined,
+  ): AccessWorkerEnvironment {
+    const ownerOnly = environment(key, accessOwnerSubject);
+
+    return agentClientId === undefined
+      ? ownerOnly
+      : { ...ownerOnly, CF_ACCESS_AGENT_CLIENT_ID: agentClientId };
+  }
+
+  test("is admitted as the owner, reaching the owner's Supervisor", async () => {
+    const key = await signingKey("agent-allow-key");
+    const accessEnv = agentEnvironment(key, accessAgentClientId);
+    const ownerToken = await tokenFor(key, accessOwnerSubject);
+    const agentToken = await serviceTokenFor(key, accessAgentClientId);
+
+    const asOwner = await authenticateAccessRequest(requestWith(ownerToken), accessEnv);
+    const asAgent = await authenticateAccessRequest(requestWith(agentToken), accessEnv);
+
+    expect(asOwner.ok).toBe(true);
+    expect(asAgent).toStrictEqual(asOwner);
+  });
+
+  test("is admitted when the token has no sub claim at all", async () => {
+    const key = await signingKey("agent-absent-sub-key");
+
+    const token = await signAccessToken(key, {
+      iss: issuer,
+      aud: [audience],
+      exp: Math.floor(Date.now() / 1000) + 600,
+      common_name: accessAgentClientId,
+    });
+
+    await expect(
+      authenticateAccessRequest(
+        requestWith(token),
+        agentEnvironment(key, `${accessAgentClientId}\n`),
+      ),
+    ).resolves.toMatchObject({ ok: true, scope: { identity: accessOwnerSubject } });
+  });
+
+  test("refuses any other service token", async () => {
+    const key = await signingKey("agent-other-token-key");
+    const token = await serviceTokenFor(key, "another-client-id.access");
+
+    await expect(
+      authenticateAccessRequest(requestWith(token), agentEnvironment(key, accessAgentClientId)),
+    ).resolves.toStrictEqual({ ok: false, reason: "missing-identity" });
+  });
+
+  test.each([undefined, "", "   "])(
+    "refuses the agent token when CF_ACCESS_AGENT_CLIENT_ID is %j",
+    async (agentClientId) => {
+      const key = await signingKey("agent-unset-key");
+      const token = await serviceTokenFor(key, accessAgentClientId);
+
+      await expect(
+        authenticateAccessRequest(requestWith(token), agentEnvironment(key, agentClientId)),
+      ).resolves.toStrictEqual({ ok: false, reason: "missing-identity" });
+    },
+  );
+
+  test("refuses a matching common_name under a signature the team keys did not make", async () => {
+    const key = await signingKey("agent-signature-key");
+    const forger = await signingKey(key.publicJwk.kid);
+    const forged = await serviceTokenFor(forger, accessAgentClientId);
+
+    await expect(
+      authenticateAccessRequest(requestWith(forged), agentEnvironment(key, accessAgentClientId)),
+    ).resolves.toStrictEqual({ ok: false, reason: "invalid-signature" });
+  });
+
+  test("leaves a person's token to the sub check, even with the agent's common_name", async () => {
+    const key = await signingKey("agent-person-key");
+
+    const token = await signAccessToken(key, {
+      iss: issuer,
+      aud: [audience],
+      exp: Math.floor(Date.now() / 1000) + 600,
+      sub: "some-other-verified-user",
+      common_name: accessAgentClientId,
+    });
+
+    await expect(
+      authenticateAccessRequest(requestWith(token), agentEnvironment(key, accessAgentClientId)),
+    ).resolves.toStrictEqual({ ok: false, reason: "not-owner" });
+  });
+
+  test("reaches the Supervisor through the Worker, as the owner does", async () => {
+    const key = await signingKey("agent-routing-key");
+    const token = await serviceTokenFor(key, accessAgentClientId);
+
+    const workerEnv = {
+      ...workerEnvironment(key, accessOwnerSubject),
+      CF_ACCESS_AGENT_CLIENT_ID: accessAgentClientId,
+    };
+
+    const response = await worker.fetch(
+      new Request("https://cf-stumble.test/", {
+        headers: { accept: "*/*", "cf-access-jwt-assertion": token },
+      }),
+      workerEnv,
+    );
+
+    expect(response.status).toBe(503);
+  });
 });

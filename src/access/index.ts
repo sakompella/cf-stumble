@@ -14,6 +14,7 @@ import {
   parseAccessToken,
   verifyParsedAccessToken,
   type AccessIdentity,
+  type AccessPrincipal,
   type AccessVerificationReason,
   type AccessVerificationResult,
   type VerifyAccessTokenInput,
@@ -30,6 +31,8 @@ export interface AccessWorkerEnvironment {
   readonly CF_ACCESS_AUD: string;
   readonly CF_ACCESS_PUBLIC_KEYS?: string;
   readonly CF_ACCESS_OWNER_SUB: string;
+  /** The Client ID of the owner's agent service token. Unset, no service token is admitted. */
+  readonly CF_ACCESS_AGENT_CLIENT_ID?: string;
 }
 
 /**
@@ -54,31 +57,56 @@ export type AccessRequestResult =
         | "key-service-unavailable";
     };
 
-// A missing, empty, or whitespace-only secret is indistinguishable from misconfiguration: this
-// Worker has exactly one owner, and there is no safe default identity to fall back to.
-function configuredOwnerSubject(env: AccessWorkerEnvironment): string | undefined {
-  if (typeof env.CF_ACCESS_OWNER_SUB !== "string") {
+// A missing, empty, or whitespace-only secret is the same as an unset one.
+function configuredSecret(value: string | undefined): string | undefined {
+  if (typeof value !== "string") {
     return undefined;
   }
 
-  const subject = env.CF_ACCESS_OWNER_SUB.trim();
+  const trimmed = value.trim();
 
-  return subject.length > 0 ? subject : undefined;
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
-// Runs on a verified identity, but strictly before a Supervisor name is ever derived for it, so a
-// non-owner request never causes a Durable Object to be named or created.
-function ownerVerificationFailure(
+function isOwnersAgent(env: AccessWorkerEnvironment, clientId: string): boolean {
+  const agentClientId = configuredSecret(env.CF_ACCESS_AGENT_CLIENT_ID);
+
+  return agentClientId !== undefined && clientId === agentClientId;
+}
+
+type OwnerIdentityResult =
+  | { readonly ok: true; readonly identity: AccessIdentity }
+  | {
+      readonly ok: false;
+      readonly reason: "missing-identity" | "invalid-configuration" | "not-owner";
+    };
+
+/**
+ * The owner's own agent acts as the owner: its service token resolves to the owner's identity, so
+ * it reaches the owner's Supervisor. Any other service token names nobody, as before the agent
+ * token existed. This runs on a verified principal, but strictly before a Supervisor name is ever
+ * derived for it, so a non-owner request never causes a Durable Object to be named or created.
+ */
+function ownerIdentity(
   env: AccessWorkerEnvironment,
-  identity: string,
-): { readonly ok: false; readonly reason: "invalid-configuration" | "not-owner" } | undefined {
-  const ownerSubject = configuredOwnerSubject(env);
+  principal: AccessPrincipal,
+): OwnerIdentityResult {
+  if (principal.kind === "service-token" && !isOwnersAgent(env, principal.clientId)) {
+    return { ok: false, reason: "missing-identity" };
+  }
+
+  // This Worker has exactly one owner, and there is no safe default identity to fall back to.
+  const ownerSubject = configuredSecret(env.CF_ACCESS_OWNER_SUB);
 
   if (ownerSubject === undefined) {
     return { ok: false, reason: "invalid-configuration" };
   }
 
-  return identity === ownerSubject ? undefined : { ok: false, reason: "not-owner" };
+  if (principal.kind === "user" && principal.subject !== ownerSubject) {
+    return { ok: false, reason: "not-owner" };
+  }
+
+  return { ok: true, identity: ownerSubject };
 }
 
 type BoundaryVerificationResult =
@@ -194,10 +222,10 @@ async function admitted(
  * Turn one request into the verified tenant it may act as, or into the reason it may not.
  *
  * Two kinds of request are refused here, before anything is named: one that presents no usable
- * credential, and one whose verified identity is not the configured owner. The owner check runs on
- * a verified identity but strictly before a Supervisor
- * name is derived, so a non-owner never causes a Durable Object, a workspace, or a capability to
- * exist. This Worker has exactly one owner and no default identity to fall back
+ * credential, and one whose verified principal is neither the configured owner nor the owner's
+ * agent service token. The owner check runs on a verified principal but strictly before a
+ * Supervisor name is derived, so a non-owner never causes a Durable Object, a workspace, or a
+ * capability to exist. This Worker has exactly one owner and no default identity to fall back
  * on, so a missing owner subject is a configuration failure rather than an open door.
  */
 export async function authenticateAccessRequest(
@@ -237,11 +265,11 @@ export async function authenticateAccessRequest(
     return verified;
   }
 
-  const ownerFailure = ownerVerificationFailure(env, verified.identity);
+  const owner = ownerIdentity(env, verified.principal);
 
-  if (ownerFailure !== undefined) {
-    return ownerFailure;
+  if (!owner.ok) {
+    return owner;
   }
 
-  return admitted({ identity: verified.identity, audience: configuration.audience }, webCrypto);
+  return admitted({ identity: owner.identity, audience: configuration.audience }, webCrypto);
 }
