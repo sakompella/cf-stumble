@@ -163,6 +163,9 @@ export const CASES: readonly HarnessCase[] = [
       await sendPrompt(page, "Edit the repository");
       await server.waitForBarrier();
       await page.click(projectButton(HARNESS_SELF_PROJECT_ID));
+      // Leaving the project must close the turn's response, not only hide its frames: the closed
+      // body is how the Supervisor learns this browser stopped reading.
+      await server.waitForResponseClosed();
       await waitForThreadOk(page);
       server.release();
       await sleep(FRAME_INTERVAL_MS * 2);
@@ -184,7 +187,7 @@ export const CASES: readonly HarnessCase[] = [
       assertSame(turn.cancelDisabled, true, "Cancel after switching projects");
       assertSame(thread.prompt, "", "the harness composer value");
 
-      return `switching at the held frame kept HARNESS-THREAD across 2 projects, excluded EXTERNAL-LATE, and restored an enabled composer for harness`;
+      return `switching at the held frame closed the turn response, kept HARNESS-THREAD across 2 projects, excluded EXTERNAL-LATE, and restored an enabled composer for harness`;
     },
   },
   {
