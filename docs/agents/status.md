@@ -103,22 +103,19 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     `main`, check the production log for one `supervisor.legacy-state-reset` event, then delete
     `src/supervisor/legacy-state-reset.ts`, its call in the Supervisor's constructor, and its test.
     The `legacy_state_reset` table can stay.
-16. **Port to Effect and Foldkit in progress** (owner, 2026-10-12). ADR-0045 moves the immutable
-    host from better-result to Effect, and ADR-0046 makes the owner page a Foldkit application
-    served as a hashed script file. Wave 0 added the pins, the Effect prebundle for the workers
-    test pool, `runAtEntryPoint` around the Worker's `fetch`, the hashed script route, and the size
-    budgets. It is not deployed. The script route, its `immutable` cache header, and the
-    `script-src 'self'` policy behind real Cloudflare Access need a staging check, and so does
-    Worker startup time: local `wrangler check startup` profiles hold too few samples to compare.
-    Wave 1 moved the Worker's request, Cloudflare Access, the owner API routes, and the model
-    route's provider stream to Effect; better-result is gone from them. Wave 2 moved the
-    Supervisor's module maps, builds, startup checks, generation control, and thread store:
-    asynchronous work is an Effect, synchronous stores and parsers return `effect/Result`, and the
-    RPC values are unchanged. Wave 3 moved the Workspace Host's surfaces and idle check, workspace
-    provisioning, the credential calls, and the GitHub clients; better-result is gone from
-    `src/workspace` and `src/github`. Wave 5 replaced the page with a Foldkit application. Wave 4 moved
-    the turn lifetime and the project workflows: a turn's admission, start, and deadline are one
-    Effect program per RPC, its streamed body runs its own program until it settles or the browser
-    cancels it, and the project connections, the lifecycle queue, and the GitHub connection are
-    Effects. A real container stop, exec, and first turn still need a staging check, and so does a
-    turn streamed and cancelled through the deployed Worker.
+16. **Port to Effect and Foldkit done locally, not deployed** (owner, 2026-10-12). ADR-0045 moves the
+    immutable host to Effect, and ADR-0046 makes the owner page a Foldkit application served as a
+    hashed script file. better-result is gone from the code and the lockfile. The Worker, Cloudflare
+    Access, the owner API routes, and the model route's provider stream run as Effect programs,
+    through `runAtEntryPoint` at the native entry points and `runResponseBody` for a streamed body.
+    The Supervisor's module maps, builds, startup checks, generation control, and thread store, the
+    Workspace Host's surfaces, idle check, and provisioning, the credential calls, the GitHub
+    clients, the turn lifetime, and the project workflows are Effects. Synchronous stores and
+    parsers return `effect/Result`, and the RPC, JSON, SQLite, and module-map values are unchanged.
+    The page is a Foldkit program, checked by Foldkit's oxlint plugin. Out of scope: the mutable
+    harness (`src/facet/generation-0`), vendored Pi and Computer, and the tools under `tools/`, which
+    keep native Node APIs. The bundle budgets are 600 KiB gzip for the Worker and 216 KiB gzip for
+    the page script. Staging must still check the script route, its `immutable` cache header, and
+    the `script-src 'self'` policy behind real Cloudflare Access; Worker startup time; a real
+    container stop, exec, and first turn; and a turn streamed and cancelled through the deployed
+    Worker. Local `wrangler check startup` profiles hold too few samples to compare.
