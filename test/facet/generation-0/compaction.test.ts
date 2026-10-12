@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import * as Result from "effect/Result";
 import {
   createPiAgentTurnState,
   estimateThreadTokens,
@@ -259,10 +260,11 @@ test("a second compaction updates the saved summary instead of summarizing it as
 
   const reloaded = parseThreadMessages(serializeThreadMessages(first.messages));
 
-  if (reloaded.isErr()) throw new Error(`the saved thread must parse: ${reloaded.error.reason}`);
+  if (Result.isFailure(reloaded))
+    throw new Error(`the saved thread must parse: ${reloaded.failure.reason}`);
 
   const second = await compactingTurn(
-    { ...first.state, messages: [...reloaded.value] },
+    { ...first.state, messages: [...reloaded.success] },
     "Remind me again.",
     SECOND_SUMMARY,
   );

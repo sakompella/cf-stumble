@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@cf-stumble/pi";
-import { Result } from "better-result";
+import * as Result from "effect/Result";
 import {
   assertNever,
   decideAbandonTurn,
@@ -67,7 +67,7 @@ export class ThreadStore {
     `);
   }
 
-  read(project: SelectableProject): Result<ProjectThread, ThreadProblem> {
+  read(project: SelectableProject): Result.Result<ProjectThread, ThreadProblem> {
     return this.readThread(project);
   }
 
@@ -111,33 +111,33 @@ export class ThreadStore {
     expectedRevision: number,
     now: number,
     leaseMs: number,
-  ): Result<ThreadLease, ThreadProblem> {
+  ): Result.Result<ThreadLease, ThreadProblem> {
     const deadlineAt = now + leaseMs;
     const leaseId = crypto.randomUUID();
 
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
 
-      if (current.isErr()) {
-        return Result.err(current.error);
+      if (Result.isFailure(current)) {
+        return Result.fail(current.failure);
       }
 
-      const reclaimed = this.previousInstanceLease(current.value);
+      const reclaimed = this.previousInstanceLease(current.success);
 
       const decision = decideStartTurn(
         project.id,
-        reclaimed ? { ...current.value, turnActive: false } : current.value,
+        reclaimed ? { ...current.success, turnActive: false } : current.success,
         expectedRevision,
         now,
       );
 
       switch (decision.kind) {
         case "rejected":
-          return Result.err(decision.problem);
+          return Result.fail(decision.problem);
         case "started":
           return this.persistStartedLease(
             project,
-            current.value,
+            current.success,
             decision.revision,
             deadlineAt,
             leaseId,
@@ -156,7 +156,7 @@ export class ThreadStore {
     deadlineAt: number,
     leaseId: string,
     reclaimed: boolean,
-  ): Result<ThreadLease, ThreadProblem> {
+  ): Result.Result<ThreadLease, ThreadProblem> {
     this.sql.exec(
       `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id, turn_holder_id)
        VALUES (?, NULL, ?, 1, ?, ?, ?)
@@ -179,7 +179,7 @@ export class ThreadStore {
       turnHolderId: this.holderId,
     };
 
-    return Result.ok({ thread, leaseId, reclaimed });
+    return Result.succeed({ thread, leaseId, reclaimed });
   }
 
   /**
@@ -192,7 +192,7 @@ export class ThreadStore {
     messages: readonly AgentMessage[],
     now: number,
     leaseId: string,
-  ): Result<ProjectThread, ThreadProblem> {
+  ): Result.Result<ProjectThread, ThreadProblem> {
     const stored = serializeThreadMessages(messages);
 
     return this.withLeaseClaim(project, leaseId, (current, claim) => {
@@ -200,7 +200,7 @@ export class ThreadStore {
 
       switch (decision.kind) {
         case "rejected":
-          return Result.err(decision.problem);
+          return Result.fail(decision.problem);
         case "finished":
           this.sql.exec(
             `UPDATE project_threads SET messages = ?, revision = ?, ${CLEAR_LEASE} WHERE project_id = ?`,
@@ -209,7 +209,7 @@ export class ThreadStore {
             project.id,
           );
 
-          return Result.ok({
+          return Result.succeed({
             projectId: project.id,
             messages,
             revision: decision.nextRevision,
@@ -222,37 +222,40 @@ export class ThreadStore {
   }
 
   /** Delete the project's thread after confirming that no live turn owns it. */
-  remove(project: SelectableProject, now: number): Result<void, ThreadRemovalProblem> {
+  remove(project: SelectableProject, now: number): Result.Result<void, ThreadRemovalProblem> {
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
 
-      if (current.isErr()) return Result.err(current.error);
+      if (Result.isFailure(current)) return Result.fail(current.failure);
 
-      const decision = decideRemoveThread(project.id, current.value, now);
+      const decision = decideRemoveThread(project.id, current.success, now);
 
-      if (decision.kind === "rejected") return Result.err(decision.problem);
+      if (decision.kind === "rejected") return Result.fail(decision.problem);
 
       this.sql.exec(`DELETE FROM project_threads WHERE project_id = ?`, project.id);
 
-      return Result.ok();
+      return Result.void;
     });
   }
 
   /** Give the turn slot back without writing a conversation, for the lease that holds it. */
-  abandonTurn(project: SelectableProject, leaseId: string): Result<ProjectThread, ThreadProblem> {
+  abandonTurn(
+    project: SelectableProject,
+    leaseId: string,
+  ): Result.Result<ProjectThread, ThreadProblem> {
     return this.withLeaseClaim(project, leaseId, (current, claim) => {
       const decision = decideAbandonTurn(project.id, current, claim);
 
       switch (decision.kind) {
         case "rejected":
-          return Result.err(decision.problem);
+          return Result.fail(decision.problem);
         case "abandoned":
           this.sql.exec(
             `UPDATE project_threads SET ${CLEAR_LEASE} WHERE project_id = ?`,
             project.id,
           );
 
-          return Result.ok({ ...current, ...RELEASED_TURN });
+          return Result.succeed({ ...current, ...RELEASED_TURN });
         default:
           return assertNever(decision);
       }
@@ -263,11 +266,14 @@ export class ThreadStore {
   private withLeaseClaim(
     project: SelectableProject,
     leaseId: string,
-    decide: (current: ProjectThread, claim: TurnLeaseClaim) => Result<ProjectThread, ThreadProblem>,
-  ): Result<ProjectThread, ThreadProblem> {
+    decide: (
+      current: ProjectThread,
+      claim: TurnLeaseClaim,
+    ) => Result.Result<ProjectThread, ThreadProblem>,
+  ): Result.Result<ProjectThread, ThreadProblem> {
     return this.storage.transactionSync(() =>
-      this.readThread(project).andThen((current) =>
-        decide(current, this.leaseClaim(project, leaseId)),
+      this.readThread(project).pipe(
+        Result.flatMap((current) => decide(current, this.leaseClaim(project, leaseId))),
       ),
     );
   }
@@ -303,7 +309,7 @@ export class ThreadStore {
     return row?.revision ?? 0;
   }
 
-  private readThread(project: SelectableProject): Result<ProjectThread, ThreadProblem> {
+  private readThread(project: SelectableProject): Result.Result<ProjectThread, ThreadProblem> {
     const row = this.sql
       .exec<ThreadRow>(
         `SELECT project_id, messages, revision, turn_active, turn_deadline_at, turn_holder_id
@@ -313,13 +319,15 @@ export class ThreadStore {
       .toArray()[0];
 
     if (row === undefined) {
-      return Result.ok(emptyThread(project.id));
+      return Result.succeed(emptyThread(project.id));
     }
 
-    return threadFromRow(project, row).mapError((unreadable): ThreadProblem => ({
-      code: "unreadable-thread",
-      projectId: project.id,
-      reason: unreadable.reason,
-    }));
+    return threadFromRow(project, row).pipe(
+      Result.mapError((unreadable): ThreadProblem => ({
+        code: "unreadable-thread",
+        projectId: project.id,
+        reason: unreadable.reason,
+      })),
+    );
   }
 }

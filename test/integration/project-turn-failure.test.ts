@@ -1,7 +1,9 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
+// oxlint-disable import/max-dependencies -- An end-to-end turn reaches the Worker, the Supervisor, its thread parser, the Workspace Host fake, and a loaded generation, so this file imports each of them.
 
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import * as Result from "effect/Result";
 import type { AgentMessage } from "@cf-stumble/pi";
 import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames.js";
 import { parseThreadMessages, type SerializedThread } from "../../src/supervisor/threads/index.js";
@@ -129,9 +131,9 @@ async function savedThread(owner: Owner) {
   const { thread } = (await response.json()) as { thread: SerializedThread };
   const conversation = parseThreadMessages(thread.conversation);
 
-  if (conversation.isErr()) throw new Error(`the saved conversation must parse`);
+  if (Result.isFailure(conversation)) throw new Error(`the saved conversation must parse`);
 
-  return { ...thread, conversation: conversation.value };
+  return { ...thread, conversation: conversation.success };
 }
 
 async function servingScriptedGeneration(owner: Owner): Promise<void> {

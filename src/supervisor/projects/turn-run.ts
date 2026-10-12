@@ -1,5 +1,6 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- The project id and the prompt arrive from a client through the Worker, so neither has a proven shape until this module proves it.
 
+import * as Result from "effect/Result";
 import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
 import { readTurnStream } from "./turn-stream.js";
@@ -158,7 +159,7 @@ async function admitAndStart(input: RunProjectTurnInput): Promise<ProjectTurnRun
 
   const history = parseThreadMessages(current.thread.conversation);
 
-  if (history.isErr()) {
+  if (Result.isFailure(history)) {
     return refused("unreadable-thread");
   }
 
@@ -180,7 +181,7 @@ async function admitAndStart(input: RunProjectTurnInput): Promise<ProjectTurnRun
   let started: ProjectTurnStart | "timed-out";
 
   try {
-    started = await boundedStart(input, turn, { prompt, messages: history.value });
+    started = await boundedStart(input, turn, { prompt, messages: history.success });
   } catch (error) {
     // A lost RPC rejects instead of returning a refusal. The route deliberately turns that
     // exception into `internal-error`, but this lease still belongs to this turn and must be

@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import * as Result from "effect/Result";
 import {
   parseThreadMessages,
   serializeThreadMessages,
@@ -38,9 +39,10 @@ function terminalMessages(frames: readonly FacetTurnFrame[]): readonly AgentMess
 function saveAndReload(messages: readonly AgentMessage[]): readonly AgentMessage[] {
   const reloaded = parseThreadMessages(serializeThreadMessages(messages));
 
-  if (reloaded.isErr()) throw new Error(`the saved thread must parse: ${reloaded.error.reason}`);
+  if (Result.isFailure(reloaded))
+    throw new Error(`the saved thread must parse: ${reloaded.failure.reason}`);
 
-  return reloaded.value;
+  return reloaded.success;
 }
 
 test("reading a PNG answers in text the route carries, and the reloaded thread keeps working", async () => {
