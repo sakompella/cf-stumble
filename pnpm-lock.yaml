@@ -27,6 +27,9 @@ importers:
       '@effect/platform-browser':
         specifier: 4.0.0
         version: 4.0.0(effect@4.0.0)
+      '@foldkit/oxlint-plugin':
+        specifier: 0.15.3
+        version: 0.15.3(effect@4.0.0)
       '@hegeldev/hegel':
         specifier: 0.4.5
         version: 0.4.5
@@ -492,6 +495,10 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@foldkit/oxlint-plugin@0.15.3':
+    resolution: {integrity: sha512-LprfdZcR4uIqzTqHhJWT9bjJiS1km4MsN9Yyqk8JcKAEHpAxwgneG3MvA7p5aPXVDpZE/zh5FCGzhRIz1MnscQ==}
+    engines: {node: '>=20.19.0 || >=22.12.0'}
 
   '@hegeldev/hegel-darwin-arm64@0.4.5':
     resolution: {integrity: sha512-YxVIYThJpCGmpYwT11dXe6RS/8VhP0hR5ZvRoRJrX1foMS5ZnU7fp1UqDBL4mU+yTEY9zCJFX/wuCxJiV4BExw==}
@@ -1080,6 +1087,10 @@ packages:
     resolution: {integrity: sha512-QRgH1XqQEYNHa4f1vvPQ5fAdNdncHGIUG1ZWLlGIZHky3qwCEeAKYitZNbZMtaXtAQAAFFTOwqUfzESvimqZNA==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
+  '@oxlint/plugins@1.87.0':
+    resolution: {integrity: sha512-OtSZ6NxNkS7bkVy7zk9zGnajz2hVIu0uRPP/dJvJesGRaXtimpA4lpxap7FaIJndG2UIoKhnBU4DxyDQIWv6yg==}
+    engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
+
   '@playwright/test@1.63.0':
     resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
     engines: {node: '>=20'}
@@ -1456,6 +1467,11 @@ packages:
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
     engines: {node: '>=0.3.1'}
+
+  effect-oxlint@0.4.0:
+    resolution: {integrity: sha512-IA3ihFKGK0JoZVSPPgPP58988jj4PZ5/asFOhaSYHwDyRRRbkBJn7FX8RiPi++MFpXQvb+3fQpKdPzOvUK9xPQ==}
+    peerDependencies:
+      effect: ^4.0.0
 
   effect@4.0.0:
     resolution: {integrity: sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ==}
@@ -2330,6 +2346,12 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
+  '@foldkit/oxlint-plugin@0.15.3(effect@4.0.0)':
+    dependencies:
+      effect-oxlint: 0.4.0(effect@4.0.0)
+    transitivePeerDependencies:
+      - effect
+
   '@hegeldev/hegel-darwin-arm64@0.4.5':
     optional: true
 
@@ -2679,6 +2701,8 @@ snapshots:
 
   '@oxlint/plugins@1.80.0': {}
 
+  '@oxlint/plugins@1.87.0': {}
+
   '@playwright/test@1.63.0':
     dependencies:
       playwright: 1.63.0
@@ -2947,6 +2971,11 @@ snapshots:
   detect-libc@2.1.2: {}
 
   diff@8.0.4: {}
+
+  effect-oxlint@0.4.0(effect@4.0.0):
+    dependencies:
+      '@oxlint/plugins': 1.87.0
+      effect: 4.0.0
 
   effect@4.0.0: {}
 

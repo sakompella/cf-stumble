@@ -9,7 +9,10 @@ export default defineConfig({
     "tools/oxlint/anti-slop/**",
     "vendor/**",
   ],
-  jsPlugins: [{ name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" }],
+  jsPlugins: [
+    { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
+    { name: "foldkit", specifier: "@foldkit/oxlint-plugin" },
+  ],
   plugins: ["typescript", "unicorn", "oxc", "import"],
   categories: {
     correctness: "error",
@@ -99,7 +102,56 @@ export default defineConfig({
         // Effect's `Option.some`, `Option.map`, and `Array.map` are module functions, not array
         // methods, and their arguments are values or callbacks of a known arity. The rule reads
         // every `.some(` and `.map(` as an array method once Effect is imported by module path.
+        // Host code keeps the rule: it calls `.map` on real arrays far more often than it imports
+        // `effect/Option`, so an Effect call there wraps its callback or takes a disable comment.
         "unicorn/no-array-callback-reference": "off",
+      },
+    },
+    {
+      // Foldkit's own rules, for the page program only: its tests build Messages and Models by
+      // hand on purpose. Every rule the pinned plugin ships is listed, so an upgrade cannot add one
+      // unread (tools/foldkit-lint.test.ts).
+      files: ["src/page/client/**"],
+      rules: {
+        "foldkit/acquire-release-constructs-in-acquire-body": "error",
+        "foldkit/command-binding-matches-name": "error",
+        "foldkit/command-define-pascal-const": "error",
+        "foldkit/got-prefix-requires-submodel-payload": "error",
+        "foldkit/got-submodel-message-name": "error",
+        "foldkit/got-wrapper-carries-only-routing": "error",
+        "foldkit/keyed-required-for-mapped-rows": "error",
+        "foldkit/lazy-view-stable-references": "error",
+        "foldkit/mount-factory-must-use-element": "error",
+        "foldkit/no-array-index-view-keys": "error",
+        "foldkit/no-child-message-construction-in-root": "error",
+        "foldkit/no-direct-submodel-state-update": "error",
+        "foldkit/no-disabling-dev-guardrails": "error",
+        "foldkit/no-duplicate-onmount-per-element": "error",
+        "foldkit/no-empty-children-array": "error",
+        "foldkit/no-empty-commands-array": "error",
+        "foldkit/no-empty-to-parent-out-message": "error",
+        "foldkit/no-empty-object-tagged-call": "error",
+        "foldkit/no-hand-rolled-command-struct": "error",
+        "foldkit/no-impure-call-at-decision-time": "error",
+        "foldkit/no-module-level-mutable-state": "error",
+        "foldkit/no-noop-message": "error",
+        "foldkit/no-prevent-default-in-stream-operator": "error",
+        "foldkit/no-raw-dom-event-attributes": "error",
+        "foldkit/no-route-query-constructor-default": "error",
+        "foldkit/no-spread-in-modify-fields": "error",
+        "foldkit/no-switch-on-message-tag": "error",
+        "foldkit/prefer-callable-message-constructor": "error",
+        "foldkit/prefer-command-mapmessage": "error",
+        "foldkit/prefer-effect-module-names": "error",
+        "foldkit/prefer-option-over-nullable-in-model": "error",
+        "foldkit/require-fold-for-child-update-result": "error",
+        "foldkit/require-rel-for-external-link": "error",
+        "foldkit/selection-submodel-factory-at-module-scope": "error",
+        "foldkit/wrap-child-output-in-got-message": "error",
+        // Off: the page has no Router. Its one link reloads the page itself.
+        "foldkit/no-hardcoded-route-strings": "off",
+        // Off: the page has no server target.
+        "foldkit/no-nonportable-server-globals": "off",
       },
     },
     {
@@ -116,9 +168,9 @@ export default defineConfig({
 
   // The vendored copy also ships an opt-in `anti-slop-effect` plugin: no-manual-effect-error-tag,
   // no-manual-tag-comparison, no-manual-tagged-construction, no-service-constructor-imports and
-  // prefer-effect-match. It is not registered yet. The host is moving to Effect (ADR-0045), but
-  // these rules are not gated on an Effect import: prefer-effect-match already reports one chained
-  // ternary in test/workspace/project/fakes.ts, and the tag rules would also report the plain
-  // `_tag` values that boundaries and pure decisions keep on purpose. Register only the rules that
-  // fit, scoped to code that has moved to Effect, once that code exists.
+  // prefer-effect-match. It stays unregistered. Its rules are not gated on an Effect import, and
+  // after the port they report only code that is right as it is: on `src` they find three chained
+  // literal ternaries in plain functions (prefer-effect-match) and eleven one-line `_tag` checks in
+  // the page's predicates (no-manual-tag-comparison), and nothing else. Foldkit's plugin already
+  // rejects a `switch` on a Message's tag in the page.
 });

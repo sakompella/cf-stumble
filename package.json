@@ -36,6 +36,7 @@
     "@cloudflare/vitest-plugin": "^1.4.0",
     "@cloudflare/workers-types": "^5",
     "@effect/platform-browser": "4.0.0",
+    "@foldkit/oxlint-plugin": "0.15.3",
     "@hegeldev/hegel": "0.4.5",
     "@oxlint/plugins": "^1",
     "@playwright/test": "1.63.0",
