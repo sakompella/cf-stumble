@@ -365,6 +365,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   /** The idle check. The RPC WebSocket from computerd is not work, so it never delays a stop. */
   override alarm(alarmInfo?: { retryCount?: number }): Promise<void> {
-    return this.#idle.onAlarm(alarmInfo?.retryCount ?? 0);
+    return runAtEntryPoint(this.#idle.onAlarm(alarmInfo?.retryCount ?? 0));
   }
 }

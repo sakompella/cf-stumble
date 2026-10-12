@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
 import type { ExecBackend } from "./project/index.js";
@@ -23,6 +24,16 @@ type IdleControllerPorts = Readonly<{
   /** Destroy the container and record the stop as the Host's own doing. */
   stopContainer(): Promise<void>;
 }>;
+
+/** The alarm could not be written. `cause` is what storage threw. */
+class IdleAlarmNotWritten extends Data.TaggedError("IdleAlarmNotWritten")<{
+  readonly cause: unknown;
+}> {}
+
+/** The platform refused to destroy the container. */
+class ContainerNotStopped extends Data.TaggedError("ContainerNotStopped")<{
+  readonly cause: unknown;
+}> {}
 
 /** How an idle stop ended. */
 type IdleStopOutcome = "stopped" | "not-running" | "skipped-busy" | "threw";
@@ -103,19 +114,24 @@ export class WorkspaceIdleController implements ProjectActivity {
 
   /**
    * Arm from the alarm itself. No work may follow to retry a failed write, so the rejection
-   * propagates out of `alarm()` and the platform runs the alarm again.
+   * becomes the alarm's own rejection and the platform runs the alarm again.
    */
-  async #rearm(atMs: number): Promise<void> {
-    this.#armed = true;
+  #rearm(atMs: number): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#armed = true;
 
-    try {
-      await this.#ports.setAlarm(atMs);
-    } catch (cause) {
-      logRedactedCause("workspace.idle-alarm: re-arm failed", cause);
-      this.#armed = false;
+      return Effect.tryPromise({
+        try: () => this.#ports.setAlarm(atMs),
+        catch: (cause) => new IdleAlarmNotWritten({ cause }),
+      });
+    }).pipe(
+      Effect.catchTag("IdleAlarmNotWritten", ({ cause }) => {
+        logRedactedCause("workspace.idle-alarm: re-arm failed", cause);
+        this.#armed = false;
 
-      throw cause;
-    }
+        return Effect.die(cause);
+      }),
+    );
   }
 
   /** Forget the alarm this instance armed, because storage may have dropped it. Work re-arms it. */
@@ -137,47 +153,47 @@ export class WorkspaceIdleController implements ProjectActivity {
    * Handle the alarm: decide, and when the limit has passed with nothing in flight, stop the
    * container. It re-arms only while a container runs, and only for a later check.
    */
-  async onAlarm(retryCount = 0): Promise<void> {
-    this.#armed = false;
-    const nowMs = this.#ports.nowMs();
-    const running = this.#ports.containerRunning();
-    const activity = this.snapshot();
-    const decision = decideIdleStop(activity, nowMs, this.#ports.idleLimitMs);
+  onAlarm(retryCount = 0): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#armed = false;
+      const nowMs = this.#ports.nowMs();
+      const running = this.#ports.containerRunning();
+      const activity = this.snapshot();
+      const decision = decideIdleStop(activity, nowMs, this.#ports.idleLimitMs);
 
-    logEvent("info", "workspace.idle-check", {
-      inFlight: activity.inFlight,
-      idleForMs: Math.max(
-        0,
-        nowMs - Math.max(activity.lastActiveAtMs, activity.leaseEndsAtMs ?? 0),
-      ),
-      idleLimitMs: this.#ports.idleLimitMs,
-      running,
-      decision: decision.kind,
-      retryCount,
+      logEvent("info", "workspace.idle-check", {
+        inFlight: activity.inFlight,
+        idleForMs: Math.max(
+          0,
+          nowMs - Math.max(activity.lastActiveAtMs, activity.leaseEndsAtMs ?? 0),
+        ),
+        idleLimitMs: this.#ports.idleLimitMs,
+        running,
+        decision: decision.kind,
+        retryCount,
+      });
+
+      if (!running) return Effect.void;
+
+      if (decision.kind === "check-at") return this.#rearm(decision.atMs);
+
+      if (this.#stopping !== undefined) return Effect.void;
+
+      // Set before the stop runs: its first step is synchronous, and work or a close callback that
+      // arrives during it must already see the stop.
+      this.#stopping = new Promise<void>((done) => {
+        this.#finishStop = done;
+      });
+
+      return this.#stop(decision.idleForMs, nowMs).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.#stopping = undefined;
+            this.#finishStop();
+          }),
+        ),
+      );
     });
-
-    if (!running) return;
-
-    if (decision.kind === "check-at") {
-      await this.#rearm(decision.atMs);
-
-      return;
-    }
-
-    if (this.#stopping !== undefined) return;
-
-    // Set before the stop runs: its first step is synchronous, and work or a close callback that
-    // arrives during it must already see the stop.
-    this.#stopping = new Promise<void>((done) => {
-      this.#finishStop = done;
-    });
-
-    try {
-      await this.#stop(decision.idleForMs, nowMs);
-    } finally {
-      this.#stopping = undefined;
-      this.#finishStop();
-    }
   }
 
   /**
@@ -186,52 +202,71 @@ export class WorkspaceIdleController implements ProjectActivity {
    * connects again and adopts the running container. A failed close does not stop the destroy,
    * because destroying the container also ends the WebSocket from the other side.
    */
-  async #stop(idleForMs: number, startedAtMs: number): Promise<void> {
-    const runningBefore = this.#ports.containerRunning();
-    logEvent("info", "workspace.container.stop-requested", { reasonCode: "idle-stop" });
-    let outcome: IdleStopOutcome;
+  #stop(idleForMs: number, startedAtMs: number): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const runningBefore = this.#ports.containerRunning();
+      logEvent("info", "workspace.container.stop-requested", { reasonCode: "idle-stop" });
 
-    try {
-      await this.#closeWorkspace();
-      outcome = await this.#destroyIfStillIdle();
-    } catch (cause) {
-      logRedactedCause("workspace.idle-stop: container not stopped", cause);
-      outcome = "threw";
-    }
+      const outcome = yield* this.#closeWorkspace().pipe(
+        Effect.andThen(this.#destroyIfStillIdle()),
+        Effect.catchTag("ContainerNotStopped", ({ cause }) => this.#threw(cause)),
+        Effect.catchDefect((cause) => this.#threw(cause)),
+      );
 
-    logEvent(outcome === "threw" ? "warn" : "info", "workspace.container.idle-stop", {
-      idleForMs,
-      idleLimitMs: this.#ports.idleLimitMs,
-      runningBefore,
-      outcome,
-      durationMs: this.#ports.nowMs() - startedAtMs,
+      logEvent(outcome === "threw" ? "warn" : "info", "workspace.container.idle-stop", {
+        idleForMs,
+        idleLimitMs: this.#ports.idleLimitMs,
+        runningBefore,
+        outcome,
+        durationMs: this.#ports.nowMs() - startedAtMs,
+      });
+
+      // The container still runs after a busy skip or a failed destroy, so look again later.
+      if (outcome === "skipped-busy" || outcome === "threw") {
+        yield* this.#rearm(this.#ports.nowMs() + this.#ports.idleLimitMs);
+      }
     });
-
-    // The container still runs after a busy skip or a failed destroy, so look again later.
-    if (outcome === "skipped-busy" || outcome === "threw") {
-      await this.#rearm(this.#ports.nowMs() + this.#ports.idleLimitMs);
-    }
   }
 
-  async #closeWorkspace(): Promise<void> {
-    try {
-      await this.#ports.closeWorkspace();
-    } catch (cause) {
-      logRedactedCause("workspace.idle-stop: workspace close failed", cause);
-    }
+  #threw(cause: unknown): Effect.Effect<IdleStopOutcome> {
+    return Effect.sync(() => {
+      logRedactedCause("workspace.idle-stop: container not stopped", cause);
+
+      return "threw";
+    });
   }
 
-  async #destroyIfStillIdle(): Promise<IdleStopOutcome> {
-    // Decide again on a fresh snapshot: work, or a turn lease taken during the close, cancels the stop.
-    const decision = decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
+  #closeWorkspace(): Effect.Effect<void> {
+    return Effect.tryPromise({
+      try: () => this.#ports.closeWorkspace(),
+      catch: (cause) => cause,
+    }).pipe(
+      Effect.catch((cause) =>
+        Effect.sync(() => {
+          logRedactedCause("workspace.idle-stop: workspace close failed", cause);
+        }),
+      ),
+    );
+  }
 
-    if (decision.kind !== "stop") return "skipped-busy";
+  #destroyIfStillIdle(): Effect.Effect<IdleStopOutcome, ContainerNotStopped> {
+    return Effect.suspend(() => {
+      // Decide again on a fresh snapshot: work, or a turn lease taken during the close, cancels the stop.
+      const decision = decideIdleStop(
+        this.snapshot(),
+        this.#ports.nowMs(),
+        this.#ports.idleLimitMs,
+      );
 
-    if (!this.#ports.containerRunning()) return "not-running";
+      if (decision.kind !== "stop") return Effect.succeed("skipped-busy" as const);
 
-    await this.#ports.stopContainer();
+      if (!this.#ports.containerRunning()) return Effect.succeed("not-running" as const);
 
-    return "stopped";
+      return Effect.tryPromise({
+        try: () => this.#ports.stopContainer(),
+        catch: (cause) => new ContainerNotStopped({ cause }),
+      }).pipe(Effect.as("stopped" as const));
+    });
   }
 }
 

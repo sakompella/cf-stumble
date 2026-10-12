@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import { capturedEvents, named } from "../log-capture.js";
@@ -70,14 +71,15 @@ test("an alarm that cannot re-arm itself fails, so the platform runs it again", 
   await Promise.resolve();
   failing.clock.now = 5_000;
 
-  await expect(failing.idle.onAlarm(), "no later activity will retry the write").rejects.toThrow(
-    "alarm write failed",
-  );
+  await expect(
+    Effect.runPromise(failing.idle.onAlarm()),
+    "no later activity will retry the write",
+  ).rejects.toThrow("alarm write failed");
   expect(failing.alarms, "the re-arm was attempted").toHaveLength(2);
 
   failing.clock.now = 5_001;
   await expect(
-    failing.idle.onAlarm(),
+    Effect.runPromise(failing.idle.onAlarm()),
     "the platform's retry tries the write again",
   ).rejects.toThrow();
   expect(failing.alarms).toHaveLength(3);
@@ -90,7 +92,7 @@ test("activity re-arms after a failed re-arm, because the alarm is no longer con
   await Promise.resolve();
   await Promise.resolve();
   clock.now = 5_000;
-  await expect(idle.onAlarm()).rejects.toThrow("alarm write failed");
+  await expect(Effect.runPromise(idle.onAlarm())).rejects.toThrow("alarm write failed");
   const before = alarms.length;
 
   idle.touch();
@@ -106,7 +108,7 @@ test("a stop whose destroy and retry write both fail logs the stop and fails the
   await Promise.resolve();
   clock.now = 11_000;
 
-  await expect(idle.onAlarm()).rejects.toThrow("alarm write failed");
+  await expect(Effect.runPromise(idle.onAlarm())).rejects.toThrow("alarm write failed");
   expect(named(events(), "workspace.container.idle-stop").at(0)).toMatchObject({
     outcome: "threw",
   });
@@ -115,7 +117,7 @@ test("a stop whose destroy and retry write both fail logs the stop and fails the
 test("the idle check records how many times the platform retried the alarm", async () => {
   const events = capturedEvents();
   const { idle } = controller();
-  await idle.onAlarm(2);
+  await Effect.runPromise(idle.onAlarm(2));
 
   expect(named(events(), "workspace.idle-check").at(0)).toMatchObject({ retryCount: 2 });
 });
