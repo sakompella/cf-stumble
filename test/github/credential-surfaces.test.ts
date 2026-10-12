@@ -2,6 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { containsCredential } from "../../src/github/index.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
@@ -145,10 +146,10 @@ test("an RPC failure during authorization logs a redacted cause and never the to
         fetcher: githubReplying(),
       });
 
-      await github.startAuthorization(owner, NOW);
+      await Effect.runPromise(github.startAuthorization(owner, NOW));
       workspace.unavailable = true;
 
-      return github.completeAuthorization(owner, NOW + 1_000);
+      return Effect.runPromise(github.completeAuthorization(owner, NOW + 1_000));
     },
   );
 
@@ -179,11 +180,15 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
         fetcher: githubReplying(),
       });
 
-      const started = await github.startAuthorization(owner, NOW);
-      const completed = await github.completeAuthorization(owner, NOW + 1_000);
-      const connected = await connections.connect(REPOSITORY, "Repo one", NOW + 2_000);
-      const listed = await connections.list(NOW + 3_000);
-      const status = await connections.connectionStatus(NOW + 4_000);
+      const started = await Effect.runPromise(github.startAuthorization(owner, NOW));
+      const completed = await Effect.runPromise(github.completeAuthorization(owner, NOW + 1_000));
+
+      const connected = await Effect.runPromise(
+        connections.connect(REPOSITORY, "Repo one", NOW + 2_000),
+      );
+
+      const listed = await Effect.runPromise(connections.list(NOW + 3_000));
+      const status = await Effect.runPromise(connections.connectionStatus(NOW + 4_000));
       answers.push(started, completed, connected, listed, status);
 
       return storedText(state.storage);
@@ -235,9 +240,9 @@ test("no log line at any level carries the token, and the install is logged with
       fetcher: githubReplying(),
     });
 
-    await github.startAuthorization(owner, NOW);
-    await github.completeAuthorization(owner, NOW + 1_000);
-    await connections.connect(REPOSITORY, "Repo one", NOW + 2_000);
+    await Effect.runPromise(github.startAuthorization(owner, NOW));
+    await Effect.runPromise(github.completeAuthorization(owner, NOW + 1_000));
+    await Effect.runPromise(connections.connect(REPOSITORY, "Repo one", NOW + 2_000));
   });
 
   const logged = events();
@@ -269,7 +274,7 @@ test("an unattended run logs that its credential came from the configured token"
       fetcher: githubReplying(),
     });
 
-    await github.ensureCredential(NOW);
+    await Effect.runPromise(github.ensureCredential(NOW));
   });
 
   const logged = events();

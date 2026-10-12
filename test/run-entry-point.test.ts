@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { runAtEntryPoint } from "../src/run-entry-point.js";
+import { runAtEntryPoint, runResponseBody } from "../src/run-entry-point.js";
 
 /**
  * The one place a native entry point interprets an Effect program. It has to behave like the
@@ -37,4 +37,41 @@ test("a response body keeps streaming after the program has returned", async () 
   await writer.close();
 
   await expect(read).resolves.toBe("first second");
+});
+
+test("a body's program runs until the body is cancelled, then runs its finalizers", async () => {
+  const cancelled = new AbortController();
+  const finalized: string[] = [];
+
+  const running = runResponseBody(
+    Effect.never.pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          finalized.push("released");
+        }),
+      ),
+    ),
+    cancelled.signal,
+  );
+
+  await scheduler.wait(5);
+  expect(finalized).toEqual([]);
+
+  cancelled.abort();
+
+  await expect(running).resolves.toBeUndefined();
+  expect(finalized).toEqual(["released"]);
+});
+
+test("a body's program that dies rejects with the value that was thrown", async () => {
+  const thrown = new Error("stream reader unavailable");
+
+  await expect(
+    runResponseBody(
+      Effect.sync(() => {
+        throw thrown;
+      }),
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(thrown);
 });

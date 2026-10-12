@@ -2,7 +2,7 @@
 
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import * as Result from "effect/Result";
+import * as Effect from "effect/Effect";
 import {
   sampleProjectOne,
   sampleProjectTwo,
@@ -164,21 +164,23 @@ test("passes the turn cancellation signal into provisioning", async () => {
   const controller = new AbortController();
   let received: AbortSignal | undefined;
 
-  const start = await startFacetTurn({
-    namespace: workspaces.namespace,
-    mount: () => Promise.resolve(Result.succeed({ fetcher: facet })),
-    provision: (_project, signal) => {
-      received = signal;
-      controller.abort();
+  const start = await Effect.runPromise(
+    startFacetTurn({
+      namespace: workspaces.namespace,
+      mount: () => Effect.succeed({ fetcher: facet }),
+      provision: (_project, signal) => {
+        received = signal;
+        controller.abort();
 
-      return Promise.resolve(true);
-    },
-    catalog: sampleSelectableCatalog,
-    workspaceName,
-    projectId: projectOne.id,
-    request: { prompt: "do the work", state: null },
-    signal: controller.signal,
-  });
+        return Effect.succeed(true);
+      },
+      catalog: sampleSelectableCatalog,
+      workspaceName,
+      projectId: projectOne.id,
+      request: { prompt: "do the work", state: null },
+      signal: controller.signal,
+    }),
+  );
 
   expect(received).toBe(controller.signal);
   expect(start).toEqual({ ok: false, reason: "turn-not-started" });

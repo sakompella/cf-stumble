@@ -116,6 +116,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     asynchronous work is an Effect, synchronous stores and parsers return `effect/Result`, and the
     RPC values are unchanged. Wave 3 moved the Workspace Host's surfaces and idle check, workspace
     provisioning, the credential calls, and the GitHub clients; better-result is gone from
-    `src/workspace` and `src/github`. Wave 5 replaced the page with a Foldkit application. A real
-    container stop, exec, and first turn still need a staging check. The turn lifetime has not
-    moved yet.
+    `src/workspace` and `src/github`. Wave 5 replaced the page with a Foldkit application. Wave 4 moved
+    the turn lifetime and the project workflows: a turn's admission, start, and deadline are one
+    Effect program per RPC, its streamed body runs its own program until it settles or the browser
+    cancels it, and the project connections, the lifecycle queue, and the GitHub connection are
+    Effects. A real container stop, exec, and first turn still need a staging check, and so does a
+    turn streamed and cancelled through the deployed Worker.

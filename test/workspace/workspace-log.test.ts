@@ -107,8 +107,8 @@ test("a provision that waits on the workspace exclusion logs how long and how th
   );
 
   const cancelled = new AbortController();
-  const waiting = waitForWorkspaceProvision(workspaceName, cancelled.signal);
-  const admitted = waitForWorkspaceProvision(workspaceName);
+  const waiting = Effect.runPromise(waitForWorkspaceProvision(workspaceName, cancelled.signal));
+  const admitted = Effect.runPromise(waitForWorkspaceProvision(workspaceName));
 
   cancelled.abort();
   expect(await waiting).toBe(false);

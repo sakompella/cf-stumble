@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+
 /**
  * One turn's single lifetime, as one instant.
  *
@@ -9,18 +11,16 @@
  * for eight minutes under a five-minute lease and go on editing the tenant's one shared workspace
  * (ADR-0038) while a replacement turn was already admitted.
  *
- * The instant carries one cancellation signal. Whatever ends the turn first — the bound passing,
- * the browser disconnecting, or a start that lost its race — aborts that one signal, so the work
- * behind the turn is cancelled rather than merely ignored.
+ * The instant carries one cancellation signal, for the native calls that can observe one.
+ * Whatever ends the turn first — the bound passing, the browser disconnecting, or a start that
+ * lost its race — aborts that one signal, so the work behind the turn is cancelled rather than
+ * merely ignored.
  */
 export class TurnBound {
   /** The instant this turn ends, on the clock the lease was taken with. */
   readonly endsAt: number;
   readonly #now: () => number;
   readonly #cancellation = new AbortController();
-  readonly #expiry: Promise<"timed-out">;
-  #timer: ReturnType<typeof setTimeout> | undefined;
-  #timedOut = false;
 
   /**
    * The bound of a turn admitted at `admittedAt` under a lease of `leaseMs`, which may wait
@@ -40,16 +40,9 @@ export class TurnBound {
   constructor(endsAt: number, now: () => number) {
     this.endsAt = endsAt;
     this.#now = now;
-    this.#expiry = new Promise((resolve) => {
-      this.#timer = setTimeout(() => {
-        this.#timedOut = true;
-        this.#cancellation.abort();
-        resolve("timed-out");
-      }, this.remainingMs());
-    });
   }
 
-  /** The turn's cancellation. Every step of the turn is passed this one signal. */
+  /** The turn's cancellation. Every native step of the turn is passed this one signal. */
   get signal(): AbortSignal {
     return this.#cancellation.signal;
   }
@@ -59,26 +52,28 @@ export class TurnBound {
     return Math.max(0, this.endsAt - this.#now());
   }
 
-  /** Whether the turn ran out of time, as opposed to being stopped by something else. */
-  timedOut(): boolean {
-    return this.#timedOut;
-  }
+  /**
+   * Run `work` in what is left of the turn. If the instant arrives first, the signal is aborted,
+   * `work` is interrupted, and the answer is `expired`. Each phase of the turn measures the same
+   * instant, so a phase that starts late gets only what the earlier phases left.
+   */
+  within<A, E, R, B>(work: Effect.Effect<A, E, R>, expired: B): Effect.Effect<A | B, E, R> {
+    const expiry = Effect.suspend(() => Effect.sleep(this.remainingMs())).pipe(
+      Effect.map(() => {
+        this.stop();
 
-  /** Resolves when the turn's time is up, so a step can race its own work against the bound. */
-  whenTimedOut(): Promise<"timed-out"> {
-    return this.#expiry;
+        return expired;
+      }),
+    );
+
+    return Effect.raceFirst(work, expiry);
   }
 
   /**
-   * End the turn now: the signal is aborted, and the timer that would have aborted it is dropped.
-   * A turn that ended early releases its lease at once, so nothing may still be running under it.
+   * End the turn now by aborting its signal. A turn that ended early releases its lease at once,
+   * so nothing may still be running under it.
    */
   stop(): void {
-    if (this.#timer !== undefined) {
-      clearTimeout(this.#timer);
-      this.#timer = undefined;
-    }
-
     this.#cancellation.abort();
   }
 }

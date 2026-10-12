@@ -11,7 +11,6 @@ import {
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logEvent, type LogLevel } from "../../diagnostics.js";
-import { runAtEntryPoint } from "../../run-entry-point.js";
 import {
   CredentialInstallFailed,
   installWorkspaceCredential,
@@ -188,18 +187,20 @@ export class GitHubConnection {
    * workspace's own answer, because the owner is mid-flow and the credential legitimately is not
    * there yet.
    */
-  status(now: number, options: StatusReadOptions = {}): Promise<GitHubConnectionStatus> {
-    const pending = this.store.pendingAuthorization(now);
+  status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
+    return Effect.suspend(() => {
+      const pending = this.store.pendingAuthorization(now);
 
-    return pending === undefined
-      ? this.observed(undefined, undefined, options)
-      : Promise.resolve({
-          state: "awaiting-authorization",
-          verificationUri: pending.verificationUri,
-          userCode: pending.userCode,
-          expiresAt: pending.expiresAt,
-          intervalSeconds: pending.intervalSeconds,
-        });
+      return pending === undefined
+        ? this.observed(undefined, undefined, options)
+        : Effect.succeed({
+            state: "awaiting-authorization",
+            verificationUri: pending.verificationUri,
+            userCode: pending.userCode,
+            expiresAt: pending.expiresAt,
+            intervalSeconds: pending.intervalSeconds,
+          });
+    });
   }
 
   /**
@@ -210,63 +211,67 @@ export class GitHubConnection {
    * somebody at a verification page. With no fallback the answer is a reconnect requirement, never
    * an optimistic `connected`.
    */
-  async ensureCredential(now: number, signal?: AbortSignal): Promise<GitHubConnectionStatus> {
-    const current = await this.status(now, { signal });
+  ensureCredential(now: number, signal?: AbortSignal): Effect.Effect<GitHubConnectionStatus> {
+    return Effect.gen({ self: this }, function* () {
+      const current = yield* this.status(now, { signal });
 
-    if (
-      signal?.aborted === true ||
-      current.state === "connected" ||
-      current.state === "tooling-missing"
-    ) {
-      return current;
-    }
+      if (
+        signal?.aborted === true ||
+        current.state === "connected" ||
+        current.state === "tooling-missing"
+      ) {
+        return current;
+      }
 
-    const token = parseGitHubToken(this.environment.fallbackToken);
+      const token = parseGitHubToken(this.environment.fallbackToken);
 
-    const repaired =
-      token === undefined ? current : await this.install(token, "configured-token", now, signal);
+      const repaired =
+        token === undefined ? current : yield* this.install(token, "configured-token", now, signal);
 
-    logCredentialEnsure(current, token !== undefined, repaired);
+      logCredentialEnsure(current, token !== undefined, repaired);
 
-    return repaired;
+      return repaired;
+    });
   }
 
   /**
    * Start one device authorization and bind it to the owner who asked for it. The device code
    * stays in storage; what comes back is the verification URL and the user code.
    */
-  async startAuthorization(
+  startAuthorization(
     scope: VerifiedAccessScope,
     now: number,
-  ): Promise<GitHubAuthorizationOutcome> {
-    const clientId = this.environment.clientId;
+  ): Effect.Effect<GitHubAuthorizationOutcome> {
+    return Effect.gen({ self: this }, function* () {
+      const clientId = this.environment.clientId;
 
-    if (clientId === undefined || clientId.trim().length === 0) {
-      return { ok: false, problem: "not-configured" };
-    }
+      if (clientId === undefined || clientId.trim().length === 0) {
+        return { ok: false, problem: "not-configured" } as const;
+      }
 
-    const started = await runAtEntryPoint(
-      Effect.result(requestDeviceAuthorization(clientId, this.environment.fetcher)),
-    );
+      const started = yield* Effect.result(
+        requestDeviceAuthorization(clientId, this.environment.fetcher),
+      );
 
-    logAuthorization("start", Result.isSuccess(started) ? "started" : "provider-unavailable");
+      logAuthorization("start", Result.isSuccess(started) ? "started" : "provider-unavailable");
 
-    if (Result.isFailure(started)) {
-      return { ok: false, problem: "provider-unavailable" };
-    }
+      if (Result.isFailure(started)) {
+        return { ok: false, problem: "provider-unavailable" } as const;
+      }
 
-    const authorization = started.success;
-    this.store.startAuthorization({
-      deviceCode: authorization.deviceCode,
-      userCode: authorization.userCode,
-      verificationUri: authorization.verificationUri,
-      expiresAt: now + authorization.expiresInSeconds * 1_000,
-      intervalSeconds: authorization.intervalSeconds,
-      identity: scope.identity,
-      audience: scope.audience,
+      const authorization = started.success;
+      this.store.startAuthorization({
+        deviceCode: authorization.deviceCode,
+        userCode: authorization.userCode,
+        verificationUri: authorization.verificationUri,
+        expiresAt: now + authorization.expiresInSeconds * 1_000,
+        intervalSeconds: authorization.intervalSeconds,
+        identity: scope.identity,
+        audience: scope.audience,
+      });
+
+      return { ok: true, status: yield* this.status(now) } as const;
     });
-
-    return { ok: true, status: await this.status(now) };
   }
 
   /**
@@ -277,113 +282,111 @@ export class GitHubConnection {
    * request replayed finds nothing. A successful redemption installs the token into the workspace
    * inside this call; the token is a local value that never reaches storage or a response.
    */
-  async completeAuthorization(
+  completeAuthorization(
     scope: VerifiedAccessScope,
     now: number,
-  ): Promise<GitHubAuthorizationOutcome> {
-    const clientId = this.environment.clientId;
-    const pending = this.store.pendingAuthorization(now);
+  ): Effect.Effect<GitHubAuthorizationOutcome> {
+    return Effect.gen({ self: this }, function* () {
+      const clientId = this.environment.clientId;
+      const pending = this.store.pendingAuthorization(now);
 
-    if (clientId === undefined) {
-      return { ok: false, problem: "not-configured" };
-    }
+      if (clientId === undefined) {
+        return { ok: false, problem: "not-configured" } as const;
+      }
 
-    if (pending === undefined) {
-      return { ok: false, problem: "no-pending-authorization" };
-    }
+      if (pending === undefined) {
+        return { ok: false, problem: "no-pending-authorization" } as const;
+      }
 
-    if (!sameOwner(scope, pending.identity, pending.audience)) {
-      return { ok: false, problem: "not-the-initiating-owner" };
-    }
+      if (!sameOwner(scope, pending.identity, pending.audience)) {
+        return { ok: false, problem: "not-the-initiating-owner" } as const;
+      }
 
-    const redeemed = await runAtEntryPoint(
-      redeemDeviceAuthorization(
+      const redeemed = yield* redeemDeviceAuthorization(
         { clientId, deviceCode: pending.deviceCode },
         this.environment.fetcher,
-      ),
-    );
+      );
 
-    if (redeemed.kind === "authorized") {
-      logAuthorization("complete", "authorized");
-      this.store.clearAuthorization();
+      if (redeemed.kind === "authorized") {
+        logAuthorization("complete", "authorized");
+        this.store.clearAuthorization();
 
-      return { ok: true, status: await this.install(redeemed.token, "device-authorization", now) };
-    }
+        return {
+          ok: true,
+          status: yield* this.install(redeemed.token, "device-authorization", now),
+        } as const;
+      }
 
-    const unredeemed = unredeemedOutcome(redeemed.kind);
-    logAuthorization("complete", unredeemed);
+      const unredeemed = unredeemedOutcome(redeemed.kind);
+      logAuthorization("complete", unredeemed);
 
-    if (unredeemed === "pending") {
-      return { ok: true, status: await this.status(now) };
-    }
+      if (unredeemed === "pending") {
+        return { ok: true, status: yield* this.status(now) } as const;
+      }
 
-    if (redeemed.kind === "expired" || redeemed.kind === "denied") {
-      this.store.clearAuthorization();
-    }
+      if (redeemed.kind === "expired" || redeemed.kind === "denied") {
+        this.store.clearAuthorization();
+      }
 
-    return { ok: false, problem: unredeemed };
+      return { ok: false, problem: unredeemed } as const;
+    });
   }
 
-  private async install(
+  private install(
     token: GitHubToken,
     source: CredentialSource,
     now: number,
     signal?: AbortSignal,
-  ): Promise<GitHubConnectionStatus> {
-    const installed = await runAtEntryPoint(
-      Effect.result(
+  ): Effect.Effect<GitHubConnectionStatus> {
+    return Effect.gen({ self: this }, function* () {
+      const installed = yield* Effect.result(
         installWorkspaceCredential({
           workspaceName: this.workspaceName,
           namespace: this.namespace,
           token,
           signal,
         }),
-      ),
-    );
-
-    if (Result.isFailure(installed)) {
-      const refused = reconnect(
-        installed.failure instanceof CredentialInstallFailed
-          ? "credential-rejected"
-          : "workspace-unavailable",
       );
 
-      logCredentialInstall(source, refused);
+      if (Result.isFailure(installed)) {
+        const refused = reconnect(
+          installed.failure instanceof CredentialInstallFailed
+            ? "credential-rejected"
+            : "workspace-unavailable",
+        );
 
-      return refused;
-    }
+        logCredentialInstall(source, refused);
 
-    const status: GitHubConnectionStatus =
-      installed.success === "tooling-missing"
-        ? { state: "tooling-missing" }
-        : await this.observed(source, now, { signal });
+        return refused;
+      }
 
-    logCredentialInstall(source, status);
+      const status: GitHubConnectionStatus =
+        installed.success === "tooling-missing"
+          ? { state: "tooling-missing" }
+          : yield* this.observed(source, now, { signal });
 
-    return status;
+      logCredentialInstall(source, status);
+
+      return status;
+    });
   }
 
   /** Ask the workspace what its credential can do, and keep the record honest about the answer. */
-  private async observed(
+  private observed(
     source?: CredentialSource,
     at?: number,
     options: StatusReadOptions = {},
-  ): Promise<GitHubConnectionStatus> {
-    const read = await runAtEntryPoint(
-      Effect.result(
-        readWorkspaceCredentialStatus({
-          workspaceName: this.workspaceName,
-          namespace: this.namespace,
-          ...options,
-        }),
-      ),
+  ): Effect.Effect<GitHubConnectionStatus> {
+    return readWorkspaceCredentialStatus({
+      workspaceName: this.workspaceName,
+      namespace: this.namespace,
+      ...options,
+    }).pipe(
+      Effect.match({
+        onFailure: () => reconnect("workspace-unavailable"),
+        onSuccess: (status) => this.recorded(status, source, at),
+      }),
     );
-
-    if (Result.isFailure(read)) {
-      return reconnect("workspace-unavailable");
-    }
-
-    return this.recorded(read.success, source, at);
   }
 
   private recorded(

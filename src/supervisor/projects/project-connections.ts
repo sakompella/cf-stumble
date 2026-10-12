@@ -47,7 +47,6 @@ import {
   type RequestId,
 } from "../../diagnostics.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
-import { runAtEntryPoint } from "../../run-entry-point.js";
 import type { DisconnectProjectResult } from "../threads/index.js";
 
 /**
@@ -65,33 +64,33 @@ export type ProjectListView = Readonly<{
   github: GitHubConnectionStatus;
 }>;
 
-async function repositorySizeAllowed(
+function repositorySizeAllowed(
   project: ProjectId,
   repositoryUrl: PublicRepositoryUrl,
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
-): Promise<boolean> {
-  const lookup = await runAtEntryPoint(
-    Effect.result(lookupRepositorySize(repositoryUrl, token, fetcher)),
-  );
+): Effect.Effect<boolean> {
+  return Effect.gen(function* () {
+    const lookup = yield* Effect.result(lookupRepositorySize(repositoryUrl, token, fetcher));
 
-  const measured = Result.isSuccess(lookup) ? lookup.success : undefined;
-  const reason = measured === undefined ? undefined : repositorySizeReason(measured);
+    const measured = Result.isSuccess(lookup) ? lookup.success : undefined;
+    const reason = measured === undefined ? undefined : repositorySizeReason(measured);
 
-  const outcome =
-    measured === undefined ? "skipped" : reason === "within-limits" ? "allowed" : "refused";
+    const outcome =
+      measured === undefined ? "skipped" : reason === "within-limits" ? "allowed" : "refused";
 
-  logEvent(outcome === "allowed" ? "info" : "warn", "project.size-check", {
-    project,
-    sizeKb: measured?.sizeKb ?? null,
-    blobCount: measured?.blobCount ?? null,
-    blobBytes: measured?.blobBytes ?? null,
-    truncated: measured?.truncated ?? null,
-    outcome,
-    reason: reason ?? "lookup-failed",
+    logEvent(outcome === "allowed" ? "info" : "warn", "project.size-check", {
+      project,
+      sizeKb: measured?.sizeKb ?? null,
+      blobCount: measured?.blobCount ?? null,
+      blobBytes: measured?.blobBytes ?? null,
+      truncated: measured?.truncated ?? null,
+      outcome,
+      reason: reason ?? "lookup-failed",
+    });
+
+    return reason === undefined || reason === "within-limits";
   });
-
-  return reason === undefined || reason === "within-limits";
 }
 
 export type DisconnectRepositoryResult =
@@ -191,18 +190,26 @@ export class ProjectConnections {
    * The harness entry is in it and has no repository URL, which is what tells the sidebar that
    * this one is not a connection: there is nothing to authorize and nothing to clone.
    */
-  async list(now: number, requestId?: RequestId): Promise<ProjectListView> {
-    return { projects: this.catalog(), github: await this.connectionStatus(now, requestId) };
+  list(now: number, requestId?: RequestId): Effect.Effect<ProjectListView> {
+    return Effect.suspend(() => {
+      const projects = this.catalog();
+
+      return this.connectionStatus(now, requestId).pipe(
+        Effect.map((github) => ({ projects, github })),
+      );
+    });
   }
 
-  async connectionStatus(now: number, requestId?: RequestId): Promise<GitHubConnectionStatus> {
-    try {
-      return await this.github.status(now, { requestId });
-    } catch (cause) {
-      logRedactedCause("project-connections.connection-status: workspace-unavailable", cause);
+  connectionStatus(now: number, requestId?: RequestId): Effect.Effect<GitHubConnectionStatus> {
+    return this.github.status(now, { requestId }).pipe(
+      Effect.catchDefect((cause) =>
+        Effect.sync((): GitHubConnectionStatus => {
+          logRedactedCause("project-connections.connection-status: workspace-unavailable", cause);
 
-      return { state: "reconnect-required", reason: "workspace-unavailable" };
-    }
+          return { state: "reconnect-required", reason: "workspace-unavailable" };
+        }),
+      ),
+    );
   }
 
   /**
@@ -215,67 +222,75 @@ export class ProjectConnections {
    * clone that fails takes a newly stored project back out: a project in the list has files.
    */
   // oxlint-disable-next-line max-lines-per-function -- The workflow keeps guard, credential, access, and catalog effects ordered.
-  async connect(
+  connect(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the repository URL arrives from a client.
     repositoryUrl: unknown,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the display name arrives from a client.
     displayName: unknown,
     now: number,
-  ): Promise<ConnectRepositoryResult> {
-    const canonical = canonicalRepositoryUrl(repositoryUrl);
-    const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
+  ): Effect.Effect<ConnectRepositoryResult> {
+    // oxlint-disable-next-line max-lines-per-function -- The same workflow, as the generator that runs it.
+    return Effect.gen({ self: this }, function* () {
+      const canonical = canonicalRepositoryUrl(repositoryUrl);
+      const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
 
-    // A URL that derives no project id could never be stored, so it is refused before the
-    // workspace is asked to reach it.
-    if (canonical === undefined || projectId === undefined) {
-      return this.refused(
-        { code: "invalid-repository-url", detail: "" },
-        { state: "disconnected" },
+      // A URL that derives no project id could never be stored, so it is refused before the
+      // workspace is asked to reach it.
+      if (canonical === undefined || projectId === undefined) {
+        return this.refused(
+          { code: "invalid-repository-url", detail: "" },
+          { state: "disconnected" },
+        );
+      }
+
+      const sizeAllowed = yield* repositorySizeAllowed(
+        projectId,
+        canonical,
+        this.repositorySizeToken,
+        this.githubFetcher,
       );
-    }
 
-    const sizeAllowed = await repositorySizeAllowed(
-      projectId,
-      canonical,
-      this.repositorySizeToken,
-      this.githubFetcher,
-    );
+      if (!sizeAllowed) {
+        return this.refused(
+          { code: "repository-too-large", detail: "" },
+          { state: "disconnected" },
+        );
+      }
 
-    if (!sizeAllowed) {
-      return this.refused({ code: "repository-too-large", detail: "" }, { state: "disconnected" });
-    }
+      const github = yield* this.github.ensureCredential(now);
 
-    const github = await this.github.ensureCredential(now);
+      if (github.state === "tooling-missing") {
+        return this.refused({ code: "tooling-missing", detail: "" }, github);
+      }
 
-    if (github.state === "tooling-missing") {
-      return this.refused({ code: "tooling-missing", detail: "" }, github);
-    }
-
-    const access = await runAtEntryPoint(
-      Effect.result(
+      const access = yield* Effect.result(
         checkRepositoryAccess({
           workspaceName: this.workspaceName,
           namespace: this.namespace,
           repositoryUrl: canonical,
         }),
-      ),
-    );
-
-    // The check fails only when the workspace could not be asked; a refusal is a granted: false.
-    if (Result.isFailure(access)) {
-      return this.refused({ code: "workspace-unavailable", detail: access.failure.detail }, github);
-    }
-
-    if (!access.success.granted) {
-      return this.refused(
-        { code: "repository-not-accessible", detail: access.success.detail },
-        github,
       );
-    }
 
-    return this.lifecycle.exclusive(projectId, () =>
-      this.store(canonical, displayName, github, now),
-    );
+      // The check fails only when the workspace could not be asked; a refusal is a granted: false.
+      if (Result.isFailure(access)) {
+        return this.refused(
+          { code: "workspace-unavailable", detail: access.failure.detail },
+          github,
+        );
+      }
+
+      if (!access.success.granted) {
+        return this.refused(
+          { code: "repository-not-accessible", detail: access.success.detail },
+          github,
+        );
+      }
+
+      return yield* this.lifecycle.exclusive(
+        projectId,
+        this.store(canonical, displayName, github, now),
+      );
+    });
   }
 
   /**
@@ -287,34 +302,37 @@ export class ProjectConnections {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
     projectId: unknown,
     releaseThread: ReleaseProjectThread,
-  ): Promise<DisconnectRepositoryResult> {
+  ): Effect.Effect<DisconnectRepositoryResult> {
     const parsed = parseProjectId(projectId);
 
     if (parsed === undefined) {
-      return Promise.resolve({ ok: false, problem: { code: "invalid-project-id" } });
+      return Effect.succeed({ ok: false, problem: { code: "invalid-project-id" } });
     }
 
-    return this.lifecycle.exclusive(parsed, async () => {
-      const thread = releaseThread();
+    return this.lifecycle.exclusive(
+      parsed,
+      Effect.gen({ self: this }, function* () {
+        const thread = releaseThread();
 
-      if (!thread.ok) return thread;
+        if (!thread.ok) return thread;
 
-      const resolved = resolveProject(parsed, this.projects.catalog());
+        const resolved = resolveProject(parsed, this.projects.catalog());
 
-      if (!resolved.ok) {
-        return { ok: false, problem: { code: resolved.reason } };
-      }
+        if (!resolved.ok) {
+          return { ok: false, problem: { code: resolved.reason } } as const;
+        }
 
-      this.projects.disconnect(resolved.project.id);
-      const workspace = await this.removeProjectDirectories(resolved.project.id);
+        this.projects.disconnect(resolved.project.id);
+        const workspace = yield* this.removeProjectDirectories(resolved.project.id);
 
-      logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
-        project: resolved.project.id,
-        workspace,
-      });
+        logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
+          project: resolved.project.id,
+          workspace,
+        });
 
-      return { ok: true, projectId: resolved.project.id, workspace };
-    });
+        return { ok: true, projectId: resolved.project.id, workspace } as const;
+      }),
+    );
   }
 
   /** Forget workspace-owned transient state after the owner resets the workspace. */
@@ -324,22 +342,21 @@ export class ProjectConnections {
   }
 
   /** Reconcile the editable harness checkout before a harness turn starts. */
-  async ensureHarnessProvisioned(
+  ensureHarnessProvisioned(
     harnessCommit: HarnessCommit,
     signal?: AbortSignal,
-  ): Promise<boolean> {
-    const provisioned = await runAtEntryPoint(
-      Effect.result(
-        provisionHarnessWorkspace({
-          workspaceName: this.workspaceName,
-          harnessCommit,
-          namespace: this.namespace,
-          signal,
-        }),
-      ),
+  ): Effect.Effect<boolean> {
+    return provisionHarnessWorkspace({
+      workspaceName: this.workspaceName,
+      harnessCommit,
+      namespace: this.namespace,
+      signal,
+    }).pipe(
+      Effect.match({
+        onFailure: () => false,
+        onSuccess: () => true,
+      }),
     );
-
-    return Result.isSuccess(provisioned);
   }
 
   /**
@@ -351,42 +368,42 @@ export class ProjectConnections {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
     projectId: unknown,
     signal?: AbortSignal,
-  ): Promise<ProjectUseResult> {
+  ): Effect.Effect<ProjectUseResult> {
     const parsed = parseProjectId(projectId);
 
     if (parsed === undefined) {
-      return Promise.resolve({ ok: false, problem: { code: "invalid-project-id" } });
+      return Effect.succeed({ ok: false, problem: { code: "invalid-project-id" } });
     }
 
-    return this.lifecycle.exclusive(parsed, () => this.provisionConnected(parsed, signal));
+    return this.lifecycle.exclusive(parsed, this.provisionConnected(parsed, signal));
   }
 
   /** The body of `ensureProvisioned`, for a caller already running in the project's queue. */
-  private async provisionConnected(
+  private provisionConnected(
     projectId: ProjectId,
     signal?: AbortSignal,
-  ): Promise<ProjectUseResult> {
-    // Only connected repositories reach this path: harness turns use the generation-bound
-    // reconciler above because the harness entry has no catalog repository URL.
-    const catalog: ProjectCatalog = this.projects.catalog();
-    const resolved = resolveProject(projectId, catalog);
+  ): Effect.Effect<ProjectUseResult> {
+    return Effect.gen({ self: this }, function* () {
+      // Only connected repositories reach this path: harness turns use the generation-bound
+      // reconciler above because the harness entry has no catalog repository URL.
+      const catalog: ProjectCatalog = this.projects.catalog();
+      const resolved = resolveProject(projectId, catalog);
 
-    if (!resolved.ok) {
-      return { ok: false, problem: { code: resolved.reason } };
-    }
+      if (!resolved.ok) {
+        return { ok: false, problem: { code: resolved.reason } } as const;
+      }
 
-    // A workspace reset removes the credential along with the checkout. Re-establish the same
-    // unattended credential that connection uses before handing the repository to the clone script.
-    // Best effort: a public repository clones without any credential, so a missing one must not
-    // block it. A private repository without a credential fails in the clone step itself.
-    await this.github.ensureCredential(Date.now(), signal);
+      // A workspace reset removes the credential along with the checkout. Re-establish the same
+      // unattended credential that connection uses before handing the repository to the clone
+      // script. Best effort: a public repository clones without any credential, so a missing one
+      // must not block it. A private repository without a credential fails in the clone step.
+      yield* this.github.ensureCredential(Date.now(), signal);
 
-    if (signal?.aborted === true) {
-      return { ok: false, problem: { code: "provisioning-failed" } };
-    }
+      if (signal?.aborted === true) {
+        return { ok: false, problem: { code: "provisioning-failed" } } as const;
+      }
 
-    const provisioned = await runAtEntryPoint(
-      Effect.result(
+      const provisioned = yield* Effect.result(
         provisionProjectWorkspace({
           workspaceName: this.workspaceName,
           projectId: resolved.project.id,
@@ -394,69 +411,71 @@ export class ProjectConnections {
           namespace: this.namespace,
           signal,
         }),
-      ),
-    );
+      );
 
-    if (Result.isFailure(provisioned)) {
-      const diskFailure =
-        provisioned.failure instanceof ProvisionStepFailed &&
-        provisioned.failure.step === "clone" &&
-        provisioned.failure.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE;
+      if (Result.isFailure(provisioned)) {
+        const diskFailure =
+          provisioned.failure instanceof ProvisionStepFailed &&
+          provisioned.failure.step === "clone" &&
+          provisioned.failure.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE;
 
-      return {
-        ok: false,
-        problem: { code: diskFailure ? "repository-too-large" : "provisioning-failed" },
-      };
-    }
+        return {
+          ok: false,
+          problem: { code: diskFailure ? "repository-too-large" : "provisioning-failed" },
+        } as const;
+      }
 
-    return { ok: true, project: resolved.project };
+      return { ok: true, project: resolved.project } as const;
+    });
   }
 
-  private async store(
+  private store(
     repositoryUrl: PublicRepositoryUrl,
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `connect`.
     displayName: unknown,
     github: GitHubConnectionStatus,
     now: number,
-  ): Promise<ConnectRepositoryResult> {
-    const connected = this.projects.connect({ repositoryUrl, displayName }, now);
+  ): Effect.Effect<ConnectRepositoryResult> {
+    return Effect.gen({ self: this }, function* () {
+      const connected = this.projects.connect({ repositoryUrl, displayName }, now);
 
-    if (!connected.ok) {
-      return this.refused({ code: connected.problem.code, detail: "" }, github);
-    }
-
-    const provisioned = await this.provisionConnected(connected.project.id);
-
-    if (!provisioned.ok) {
-      if (!connected.alreadyConnected) {
-        this.projects.disconnect(connected.project.id);
+      if (!connected.ok) {
+        return this.refused({ code: connected.problem.code, detail: "" }, github);
       }
 
-      return this.refused(
-        {
-          code:
-            provisioned.problem.code === "repository-too-large"
-              ? "repository-too-large"
-              : "provisioning-failed",
-          detail: "",
-        },
-        github,
-      );
-    }
+      const provisioned = yield* this.provisionConnected(connected.project.id);
 
-    return {
-      ok: true,
-      project: connected.project,
-      alreadyConnected: connected.alreadyConnected,
-      github,
-    };
+      if (!provisioned.ok) {
+        if (!connected.alreadyConnected) {
+          this.projects.disconnect(connected.project.id);
+        }
+
+        return this.refused(
+          {
+            code:
+              provisioned.problem.code === "repository-too-large"
+                ? "repository-too-large"
+                : "provisioning-failed",
+            detail: "",
+          },
+          github,
+        );
+      }
+
+      return {
+        ok: true,
+        project: connected.project,
+        alreadyConnected: connected.alreadyConnected,
+        github,
+      } as const;
+    });
   }
 
-  private async removeProjectDirectories(projectId: ProjectId): Promise<"removed" | "failed"> {
-    try {
-      const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
+  private removeProjectDirectories(projectId: ProjectId): Effect.Effect<"removed" | "failed"> {
+    const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
 
-      const result = await timedWorkspaceRpc(
+    return Effect.promise(() =>
+      timedWorkspaceRpc(
         { method: "project", step: "remove" },
         () =>
           removalNamespace.getByName(this.workspaceName).removeProject({
@@ -468,21 +487,24 @@ export class ProjectConnections {
             return { outcome: "removed" };
           }
 
-          // `workspace-sync-incomplete` means the container deleted the clone but the durable store
-          // may still hold it, so it can return with a replacement container. It is not a removal.
+          // `workspace-sync-incomplete` means the container deleted the clone but the durable
+          // store may still hold it, so it can return with a replacement container. It is not a
+          // removal.
           return { outcome: answered.ok ? "failed" : answered.error.code, level: "error" };
         },
         WORKSPACE_RPC_TIMEOUT_MS,
-      );
+      ).then(
+        (result) =>
+          result.ok && result.result.kind === "command" && result.result.exitCode === 0
+            ? "removed"
+            : "failed",
+        (cause: unknown) => {
+          logRedactedCause(`project-disconnect.${projectId}: workspace-unavailable`, cause);
 
-      return result.ok && result.result.kind === "command" && result.result.exitCode === 0
-        ? "removed"
-        : "failed";
-    } catch (cause) {
-      logRedactedCause(`project-disconnect.${projectId}: workspace-unavailable`, cause);
-
-      return "failed";
-    }
+          return "failed";
+        },
+      ),
+    );
   }
 
   private refused(

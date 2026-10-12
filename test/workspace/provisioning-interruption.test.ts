@@ -55,7 +55,7 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
   const interrupted = Effect.runPromise(Fiber.interrupt(plan));
   let admitted = false;
 
-  const turn = waitForWorkspaceProvision(workspaceName).then((admit) => {
+  const turn = Effect.runPromise(waitForWorkspaceProvision(workspaceName)).then((admit) => {
     admitted = admit;
   });
 

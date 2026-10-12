@@ -2,6 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test } from "vitest";
 import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
@@ -74,13 +75,13 @@ test("a reconnect waits until the earlier disconnect has removed the clone", asy
   const workspace = new FakeTenantWorkspace();
 
   await withConnections("reconnect-during-removal", workspace, async (connections) => {
-    await connections.connect(REPOSITORY, undefined, NOW);
+    await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     const removal = workspace.holdNext(REMOVAL);
-    const disconnecting = connections.disconnect(PROJECT_ID, threadReleased);
+    const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, threadReleased));
     await removal.reached;
     const clonesBeforeReconnect = indexOfLast(workspace.commands, CLONE);
 
-    const reconnecting = connections.connect(REPOSITORY, undefined, NOW + 1);
+    const reconnecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1));
     await letOtherWorkRun();
 
     expect(
@@ -108,10 +109,10 @@ test("a failed connection leaves the row that an overlapping connection provisio
 
   await withConnections("overlapping-connections", workspace, async (connections) => {
     const firstClone = workspace.holdNext(CLONE);
-    const first = connections.connect(REPOSITORY, undefined, NOW);
+    const first = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     await firstClone.reached;
 
-    const second = connections.connect(REPOSITORY, undefined, NOW + 1);
+    const second = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW + 1));
     await letOtherWorkRun();
     firstClone.release(128);
 
@@ -131,10 +132,10 @@ test("a disconnect during a connection's clone removes the clone after it lands"
 
   await withConnections("disconnect-during-clone", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = connections.connect(REPOSITORY, undefined, NOW);
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     await clone.reached;
 
-    const disconnecting = connections.disconnect(PROJECT_ID, threadReleased);
+    const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, threadReleased));
     await letOtherWorkRun();
 
     expect(
@@ -158,15 +159,17 @@ test("a disconnect waits for the thread check until an earlier connection has se
 
   await withConnections("disconnect-thread-order", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = connections.connect(REPOSITORY, undefined, NOW);
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     await clone.reached;
     let threadChecked = false;
 
-    const disconnecting = connections.disconnect(PROJECT_ID, () => {
-      threadChecked = true;
+    const disconnecting = Effect.runPromise(
+      connections.disconnect(PROJECT_ID, () => {
+        threadChecked = true;
 
-      return { ok: false, problem: { code: "turn-active", deadlineAt: NOW } };
-    });
+        return { ok: false, problem: { code: "turn-active", deadlineAt: NOW } };
+      }),
+    );
 
     await letOtherWorkRun();
 
@@ -188,14 +191,14 @@ test("provisioning on use waits for a failing connection and then finds no proje
 
   await withConnections("use-during-failed-connection", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
-    const connecting = connections.connect(REPOSITORY, undefined, NOW);
+    const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     await clone.reached;
 
     const clonesDuringConnection = workspace.commands.filter((command) =>
       command.includes(CLONE),
     ).length;
 
-    const used = connections.ensureProvisioned(PROJECT_ID);
+    const used = Effect.runPromise(connections.ensureProvisioned(PROJECT_ID));
     await letOtherWorkRun();
     clone.release(128);
 

@@ -2,6 +2,7 @@
 
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { ConnectedProjects, GitHubConnectionStore } from "../../src/supervisor/projects/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
@@ -136,11 +137,13 @@ test("drops legacy Supervisor state once and keeps the GitHub connection", async
   const workspace = new FakeTenantWorkspace();
 
   const connected = await runInDurableObject(control, (_instance, state) =>
-    tenantConnections(state.storage, "legacy-state-reset", workspace, {
-      clientId: undefined,
-      fallbackToken: undefined,
-      fetcher: () => Promise.resolve(Response.json({ message: "rate limit exceeded" })),
-    }).connections.connect(LEGACY_URL, undefined, 2),
+    Effect.runPromise(
+      tenantConnections(state.storage, "legacy-state-reset", workspace, {
+        clientId: undefined,
+        fallbackToken: undefined,
+        fetcher: () => Promise.resolve(Response.json({ message: "rate limit exceeded" })),
+      }).connections.connect(LEGACY_URL, undefined, 2),
+    ),
   );
 
   expect(connected).toMatchObject({

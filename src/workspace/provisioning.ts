@@ -23,7 +23,6 @@ import {
   WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
   WORKSPACE_RPC_TIMEOUT_MS,
 } from "../workspace-command-timeout.js";
-import { runAtEntryPoint } from "../run-entry-point.js";
 import { workspaceRpc, type WorkspaceRpcFailed } from "./workspace-rpc.js";
 
 /** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
@@ -497,28 +496,26 @@ function settleActiveProvision(
 export function waitForWorkspaceProvision(
   workspaceName: string,
   signal?: AbortSignal,
-): Promise<boolean> {
-  return runAtEntryPoint(
-    Effect.gen(function* () {
-      for (;;) {
-        const active = activeProvisions.get(workspaceName);
+): Effect.Effect<boolean> {
+  return Effect.gen(function* () {
+    for (;;) {
+      const active = activeProvisions.get(workspaceName);
 
-        if (active === undefined) return signal?.aborted !== true;
+      if (active === undefined) return signal?.aborted !== true;
 
-        if (provisionIsStale(active, Date.now())) {
-          clearStaleProvision(workspaceName, active);
+      if (provisionIsStale(active, Date.now())) {
+        clearStaleProvision(workspaceName, active);
 
-          continue;
-        }
-
-        const wait = yield* Effect.promise(() => waitForActiveProvision(active, signal, "turn"));
-
-        if (wait === "aborted") return false;
-
-        if (wait === "settled") return true;
+        continue;
       }
-    }),
-  );
+
+      const wait = yield* Effect.promise(() => waitForActiveProvision(active, signal, "turn"));
+
+      if (wait === "aborted") return false;
+
+      if (wait === "settled") return true;
+    }
+  });
 }
 
 /** Provision one project inside the tenant's workspace, then rewrite its managed instructions. */

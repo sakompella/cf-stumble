@@ -1,9 +1,11 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { runInDurableObject } from "cloudflare:test";
+import * as Effect from "effect/Effect";
 import { Generations } from "../../../src/supervisor/generations/index.js";
 import {
   runProjectTurn,
+  type ProjectTurnRun,
   type ProjectTurnRunProblemCode,
   type ProjectTurnStart,
   type RunProjectTurnInput,
@@ -42,6 +44,16 @@ export interface ScriptedGeneration {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: a scripted generation writes whatever a generation could write, including frames the parse boundary must refuse.
   frame(value: unknown): void;
   close(): void;
+  /** Whether the Supervisor cancelled this stream, which is what ends the Pi turn behind it. */
+  cancelled(): boolean;
+}
+
+/**
+ * Admit and start one turn, answering as the Supervisor's RPC method answers. Every test that runs
+ * a whole turn goes through here, so a change to how a turn is run changes this one place.
+ */
+export function admitTurn(input: RunProjectTurnInput): Promise<ProjectTurnRun> {
+  return Effect.runPromise(runProjectTurn(input));
 }
 
 function streamWithThrowingReader(): ReadableStream<Uint8Array> {
@@ -55,7 +67,7 @@ function streamWithThrowingReader(): ReadableStream<Uint8Array> {
   return frames;
 }
 
-function scriptedGeneration(): ScriptedGeneration {
+export function scriptedGeneration(): ScriptedGeneration {
   const state = { cancelled: false, closed: false };
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
 
@@ -86,6 +98,7 @@ function scriptedGeneration(): ScriptedGeneration {
         controller?.close();
       }
     },
+    cancelled: () => state.cancelled,
   };
 }
 
@@ -192,7 +205,7 @@ export function runScriptedTurn(
     writeScript(generation, script);
     script.beforeRun?.(state);
 
-    const run = await runProjectTurn(turnInput(stores, script, projectId, generation));
+    const run = await admitTurn(turnInput(stores, script, projectId, generation));
 
     script.whileRunning?.(state, generation);
     const frames = run.ok ? await readFrames(run.frames, script.cancelAfter) : [];
@@ -233,18 +246,18 @@ function turnInput(
       script.handoff?.(request);
 
       if (script.stallStart === true) {
-        return new Promise<ProjectTurnStart>(() => {});
+        return Effect.never;
       }
 
       if (script.throwStart === true) {
-        return Promise.reject(new Error("start failed"));
+        return Effect.die(new Error("start failed"));
       }
 
       if (script.throwStreamReader === true) {
-        return Promise.resolve({ ok: true, frames: streamWithThrowingReader() });
+        return Effect.succeed({ ok: true, frames: streamWithThrowingReader() });
       }
 
-      return Promise.resolve(script.refuseStart ?? { ok: true, frames: generation.stream });
+      return Effect.succeed(script.refuseStart ?? { ok: true, frames: generation.stream });
     },
     now: () => NOW,
     leaseMs: PROJECT_TURN_LEASE_MS,
