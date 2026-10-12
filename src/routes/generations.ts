@@ -1,9 +1,9 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Request JSON is parsed and validated at this HTTP boundary.
-import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { parseHarnessCommit } from "../harness-commit.js";
 import type { GenerationControlResult, GenerationRequest } from "../supervisor/control/index.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
-import { hasExactKeys, isRecord } from "../untrusted.js";
-import { isCount, jsonError, readJson } from "./json.js";
+import { callSupervisor, Count, decodeRequestBody, InvalidRequestBody, jsonError } from "./json.js";
 
 export type GenerationControlSupervisor = {
   readonly controlGeneration: (request: GenerationRequest) => Promise<GenerationControlResult>;
@@ -35,55 +35,20 @@ export type GenerationSubmissionResult =
   | Extract<GenerationControlResult, { readonly ok: false }>;
 
 /** Activation and rollback take the same request. Only the command differs. */
-type GenerationControlBody = {
-  readonly observedEpoch: number;
-  readonly label: number;
-};
+const GenerationControlBody = Schema.Struct({ observedEpoch: Count, label: Count });
 
 type ControlCommandKind = "activate" | "rollback";
-
-function parseGenerationControlBody(value: unknown): GenerationControlBody | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["label", "observedEpoch"])) {
-    return undefined;
-  }
-
-  const { observedEpoch, label } = value;
-
-  if (!isCount(observedEpoch) || !isCount(label)) {
-    return undefined;
-  }
-
-  return { observedEpoch, label };
-}
 
 /**
  * A submission carries only a harness commit. ADR-0030 gives the observed epoch to activation and
  * rollback alone, because labeling a commit and checking it decide nothing about what serves, so a
  * body that carries one is malformed rather than stale.
  */
-type GenerationSubmissionBody = {
-  readonly harnessCommit: HarnessCommit;
-};
-
-function parseGenerationSubmissionBody(value: unknown): GenerationSubmissionBody | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["harnessCommit"])) {
-    return undefined;
-  }
-
-  const { harnessCommit } = value;
-
-  if (typeof harnessCommit !== "string") {
-    return undefined;
-  }
-
-  const parsedHarnessCommit = parseHarnessCommit(harnessCommit);
-
-  return parsedHarnessCommit === undefined ? undefined : { harnessCommit: parsedHarnessCommit };
-}
+const GenerationSubmissionBody = Schema.Struct({ harnessCommit: Schema.String });
 
 function command(
   kind: ControlCommandKind,
-  body: GenerationControlBody,
+  body: typeof GenerationControlBody.Type,
 ): GenerationRequest["command"] {
   return kind === "activate"
     ? { kind: "activate", label: body.label, observedEpoch: body.observedEpoch }
@@ -96,27 +61,28 @@ function command(
  * current state rather than a replayed one. The principal is fixed here. Cloudflare Access already
  * proved the owner, and the caller never names a tenant, an identity, or a Durable Object.
  */
-export async function handleGenerationControl(
-  request: Request,
-  supervisor: GenerationControlSupervisor,
-  kind: ControlCommandKind,
-): Promise<Response> {
-  const body = parseGenerationControlBody(await readJson(request));
+export const handleGenerationControl = Effect.fnUntraced(
+  function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
+    const body = yield* decodeRequestBody(request, GenerationControlBody);
 
-  if (body === undefined) {
-    return jsonError(
-      400,
-      kind === "activate" ? "invalid-activation-request" : "invalid-rollback-request",
+    const result = yield* callSupervisor(() =>
+      supervisor.controlGeneration({ principal: { kind: "user" }, command: command(kind, body) }),
     );
-  }
 
-  return Response.json(
-    await supervisor.controlGeneration({
-      principal: { kind: "user" },
-      command: command(kind, body),
-    }),
-  );
-}
+    return Response.json(result);
+  },
+  (handled, _request, _supervisor, kind) =>
+    handled.pipe(
+      Effect.catchTag("InvalidRequestBody", () =>
+        Effect.succeed(
+          jsonError(
+            400,
+            kind === "activate" ? "invalid-activation-request" : "invalid-rollback-request",
+          ),
+        ),
+      ),
+    ),
+);
 
 /**
  * Submit a harness commit as a generation candidate. The Supervisor labels the commit directly
@@ -136,30 +102,37 @@ export async function handleGenerationControl(
  * same commit is refused as a contradiction (`contradicts-recorded-outcome`) instead of silently
  * overwriting the first result.
  */
-export async function handleGenerationSubmission(
-  request: Request,
-  supervisor: GenerationSubmissionSupervisor,
-): Promise<Response> {
-  const body = parseGenerationSubmissionBody(await readJson(request));
+export const handleGenerationSubmission = Effect.fnUntraced(
+  function* (request: Request, supervisor: GenerationSubmissionSupervisor) {
+    const body = yield* decodeRequestBody(request, GenerationSubmissionBody);
+    const harnessCommit = parseHarnessCommit(body.harnessCommit);
 
-  if (body === undefined) {
-    return jsonError(400, "invalid-submission-request");
-  }
+    if (harnessCommit === undefined) {
+      return yield* new InvalidRequestBody();
+    }
 
-  const submitted = await supervisor.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit: body.harnessCommit },
-  });
+    const submitted = yield* callSupervisor(() =>
+      supervisor.controlGeneration({
+        principal: { kind: "user" },
+        command: { kind: "submit-candidate", harnessCommit },
+      }),
+    );
 
-  if (!submitted.ok) {
-    return Response.json(submitted);
-  }
+    if (!submitted.ok) {
+      return Response.json(submitted);
+    }
 
-  const result: GenerationSubmissionResult = {
-    ok: true,
-    outcome: submitted.outcome,
-    preparation: await supervisor.prepareGeneration(submitted.outcome.generation.label),
-  };
+    const result: GenerationSubmissionResult = {
+      ok: true,
+      outcome: submitted.outcome,
+      preparation: yield* callSupervisor(() =>
+        supervisor.prepareGeneration(submitted.outcome.generation.label),
+      ),
+    };
 
-  return Response.json(result);
-}
+    return Response.json(result);
+  },
+  Effect.catchTag("InvalidRequestBody", () =>
+    Effect.succeed(jsonError(400, "invalid-submission-request")),
+  ),
+);

@@ -1,12 +1,16 @@
 import { exports as workerExports } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
-import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import {
+  controlRequest,
+  ownerApiResponse,
+  ownerApiSupervisor as supervisor,
+  ownerScope,
+} from "./helpers.js";
 
 test("returns the active generation", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/status"),
     supervisor({
       getActiveGeneration() {
@@ -43,7 +47,7 @@ test("returns the active generation", async () => {
 });
 
 test("returns a project's thread", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/thread"),
     supervisor(),
     ownerScope,
@@ -63,7 +67,7 @@ test("returns a project's thread", async () => {
 });
 
 test("reports a project the catalog does not have without inventing a thread", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/projects/project-nine/thread"),
     supervisor(),
     ownerScope,
@@ -79,7 +83,7 @@ test("reports a project the catalog does not have without inventing a thread", a
 test("starts a fresh thread only on POST, and passes the id the client named", async () => {
   let reset: string | undefined;
 
-  const fresh = await routeOwnerApiRequest(
+  const fresh = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh", {
       method: "POST",
       headers: { origin: "https://cf-stumble.test" },
@@ -105,7 +109,7 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
     ownerScope,
   );
 
-  const wrongMethod = await routeOwnerApiRequest(
+  const wrongMethod = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh"),
     supervisor(),
     ownerScope,
@@ -119,7 +123,7 @@ test("starts a fresh thread only on POST, and passes the id the client named", a
 test("resets the workspace and reports what it reset", async () => {
   let calls = 0;
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/workspace/reset", {
       method: "POST",
       headers: { origin: "https://cf-stumble.test" },
@@ -160,13 +164,13 @@ test("an unauthenticated workspace reset cannot reach the owner API", async () =
 });
 
 test("returns JSON 404 for unknown route and method pairs", async () => {
-  const unknownPath = await routeOwnerApiRequest(
+  const unknownPath = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/unknown"),
     supervisor(),
     ownerScope,
   );
 
-  const unknownMethod = await routeOwnerApiRequest(
+  const unknownMethod = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/status", {
       method: "POST",
       headers: { origin: "https://cf-stumble.test" },
@@ -221,13 +225,13 @@ test("an unauthenticated request cannot reach a generation control route", async
 });
 
 test("keeps the generation control routes POST-only", async () => {
-  const getActivate = await routeOwnerApiRequest(
+  const getActivate = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/generations/activate"),
     supervisor(),
     ownerScope,
   );
 
-  const getSubmit = await routeOwnerApiRequest(
+  const getSubmit = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/generations/submit"),
     supervisor(),
     ownerScope,
@@ -238,7 +242,7 @@ test("keeps the generation control routes POST-only", async () => {
 });
 
 test("refuses a cross-origin POST before it looks for a route", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/unknown", {
       method: "POST",
       headers: { origin: "https://evil.example" },

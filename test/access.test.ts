@@ -2,11 +2,7 @@
 
 import { exports as workerExports } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
-import {
-  authenticateAccessRequest,
-  deriveSupervisorName,
-  verifyAccessToken,
-} from "../src/access/index.js";
+import { accessResult, supervisorNameFor, verificationResult } from "./access-results.js";
 import type { VerifyAccessTokenInput } from "../src/access/index.js";
 import {
   accessAudience as audience,
@@ -49,7 +45,7 @@ async function validToken(
 describe("Cloudflare Access JWT verification", () => {
   test.each(["RS256", "ES256"] as const)("accepts a valid %s token", async (algorithm) => {
     const signed = await validToken(algorithm);
-    await expect(verifyAccessToken(input(signed.token, signed.key))).resolves.toEqual({
+    await expect(verificationResult(input(signed.token, signed.key))).resolves.toEqual({
       ok: true,
       principal: { kind: "user", subject: "user-1" },
     });
@@ -62,7 +58,7 @@ describe("Cloudflare Access JWT verification", () => {
     // A fixed replacement character matches the original signature about one run in sixty-four.
     const changedFirst = signature.startsWith("A") ? "B" : "A";
     const tampered = `${parts[0]}.${parts[1]}.${changedFirst}${signature.slice(1)}`;
-    await expect(verifyAccessToken(input(tampered, signed.key))).resolves.toMatchObject({
+    await expect(verificationResult(input(tampered, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "invalid-signature",
     });
@@ -78,7 +74,7 @@ describe("Cloudflare Access JWT verification", () => {
       sub: "user-1",
     });
 
-    await expect(verifyAccessToken(input(wrongIssuer, signed.key))).resolves.toMatchObject({
+    await expect(verificationResult(input(wrongIssuer, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "wrong-issuer",
     });
@@ -94,7 +90,7 @@ describe("Cloudflare Access JWT verification", () => {
       sub: "user-1",
     });
 
-    await expect(verifyAccessToken(input(wrongAudience, signed.key))).resolves.toMatchObject({
+    await expect(verificationResult(input(wrongAudience, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "wrong-audience",
     });
@@ -110,7 +106,7 @@ describe("Cloudflare Access JWT verification", () => {
       sub: "user-1",
     });
 
-    await expect(verifyAccessToken(input(expired, signed.key))).resolves.toMatchObject({
+    await expect(verificationResult(input(expired, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "expired",
     });
@@ -127,7 +123,7 @@ describe("Cloudflare Access JWT verification", () => {
       sub: "user-1",
     });
 
-    await expect(verifyAccessToken(input(notYetValid, signed.key))).resolves.toMatchObject({
+    await expect(verificationResult(input(notYetValid, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "not-yet-valid",
     });
@@ -142,7 +138,7 @@ describe("Cloudflare Access JWT verification", () => {
       exp: now + 60,
     });
 
-    await expect(verifyAccessToken(input(missingIdentity, signed.key))).resolves.toMatchObject({
+    await expect(verificationResult(input(missingIdentity, signed.key))).resolves.toMatchObject({
       ok: false,
       reason: "missing-identity",
     });
@@ -159,7 +155,7 @@ describe("Cloudflare Access JWT verification", () => {
       common_name: "client-id.access",
     });
 
-    await expect(verifyAccessToken(input(serviceToken, signed.key))).resolves.toEqual({
+    await expect(verificationResult(input(serviceToken, signed.key))).resolves.toEqual({
       ok: true,
       principal: { kind: "service-token", clientId: "client-id.access" },
     });
@@ -173,7 +169,7 @@ describe("Cloudflare Access JWT verification", () => {
     for (const anonymousClaims of [claims, { ...claims, common_name: "" }]) {
       const anonymous = await signAccessToken(signed.key, anonymousClaims);
 
-      await expect(verifyAccessToken(input(anonymous, signed.key))).resolves.toEqual({
+      await expect(verificationResult(input(anonymous, signed.key))).resolves.toEqual({
         ok: false,
         reason: "missing-identity",
       });
@@ -191,7 +187,7 @@ describe("Cloudflare Access JWT verification", () => {
       common_name: "client-id.access",
     });
 
-    await expect(verifyAccessToken(input(both, signed.key))).resolves.toEqual({
+    await expect(verificationResult(input(both, signed.key))).resolves.toEqual({
       ok: true,
       principal: { kind: "user", subject: "user-1" },
     });
@@ -203,7 +199,7 @@ describe("Cloudflare Access JWT verification", () => {
     const header = encode(JSON.stringify({ alg, kid: signed.key.publicJwk.kid }));
 
     await expect(
-      verifyAccessToken(input(`${header}.${claims}.${signature}`, signed.key)),
+      verificationResult(input(`${header}.${claims}.${signature}`, signed.key)),
     ).resolves.toEqual({ ok: false, reason: "unsupported-algorithm" });
   });
 
@@ -213,14 +209,14 @@ describe("Cloudflare Access JWT verification", () => {
 
     for (const publicJwk of [{ ...signed.key.publicJwk, alg: "ES256" }, otherFamily.publicJwk]) {
       await expect(
-        verifyAccessToken({ ...input(signed.token, signed.key), publicKeys: [publicJwk] }),
+        verificationResult({ ...input(signed.token, signed.key), publicKeys: [publicJwk] }),
       ).resolves.toEqual({ ok: false, reason: "invalid-signature" });
     }
   });
 
   test("rejects an unauthenticated request before configuration or routing", async () => {
     await expect(
-      authenticateAccessRequest(
+      accessResult(
         new Request("https://cf-stumble.test/"),
         {
           CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
@@ -239,7 +235,7 @@ describe("Cloudflare Access JWT verification", () => {
 });
 
 test("rejects an http team domain as invalid configuration", async () => {
-  const result = await authenticateAccessRequest(
+  const result = await accessResult(
     new Request("https://stumble.example/", {
       headers: { "cf-access-jwt-assertion": "header.payload.signature" },
     }),
@@ -255,14 +251,14 @@ test("rejects an http team domain as invalid configuration", async () => {
 
 describe("Access-derived Supervisor names", () => {
   test("gives distinct identities distinct names", async () => {
-    await expect(deriveSupervisorName({ identity: "user-1", audience })).not.resolves.toBe(
-      await deriveSupervisorName({ identity: "user-2", audience }),
+    await expect(supervisorNameFor({ identity: "user-1", audience })).not.resolves.toBe(
+      await supervisorNameFor({ identity: "user-2", audience }),
     );
   });
 
   test("keeps the same identity stable", async () => {
-    await expect(deriveSupervisorName({ identity: "user-1", audience })).resolves.toBe(
-      await deriveSupervisorName({ identity: "user-1", audience }),
+    await expect(supervisorNameFor({ identity: "user-1", audience })).resolves.toBe(
+      await supervisorNameFor({ identity: "user-1", audience }),
     );
   });
 });

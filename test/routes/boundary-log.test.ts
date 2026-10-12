@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import worker from "../../src/worker.js";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { capturedEvents, named } from "../log-capture.js";
 import {
   accessAudience,
@@ -11,7 +10,7 @@ import {
   signingKey,
   type SigningKey,
 } from "../access-tokens.js";
-import { ownerApiSupervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor, ownerScope } from "./helpers.js";
 
 /**
  * A refusal at the boundary is logged with a reason code, the route pattern it hit, and the
@@ -124,7 +123,7 @@ test("a deployment with no owner configured is refused as its own fault, at erro
 test("a cross-origin mutation is refused with the route pattern, and never the origin", async () => {
   const events = capturedEvents();
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/projects/secret-project/thread/fresh", {
       method: "POST",
       headers: { origin: "https://evil.example" },

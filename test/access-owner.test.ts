@@ -12,7 +12,8 @@
 
 import { env } from "cloudflare:workers";
 import { describe, expect, test } from "vitest";
-import { authenticateAccessRequest, type AccessWorkerEnvironment } from "../src/access/index.js";
+import type { AccessWorkerEnvironment } from "../src/access/index.js";
+import { accessResult } from "./access-results.js";
 import worker from "../src/worker.js";
 import {
   accessAgentClientId,
@@ -74,7 +75,7 @@ describe("the owner allowlist", () => {
     const token = await tokenFor(key, accessOwnerSubject);
 
     await expect(
-      authenticateAccessRequest(requestWith(token), environment(key, accessOwnerSubject)),
+      accessResult(requestWith(token), environment(key, accessOwnerSubject)),
     ).resolves.toMatchObject({ ok: true });
   });
 
@@ -83,7 +84,7 @@ describe("the owner allowlist", () => {
     const token = await tokenFor(key, accessOwnerSubject);
 
     await expect(
-      authenticateAccessRequest(requestWith(token), environment(key, `${accessOwnerSubject}\n`)),
+      accessResult(requestWith(token), environment(key, `${accessOwnerSubject}\n`)),
     ).resolves.toMatchObject({ ok: true });
   });
 
@@ -91,10 +92,7 @@ describe("the owner allowlist", () => {
     const key = await signingKey("owner-reject-key");
     const token = await tokenFor(key, "some-other-verified-user");
 
-    const result = await authenticateAccessRequest(
-      requestWith(token),
-      environment(key, accessOwnerSubject),
-    );
+    const result = await accessResult(requestWith(token), environment(key, accessOwnerSubject));
 
     // `AccessRequestResult` carries `supervisorName` only on the `ok: true` branch, so this
     // equality also proves no Supervisor Durable Object name exists anywhere in the result.
@@ -156,7 +154,7 @@ describe("the owner allowlist", () => {
       const token = await tokenFor(key, accessOwnerSubject);
 
       await expect(
-        authenticateAccessRequest(requestWith(token), environment(key, ownerSub)),
+        accessResult(requestWith(token), environment(key, ownerSub)),
       ).resolves.toStrictEqual({ ok: false, reason: "invalid-configuration" });
     },
   );
@@ -180,8 +178,8 @@ describe("the owner's agent service token", () => {
     const ownerToken = await tokenFor(key, accessOwnerSubject);
     const agentToken = await serviceTokenFor(key, accessAgentClientId);
 
-    const asOwner = await authenticateAccessRequest(requestWith(ownerToken), accessEnv);
-    const asAgent = await authenticateAccessRequest(requestWith(agentToken), accessEnv);
+    const asOwner = await accessResult(requestWith(ownerToken), accessEnv);
+    const asAgent = await accessResult(requestWith(agentToken), accessEnv);
 
     expect(asOwner.ok).toBe(true);
     expect(asAgent).toStrictEqual(asOwner);
@@ -198,10 +196,7 @@ describe("the owner's agent service token", () => {
     });
 
     await expect(
-      authenticateAccessRequest(
-        requestWith(token),
-        agentEnvironment(key, `${accessAgentClientId}\n`),
-      ),
+      accessResult(requestWith(token), agentEnvironment(key, `${accessAgentClientId}\n`)),
     ).resolves.toMatchObject({ ok: true, scope: { identity: accessOwnerSubject } });
   });
 
@@ -210,7 +205,7 @@ describe("the owner's agent service token", () => {
     const token = await serviceTokenFor(key, "another-client-id.access");
 
     await expect(
-      authenticateAccessRequest(requestWith(token), agentEnvironment(key, accessAgentClientId)),
+      accessResult(requestWith(token), agentEnvironment(key, accessAgentClientId)),
     ).resolves.toStrictEqual({ ok: false, reason: "missing-identity" });
   });
 
@@ -221,7 +216,7 @@ describe("the owner's agent service token", () => {
       const token = await serviceTokenFor(key, accessAgentClientId);
 
       await expect(
-        authenticateAccessRequest(requestWith(token), agentEnvironment(key, agentClientId)),
+        accessResult(requestWith(token), agentEnvironment(key, agentClientId)),
       ).resolves.toStrictEqual({ ok: false, reason: "missing-identity" });
     },
   );
@@ -232,7 +227,7 @@ describe("the owner's agent service token", () => {
     const forged = await serviceTokenFor(forger, accessAgentClientId);
 
     await expect(
-      authenticateAccessRequest(requestWith(forged), agentEnvironment(key, accessAgentClientId)),
+      accessResult(requestWith(forged), agentEnvironment(key, accessAgentClientId)),
     ).resolves.toStrictEqual({ ok: false, reason: "invalid-signature" });
   });
 
@@ -248,7 +243,7 @@ describe("the owner's agent service token", () => {
     });
 
     await expect(
-      authenticateAccessRequest(requestWith(token), agentEnvironment(key, accessAgentClientId)),
+      accessResult(requestWith(token), agentEnvironment(key, accessAgentClientId)),
     ).resolves.toStrictEqual({ ok: false, reason: "not-owner" });
   });
 

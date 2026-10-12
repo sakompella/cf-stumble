@@ -1,12 +1,16 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { GenerationRequest } from "../../src/supervisor/control/index.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
-import { controlRequest, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import {
+  controlRequest,
+  ownerApiResponse,
+  ownerApiSupervisor as supervisor,
+  ownerScope,
+} from "./helpers.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -101,7 +105,7 @@ test("labels the commit directly, then prepares that label", async () => {
     submissions: 0,
   };
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     recordingSupervisor(record),
     ownerScope,
@@ -124,7 +128,7 @@ test("labels the commit directly, then prepares that label", async () => {
 });
 
 test("returns a failed startup check as the recorded preparation result", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
@@ -154,7 +158,7 @@ test("returns a failed startup check as the recorded preparation result", async 
 });
 
 test("returns a build failure as a preparation problem rather than a transport error", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
@@ -186,7 +190,7 @@ test("returns a failed build step's output tail to the owner and writes none of 
 
   capturedEvents();
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
@@ -218,7 +222,7 @@ test("returns a failed build step's output tail to the owner and writes none of 
 test("prepares nothing when the control operation rejects the submission", async () => {
   let prepared = false;
 
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
@@ -259,7 +263,7 @@ test.each(malformedBodies)(
   async (_description, body) => {
     let invoked = false;
 
-    const response = await routeOwnerApiRequest(
+    const response = await ownerApiResponse(
       submitRequest(body),
       supervisor({
         controlGeneration() {
@@ -286,7 +290,7 @@ test.each(malformedBodies)(
 );
 
 test("reports a labeling failure without echoing the internal error", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {
@@ -303,7 +307,7 @@ test("reports a labeling failure without echoing the internal error", async () =
 });
 
 test("reports a preparation failure without echoing the internal error", async () => {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
       controlGeneration() {

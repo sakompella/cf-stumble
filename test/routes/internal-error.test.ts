@@ -1,9 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
 import { textLines } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
-import { controlRequest, ownerApiSupervisor, ownerScope } from "./helpers.js";
+import { controlRequest, ownerApiResponse, ownerApiSupervisor, ownerScope } from "./helpers.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
@@ -84,7 +83,7 @@ test.each(throwingRoutes)(
   async (route, request, overrides) => {
     const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await routeOwnerApiRequest(request, ownerApiSupervisor(overrides), ownerScope);
+    const response = await ownerApiResponse(request, ownerApiSupervisor(overrides), ownerScope);
 
     expect(response.status).toBe(500);
     const body = await response.text();

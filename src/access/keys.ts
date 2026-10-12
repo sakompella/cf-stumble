@@ -1,96 +1,72 @@
 // The JWKS document is untrusted input, so keys are parsed before the verifier ever sees them.
-// oxlint-disable anti-slop/no-unknown-parameters
-import { Result } from "better-result";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { logRedactedCause } from "../diagnostics.js";
-import { isRecord } from "../untrusted.js";
 
 export type AccessFetch = typeof fetch;
 
 /**
- * Why a JWKS load produced no keys: the certs endpoint rejected, answered a non-2xx status, or
- * answered a body that did not parse into a usable key set. A caller cannot and should not tell
- * these apart (ADR-0035); every one of them is Cloudflare Access's key service, not the presented
- * token, so `verifyUsingAccessKeys` turns this into a public `key-service-unavailable` reason
- * rather than folding it into `invalid-signature`. The cause itself is logged for operators at the
- * point it is discarded, not carried on this value.
+ * Cloudflare Access's key service produced no keys: the certs endpoint rejected, answered a non-2xx
+ * status, or answered a body that did not parse into a usable key set. A caller cannot and should
+ * not tell these apart; every one of them is the key service, not the presented token, so the
+ * boundary reports `key-service-unavailable` rather than folding it into `invalid-signature`. The
+ * cause is logged for operators where it is discarded, not carried here.
  */
-type KeyLoadFailure = Readonly<{ code: "key-service-unavailable" }>;
+export class KeyServiceUnavailable extends Data.TaggedError("KeyServiceUnavailable") {
+  get reason(): "key-service-unavailable" {
+    return "key-service-unavailable";
+  }
+}
 
 /**
  * A signing key this module accepted. `JsonWebKey` in workers-types has no `kid`, and Access
- * publishes one per key, so the parsed type carries the field the verifier reads. The parser
+ * publishes one per key, so the parsed type carries the field the verifier reads. `PublicJwk`
  * below is the only place that decides a `kid` is a non-empty string.
  */
 export interface AccessPublicKey extends JsonWebKey {
   readonly kid?: string;
 }
 
-interface CachedPublicKeys {
-  readonly fetcher: AccessFetch;
-  readonly url: string;
-  readonly expiresAt: number;
-  readonly keys: readonly AccessPublicKey[];
-}
+const signingKeyFields = {
+  alg: Schema.optionalKey(Schema.Literals(["RS256", "ES256"])),
+  use: Schema.optionalKey(Schema.Literal("sig")),
+  kid: Schema.optionalKey(Schema.NonEmptyString),
+};
 
-const publicKeyCacheTtlMs = 5 * 60 * 1000;
+const PublicJwk = Schema.Union([
+  Schema.Struct({
+    ...signingKeyFields,
+    kty: Schema.Literal("RSA"),
+    n: Schema.NonEmptyString,
+    e: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
+    ...signingKeyFields,
+    kty: Schema.Literal("EC"),
+    crv: Schema.Literal("P-256"),
+    x: Schema.NonEmptyString,
+    y: Schema.NonEmptyString,
+  }),
+]);
 
-const publicKeyRefreshCooldownMs = 30 * 1000;
+const PublicJwks = Schema.NonEmptyArray(PublicJwk);
 
-let publicKeyCache: CachedPublicKeys | undefined;
+const KeySetDocument = Schema.Union([PublicJwks, Schema.Struct({ keys: PublicJwks })]);
 
-let publicKeyRefreshAllowedAt = 0;
+// `Schema.is` checks the document without rebuilding it: a decode would strip fields such as
+// `key_ops` and `ext` that `crypto.subtle.importKey` still enforces.
+const isKeySetDocument = Schema.is(KeySetDocument);
 
-let publicKeyFetchInFlight: Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> | undefined;
+const isKeyList = Schema.is(PublicJwks);
 
-function isPublicJwk(value: unknown): value is AccessPublicKey {
-  if (!isRecord(value) || typeof value.kty !== "string") {
-    return false;
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a JWKS document is untrusted JSON.
+function parsePublicKeys(document: unknown): readonly AccessPublicKey[] | undefined {
+  if (!isKeySetDocument(document)) {
+    return undefined;
   }
 
-  if (value.alg !== undefined && value.alg !== "RS256" && value.alg !== "ES256") {
-    return false;
-  }
-
-  if (value.use !== undefined && value.use !== "sig") {
-    return false;
-  }
-
-  if (value.kid !== undefined && (typeof value.kid !== "string" || value.kid.length === 0)) {
-    return false;
-  }
-
-  if (value.kty === "RSA") {
-    return (
-      typeof value.n === "string" &&
-      value.n.length > 0 &&
-      typeof value.e === "string" &&
-      value.e.length > 0
-    );
-  }
-
-  if (value.kty === "EC") {
-    return (
-      value.crv === "P-256" &&
-      typeof value.x === "string" &&
-      value.x.length > 0 &&
-      typeof value.y === "string" &&
-      value.y.length > 0
-    );
-  }
-
-  return false;
-}
-
-function parsePublicKeys(value: unknown): readonly AccessPublicKey[] | undefined {
-  const keys = Array.isArray(value)
-    ? value
-    : isRecord(value) && Array.isArray(value.keys)
-      ? value.keys
-      : undefined;
-
-  return keys !== undefined && keys.length > 0 && keys.every((item) => isPublicJwk(item))
-    ? keys
-    : undefined;
+  return isKeyList(document) ? document : document.keys;
 }
 
 export function parseSerializedPublicKeys(
@@ -131,6 +107,29 @@ export function certsUrl(issuer: string): string | undefined {
   }
 }
 
+interface CachedPublicKeys {
+  readonly fetcher: AccessFetch;
+  readonly url: string;
+  readonly expiresAt: number;
+  readonly keys: readonly AccessPublicKey[];
+}
+
+const publicKeyCacheTtlMs = 5 * 60 * 1000;
+
+const publicKeyRefreshCooldownMs = 30 * 1000;
+
+let publicKeyCache: CachedPublicKeys | undefined;
+
+let publicKeyRefreshAllowedAt = 0;
+
+/**
+ * The one key load in progress, shared by every request this isolate is serving. It is a native
+ * Promise rather than a fiber or a `Deferred` on purpose. A request that awaits a Promise resumes
+ * in its own request context; a fiber that another request's fiber resumed would run the rest of
+ * this request, including its Supervisor call, from inside that other request.
+ */
+let publicKeyFetchInFlight: Promise<readonly AccessPublicKey[] | undefined> | undefined;
+
 function cachedPublicKeys(
   url: string,
   fetcher: AccessFetch,
@@ -144,10 +143,11 @@ function cachedPublicKeys(
     : undefined;
 }
 
+/** Fetch and parse the key set once. A failure is logged here, once per load, and is `undefined`. */
 async function loadPublicKeys(
   url: string,
   fetcher: AccessFetch,
-): Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> {
+): Promise<readonly AccessPublicKey[] | undefined> {
   try {
     const response = await fetcher(url);
 
@@ -157,7 +157,7 @@ async function loadPublicKeys(
         `unexpected JWKS response status ${response.status}`,
       );
 
-      return Result.err({ code: "key-service-unavailable" });
+      return undefined;
     }
 
     const keys = parsePublicKeys(await response.json());
@@ -168,33 +168,29 @@ async function loadPublicKeys(
         "JWKS response body did not parse into a usable key set",
       );
 
-      return Result.err({ code: "key-service-unavailable" });
+      return undefined;
     }
 
     publicKeyCache = { fetcher, url, expiresAt: Date.now() + publicKeyCacheTtlMs, keys };
 
-    return Result.ok(keys);
+    return keys;
   } catch (cause) {
     logRedactedCause("access-keys.load: key-service-unavailable", cause);
 
-    return Result.err({ code: "key-service-unavailable" });
+    return undefined;
   }
 }
 
-/**
- * An unverified token names its own key, so a refresh must never be one fetch per request.
- * Concurrent callers share one request and a rejected key id cannot force the next one.
- */
-export function fetchPublicKeys(
+function sharedKeyLoad(
   url: string,
   fetcher: AccessFetch,
   forceRefresh: boolean,
-): Promise<Result<readonly AccessPublicKey[], KeyLoadFailure>> {
+): Promise<readonly AccessPublicKey[] | undefined> {
   const now = Date.now();
   const cached = cachedPublicKeys(url, fetcher, now);
 
   if (cached !== undefined && (!forceRefresh || now < publicKeyRefreshAllowedAt)) {
-    return Promise.resolve(Result.ok(cached));
+    return Promise.resolve(cached);
   }
 
   if (publicKeyFetchInFlight === undefined) {
@@ -208,4 +204,20 @@ export function fetchPublicKeys(
   }
 
   return publicKeyFetchInFlight;
+}
+
+/**
+ * An unverified token names its own key, so a refresh must never be one fetch per request.
+ * Concurrent callers share one request and a rejected key id cannot force the next one.
+ */
+export function fetchPublicKeys(
+  url: string,
+  fetcher: AccessFetch,
+  forceRefresh: boolean,
+): Effect.Effect<readonly AccessPublicKey[], KeyServiceUnavailable> {
+  return Effect.promise(() => sharedKeyLoad(url, fetcher, forceRefresh)).pipe(
+    Effect.flatMap((keys) =>
+      keys === undefined ? Effect.fail(new KeyServiceUnavailable()) : Effect.succeed(keys),
+    ),
+  );
 }

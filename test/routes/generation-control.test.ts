@@ -3,14 +3,13 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   prepareFixtureGeneration,
   prepareGeneration,
   submitCandidate,
 } from "../supervisor/helpers.js";
-import { ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerScope } from "./helpers.js";
 
 const commits = {
   second: "0123456789abcdef0123456789abcdef01234567",
@@ -32,7 +31,7 @@ function control(
   command: "activate" | "rollback",
   body: ControlBody,
 ): Promise<Response> {
-  return routeOwnerApiRequest(
+  return ownerApiResponse(
     new Request(`https://cf-stumble.test/api/generations/${command}`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
@@ -45,7 +44,7 @@ function control(
 
 /** The epoch the owner page reads is the epoch an activation request must carry. */
 async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number> {
-  const response = await routeOwnerApiRequest(
+  const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/status"),
     stub,
     ownerScope,

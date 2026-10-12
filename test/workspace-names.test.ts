@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { deriveSupervisorName } from "../src/access/index.js";
+import { supervisorNameFor } from "./access-results.js";
 import { tenantWorkspaceName } from "../src/workspace-names.js";
 
 /**
@@ -11,7 +11,7 @@ import { tenantWorkspaceName } from "../src/workspace-names.js";
 const audience = "workspace-name-audience";
 
 function nameFor(identity: string): Promise<string> {
-  return deriveSupervisorName({ identity, audience });
+  return supervisorNameFor({ identity, audience });
 }
 
 test("gives different tenants different workspaces and keeps one tenant stable", async () => {

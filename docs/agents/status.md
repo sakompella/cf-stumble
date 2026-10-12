@@ -110,4 +110,6 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     budgets. It is not deployed. The script route, its `immutable` cache header, and the
     `script-src 'self'` policy behind real Cloudflare Access need a staging check, and so does
     Worker startup time: local `wrangler check startup` profiles hold too few samples to compare.
-    The page itself, Access, the Supervisor, and the Workspace Host have not moved yet.
+    Wave 1 moved the Worker's request, Cloudflare Access, the owner API routes, and the model
+    route's provider stream to Effect; better-result is gone from them. The page itself, the
+    Supervisor, and the Workspace Host have not moved yet.

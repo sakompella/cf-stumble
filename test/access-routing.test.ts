@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
-import { deriveSupervisorName } from "../src/access/index.js";
+import { supervisorNameFor } from "./access-results.js";
 import worker from "../src/worker.js";
 import {
   accessAudience,
@@ -33,7 +33,7 @@ function ownerToken(key: SigningKey): Promise<string> {
 }
 
 async function supervisorSpy() {
-  const name = await deriveSupervisorName({
+  const name = await supervisorNameFor({
     identity: accessOwnerSubject,
     audience: accessAudience,
   });

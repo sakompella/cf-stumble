@@ -1,6 +1,6 @@
 import { env as workerTestEnv } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
-import { authenticateAccessRequest } from "../src/access/index.js";
+import { accessResult } from "./access-results.js";
 import worker from "../src/worker.js";
 
 import {
@@ -57,14 +57,10 @@ test("loads keys from the team certs URL and uses the cache", async () => {
     CF_ACCESS_OWNER_SUB: accessOwnerSubject,
   };
 
-  await expect(
-    authenticateAccessRequest(request(signed), env, now, crypto, fetcher),
-  ).resolves.toMatchObject({
+  await expect(accessResult(request(signed), env, now, crypto, fetcher)).resolves.toMatchObject({
     ok: true,
   });
-  await expect(
-    authenticateAccessRequest(request(signed), env, now, crypto, fetcher),
-  ).resolves.toMatchObject({
+  await expect(accessResult(request(signed), env, now, crypto, fetcher)).resolves.toMatchObject({
     ok: true,
   });
   expect(fetches).toBe(1);
@@ -90,14 +86,10 @@ test("refreshes keys once when rotation introduces an unknown kid", async () => 
     CF_ACCESS_OWNER_SUB: accessOwnerSubject,
   };
 
-  await expect(
-    authenticateAccessRequest(request(oldToken), env, now, crypto, fetcher),
-  ).resolves.toMatchObject({
+  await expect(accessResult(request(oldToken), env, now, crypto, fetcher)).resolves.toMatchObject({
     ok: true,
   });
-  await expect(
-    authenticateAccessRequest(request(newToken), env, now, crypto, fetcher),
-  ).resolves.toMatchObject({
+  await expect(accessResult(request(newToken), env, now, crypto, fetcher)).resolves.toMatchObject({
     ok: true,
   });
   expect(fetches).toBe(2);
@@ -109,7 +101,7 @@ test("reports a key-service failure when fetching the JWKS rejects, without expo
   const fetcher: typeof fetch = () => Promise.reject(new Error(`JWKS unavailable for ${signed}`));
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const result = await authenticateAccessRequest(
+  const result = await accessResult(
     request(signed),
     {
       CF_ACCESS_TEAM_DOMAIN: "failed.cloudflareaccess.com",
@@ -137,7 +129,7 @@ test("reports a key-service failure when the JWKS endpoint answers a non-2xx sta
   const signed = await token(key, "status-user");
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const result = await authenticateAccessRequest(
+  const result = await accessResult(
     request(signed),
     {
       CF_ACCESS_TEAM_DOMAIN: "statuscode.cloudflareaccess.com",
@@ -160,7 +152,7 @@ test("reports a key-service failure when the JWKS response body is not JSON", as
   const signed = await token(key, "malformed-json-user");
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const result = await authenticateAccessRequest(
+  const result = await accessResult(
     request(signed),
     {
       CF_ACCESS_TEAM_DOMAIN: "malformedjson.cloudflareaccess.com",
@@ -187,7 +179,7 @@ test("reports a key-service failure for malformed JWKS shapes, without exposing 
 
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const result = await authenticateAccessRequest(
+  const result = await accessResult(
     request(signed),
     {
       CF_ACCESS_TEAM_DOMAIN: "malformed.cloudflareaccess.com",
@@ -245,7 +237,7 @@ test("reports a key-service failure when a forced refresh fails after an unknown
 
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  const result = await authenticateAccessRequest(
+  const result = await accessResult(
     request(signed),
     {
       CF_ACCESS_TEAM_DOMAIN: "refresh-outage.cloudflareaccess.com",
@@ -282,7 +274,7 @@ test("does not refetch keys for repeated unknown key ids", async () => {
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await expect(
-      authenticateAccessRequest(request(unknownToken), env, now, crypto, fetcher),
+      accessResult(request(unknownToken), env, now, crypto, fetcher),
     ).resolves.toStrictEqual({ ok: false, reason: "invalid-signature" });
   }
 
@@ -311,9 +303,7 @@ test("shares one key fetch across concurrent cold requests", async () => {
   };
 
   const results = await Promise.all(
-    Array.from({ length: 4 }, () =>
-      authenticateAccessRequest(request(signed), env, now, crypto, fetcher),
-    ),
+    Array.from({ length: 4 }, () => accessResult(request(signed), env, now, crypto, fetcher)),
   );
 
   expect(results.every((result) => result.ok)).toBe(true);

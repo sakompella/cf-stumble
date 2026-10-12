@@ -1,10 +1,9 @@
 import { expect, test } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
-import { routeOwnerApiRequest } from "../../src/routes/index.js";
 import { emptyThread, serializedThread } from "../../src/supervisor/threads/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
-import { ownerApiSupervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor, ownerScope } from "./helpers.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
@@ -266,7 +265,7 @@ test.each(
   async (_mutationName, _originName, mutation, origin) => {
     const calls = { value: 0 };
 
-    const response = await routeOwnerApiRequest(
+    const response = await ownerApiResponse(
       requestFor(mutation, origin.value),
       successfulSupervisor(mutation.operation, calls),
       ownerScope,
