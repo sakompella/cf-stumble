@@ -9,6 +9,7 @@ import {
   readThread,
   sleep,
   waitForText,
+  waitForThreadOk,
   completeTurn,
   readTurn,
   assertIncludes,
@@ -55,6 +56,8 @@ async function finishRollback(
 ): Promise<string> {
   await page.reload();
   await waitForGeneration(page, "1", "5");
+  // The status and the thread are read independently after a load, so the status can arrive first.
+  await waitForThreadOk(page);
   const reloaded = await readThread(page);
   const retained = await readConversation(page);
   assertSame(reloaded.project, evidence.before.project, "the project after rollback and reload");

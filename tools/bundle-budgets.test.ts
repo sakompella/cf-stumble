@@ -8,18 +8,19 @@ import { gzipSync } from "node:zlib";
 import { OWNER_PAGE_SCRIPT_SOURCE } from "../src/page/owner-script.generated.ts";
 
 /**
- * Size ceilings for what a deploy uploads and what the owner's browser downloads. They are the
- * sizes the Foldkit spike measured for the finished port plus about 10 percent, so a port that
- * grows past its expected cost fails here instead of in production. ADR-0046 records the measured
- * values.
+ * Size ceilings for what a deploy uploads and what the owner's browser downloads, so a change that
+ * grows past its expected cost fails here instead of in production. The Worker limit is the size
+ * the Foldkit spike measured for the finished port plus about 10 percent. The page limit is the
+ * Foldkit page's measured size plus about 10 percent (200,595 bytes gzip in Wave 5). ADR-0046
+ * records the measured values.
  *
  * gzip runs at the default level, which reproduces the "gzip" figure `wrangler deploy` prints.
  */
 const KIB = 1024;
 
-const WORKER_UPLOAD_GZIP_LIMIT = 400 * KIB;
+const WORKER_UPLOAD_GZIP_LIMIT = 600 * KIB;
 
-const OWNER_SCRIPT_GZIP_LIMIT = 230 * KIB;
+const OWNER_SCRIPT_GZIP_LIMIT = 216 * KIB;
 
 const repoRoot = resolve(import.meta.dirname, "..");
 

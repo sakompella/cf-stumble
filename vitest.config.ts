@@ -21,8 +21,14 @@ const EFFECT_IMPORT = /from\s+"(effect(?:\/[\w-]+)*)"/gu;
 
 const PREBUNDLE_DIRECTORY = resolve(import.meta.dirname, "node_modules/.cache/effect-prebundle");
 
+/** The owner page's browser program and its tests run in Node, not in the workers pool. */
+const OWNER_PAGE_CLIENT = ["src/page/client/**", "test/page/client/**"];
+
 function importedEffectPaths(): readonly string[] {
-  const sources = globSync(["src/**/*.ts", "test/**/*.ts"], { cwd: import.meta.dirname });
+  const sources = globSync(["src/**/*.ts", "test/**/*.ts"], {
+    cwd: import.meta.dirname,
+    exclude: OWNER_PAGE_CLIENT,
+  });
 
   const paths = sources.flatMap((source) =>
     [...readFileSync(resolve(import.meta.dirname, source), "utf8").matchAll(EFFECT_IMPORT)].map(
@@ -78,6 +84,10 @@ async function effectPrebundle(): Promise<Plugin> {
  * run in Node, but each has a workerd sibling enforced by test/docs/props-siblings.test.ts.
  * Shell tests also run in Node, because workerd has no `node:child_process` to start `/bin/sh`.
  * tsconfig.json still typechecks both projects against the Worker globals.
+ *
+ * The owner page's Foldkit program runs in a browser, so its tests run in Node too, and its own
+ * tsconfig files typecheck it against the DOM. Foldkit imports the `effect` index, which the
+ * prebundle above deliberately refuses.
  */
 export default defineConfig({
   test: {
@@ -91,13 +101,22 @@ export default defineConfig({
         test: {
           name: "workers",
           include: ["test/**/*.test.ts"],
-          exclude: [...defaultExclude, "**/*.props.test.ts", "**/*.shell.test.ts"],
+          exclude: [
+            ...defaultExclude,
+            "**/*.props.test.ts",
+            "**/*.shell.test.ts",
+            ...OWNER_PAGE_CLIENT,
+          ],
         },
       },
       {
         test: {
           name: "node",
-          include: ["test/**/*.props.test.ts", "test/**/*.shell.test.ts"],
+          include: [
+            "test/**/*.props.test.ts",
+            "test/**/*.shell.test.ts",
+            "test/page/client/**/*.test.ts",
+          ],
           environment: "node",
           pool: "forks",
         },

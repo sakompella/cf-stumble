@@ -1,0 +1,10 @@
+{
+  // Tests of the owner page's browser program. They import its modules, which use the DOM library,
+  // so they are typechecked with it. The root tsconfig excludes this directory.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["./**/*.ts", "../../../src/page/client/**/*.ts"]
+}

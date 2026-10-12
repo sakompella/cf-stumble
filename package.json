@@ -7,7 +7,7 @@
     "test": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest run",
     "test:tools": "node --test 'tools/**/*.test.ts'",
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/page/client && tsc --noEmit -p test/page/client",
     "typecheck:tools": "tsc --noEmit -p tools",
     "lint": "oxlint --type-aware --max-warnings=0 --report-unused-disable-directives",
     "format": "oxfmt",

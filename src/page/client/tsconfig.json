@@ -1,0 +1,10 @@
+{
+  // The owner page's browser program. It runs in the browser, not in workerd, so it gets the DOM
+  // library instead of the Worker globals. The root tsconfig excludes this directory.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["./**/*.ts"]
+}
