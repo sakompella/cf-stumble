@@ -62,6 +62,15 @@ the path guard is the workspace root. Both the guard and the addressed-path tran
 `WORKSPACE_ROOT` from that one module, so they cannot drift into disagreeing about what is inside
 the workspace.
 
+A turn's project capability lasts only as long as the turn. The Supervisor asks the Workspace Host
+for it with the admitted turn's remaining budget, so the Host ends it at the turn's deadline, and the
+Supervisor ends it again when the turn settles. Once it has ended, `lstat`, `readFile`, `writeFile`,
+`listFiles`, and `startExec` answer `turn-ended`, also through a duplicate that the generation kept,
+so a generation that ignores the end of its turn cannot keep editing the shared workspace while a
+later turn runs. `kill` and `endTurn` still answer, so cleanup can run more than once. A container
+replacement refuses only the next command, with `container-restarted`; file calls go on, because the
+files are durable (`src/workspace/project/target.ts`).
+
 ## Harness execution
 
 The harness source is TypeScript, while Dynamic Workers require Worker-executable modules. Computer

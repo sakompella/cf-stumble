@@ -58,6 +58,8 @@ export type FacetTurnHandoff = Readonly<{
 export type TurnStartContext = Readonly<{
   attribution: TurnAttribution;
   signal: AbortSignal;
+  /** What is left of the turn's budget, which bounds the workspace capability the turn obtains. */
+  remainingMs: () => number;
   /** Who this turn is in the operational log, so each start step can report under it. */
   trace: TurnTrace;
 }>;
@@ -334,6 +336,7 @@ function boundedStart(
   const context: TurnStartContext = {
     attribution: turn.attribution,
     signal: turn.bound.signal,
+    remainingMs: () => turn.bound.remainingMs(),
     trace: turn.trace,
   };
 

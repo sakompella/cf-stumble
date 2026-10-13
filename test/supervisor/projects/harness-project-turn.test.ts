@@ -11,6 +11,7 @@ import {
   turnRecordingProvisioning,
   workspaceName,
 } from "./project-turn-helpers.js";
+import { wholeTurn } from "./turn-workspace-fakes.js";
 
 test("a harness turn reconciles before mounting the generation", async () => {
   const workspaces = await projectWorkspaces();
@@ -36,6 +37,7 @@ test("a harness turn reconciles before mounting the generation", async () => {
       projectId: HARNESS_PROJECT_ID,
       request: { prompt: "do the work", state: null },
       signal: new AbortController().signal,
+      remainingMs: wholeTurn,
     }),
   );
 
@@ -68,6 +70,7 @@ test("a harness provision that observes cancellation never mounts", async () => 
       projectId: HARNESS_PROJECT_ID,
       request: { prompt: "do the work", state: null },
       signal: controller.signal,
+      remainingMs: wholeTurn,
     }),
   );
 

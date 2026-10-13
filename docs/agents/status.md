@@ -47,6 +47,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   `github_connection`, then writes a marker so that it never runs again. The owner keeps the GitHub
   connection but must reconnect repositories and prepare and activate a generation again. See
   `design/github-connection.md`, "The connected project list".
+- **An ended turn's capability refuses file access as well as commands** (owner default,
+  2026-10-13). Before, ending a turn killed its commands but left reads and writes open, and main's
+  capability had no deadline at all. See `design/computer-integration.md`, "Workspace layout".
 
 ## Open items
 

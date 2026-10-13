@@ -372,6 +372,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       workspaceName: this.workspaceName,
       namespace: this.env.WORKSPACE_HOST,
       signal: context.signal,
+      remainingMs: context.remainingMs,
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
       // on the same generation it was admitted against (`turn-run.ts`).
       mount: () =>

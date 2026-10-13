@@ -73,6 +73,11 @@ interface ProjectTurnInput extends ProjectTurnRequest {
    * this is what stops the next one from being made once the turn is over.
    */
   readonly signal: AbortSignal;
+  /**
+   * What is left of the admitted turn's budget. The capability is handed out with it, so the
+   * Workspace Host ends the capability at the turn's deadline even if nothing ends it sooner.
+   */
+  readonly remainingMs: () => number;
 }
 
 /**
@@ -98,8 +103,9 @@ export type ProjectTurnStart =
  * Cancelling the generation's stream does not stop the generation while it is quiet: Workers RPC
  * tells it that its reader went away only when it next writes, and a turn running `sleep 90`
  * writes nothing until the command ends. Ending the capability kills every command the turn
- * still has running and refuses new ones, so a turn that is over stops working in the tenant's
- * shared workspace whether or not its generation has noticed. Call `end` once, when the turn ends.
+ * still has running and refuses every later file or command call, through any duplicate the
+ * generation kept, so a turn that is over stops working in the tenant's shared workspace whether
+ * or not its generation has noticed. Call `end` once, when the turn ends.
  */
 export type TurnWorkspace = Readonly<{ end(): void }>;
 
@@ -266,7 +272,10 @@ function obtainCapability(input: ProjectTurnInput): Effect.Effect<ProjectCapabil
   return Effect.promise(() =>
     timedWorkspaceRpc(
       { method: "project" },
-      () => input.namespace.getByName(input.workspaceName).project(),
+      () =>
+        input.namespace
+          .getByName(input.workspaceName)
+          .project({ remainingMs: input.remainingMs() }),
       () => ({ outcome: "ok" }),
     ).then(
       (capability) => capability,

@@ -128,14 +128,16 @@ test("a past-due alarm closes the Workspace and destroys the container for being
 });
 
 test("a call on the project capability counts as activity", async () => {
-  const quietMs = 120_000;
+  // Past the lease, so only the call itself can keep the workspace busy. A capability with a turn
+  // budget refuses calls by then, so this one has none.
+  const calledAtMs = PROJECT_TURN_LEASE_MS + 120_000;
 
   const destroyed = await withHost("host-seam-touch", async (host, _state, container) => {
     const start = Date.now();
-    const project = host.project({ remainingMs: 1_000 });
-    vi.spyOn(Date, "now").mockReturnValue(start + quietMs);
+    const project = host.project();
+    vi.spyOn(Date, "now").mockReturnValue(start + calledAtMs);
     await project.lstat("/");
-    vi.spyOn(Date, "now").mockReturnValue(start + WORKSPACE_IDLE_STOP_MS + quietMs - 1);
+    vi.spyOn(Date, "now").mockReturnValue(start + WORKSPACE_IDLE_STOP_MS + calledAtMs - 1);
     await host.alarm();
 
     return container.destroyed;

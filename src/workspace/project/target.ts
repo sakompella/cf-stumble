@@ -101,16 +101,12 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#lstat` parses `path`.
   lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>> {
-    this.#activity?.touch();
-
-    return projectResult(() => this.#lstat(path));
+    return this.#whileTurnLasts(() => this.#lstat(path));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#readFile` parses `path`.
   readFile(path: unknown): Promise<ProjectResult<Uint8Array>> {
-    this.#activity?.touch();
-
-    return projectResult(() => this.#readFile(path));
+    return this.#whileTurnLasts(() => this.#readFile(path));
   }
 
   writeFile(
@@ -121,16 +117,12 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#writeFile` parses every argument.
     mode: unknown,
   ): Promise<ProjectResult<null>> {
-    this.#activity?.touch();
-
-    return projectResult(() => this.#writeFile(path, bytes, mode));
+    return this.#whileTurnLasts(() => this.#writeFile(path, bytes, mode));
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#listFiles` parses `path`.
   listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>> {
-    this.#activity?.touch();
-
-    return projectResult(() => this.#listFiles(path));
+    return this.#whileTurnLasts(() => this.#listFiles(path));
   }
 
   startExec(
@@ -319,6 +311,10 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return { ok: false, error: { code: "container-restarted" } };
     }
 
+    return this.#turnEnded();
+  }
+
+  #turnEnded(): ProjectFailure | undefined {
     if (this.#ended) return { ok: false, error: { code: "turn-ended" } };
 
     if (this.#turnEndsAt !== undefined && Date.now() >= this.#turnEndsAt) {
@@ -328,6 +324,21 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     }
 
     return undefined;
+  }
+
+  /**
+   * Run one file operation, or refuse it once the turn is over. A refused call is not workspace
+   * activity. A container replacement does not refuse file access: the files are durable, so only
+   * a command needs to hear that its container changed.
+   */
+  #whileTurnLasts<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
+    const ended = this.#turnEnded();
+
+    if (ended !== undefined) return Promise.resolve(ended);
+
+    this.#activity?.touch();
+
+    return projectResult(operation);
   }
 
   #logSettlement(settlement: ExecSettlement, timeoutMs: number): void {

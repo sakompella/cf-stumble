@@ -19,7 +19,7 @@ import type {
   ProjectCapabilityStub,
   ProjectWorkspaceNamespace,
 } from "../../../src/supervisor/projects/index.js";
-import { unusedCapability } from "./turn-workspace-fakes.js";
+import { unusedCapability, wholeTurn } from "./turn-workspace-fakes.js";
 import { runToResult } from "../../workspace/workspace-results.js";
 
 type DelayedWorkspace = Readonly<{
@@ -119,6 +119,7 @@ test("a harness turn waits for a project provision in the shared workspace", asy
       projectId: HARNESS_PROJECT_ID,
       request: { prompt: "do the work", state: null },
       signal: new AbortController().signal,
+      remainingMs: wholeTurn,
     }),
   );
 
