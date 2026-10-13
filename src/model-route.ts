@@ -1,10 +1,14 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { streamModelEvents, streamingBindingCall } from "./model-route-stream.js";
+import * as Effect from "effect/Effect";
+import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
+import { streamingBindingCall, workersAiTurn } from "./model-route-stream.js";
+import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
 import { asUntrusted, field, hasOwn, type UntrustedObject } from "./untrusted.js";
 
 export { streamModelEvents } from "./model-route-stream.js";
 
 export type {
+  ModelRouteErrorCode,
   ModelStreamEvent,
   ModelStreamInference,
   ModelUsage,
@@ -218,12 +222,36 @@ export function validateRequest(raw: unknown): Readonly<{ ok: true }> | Validati
 
 // -- Service binding entrypoint ---------------------------------------------
 
-type ModelRouteEnv = Readonly<{ AI: Ai }>;
+/** The Supervisor methods this route uses, on the Supervisor that holds the owner's credential. */
+type CredentialHolders = Readonly<{
+  getByName(name: string): Readonly<{
+    chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
+    markChatGPTRefused(accessToken: string): Promise<void>;
+  }>;
+}>;
 
-export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv> {
+type ModelRouteEnv = Readonly<{
+  AI: Ai;
+  SUPERVISOR: CredentialHolders;
+  /** The ChatGPT model, a declared plain variable (`cloudflare.config.ts`). */
+  CHATGPT_MODEL: string;
+}>;
+
+/**
+ * Set by the Supervisor that hands this route to its facets, and invisible to them: the facet holds
+ * a stub, not these props. A route no Supervisor created has no credential to consult and answers
+ * from Workers AI.
+ */
+export type ModelRouteProps = Readonly<{ supervisor: string }> | undefined;
+
+export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
   /** Answers with incremental model events. Every failure after validation becomes an event on the
    * returned stream, which is what lets this cross the RPC boundary as a plain byte stream
-   * (ADR-0045), like `MainFacetTarget.startTurn`. */
+   * (ADR-0045), like `MainFacetTarget.startTurn`.
+   *
+   * The owner's ChatGPT plan answers while a credential is connected; Workers AI answers while none
+   * is. A refused or revoked grant fails the call with `chatgpt-reconnect-required` rather than
+   * switching provider (ADR-0047). */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
   runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
     const validation = validateRequest(request);
@@ -232,9 +260,39 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv> {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: validateRequest checked every field of the closed message union.
     const validated = request as ModelRouteRequest;
 
-    return streamModelEvents(
+    const workersAi = workersAiTurn(
       { run: (model, input, signal) => streamingBindingCall(this.env.AI, model, input, signal) },
       validated,
     );
+
+    const credential = this.chatgptCredential();
+
+    if (credential === undefined) return modelEventStream(workersAi);
+
+    const chatgpt = chatgptTurn(
+      {
+        credential,
+        fetcher: (url, init) => fetch(url, init),
+        model: this.env.CHATGPT_MODEL,
+      },
+      validated,
+    );
+
+    const turn: ModelTurn = (emit) =>
+      chatgpt(emit).pipe(Effect.catchTag("ChatGPTNotConnected", () => workersAi(emit)));
+
+    return modelEventStream(turn);
+  }
+
+  private chatgptCredential(): ChatGPTCredential | undefined {
+    const name = this.ctx.props?.supervisor;
+
+    if (name === undefined) return undefined;
+    const holder = this.env.SUPERVISOR.getByName(name);
+
+    return {
+      access: (rejected) => holder.chatgptAccess(rejected),
+      markRefused: (accessToken) => holder.markChatGPTRefused(accessToken),
+    };
   }
 }

@@ -13,6 +13,7 @@ type ApiErrorCode =
   | "invalid-rollback-request"
   | "invalid-connect-request"
   | "invalid-turn-request"
+  | "invalid-chatgpt-request"
   | "cross-origin-request"
   | "not-found"
   | "internal-error";

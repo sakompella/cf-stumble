@@ -1,10 +1,15 @@
 import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
-import { FetchProjects, FetchStatus } from "./commands.js";
+import { FetchChatGPT, FetchProjects, FetchStatus } from "./commands.js";
 import { Message } from "./message.js";
 import { Turn, type Model } from "./model.js";
 import { controlHandlers, statusHandlers, submitHandlers } from "./update-generation.js";
-import { connectHandlers, gitHubHandlers, projectHandlers } from "./update-projects.js";
+import {
+  chatGPTHandlers,
+  connectHandlers,
+  gitHubHandlers,
+  projectHandlers,
+} from "./update-projects.js";
 import type { UpdateReturn } from "./update-shared.js";
 import { threadHandlers } from "./update-thread.js";
 import { turnHandlers } from "./update-turn.js";
@@ -20,6 +25,9 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     github: { state: "", detail: "", verificationUri: "" },
     connectRepositoryInput: "",
     connectStatus: "",
+    chatgpt: { connection: "", isConnected: false, maybeLogin: Option.none() },
+    chatgptCallbackInput: "",
+    chatgptResult: "",
     selection: 0,
     maybeProjectId: Option.none(),
     conversationProject: "No project selected",
@@ -50,7 +58,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     activate: EMPTY_PANEL,
     rollback: EMPTY_PANEL,
   },
-  commands: [FetchStatus(), FetchProjects()],
+  commands: [FetchStatus(), FetchProjects(), FetchChatGPT()],
 });
 
 export function update(model: Model, message: Message): UpdateReturn {
@@ -58,6 +66,7 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...projectHandlers(model),
     ...connectHandlers(model),
     ...gitHubHandlers(model),
+    ...chatGPTHandlers(model),
     ...threadHandlers(model),
     ...turnHandlers(model),
     ...statusHandlers(model),

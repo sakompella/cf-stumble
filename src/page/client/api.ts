@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
-import { GitHubReport, type Project, type ThreadFacts } from "./model.js";
+import { GitHubReport, type ChatGPTConnection, type Project, type ThreadFacts } from "./model.js";
 
 /**
  * Requests to this Worker, and the readers that turn an answer into what the page shows. Every
@@ -133,6 +133,46 @@ export function gitHubReport(status: unknown): GitHubReport {
         state === "awaiting-authorization" ? text(field(status, "verificationUri")) : "",
     },
   });
+}
+
+const UNKNOWN_CHATGPT: ChatGPTConnection = {
+  connection: "unknown",
+  isConnected: false,
+  maybeLogin: Option.none(),
+};
+
+function chatGPTLogin(login: unknown): ChatGPTConnection["maybeLogin"] {
+  const attemptId = text(field(login, "attemptId"));
+  const authorizeUrl = text(field(login, "authorizeUrl"));
+
+  return attemptId === "" || authorizeUrl === ""
+    ? Option.none()
+    : Option.some({ attemptId, authorizeUrl });
+}
+
+/** The `chatgpt` view the Worker sends, worded for the page. A state the page cannot word reads as unknown. */
+export function chatGPTConnection(view: unknown): ChatGPTConnection {
+  const connection = field(view, "connection");
+  const maybeLogin = chatGPTLogin(field(view, "login"));
+
+  switch (field(connection, "state")) {
+    case "disconnected":
+      return { connection: "not connected (Workers AI fallback)", isConnected: false, maybeLogin };
+    case "connected":
+      return {
+        connection: `connected (${text(field(view, "model"))})`,
+        isConnected: true,
+        maybeLogin,
+      };
+    case "needs-reconnect":
+      return {
+        connection: `reconnect required: ${text(field(connection, "reason"))}`,
+        isConnected: false,
+        maybeLogin,
+      };
+    default:
+      return UNKNOWN_CHATGPT;
+  }
 }
 
 function project(entry: unknown): Project {

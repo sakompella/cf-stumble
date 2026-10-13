@@ -209,6 +209,7 @@ const WRANGLER_KEYS = [
   "name",
   "observability",
   "routes",
+  "vars",
   "worker_loaders",
   "workers_dev",
 ];
@@ -264,14 +265,14 @@ test("traces, logs, and Issues stay enabled with every rate at 1", () => {
   expect(wranglerFacts("wrangler.jsonc").observability).toEqual(expected);
 });
 
-test("no secret is declared and no plain variable exists, in any configuration", () => {
+test("no secret is declared and the ChatGPT model is the one plain variable, in every configuration", () => {
   for (const facts of [
     cloudflareFacts(),
     wranglerFacts("wrangler.jsonc"),
     wranglerFacts("wrangler.test.jsonc"),
   ]) {
     expect(facts.secrets).toEqual([]);
-    expect(facts.vars).toEqual({});
+    expect(keysOf(facts.vars)).toEqual(["CHATGPT_MODEL"]);
   }
 });
 
@@ -280,7 +281,7 @@ test("every cloudflare.config.ts binding is one the comparison maps", () => {
     at(binding, "type"),
   );
 
-  expect(sorted(types)).toEqual(["ai", "durable-object", "durable-object", "worker-loader"]);
+  expect(sorted(types).join(" ")).toBe("ai durable-object durable-object text worker-loader");
 });
 
 test("every configuration declares exactly one container", () => {

@@ -13,7 +13,10 @@ import type { BrowserPage } from "./chrome.mjs";
 
 const READING = "reading";
 
-/** Every element the page fills from a read of the owner API, and its "still reading" wording. */
+/**
+ * Every element the page fills from a read of the owner API, and its "still reading" wording. The
+ * ChatGPT connection has no such wording: it is empty until its read answers.
+ */
 const READ_STATES: readonly string[] = [
   ID.statusStatus,
   ID.projectListStatus,
@@ -31,9 +34,12 @@ function textExpression(elementId: string): string {
  * refusal instead of `reading`, which is the observation those cases are about.
  */
 export async function waitForSettledReads(page: BrowserPage, timeoutMs = 15_000): Promise<void> {
-  const still = READ_STATES.map(
-    (elementId) => `${textExpression(elementId)} === ${JSON.stringify(READING)}`,
-  ).join(" || ");
+  const still = [
+    ...READ_STATES.map(
+      (elementId) => `${textExpression(elementId)} === ${JSON.stringify(READING)}`,
+    ),
+    `${textExpression(ID.chatgptConnection)} === ""`,
+  ].join(" || ");
 
   await page.waitFor(`!(${still})`, timeoutMs);
   await sleep(120);

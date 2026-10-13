@@ -6,6 +6,8 @@ export * from "./expect.mjs";
 
 export * from "./fixtures.mjs";
 
+export * from "./fixtures-chatgpt.mjs";
+
 export * from "./fixtures-generation.mjs";
 
 export * from "./fixtures-thread.mjs";
@@ -13,6 +15,8 @@ export * from "./fixtures-thread.mjs";
 export * from "./page-accessibility.mjs";
 
 export * from "./page-actions.mjs";
+
+export * from "./page-chatgpt.mjs";
 
 export * from "./page-layout.mjs";
 

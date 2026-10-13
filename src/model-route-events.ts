@@ -68,4 +68,11 @@ export type ModelStreamEvent =
   | Readonly<{ type: "text-delta"; delta: string }>
   | Readonly<{ type: "tool-call-delta"; delta: ToolCallDelta }>
   | Readonly<{ type: "done"; message: AssistantMessage; usage: ModelUsage }>
-  | Readonly<{ type: "error"; error: Readonly<{ code: "model-unavailable" }> }>;
+  | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode }> }>;
+
+/**
+ * Why a turn got no answer. `chatgpt-reconnect-required` means the owner's ChatGPT grant was
+ * refused or revoked: the route says so instead of answering from another provider mid-turn, and
+ * every turn fails this way until the owner reconnects or disconnects ChatGPT (ADR-0047).
+ */
+export type ModelRouteErrorCode = "model-unavailable" | "chatgpt-reconnect-required";

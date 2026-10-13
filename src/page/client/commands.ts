@@ -3,6 +3,9 @@ import * as Option from "effect/Option";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
 import {
+  type Answer,
+  type JsonBody,
+  chatGPTConnection,
   diagnosticsText,
   field,
   freshRefusalText,
@@ -103,6 +106,54 @@ export const AuthorizeGitHub = Command.define("AuthorizeGitHub", {
       ),
       Effect.catch((detail) => Effect.succeed(Message.FailedAuthorize({ detail }))),
     ),
+});
+
+type ChatGPTAnswer = Extract<Message, { readonly _tag: "SucceededChatGPT" | "RejectedChatGPT" }>;
+
+function chatGPTAnswer(answer: Answer): ChatGPTAnswer {
+  const chatgpt = field(answer.payload, "chatgpt");
+
+  return isOk(answer.payload)
+    ? Message.SucceededChatGPT({ chatgpt: chatGPTConnection(chatgpt) })
+    : Message.RejectedChatGPT({
+        wording: problemText(answer),
+        maybeChatGPT: truthy(chatgpt) ? Option.some(chatGPTConnection(chatgpt)) : Option.none(),
+      });
+}
+
+const CHATGPT_MESSAGES = [
+  Message.SucceededChatGPT,
+  Message.RejectedChatGPT,
+  Message.FailedChatGPT,
+] as const;
+
+function chatGPTRequest(method: "GET" | "POST", path: string, maybeBody: Option.Option<JsonBody>) {
+  return requestJson(method, path, maybeBody).pipe(
+    Effect.map(chatGPTAnswer),
+    Effect.catch((detail) => Effect.succeed(Message.FailedChatGPT({ detail }))),
+  );
+}
+
+export const FetchChatGPT = Command.define("FetchChatGPT", {
+  messages: CHATGPT_MESSAGES,
+  execute: chatGPTRequest("GET", "/api/chatgpt/connection", Option.none()),
+});
+
+export const StartChatGPTLogin = Command.define("StartChatGPTLogin", {
+  messages: CHATGPT_MESSAGES,
+  execute: chatGPTRequest("POST", "/api/chatgpt/login", Option.some({})),
+});
+
+export const FinishChatGPTLogin = Command.define("FinishChatGPTLogin", {
+  args: { attemptId: Schema.String, callbackUrl: Schema.String },
+  messages: CHATGPT_MESSAGES,
+  execute: ({ attemptId, callbackUrl }) =>
+    chatGPTRequest("POST", "/api/chatgpt/login/complete", Option.some({ attemptId, callbackUrl })),
+});
+
+export const DisconnectChatGPT = Command.define("DisconnectChatGPT", {
+  messages: CHATGPT_MESSAGES,
+  execute: chatGPTRequest("POST", "/api/chatgpt/disconnect", Option.some({})),
 });
 
 export const FetchThread = Command.define("FetchThread", {

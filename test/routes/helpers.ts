@@ -7,6 +7,7 @@ import {
 } from "../../src/supervisor/threads/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import type { VerifiedAccessScope } from "../../src/supervisor/projects/index.js";
+import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
 /**
  * The verified scope the Worker hands the owner API. Boundary tests pass it explicitly, because
@@ -25,6 +26,24 @@ export function ownerApiResponse(
 ): Promise<Response> {
   return Effect.runPromise(routeOwnerApiRequest(request, supervisor, scope));
 }
+
+export const disconnectedChatGPT: ChatGPTConnectionView = {
+  connection: { state: "disconnected" },
+  login: null,
+  model: "gpt-test",
+};
+
+const notCalled = (what: string) => () => Promise.reject(new Error(`this test must not ${what}`));
+
+const chatgptSupervisor: Pick<
+  OwnerApiSupervisor,
+  "getChatGPTConnection" | "startChatGPTLogin" | "completeChatGPTLogin" | "disconnectChatGPT"
+> = {
+  getChatGPTConnection: () => Promise.resolve(disconnectedChatGPT),
+  startChatGPTLogin: notCalled("start a ChatGPT sign-in"),
+  completeChatGPTLogin: notCalled("complete a ChatGPT sign-in"),
+  disconnectChatGPT: notCalled("disconnect ChatGPT"),
+};
 
 /** A stand-in Supervisor for boundary tests. Each test overrides only the call it exercises. */
 export function ownerApiSupervisor(
@@ -70,6 +89,7 @@ export function ownerApiSupervisor(
     resetWorkspace() {
       return Promise.resolve({ ok: true, reset: "workspace" });
     },
+    ...chatgptSupervisor,
     ...overrides,
   };
 }

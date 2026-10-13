@@ -13,6 +13,7 @@ cases/chat-endings.mts    CHAT-5 … CHAT-7
 cases/chat-output.mts     CHAT-8 … CHAT-11
 cases/chat-bounds.mts     CHAT-12 … CHAT-14
 cases/_chat.mts           what those four files share
+cases/chatgpt.mts         CHATGPT-1, CHATGPT-2
 cases/smoke.mts           SMOKE-1, the fast plumbing check
 ```
 
@@ -203,6 +204,7 @@ running turn.
 | `readTools(page)`                 | per disclosure: `summary`, `open`, `failed`, `output`, `outputLength`, `serverTruncated`, `displayShortened`                                                                       |
 | `readDiffs(page)`                 | tool-patch counts and turn-diff counts separately, plus `diffText`, `unavailableMessages`, `unavailableText`                                                                       |
 | `readProjectList(page)`           | `status`, `projects`, `labels`, `locations`, `selected`, `ariaCurrent`, GitHub state and detail, `connectStatus`, verification link `href`/`target`/`rel`/text, `credentialInputs` |
+| `readChatGPT(page)`               | `connection`, `result`, which buttons are offered, sign-in link `href`/`target`/`rel`, `instruction`, `addressValue`                                                               |
 | `readLayout(page)`                | `layoutClass`, sidebar and conversation boxes, viewport size, `toggleExpanded`, `toggleLabel`, `drawerOpen`; a collapsed element reads 0                                           |
 | `readBox(page, selector)`         | `present`, `visible`, `width`, `height`, `top`, `right`, `bottom`, `left`                                                                                                          |
 | `readPageMetrics(page)`           | `scrollWidth`, `clientWidth`, `horizontalOverflow`, `scrollHeight`, `clientHeight`, viewport size, `bodyWidth`, `bodyLeft`                                                         |
@@ -228,6 +230,7 @@ HTTP request.
 | `thread`                                   | `(projectId: string) => { revision: number; messageCount: number }`                    |
 | `projects`                                 | `() => readonly ProjectEntry[]`                                                        |
 | `generation`                               | `() => { generations, activeLabel, epoch }`                                            |
+| `chatgpt`                                  | `() => { connection, login, attempts }` — what the stub holds, not what the page shows |
 | `setGeneration`                            | `(patch: { activeLabel?, epoch?, generations? }) => void` — out-of-band change         |
 | `reset`                                    | `(scenario?: HarnessScenario) => void`                                                 |
 
@@ -261,6 +264,8 @@ acting on the page or by calling a control.
 | `no-projects`                   | `GET /api/projects` answers an empty catalog with connected GitHub                                                                             |
 | `github-disconnected`           | GitHub state `disconnected`                                                                                                                    |
 | `github-awaiting-authorization` | state `awaiting-authorization`, code `WDJB-MJHT`, GitHub's device link                                                                         |
+| `chatgpt-connected`             | the ChatGPT connection starts `connected`, with model `gpt-6.1-sol`                                                                            |
+| `chatgpt-needs-reconnect`       | the ChatGPT connection starts `needs-reconnect` with reason `refresh-refused`                                                                  |
 | `status-problem`                | `GET /api/status` is refused, so the page renders no epoch                                                                                     |
 
 ### Baseline data

@@ -1,13 +1,11 @@
 /**
- * The streaming half of the model route: build the payload for the one fixed model, drive one
- * Workers AI streaming call, and translate its provider-native Server-Sent Events into the plain
- * `ModelStreamEvent` protocol that `ModelRoute.runStream` returns. `./model-route-stream-parse.ts`
- * does the untrusted per-chunk parsing.
+ * The Workers AI model call, and the assembly of streamed chunks into one answer that the ChatGPT
+ * call reuses. `./model-route-stream-parse.ts` does the untrusted per-chunk parsing of Workers AI's
+ * events; `./model-route-turn.ts` reads the stream and emits the route's events.
  */
 
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { parseProviderChunk } from "./model-route-stream-parse.js";
+import { parseProviderChunk, type ParsedProviderChunk } from "./model-route-stream-parse.js";
 import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
 import type {
   ModelStreamEvent,
@@ -16,10 +14,16 @@ import type {
   ToolCallDelta,
 } from "./model-route-events.js";
 import { resolveUsage, type ProviderResult } from "./model-route-usage.js";
-import { runResponseBody } from "./run-entry-point.js";
-import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
+import {
+  modelEventStream,
+  modelUnavailable,
+  pumpSseStream,
+  type ModelTurn,
+  type ModelTurnAnswer,
+} from "./model-route-turn.js";
 
-// The only model the immutable host selects. Two deployed facts pin it. Turns first saved an empty
+// The Workers AI model, used while no ChatGPT credential is connected (ADR-0047). Two deployed
+// facts pin it. Turns first saved an empty
 // assistant message, because this model answers in `reasoning_content` and the default output
 // budget was spent there, hence `MAX_OUTPUT_TOKENS`. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
 // then failed every call: its schema takes `messages[].content` as a string, and Pi sends parts.
@@ -84,7 +88,7 @@ type ToolCallAccumulator = { id: string; name: string; args: string[] };
  * Accumulates one turn's parsed provider chunks and emits the `ModelStreamEvent`s they imply.
  * Kept as a class so each step of the work stays a short, separately readable method.
  */
-class ProviderStreamAccumulator {
+export class ProviderStreamAccumulator {
   private readonly texts: string[] = [];
   private readonly toolCalls = new Map<number, ToolCallAccumulator>();
   private readonly emit: (event: ModelStreamEvent) => void;
@@ -106,7 +110,7 @@ class ProviderStreamAccumulator {
     this.emit({ type: "tool-call-delta", delta });
   }
 
-  /** Parse and apply one decoded line; returns `true` when it is the terminal `[DONE]` marker. */
+  /** Parse and apply one decoded Workers AI line; returns `true` when it is the terminal `[DONE]`. */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
 
@@ -124,8 +128,13 @@ class ProviderStreamAccumulator {
 
     const chunk = parseProviderChunk(parsedJson);
 
-    if (chunk === undefined) return false;
+    if (chunk !== undefined) this.apply(chunk);
 
+    return false;
+  }
+
+  /** Emit and remember one chunk's text, tool call fragments and usage, whichever provider sent it. */
+  apply(chunk: ParsedProviderChunk): void {
     if (chunk.textDelta !== undefined) {
       this.texts.push(chunk.textDelta);
       this.emit({ type: "text-delta", delta: chunk.textDelta });
@@ -134,8 +143,6 @@ class ProviderStreamAccumulator {
     for (const delta of chunk.toolCallDeltas ?? []) this.applyToolCallDelta(delta);
 
     if (chunk.usage !== undefined) this.reportedUsage = chunk.usage;
-
-    return false;
   }
 
   result(): ProviderResult {
@@ -157,182 +164,39 @@ class ProviderStreamAccumulator {
   }
 }
 
-/**
- * Upper bound on the bytes this route will read from one provider stream. Applies to the
- * provider's raw wire bytes, not `JSON.stringify(...).length`, for the same reason
- * `validateRequest`'s request bound does: a byte cap stated in string length would not be a byte
- * cap. This is defense in depth against a runaway or misbehaving stream, not a measured provider
- * limit — generation 0 has none to report.
- */
-const MAX_STREAM_EVENT_BYTES = 8_388_608;
-
-/**
- * Decode one provider byte stream into lines and feed each to `onLine`, honoring split UTF-8
- * across chunk boundaries. Returns whether a terminal `[DONE]` marker was seen; a well-formed
- * provider owes one even in its very last chunk, which is why the final decoder flush gets one
- * more pass over `onLine` too.
- */
-async function readSseLines(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  onLine: (line: string) => boolean,
-): Promise<boolean> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let totalBytes = 0;
-
-  for (;;) {
-    const next = await reader.read();
-
-    if (next.done) break;
-    totalBytes += next.value.byteLength;
-
-    if (totalBytes > MAX_STREAM_EVENT_BYTES) {
-      throw new Error("provider stream exceeded the event byte bound");
-    }
-
-    buffer += decoder.decode(next.value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (onLine(line)) return true;
-    }
-  }
-
-  buffer += decoder.decode();
-
-  for (const line of buffer.split("\n")) {
-    if (onLine(line)) return true;
-  }
-
-  return false;
-}
-
-/**
- * The provider did not give this turn a complete answer: the binding call failed, the stream
- * failed or ended before its terminal `[DONE]` marker, or it passed the byte bound. The caller sees
- * one `model-unavailable` event for every one of these, and nothing of the provider's own error.
- */
-class ModelUnavailable extends Data.TaggedError("ModelUnavailable") {}
-
-type PumpedProviderStream = Readonly<{
-  result: ProviderResult;
-  usage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
-}>;
-
-/**
- * Read one provider SSE byte stream, emit a `ModelStreamEvent` per parsed chunk via `emit`, and
- * return the assembled `ProviderResult` plus any usage the provider reported. The reader is
- * cancelled however the read ends, so a stream this route stopped reading is released.
- */
-function pumpProviderStream(
-  providerStream: ReadableStream<Uint8Array>,
-  emit: (event: ModelStreamEvent) => void,
-): Effect.Effect<PumpedProviderStream, ModelUnavailable> {
-  const accumulator = new ProviderStreamAccumulator(emit);
-
-  return Effect.acquireUseRelease(
-    Effect.try({
-      try: () => providerStream.getReader(),
-      catch: () => new ModelUnavailable(),
-    }),
-    (reader) =>
-      Effect.tryPromise({
-        try: () => readSseLines(reader, (line) => accumulator.handleLine(line)),
-        catch: () => new ModelUnavailable(),
-      }),
-    (reader) =>
-      Effect.promise(() =>
-        reader.cancel().catch(() => {
-          /* the stream already ended or failed; nothing more to release */
-        }),
-      ),
-  ).pipe(
-    Effect.flatMap((terminated) =>
-      terminated
-        ? Effect.succeed({ result: accumulator.result(), usage: accumulator.usage() })
-        : Effect.fail(new ModelUnavailable()),
-    ),
-  );
-}
-
-/** One model call, reported as events: its deltas, then `done` or `model-unavailable`. */
-function modelAnswer(
-  ai: ModelStreamInference,
+/** The terminal answer of one provider call, built from what its stream delivered. */
+export function finishedTurn(
+  accumulator: ProviderStreamAccumulator,
   request: ModelRouteRequest,
-  emit: (event: ModelStreamEvent) => void,
-): Effect.Effect<void> {
-  return Effect.tryPromise({
-    try: (signal) => ai.run(MODEL, buildStreamingProviderPayload(request), signal),
-    catch: () => new ModelUnavailable(),
-  }).pipe(
-    Effect.flatMap((providerStream) => pumpProviderStream(providerStream, emit)),
-    Effect.flatMap(({ result, usage }) =>
-      Effect.sync(() => {
-        emit({
-          type: "done",
-          message: normalizeResponse(result),
-          usage: resolveUsage(usage, request, result),
-        });
-      }),
-    ),
-    Effect.catchTag("ModelUnavailable", () =>
-      Effect.sync(() => {
-        emit({ type: "error", error: { code: "model-unavailable" } });
-      }),
-    ),
-  );
+): ModelTurnAnswer {
+  const result = accumulator.result();
+
+  return {
+    message: normalizeResponse(result),
+    usage: resolveUsage(accumulator.usage(), request, result),
+  };
 }
 
-/**
- * Drive one streamed model call and translate it into plain {@link ModelStreamEvent}s. Every
- * outcome — a provider rejection, a truncated stream, or a clean finish — becomes an event on the
- * returned stream; nothing here throws across the RPC boundary or resolves a rejected promise.
- *
- * The call runs in the stream's own `start`, so its lifetime is the body's, not the RPC call's
- * that returned the stream. Cancelling the stream interrupts the call, which aborts the provider
- * request or cancels its stream. While the provider is quiet the stream writes empty lines, so a
- * generation that stops reading across Workers RPC is heard of within seconds.
- */
+/** One call to the fixed Workers AI model, the provider used while ChatGPT is not connected. */
+export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteRequest): ModelTurn {
+  return (emit) => {
+    const accumulator = new ProviderStreamAccumulator(emit);
+
+    return Effect.tryPromise({
+      try: (signal) => ai.run(MODEL, buildStreamingProviderPayload(request), signal),
+      catch: modelUnavailable,
+    }).pipe(
+      Effect.flatMap((providerStream) =>
+        pumpSseStream(providerStream, (line) => accumulator.handleLine(line)),
+      ),
+      Effect.map(() => finishedTurn(accumulator, request)),
+    );
+  };
+}
+
 export function streamModelEvents(
   ai: ModelStreamInference,
   request: ModelRouteRequest,
 ): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  const cancelled = new AbortController();
-  let ended: Promise<void> | undefined;
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      function write(bytes: Uint8Array): void {
-        if (!cancelled.signal.aborted) controller.enqueue(bytes);
-      }
-
-      function emit(event: ModelStreamEvent): void {
-        write(encoder.encode(`${JSON.stringify(event)}\n`));
-      }
-
-      const turn = keptAlive(modelAnswer(ai, request, emit), () => {
-        write(KEEPALIVE_LINE);
-      }).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            controller.close();
-          }),
-        ),
-      );
-
-      ended = runResponseBody(turn, cancelled.signal);
-
-      return ended;
-    },
-    cancel() {
-      cancelled.abort();
-
-      return ended?.then(
-        () => {},
-        () => {},
-      );
-    },
-  });
+  return modelEventStream(workersAiTurn(ai, request));
 }

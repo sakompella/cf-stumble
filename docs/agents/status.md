@@ -46,6 +46,10 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   The answer is HTTP 409 `turn-active`, or `workspace-busy` when the Workspace Host is running a
   build, provision, or removal. The alternative, cancelling and fencing the running turn, is not
   built. See `design/computer-integration.md`, "Workspace layout".
+- **The model route uses the owner's ChatGPT subscription once connected** (owner, 2026-10-13).
+  The Supervisor caches the credential; Workers AI answers until a connection exists. See
+  ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers
+  from Workers AI only.
 
 ## Open items
 
@@ -120,4 +124,12 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     kills the command. A generation built before this change still learns of the cancel only when
     it next writes, which the killed command makes it do. The model route's stream had the same
     gap and no `cancel` at all, so a cancelled turn left a quiet provider call running. It now
-    writes the same empty lines, and its `cancel` aborts the provider call or cancels its stream.
+    writes the same empty lines for either provider, and its `cancel` aborts the Workers AI call or
+    the ChatGPT request, or cancels the provider's stream.
+17. **ChatGPT connection not proved end to end.** The model route's ChatGPT path is tested against
+    fakes of OpenAI's token endpoint and Responses stream. No deployed instance has redeemed a
+    real code, refreshed a real token, or streamed a real answer. On 2026-10-13 a headless Firefox
+    run of `tools/chatgpt-connect.mts --inspect` reached the account chooser, then OpenAI answered
+    the account choice with 403 and a Cloudflare challenge, so the agent tool is unproved past that
+    point. After a deploy, connect once from the owner page (`docs/deploy.md`, "Connect ChatGPT"),
+    run one turn, and check for `chatgpt.model-call` errors.

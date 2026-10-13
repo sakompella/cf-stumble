@@ -15,7 +15,7 @@ import { asUntrusted, field, type UntrustedObject } from "./untrusted.js";
 import type { ToolCallDelta } from "./model-route-events.js";
 
 /** One provider stream chunk's fields this route understands, after defensive parsing. */
-type ParsedProviderChunk = Readonly<{
+export type ParsedProviderChunk = Readonly<{
   textDelta?: string;
   toolCallDeltas?: ReadonlyArray<ToolCallDelta>;
   usage?: Readonly<{ inputTokens: number; outputTokens: number }>;

@@ -4,6 +4,7 @@ import { OWNER_PAGE_CLASSES as CLASS, OWNER_PAGE_IDS as ID } from "../element-id
 import { Message } from "./message.js";
 import type { Model, Project } from "./model.js";
 import { conversationView } from "./view-conversation.js";
+import { chatGPTPanel } from "./view-chatgpt.js";
 import { generationBarView } from "./view-generation.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
@@ -86,6 +87,29 @@ function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
   );
 }
 
+function connectPanel(model: Model, h: HtmlBuilder<Message>): Html {
+  return h.div(
+    [h.Class("sidebar-panel")],
+    [
+      h.h3([], ["Connect a repository"]),
+      controlRow(
+        {
+          label: "repository url",
+          inputId: ID.connectRepositoryInput,
+          isNumber: false,
+          value: model.connectRepositoryInput,
+          onInput: (value) => Message.UpdatedConnectRepositoryInput({ value }),
+          buttonId: ID.connectButton,
+          buttonText: "Connect",
+          onClick: Message.ClickedConnect(),
+        },
+        h,
+      ),
+      valueRow("result", ID.connectStatus, model.connectStatus, h),
+    ],
+  );
+}
+
 function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
   const isExpanded = model.isSidebarExpanded;
 
@@ -112,26 +136,8 @@ function sidebarView(model: Model, h: HtmlBuilder<Message>): Html {
             model.projects.map((project) => projectButton(project, model, h)),
           ),
           gitHubPanel(model, h),
-          h.div(
-            [h.Class("sidebar-panel")],
-            [
-              h.h3([], ["Connect a repository"]),
-              controlRow(
-                {
-                  label: "repository url",
-                  inputId: ID.connectRepositoryInput,
-                  isNumber: false,
-                  value: model.connectRepositoryInput,
-                  onInput: (value) => Message.UpdatedConnectRepositoryInput({ value }),
-                  buttonId: ID.connectButton,
-                  buttonText: "Connect",
-                  onClick: Message.ClickedConnect(),
-                },
-                h,
-              ),
-              valueRow("result", ID.connectStatus, model.connectStatus, h),
-            ],
-          ),
+          chatGPTPanel(model, h),
+          connectPanel(model, h),
         ],
       ),
     ],

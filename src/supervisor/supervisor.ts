@@ -51,6 +51,13 @@ import {
   type PreparationCheck,
 } from "./generations/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
+import {
+  ChatGPTConnection,
+  ChatGPTCredentialStore,
+  type ChatGPTAccess,
+  type ChatGPTConnectionView,
+  type ChatGPTLoginOutcome,
+} from "../chatgpt/index.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
 import { ProjectThreads, type LiveTurn, type ProjectThreadResult } from "./threads/index.js";
@@ -96,7 +103,23 @@ type SupervisorEnv = {
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   /** The documented test and development credential source. See `docs/agents/design/github-connection.md`. */
   readonly GH_TOKEN?: string;
+  /** The model ChatGPT turns use. A declared plain variable, not a secret. */
+  readonly CHATGPT_MODEL: string;
 };
+
+/**
+ * The name the Worker reached this Supervisor by, which it derived from the verified owner. A
+ * Supervisor reached by raw id has no verified tenant behind it, and its one workspace is named from
+ * this name. Falling back to the id would mint a valid workspace name for a request that never
+ * proved whose workspace it is.
+ */
+function verifiedName(ctx: DurableObjectState): string {
+  const name = ctx.id.name;
+
+  if (name === undefined) throw new Error("a Supervisor must be reached by name, not by id");
+
+  return name;
+}
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly control: GenerationControl;
@@ -108,24 +131,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly github: GitHubConnection;
   /** The tenant's connected repositories and their provisioning. */
   private readonly connections: ProjectConnections;
+  /** The owner's ChatGPT credential, which the model route uses (ADR-0047). */
+  private readonly chatgpt: ChatGPTConnection;
   /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
   private readonly workspaceName: string;
+  /** This object's name, which the Worker derived from the verified owner. */
+  private readonly name: string;
   /** Fences leases held by an instance that Durable Objects have since replaced. */
   private readonly instanceId = crypto.randomUUID();
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage);
-    const supervisorName = ctx.id.name;
-
-    if (supervisorName === undefined) {
-      // A Supervisor reached by raw id has no verified tenant behind it, and its one workspace is
-      // named from this object's name. Falling back to the id would mint a valid workspace name
-      // for a request that never proved whose workspace it is.
-      throw new Error("a Supervisor must be reached by name, not by id");
-    }
-
-    this.workspaceName = tenantWorkspaceName(supervisorName);
+    this.name = verifiedName(ctx);
+    this.workspaceName = tenantWorkspaceName(this.name);
     this.artifacts = HarnessArtifacts.forWorkspace(
       ctx.storage,
       env.WORKSPACE_HOST,
@@ -166,10 +185,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       () => this.connections.catalog(),
       this.instanceId,
     );
+    this.chatgpt = new ChatGPTConnection({
+      store: new ChatGPTCredentialStore(ctx.storage),
+      fetcher: (url, init) => fetch(url, init),
+      model: env.CHATGPT_MODEL,
+      clock: () => Date.now(),
+    });
   }
 
+  /** The route is told which Supervisor holds the credential; the facet only holds the stub. */
   private modelRoute(): MainFacetCapabilities["MODEL"] {
-    return this.ctx.exports.ModelRoute({});
+    return this.ctx.exports.ModelRoute({ props: { supervisor: this.name } });
   }
 
   /** Mount one generation as a facet. Relaying and starting a project turn both use this. */
@@ -318,6 +344,56 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     now: number = Date.now(),
   ): Promise<GitHubAuthorizationOutcome> {
     return runAtEntryPoint(this.github.completeAuthorization(scope, now));
+  }
+
+  /** The ChatGPT connection as the owner sees it. It carries no token. */
+  getChatGPTConnection(): ChatGPTConnectionView {
+    return this.chatgpt.view();
+  }
+
+  startChatGPTLogin(): Promise<ChatGPTConnectionView> {
+    return runAtEntryPoint(this.chatgpt.startLogin());
+  }
+
+  completeChatGPTLogin(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+    attemptId: unknown,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see above.
+    callbackUrl: unknown,
+  ): Promise<ChatGPTLoginOutcome> {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC arguments.
+    if (typeof attemptId !== "string" || typeof callbackUrl !== "string") {
+      return Promise.resolve({
+        ok: false,
+        problem: { code: "no-sign-in" },
+        chatgpt: this.chatgpt.view(),
+      });
+    }
+
+    return runAtEntryPoint(this.chatgpt.completeLogin(attemptId, callbackUrl));
+  }
+
+  disconnectChatGPT(): ChatGPTConnectionView {
+    return this.chatgpt.disconnect();
+  }
+
+  /**
+   * The access token for the model route's next ChatGPT call, refreshed first when it is close to
+   * expiry. Only the model route calls this: the owner API exposes no route to it, and a facet
+   * holds no Supervisor stub.
+   */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+  chatgptAccess(rejected?: unknown): Promise<ChatGPTAccess> {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
+    const refused = typeof rejected === "string" ? rejected : undefined;
+
+    return runAtEntryPoint(this.chatgpt.access(refused));
+  }
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+  markChatGPTRefused(accessToken: unknown): void {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
+    if (typeof accessToken === "string") this.chatgpt.markRefused(accessToken);
   }
 
   /**

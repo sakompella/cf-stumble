@@ -10,6 +10,7 @@ import {
   providerStreamOfLines,
   sseLine,
 } from "./model-route-provider-stream.js";
+import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type {
   ModelRouteRequest,
   StreamingProviderPayload,
@@ -55,8 +56,44 @@ function bindingStreaming(lines: readonly string[]): FakeBinding {
   return fakeAiBinding(() => Promise.resolve(providerStreamOfLines(lines)));
 }
 
+type CredentialHolder = Readonly<{
+  chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
+  markChatGPTRefused(accessToken: string): Promise<void>;
+}>;
+
+const NO_SUPERVISOR = {
+  getByName(): CredentialHolder {
+    throw new Error("a route no Supervisor created must not look for one");
+  },
+};
+
 function routeOver(binding: FakeBinding): ModelRoute {
-  return new ModelRoute(createExecutionContext(), { AI: binding.ai });
+  return new ModelRoute(createExecutionContext(), {
+    AI: binding.ai,
+    SUPERVISOR: NO_SUPERVISOR,
+    CHATGPT_MODEL: "gpt-test",
+  });
+}
+
+/** A route a Supervisor created, whose credential holder answers every call with `access`. */
+function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRoute {
+  const context = createExecutionContext();
+  Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
+
+  return new ModelRoute(context, {
+    AI: binding.ai,
+    SUPERVISOR: {
+      getByName: (name) => {
+        expect(name).toBe("owner");
+
+        return {
+          chatgptAccess: () => Promise.resolve(access),
+          markChatGPTRefused: () => Promise.resolve(),
+        };
+      },
+    },
+    CHATGPT_MODEL: "gpt-test",
+  });
 }
 
 function streamOf(
@@ -237,4 +274,26 @@ test("the deployed entrypoint answers runStream across its own service-binding h
   const outcome = await stub.runStream(REQUEST);
   const events = await collectEvents(streamOf(outcome));
   expect(events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
+});
+
+test("with no ChatGPT credential connected, the Supervisor's route answers from Workers AI", async () => {
+  const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
+
+  const events = await collectEvents(
+    streamOf(supervisedRoute(binding, { kind: "not-connected" }).runStream(REQUEST)),
+  );
+
+  expect(binding.calls).toHaveLength(1);
+  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });
+});
+
+test("a ChatGPT grant that needs a reconnect fails the call and never falls back to Workers AI", async () => {
+  const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
+
+  const events = await collectEvents(
+    streamOf(supervisedRoute(binding, { kind: "reconnect-required" }).runStream(REQUEST)),
+  );
+
+  expect(events).toEqual([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]);
+  expect(binding.calls).toEqual([]);
 });

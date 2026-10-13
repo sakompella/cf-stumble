@@ -37,6 +37,8 @@ export const HARNESS_SCENARIOS = [
   "no-projects",
   "github-disconnected",
   "github-awaiting-authorization",
+  "chatgpt-connected",
+  "chatgpt-needs-reconnect",
   "status-problem",
 ] as const;
 

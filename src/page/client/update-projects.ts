@@ -1,13 +1,21 @@
 import * as Array from "effect/Array";
 import * as Option from "effect/Option";
-import { AuthorizeGitHub, ConnectRepository, FetchProjects, FetchThread } from "./commands.js";
+import {
+  AuthorizeGitHub,
+  ConnectRepository,
+  DisconnectChatGPT,
+  FetchProjects,
+  FetchThread,
+  FinishChatGPTLogin,
+  StartChatGPTLogin,
+} from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
 import { Turn } from "./model.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 /**
- * The sidebar: what the owner may work in, the GitHub connection, and connecting another
- * repository. Selecting a project is the only way this page names one, and it is a boundary: it
+ * The sidebar: what the owner may work in, the GitHub and ChatGPT connections, and connecting
+ * another repository. Selecting a project is the only way this page names one, and it is a boundary: it
  * bumps `selection`, so a thread read for the project a reader left is dropped, and it stops any
  * turn still streaming.
  */
@@ -159,6 +167,74 @@ export function gitHubHandlers(
       model: {
         ...withError(model, "the GitHub authorization request", detail),
         github: { ...model.github, state: "request failed" },
+      },
+    }),
+  };
+}
+
+/**
+ * Every ChatGPT answer carries the Worker's whole view of the connection, so the page replaces what
+ * it showed instead of working out what the request changed.
+ */
+const ASKING = "asking ChatGPT";
+
+function asking(model: Model): Model {
+  return { ...clearError(model), chatgptResult: ASKING };
+}
+
+function finish(model: Model): UpdateReturn {
+  return Option.match(model.chatgpt.maybeLogin, {
+    onNone: () => ({ model }),
+    onSome: (login) => {
+      const callbackUrl = model.chatgptCallbackInput.trim();
+
+      return callbackUrl === ""
+        ? { model: { ...clearError(model), chatgptResult: "paste the address first" } }
+        : {
+            model: asking(model),
+            commands: [FinishChatGPTLogin({ attemptId: login.attemptId, callbackUrl })],
+          };
+    },
+  });
+}
+
+export function chatGPTHandlers(
+  model: Model,
+): Handlers<
+  | "ClickedChatGPTLogin"
+  | "UpdatedChatGPTCallbackInput"
+  | "ClickedChatGPTFinish"
+  | "ClickedChatGPTDisconnect"
+  | "SucceededChatGPT"
+  | "RejectedChatGPT"
+  | "FailedChatGPT"
+> {
+  return {
+    ClickedChatGPTLogin: () => ({ model: asking(model), commands: [StartChatGPTLogin()] }),
+    UpdatedChatGPTCallbackInput: ({ value }) => ({
+      model: { ...model, chatgptCallbackInput: value },
+    }),
+    ClickedChatGPTFinish: () => finish(model),
+    ClickedChatGPTDisconnect: () => ({ model: asking(model), commands: [DisconnectChatGPT()] }),
+    SucceededChatGPT: ({ chatgpt }) => ({
+      model: { ...model, chatgpt, chatgptCallbackInput: "", chatgptResult: "" },
+    }),
+    RejectedChatGPT: ({ wording, maybeChatGPT }) => {
+      const chatgpt = Option.getOrElse(maybeChatGPT, () => model.chatgpt);
+
+      return {
+        model: {
+          ...model,
+          chatgpt,
+          chatgptCallbackInput: Option.isSome(chatgpt.maybeLogin) ? model.chatgptCallbackInput : "",
+          chatgptResult: wording,
+        },
+      };
+    },
+    FailedChatGPT: ({ detail }) => ({
+      model: {
+        ...withError(model, "the ChatGPT request", detail),
+        chatgptResult: "request failed",
       },
     }),
   };

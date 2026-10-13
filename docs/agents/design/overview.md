@@ -84,7 +84,7 @@ Version 0 deliberately postponed these:
 - reconnect, resume, steering, and background turns beyond what a correct streamed turn needs;
 - combined project and harness views;
 - public signup, teams, roles, invitations, tenant administration, or a custom account system;
-- provider selection and subscription login; and
+- provider selection by the owner or the agent; and
 - a better cache policy and thread migrations.
 
 Ideas outside version 0: `patch.md` profiles; code-server; Cloudflare OS Gadget or Blueprint
@@ -123,7 +123,8 @@ therefore sandboxes every relayed response into an opaque origin, and the owner 
 reach the supervisor's generation controls through the browser either.
 
 The cold-start check is settled by ADR-0029. ADR-0037 settles UI transport. The host selects the
-Workers AI model through its binding. A caller cannot select the model, effort, or endpoint, as the
+model: the owner's ChatGPT subscription once the owner connects it, and the Workers AI model through
+its binding until then (ADR-0047). A caller cannot select the model, effort, or endpoint, as the
 [version 0 release notes](../../release/v0/release-notes.md) record.
 
 A successful HTTP status does not prove that a streamed turn completed. A stream can fail after sending headers, and a disconnect can leave work unresolved. The implementation should measure those cases before using them as evidence that a generation is reliable.
