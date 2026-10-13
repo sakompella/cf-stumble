@@ -12,6 +12,7 @@ export default defineConfig({
   jsPlugins: [
     { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
     { name: "foldkit", specifier: "@foldkit/oxlint-plugin" },
+    { name: "cf-stumble", specifier: "./tools/oxlint/cf-stumble/index.ts" },
   ],
   plugins: ["typescript", "unicorn", "oxc", "import"],
   categories: {
@@ -88,6 +89,9 @@ export default defineConfig({
     // A `typeof` check inside a type guard is the guard's whole job. The parsers that read
     // untrusted JSON keep their checks; everywhere else the rule stays on.
     "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
+
+    // Workers RPC exposes every prototype method of an RPC class, whatever TypeScript calls it.
+    "cf-stumble/no-typescript-private-rpc-member": "error",
   },
 
   overrides: [

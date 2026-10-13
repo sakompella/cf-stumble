@@ -22,6 +22,7 @@
     "browser-harness/**/*.mts",
     "playwright/**/*.mts",
     "ops-check/**/*.mts",
-    "ops-check/**/*.ts"
+    "ops-check/**/*.ts",
+    "oxlint/cf-stumble/**/*.ts"
   ]
 }

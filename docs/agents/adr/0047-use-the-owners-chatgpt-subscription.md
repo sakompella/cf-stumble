@@ -22,6 +22,15 @@ asks the Supervisor for an access token over RPC for each call and sends it only
 `Authorization` header to OpenAI. No view, log event, RPC result to a facet, or error carries a
 token, a code, or the verifier.
 
+**Methods on RPC classes are public API.** Workers RPC exposes every method and accessor on the
+prototype of a class that extends `WorkerEntrypoint`, `DurableObject`, or `RpcTarget`. TypeScript's
+`private` and `protected` are erased, so a facet holding the route stub could call a `private`
+helper by name. Until 2026-10-13 the route's credential lookup was such a helper, and a loaded
+generation called it and read the access token through the returned `access()`. A helper on these
+classes is a `#private` method or a module function. The lint rule
+`cf-stumble/no-typescript-private-rpc-member` (`tools/oxlint/cf-stumble/`) rejects the TypeScript
+form, and `test/model-route-rpc-surface.test.ts` probes the route from a loaded generation.
+
 **The fallback is narrow.** With no connection the route calls Workers AI as before. A connection
 that needs a reconnect fails every call with `chatgpt-reconnect-required` instead of falling back,
 so the owner sees that the subscription stopped answering. A token server that is down fails the
