@@ -25,10 +25,14 @@ export type StreamingProviderPayload = Readonly<{
  * The capability a streaming call needs from the Workers AI binding: pass the fixed model and a
  * streaming payload, get back the raw provider byte stream. This mirrors `Ai.run(model, { ...,
  * stream: true })`'s real return type so a fake in tests and the real `env.AI` binding satisfy the
- * same shape.
+ * same shape. `signal` aborts once nobody reads the route's stream any more.
  */
 export type ModelStreamInference = {
-  run(model: string, input: StreamingProviderPayload): Promise<ReadableStream<Uint8Array>>;
+  run(
+    model: string,
+    input: StreamingProviderPayload,
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array>>;
 };
 
 /**

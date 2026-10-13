@@ -8,6 +8,7 @@ import {
 } from "./turn-frames.js";
 import { endTurn, releaseLease, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
 import { runResponseBody } from "../../run-entry-point.js";
+import { KEEPALIVE_LINE, keptAlive } from "../../stream-keepalive.js";
 import type { TurnBound } from "./turn-bound.js";
 import type { TurnWorkspace } from "./project-turn.js";
 import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
@@ -27,11 +28,6 @@ type ReadTurnStreamInput = TurnSettlement &
   }>;
 
 const encoder = new TextEncoder();
-
-/** How often a quiet turn writes an empty line, which bounds how late a disconnect is heard of. */
-const TURN_KEEPALIVE_MS = 2_000;
-
-const KEEPALIVE = encoder.encode("\n");
 
 function encodeFrame(frame: ProjectTurnFrame): Uint8Array {
   return encoder.encode(`${JSON.stringify(frame)}\n`);
@@ -190,7 +186,7 @@ class TurnOutput {
 
   /** Write an empty line, which every reader of a turn skips. */
   readonly keepAlive = (): void => {
-    if (!this.#cancelled) this.#controller?.enqueue(KEEPALIVE);
+    if (!this.#cancelled) this.#controller?.enqueue(KEEPALIVE_LINE);
   };
 
   /** Write the one terminal frame and close, which happens exactly once per turn. */
@@ -210,23 +206,6 @@ function endingOf(read: Exit.Exit<StreamEnding>): Effect.Effect<StreamEnding> {
 }
 
 /**
- * Write an empty line every few seconds until `work` ends.
- *
- * Workers RPC tells a stream's source that its reader went away only when the source next writes.
- * Every hop between the generation and the browser is such a stream, and a generation running a
- * long command writes nothing, so without these lines a browser that leaves during `sleep 90` is
- * heard of only when the command ends, and the project stays held until then.
- */
-function keptAlive<A>(work: Effect.Effect<A>, output: TurnOutput): Effect.Effect<A> {
-  const beat = Effect.sleep(TURN_KEEPALIVE_MS).pipe(
-    Effect.andThen(Effect.sync(output.keepAlive)),
-    Effect.forever,
-  );
-
-  return Effect.raceFirst(work, beat);
-}
-
-/**
  * Read the generation's stream to its ending and settle the turn from it.
  *
  * The read is the only interruptible part. A disconnect interrupts it, and that becomes the
@@ -243,7 +222,7 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
     const reader = new TurnReader(input.frames, log.counting(output.publish));
 
     return input.bound
-      .within(keptAlive(reader.read(), output), TIMED_OUT)
+      .within(keptAlive(reader.read(), output.keepAlive), TIMED_OUT)
       .pipe(Effect.ensuring(reader.stop()));
   });
 

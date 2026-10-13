@@ -125,4 +125,6 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     reader went away only on the source's next write, and a running command writes nothing. The
     turn body now writes an empty line every 2 s, and a settled turn ends its capability, which
     kills the command. A generation built before this change still learns of the cancel only when
-    it next writes, which the killed command makes it do.
+    it next writes, which the killed command makes it do. The model route's stream had the same
+    gap and no `cancel` at all, so a cancelled turn left a quiet provider call running. It now
+    writes the same empty lines, and its `cancel` aborts the provider call or cancels its stream.
