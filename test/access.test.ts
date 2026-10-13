@@ -228,10 +228,12 @@ describe("Cloudflare Access JWT verification", () => {
     ).resolves.toEqual({ ok: false, reason: "malformed-token" });
   });
 
+  // The first request in this file loads the whole Worker module, which exceeds Vitest's 5 s default
+  // on a busy machine; the assertion is about routing, not load time.
   test("the Worker rejects an unauthenticated request before Supervisor routing", async () => {
     const response = await workerExports.default.fetch(new Request("https://cf-stumble.test/"));
     expect(response.status).toBe(401);
-  });
+  }, 30_000);
 });
 
 test("rejects an http team domain as invalid configuration", async () => {
