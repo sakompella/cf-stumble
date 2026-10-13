@@ -13,12 +13,26 @@ import { isRecord } from "../../untrusted.js";
  */
 
 /**
- * The most one frame may occupy. A generation that writes a longer line has broken the protocol,
- * so the turn ends as an invalid stream rather than growing a buffer until the isolate dies. The
- * bound is above the tool-result bound a generation applies to its own output
- * (`facet/generation-0/turn-policy.ts`), so a legitimate frame cannot reach it.
+ * The most one line of a generation's stream may occupy, in UTF-8 bytes. A generation that writes a
+ * longer line has broken the protocol, so the turn ends as an invalid stream rather than growing a
+ * buffer until the isolate dies.
+ *
+ * A progress frame carries at most one tool result or diff, which Generation 0 bounds to 50 KiB
+ * (`facet/generation-0/turn-policy.ts`); the progress bound leaves room for JSON escaping on top.
+ *
+ * A terminal frame carries the whole conversation, so it has its own, larger bound. The model route
+ * refuses a request over 1 MiB (`model-route.ts`), so the conversation a turn's last model call
+ * sent is at most that. After it the turn adds one reply of at most 4096 output tokens and the
+ * results of that reply's tool calls, each again at most 50 KiB.
+ *
+ * The Supervisor stores that conversation as one SQLite value, and Cloudflare caps a Durable Object
+ * string, BLOB, or row at 2 MB. The terminal bound stays below that with margin, so a conversation
+ * the store could not hold ends the turn as `oversized-frame` instead of failing the save. It
+ * still leaves room for about fifteen full tool results after the last 1 MiB request.
  */
-export const PROJECT_TURN_FRAME_MAX_BYTES = 262_144;
+export const TURN_PROGRESS_FRAME_MAX_BYTES = 262_144;
+
+export const TURN_TERMINAL_FRAME_MAX_BYTES = 1_835_008;
 
 /** Why a turn stream could not be read as frames. Each one ends the turn without a save. */
 export type TurnStreamProblem = "malformed-frame" | "oversized-frame" | "missing-terminal-frame";

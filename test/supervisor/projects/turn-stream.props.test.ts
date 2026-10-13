@@ -8,7 +8,7 @@ import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
 import { readTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
 import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
 import { idleWorkspace } from "./turn-workspace-fakes.js";
-import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/turn-frames.js";
+import { TURN_PROGRESS_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/turn-frames.js";
 import type { ProjectThreadResult } from "../../../src/supervisor/threads/index.js";
 
 function testProjectId(): ProjectId {
@@ -134,7 +134,9 @@ test("reassembles several Unicode turn frames at arbitrary byte offsets, past em
 test("rejects an oversized frame regardless of where its bytes are split", async () => {
   await hegel.testAsync(
     async (tc) => {
-      const raw = `${JSON.stringify({ kind: "text", text: "x".repeat(PROJECT_TURN_FRAME_MAX_BYTES) })}\n`;
+      // Fewer UTF-16 code units than the bound, but more UTF-8 bytes, which is what the bound counts.
+      const wide = "日".repeat(Math.ceil(TURN_PROGRESS_FRAME_MAX_BYTES / 3));
+      const raw = `${JSON.stringify({ kind: "text", text: wide })}\n`;
       const bytes = new TextEncoder().encode(raw);
 
       const points = tc.draw(

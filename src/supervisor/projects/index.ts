@@ -39,7 +39,7 @@ export {
   type TurnStartContext,
 } from "./turn-run.js";
 
-export { PROJECT_TURN_FRAME_MAX_BYTES } from "./turn-frames.js";
+export { TURN_PROGRESS_FRAME_MAX_BYTES, TURN_TERMINAL_FRAME_MAX_BYTES } from "./turn-frames.js";
 
 export { timedTurnMount, timedTurnProvision } from "./turn-log.js";
 
