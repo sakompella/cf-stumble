@@ -11,6 +11,7 @@ import {
   type GenerationControlSupervisor,
   type GenerationSubmissionSupervisor,
 } from "./generations.js";
+import { routeChatGPTApiRequest, type ChatGPTApiSupervisor } from "./chatgpt.js";
 import { callSupervisor, jsonError, SupervisorCallFailed } from "./json.js";
 import { projectIdFromPath, routePattern } from "./route-pattern.js";
 import { settleRoute } from "./route-settled.js";
@@ -22,7 +23,8 @@ type WorkspaceResetResult = Readonly<{
   reset: "workspace";
 }>;
 
-export type OwnerApiSupervisor = GenerationControlSupervisor &
+export type OwnerApiSupervisor = ChatGPTApiSupervisor &
+  GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
   ProjectApiSupervisor &
   TurnApiSupervisor & {
@@ -187,6 +189,12 @@ function ownerApiRoute(
 
   if (turnRoute !== undefined) {
     return turnRoute;
+  }
+
+  const chatgptRoute = routeChatGPTApiRequest(request, supervisor);
+
+  if (chatgptRoute !== undefined) {
+    return chatgptRoute;
   }
 
   const isGet = request.method === "GET";
