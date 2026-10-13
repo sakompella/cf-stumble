@@ -8,7 +8,9 @@ import {
 } from "./turn-frames.js";
 import { endTurn, releaseLease, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
 import { runResponseBody } from "../../run-entry-point.js";
+import { KEEPALIVE_LINE, keptAlive } from "../../stream-keepalive.js";
 import type { TurnBound } from "./turn-bound.js";
+import type { TurnWorkspace } from "./project-turn.js";
 import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
 
 type ReadTurnStreamInput = TurnSettlement &
@@ -19,6 +21,8 @@ type ReadTurnStreamInput = TurnSettlement &
      * and the start already spent part of it, so what is left here is what is left of the turn.
      */
     bound: TurnBound;
+    /** The turn's capability, ended once the turn has settled, however it ended. */
+    workspace: TurnWorkspace;
     /** Who this turn is in the operational log. */
     trace: TurnTrace;
   }>;
@@ -180,6 +184,11 @@ class TurnOutput {
     if (!this.#cancelled) this.#controller?.enqueue(encodeFrame(frame));
   };
 
+  /** Write an empty line, which every reader of a turn skips. */
+  readonly keepAlive = (): void => {
+    if (!this.#cancelled) this.#controller?.enqueue(KEEPALIVE_LINE);
+  };
+
   /** Write the one terminal frame and close, which happens exactly once per turn. */
   finish(frame: ProjectTurnFrame): void {
     if (this.#cancelled) return;
@@ -212,7 +221,9 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
   const reading = Effect.suspend(() => {
     const reader = new TurnReader(input.frames, log.counting(output.publish));
 
-    return input.bound.within(reader.read(), TIMED_OUT).pipe(Effect.ensuring(reader.stop()));
+    return input.bound
+      .within(keptAlive(reader.read(), output.keepAlive), TIMED_OUT)
+      .pipe(Effect.ensuring(reader.stop()));
   });
 
   return Effect.uninterruptibleMask((restore) =>
@@ -238,6 +249,7 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
     Effect.ensuring(
       Effect.sync(() => {
         input.bound.stop();
+        input.workspace.end();
       }),
     ),
   );

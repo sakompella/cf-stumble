@@ -14,6 +14,7 @@ import { capturedEvents } from "../../log-capture.js";
 import { sampleSelectableCatalog } from "../../project-fixtures.js";
 import { activateFixtureGeneration, connectedSupervisor as supervisor } from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../threads/message-samples.js";
+import { idleWorkspace } from "./turn-workspace-fakes.js";
 import {
   admitTurn,
   runScriptedTurn,
@@ -84,7 +85,7 @@ function turnInput(
 }
 
 function startingWith(generation: ScriptedGeneration): RunProjectTurnInput["start"] {
-  return () => Effect.succeed({ ok: true, frames: generation.stream });
+  return () => Effect.succeed({ ok: true, frames: generation.stream, workspace: idleWorkspace });
 }
 
 function frameOf(chunk: ReadableStreamReadResult<Uint8Array>): ProjectTurnFrame | undefined {
@@ -127,7 +128,11 @@ function startingLate(
     seen?.(context);
 
     return Effect.promise(() => scheduler.wait(delayMs)).pipe(
-      Effect.as({ ok: true, frames: generation.stream } satisfies ProjectTurnStart),
+      Effect.as({
+        ok: true,
+        frames: generation.stream,
+        workspace: idleWorkspace,
+      } satisfies ProjectTurnStart),
     );
   };
 }
@@ -190,7 +195,7 @@ test("a browser that cancels reaches the generation and gives the project back",
       turnInput(state, threads, (_project, _request, context) => {
         signal = context.signal;
 
-        return Effect.succeed({ ok: true, frames: generation.stream });
+        return Effect.succeed({ ok: true, frames: generation.stream, workspace: idleWorkspace });
       }),
     );
 
@@ -578,7 +583,7 @@ test("the turn's signal is aborted once the turn has settled", async () => {
       turnInput(state, threads, (_project, _request, context) => {
         signal = context.signal;
 
-        return Effect.succeed({ ok: true, frames: generation.stream });
+        return Effect.succeed({ ok: true, frames: generation.stream, workspace: idleWorkspace });
       }),
     );
 
@@ -614,7 +619,12 @@ test("a terminal frame read before the deadline stands, however long the cancel 
     });
 
     const run = await admitTurn(
-      turnInput(state, threads, () => Effect.succeed({ ok: true, frames }), { deadlineMs: 50 }),
+      turnInput(
+        state,
+        threads,
+        () => Effect.succeed({ ok: true, frames, workspace: idleWorkspace }),
+        { deadlineMs: 50 },
+      ),
     );
 
     if (!run.ok) throw new Error(`the turn must start; it was refused with ${run.problem.code}`);

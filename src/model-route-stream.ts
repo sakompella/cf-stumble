@@ -12,11 +12,12 @@ import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-rout
 import type {
   ModelStreamEvent,
   ModelStreamInference,
-  ModelUsage,
   StreamingProviderPayload,
   ToolCallDelta,
 } from "./model-route-events.js";
-import { runAtEntryPoint } from "./run-entry-point.js";
+import { resolveUsage, type ProviderResult } from "./model-route-usage.js";
+import { runResponseBody } from "./run-entry-point.js";
+import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
 
 // The only model the immutable host selects. Two deployed facts pin it. Turns first saved an empty
 // assistant message, because this model answers in `reasoning_content` and the default output
@@ -27,11 +28,6 @@ const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
 const REASONING_EFFORT = "low" as const;
 
 const MAX_OUTPUT_TOKENS = 4096;
-
-type ProviderResult = Readonly<{
-  response?: string | null;
-  tool_calls?: ReadonlyArray<ToolCall>;
-}>;
 
 function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingProviderPayload {
   const fixed = {
@@ -73,8 +69,9 @@ export function streamingBindingCall(
   ai: Ai,
   model: string,
   input: StreamingProviderPayload,
+  signal: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
-  const raw: unknown = ai.run(model, input);
+  const raw: unknown = ai.run(model, input, { signal });
 
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: see the function doc above.
   return raw as Promise<ReadableStream<Uint8Array>>;
@@ -259,39 +256,32 @@ function pumpProviderStream(
   );
 }
 
-const USAGE_BYTES = new TextEncoder();
-
-/** Conservative bytes-per-token used only when the provider reports no usage of its own. */
-const ESTIMATED_BYTES_PER_TOKEN = 3;
-
-function estimateTokens(byteLength: number): number {
-  return Math.ceil(byteLength / ESTIMATED_BYTES_PER_TOKEN);
-}
-
-function resolveUsage(
-  reported: Readonly<{ inputTokens: number; outputTokens: number }> | undefined,
+/** One model call, reported as events: its deltas, then `done` or `model-unavailable`. */
+function modelAnswer(
+  ai: ModelStreamInference,
   request: ModelRouteRequest,
-  result: ProviderResult,
-): ModelUsage {
-  if (reported !== undefined) {
-    return {
-      inputTokens: reported.inputTokens,
-      outputTokens: reported.outputTokens,
-      estimated: false,
-    };
-  }
-
-  const promptBytes = USAGE_BYTES.encode(JSON.stringify(request.messages)).length;
-
-  const completionBytes = USAGE_BYTES.encode(
-    (result.response ?? "") + JSON.stringify(result.tool_calls ?? []),
-  ).length;
-
-  return {
-    inputTokens: estimateTokens(promptBytes),
-    outputTokens: estimateTokens(completionBytes),
-    estimated: true,
-  };
+  emit: (event: ModelStreamEvent) => void,
+): Effect.Effect<void> {
+  return Effect.tryPromise({
+    try: (signal) => ai.run(MODEL, buildStreamingProviderPayload(request), signal),
+    catch: () => new ModelUnavailable(),
+  }).pipe(
+    Effect.flatMap((providerStream) => pumpProviderStream(providerStream, emit)),
+    Effect.flatMap(({ result, usage }) =>
+      Effect.sync(() => {
+        emit({
+          type: "done",
+          message: normalizeResponse(result),
+          usage: resolveUsage(usage, request, result),
+        });
+      }),
+    ),
+    Effect.catchTag("ModelUnavailable", () =>
+      Effect.sync(() => {
+        emit({ type: "error", error: { code: "model-unavailable" } });
+      }),
+    ),
+  );
 }
 
 /**
@@ -300,39 +290,31 @@ function resolveUsage(
  * returned stream; nothing here throws across the RPC boundary or resolves a rejected promise.
  *
  * The call runs in the stream's own `start`, so its lifetime is the body's, not the RPC call's
- * that returned the stream.
+ * that returned the stream. Cancelling the stream interrupts the call, which aborts the provider
+ * request or cancels its stream. While the provider is quiet the stream writes empty lines, so a
+ * generation that stops reading across Workers RPC is heard of within seconds.
  */
 export function streamModelEvents(
   ai: ModelStreamInference,
   request: ModelRouteRequest,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  const cancelled = new AbortController();
+  let ended: Promise<void> | undefined;
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      function emit(event: ModelStreamEvent): void {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      function write(bytes: Uint8Array): void {
+        if (!cancelled.signal.aborted) controller.enqueue(bytes);
       }
 
-      const turn = Effect.tryPromise({
-        try: () => ai.run(MODEL, buildStreamingProviderPayload(request)),
-        catch: () => new ModelUnavailable(),
+      function emit(event: ModelStreamEvent): void {
+        write(encoder.encode(`${JSON.stringify(event)}\n`));
+      }
+
+      const turn = keptAlive(modelAnswer(ai, request, emit), () => {
+        write(KEEPALIVE_LINE);
       }).pipe(
-        Effect.flatMap((providerStream) => pumpProviderStream(providerStream, emit)),
-        Effect.flatMap(({ result, usage }) =>
-          Effect.sync(() => {
-            emit({
-              type: "done",
-              message: normalizeResponse(result),
-              usage: resolveUsage(usage, request, result),
-            });
-          }),
-        ),
-        Effect.catchTag("ModelUnavailable", () =>
-          Effect.sync(() => {
-            emit({ type: "error", error: { code: "model-unavailable" } });
-          }),
-        ),
         Effect.andThen(
           Effect.sync(() => {
             controller.close();
@@ -340,7 +322,17 @@ export function streamModelEvents(
         ),
       );
 
-      return runAtEntryPoint(turn);
+      ended = runResponseBody(turn, cancelled.signal);
+
+      return ended;
+    },
+    cancel() {
+      cancelled.abort();
+
+      return ended?.then(
+        () => {},
+        () => {},
+      );
     },
   });
 }

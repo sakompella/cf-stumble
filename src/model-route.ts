@@ -233,7 +233,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv> {
     const validated = request as ModelRouteRequest;
 
     return streamModelEvents(
-      { run: (model, input) => streamingBindingCall(this.env.AI, model, input) },
+      { run: (model, input, signal) => streamingBindingCall(this.env.AI, model, input, signal) },
       validated,
     );
   }

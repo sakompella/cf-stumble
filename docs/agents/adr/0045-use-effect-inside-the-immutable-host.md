@@ -46,7 +46,10 @@ identity or a request's Durable Object stub, lives in a global layer.
   lifetime until the turn settles, fails, is cancelled, or reaches its deadline (ADR-0037). Its
   `start` runs the body's program with `runResponseBody` in `src/run-entry-point.ts`, and its
   `cancel` interrupts that program. The program's settlement runs uninterruptibly, so a cancel
-  cannot stop a turn between its thread write and the lease release.
+  cannot stop a turn between its thread write and the lease release. Workers RPC calls a
+  stream's `cancel` only when the stream next writes, so a turn body writes an empty line every
+  2 s while the generation is quiet, and once settled it ends the turn's capability, which kills
+  any command the generation still has running (`turn-cancel.test.ts`).
 - Durable state and platform alarms stay authoritative across Durable Object eviction. A fiber or
   a finalizer does not replace them, because eviction runs neither.
 - The mutable harness, vendored Pi, and vendored Computer do not use the host's Effect. A

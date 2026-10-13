@@ -10,7 +10,7 @@ import type {
   ProjectTurnStart,
   ProjectWorkspaceNamespace,
 } from "../../../src/supervisor/projects/index.js";
-import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
+import { unusedCapability } from "./turn-workspace-fakes.js";
 
 /**
  * The order of a turn's start steps, with every step a recording stand-in.
@@ -20,9 +20,6 @@ import type { ProjectRpcTargetContract } from "../../../src/workspace/project/pr
  * not decide whether anything serves. The capability comes last, and nothing runs once the turn's
  * signal has aborted.
  */
-
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the stand-in facet never calls the capability; the test only records when it was obtained.
-const capability = {} as ProjectRpcTargetContract;
 
 const workspaceName = tenantWorkspaceName("turn-start-order");
 
@@ -45,7 +42,7 @@ function recorder(answer: (events: string[]) => Promise<void> = () => Promise.re
         project: () => {
           events.push("capability");
 
-          return Promise.resolve(capability);
+          return Promise.resolve(unusedCapability);
         },
       }),
     },

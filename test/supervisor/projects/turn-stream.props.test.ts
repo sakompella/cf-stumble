@@ -7,6 +7,7 @@ import type { ProjectId } from "../../../src/project-catalog.js";
 import { TurnBound } from "../../../src/supervisor/projects/turn-bound.js";
 import { readTurnStream } from "../../../src/supervisor/projects/turn-stream.js";
 import { turnTrace } from "../../../src/supervisor/projects/turn-log.js";
+import { idleWorkspace } from "./turn-workspace-fakes.js";
 import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/turn-frames.js";
 import type { ProjectThreadResult } from "../../../src/supervisor/threads/index.js";
 
@@ -58,6 +59,7 @@ async function readTurn(chunks: readonly Uint8Array[]): Promise<readonly unknown
     },
     now: () => 0,
     bound: new TurnBound(10_000, () => 0),
+    workspace: idleWorkspace,
     trace: turnTrace(projectId, "lease-property", undefined, 0),
     frames: new ReadableStream<Uint8Array>({
       start(controller) {
@@ -83,7 +85,7 @@ async function readTurn(chunks: readonly Uint8Array[]): Promise<readonly unknown
   return output;
 }
 
-test("reassembles several Unicode turn frames at arbitrary byte offsets", async () => {
+test("reassembles several Unicode turn frames at arbitrary byte offsets, past empty lines", async () => {
   await hegel.testAsync(async (tc) => {
     const forwardedTexts = tc
       .draw(gs.arrays(text, { minSize: 1, maxSize: 5 }))
@@ -92,7 +94,19 @@ test("reassembles several Unicode turn frames at arbitrary byte offsets", async 
     const lines = forwardedTexts.map((value) => JSON.stringify({ kind: "text", text: value }));
 
     const terminal = JSON.stringify({ kind: "rejected", code: "invalid-turn-request" });
-    const raw = `${[...lines, terminal].join("\n")}\n`;
+
+    // Empty lines are keepalives, which any hop may add between frames and every reader skips.
+    const emptyLines = tc.draw(
+      gs.arrays(gs.integers({ minValue: 0, maxValue: 2 }), {
+        minSize: lines.length + 1,
+        maxSize: lines.length + 1,
+      }),
+    );
+
+    const raw = [...lines, terminal]
+      .map((line, index) => `${"\n".repeat(emptyLines[index] ?? 0)}${line}\n`)
+      .join("");
+
     const bytes = new TextEncoder().encode(raw);
 
     const continuationOffsets = [...bytes].flatMap((byte, index) =>

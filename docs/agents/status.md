@@ -106,3 +106,12 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     the `script-src 'self'` policy behind real Cloudflare Access; Worker startup time; a real
     container stop, exec, and first turn; and a turn streamed and cancelled through the deployed
     Worker. Local `wrangler check startup` profiles hold too few samples to compare.
+16. **A cancelled turn held its project until its command ended** (found on staging, 2026-10-12,
+    fixed on `fix/turn-cancel`). A browser that left during `sleep 90` freed the lease only after
+    the command finished, on the pre-port code too. Workers RPC tells a stream's source that its
+    reader went away only on the source's next write, and a running command writes nothing. The
+    turn body now writes an empty line every 2 s, and a settled turn ends its capability, which
+    kills the command. A generation built before this change still learns of the cancel only when
+    it next writes, which the killed command makes it do. The model route's stream had the same
+    gap and no `cancel` at all, so a cancelled turn left a quiet provider call running. It now
+    writes the same empty lines, and its `cancel` aborts the provider call or cancels its stream.

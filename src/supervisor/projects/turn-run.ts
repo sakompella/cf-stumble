@@ -62,6 +62,8 @@ export type TurnStartContext = Readonly<{
   trace: TurnTrace;
 }>;
 
+type StartedTurn = Extract<ProjectTurnStart, { ok: true }>;
+
 /** The generation a turn runs on, read once at admission and never re-read. */
 type TurnAttribution = Readonly<{ active: ActiveGeneration }>;
 
@@ -251,7 +253,7 @@ function handOff(
     return refused(started.reason);
   }
 
-  return { ok: true, frames: streamOrAbandon(input, turn, started.frames) };
+  return { ok: true, frames: streamOrAbandon(input, turn, started) };
 }
 
 /** Fix everything the rest of the turn is measured against, and log that it was admitted. */
@@ -286,13 +288,14 @@ function admittedTurn(
 function streamOrAbandon(
   input: RunProjectTurnInput,
   turn: AdmittedTurn,
-  frames: ReadableStream<Uint8Array>,
+  started: StartedTurn,
 ): ReadableStream<Uint8Array> {
   try {
-    return streamAdmittedTurn(input, turn, frames);
+    return streamAdmittedTurn(input, turn, started);
   } catch (error) {
     // Constructing the Supervisor-owned response stream can itself fail after the facet started.
     abandonTurn(input, turn, "stream-failed");
+    started.workspace.end();
     throw error;
   }
 }
@@ -374,6 +377,7 @@ function cancelOrphanedStart(ended: Exit.Exit<Exit.Exit<ProjectTurnStart>>): voi
       () => {},
       () => {},
     );
+    ended.value.value.workspace.end();
   }
 }
 
@@ -381,12 +385,13 @@ function cancelOrphanedStart(ended: Exit.Exit<Exit.Exit<ProjectTurnStart>>): voi
 function streamAdmittedTurn(
   input: RunProjectTurnInput,
   turn: AdmittedTurn,
-  frames: ReadableStream<Uint8Array>,
+  { frames, workspace }: StartedTurn,
 ): ReadableStream<Uint8Array> {
   return readTurnStream({
     projectId: turn.projectId,
     leaseId: turn.leaseId,
     frames,
+    workspace,
     threads: input.threads,
     now: input.now,
     bound: turn.bound,

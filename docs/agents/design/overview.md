@@ -100,7 +100,11 @@ The main open questions are:
 
 - whether ordinary `fetch` forwarding stays the supervisor-to-facet interface, or a future
   redesign replaces it (current implementation: `fetch`, see "The two harnesses" above);
-- what happens to a running turn when its browser disconnects; and
+- whether a running turn should outlive its browser. Today it does not: while a turn is open the
+  Supervisor writes an empty line on the turn stream every 2 s, so it hears of a disconnect within
+  about 4 s even while a command runs. It then settles the turn as `cancelled`, frees the lease,
+  and ends the turn's capability, which kills the turn's running commands
+  (`src/supervisor/projects/turn-stream.ts`, ADR-0045); and
 - whether the current module-map build path (see "Runtime and Computer" above) stays the way
   executable Worker modules are produced, identified, and retained.
 

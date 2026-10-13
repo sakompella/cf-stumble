@@ -89,9 +89,23 @@ async function effectPrebundle(): Promise<Plugin> {
  * tsconfig files typecheck it against the DOM. Foldkit imports the `effect` index, which the
  * prebundle above deliberately refuses.
  */
+/**
+ * workerd rejects a promise of its own, which no code can reach or handle, when a reader cancels a
+ * stream received over Workers RPC while a read is pending; the pending read itself rejects and
+ * is handled. A turn that ends while its generation is quiet does exactly that, and only
+ * `turn-cancel.test.ts` runs a real generation that far, so the error is ignored there alone.
+ */
+function isRpcStreamCancelNoise(error: { message?: string; VITEST_TEST_PATH?: string }): boolean {
+  return (
+    error.message === "Stream was cancelled." &&
+    error.VITEST_TEST_PATH?.endsWith("test/supervisor/projects/turn-cancel.test.ts") === true
+  );
+}
+
 export default defineConfig({
   test: {
     silent: "passed-only",
+    onUnhandledError: (error) => !isRpcStreamCancelNoise(error),
     projects: [
       {
         plugins: [

@@ -7,8 +7,15 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
  * surfaces.
  */
 type ProjectWorkspaceHost = Readonly<{
-  project(): Promise<ProjectRpcTargetContract>;
+  project(): Promise<ProjectCapabilityStub>;
 }>;
+
+/**
+ * The project capability as Workers RPC hands it over: a stub, which a holder duplicates to keep it
+ * past the call that received it.
+ */
+export type ProjectCapabilityStub = ProjectRpcTargetContract &
+  Readonly<{ dup(): ProjectRpcTargetContract & Disposable }>;
 
 /**
  * Just enough of the Workspace Host binding to reach the tenant's workspace by name. The Supervisor

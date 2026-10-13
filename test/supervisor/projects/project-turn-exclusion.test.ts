@@ -15,12 +15,12 @@ import {
   type ProvisionWorkspaceNamespace,
   type WorkspaceResult,
 } from "../../../src/workspace/index.js";
-import type { ProjectWorkspaceNamespace } from "../../../src/supervisor/projects/index.js";
-import type { ProjectRpcTargetContract } from "../../../src/workspace/project/protocol.js";
+import type {
+  ProjectCapabilityStub,
+  ProjectWorkspaceNamespace,
+} from "../../../src/supervisor/projects/index.js";
+import { unusedCapability } from "./turn-workspace-fakes.js";
 import { runToResult } from "../../workspace/workspace-results.js";
-
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the fake facet never calls this capability; the test only observes when it is obtained.
-const unusedCapability = {} as ProjectRpcTargetContract;
 
 type DelayedWorkspace = Readonly<{
   namespace: ProvisionWorkspaceNamespace & ProjectWorkspaceNamespace;
@@ -40,7 +40,7 @@ function delayedWorkspace(): DelayedWorkspace {
     cloneStarted = resolve;
   });
 
-  const host: ProvisionWorkspaceHost & { project(): Promise<ProjectRpcTargetContract> } = {
+  const host: ProvisionWorkspaceHost & { project(): Promise<ProjectCapabilityStub> } = {
     provision(request): Promise<WorkspaceResult> {
       provisionCalls += 1;
 

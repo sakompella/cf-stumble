@@ -26,6 +26,11 @@ const FIXTURES: readonly ModuleMapBuild[] = [
     entryModule: "loaded-project-workspaces-entry.js",
     outputPath: "build/loaded-project-workspaces-fixture.json",
   },
+  {
+    entryPoint: "test/supervisor/projects/loaded-stream-relay-entry.ts",
+    entryModule: "loaded-stream-relay-entry.js",
+    outputPath: "build/loaded-stream-relay-fixture.json",
+  },
 ];
 
 for (const fixture of FIXTURES) {

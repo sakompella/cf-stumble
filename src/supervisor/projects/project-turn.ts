@@ -11,7 +11,7 @@ import {
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import type { MainFacetMountProblem } from "../artifacts/index.js";
-import type { ProjectWorkspaceNamespace } from "./project-workspace.js";
+import type { ProjectCapabilityStub, ProjectWorkspaceNamespace } from "./project-workspace.js";
 
 /**
  * The one thing this path calls on a mounted generation. It is narrower than `MainFacetTarget` on
@@ -89,8 +89,37 @@ export type ProjectTurnRefusal =
   | "turn-not-started";
 
 export type ProjectTurnStart =
-  | Readonly<{ ok: true; frames: ReadableStream<Uint8Array> }>
+  | Readonly<{ ok: true; frames: ReadableStream<Uint8Array>; workspace: TurnWorkspace }>
   | Readonly<{ ok: false; reason: ProjectTurnRefusal }>;
+
+/**
+ * The Supervisor's own hold on a started turn's capability, apart from the generation's.
+ *
+ * Cancelling the generation's stream does not stop the generation while it is quiet: Workers RPC
+ * tells it that its reader went away only when it next writes, and a turn running `sleep 90`
+ * writes nothing until the command ends. Ending the capability kills every command the turn
+ * still has running and refuses new ones, so a turn that is over stops working in the tenant's
+ * shared workspace whether or not its generation has noticed. Call `end` once, when the turn ends.
+ */
+export type TurnWorkspace = Readonly<{ end(): void }>;
+
+/**
+ * Hold a duplicate, because Workers RPC disposes a received stub once the call that received it
+ * returns, and the turn outlives that call.
+ */
+function holdWorkspace(capability: ProjectCapabilityStub): TurnWorkspace {
+  const held = capability.dup();
+
+  const release = () => {
+    held[Symbol.dispose]();
+  };
+
+  return {
+    end() {
+      void held.endTurn().then(release, release);
+    },
+  };
+}
 
 /** A turn that did not begin. Every start step ends here when the turn is already over. */
 const NOT_STARTED = { ok: false, reason: "turn-not-started" } as const satisfies ProjectTurnStart;
@@ -143,8 +172,9 @@ function prepareWorkspace(
  *
  * Nothing disposes the obtained stub here. The generation leases a duplicate that outlives this
  * call, and that duplicate is a reference held through it, so disposing here would cut a running
- * turn off from the files it is working in. Releasing the lease at the turn's end, which
- * `facet/generation-0/project-capability.ts` does, is what ends the whole chain.
+ * turn off from the files it is working in. The Supervisor holds a duplicate of its own
+ * ({@link TurnWorkspace}), which the turn ends when it settles, and releasing the generation's lease
+ * at the turn's end, which `facet/generation-0/project-capability.ts` does, ends the whole chain.
  */
 export function startFacetTurn(input: ProjectTurnInput): Effect.Effect<ProjectTurnStart> {
   return Effect.gen(function* () {
@@ -200,20 +230,39 @@ export function startFacetTurn(input: ProjectTurnInput): Effect.Effect<ProjectTu
 
     if (!(yield* workspaceIsAvailable(input))) return NOT_STARTED;
 
-    const frames = yield* facetStream(() =>
-      mounted.success.fetcher.startTurn(
-        capability,
-        input.request,
-        selectedWorkingDirectory(selected),
-      ),
-    );
+    return yield* beginOnFacet(input, mounted.success.fetcher, capability, selected);
+  });
+}
 
-    return frames === null ? NOT_STARTED : endedBeforeItBegan(input, frames);
+/**
+ * Hand the generation the capability and the request, and keep the Supervisor's own hold on the
+ * capability. The hold is taken first, because handing a stub to a call gives it away.
+ */
+function beginOnFacet(
+  input: ProjectTurnInput,
+  facet: ProjectTurnFacet,
+  capability: ProjectCapabilityStub,
+  selected: SelectableProject,
+): Effect.Effect<ProjectTurnStart> {
+  return Effect.gen(function* () {
+    const workspace = holdWorkspace(capability);
+
+    const frames = yield* facetStream(() =>
+      facet.startTurn(capability, input.request, selectedWorkingDirectory(selected)),
+    ).pipe(Effect.onInterrupt(() => Effect.sync(workspace.end)));
+
+    if (frames === null) {
+      workspace.end();
+
+      return NOT_STARTED;
+    }
+
+    return endedBeforeItBegan(input, frames, workspace);
   });
 }
 
 /** Ask the tenant's Workspace Host for the project capability, or learn that it cannot answer. */
-function obtainCapability(input: ProjectTurnInput): Effect.Effect<ProjectRpcTargetContract | null> {
+function obtainCapability(input: ProjectTurnInput): Effect.Effect<ProjectCapabilityStub | null> {
   return Effect.promise(() =>
     timedWorkspaceRpc(
       { method: "project" },
@@ -270,18 +319,20 @@ function cancelUnread(frames: ReadableStream<Uint8Array> | null): void {
 
 /**
  * A turn whose bound passed while the facet was starting. The facet answered with a live stream
- * and has already begun the work behind it, so the stream is cancelled rather than returned: that
- * is what ends a turn nobody will read (`facet/generation-0/facet-turn.ts`).
+ * and has already begun the work behind it, so the stream is cancelled and the workspace ended
+ * rather than returned: that is what ends a turn nobody will read.
  */
 function endedBeforeItBegan(
   input: ProjectTurnInput,
   frames: ReadableStream<Uint8Array>,
+  workspace: TurnWorkspace,
 ): ProjectTurnStart {
   if (!input.signal.aborted) {
-    return { ok: true, frames };
+    return { ok: true, frames, workspace };
   }
 
   cancelUnread(frames);
+  workspace.end();
 
   return NOT_STARTED;
 }

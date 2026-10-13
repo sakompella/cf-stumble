@@ -93,6 +93,9 @@ async function streamFrames(
       return;
     }
 
+    // The deployed Supervisor writes an empty line every 2 s while a turn is quiet, so the page
+    // always reads one here.
+    res.write("\n");
     res.write(`${JSON.stringify(settle(state, turn, streamed, frame))}\n`);
     watch.framesWritten = index + 1;
     streamed.push(frame);
