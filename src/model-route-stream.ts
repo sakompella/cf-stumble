@@ -5,7 +5,11 @@
  */
 
 import * as Effect from "effect/Effect";
-import { parseProviderChunk, type ParsedProviderChunk } from "./model-route-stream-parse.js";
+import {
+  isProviderError,
+  parseProviderChunk,
+  type ParsedProviderChunk,
+} from "./model-route-stream-parse.js";
 import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
 import type {
   ModelStreamEvent,
@@ -97,6 +101,8 @@ export class ProviderStreamAccumulator {
   private readonly toolCalls = new Map<number, ToolCallAccumulator>();
   private readonly emit: (event: ModelStreamEvent) => void;
   private reportedUsage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
+  /** Set when a Workers AI line reported an error, which ends the stream without an answer. */
+  providerFailed = false;
 
   constructor(emit: (event: ModelStreamEvent) => void) {
     this.emit = emit;
@@ -114,7 +120,10 @@ export class ProviderStreamAccumulator {
     this.emit({ type: "tool-call-delta", delta });
   }
 
-  /** Parse and apply one decoded Workers AI line; returns `true` when it is the terminal `[DONE]`. */
+  /**
+   * Parse and apply one decoded Workers AI line; returns `true` when it is the terminal `[DONE]` or
+   * an error, which sets {@link providerFailed}.
+   */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
 
@@ -128,6 +137,12 @@ export class ProviderStreamAccumulator {
       parsedJson = JSON.parse(payload);
     } catch {
       return false;
+    }
+
+    if (isProviderError(parsedJson)) {
+      this.providerFailed = true;
+
+      return true;
     }
 
     const chunk = parseProviderChunk(parsedJson);
@@ -228,7 +243,11 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
       Effect.flatMap((providerStream) =>
         pumpSseStream(providerStream, (line) => accumulator.handleLine(line)),
       ),
-      Effect.map(() => finishedTurn(accumulator, request)),
+      Effect.flatMap(() =>
+        accumulator.providerFailed
+          ? Effect.fail(modelUnavailable())
+          : Effect.succeed(finishedTurn(accumulator, request)),
+      ),
     );
   };
 }

@@ -64,9 +64,9 @@ async function readSseLines(
 
 /**
  * The provider did not give this turn a complete answer, and `code` is the one thing the caller
- * learns about why. For `model-unavailable` that covers a failed call, a stream that failed or
- * ended before its terminal event, and a stream past the byte bound; nothing of the provider's own
- * error reaches the caller.
+ * learns about why. For `model-unavailable` that covers a failed call, a stream that reported an
+ * error, a stream that failed or ended before its terminal event, and a stream past the byte bound;
+ * nothing of the provider's own error reaches the caller.
  */
 export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
   readonly code: ModelRouteErrorCode;

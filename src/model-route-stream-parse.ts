@@ -11,7 +11,7 @@
  * `tool-call-delta` event instead of several.
  */
 
-import { asUntrusted, field, type UntrustedObject } from "./untrusted.js";
+import { asUntrusted, field, isRecord, type UntrustedObject } from "./untrusted.js";
 import type { ToolCallDelta } from "./model-route-events.js";
 
 /** One provider stream chunk's fields this route understands, after defensive parsing. */
@@ -147,6 +147,20 @@ function parseProviderToolCallDeltas(toolCalls: unknown): ToolCallDelta[] {
   );
 
   return deltas;
+}
+
+/**
+ * Whether one decoded provider event reports a failure instead of carrying part of the answer. An
+ * OpenAI-compatible server reports a failure mid-stream as `{"error": ...}` and can still send
+ * `[DONE]` after it, so this event, not the end of the stream, has to fail the turn.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream event.
+export function isProviderError(raw: unknown): boolean {
+  if (!isRecord(raw)) return false;
+  const error = raw.error;
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider error field.
+  return isRecord(error) || (typeof error === "string" && error !== "");
 }
 
 /**
