@@ -13,7 +13,10 @@ import {
 } from "../helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../threads/message-samples.js";
 import { runScriptedTurn } from "./turn-run-helpers.js";
-import { PROJECT_TURN_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/index.js";
+import {
+  TURN_PROGRESS_FRAME_MAX_BYTES,
+  TURN_TERMINAL_FRAME_MAX_BYTES,
+} from "../../../src/supervisor/projects/index.js";
 
 /**
  * What a turn does when the stream it is reading is not a turn.
@@ -88,16 +91,39 @@ test("a malformed line ends the turn instead of being passed on", async () => {
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
 });
 
-test("an oversized frame ends the turn rather than being buffered", async () => {
+test("an oversized progress frame ends the turn instead of reaching the browser", async () => {
   const control = await supervisor("turn-oversized");
   await activateFixtureGeneration(control);
 
   const observed = await runScriptedTurn(control, {
     lines: [
-      JSON.stringify({ kind: "text", text: "x".repeat(PROJECT_TURN_FRAME_MAX_BYTES + 1) }),
+      JSON.stringify({ kind: "text", text: "x".repeat(TURN_PROGRESS_FRAME_MAX_BYTES + 1) }),
       JSON.stringify(completed),
     ],
   });
+
+  expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "oversized-frame" }]);
+  expect(observed.thread).toMatchObject({ conversation: "[]", turnActive: false });
+});
+
+test("a conversation past the terminal frame bound ends the turn rather than being buffered", async () => {
+  const control = await supervisor("turn-oversized-terminal");
+  await activateFixtureGeneration(control);
+
+  const oversized = {
+    kind: "completed",
+    state: {
+      messages: [
+        ...conversation,
+        {
+          ...THREAD_MESSAGE_SAMPLES.user,
+          content: [{ type: "text", text: "x".repeat(TURN_TERMINAL_FRAME_MAX_BYTES) }],
+        },
+      ],
+    },
+  };
+
+  const observed = await runScriptedTurn(control, { frames: [oversized] });
 
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "oversized-frame" }]);
   expect(observed.thread).toMatchObject({ conversation: "[]", turnActive: false });

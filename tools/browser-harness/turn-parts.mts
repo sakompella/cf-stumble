@@ -96,7 +96,7 @@ export const TURN_DIFF_FRAME: ProjectTurnFrame = {
 
 /**
  * A tool result at the size a real `pnpm install` or test run produces. The Supervisor bounds a
- * forwarded frame at 256 KiB (`PROJECT_TURN_FRAME_MAX_BYTES`), so this stays under that: the point
+ * forwarded frame at 256 KiB (`TURN_PROGRESS_FRAME_MAX_BYTES`), so this stays under that: the point
  * is a result the page must survive, not a protocol violation.
  */
 export function largeToolOutput(): string {

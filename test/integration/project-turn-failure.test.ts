@@ -18,6 +18,7 @@ import {
   submitCandidate,
 } from "../supervisor/helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../supervisor/threads/message-samples.js";
+import { TOOL_RESULT_DISPLAY_MAX_BYTES } from "../../src/facet/generation-0/turn-policy.js";
 import { ownerSession, stubExternalBoundaries } from "./owner-session.js";
 
 /**
@@ -47,6 +48,48 @@ const assistant = (text: string, stopReason: "stop" | "error"): AgentMessage => 
   stopReason,
 });
 
+/** Six reads, each answered with as much text as a read tool may return. */
+const READ_PATHS = Array.from({ length: 6 }, (_, index) => `src/large-${index}.ts`);
+
+const fileText = (path: string) => path.padEnd(TOOL_RESULT_DISPLAY_MAX_BYTES, ".");
+
+const readCalls: AgentMessage = {
+  ...THREAD_MESSAGE_SAMPLES.assistant,
+  content: READ_PATHS.map((path) => ({
+    type: "toolCall",
+    id: path,
+    name: "read",
+    arguments: { path },
+  })),
+  stopReason: "toolUse",
+};
+
+const readResults: readonly AgentMessage[] = READ_PATHS.map((path) => ({
+  ...THREAD_MESSAGE_SAMPLES.toolResult,
+  toolCallId: path,
+  toolName: "read",
+  content: [{ type: "text", text: fileText(path) }],
+}));
+
+const readTurn: readonly AgentMessage[] = [
+  user("reads"),
+  readCalls,
+  ...readResults,
+  assistant("read them all", "stop"),
+];
+
+const readFrames = READ_PATHS.flatMap((path) => [
+  { kind: "tool-start", toolCallId: path, toolName: "read", arguments: { path } },
+  {
+    kind: "tool-result",
+    toolCallId: path,
+    toolName: "read",
+    isError: false,
+    content: fileText(path),
+    truncated: false,
+  },
+]);
+
 /**
  * The generation's reply to each prompt: the frames it writes, built from the history the
  * Supervisor handed it. `corrupt` ends with a message no thread may store.
@@ -72,6 +115,10 @@ const replies = {
   ],
   corrupt: (history) => [
     { kind: "completed", state: { messages: [...history, { role: "not-a-message" }] } },
+  ],
+  reads: (history) => [
+    ...${JSON.stringify(readFrames)},
+    { kind: "completed", state: { messages: [...history, ...${JSON.stringify(readTurn)}] } },
   ],
 };
 
@@ -198,5 +245,23 @@ test("a failed turn's saved conversation is what the next request reads and the 
   expect(refusedSave).toEqual([{ kind: "save-failed", code: "invalid-messages" }]);
   await expect(savedThread(owner)).resolves.toEqual(
     expect.objectContaining({ conversation: continued, revision: 2, turnActive: false }),
+  );
+});
+
+test("a turn that read several large files keeps its whole conversation", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  stubExternalBoundaries(new TurnWorkspace());
+  const owner = await ownerSession("integration-large-reads");
+  await servingScriptedGeneration(owner);
+  await connectSampleProjects(owner.supervisor);
+
+  const frames = await turn(owner, "reads");
+
+  expect(frames.at(-1)).toEqual({ kind: "saved", revision: 1, messageCount: readTurn.length });
+
+  await evictDurableObject(owner.supervisor);
+
+  await expect(savedThread(owner)).resolves.toEqual(
+    expect.objectContaining({ conversation: readTurn, revision: 1, turnActive: false }),
   );
 });

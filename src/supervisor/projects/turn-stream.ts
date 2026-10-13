@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import {
   parseFacetFrameLine,
-  PROJECT_TURN_FRAME_MAX_BYTES,
+  TURN_PROGRESS_FRAME_MAX_BYTES,
+  TURN_TERMINAL_FRAME_MAX_BYTES,
   type ProjectTurnFrame,
 } from "./turn-frames.js";
 import { endTurn, releaseLease, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
@@ -43,6 +44,10 @@ const MALFORMED: StreamEnding = { kind: "invalid", problem: "malformed-frame" };
 
 const MISSING_TERMINAL: StreamEnding = { kind: "invalid", problem: "missing-terminal-frame" };
 
+const OVERSIZED: StreamEnding = { kind: "invalid", problem: "oversized-frame" };
+
+const NEWLINE = 0x0a;
+
 /**
  * The server's reader of one generation's turn stream.
  *
@@ -54,7 +59,13 @@ const MISSING_TERMINAL: StreamEnding = { kind: "invalid", problem: "missing-term
 class TurnReader {
   readonly #reader: ReadableStreamDefaultReader<Uint8Array>;
   readonly #publish: Publish;
-  #buffer = "";
+  readonly #decoder = new TextDecoder();
+  /**
+   * The bytes of the line not yet ended. Lines are split on the newline byte, which never occurs
+   * inside a multi-byte UTF-8 character, so each line is measured in bytes before it is decoded.
+   */
+  #pending: Uint8Array[] = [];
+  #pendingBytes = 0;
 
   constructor(frames: ReadableStream<Uint8Array>, publish: Publish) {
     this.#reader = frames.getReader();
@@ -73,8 +84,6 @@ class TurnReader {
    */
   read(): Effect.Effect<StreamEnding> {
     return Effect.gen({ self: this }, function* () {
-      const decoder = new TextDecoder();
-
       for (;;) {
         const chunk = yield* Effect.promise(() =>
           this.#reader.read().then(
@@ -89,7 +98,7 @@ class TurnReader {
 
         if (chunk.done) return MISSING_TERMINAL;
 
-        const ending = this.#consume(decoder.decode(chunk.value, { stream: true }));
+        const ending = this.#consume(chunk.value);
 
         if (ending !== undefined) return ending;
       }
@@ -110,60 +119,80 @@ class TurnReader {
     );
   }
 
-  /** Add decoded text and publish every whole frame it completed, or end the stream. */
-  #consume(text: string): StreamEnding | undefined {
-    this.#buffer += text;
+  /** Publish every whole frame this chunk completed, or end the stream. */
+  #consume(chunk: Uint8Array): StreamEnding | undefined {
+    let start = 0;
 
     for (;;) {
-      const newline = this.#buffer.indexOf("\n");
+      const newline = chunk.indexOf(NEWLINE, start);
 
       if (newline < 0) {
-        return this.#endOfChunk();
+        return this.#hold(chunk.subarray(start));
       }
 
-      const line = this.#buffer.slice(0, newline);
-      this.#buffer = this.#buffer.slice(newline + 1);
-
-      if (line.trim() === "") {
-        continue;
-      }
-
-      const ending = this.#accept(line);
+      const ending = this.#hold(chunk.subarray(start, newline)) ?? this.#accept(this.#takeLine());
 
       if (ending !== undefined) {
         return ending;
       }
+
+      start = newline + 1;
     }
   }
 
   /**
-   * Nothing whole is left in the buffer, so the read continues — unless the buffer has passed the
-   * frame bound without a newline, which is a line a generation is not allowed to write.
+   * Keep part of the line being read. No line may pass the terminal bound, because its kind is not
+   * known until it is whole; {@link #accept} applies the smaller progress bound once it is.
    */
-  #endOfChunk(): StreamEnding | undefined {
-    return this.#buffer.length > PROJECT_TURN_FRAME_MAX_BYTES
-      ? { kind: "invalid", problem: "oversized-frame" }
-      : undefined;
+  #hold(bytes: Uint8Array): StreamEnding | undefined {
+    this.#pendingBytes += bytes.byteLength;
+
+    if (this.#pendingBytes > TURN_TERMINAL_FRAME_MAX_BYTES) return OVERSIZED;
+
+    this.#pending.push(bytes);
+
+    return undefined;
   }
 
-  #accept(line: string): StreamEnding | undefined {
-    if (line.length > PROJECT_TURN_FRAME_MAX_BYTES) {
-      return { kind: "invalid", problem: "oversized-frame" };
+  #takeLine(): Uint8Array {
+    const line = new Uint8Array(this.#pendingBytes);
+    let offset = 0;
+
+    for (const part of this.#pending) {
+      line.set(part, offset);
+      offset += part.byteLength;
     }
 
-    const parsed = parseFacetFrameLine(line);
+    this.#pending = [];
+    this.#pendingBytes = 0;
+
+    return line;
+  }
+
+  #accept(line: Uint8Array): StreamEnding | undefined {
+    const text = this.#decoder.decode(line);
+
+    if (text.trim() === "") {
+      return undefined;
+    }
+
+    const parsed = parseFacetFrameLine(text);
 
     if (parsed.kind === "invalid") {
       return { kind: "invalid", problem: parsed.problem };
     }
 
-    if (parsed.kind === "forwarded") {
-      this.#publish(parsed.frame);
-
-      return undefined;
+    if (parsed.kind === "terminal") {
+      return { kind: "terminal", frame: parsed.frame };
     }
 
-    return { kind: "terminal", frame: parsed.frame };
+    if (line.byteLength > TURN_PROGRESS_FRAME_MAX_BYTES) {
+      return OVERSIZED;
+    }
+
+    this.#publish(parsed.frame);
+
+    return undefined;
   }
 }
 
