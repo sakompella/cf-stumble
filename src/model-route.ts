@@ -74,7 +74,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
       validated,
     );
 
-    const credential = this.chatgptCredential();
+    const credential = this.#chatgptCredential();
 
     if (credential === undefined) return modelEventStream(workersAi);
 
@@ -93,7 +93,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     return modelEventStream(turn);
   }
 
-  private chatgptCredential(): ChatGPTCredential | undefined {
+  #chatgptCredential(): ChatGPTCredential | undefined {
     const name = this.ctx.props?.supervisor;
 
     if (name === undefined) return undefined;
