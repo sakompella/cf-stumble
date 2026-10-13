@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { initialChatGPT, type ChatGPTState } from "./fixtures-chatgpt.mjs";
 import { initialProjects, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import { INITIAL_GENERATION, type GenerationState } from "./fixtures-generation.mjs";
 import { initialThread, type StoredThread } from "./fixtures-thread.mjs";
@@ -39,6 +40,7 @@ export type ScenarioState = {
   projects: ProjectEntry[];
   readonly threads: Map<string, StoredThread>;
   generation: GenerationState;
+  chatgpt: ChatGPTState;
   requests: RequestRecord[];
   stream: StreamWatch;
 };
@@ -53,6 +55,7 @@ export function initialState(scenario: HarnessScenario): ScenarioState {
     projects: [...initialProjects(scenario)],
     threads: new Map<string, StoredThread>(),
     generation: INITIAL_GENERATION,
+    chatgpt: initialChatGPT(scenario),
     requests: [],
     stream: freshStreamWatch(),
   };
@@ -68,6 +71,7 @@ export function resetState(state: ScenarioState, scenario: HarnessScenario): voi
   state.projects = [...initialProjects(scenario)];
   state.threads.clear();
   state.generation = INITIAL_GENERATION;
+  state.chatgpt = initialChatGPT(scenario);
   state.requests = [];
   state.stream = freshStreamWatch();
 }

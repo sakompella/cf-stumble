@@ -61,6 +61,7 @@ export type HarnessServer = Readonly<{
   thread: (projectId: string) => ThreadState;
   projects: () => readonly ProjectEntry[];
   generation: () => GenerationState;
+  chatgpt: () => ScenarioState["chatgpt"];
   setGeneration: (patch: GenerationPatch) => void;
   reset: (scenario?: HarnessScenario) => void;
   close: () => Promise<void>;
@@ -202,6 +203,7 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
     thread: (projectId) => threadSummary(threadOf(state, projectId)),
     projects: () => [...state.projects],
     generation: () => state.generation,
+    chatgpt: () => state.chatgpt,
     setGeneration: (patch) => {
       state.generation = {
         generations: patch.generations ?? state.generation.generations,

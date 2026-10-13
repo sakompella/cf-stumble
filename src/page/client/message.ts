@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
-import { ControlKind, GitHubReport, Project, ThreadFacts } from "./model.js";
+import { ChatGPTConnection, ControlKind, GitHubReport, Project, ThreadFacts } from "./model.js";
 import { TurnFrame } from "./frames.js";
 
 /**
@@ -14,6 +14,10 @@ export const Message = defineMessageUnion({
   UpdatedConnectRepositoryInput: { value: Schema.String },
   ClickedConnect: {},
   ClickedAuthorize: { path: Schema.String },
+  ClickedChatGPTLogin: {},
+  UpdatedChatGPTCallbackInput: { value: Schema.String },
+  ClickedChatGPTFinish: {},
+  ClickedChatGPTDisconnect: {},
 
   UpdatedPrompt: { value: Schema.String },
   ClickedSendTurn: {},
@@ -53,6 +57,10 @@ export const Message = defineMessageUnion({
   SucceededAuthorize: { github: GitHubReport },
   RejectedAuthorize: { wording: Schema.String },
   FailedAuthorize: { detail: Schema.String },
+
+  SucceededChatGPT: { chatgpt: ChatGPTConnection },
+  RejectedChatGPT: { wording: Schema.String, maybeChatGPT: Schema.Option(ChatGPTConnection) },
+  FailedChatGPT: { detail: Schema.String },
 
   SucceededFetchThread: { selection: Schema.Number, isQuiet: Schema.Boolean, thread: ThreadFacts },
   RejectedFetchThread: { selection: Schema.Number, wording: Schema.String },

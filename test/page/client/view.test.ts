@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import { OWNER_PAGE_ELEMENT_IDS } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
-import type { Model } from "../../../src/page/client/model.js";
+import type { ChatGPTConnection, Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
 
@@ -40,22 +40,41 @@ function shownWithDiagnostics(): Model {
   ).model;
 }
 
-test("the page renders every stable element id exactly once", () => {
+function idsRendered(model: Model): readonly string[] {
   let ids: readonly string[] = [];
 
   Scene.scene(
     { update, view },
-    Scene.given(shownWithDiagnostics()),
+    Scene.given(model),
     Scene.tap((simulation) => {
       ids = renderedIds(simulation.html);
     }),
     Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
   );
 
+  return ids;
+}
+
+function withChatGPT(chatgpt: ChatGPTConnection): Model {
+  return update(init().model, Message.SucceededChatGPT({ chatgpt })).model;
+}
+
+test("the page renders every stable element id, and none twice", () => {
+  // The ChatGPT control offers disconnecting, or a sign-in, or neither, so no one state renders
+  // every identifier.
+  const pages = [
+    shownWithDiagnostics(),
+    withChatGPT({
+      connection: "not connected",
+      isConnected: false,
+      maybeLogin: Option.some({ attemptId: "a", authorizeUrl: "https://auth.example/authorize" }),
+    }),
+    withChatGPT({ connection: "connected", isConnected: true, maybeLogin: Option.none() }),
+  ].map((model) => idsRendered(model));
+
   for (const id of OWNER_PAGE_ELEMENT_IDS) {
-    expect(
-      ids.filter((rendered) => rendered === id),
-      id,
-    ).toHaveLength(1);
+    const counts = pages.map((ids) => ids.filter((rendered) => rendered === id).length);
+
+    expect(Math.max(...counts), id).toBe(1);
   }
 });

@@ -33,6 +33,24 @@ export const GitHubReport = defineTaggedUnion({
 
 export type GitHubReport = typeof GitHubReport.Type;
 
+const ChatGPTLogin = Schema.Struct({
+  attemptId: Schema.String,
+  authorizeUrl: Schema.String,
+});
+
+/**
+ * What a response said about the ChatGPT connection. `connection` is the wording the page shows
+ * (`unknown` when the response was unreadable), and `maybeLogin` is the sign-in the owner is in the
+ * middle of, if the Worker holds one.
+ */
+export const ChatGPTConnection = Schema.Struct({
+  connection: Schema.String,
+  isConnected: Schema.Boolean,
+  maybeLogin: Schema.Option(ChatGPTLogin),
+});
+
+export type ChatGPTConnection = typeof ChatGPTConnection.Type;
+
 /** What a project's thread read reported, already worded for its four elements. */
 export const ThreadFacts = Schema.Struct({
   revision: Schema.String,
@@ -82,6 +100,9 @@ export const Model = Schema.Struct({
   github: GitHubConnection,
   connectRepositoryInput: Schema.String,
   connectStatus: Schema.String,
+  chatgpt: ChatGPTConnection,
+  chatgptCallbackInput: Schema.String,
+  chatgptResult: Schema.String,
 
   selection: Schema.Number,
   maybeProjectId: Schema.Option(Schema.String),
