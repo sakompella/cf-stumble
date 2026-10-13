@@ -1,23 +1,18 @@
 # Status
 
 This file records what runs in production, what was decided outside an ADR, and what is still
-open. It was checked against `main` at `86fb16f` on 2026-10-09. Refresh it in place when the state
-changes; Git keeps the history. It does not replace an ADR or a design document.
+open. "What is deployed" was refreshed on 2026-10-13 against `main` at `f4191af`; the open items
+were last checked against `86fb16f` on 2026-10-09. Refresh it in place when the state changes; Git
+keeps the history. It does not replace an ADR or a design document.
 
 ## What is deployed
 
-Production is the Worker `cf-stumble`, deployed only with `cf deploy`. The last deploy was on
-2026-10-02. The version ids and their content come from the deploy messages; the commit boundaries
-are not recorded. The work after `c620d825` is the `ops:check` tool, which does not ship in the
-Worker, and every commit from `4636cc5` to `86fb16f` changes only docs. Run
-`pnpm exec cf workers deployments list` before you assume that production matches `main`.
-
-| Version    | Content                                                               |
-| ---------- | --------------------------------------------------------------------- |
-| `1cfa826f` | The `cf` migration, `exports`, instance secrets, traces, and Issues.  |
-| `a70c5499` | The durable GitHub credential and build output returned to the owner. |
-| `b5fe4294` | The idle stop and the 5 s shim poll.                                  |
-| `c620d825` | The alarm retry, the poll cap, and the alarm logs.                    |
+Production is the Worker `cf-stumble`, deployed only with `cf deploy`. It runs `1a60802`, deployed
+on 2026-10-12 at about 09:20 UTC as Worker version `4bc2112f`, with container application version
+50 and generation `eafaf99` active at epoch 3. GitHub is connected through the configured token
+(`configured-token`), and no project is connected. `main` at `f4191af`, 45 commits later and
+carrying the Effect and Foldkit port (item 15), is not deployed. Run
+`pnpm exec cf workers deployments list` before you assume that production matches either commit.
 
 Checked in production on 2026-10-02: the idle stop fired ten minutes after the last work (see
 `incident-2026-09-container-cost.md`), and the GitHub connection stayed connected across the image
@@ -41,12 +36,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance
   secrets".
 - **Reset Supervisor state once instead of migrating it** (owner, October 2026). Production's
-  Supervisor SQLite may hold project rows from before `8d0469f` or a thread table from before
-  `turn_holder_id`, and nobody can read it to check. The first construction after the deploy of the
-  current `main` drops every Supervisor table except `github_authorization` and
-  `github_connection`, then writes a marker so that it never runs again. The owner keeps the GitHub
-  connection but must reconnect repositories and prepare and activate a generation again. See
-  `design/github-connection.md`, "The connected project list".
+  Supervisor dropped every table except `github_authorization` and `github_connection` on
+  2026-10-12 at 08:38:33Z (9 tables, 35 rows). The reset code is removed; the `legacy_state_reset`
+  table stays. See `design/github-connection.md`, "The connected project list".
 
 ## Open items
 
@@ -98,11 +90,7 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     fence). Whether the repository size thresholds in `src/github/repository-size.ts` need an ADR.
     A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched on
     2026-09-27; the note is lost and nothing was decided.
-15. **Remove the one-time Supervisor reset.** After the first production deploy of the current
-    `main`, check the production log for one `supervisor.legacy-state-reset` event, then delete
-    `src/supervisor/legacy-state-reset.ts`, its call in the Supervisor's constructor, and its test.
-    The `legacy_state_reset` table can stay.
-16. **Port to Effect and Foldkit done locally, not deployed** (owner, 2026-10-12). ADR-0045 moves the
+15. **Port to Effect and Foldkit done locally, not deployed** (owner, 2026-10-12). ADR-0045 moves the
     immutable host to Effect, and ADR-0046 makes the owner page a Foldkit application served as a
     hashed script file. better-result is gone from the code and the lockfile. The Worker, Cloudflare
     Access, the owner API routes, and the model route's provider stream run as Effect programs,
