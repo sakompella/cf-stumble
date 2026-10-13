@@ -2,7 +2,7 @@
 
 import type { ModelRouteRequest, RouteMessage } from "../model-route.js";
 import type { ProviderStreamAccumulator } from "../model-route-stream.js";
-import { isProviderError } from "../model-route-stream-parse.js";
+import { isProviderError, tokenCount } from "../model-route-stream-parse.js";
 import type { ToolCallDelta } from "../model-route-events.js";
 import { asUntrusted, field, isRecord, type UntrustedObject } from "../untrusted.js";
 
@@ -133,8 +133,8 @@ function usageOf(
   event: UntrustedObject,
 ): Readonly<{ inputTokens: number; outputTokens: number }> | undefined {
   const usage = objectAt(objectAt(event, "response"), "usage");
-  const inputTokens = numberAt(usage, "input_tokens");
-  const outputTokens = numberAt(usage, "output_tokens");
+  const inputTokens = tokenCount(numberAt(usage, "input_tokens"));
+  const outputTokens = tokenCount(numberAt(usage, "output_tokens"));
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined

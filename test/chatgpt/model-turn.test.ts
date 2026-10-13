@@ -296,6 +296,22 @@ test("an HTTP refusal and a stream that stops early both end as model-unavailabl
   expect(truncated.events.at(-1)).toEqual({ type: "error", error: { code: "model-unavailable" } });
 });
 
+test("usage the provider reports as a negative count is replaced by an estimate", async () => {
+  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(
+      sseResponse([
+        responsesEvent({ type: "response.output_text.delta", delta: "ok" }),
+        responsesEvent({
+          type: "response.completed",
+          response: { usage: { input_tokens: 12, output_tokens: -3 } },
+        }),
+      ]),
+    ),
+  );
+
+  expect(events.at(-1)).toMatchObject({ type: "done", usage: { estimated: true } });
+});
+
 test("no connected credential is a typed failure the route can fall back on", async () => {
   const { fetcher, calls } = recordingFetch(() => Promise.reject(new Error("must not be called")));
 
