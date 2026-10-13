@@ -48,6 +48,11 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   connection but must reconnect repositories and prepare and activate a generation again. See
   `design/github-connection.md`, "The connected project list".
 
+- **The model route uses the owner's ChatGPT subscription once connected** (owner, 2026-10-13).
+  The Supervisor caches the credential; Workers AI answers until a connection exists. See
+  ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers
+  from Workers AI only.
+
 ## Open items
 
 1. **Polling clients still cost money.** A client that keeps calling a route that touches the
@@ -119,3 +124,11 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     the `script-src 'self'` policy behind real Cloudflare Access; Worker startup time; a real
     container stop, exec, and first turn; and a turn streamed and cancelled through the deployed
     Worker. Local `wrangler check startup` profiles hold too few samples to compare.
+
+17. **ChatGPT connection not proved end to end.** The model route's ChatGPT path is tested against
+    fakes of OpenAI's token endpoint and Responses stream. No deployed instance has redeemed a
+    real code, refreshed a real token, or streamed a real answer. On 2026-10-13 a headless Firefox
+    run of `tools/chatgpt-connect.mts --inspect` reached the account chooser, then OpenAI answered
+    the account choice with 403 and a Cloudflare challenge, so the agent tool is unproved past that
+    point. After a deploy, connect once from the owner page (`docs/deploy.md`, "Connect ChatGPT"),
+    run one turn, and check for `chatgpt.model-call` errors.

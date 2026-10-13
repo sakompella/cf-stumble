@@ -222,6 +222,36 @@ A connection is refused when GitHub's complete tree reports more than 3,000 file
 
 To remove a connected project, send the owner-only `POST /api/projects/{id}/disconnect` request with the page's exact `Origin`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
 
+## Connect ChatGPT
+
+The model route answers from the fixed Workers AI model until you connect a ChatGPT account. After that it answers from OpenAI's Responses API with your ChatGPT subscription, using the model that `CHATGPT_MODEL` names in `cloudflare.config.ts` (`gpt-6.1-sol`). The Supervisor keeps the access and refresh tokens in its SQLite and refreshes them itself, so you connect once per instance. Your browser and the harness never receive a token. See ADR-0047.
+
+Connect from the owner page:
+
+1. Select **Connect ChatGPT** in the sidebar, then open the sign-in link it shows.
+2. Sign in to ChatGPT and approve cf-stumble.
+3. OpenAI sends the browser to `http://127.0.0.1:1455/auth/callback?...`. Nothing listens there, so the browser shows a connection error. That is expected. Copy the whole address from the address bar.
+4. Paste it into the sidebar and select **Finish**. The panel says the account is connected.
+
+A sign-in expires after 10 minutes, and only the most recent one can be finished. The address holds a one-time code; it is useless without the verifier the Supervisor kept.
+
+An agent can do the same with `tools/chatgpt-connect.mts`. It starts a sign-in through the owner API with the agent service token (see "Agent access without a sign-in"), drives a temporary copy of a Firefox profile that is already signed in to ChatGPT, catches the redirect, and finishes the sign-in:
+
+```sh
+pnpm exec tsx tools/chatgpt-connect.mts --origin https://<host> \
+  --profile "<Firefox profile directory>" [--account <email or exact name>]
+```
+
+`--account` is required when OpenAI's account chooser lists more than one account. The tool never changes the original profile and deletes its copy when it exits. OpenAI may answer a headless browser with a Cloudflare challenge or a route error; the tool then stops and saves the page text and a screenshot under `/tmp/chatgpt-connect-*`. Run it again with `--headed` to show the window, or connect from the owner page. `--inspect` stops before the approval page and calls no owner API.
+
+The page shows one of three states:
+
+- **connected** (with the model name): model calls use your subscription.
+- **reconnect required** (with the reason): OpenAI refused the refresh token or the access token. Every model call fails with `chatgpt-reconnect-required` until you connect again or disconnect. The route does not fall back to Workers AI here, so a broken subscription is visible.
+- **not connected (Workers AI fallback)**: model calls use Workers AI.
+
+**Disconnect** deletes the stored tokens and returns the route to Workers AI. It does not revoke the grant at OpenAI. To revoke it, remove cf-stumble from your ChatGPT account's settings.
+
 ## First run
 
 Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0,"activationId":null}}`. `GET /`, `/status`, `/generations`, and `/projects` relay to a generation and return HTTP 503 with `{"ok":false,"problem":{"code":"no-active-generation"}}`. That response is normal on a new instance. It does not mean that the deployment failed. A browser request for `/` with `Accept: text/html` still receives the owner page. `GET /health` is answered by the Worker itself, so it returns `{"ok":true}` before any generation exists. It still sits behind Access.
