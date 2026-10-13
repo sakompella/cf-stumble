@@ -155,7 +155,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       loader: env.LOADER,
       artifacts: this.artifacts,
       generations: this.generations,
-      modelRoute: () => this.modelRoute(),
+      modelRoute: () => this.#modelRoute(),
     };
     this.control = new GenerationControl(this.generations);
 
@@ -194,13 +194,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /** The route is told which Supervisor holds the credential; the facet only holds the stub. */
-  private modelRoute(): MainFacetCapabilities["MODEL"] {
+  #modelRoute(): MainFacetCapabilities["MODEL"] {
     return this.ctx.exports.ModelRoute({ props: { supervisor: this.name } });
   }
 
   /** Mount one generation as a facet. Relaying and starting a project turn both use this. */
-  private mountServing(active: ActiveGeneration) {
-    return this.artifacts.mount(active, this.env.LOADER, this.ctx.facets, this.modelRoute());
+  #mountServing(active: ActiveGeneration) {
+    return this.artifacts.mount(active, this.env.LOADER, this.ctx.facets, this.#modelRoute());
   }
 
   checkGenerationStartup(
@@ -437,7 +437,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         prompt,
         threads: this.threads,
         attribution: () => ({ active: this.generations.active() }),
-        start: (project, request, context) => this.startTurnStream(project, request, context),
+        start: (project, request, context) => this.#startTurnStream(project, request, context),
         now: () => Date.now(),
         leaseMs: PROJECT_TURN_LEASE_MS,
         deadlineMs: PROJECT_TURN_DEADLINE_MS,
@@ -451,7 +451,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * The capability and the selected project's working directory both travel to the generation as
    * arguments of its `startTurn`; nothing here is reachable from a request.
    */
-  private startTurnStream(
+  #startTurnStream(
     projectId: string,
     request: FacetTurnHandoff,
     context: TurnStartContext,
@@ -469,9 +469,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
       // on the same generation it was admitted against (`turn-run.ts`).
       mount: () =>
-        Effect.suspend(() => Effect.fromResult(this.mountServing(context.attribution.active))).pipe(
-          timedTurnMount(context.trace),
-        ),
+        Effect.suspend(() =>
+          Effect.fromResult(this.#mountServing(context.attribution.active)),
+        ).pipe(timedTurnMount(context.trace)),
       // The harness checkout is owned by the active generation's repository. Reconcile it before
       // mounting so a reset cannot leave Computer with a missing working directory.
       provisionHarness:
@@ -505,7 +505,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * 500.
    */
   override fetch(request: Request): Promise<Response> {
-    const mainFacet = this.mountServing(this.generations.active());
+    const mainFacet = this.#mountServing(this.generations.active());
 
     if (Result.isFailure(mainFacet)) {
       const { code } = mainFacet.failure;
