@@ -6,7 +6,13 @@ import {
   type ModelStreamInference,
   type StreamingProviderPayload,
 } from "../src/model-route.js";
-import { collectEvents, DONE_LINE, rawByteStream, sseLine } from "./model-route-provider-stream.js";
+import {
+  collectEvents,
+  DONE_LINE,
+  providerStreamOfLines,
+  rawByteStream,
+  sseLine,
+} from "./model-route-provider-stream.js";
 
 const encoder = new TextEncoder();
 
@@ -152,6 +158,45 @@ test("estimates non-zero usage, and marks it as an estimate, when the provider r
   expect(done.usage.inputTokens).toBeGreaterThan(0);
   expect(done.usage.outputTokens).toBeGreaterThan(0);
 });
+
+test("a stream that completes with no text or tool call is an empty answer, not an error", async () => {
+  const provider = providerStreamOfLines([
+    sseLine({ choices: [{ delta: { reasoning_content: "thinking" } }] }),
+    sseLine({ usage: { prompt_tokens: 5, completion_tokens: 1 } }),
+    DONE_LINE,
+  ]);
+
+  const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
+
+  expect(events).toEqual([
+    {
+      type: "done",
+      message: { role: "assistant", content: null, tool_calls: [] },
+      usage: { inputTokens: 5, outputTokens: 1, estimated: false },
+    },
+  ]);
+});
+
+test.each([
+  { name: "an error object", error: { message: "provider failed", code: 500 } },
+  { name: "an error string", error: "provider failed" },
+])(
+  "$name from the provider keeps the text already sent, then errors once even though [DONE] follows",
+  async ({ error }) => {
+    const provider = providerStreamOfLines([
+      sseLine({ response: "partial" }),
+      sseLine({ error }),
+      DONE_LINE,
+    ]);
+
+    const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
+
+    expect(events).toEqual([
+      { type: "text-delta", delta: "partial" },
+      { type: "error", error: { code: "model-unavailable" } },
+    ]);
+  },
+);
 
 type HeldProviderStream = Readonly<{
   stream: ReadableStream<Uint8Array>;

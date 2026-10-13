@@ -255,6 +255,30 @@ test("a provider failure keeps the text already streamed, logs only its code, an
   expect(everythingLogged()).not.toContain("Read a.txt");
 });
 
+test("an error object without a type, then [DONE], keeps the text already streamed, logs the code, and errors the call", async () => {
+  const logged = capturedEvents();
+  const errorObject = { error: { code: "server_error", message: "Read a.txt" } };
+
+  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(
+      sseResponse([
+        responsesEvent({ type: "response.output_text.delta", delta: "part" }),
+        `data: ${JSON.stringify(errorObject)}\n\n`,
+        "data: [DONE]\n\n",
+      ]),
+    ),
+  );
+
+  expect(events).toEqual([
+    { type: "text-delta", delta: "part" },
+    { type: "error", error: { code: "model-unavailable" } },
+  ]);
+  expect(named(logged(), "chatgpt.model-call")).toEqual([
+    expect.objectContaining({ outcome: "stream-failed", code: "server_error" }),
+  ]);
+  expect(everythingLogged()).not.toContain("Read a.txt");
+});
+
 test("an HTTP refusal and a stream that stops early both end as model-unavailable", async () => {
   const refused = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
     Promise.resolve(
@@ -270,6 +294,22 @@ test("an HTTP refusal and a stream that stops early both end as model-unavailabl
 
   expect(refused.events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
   expect(truncated.events.at(-1)).toEqual({ type: "error", error: { code: "model-unavailable" } });
+});
+
+test("usage the provider reports as a negative count is replaced by an estimate", async () => {
+  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(
+      sseResponse([
+        responsesEvent({ type: "response.output_text.delta", delta: "ok" }),
+        responsesEvent({
+          type: "response.completed",
+          response: { usage: { input_tokens: 12, output_tokens: -3 } },
+        }),
+      ]),
+    ),
+  );
+
+  expect(events.at(-1)).toMatchObject({ type: "done", usage: { estimated: true } });
 });
 
 test("no connected credential is a typed failure the route can fall back on", async () => {

@@ -2,6 +2,7 @@
 
 import type { ModelRouteRequest, RouteMessage } from "../model-route.js";
 import type { ProviderStreamAccumulator } from "../model-route-stream.js";
+import { isProviderError, tokenCount } from "../model-route-stream-parse.js";
 import type { ToolCallDelta } from "../model-route-events.js";
 import { asUntrusted, field, isRecord, type UntrustedObject } from "../untrusted.js";
 
@@ -132,8 +133,8 @@ function usageOf(
   event: UntrustedObject,
 ): Readonly<{ inputTokens: number; outputTokens: number }> | undefined {
   const usage = objectAt(objectAt(event, "response"), "usage");
-  const inputTokens = numberAt(usage, "input_tokens");
-  const outputTokens = numberAt(usage, "output_tokens");
+  const inputTokens = tokenCount(numberAt(usage, "input_tokens"));
+  const outputTokens = tokenCount(numberAt(usage, "output_tokens"));
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined
@@ -146,7 +147,7 @@ function usageOf(
  */
 function failureCode(event: UntrustedObject): string {
   const response = objectAt(event, "response");
-  const error = response === undefined ? event : objectAt(response, "error");
+  const error = objectAt(response, "error") ?? objectAt(event, "error") ?? event;
 
   return safeCode(
     stringAt(error, "code") ?? stringAt(objectAt(response, "incomplete_details"), "reason"),
@@ -156,7 +157,8 @@ function failureCode(event: UntrustedObject): string {
 /**
  * Reads one Responses event stream into an accumulator. Text deltas and function call fragments
  * become chunks as they arrive; `response.completed` ends the stream with the provider's usage, and
- * `response.failed`, `response.incomplete`, or `error` ends it with {@link failure} set. A call's
+ * `response.failed`, `response.incomplete`, `error`, or an untyped `{"error": ...}` object ends it
+ * with {@link failure} set. A call's
  * `output_index` is its slot, so a reasoning item before it leaves a gap rather than a merge.
  */
 export class ResponsesStreamReader {
@@ -225,7 +227,10 @@ export class ResponsesStreamReader {
 
         return true;
       default:
-        return false;
+        if (!isProviderError(event)) return false;
+        this.failure = failureCode(event);
+
+        return true;
     }
   }
 

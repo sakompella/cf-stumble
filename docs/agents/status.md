@@ -94,9 +94,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     Terminal turn status has no concise live-region announcement. The vendor hash checks compare
     with the local manifest, not with upstream Pi.
 13. **Runtime behavior that needs a platform test.** Overlapping same-commit startup checks may
-    abort each other. A provider JSON error followed by `[DONE]` may be ignored. Missing or
-    malformed provider usage can undercount. Producer cancellation after a browser disconnect is
-    untested. Workspace exclusion during a turn is isolate-local, not held by the Workspace Host.
+    abort each other. When a provider reports no usage, or a negative or fractional count, the
+    route estimates usage from bytes, which can undercount. Workspace exclusion during a turn is
+    isolate-local, not held by the Workspace Host.
 14. **Owner decisions.** Whether the repository size thresholds in `src/github/repository-size.ts`
     need an ADR. A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched
     on 2026-09-27; the note is lost and nothing was decided.

@@ -15,7 +15,7 @@ import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
 /**
  * Upper bound on the bytes this route will read from one provider stream. Applies to the
  * provider's raw wire bytes, not `JSON.stringify(...).length`, for the same reason
- * `validateRequest`'s request bound does: a byte cap stated in string length would not be a byte
+ * `parseRequest`'s request bound does: a byte cap stated in string length would not be a byte
  * cap. This is defense in depth against a runaway or misbehaving stream, not a measured provider
  * limit — generation 0 has none to report.
  */
@@ -65,9 +65,9 @@ async function readSseLines(
 
 /**
  * The provider did not give this turn a complete answer, and `code` is the one thing the caller
- * learns about why. For `model-unavailable` that covers a failed call, a stream that failed or
- * ended before its terminal event, and a stream past the byte bound; nothing of the provider's own
- * error reaches the caller.
+ * learns about why. For `model-unavailable` that covers a failed call, a stream that reported an
+ * error, a stream that failed or ended before its terminal event, and a stream past the byte bound;
+ * nothing of the provider's own error reaches the caller.
  */
 export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
   readonly code: ModelRouteErrorCode;

@@ -11,7 +11,7 @@
  * `tool-call-delta` event instead of several.
  */
 
-import { asUntrusted, field, type UntrustedObject } from "./untrusted.js";
+import { asUntrusted, field, isRecord, type UntrustedObject } from "./untrusted.js";
 import type { ToolCallDelta } from "./model-route-events.js";
 
 /** One provider stream chunk's fields this route understands, after defensive parsing. */
@@ -73,6 +73,13 @@ function numberField(obj: UntrustedObject, key: string): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
+/** A provider's reported token count, if it is one: a non-negative whole number. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted provider usage field.
+export function tokenCount(value: unknown): number | undefined {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider usage field.
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
 function parseProviderUsage(obj: UntrustedObject): ParsedProviderChunk["usage"] {
   const usageValue = field(obj, "usage");
 
@@ -81,10 +88,11 @@ function parseProviderUsage(obj: UntrustedObject): ParsedProviderChunk["usage"] 
   const usageObj = asUntrusted(usageValue);
 
   const inputTokens =
-    numberField(usageObj, "prompt_tokens") ?? numberField(usageObj, "input_tokens");
+    tokenCount(field(usageObj, "prompt_tokens")) ?? tokenCount(field(usageObj, "input_tokens"));
 
   const outputTokens =
-    numberField(usageObj, "completion_tokens") ?? numberField(usageObj, "output_tokens");
+    tokenCount(field(usageObj, "completion_tokens")) ??
+    tokenCount(field(usageObj, "output_tokens"));
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined
@@ -147,6 +155,20 @@ function parseProviderToolCallDeltas(toolCalls: unknown): ToolCallDelta[] {
   );
 
   return deltas;
+}
+
+/**
+ * Whether one decoded provider event reports a failure instead of carrying part of the answer. An
+ * OpenAI-compatible server reports a failure mid-stream as `{"error": ...}` and can still send
+ * `[DONE]` after it, so this event, not the end of the stream, has to fail the turn.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream event.
+export function isProviderError(raw: unknown): boolean {
+  if (!isRecord(raw)) return false;
+  const error = raw.error;
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider error field.
+  return isRecord(error) || (typeof error === "string" && error !== "");
 }
 
 /**
