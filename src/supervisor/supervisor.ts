@@ -53,7 +53,7 @@ import {
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
-import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
+import { ProjectThreads, type LiveTurn, type ProjectThreadResult } from "./threads/index.js";
 import {
   HarnessArtifacts,
   type BuildWorkspaceNamespace,
@@ -77,6 +77,11 @@ import {
 type ResetWorkspaceNamespace = Readonly<{
   getByName(name: string): Readonly<{ reset(): Promise<WorkspaceResetResult> }>;
 }>;
+
+/** A reset the Supervisor refused, because a turn holds a lease, or what the Host answered. */
+export type SupervisorWorkspaceReset =
+  | WorkspaceResetResult
+  | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" } & LiveTurn> }>;
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
@@ -241,17 +246,28 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runAtEntryPoint(this.connections.connectionStatus(now, parseRequestId(requestId)));
   }
 
-  /** Reset only the shared workspace; project threads and generation state live elsewhere here. */
-  async resetWorkspace(): Promise<WorkspaceResetResult> {
+  /**
+   * Reset only the shared workspace; project threads and generation state live elsewhere here.
+   *
+   * A live turn lease on any project or the harness refuses the reset. The reset deletes the files
+   * the turn works in and restarts the container its commands run in, so it would cut the turn off
+   * halfway through a change. The Workspace Host refuses in turn while it runs a build, provision,
+   * or removal.
+   */
+  async resetWorkspace(now: number = Date.now()): Promise<SupervisorWorkspaceReset> {
+    const liveTurn = this.threads.liveTurn(now);
+
+    if (liveTurn !== undefined) return { ok: false, problem: { code: "turn-active", ...liveTurn } };
+
     const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
 
     const result = await timedWorkspaceRpc(
       { method: "reset" },
       () => namespace.getByName(this.workspaceName).reset(),
-      () => ({ outcome: "reset" }),
+      (reset) => (reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" }),
     );
 
-    this.connections.resetWorkspace();
+    if (result.ok) this.connections.resetWorkspace();
 
     return result;
   }
@@ -314,9 +330,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.threads.read(projectId);
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
-  startFreshProjectThread(projectId: unknown): ProjectThreadResult {
-    return this.threads.startFreshThread(projectId);
+  /** Refused with `turn-active` while a turn holds the project's lease (`ThreadStore`). */
+  startFreshProjectThread(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `getProjectThread`.
+    projectId: unknown,
+    now: number = Date.now(),
+  ): ProjectThreadResult {
+    return this.threads.startFreshThread(projectId, now);
   }
 
   /**
@@ -369,6 +389,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       workspaceName: this.workspaceName,
       namespace: this.env.WORKSPACE_HOST,
       signal: context.signal,
+      remainingMs: context.remainingMs,
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
       // on the same generation it was admitted against (`turn-run.ts`).
       mount: () =>

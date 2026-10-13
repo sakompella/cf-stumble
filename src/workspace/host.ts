@@ -52,10 +52,11 @@ import { observeBackendClose, type BackendCloseTrigger } from "./container-exit.
 
 export { parseProjectBudget };
 
-export type WorkspaceResetResult = Readonly<{
-  ok: true;
-  reset: "workspace";
-}>;
+export type WorkspaceResetResult =
+  | Readonly<{ ok: true; reset: "workspace" }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy" }> }>;
+
+const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as const;
 
 type WorkspaceStorageReset = Readonly<{
   deleteAll(): Promise<void>;
@@ -171,6 +172,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #container: ObservedWorkspaceContainer;
   readonly #idle: WorkspaceIdleController;
   readonly #containerLifecycle = new ContainerLifecycle();
+  /** Builds, provisions, and removals this instance is running. A reset refuses while any run. */
+  #changesInFlight = 0;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
@@ -217,6 +220,22 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return runAtEntryPoint(trackedWork(this.#idle, Effect.suspend(work)));
   }
 
+  /** Run a build, provision, or removal as tracked work that a reset will not cut off. */
+  #changing<A>(work: () => Effect.Effect<A>): Promise<A> {
+    return runAtEntryPoint(
+      Effect.acquireUseRelease(
+        Effect.sync(() => {
+          this.#changesInFlight += 1;
+        }),
+        () => trackedWork(this.#idle, Effect.suspend(work)),
+        () =>
+          Effect.sync(() => {
+            this.#changesInFlight -= 1;
+          }),
+      ),
+    );
+  }
+
   #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
     return observeBackendClose(this.#container, trigger, () => {
       this.#containerLifecycle.replaced();
@@ -240,7 +259,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
-    return this.#tracked(() =>
+    return this.#changing(() =>
       executeHarnessBuildRequest({
         configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
         operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
@@ -263,7 +282,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
-    return this.#tracked(() =>
+    return this.#changing(() =>
       executeProjectProvisionRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
@@ -274,7 +293,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   /** Remove one connected project's clone and provisioning remnants, never the harness. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The RPC parser validates this boundary.
   removeProject(request: unknown): Promise<WorkspaceResult> {
-    return this.#tracked(() =>
+    return this.#changing(() =>
       executeProjectRemovalRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
@@ -318,10 +337,16 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /** Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them. */
+  /**
+   * Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them.
+   * A build, provision, or removal still running would be cut off halfway, and could write into the
+   * wiped store afterwards, so the reset refuses while one runs.
+   */
   reset(): Promise<WorkspaceResetResult> {
-    return this.#tracked(() =>
-      resetWorkspaceStorage(this.ctx.storage, {
+    return this.#tracked((): Effect.Effect<WorkspaceResetResult> => {
+      if (this.#changesInFlight > 0) return Effect.succeed(WORKSPACE_BUSY);
+
+      return resetWorkspaceStorage(this.ctx.storage, {
         restart: (spec) => this.#container.restartFor("workspace-reset", spec),
       }).pipe(
         Effect.ensuring(
@@ -335,8 +360,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
             this.#idle.forgetAlarm();
           }),
         ),
-      ),
-    );
+      );
+    });
   }
 
   /** Hand out a project capability bounded to one turn and this container generation. */

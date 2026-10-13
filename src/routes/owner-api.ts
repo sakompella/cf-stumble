@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import { logEvent, logRedactedCause, timed, type RequestId } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
 import type { VerifiedAccessScope } from "../supervisor/projects/index.js";
-import type { ProjectThreadResult } from "../supervisor/threads/index.js";
+import type { ProjectThreadProblem, ProjectThreadResult } from "../supervisor/threads/index.js";
 import {
   handleGenerationControl,
   handleGenerationSubmission,
@@ -17,10 +17,10 @@ import { settleRoute } from "./route-settled.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
 
-type WorkspaceResetResult = Readonly<{
-  ok: true;
-  reset: "workspace";
-}>;
+/** A refused reset names why: a turn holds a lease, or the Workspace Host is changing files. */
+type WorkspaceResetResult =
+  | Readonly<{ ok: true; reset: "workspace" }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" | "workspace-busy" }> }>;
 
 export type OwnerApiSupervisor = GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
@@ -40,11 +40,9 @@ function workspaceResetResponse(
       "workspace.reset",
       {},
       () => supervisor.resetWorkspace(),
-      () => ({
-        outcome: "reset",
-      }),
+      (reset) => (reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" }),
     ),
-  ).pipe(Effect.map((reset) => Response.json(reset)));
+  ).pipe(Effect.map((reset) => Response.json(reset, { status: reset.ok ? 200 : 409 })));
 }
 
 /**
@@ -73,7 +71,7 @@ function statusResponse(
 
 /**
  * Naming a project the catalog does not have is a 404, because the client asked for something that
- * does not exist. Anything else is a fault about the thread it did name.
+ * does not exist. A live turn refusing a fresh thread is a 409. An unreadable thread is a fault.
  */
 function threadResponse(
   read: () => Promise<ProjectThreadResult>,
@@ -84,11 +82,20 @@ function threadResponse(
         return Response.json({ ok: true, thread: result.thread });
       }
 
-      const status = result.problem.code === "unreadable-thread" ? 500 : 404;
-
-      return Response.json({ ok: false, problem: result.problem }, { status });
+      return Response.json(
+        { ok: false, problem: result.problem },
+        { status: threadProblemStatus(result.problem.code) },
+      );
     }),
   );
+}
+
+function threadProblemStatus(code: ProjectThreadProblem["code"]): number {
+  if (code === "unreadable-thread") return 500;
+
+  if (code === "turn-active") return 409;
+
+  return 404;
 }
 
 /**

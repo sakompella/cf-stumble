@@ -208,6 +208,12 @@ export function diagnosticsText(preparation: unknown): Option.Option<string> {
   return Option.some(parts.join("\n\n"));
 }
 
+export function freshRefusalText(answer: Answer): string {
+  return field(answer.payload, "problem", "code") === "turn-active"
+    ? "a turn is running on this project; start a fresh thread once it ends"
+    : problemText(answer);
+}
+
 export function turnRefusalText(answer: Answer): string {
   switch (field(answer.payload, "problem", "code")) {
     case "turn-conflict":

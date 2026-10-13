@@ -6,6 +6,11 @@ import { afterEach, expect, test, vi } from "vitest";
 import { GitHubConnectionStore } from "../../src/supervisor/projects/github-connection-store.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
+import { startProjectTurn } from "./threads/turn-slot.js";
+
+const NOW = 1_700_000_000_000;
+
+const LEASE_MS = 30_000;
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -34,7 +39,7 @@ function fakeWorkspace(resetResult: WorkspaceResetResult) {
   );
 
   const resetWorkspace = vi.fn(() => {
-    credentialState = "missing";
+    if (resetResult.ok) credentialState = "missing";
 
     return Promise.resolve(resetResult);
   });
@@ -81,4 +86,47 @@ test("resets the named workspace while preserving thread and generation state", 
   await expect(control.getGitHubConnection()).resolves.toEqual({ state: "disconnected" });
   expect(await control.getProjectThread("sample-project-one")).toEqual(threadBeforeReset);
   expect(await control.getGenerations()).toEqual(generationsBeforeReset);
+});
+
+test("a live turn on any project or the harness refuses the reset before the workspace is asked", async () => {
+  for (const projectId of ["sample-project-one", "harness"]) {
+    const control = env.SUPERVISOR.getByName(`workspace-reset-live-turn-${projectId}`);
+    await connectSampleProjects(control);
+    const turn = await startProjectTurn(control, projectId, 0, NOW, LEASE_MS);
+
+    if (!turn.ok) throw new Error(`the ${projectId} turn must be admitted`);
+
+    const fake = fakeWorkspace({ ok: true, reset: "workspace" });
+    vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+
+    await expect(control.resetWorkspace(NOW + 1)).resolves.toEqual({
+      ok: false,
+      problem: { code: "turn-active", projectId, deadlineAt: NOW + LEASE_MS },
+    });
+    expect(fake.resetWorkspace).not.toHaveBeenCalled();
+
+    await expect(control.resetWorkspace(NOW + LEASE_MS)).resolves.toEqual({
+      ok: true,
+      reset: "workspace",
+    });
+    vi.restoreAllMocks();
+  }
+});
+
+test("a reset the Workspace Host refuses keeps the GitHub connection record", async () => {
+  const control = env.SUPERVISOR.getByName("workspace-reset-host-busy");
+  await runInDurableObject(control, (_instance, state) => {
+    new GitHubConnectionStore(state.storage).recordConnection({
+      login: "reset-user",
+      source: "configured-token",
+      connectedAt: 0,
+    });
+  });
+
+  const busy = { ok: false, problem: { code: "workspace-busy" } } as const;
+  const fake = fakeWorkspace(busy);
+  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+
+  await expect(control.resetWorkspace()).resolves.toEqual(busy);
+  await expect(control.getGitHubConnection()).resolves.toMatchObject({ state: "connected" });
 });

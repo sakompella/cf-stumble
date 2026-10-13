@@ -15,6 +15,9 @@ import type {
 } from "../../../src/supervisor/projects/index.js";
 import type LoadedFacetTurnEntry from "../../facet/generation-0/loaded-facet-turn-entry.js";
 import type LoadedProjectWorkspacesEntry from "./loaded-project-workspaces-entry.js";
+import { wholeTurn } from "./turn-workspace-fakes.js";
+
+export { wholeTurn };
 
 /**
  * The tenant's one workspace, as the Supervisor names it from its own server-derived name. Every
@@ -69,6 +72,7 @@ export async function turnRecordingProvisioning(
       projectId,
       request: OPENING,
       signal: runningTurn(),
+      remainingMs: wholeTurn,
     }),
   );
 
@@ -98,7 +102,7 @@ export async function projectWorkspaces(): Promise<ProjectWorkspaces> {
   );
 
   return {
-    namespace: { getByName: (name) => ({ project: () => host.project(name) }) },
+    namespace: { getByName: (name) => ({ project: (budget) => host.project(name, budget) }) },
     fileText: (name, path) => host.fileText(name, path),
     requestedNames: () => host.requestedNames(),
     heldCommands: () => host.heldCommands(),
@@ -131,6 +135,7 @@ export function turnFor(
       projectId,
       request: OPENING,
       signal,
+      remainingMs: wholeTurn,
     }),
   );
 }
@@ -147,6 +152,7 @@ export function turnWithNothingServing(workspaces: ProjectWorkspaces): Promise<P
       projectId: sampleProjectOne.id,
       request: OPENING,
       signal: runningTurn(),
+      remainingMs: wholeTurn,
     }),
   );
 }

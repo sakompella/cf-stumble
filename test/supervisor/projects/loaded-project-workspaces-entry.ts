@@ -42,7 +42,7 @@ const execBackends: GitDiffExecBackend[] = [];
 
 export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
   /** The project capability for one workspace name, as `WorkspaceHost.project()` hands it out. */
-  project(name: string): ProjectRpcTarget {
+  project(name: string, budget: Readonly<{ remainingMs: number }>): ProjectRpcTarget {
     const provider = workspaceFor(name);
 
     // A turn asks its workspace for a diff when it ends, and this backend answers that command by
@@ -50,7 +50,9 @@ export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
     const execBackend = new GitDiffExecBackend(provider);
     execBackends.push(execBackend);
 
-    return new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
+    return new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend, {
+      remainingMs: budget.remainingMs,
+    });
   }
 
   /**

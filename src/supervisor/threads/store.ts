@@ -8,6 +8,7 @@ import {
   decideStartTurn,
   type TurnLeaseClaim,
 } from "./decisions.js";
+import { findLiveTurn } from "./live-turn.js";
 import { serializeThreadMessages } from "./messages.js";
 import { threadFromRow, type ThreadRow } from "./row.js";
 import { emptyThread, type ProjectThread, type ThreadProblem } from "./thread.js";
@@ -18,10 +19,6 @@ export type ThreadLease = Readonly<{
   leaseId: string;
   reclaimed: boolean;
 }>;
-
-type ThreadRemovalProblem =
-  | ThreadProblem
-  | Readonly<{ code: "turn-active"; projectId: SelectableProject["id"]; deadlineAt: number }>;
 
 const CLEAR_LEASE =
   "turn_active = 0, turn_deadline_at = NULL, turn_lease_id = NULL, turn_holder_id = NULL";
@@ -81,10 +78,18 @@ export class ThreadStore {
    * revision zero would be admitted into the replacement as if nothing had happened. Clearing the
    * lease stops that turn from committing, and advancing the revision stops it from starting
    * again; both hold without reading the conversation, so a damaged row is replaced rather than
-   * reported.
+   * reported. A live lease refuses it instead: the running turn would lose its save but keep
+   * editing files, and a replacement turn could start beside it.
    */
-  startFreshThread(project: SelectableProject): ProjectThread {
+  startFreshThread(
+    project: SelectableProject,
+    now: number,
+  ): Result.Result<ProjectThread, ThreadProblem> {
     return this.storage.transactionSync(() => {
+      const live = findLiveTurn(this.sql, now, project.id);
+
+      if (live !== undefined) return Result.fail({ code: "turn-active", ...live });
+
       this.sql.exec(
         `INSERT INTO project_threads (project_id, messages, revision, turn_active, turn_deadline_at, turn_lease_id, turn_holder_id)
          VALUES (?, NULL, 0, 0, NULL, NULL, NULL)
@@ -98,7 +103,7 @@ export class ThreadStore {
         project.id,
       );
 
-      return { ...emptyThread(project.id), revision: this.revisionOf(project) };
+      return Result.succeed({ ...emptyThread(project.id), revision: this.revisionOf(project) });
     });
   }
 
@@ -222,7 +227,7 @@ export class ThreadStore {
   }
 
   /** Delete the project's thread after confirming that no live turn owns it. */
-  remove(project: SelectableProject, now: number): Result.Result<void, ThreadRemovalProblem> {
+  remove(project: SelectableProject, now: number): Result.Result<void, ThreadProblem> {
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
 

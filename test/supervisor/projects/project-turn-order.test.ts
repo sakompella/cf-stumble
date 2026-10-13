@@ -10,7 +10,7 @@ import type {
   ProjectTurnStart,
   ProjectWorkspaceNamespace,
 } from "../../../src/supervisor/projects/index.js";
-import { unusedCapability } from "./turn-workspace-fakes.js";
+import { unusedCapability, wholeTurn } from "./turn-workspace-fakes.js";
 
 /**
  * The order of a turn's start steps, with every step a recording stand-in.
@@ -100,6 +100,7 @@ function startIn(
       projectId,
       request: { prompt: "do the work", state: null },
       signal,
+      remainingMs: wholeTurn,
     }),
   );
 }
@@ -206,6 +207,7 @@ test("a start interrupted while the facet answers cancels the stream that arrive
       projectId: sampleProjectOne.id,
       request: { prompt: "do the work", state: null },
       signal: new AbortController().signal,
+      remainingMs: wholeTurn,
     }),
   );
 

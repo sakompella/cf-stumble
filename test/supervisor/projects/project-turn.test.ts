@@ -20,6 +20,7 @@ import {
   turnFor,
   turnWithNothingServing,
   workspaceName,
+  wholeTurn,
 } from "./project-turn-helpers.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/index.js";
 
@@ -179,6 +180,7 @@ test("passes the turn cancellation signal into provisioning", async () => {
       projectId: projectOne.id,
       request: { prompt: "do the work", state: null },
       signal: controller.signal,
+      remainingMs: wholeTurn,
     }),
   );
 

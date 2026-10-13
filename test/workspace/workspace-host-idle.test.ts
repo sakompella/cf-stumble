@@ -9,6 +9,7 @@ import { PROJECT_TURN_LEASE_MS } from "../../src/turn-budget.js";
 import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
 import { capturedEvents, named } from "../log-capture.js";
+import { sampleProjectOne } from "../project-fixtures.js";
 
 /**
  * The Host's own wiring of the idle stop: which calls count as work, what the alarm closes and
@@ -128,14 +129,16 @@ test("a past-due alarm closes the Workspace and destroys the container for being
 });
 
 test("a call on the project capability counts as activity", async () => {
-  const quietMs = 120_000;
+  // Past the lease, so only the call itself can keep the workspace busy. A capability with a turn
+  // budget refuses calls by then, so this one has none.
+  const calledAtMs = PROJECT_TURN_LEASE_MS + 120_000;
 
   const destroyed = await withHost("host-seam-touch", async (host, _state, container) => {
     const start = Date.now();
-    const project = host.project({ remainingMs: 1_000 });
-    vi.spyOn(Date, "now").mockReturnValue(start + quietMs);
+    const project = host.project();
+    vi.spyOn(Date, "now").mockReturnValue(start + calledAtMs);
     await project.lstat("/");
-    vi.spyOn(Date, "now").mockReturnValue(start + WORKSPACE_IDLE_STOP_MS + quietMs - 1);
+    vi.spyOn(Date, "now").mockReturnValue(start + WORKSPACE_IDLE_STOP_MS + calledAtMs - 1);
     await host.alarm();
 
     return container.destroyed;
@@ -208,4 +211,40 @@ test("an exec started while the idle stop destroys the container waits for it", 
   expect(seen.started.ok, "the exec is accepted").toBe(true);
   expect(seen.whileDestroying, "it does not reach the container during the destroy").toBe(0);
   expect(seen.afterwards, "it reaches the container once the destroy settled").toBeGreaterThan(0);
+});
+
+test("a reset refuses while a provision is in flight and leaves the store alone", async () => {
+  const held = { release: (): void => {} };
+
+  const stalled = new Promise<void>((resolve) => {
+    held.release = resolve;
+  });
+
+  const seen = await withHost("host-reset-busy", async (host, state) => {
+    // Every Workspace call waits, so the provision stays in flight until the test releases it.
+    // SAFETY: each member the provision reaches is a function that waits; nothing reads the rest.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const waiting = new Proxy({}, { get: () => () => stalled }) as never;
+    vi.spyOn(Workspace.prototype, "fs", "get").mockReturnValue(waiting);
+    vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(waiting);
+    await state.storage.put("durable-row", "kept");
+
+    const provision = host.provision({
+      kind: "provision-project",
+      projectId: sampleProjectOne.id,
+      repositoryUrl: sampleProjectOne.repositoryUrl,
+      step: "clone",
+    });
+
+    await tick();
+    const refused = await host.reset();
+    const row = await state.storage.get("durable-row");
+    held.release();
+    await provision;
+
+    return { refused, row };
+  });
+
+  expect(seen.refused).toEqual({ ok: false, problem: { code: "workspace-busy" } });
+  expect(seen.row, "the refused reset deleted nothing").toBe("kept");
 });

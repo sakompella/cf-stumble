@@ -87,15 +87,15 @@ test("starting a fresh thread removes the conversation without calling workspace
   }
 });
 
-test("a fresh thread frees the turn slot the replaced conversation held", async () => {
+test("a fresh thread clears an expired lease the replaced conversation held", async () => {
   const control = await supervisor("fresh-thread-releases-turn");
   await threadWithConversation(control, "sample-project-one");
   const heldLease = await admit(control, "sample-project-one", 1);
 
-  await control.startFreshProjectThread("sample-project-one");
+  await control.startFreshProjectThread("sample-project-one", NOW + LEASE_MS);
 
-  // The turn that was running cannot commit into the thread it no longer holds, and the next turn
-  // starts from the fresh thread's revision rather than waiting for the old lease to expire.
+  // A turn whose lease ran out, say because its facet died, cannot commit into the thread it no
+  // longer holds, and the next turn starts from the fresh thread's revision.
   const lateFinish = await finishProjectTurn(
     control,
     "sample-project-one",
@@ -119,7 +119,7 @@ test("a delayed start cannot enter a replaced thread by presenting its old revis
   // number a replacement would count back to if a fresh thread restarted the count.
   const staleLease = await admit(control, "sample-project-one", 0);
 
-  await control.startFreshProjectThread("sample-project-one");
+  await control.startFreshProjectThread("sample-project-one", NOW + LEASE_MS);
 
   const delayedStart = await startProjectTurn(control, "sample-project-one", 0, NOW + 1, LEASE_MS);
 
@@ -154,7 +154,7 @@ test("a delayed start cannot enter a replaced thread by presenting its old revis
 test("the replaced thread's lease cannot save into the turn that replaced it", async () => {
   const control = await supervisor("fresh-thread-lease-fenced");
   const staleLease = await admit(control, "sample-project-one", 0);
-  await control.startFreshProjectThread("sample-project-one");
+  await control.startFreshProjectThread("sample-project-one", NOW + LEASE_MS);
 
   // The coordinator of the later turn holds a lease of its own on a thread the replaced turn
   // cannot name: its predecessor's save is refused while its own succeeds.
@@ -220,6 +220,37 @@ test("the harness entry has a thread of its own, and resetting it leaves a proje
   expect(await control.getProjectThread("sample-project-one")).toMatchObject({
     ok: true,
     thread: { conversation: JSON.stringify(savedConversation), revision: 1 },
+  });
+});
+
+test("a fresh thread is refused while a turn holds the project, and replaces it once the turn ends", async () => {
+  const control = await supervisor("fresh-thread-live-turn");
+  await threadWithConversation(control, "sample-project-one");
+  const liveLease = await admit(control, "sample-project-one", 1);
+
+  expect(await control.startFreshProjectThread("sample-project-one", NOW + 1)).toEqual({
+    ok: false,
+    problem: { code: "turn-active", projectId: "sample-project-one", deadlineAt: NOW + LEASE_MS },
+  });
+  expect(await control.getProjectThread("sample-project-one")).toMatchObject({
+    ok: true,
+    thread: { messageCount: savedConversation.length, revision: 1, turnActive: true },
+  });
+
+  await abandonProjectTurn(control, "sample-project-one", liveLease);
+
+  expect(await control.startFreshProjectThread("sample-project-one", NOW + 1)).toMatchObject({
+    ok: true,
+    thread: { conversation: "[]", revision: 2 },
+  });
+});
+
+test("a turn on another project does not refuse this project's fresh thread", async () => {
+  const control = await supervisor("fresh-thread-other-project-live");
+  await admit(control, "sample-project-two", 0);
+
+  expect(await control.startFreshProjectThread("sample-project-one", NOW + 1)).toMatchObject({
+    ok: true,
   });
 });
 

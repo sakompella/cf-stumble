@@ -93,6 +93,7 @@ function turnAcrossIsolates(
         projectId,
         request,
         signal: context.signal,
+        remainingMs: context.remainingMs,
       }),
     now: () => Date.now(),
     leaseMs: PROJECT_TURN_LEASE_MS,

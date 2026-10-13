@@ -7,7 +7,8 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
  * surfaces.
  */
 type ProjectWorkspaceHost = Readonly<{
-  project(): Promise<ProjectCapabilityStub>;
+  /** `remainingMs` is the turn's remaining budget; the capability ends when it runs out. */
+  project(budget: Readonly<{ remainingMs: number }>): Promise<ProjectCapabilityStub>;
 }>;
 
 /**

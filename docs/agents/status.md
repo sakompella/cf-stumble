@@ -39,6 +39,13 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   Supervisor dropped every table except `github_authorization` and `github_connection` on
   2026-10-12 at 08:38:33Z (9 tables, 35 rows). The reset code is removed; the `legacy_state_reset`
   table stays. See `design/github-connection.md`, "The connected project list".
+- **An ended turn's capability refuses file access as well as commands** (owner default,
+  2026-10-13). Before, ending a turn killed its commands but left reads and writes open, and main's
+  capability had no deadline at all. See `design/computer-integration.md`, "Workspace layout".
+- **A fresh thread or a workspace reset is refused while a turn runs** (owner default, 2026-10-13).
+  The answer is HTTP 409 `turn-active`, or `workspace-busy` when the Workspace Host is running a
+  build, provision, or removal. The alternative, cancelling and fencing the running turn, is not
+  built. See `design/computer-integration.md`, "Workspace layout".
 
 ## Open items
 
@@ -86,10 +93,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     abort each other. A provider JSON error followed by `[DONE]` may be ignored. Missing or
     malformed provider usage can undercount. Producer cancellation after a browser disconnect is
     untested. Workspace exclusion during a turn is isolate-local, not held by the Workspace Host.
-14. **Owner decisions.** What a workspace reset does to a running turn (refuse, or cancel and
-    fence). Whether the repository size thresholds in `src/github/repository-size.ts` need an ADR.
-    A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched on
-    2026-09-27; the note is lost and nothing was decided.
+14. **Owner decisions.** Whether the repository size thresholds in `src/github/repository-size.ts`
+    need an ADR. A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched
+    on 2026-09-27; the note is lost and nothing was decided.
 15. **Port to Effect and Foldkit done locally, not deployed** (owner, 2026-10-12). ADR-0045 moves the
     immutable host to Effect, and ADR-0046 makes the owner page a Foldkit application served as a
     hashed script file. better-result is gone from the code and the lockfile. The Worker, Cloudflare

@@ -5,6 +5,7 @@
 
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
+import { freshRefusalText } from "../../../src/page/client/api.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import type { TurnFrame } from "../../../src/page/client/frames.js";
@@ -171,6 +172,24 @@ test("a fresh thread needs two clicks and no running turn", () => {
   expect(after(streaming(page), [Message.ClickedFreshThread()]).freshThreadStatus).toBe(
     "a turn is running; cancel it first",
   );
+});
+
+test("a fresh thread refused for a turn running elsewhere says so and leaves the conversation", () => {
+  const page = readyPage();
+
+  const wording = freshRefusalText({
+    status: 409,
+    payload: { ok: false, problem: { code: "turn-active" } },
+  });
+
+  const refused = after(page, [
+    Message.RejectedFreshThread({ selection: page.selection, wording }),
+  ]);
+
+  expect(refused.freshThreadStatus).toBe(
+    "not started: a turn is running on this project; start a fresh thread once it ends",
+  );
+  expect(refused.conversationState).toBe(page.conversationState);
 });
 
 test("activation sends nothing until the page has rendered an epoch", () => {
