@@ -111,7 +111,7 @@ export class GitHubConnectionStore {
     }
 
     if (row.expires_at <= now) {
-      this.clearAuthorization();
+      this.consumeAuthorization(row.device_code);
 
       return undefined;
     }
@@ -127,9 +127,20 @@ export class GitHubConnectionStore {
     };
   }
 
-  /** Consume the pending authorization. A redeemed device code is never redeemable twice. */
-  clearAuthorization(): void {
-    this.sql.exec(`DELETE FROM github_authorization WHERE id = 1`);
+  /**
+   * Consume the pending authorization if it is still the one for `deviceCode`, and answer whether
+   * this call consumed it. A redeemed device code is never redeemable twice, and a redemption that
+   * ends after a newer authorization started leaves the newer one in place.
+   */
+  consumeAuthorization(deviceCode: string): boolean {
+    const consumed = this.sql
+      .exec(
+        `DELETE FROM github_authorization WHERE id = 1 AND device_code = ? RETURNING id`,
+        deviceCode,
+      )
+      .toArray();
+
+    return consumed.length > 0;
   }
 
   recordConnection(connection: RecordedConnection): void {

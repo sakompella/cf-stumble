@@ -81,7 +81,7 @@ export const THREAD_MESSAGE_FIELDS = {
   bashExecution: {
     command: "string",
     output: "string",
-    // Pi declares this required and nullable: a cancelled command reports no exit code.
+    // Pi declares this `number | undefined`, not optional: a cancelled command reports no exit code.
     exitCode: "optional-number",
     cancelled: "boolean",
     truncated: "boolean",

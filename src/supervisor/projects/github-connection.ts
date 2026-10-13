@@ -132,9 +132,13 @@ function logCredentialEnsure(
 /** One step of the device authorization, as the kind of answer it reached. */
 function logAuthorization(
   step: "start" | "complete",
-  result: GitHubAuthorizationProblem | "started" | "authorized" | "pending",
+  result: GitHubAuthorizationProblem | "started" | "authorized" | "pending" | "superseded",
 ): void {
-  const refused = result !== "started" && result !== "authorized" && result !== "pending";
+  const refused =
+    result !== "started" &&
+    result !== "authorized" &&
+    result !== "pending" &&
+    result !== "superseded";
 
   logEvent(refused ? "warn" : "info", `github-authorization.${step}`, { outcome: result });
 }
@@ -281,6 +285,10 @@ export class GitHubConnection {
    * used, and a code that has been redeemed, denied, or has expired is deleted, so the same
    * request replayed finds nothing. A successful redemption installs the token into the workspace
    * inside this call; the token is a local value that never reaches storage or a response.
+   *
+   * GitHub's answer arrives after a network wait, during which a newer authorization can replace
+   * the one this call redeemed, or a concurrent completion can consume it. Such an answer is
+   * discarded, token included, and the caller gets the current status.
    */
   completeAuthorization(
     scope: VerifiedAccessScope,
@@ -307,9 +315,17 @@ export class GitHubConnection {
         this.environment.fetcher,
       );
 
+      const settled =
+        redeemed.kind === "authorized" || redeemed.kind === "expired" || redeemed.kind === "denied";
+
+      if (settled && !this.store.consumeAuthorization(pending.deviceCode)) {
+        logAuthorization("complete", "superseded");
+
+        return { ok: true, status: yield* this.status(now) } as const;
+      }
+
       if (redeemed.kind === "authorized") {
         logAuthorization("complete", "authorized");
-        this.store.clearAuthorization();
 
         return {
           ok: true,
@@ -322,10 +338,6 @@ export class GitHubConnection {
 
       if (unredeemed === "pending") {
         return { ok: true, status: yield* this.status(now) } as const;
-      }
-
-      if (redeemed.kind === "expired" || redeemed.kind === "denied") {
-        this.store.clearAuthorization();
       }
 
       return { ok: false, problem: unredeemed } as const;

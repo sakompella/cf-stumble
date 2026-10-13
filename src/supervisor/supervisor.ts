@@ -54,7 +54,6 @@ import { runAtEntryPoint } from "../run-entry-point.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
 import { ProjectThreads, type ProjectThreadResult } from "./threads/index.js";
-import { resetLegacySupervisorStateOnce } from "./legacy-state-reset.js";
 import {
   HarnessArtifacts,
   type BuildWorkspaceNamespace,
@@ -109,10 +108,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   /** Fences leases held by an instance that Durable Objects have since replaced. */
   private readonly instanceId = crypto.randomUUID();
 
-  // oxlint-disable-next-line max-lines-per-function -- The one-time legacy reset, which runs before any store opens its tables, goes once production has run it.
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
-    resetLegacySupervisorStateOnce(ctx.storage);
     this.generations = new Generations(ctx.storage);
     const supervisorName = ctx.id.name;
 

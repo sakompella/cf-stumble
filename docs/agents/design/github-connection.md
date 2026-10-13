@@ -73,24 +73,13 @@ whose new id equals the old row's id returns the old repository as already conne
 `project_threads` table created before the `turn_holder_id` column has the same origin: the thread
 store's queries select that column and fail on the old table.
 
-Nobody can read production's Supervisor SQLite to prove that it holds neither, so the Supervisor
-resets its own state once instead (`resetLegacySupervisorStateOnce` in
-`src/supervisor/legacy-state-reset.ts`). The Supervisor's constructor calls it before any store
-opens its tables. The first time, it drops every Supervisor table except `github_authorization` and
-`github_connection`, writes a marker row in `legacy_state_reset`, and logs
-`supervisor.legacy-state-reset` with the row count of each dropped table. It does all of this in
-one transaction, so a crash leaves either the old state or the reset state. The stores then
-recreate their tables empty. On every later construction the marker is present and the reset does
-nothing, so data written after the reset stays. A new, empty Supervisor gets the marker and nothing
-else.
-
-The reset keeps the two GitHub tables because they record how the workspace got its credential.
-The credential itself lives in the Workspace Host, and the reset never calls the Workspace Host or
-touches workspace files, R2, or KV, so the owner does not sign in to GitHub again. Everything else
-in the Supervisor is gone: generations, module maps, the active generation, connected projects, and
-threads. After the first deploy that runs the reset, the owner reconnects each repository and
-submits, prepares, and activates a generation again; a rollback has no earlier generation to
-return to. The reset is deleted once production has run it.
+Nobody could read production's Supervisor SQLite to prove that it held neither, so the Supervisor
+reset its own state once instead (`a9c423f`). On its first construction after that deploy it
+dropped every Supervisor table except `github_authorization` and `github_connection` in one
+transaction, wrote a marker row in `legacy_state_reset`, and logged `supervisor.legacy-state-reset`.
+Production ran it once, on 2026-10-12 at 08:38:33Z: 9 tables and 35 rows. The owner kept the GitHub
+connection and had to reconnect repositories and prepare and activate a generation again. The reset
+code was then removed; the `legacy_state_reset` table stays and nothing reads it.
 
 ## Connecting a repository
 
@@ -156,7 +145,9 @@ Three rules protect the flow:
 - The pending authorization records the verified Access identity and audience that started it. A
   redemption presented by any other verified owner is refused.
 - The device code is deleted when it is redeemed, denied, or expires, so the same request replayed
-  finds nothing to redeem.
+  finds nothing to redeem. The deletion names the redeemed device code. GitHub's answer for a code
+  that a newer authorization replaced during the wait is discarded, token included, and the newer
+  code stays pending.
 - Every state-changing route under `/api/` requires an `Origin` header that exactly matches
   cf-stumble's own request origin; a missing, `null`, or other value is refused.
 

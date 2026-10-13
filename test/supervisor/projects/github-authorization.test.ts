@@ -3,6 +3,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
+import * as Latch from "effect/Latch";
 import { afterEach, expect, test } from "vitest";
 import { GitHubConnection, GitHubConnectionStore } from "../../../src/supervisor/projects/index.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
@@ -50,6 +51,32 @@ function githubReplying(replies: readonly Reply[]): GitHubFetch {
   };
 }
 
+/**
+ * GitHub issuing `deviceCodes` in order and holding the first redemption until `released` opens,
+ * so a test can start a newer authorization while an older one is still being redeemed.
+ */
+function githubHoldingRedemption(deviceCodes: readonly Reply[], redemption: Reply) {
+  const redeeming = Latch.makeUnsafe();
+  const released = Latch.makeUnsafe();
+  let issued = 0;
+
+  const fetcher: GitHubFetch = async (url) => {
+    if (url.endsWith("/login/device/code")) {
+      const reply = deviceCodes[issued] ?? {};
+      issued += 1;
+
+      return Response.json(reply);
+    }
+
+    Latch.openUnsafe(redeeming);
+    await Effect.runPromise(released.await);
+
+    return Response.json(redemption);
+  };
+
+  return { fetcher, redeeming, released };
+}
+
 interface Tenant {
   readonly workspace: FakeTenantWorkspace;
   github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
@@ -57,9 +84,12 @@ interface Tenant {
 
 /** `configured` is false for the deployment that has no GitHub OAuth client id yet. */
 function tenant(name: string, replies: readonly Reply[], configured = true): Tenant {
+  return tenantOf(name, githubReplying(replies), configured);
+}
+
+function tenantOf(name: string, fetcher: GitHubFetch, configured = true): Tenant {
   const clientId = configured ? CLIENT_ID : undefined;
   const workspace = new FakeTenantWorkspace();
-  const fetcher = githubReplying(replies);
 
   return {
     workspace,
@@ -182,6 +212,47 @@ test.each([
   expect(ended).toEqual({ ok: false, problem });
   expect(afterwards).toEqual({ state: "disconnected" });
 });
+
+test.each([
+  ["denies", { error: "access_denied" }],
+  ["expires", { error: "expired_token" }],
+  ["authorizes", { access_token: FAKE_TOKEN, token_type: "bearer" }],
+])(
+  "keeps a newer authorization when an older redemption %s afterwards",
+  async (answer, redemption) => {
+    const newerDevice = { ...deviceReply, device_code: "newer-code", user_code: "NEWR-CODE" };
+    const provider = githubHoldingRedemption([deviceReply, newerDevice], redemption);
+    const subject = tenantOf(`authorization-superseded-${answer}`, provider.fetcher);
+
+    const { older, afterwards } = await subject.github((github) =>
+      Effect.gen(function* () {
+        yield* github.startAuthorization(owner, NOW);
+
+        const startNewerDuringRedemption = Effect.gen(function* () {
+          yield* provider.redeeming.await;
+          yield* github.startAuthorization(owner, NOW + 2_000);
+          yield* provider.released.open;
+        });
+
+        const [olderCompletion] = yield* Effect.all(
+          [github.completeAuthorization(owner, NOW + 1_000), startNewerDuringRedemption],
+          { concurrency: "unbounded" },
+        );
+
+        return {
+          older: olderCompletion,
+          afterwards: yield* github.status(NOW + 3_000),
+        };
+      }),
+    );
+
+    const newerPending = { state: "awaiting-authorization", userCode: "NEWR-CODE" };
+
+    expect(older).toMatchObject({ ok: true, status: newerPending });
+    expect(afterwards).toMatchObject(newerPending);
+    expect(subject.workspace.credentialRequests.join("")).not.toContain(FAKE_TOKEN);
+  },
+);
 
 test("keeps the authorization when GitHub cannot answer, so the owner can retry", async () => {
   const subject = tenant("authorization-unavailable", [deviceReply, { error: "server_error" }]);
