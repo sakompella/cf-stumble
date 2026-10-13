@@ -91,9 +91,11 @@ const mutations: readonly Mutation[] = [
   },
 ];
 
+/** `fetchSite` is the browser's `Sec-Fetch-Site`, which a non-browser client does not send. */
 const origins: readonly Readonly<{
   name: string;
   value: string | undefined;
+  fetchSite?: string;
   status: number;
   calls: number;
 }>[] = [
@@ -101,13 +103,20 @@ const origins: readonly Readonly<{
   { name: "missing Origin", value: undefined, status: 403, calls: 0 },
   { name: 'Origin "null"', value: "null", status: 403, calls: 0 },
   { name: "same-origin Origin", value: ORIGIN, status: 200, calls: 1 },
+  { name: "same-origin fetch", value: ORIGIN, fetchSite: "same-origin", status: 200, calls: 1 },
+  { name: "same-site fetch", value: ORIGIN, fetchSite: "same-site", status: 403, calls: 0 },
+  { name: "cross-site fetch", value: ORIGIN, fetchSite: "cross-site", status: 403, calls: 0 },
 ];
 
-function requestFor(mutation: Mutation, origin: string | undefined): Request {
+function requestFor(mutation: Mutation, origin: (typeof origins)[number]): Request {
   const headers = new Headers({ "content-type": "application/json" });
 
-  if (origin !== undefined) {
-    headers.set("origin", origin);
+  if (origin.value !== undefined) {
+    headers.set("origin", origin.value);
+  }
+
+  if (origin.fetchSite !== undefined) {
+    headers.set("sec-fetch-site", origin.fetchSite);
   }
 
   return new Request(`${ORIGIN}${mutation.path}`, {
@@ -261,12 +270,12 @@ test.each(
     origins.map((origin) => [mutation.name, origin.name, mutation, origin] as const),
   ),
 )(
-  "requires an exact, present Origin for %s (%s)",
+  "requires an exact, present Origin and no cross-origin fetch for %s (%s)",
   async (_mutationName, _originName, mutation, origin) => {
     const calls = { value: 0 };
 
     const response = await ownerApiResponse(
-      requestFor(mutation, origin.value),
+      requestFor(mutation, origin),
       successfulSupervisor(mutation.operation, calls),
       ownerScope,
     );

@@ -38,6 +38,9 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0046](0046-serve-the-owner-page-script-as-a-hashed-file.md)**: the owner page is a Foldkit
   application whose script the Worker serves after Access as a content-hashed, immutable
   same-origin file, under `script-src 'self'`.
+- **[ADR-0048](0048-sandbox-every-relayed-response.md)**: every response relayed from the active
+  generation is sandboxed into an opaque origin, so its documents cannot use the owner's browser
+  against the owner API.
 
 ## Adding a decision
 

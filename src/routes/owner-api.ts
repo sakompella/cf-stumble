@@ -110,6 +110,28 @@ export function routeOwnerApiRequest(
   );
 }
 
+function originKind(origin: string | null, ownOrigin: string): string {
+  if (origin === null) return "missing";
+
+  if (origin === "null") return "null";
+
+  return origin === ownOrigin ? "same" : "foreign";
+}
+
+/** The `Sec-Fetch-Site` values a browser sends, so a log never carries a client's own text. */
+const FETCH_SITES: ReadonlySet<string> = new Set([
+  "same-origin",
+  "same-site",
+  "cross-site",
+  "none",
+]);
+
+function fetchSiteKind(fetchSite: string | null): string {
+  if (fetchSite === null) return "missing";
+
+  return FETCH_SITES.has(fetchSite) ? fetchSite : "other";
+}
+
 /**
  * The owner API treats every `POST` as a state change, so each one has to come from cf-stumble's
  * own page.
@@ -118,21 +140,24 @@ export function routeOwnerApiRequest(
  * still be the owner's own browser driven by another site, which is what would let a page the
  * owner happens to visit start an authorization or connect a repository in their name. The
  * browser must send an `Origin` that exactly matches the request URL's origin. A missing value,
- * `null`, and every other value are refused.
+ * `null`, and every other value are refused. A browser's `Sec-Fetch-Site`, when present, must also
+ * say `same-origin`; a client that is not a browser does not send it.
  *
- * The refusal is logged here: the route pattern and which kind of origin it was, never the origin
- * itself.
+ * The refusal is logged here: the route pattern and which kind of origin and fetch site it was,
+ * never the origin itself.
  */
 function isCrossOriginMutation(request: Request): boolean {
   const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
   const url = new URL(request.url);
-  const crossOrigin = origin !== url.origin;
+  const crossOrigin = origin !== url.origin || (fetchSite !== null && fetchSite !== "same-origin");
 
   if (crossOrigin) {
     logEvent("warn", "route.cross-origin-refused", {
       route: routePattern(url.pathname),
       method: request.method,
-      origin: origin === null ? "missing" : origin === "null" ? "null" : "foreign",
+      origin: originKind(origin, url.origin),
+      fetchSite: fetchSiteKind(fetchSite),
     });
   }
 

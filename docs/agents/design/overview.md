@@ -115,8 +115,12 @@ act as the owner: Access admits its service token through a Service Auth policy,
 resolves that token to the owner's identity when its Client ID equals `CF_ACCESS_AGENT_CLIENT_ID`.
 The token therefore reaches the owner's Supervisor, not a separate one (`src/access/index.ts`,
 `docs/deploy.md`, "Agent access without a sign-in"). The harness request path
-is not built: the main facet's only capability is the model route (`src/facet/index.ts`), so it
-cannot reach the supervisor's generation controls.
+is not built: the main facet's only capability is the model route (`src/facet/index.ts`). Its
+responses are another path, because the Worker relays them to the owner's browser on the owner's
+origin, where the Access session would carry a request from a document they contain. The Worker
+therefore sandboxes every relayed response into an opaque origin, and the owner API refuses a
+`POST` from it ([ADR-0048](../adr/0048-sandbox-every-relayed-response.md)), so the facet cannot
+reach the supervisor's generation controls through the browser either.
 
 The cold-start check is settled by ADR-0029. ADR-0037 settles UI transport. The host selects the
 Workers AI model through its binding. A caller cannot select the model, effort, or endpoint, as the

@@ -57,6 +57,40 @@ function noStore(response: Response): Response {
   });
 }
 
+/**
+ * The policy every relayed response carries. A relayed response is served from the owner's origin
+ * to the owner's browser, which holds the Access session, so a document the generation serves
+ * would otherwise run as the owner page does and could call the owner API in the owner's name.
+ * `sandbox` without `allow-same-origin` runs it in an opaque origin instead: its requests carry
+ * `Origin: null`, which the owner API refuses for every `POST`, and no CORS header lets it read an
+ * owner API answer. Scripts may run, because that origin gives them nothing of the owner's
+ * (ADR-0048).
+ */
+const RELAY_POLICY = "sandbox allow-scripts; frame-ancestors 'none'";
+
+/**
+ * Add the relay policy as its own policy, after any the generation set. A browser enforces every
+ * policy in the header and combines their sandbox restrictions, so a generation's policy can
+ * restrict its document further but cannot lift this one.
+ *
+ * Every `Set-Cookie` is dropped. A cookie set here belongs to the owner's origin, so a generation
+ * could plant a junk `CF_Authorization` on `/api` that the browser sends ahead of the real one and
+ * lock the owner out of rollback.
+ */
+function sandboxedRelayResponse(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.append("content-security-policy", RELAY_POLICY);
+  headers.delete("set-cookie");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+    // A generation's WebSocket upgrade answers 101, which only a response carrying the socket may.
+    webSocket: response.webSocket,
+  });
+}
+
 function ownerResponse(pathname: string, response: Response): Response {
   return pathname.startsWith("/api/") || pathname === "/health" ? noStore(response) : response;
 }
@@ -93,9 +127,11 @@ function admittedRequest(
     );
   }
 
-  // A relayed response is the generation's, body and all. A rejected relay is a defect, which
-  // rejects the Worker's Promise as it always did.
-  return Effect.promise(() => supervisor.fetch(withoutAccessCredentials(request)));
+  // A relayed response is the generation's, body and all, under the relay policy. A rejected relay
+  // is a defect, which rejects the Worker's Promise as it always did.
+  return Effect.promise(() => supervisor.fetch(withoutAccessCredentials(request))).pipe(
+    Effect.map((response) => sandboxedRelayResponse(response)),
+  );
 }
 
 function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Response> {
