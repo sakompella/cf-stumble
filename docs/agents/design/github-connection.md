@@ -156,7 +156,9 @@ Three rules protect the flow:
 - The pending authorization records the verified Access identity and audience that started it. A
   redemption presented by any other verified owner is refused.
 - The device code is deleted when it is redeemed, denied, or expires, so the same request replayed
-  finds nothing to redeem.
+  finds nothing to redeem. The deletion names the redeemed device code. GitHub's answer for a code
+  that a newer authorization replaced during the wait is discarded, token included, and the newer
+  code stays pending.
 - Every state-changing route under `/api/` requires an `Origin` header that exactly matches
   cf-stumble's own request origin; a missing, `null`, or other value is refused.
 

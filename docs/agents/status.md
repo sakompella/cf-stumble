@@ -83,8 +83,7 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     tests now catch dropped prompts or history; facet mutations for empty tool lists, ignored
     directories, and compaction policy; and streamed startup-check errors and Computer file
     bounds. Seven proposed whole-test deletions were never reviewed.
-12. **Code leads** from the 2026-09-27 audit, not confirmed as defects. An older GitHub device
-    redemption can clear a newer pending code. Late refusals can write status into a newly selected
+12. **Code leads** from the 2026-09-27 audit, not confirmed as defects. Late refusals can write status into a newly selected
     project's page. The turn-stream frame ceiling counts UTF-16 code units, not UTF-8 bytes
     (`src/supervisor/projects/turn-stream.ts`). Command decoders have no end-of-stream flush. The
     directory listing returns every entry. The Computer tarball verifier reads an ignored checksum
