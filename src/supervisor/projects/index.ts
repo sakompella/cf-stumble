@@ -43,6 +43,6 @@ export { PROJECT_TURN_FRAME_MAX_BYTES } from "./turn-frames.js";
 
 export { timedTurnMount, timedTurnProvision } from "./turn-log.js";
 
-export type { ProjectTurnFacet, ProjectTurnStart } from "./project-turn.js";
+export type { ProjectTurnFacet, ProjectTurnStart, TurnWorkspace } from "./project-turn.js";
 
-export type { ProjectWorkspaceNamespace } from "./project-workspace.js";
+export type { ProjectCapabilityStub, ProjectWorkspaceNamespace } from "./project-workspace.js";

@@ -132,3 +132,25 @@ test("stopping the turn's stream aborts its request and cancels the response bod
   // dependencies end; `runHead` interrupts it after the first Message in the same way.
   expect(seen).toEqual({ aborted: true, bodyCancelled: true });
 });
+
+test("the page reads past keepalive lines and sees only the turn's frames", async () => {
+  const body = '\n{"kind":"text","text":"Hel"}\n\n\n{"kind":"text","text":"lo"}\n\n';
+
+  vi.stubGlobal("fetch", () =>
+    Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson" } }),
+    ),
+  );
+
+  const dependencies = turn.modelToDependencies(streamingPage());
+
+  const messages = await Effect.runPromise(
+    Stream.runCollect(turn.dependenciesToStream(dependencies)),
+  );
+
+  expect([...messages].map((message) => message._tag)).toEqual([
+    "ReceivedTurnFrame",
+    "ReceivedTurnFrame",
+    "EndedTurnStream",
+  ]);
+});

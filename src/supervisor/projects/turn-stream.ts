@@ -9,6 +9,7 @@ import {
 import { endTurn, releaseLease, type StreamEnding, type TurnSettlement } from "./turn-settle.js";
 import { runResponseBody } from "../../run-entry-point.js";
 import type { TurnBound } from "./turn-bound.js";
+import type { TurnWorkspace } from "./project-turn.js";
 import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
 
 type ReadTurnStreamInput = TurnSettlement &
@@ -19,11 +20,18 @@ type ReadTurnStreamInput = TurnSettlement &
      * and the start already spent part of it, so what is left here is what is left of the turn.
      */
     bound: TurnBound;
+    /** The turn's capability, ended once the turn has settled, however it ended. */
+    workspace: TurnWorkspace;
     /** Who this turn is in the operational log. */
     trace: TurnTrace;
   }>;
 
 const encoder = new TextEncoder();
+
+/** How often a quiet turn writes an empty line, which bounds how late a disconnect is heard of. */
+const TURN_KEEPALIVE_MS = 2_000;
+
+const KEEPALIVE = encoder.encode("\n");
 
 function encodeFrame(frame: ProjectTurnFrame): Uint8Array {
   return encoder.encode(`${JSON.stringify(frame)}\n`);
@@ -180,6 +188,11 @@ class TurnOutput {
     if (!this.#cancelled) this.#controller?.enqueue(encodeFrame(frame));
   };
 
+  /** Write an empty line, which every reader of a turn skips. */
+  readonly keepAlive = (): void => {
+    if (!this.#cancelled) this.#controller?.enqueue(KEEPALIVE);
+  };
+
   /** Write the one terminal frame and close, which happens exactly once per turn. */
   finish(frame: ProjectTurnFrame): void {
     if (this.#cancelled) return;
@@ -194,6 +207,23 @@ function endingOf(read: Exit.Exit<StreamEnding>): Effect.Effect<StreamEnding> {
   if (Exit.isSuccess(read) || !Cause.hasInterruptsOnly(read.cause)) return read;
 
   return Effect.succeed(CANCELLED);
+}
+
+/**
+ * Write an empty line every few seconds until `work` ends.
+ *
+ * Workers RPC tells a stream's source that its reader went away only when the source next writes.
+ * Every hop between the generation and the browser is such a stream, and a generation running a
+ * long command writes nothing, so without these lines a browser that leaves during `sleep 90` is
+ * heard of only when the command ends, and the project stays held until then.
+ */
+function keptAlive<A>(work: Effect.Effect<A>, output: TurnOutput): Effect.Effect<A> {
+  const beat = Effect.sleep(TURN_KEEPALIVE_MS).pipe(
+    Effect.andThen(Effect.sync(output.keepAlive)),
+    Effect.forever,
+  );
+
+  return Effect.raceFirst(work, beat);
 }
 
 /**
@@ -212,7 +242,9 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
   const reading = Effect.suspend(() => {
     const reader = new TurnReader(input.frames, log.counting(output.publish));
 
-    return input.bound.within(reader.read(), TIMED_OUT).pipe(Effect.ensuring(reader.stop()));
+    return input.bound
+      .within(keptAlive(reader.read(), output), TIMED_OUT)
+      .pipe(Effect.ensuring(reader.stop()));
   });
 
   return Effect.uninterruptibleMask((restore) =>
@@ -238,6 +270,7 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
     Effect.ensuring(
       Effect.sync(() => {
         input.bound.stop();
+        input.workspace.end();
       }),
     ),
   );

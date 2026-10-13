@@ -37,6 +37,9 @@ function workspaceFor(name: string): FakeProjectFilesystemProvider {
   return created;
 }
 
+/** Every exec backend a capability was given, so a test can see whether a command was killed. */
+const execBackends: GitDiffExecBackend[] = [];
+
 export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
   /** The project capability for one workspace name, as `WorkspaceHost.project()` hands it out. */
   project(name: string): ProjectRpcTarget {
@@ -44,11 +47,10 @@ export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
 
     // A turn asks its workspace for a diff when it ends, and this backend answers that command by
     // diffing the files the turn wrote here rather than by replaying a scripted string.
-    return new ProjectRpcTarget(
-      provider,
-      new FakeProjectTransactions(),
-      new GitDiffExecBackend(provider),
-    );
+    const execBackend = new GitDiffExecBackend(provider);
+    execBackends.push(execBackend);
+
+    return new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend);
   }
 
   /**
@@ -67,6 +69,19 @@ export default class LoadedProjectWorkspacesEntry extends WorkerEntrypoint {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Each command a turn ran that nothing answers, with how often it was asked to stop. Such a
+   * command runs until it is killed, the way `sleep 90` does.
+   */
+  heldCommands(): { command: string; killCalls: number }[] {
+    return execBackends.flatMap((backend) =>
+      backend.commands.requests.map((request, index) => ({
+        command: request.command,
+        killCalls: backend.commands.handles[index]?.killCalls ?? 0,
+      })),
+    );
   }
 
   /** The names this isolate has been asked for, so a test can see how many workspaces exist. */

@@ -75,6 +75,29 @@ test("runs the turn the path names with the prompt the body carries, and nothing
   await expect(response.text()).resolves.toBe('{"kind":"text","text":"working"}\n');
 });
 
+test("passes the turn stream to the browser byte for byte, keepalive lines included", async () => {
+  const body = '\n{"kind":"text","text":"working"}\n\n\n{"kind":"cancelled"}\n';
+
+  const response = await ownerApiResponse(
+    post(TURN_PATH, { prompt: "read the file" }),
+    supervisor({
+      runProjectTurn: () =>
+        Promise.resolve({
+          ok: true,
+          frames: new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(body));
+              controller.close();
+            },
+          }),
+        }),
+    }),
+    ownerScope,
+  );
+
+  await expect(response.text()).resolves.toBe(body);
+});
+
 test.each([
   [{ prompt: 7 }],
   [{}],

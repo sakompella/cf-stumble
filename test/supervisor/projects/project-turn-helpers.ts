@@ -89,6 +89,7 @@ export interface ProjectWorkspaces {
   readonly namespace: ProjectWorkspaceNamespace;
   fileText(name: string, path: string): Promise<string | null>;
   requestedNames(): Promise<string[]>;
+  heldCommands(): Promise<{ command: string; killCalls: number }[]>;
 }
 
 export async function projectWorkspaces(): Promise<ProjectWorkspaces> {
@@ -100,6 +101,7 @@ export async function projectWorkspaces(): Promise<ProjectWorkspaces> {
     namespace: { getByName: (name) => ({ project: () => host.project(name) }) },
     fileText: (name, path) => host.fileText(name, path),
     requestedNames: () => host.requestedNames(),
+    heldCommands: () => host.heldCommands(),
   };
 }
 

@@ -12,6 +12,7 @@ import {
 } from "../../../src/supervisor/projects/index.js";
 import { ProjectThreads, type SerializedThread } from "../../../src/supervisor/threads/index.js";
 import { PROJECT_TURN_LEASE_MS } from "../../../src/turn-budget.js";
+import { idleWorkspace } from "./turn-workspace-fakes.js";
 import { sampleSelectableCatalog } from "../../project-fixtures.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
@@ -254,10 +255,16 @@ function turnInput(
       }
 
       if (script.throwStreamReader === true) {
-        return Effect.succeed({ ok: true, frames: streamWithThrowingReader() });
+        return Effect.succeed({
+          ok: true,
+          frames: streamWithThrowingReader(),
+          workspace: idleWorkspace,
+        });
       }
 
-      return Effect.succeed(script.refuseStart ?? { ok: true, frames: generation.stream });
+      return Effect.succeed(
+        script.refuseStart ?? { ok: true, frames: generation.stream, workspace: idleWorkspace },
+      );
     },
     now: () => NOW,
     leaseMs: PROJECT_TURN_LEASE_MS,

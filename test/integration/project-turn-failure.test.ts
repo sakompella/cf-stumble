@@ -9,6 +9,8 @@ import type { ProjectTurnFrame } from "../../src/supervisor/projects/turn-frames
 import { parseThreadMessages, type SerializedThread } from "../../src/supervisor/threads/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
+import { unusedCapability } from "../supervisor/projects/turn-workspace-fakes.js";
+import type { ProjectCapabilityStub } from "../../src/supervisor/projects/index.js";
 import {
   activateGeneration,
   artifact,
@@ -94,9 +96,9 @@ export class MainFacet extends DurableObject {
 
 /** The fake Workspace Host, plus the project capability a turn obtains before it starts. */
 class TurnWorkspace extends FakeTenantWorkspace {
-  /** The scripted generation never calls the capability, so an empty one is enough. */
-  project(): Promise<object> {
-    return Promise.resolve({});
+  /** The scripted generation never calls the capability; the Supervisor only ends it. */
+  project(): Promise<ProjectCapabilityStub> {
+    return Promise.resolve(unusedCapability);
   }
 }
 
