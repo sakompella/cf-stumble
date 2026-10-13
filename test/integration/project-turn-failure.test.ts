@@ -11,14 +11,13 @@ import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { unusedCapability } from "../supervisor/projects/turn-workspace-fakes.js";
 import type { ProjectCapabilityStub } from "../../src/supervisor/projects/index.js";
-import {
-  activateGeneration,
-  artifact,
-  connectSampleProjects,
-  submitCandidate,
-} from "../supervisor/helpers.js";
+import { connectSampleProjects } from "../supervisor/helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../supervisor/threads/message-samples.js";
-import { ownerSession, stubExternalBoundaries } from "./owner-session.js";
+import {
+  ownerSession,
+  servingScriptedGeneration,
+  stubExternalBoundaries,
+} from "./owner-session.js";
 
 /**
  * A project turn through `POST /api/projects/{id}/turn`, with the Worker, the Supervisor Durable
@@ -31,8 +30,6 @@ import { ownerSession, stubExternalBoundaries } from "./owner-session.js";
  * `saved: true` without storing anything, so neither shows that the conversation a failed turn
  * saved is the one the next request reads and the next turn continues from.
  */
-
-const HARNESS_COMMIT = "c0ffee0000000000000000000000000000000001";
 
 const promptText = (text: string) => [{ type: "text", text }] as const;
 
@@ -138,21 +135,6 @@ async function savedThread(owner: Owner) {
   return { ...thread, conversation: conversation.success };
 }
 
-async function servingScriptedGeneration(owner: Owner): Promise<void> {
-  const label = await submitCandidate(owner.supervisor, HARNESS_COMMIT);
-
-  const checked = await owner.supervisor.checkGenerationStartup(
-    label,
-    artifact(HARNESS_COMMIT, generationSource),
-  );
-
-  if (!checked.ok || checked.report.stage !== "ready") {
-    throw new Error("the scripted generation must pass its startup check");
-  }
-
-  await activateGeneration(owner.supervisor, label);
-}
-
 afterEach(async () => {
   vi.restoreAllMocks();
   await reset();
@@ -163,7 +145,7 @@ test("a failed turn's saved conversation is what the next request reads and the 
   vi.spyOn(console, "warn").mockImplementation(() => {});
   stubExternalBoundaries(new TurnWorkspace());
   const owner = await ownerSession("integration-failed-turn");
-  await servingScriptedGeneration(owner);
+  await servingScriptedGeneration(owner, generationSource);
 
   // The catalog row a connection writes. Connecting over HTTP is covered by
   // `project-disconnect.test.ts`; here the turn still provisions the clone through the fake.

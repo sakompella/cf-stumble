@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import {
   diagnosticsText,
   field,
+  freshRefusalText,
   gitHubReport,
   isOk,
   preparationText,
@@ -126,7 +127,8 @@ export const ReplaceThread = Command.define("ReplaceThread", {
     requestJson("POST", projectPath(projectId, "/thread/fresh"), Option.none()).pipe(
       Effect.map((answer) =>
         Option.match(threadFacts(answer.payload), {
-          onNone: () => Message.RejectedFreshThread({ selection, wording: problemText(answer) }),
+          onNone: () =>
+            Message.RejectedFreshThread({ selection, wording: freshRefusalText(answer) }),
           onSome: (thread) => Message.SucceededFreshThread({ selection, thread }),
         }),
       ),

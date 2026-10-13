@@ -35,6 +35,15 @@ Each project also has one current Pi thread stored outside the workspace and out
 state. Starting a fresh thread replaces conversation and compacted context without changing project
 files. Both the project thread and shared workspace survive main-harness generation changes.
 
+Neither a fresh thread nor a workspace reset stops a turn that is running, so both refuse instead
+of racing it. The Supervisor answers a fresh thread with HTTP 409 `turn-active` while that project's
+turn lease is live, and a workspace reset with the same answer while any project's or the harness's
+lease is live. A lease is live until its turn releases it or its deadline passes. A fresh thread
+would stop the running turn from saving but not from editing files, and a later turn could start
+beside it; a reset would delete the files under it and kill its commands halfway through a change.
+The Workspace Host also refuses a reset with HTTP 409 `workspace-busy` while it runs a build,
+provision, or removal, which the reset would otherwise cut off.
+
 The workspace behaves like an ordinary development machine. It has unrestricted outbound internet
 access, `git`, `gh`, and repository toolchains. GitHub credentials live in `gh` and Git
 configuration under `/workspace`, outside the repositories, so they survive a container replacement.

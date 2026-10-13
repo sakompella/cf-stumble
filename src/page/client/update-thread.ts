@@ -108,11 +108,11 @@ export function threadHandlers(
         freshThreadStatus: "fresh thread started; repository files are untouched",
         turnState: "",
       })),
+    // The conversation is unchanged, so only the fresh thread's own status says why.
     RejectedFreshThread: ({ selection, wording }) =>
       forSelection(selection, () => ({
         ...model,
-        conversationState: wording,
-        freshThreadStatus: "not started",
+        freshThreadStatus: `not started: ${wording}`,
         turnState: "",
       })),
     FailedFreshThread: ({ selection, detail }) =>

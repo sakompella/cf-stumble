@@ -10,6 +10,7 @@ import {
   signingKey,
 } from "../access-tokens.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
+import { activateGeneration, artifact, submitCandidate } from "../supervisor/helpers.js";
 
 /**
  * The owner as the Worker sees them: a signed Access token, the page's own origin, and the
@@ -74,4 +75,25 @@ export function stubExternalBoundaries<Workspace extends FakeTenantWorkspace>(
   );
 
   return workspace;
+}
+
+const SCRIPTED_HARNESS_COMMIT = "c0ffee0000000000000000000000000000000001";
+
+/** Prepare and activate a generation whose whole main facet module is `source`. */
+export async function servingScriptedGeneration(
+  owner: Awaited<ReturnType<typeof ownerSession>>,
+  source: string,
+): Promise<void> {
+  const label = await submitCandidate(owner.supervisor, SCRIPTED_HARNESS_COMMIT);
+
+  const checked = await owner.supervisor.checkGenerationStartup(
+    label,
+    artifact(SCRIPTED_HARNESS_COMMIT, source),
+  );
+
+  if (!checked.ok || checked.report.stage !== "ready") {
+    throw new Error("the scripted generation must pass its startup check");
+  }
+
+  await activateGeneration(owner.supervisor, label);
 }

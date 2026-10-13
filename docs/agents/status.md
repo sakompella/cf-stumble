@@ -50,6 +50,10 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
 - **An ended turn's capability refuses file access as well as commands** (owner default,
   2026-10-13). Before, ending a turn killed its commands but left reads and writes open, and main's
   capability had no deadline at all. See `design/computer-integration.md`, "Workspace layout".
+- **A fresh thread or a workspace reset is refused while a turn runs** (owner default, 2026-10-13).
+  The answer is HTTP 409 `turn-active`, or `workspace-busy` when the Workspace Host is running a
+  build, provision, or removal. The alternative, cancelling and fencing the running turn, is not
+  built. See `design/computer-integration.md`, "Workspace layout".
 
 ## Open items
 
@@ -98,10 +102,9 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
     abort each other. A provider JSON error followed by `[DONE]` may be ignored. Missing or
     malformed provider usage can undercount. Producer cancellation after a browser disconnect is
     untested. Workspace exclusion during a turn is isolate-local, not held by the Workspace Host.
-14. **Owner decisions.** What a workspace reset does to a running turn (refuse, or cancel and
-    fence). Whether the repository size thresholds in `src/github/repository-size.ts` need an ADR.
-    A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched on
-    2026-09-27; the note is lost and nothing was decided.
+14. **Owner decisions.** Whether the repository size thresholds in `src/github/repository-size.ts`
+    need an ADR. A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched
+    on 2026-09-27; the note is lost and nothing was decided.
 15. **Remove the one-time Supervisor reset.** After the first production deploy of the current
     `main`, check the production log for one `supervisor.legacy-state-reset` event, then delete
     `src/supervisor/legacy-state-reset.ts`, its call in the Supervisor's constructor, and its test.

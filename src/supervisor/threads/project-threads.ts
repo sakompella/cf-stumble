@@ -1,6 +1,7 @@
 // oxlint-disable anti-slop/no-unknown-parameters -- Every project id here arrives from a client through Durable Object RPC, so it is a string with no proven meaning until the catalog resolves it.
 
 import * as Result from "effect/Result";
+import { findLiveTurn, type LiveTurn } from "./live-turn.js";
 import { parseAgentMessages } from "./messages.js";
 import { ThreadStore, type ThreadLease } from "./store.js";
 import {
@@ -50,10 +51,12 @@ export type DisconnectProjectResult =
  */
 export class ProjectThreads {
   private readonly store: ThreadStore;
+  private readonly sql: SqlStorage;
   private readonly catalog: ProjectCatalogSource;
 
   constructor(storage: DurableObjectStorage, catalog: ProjectCatalogSource, holderId?: string) {
     this.store = new ThreadStore(storage, holderId);
+    this.sql = storage.sql;
     this.catalog = catalog;
   }
 
@@ -63,10 +66,17 @@ export class ProjectThreads {
     );
   }
 
-  startFreshThread(projectId: unknown): ProjectThreadResult {
+  startFreshThread(projectId: unknown, now: number): ProjectThreadResult {
     return plainThread(
-      this.resolve(projectId).pipe(Result.map((project) => this.store.startFreshThread(project))),
+      this.resolve(projectId).pipe(
+        Result.flatMap((project) => this.store.startFreshThread(project, now)),
+      ),
     );
+  }
+
+  /** The live turn lease that ends last, on any project or the harness, if one is held. */
+  liveTurn(now: number): LiveTurn | undefined {
+    return findLiveTurn(this.sql, now);
   }
 
   /**

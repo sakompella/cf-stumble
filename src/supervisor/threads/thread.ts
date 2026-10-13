@@ -31,6 +31,8 @@ export type ThreadProblem =
   | Readonly<{ code: "turn-not-active"; projectId: ProjectId }>
   | Readonly<{ code: "turn-expired"; projectId: ProjectId; deadlineAt: number }>
   | Readonly<{ code: "turn-lease-lost"; projectId: ProjectId }>
+  /** A live turn holds the project, so a change that would cut it off is refused. */
+  | Readonly<{ code: "turn-active"; projectId: ProjectId; deadlineAt: number }>
   /** The Supervisor wrote this row and cannot read it back, so the row is damaged. */
   | Readonly<{ code: "unreadable-thread"; projectId: ProjectId; reason: string }>;
 
