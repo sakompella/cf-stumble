@@ -1,112 +1,84 @@
+import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { normalizeResponse } from "../src/model-route-stream.js";
 import {
-  validateRequest,
+  parseRequest,
   type AssistantMessage,
+  type ModelRouteRequest,
   type ValidationFailure,
 } from "../src/model-route.js";
 
-test("rejects a message with an unknown role", () => {
-  const r = validateRequest({
-    messages: [
-      { role: "user", content: "Hi" },
-      { role: "function", content: "bad" },
-    ],
-  });
+function rejected(reason: string): Result.Result<ModelRouteRequest, ValidationFailure> {
+  return Result.fail({ ok: false, error: { code: "invalid-request", reason } });
+}
 
-  expect(r).toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: 'unknown role "function" at messages[1]' },
-  } satisfies ValidationFailure);
+const USER = { role: "user", content: "Hi" } as const;
+
+const READ_TOOL = {
+  type: "function",
+  function: { name: "read", description: "Read a file", parameters: { type: "object" } },
+} as const;
+
+test("rejects a message with an unknown role", () => {
+  expect(
+    parseRequest({
+      messages: [
+        { role: "user", content: "Hi" },
+        { role: "function", content: "bad" },
+      ],
+    }),
+  ).toEqual(rejected('unknown role "function" at messages[1]'));
 });
 
 test("rejects a tool-result message without tool_call_id", () => {
-  const r = validateRequest({ messages: [{ role: "tool", content: "result" }] });
-  expect(r).toEqual({
-    ok: false,
-    error: {
-      code: "invalid-request",
-      reason: "tool message at messages[0] missing non-empty tool_call_id",
-    },
-  } satisfies ValidationFailure);
+  expect(parseRequest({ messages: [{ role: "tool", content: "result" }] })).toEqual(
+    rejected("tool message at messages[0] missing non-empty tool_call_id"),
+  );
 });
 
 test.each([
   {
     name: "missing id",
-    request: {
-      messages: [
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ function: { name: "r", arguments: "{}" } }],
-        },
-      ],
-    },
+    toolCall: { function: { name: "r", arguments: "{}" } },
     reason: "tool_calls[0] at messages[0] missing non-empty id",
   },
   {
     name: "missing function.name",
-    request: {
-      messages: [
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ id: "c1", function: { arguments: "{}" } }],
-        },
-      ],
-    },
+    toolCall: { id: "c1", function: { arguments: "{}" } },
     reason: "tool_calls[0] at messages[0] missing function.name",
   },
   {
     name: "missing function.arguments",
-    request: {
-      messages: [
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ id: "c1", function: { name: "r" } }],
-        },
-      ],
-    },
+    toolCall: { id: "c1", function: { name: "r" } },
     reason: "tool_calls[0] at messages[0] missing function.arguments",
   },
-])("rejects a tool call with $name", ({ request, reason }) => {
-  expect(validateRequest(request)).toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason },
-  } satisfies ValidationFailure);
+])("rejects a tool call with $name", ({ toolCall, reason }) => {
+  expect(
+    parseRequest({ messages: [{ role: "assistant", content: null, tool_calls: [toolCall] }] }),
+  ).toEqual(rejected(reason));
 });
 
 test("rejects a request whose UTF-8 byte size exceeds 1 MiB even though its string length does not", () => {
   const content = "\u00E9".repeat(600_000);
   expect(content.length).toBeLessThan(1_048_576);
-  expect(validateRequest({ messages: [{ role: "user", content }] })).toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: "request exceeds 1 MiB size limit" },
-  } satisfies ValidationFailure);
+  expect(parseRequest({ messages: [{ role: "user", content }] })).toEqual(
+    rejected("request exceeds 1 MiB size limit"),
+  );
 });
 
 test("accepts a request comfortably under the byte-size limit even with multi-byte characters", () => {
   const content = "\u00E9".repeat(1_000);
-  expect(validateRequest({ messages: [{ role: "user", content }] })).toEqual({ ok: true });
+  expect(parseRequest({ messages: [{ role: "user", content }] })).toEqual(
+    Result.succeed({ messages: [{ role: "user", content }] }),
+  );
 });
 
 test.each(["model", "reasoning_effort", "credentials", "endpoint", "provider"] as const)(
   "rejects a request that includes %s",
   (field) => {
-    const r = validateRequest({
-      messages: [{ role: "user", content: "Hi" }],
-      [field]: "forbidden",
-    });
-
-    expect(r).toEqual({
-      ok: false,
-      error: {
-        code: "invalid-request",
-        reason: `request must not include provider field: ${field}`,
-      },
-    } satisfies ValidationFailure);
+    expect(parseRequest({ messages: [USER], [field]: "forbidden" })).toEqual(
+      rejected(`request must not include provider field: ${field}`),
+    );
   },
 );
 
@@ -114,10 +86,7 @@ test.each([
   { name: "no messages", request: {} },
   { name: "an empty messages array", request: { messages: [] } },
 ])("rejects a request with $name", ({ request }) => {
-  expect(validateRequest(request)).toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: "messages must be a non-empty array" },
-  } satisfies ValidationFailure);
+  expect(parseRequest(request)).toEqual(rejected("messages must be a non-empty array"));
 });
 
 test("normalizes a plain text response", () => {
@@ -141,47 +110,107 @@ test("normalizes a response with tool calls", () => {
   } satisfies AssistantMessage);
 });
 
-test("validates a correct simple request", () => {
-  expect(
-    validateRequest({
-      messages: [
-        { role: "system", content: "Be helpful" },
-        { role: "user", content: "Hi" },
-      ],
-    }),
-  ).toEqual({ ok: true });
+test("parses a request with all four message roles and a tool to the same request", () => {
+  const request: ModelRouteRequest = {
+    messages: [
+      { role: "system", content: "S" },
+      { role: "user", content: "R" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "c1", function: { name: "r", arguments: "{}" } }],
+      },
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+    ],
+    tools: [READ_TOOL],
+  };
+
+  expect(parseRequest(request)).toEqual(Result.succeed(request));
 });
 
-test("validates a request with all four message roles", () => {
+test("an assistant message without tool_calls parses with none, and fields the route does not know are dropped", () => {
   expect(
-    validateRequest({
+    parseRequest({
       messages: [
-        { role: "system", content: "S" },
-        { role: "user", content: "R" },
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ id: "c1", function: { name: "r", arguments: "{}" } }],
-        },
-        { role: "tool", tool_call_id: "c1", content: "ok" },
+        { role: "user", content: "Hi", name: "owner" },
+        { role: "assistant", content: "Hello" },
       ],
+      tools: [{ ...READ_TOOL, strict: true }],
     }),
-  ).toEqual({ ok: true });
+  ).toEqual(
+    Result.succeed({
+      messages: [
+        { role: "user", content: "Hi" },
+        { role: "assistant", content: "Hello", tool_calls: [] },
+      ],
+      tools: [READ_TOOL],
+    }),
+  );
 });
 
 test("rejects non-object entry in messages", () => {
-  expect(validateRequest({ messages: ["not a message"] })).toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: "messages[0] is not an object" },
-  } satisfies ValidationFailure);
+  expect(parseRequest({ messages: ["not a message"] })).toEqual(
+    rejected("messages[0] is not an object"),
+  );
 });
 
 test("rejects assistant content that is neither string nor null", () => {
-  expect(validateRequest({ messages: [{ role: "assistant", content: 42 }] })).toEqual({
-    ok: false,
-    error: {
-      code: "invalid-request",
-      reason: "assistant message at messages[0] content must be string or null",
-    },
-  } satisfies ValidationFailure);
+  expect(parseRequest({ messages: [{ role: "assistant", content: 42 }] })).toEqual(
+    rejected("assistant message at messages[0] content must be string or null"),
+  );
+});
+
+test.each([
+  { name: "absent", fields: {}, parsed: {} },
+  { name: "empty", fields: { tools: [] }, parsed: { tools: [] } },
+  { name: "one valid tool", fields: { tools: [READ_TOOL] }, parsed: { tools: [READ_TOOL] } },
+])("accepts tools that are $name", ({ fields, parsed }) => {
+  expect(parseRequest({ messages: [USER], ...fields })).toEqual(
+    Result.succeed({ messages: [USER], ...parsed }),
+  );
+});
+
+const readFunction = READ_TOOL.function;
+
+test.each([
+  { tools: 42, reason: "tools must be an array" },
+  { tools: "read", reason: "tools must be an array" },
+  { tools: null, reason: "tools must be an array" },
+  { tools: { 0: READ_TOOL }, reason: "tools must be an array" },
+  { tools: [42], reason: "tools[0] is not an object" },
+  { tools: [READ_TOOL, [READ_TOOL]], reason: "tools[1] is not an object" },
+  { tools: [{ function: readFunction }], reason: 'tools[0] type must be "function"' },
+  { tools: [{ type: "web_search" }], reason: 'tools[0] type must be "function"' },
+  { tools: [{ type: "function" }], reason: "tools[0] missing function" },
+  { tools: [{ type: "function", function: "read" }], reason: "tools[0] missing function" },
+  {
+    tools: [{ type: "function", function: { ...readFunction, name: "" } }],
+    reason: "tools[0] missing function.name",
+  },
+  {
+    tools: [{ type: "function", function: { ...readFunction, name: 7 } }],
+    reason: "tools[0] missing function.name",
+  },
+  {
+    tools: [{ type: "function", function: { name: "read", parameters: {} } }],
+    reason: "tools[0] function.description must be a string",
+  },
+  {
+    tools: [{ type: "function", function: { name: "read", description: "d" } }],
+    reason: "tools[0] function.parameters must be an object",
+  },
+  {
+    tools: [{ type: "function", function: { ...readFunction, parameters: null } }],
+    reason: "tools[0] function.parameters must be an object",
+  },
+  {
+    tools: [{ type: "function", function: { ...readFunction, parameters: [] } }],
+    reason: "tools[0] function.parameters must be an object",
+  },
+  {
+    tools: [{ type: "function", function: { ...readFunction, parameters: "{}" } }],
+    reason: "tools[0] function.parameters must be an object",
+  },
+])("rejects tools $tools", ({ tools, reason }) => {
+  expect(parseRequest({ messages: [USER], tools })).toEqual(rejected(reason));
 });

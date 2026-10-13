@@ -287,6 +287,29 @@ test("with no ChatGPT credential connected, the Supervisor's route answers from 
   expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "fallback" } });
 });
 
+test("a Supervisor's route forwards an assistant message sent without tool_calls, with none", async () => {
+  const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
+
+  const outcome = supervisedRoute(binding, { kind: "not-connected" }).runStream({
+    messages: [
+      { role: "user", content: "hi", name: "owner" },
+      { role: "assistant", content: "hello" },
+      { role: "user", content: "again" },
+    ],
+  });
+
+  const events = await collectEvents(streamOf(outcome));
+
+  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "ok" } });
+  expect(binding.calls.map((call) => call.input.messages)).toEqual([
+    [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello", tool_calls: [] },
+      { role: "user", content: "again" },
+    ],
+  ]);
+});
+
 test("a ChatGPT grant that needs a reconnect fails the call and never falls back to Workers AI", async () => {
   const binding = bindingStreaming([sseLine({ response: "fallback" }), DONE_LINE]);
 

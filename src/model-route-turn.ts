@@ -14,7 +14,7 @@ import { runAtEntryPoint } from "./run-entry-point.js";
 /**
  * Upper bound on the bytes this route will read from one provider stream. Applies to the
  * provider's raw wire bytes, not `JSON.stringify(...).length`, for the same reason
- * `validateRequest`'s request bound does: a byte cap stated in string length would not be a byte
+ * `parseRequest`'s request bound does: a byte cap stated in string length would not be a byte
  * cap. This is defense in depth against a runaway or misbehaving stream, not a measured provider
  * limit — generation 0 has none to report.
  */
