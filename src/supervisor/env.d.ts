@@ -20,6 +20,8 @@ declare global {
       readonly GITHUB_OAUTH_CLIENT_ID?: string;
       /** The documented test and development credential. See `docs/agents/design/github-connection.md`. */
       readonly GH_TOKEN?: string;
+      /** The model ChatGPT turns use. A declared plain variable (`cloudflare.config.ts`). */
+      readonly CHATGPT_MODEL: string;
     }
   }
 }

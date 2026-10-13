@@ -38,6 +38,9 @@ This directory records current decisions. Every ADR declares whether a human app
 - **[ADR-0046](0046-serve-the-owner-page-script-as-a-hashed-file.md)**: the owner page is a Foldkit
   application whose script the Worker serves after Access as a content-hashed, immutable
   same-origin file, under `script-src 'self'`.
+- **[ADR-0047](0047-use-the-owners-chatgpt-subscription.md)**: the model route answers from the
+  owner's ChatGPT subscription once connected, with the credential cached in Supervisor SQLite and
+  never visible to a facet, and from Workers AI until then.
 
 ## Adding a decision
 

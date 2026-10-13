@@ -69,8 +69,9 @@
     },
   ],
   // Instance values are Worker secrets that each instance sets itself, and they are not declared
-  // here: a declared secret is required, which stops the first deploy of a new Worker. This file has
-  // no `vars` either. See `cloudflare.config.ts` and `docs/deploy.md`.
+  // here: a declared secret is required, which stops the first deploy of a new Worker. The one
+  // plain variable is the ChatGPT model (ADR-0047). See `cloudflare.config.ts` and `docs/deploy.md`.
+  "vars": { "CHATGPT_MODEL": "gpt-6.1-sol" },
   "worker_loaders": [{ "binding": "LOADER" }],
   "ai": { "binding": "AI" },
 }

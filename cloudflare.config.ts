@@ -78,7 +78,12 @@ export default defineConfig({
       SUPERVISOR: bindings.durableObject({ worker: WORKER_NAME, exportName: "Supervisor" }),
       WORKSPACE_HOST: bindings.durableObject({ worker: WORKER_NAME, exportName: "WorkspaceHost" }),
       LOADER: bindings.workerLoader(),
+      // Workers AI answers turns while no ChatGPT credential is connected (ADR-0047).
       AI: bindings.ai({}),
+      // The model ChatGPT turns use. Plain configuration, declared so `cf deploy` keeps it. The
+      // default is the one OpenAI's "Sign in with ChatGPT" docs use, and the coding model of the
+      // GPT-6 family; the connected account must have it (GET https://api.openai.com/v1/models).
+      CHATGPT_MODEL: bindings.text("gpt-6.1-sol"),
     },
   },
   containers: [workspaceHostContainer],
