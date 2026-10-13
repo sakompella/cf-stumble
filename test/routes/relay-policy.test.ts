@@ -129,3 +129,16 @@ test("the owner page and its script keep their own policies", async () => {
   expect(policies(page)[0]).toContain("frame-ancestors 'none'");
   expect(policies(script)).toEqual(["default-src 'none'; frame-ancestors 'none'"]);
 });
+
+test("a relayed response cannot set a cookie on the owner's origin", async () => {
+  const headers = new Headers({ "content-type": "text/html", "x-generation": "kept" });
+  headers.append("set-cookie", "CF_Authorization=junk; Path=/api");
+  headers.append("set-cookie", "session=generation; Path=/");
+
+  await generationAnswers(new Response("<!doctype html>", { headers }));
+
+  const response = await ownerFetch("/generation/login", "relay-policy-cookie");
+
+  expect(response.headers.getSetCookie()).toEqual([]);
+  expect(response.headers.get("x-generation")).toBe("kept");
+});

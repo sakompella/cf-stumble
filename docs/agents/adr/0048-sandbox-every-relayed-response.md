@@ -3,7 +3,8 @@
 > **Review:** Agent-only
 
 Every response the Worker relays from the active generation carries a policy the host adds:
-`content-security-policy: sandbox allow-scripts; frame-ancestors 'none'`. The cleanup run's fresh
+`content-security-policy: sandbox allow-scripts; frame-ancestors 'none'`, and the Worker removes
+every `Set-Cookie` header the generation sent. The cleanup run's fresh
 review found the gap on 2026-10-13, and the orchestrating agent chose this fix. No human has
 approved it.
 
@@ -33,13 +34,20 @@ opaque origin, whatever its content type.
 Scripts stay allowed, because the sandbox already denies them the owner API. The owner page, its
 hashed script, the owner API, and `/health` are host responses and keep their own policies.
 
+**Cookies.** A cookie that a relayed response sets belongs to the owner's origin, whatever the
+sandbox does to the document. A generation could set a junk `CF_Authorization` cookie with
+`Path=/api`. The browser sends the more specific path first, so the owner's API requests, rollback
+included, could carry the junk value instead of the real token. Rollback is the owner's recovery
+from a bad generation, so the Worker drops every `Set-Cookie` from a relayed response. A
+generation has no legitimate reason to set cookies on the owner's origin.
+
 **Merging.** The Worker appends its policy to any `content-security-policy` the generation set,
 so the header holds both policies. A browser enforces each policy and combines their sandbox
 restrictions, so a generation's policy can restrict its document further but cannot lift the
 host's sandbox.
 
-**Cost.** A generation cannot serve a browser application that uses cookies, storage, or the owner
-API on this origin. Generation 0 serves only a text readiness answer, so nothing changes for it.
+**Cost.** A generation cannot serve a browser application that sets or uses cookies, storage, or
+the owner API on this origin. Generation 0 serves only a text readiness answer, so nothing changes for it.
 
 **Alternatives.** Refusing active content types from the relay is easier to bypass, because a
 browser renders more types as documents than a deny-list names. Serving generation content on a
