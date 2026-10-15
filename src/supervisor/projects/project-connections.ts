@@ -93,9 +93,11 @@ function repositorySizeAllowed(
   });
 }
 
+/** `workspace-busy`: an owner reset was running, so nothing was disconnected. */
 export type DisconnectRepositoryResult =
   | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
-  | Extract<DisconnectProjectResult, { ok: false }>;
+  | Extract<DisconnectProjectResult, { ok: false }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy" }> }>;
 
 /**
  * Removes the project's thread, or refuses because a turn still owns it. It runs inside the
@@ -115,6 +117,10 @@ type ConnectRepositoryProblem = Readonly<{
   detail: string;
 }>;
 
+/**
+ * A refused connect carries the GitHub status it saw, except one refused `workspace-busy` because
+ * an owner reset was running: that one asked nothing of the workspace.
+ */
 export type ConnectRepositoryResult =
   | Readonly<{
       ok: true;
@@ -122,7 +128,8 @@ export type ConnectRepositoryResult =
       alreadyConnected: boolean;
       github: GitHubConnectionStatus;
     }>
-  | Readonly<{ ok: false; problem: ConnectRepositoryProblem; github: GitHubConnectionStatus }>;
+  | Readonly<{ ok: false; problem: ConnectRepositoryProblem; github: GitHubConnectionStatus }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
 /** Why a project could not be provisioned when it was used. */
 type ProjectUseProblem = Readonly<{

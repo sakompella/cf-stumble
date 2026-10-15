@@ -262,6 +262,8 @@ export function turnRefusalText(answer: Answer): string {
       return "no active generation: activate one in the generation controls";
     case "stale-revision":
       return "conflict: this thread moved on; reload the project";
+    case "workspace-busy":
+      return "busy: the workspace is resetting; send again once it finishes";
     default:
       return problemText(answer);
   }

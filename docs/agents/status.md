@@ -46,6 +46,11 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
   The answer is HTTP 409 `turn-active`, or `workspace-busy` when the Workspace Host is running a
   file change or credential install. The alternative, cancelling and fencing the running turn, is
   not built. See `design/computer-integration.md`, "Workspace layout".
+- **Work that starts during a workspace reset is refused** (owner default, 2026-10-15). While a reset
+  runs, the Supervisor answers a new turn, a connect, a disconnect, or a second reset with HTTP 409
+  `workspace-busy`, and the Workspace Host refuses file changes, credential installs, and project
+  capabilities. Waiting for the reset instead is not built. See `design/computer-integration.md`,
+  "Workspace layout".
 - **The model route uses the owner's ChatGPT subscription once connected** (owner, 2026-10-13).
   The Supervisor caches the credential; Workers AI answers until a connection exists. See
   ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers

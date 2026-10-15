@@ -40,6 +40,7 @@ const TURN_STATUS = {
   "turn-expired": 409,
   "turn-lease-lost": 409,
   "turn-active": 409,
+  "workspace-busy": 409,
   "unreadable-thread": 500,
   "no-active-generation": 503,
   "mount-failed": 503,

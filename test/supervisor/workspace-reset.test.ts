@@ -5,6 +5,7 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { GitHubConnectionStore } from "../../src/supervisor/projects/github-connection-store.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
 import { startProjectTurn } from "./threads/turn-slot.js";
 
@@ -129,4 +130,79 @@ test("a reset the Workspace Host refuses keeps the GitHub connection record", as
 
   await expect(control.resetWorkspace()).resolves.toEqual(busy);
   await expect(control.getGitHubConnection()).resolves.toMatchObject({ state: "connected" });
+});
+
+/** A Workspace Host whose first reset waits until the test finishes it; later resets succeed. */
+function heldWorkspace() {
+  const held = { started: (): void => {}, finish: (_result: WorkspaceResetResult): void => {} };
+
+  const started = new Promise<void>((resolve) => {
+    held.started = resolve;
+  });
+
+  const answer = new Promise<WorkspaceResetResult>((resolve) => {
+    held.finish = resolve;
+  });
+
+  const resetWorkspace = vi
+    .fn(() => Promise.resolve<WorkspaceResetResult>({ ok: true, reset: "workspace" }))
+    .mockImplementationOnce(() => {
+      held.started();
+
+      return answer;
+    });
+
+  // SAFETY: the fake implements the reset RPC this test observes; nothing else may be reached.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
+  const workspace = { reset: resetWorkspace } as unknown as ReturnType<
+    typeof env.WORKSPACE_HOST.getByName
+  >;
+
+  return { started, finish: held.finish, resetWorkspace, workspace };
+}
+
+test("while a reset runs, turns, connects, disconnects, and a second reset are refused", async () => {
+  const control = env.SUPERVISOR.getByName("workspace-reset-exclusion");
+  await connectSampleProjects(control);
+  const fake = heldWorkspace();
+  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+  // A connect that got past the exclusion would ask GitHub for the repository size first.
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("this test reaches no network"));
+  const busy = { ok: false, problem: { code: "workspace-busy" } };
+
+  // Inside the object, because the held reset resolves from this test's own request.
+  await runInDurableObject(control, async (supervisor) => {
+    const resetting = supervisor.resetWorkspace();
+    await fake.started;
+
+    await expect(
+      supervisor.runProjectTurn("sample-project-one", "a turn during the reset"),
+    ).resolves.toEqual(busy);
+    await expect(supervisor.resetWorkspace()).resolves.toEqual(busy);
+    await expect(supervisor.connectProject(sampleProjectTwo.repositoryUrl, "")).resolves.toEqual({
+      ok: false,
+      problem: { code: "workspace-busy", detail: "" },
+    });
+    await expect(supervisor.disconnectProject("sample-project-one")).resolves.toEqual(busy);
+    expect(fake.resetWorkspace).toHaveBeenCalledOnce();
+
+    fake.finish({ ok: true, reset: "workspace" });
+    await expect(resetting).resolves.toEqual({ ok: true, reset: "workspace" });
+  });
+
+  // The refused turn took no lease, and the exclusion ended with the reset.
+  await expect(control.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
+  expect((await control.getProjectThread("sample-project-one")).ok, "still connected").toBe(true);
+});
+
+test("the reset exclusion ends when the Workspace Host call throws", async () => {
+  const control = env.SUPERVISOR.getByName("workspace-reset-exclusion-throws");
+  const fake = fakeWorkspace({ ok: true, reset: "workspace" });
+  fake.resetWorkspace.mockRejectedValueOnce(new Error("the Workspace Host went away"));
+  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+
+  await runInDurableObject(control, async (supervisor) => {
+    await expect(supervisor.resetWorkspace()).rejects.toThrow("the Workspace Host went away");
+    await expect(supervisor.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
+  });
 });

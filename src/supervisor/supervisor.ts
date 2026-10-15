@@ -85,10 +85,15 @@ type ResetWorkspaceNamespace = Readonly<{
   getByName(name: string): Readonly<{ reset(): Promise<WorkspaceResetResult> }>;
 }>;
 
-/** A reset the Supervisor refused, because a turn holds a lease, or what the Host answered. */
+/**
+ * A reset the Supervisor refused, because a turn holds a lease, or what the Host answered. A reset
+ * that arrives while another runs is refused `workspace-busy`, the Host's own answer for it.
+ */
 export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
   | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" } & LiveTurn> }>;
+
+const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as const;
 
 type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
@@ -139,6 +144,11 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly name: string;
   /** Fences leases held by an instance that Durable Objects have since replaced. */
   private readonly instanceId = crypto.randomUUID();
+  /**
+   * Set from the moment an owner reset arrives until it ends. Turn admission, connect, disconnect,
+   * and another reset refuse while it is set. The Workspace Host keeps its own exclusion.
+   */
+  #resetInProgress = false;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
@@ -277,25 +287,39 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    *
    * A live turn lease on any project or the harness refuses the reset. The reset deletes the files
    * the turn works in and restarts the container its commands run in, so it would cut the turn off
-   * halfway through a change. The Workspace Host refuses in turn while it runs a build, provision,
-   * or removal.
+   * halfway through a change. The Workspace Host refuses in turn while it runs a file change or a
+   * credential install.
+   *
+   * The exclusion is set before the lease check, in the same synchronous step, so no turn can be
+   * admitted between the check and the end of the reset.
    */
   async resetWorkspace(now: number = Date.now()): Promise<SupervisorWorkspaceReset> {
-    const liveTurn = this.threads.liveTurn(now);
+    if (this.#resetInProgress) return WORKSPACE_BUSY;
 
-    if (liveTurn !== undefined) return { ok: false, problem: { code: "turn-active", ...liveTurn } };
+    this.#resetInProgress = true;
 
-    const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
+    try {
+      const liveTurn = this.threads.liveTurn(now);
 
-    const result = await timedWorkspaceRpc(
-      { method: "reset" },
-      () => namespace.getByName(this.workspaceName).reset(),
-      (reset) => (reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" }),
-    );
+      if (liveTurn !== undefined) {
+        return { ok: false, problem: { code: "turn-active", ...liveTurn } };
+      }
 
-    if (result.ok) this.connections.resetWorkspace();
+      const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
 
-    return result;
+      const result = await timedWorkspaceRpc(
+        { method: "reset" },
+        () => namespace.getByName(this.workspaceName).reset(),
+        (reset) =>
+          reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" },
+      );
+
+      if (result.ok) this.connections.resetWorkspace();
+
+      return result;
+    } finally {
+      this.#resetInProgress = false;
+    }
   }
 
   /**
@@ -313,6 +337,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     displayName: unknown,
     now: number = Date.now(),
   ): Promise<ConnectRepositoryResult> {
+    if (this.#resetInProgress) {
+      return Promise.resolve({ ok: false, problem: { code: "workspace-busy", detail: "" } });
+    }
+
     return runAtEntryPoint(this.connections.connect(repositoryUrl, displayName, now));
   }
 
@@ -322,6 +350,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     projectId: unknown,
     now: number = Date.now(),
   ): Promise<DisconnectRepositoryResult> {
+    if (this.#resetInProgress) return Promise.resolve(WORKSPACE_BUSY);
+
     return runAtEntryPoint(
       this.connections.disconnect(projectId, () => this.threads.disconnectProject(projectId, now)),
     );
@@ -436,6 +466,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
         projectId,
         prompt,
         threads: this.threads,
+        resetting: () => this.#resetInProgress,
         attribution: () => ({ active: this.generations.active() }),
         start: (project, request, context) => this.#startTurnStream(project, request, context),
         now: () => Date.now(),

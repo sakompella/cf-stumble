@@ -76,6 +76,7 @@ function turnInput(
     projectId: PROJECT,
     prompt: "do the work",
     threads,
+    resetting: () => false,
     attribution: () => ({ active: generations.active() }),
     start,
     now: () => Date.now(),

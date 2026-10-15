@@ -82,6 +82,7 @@ function turnAcrossIsolates(
     projectId: sampleProjectOne.id,
     prompt: "sleep for a while",
     threads: new ProjectThreads(state.storage, () => sampleSelectableCatalog),
+    resetting: () => false,
     attribution: () => ({ active: generations.active() }),
     start: (projectId, request, context) =>
       startFacetTurn({

@@ -48,6 +48,7 @@ const CONNECT_STATUS = {
   "workspace-unavailable": 503,
   "tooling-missing": 503,
   "provisioning-failed": 503,
+  "workspace-busy": 409,
 } as const satisfies Record<string, number>;
 
 const DISCONNECT_STATUS = {
@@ -55,6 +56,7 @@ const DISCONNECT_STATUS = {
   "unknown-project-id": 404,
   "harness-project": 400,
   "turn-active": 409,
+  "workspace-busy": 409,
 } as const;
 
 function disconnectResponse(
@@ -143,7 +145,11 @@ const connectResponse = Effect.fnUntraced(
 
     if (!result.ok) {
       return Response.json(
-        { ok: false, problem: result.problem, github: result.github },
+        {
+          ok: false,
+          problem: result.problem,
+          ...("github" in result && { github: result.github }),
+        },
         { status: CONNECT_STATUS[result.problem.code] },
       );
     }

@@ -50,6 +50,16 @@ project capability throws, and a second reset answers `workspace-busy`. A file c
 Supervisor already reads every install failure other than a failed command. A credential
 status read or repository check is not excluded, because it changes nothing.
 
+The Supervisor keeps its own exclusion for the same span. From the moment an owner reset reaches it,
+before it checks leases and until the Host answers, it refuses a new turn, a project connect or
+disconnect, and a second reset with HTTP 409 `workspace-busy`, and the page says the workspace is
+resetting. The turn check runs in the same synchronous step that takes the lease, so a turn is
+either admitted before the reset checks leases or refused. A fresh thread is still allowed, because
+it changes no workspace file. Builds and the GitHub device authorization rely on the Host's
+exclusion: a build step answers `workspace-busy`, and a refused credential install leaves the
+connection reporting the workspace as unavailable until the owner connects again. Both
+exclusions live in memory, one per object instance.
+
 The workspace behaves like an ordinary development machine. It has unrestricted outbound internet
 access, `git`, `gh`, and repository toolchains. GitHub credentials live in `gh` and Git
 configuration under `/workspace`, outside the repositories, so they survive a container replacement.

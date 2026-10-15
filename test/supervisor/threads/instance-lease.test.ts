@@ -51,6 +51,7 @@ test("reclaiming a previous instance lease is logged with its lease suffix", asy
         projectId: "sample-project-one",
         prompt: "do the work",
         threads: second,
+        resetting: () => false,
         attribution: () => ({
           active: { generation: undefined, epoch: 0, activationId: undefined },
         }),

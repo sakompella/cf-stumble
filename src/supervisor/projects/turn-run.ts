@@ -72,7 +72,8 @@ type TurnAttribution = Readonly<{ active: ActiveGeneration }>;
 export type ProjectTurnRunProblemCode =
   | ProjectThreadProblem["code"]
   | ProjectTurnRefusal
-  | "invalid-prompt";
+  | "invalid-prompt"
+  | "workspace-busy";
 
 export type ProjectTurnRun =
   | Readonly<{ ok: true; frames: ReadableStream<Uint8Array> }>
@@ -83,6 +84,8 @@ export type RunProjectTurnInput = Readonly<{
   projectId: unknown;
   prompt: unknown;
   threads: TurnThreads;
+  /** True while the owner's workspace reset runs. Admission refuses then, before taking a lease. */
+  resetting: () => boolean;
   attribution: () => TurnAttribution;
   /** Runs the turn on the serving generation. The Supervisor binds the workspace and mount. */
   start: (
@@ -181,6 +184,12 @@ function admit(input: RunProjectTurnInput): Admission {
 
   if (Result.isFailure(history)) {
     return { admitted: false, refusal: refused("unreadable-thread") };
+  }
+
+  // Checked in the same synchronous step as the lease: a reset that starts after this sees the
+  // lease, and a turn that arrives after the reset started is refused here.
+  if (input.resetting()) {
+    return { admitted: false, refusal: refused("workspace-busy") };
   }
 
   const attribution = input.attribution();

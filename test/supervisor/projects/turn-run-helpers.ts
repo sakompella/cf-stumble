@@ -238,6 +238,7 @@ function turnInput(
     projectId,
     prompt: script.prompt ?? "do the work",
     threads: stores.threads,
+    resetting: () => false,
     attribution: () => {
       if (script.throwAttribution === true) throw new Error("attribution failed");
 
