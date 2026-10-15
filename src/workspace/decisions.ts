@@ -20,6 +20,7 @@ export type WorkspacePlan =
  * `workspace-sync-incomplete` means a command ran in the container but its effect is not proven to
  * be in the durable workspace store: Computer's post-command sync did not complete, or the store
  * does not show the result. After the container is replaced, the store is what comes back.
+ * `workspace-busy` means a workspace reset was running, so the change was refused before it began.
  */
 export type WorkspaceFailure = Readonly<{
   ok: false;
@@ -29,6 +30,7 @@ export type WorkspaceFailure = Readonly<{
       | "path-outside-root"
       | "unknown-command"
       | "workspace-unavailable"
+      | "workspace-busy"
       | "workspace-sync-incomplete";
   }>;
 }>;

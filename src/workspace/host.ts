@@ -23,6 +23,7 @@ import { logEvent, logRedactedCause, parseRequestId, timedEffect } from "../diag
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ObservedWorkspaceContainer } from "./container-observer.js";
+import { isRecord } from "../untrusted.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
 import {
   executeHarnessBuildRequest,
@@ -57,6 +58,14 @@ export type WorkspaceResetResult =
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy" }> }>;
 
 const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as const;
+
+const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
+
+/** The credential surface's callers treat every failure but a failed command as unavailable. */
+const CREDENTIAL_INSTALL_REFUSED = {
+  ok: false,
+  error: { code: "workspace-unavailable", detail: "the workspace is resetting" },
+} as const;
 
 type WorkspaceStorageReset = Readonly<{
   deleteAll(): Promise<void>;
@@ -98,6 +107,15 @@ export function resetWorkspaceStorage(
     ),
     Effect.as({ ok: true, reset: "workspace" } as const),
   );
+}
+
+/**
+ * Whether a request asks for an install, the one credential step that changes the workspace. It
+ * reads the step before the request is parsed, so an invalid install request also counts.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the credential surface's RPC boundary.
+function requestsCredentialInstall(value: unknown): boolean {
+  return isRecord(value) && value["step"] === "install";
 }
 
 interface WorkspaceHostEnv {
@@ -172,8 +190,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #container: ObservedWorkspaceContainer;
   readonly #idle: WorkspaceIdleController;
   readonly #containerLifecycle = new ContainerLifecycle();
-  /** Builds, provisions, and removals this instance is running. A reset refuses while any run. */
+  /** File changes and credential installs this instance is running. A reset refuses while any run. */
   #changesInFlight = 0;
+  /** Set from the moment a reset arrives until it ends. Changes and project capabilities refuse. */
+  #resetting = false;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
     super(ctx, env);
@@ -220,8 +240,13 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return runAtEntryPoint(trackedWork(this.#idle, Effect.suspend(work)));
   }
 
-  /** Run a build, provision, or removal as tracked work that a reset will not cut off. */
-  #changing<A>(work: () => Effect.Effect<A>): Promise<A> {
+  /**
+   * Run a file change as tracked work that a reset will not cut off, or answer `refused` without
+   * running it while a reset runs.
+   */
+  #changing<A>(refused: A, work: () => Effect.Effect<A>): Promise<A> {
+    if (this.#resetting) return Promise.resolve(refused);
+
     return runAtEntryPoint(
       Effect.acquireUseRelease(
         Effect.sync(() => {
@@ -259,7 +284,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
-    return this.#changing(() =>
+    return this.#changing(CHANGE_REFUSED, () =>
       executeHarnessBuildRequest({
         configuration: harnessBuildConfiguration(this.env.HARNESS_REPOSITORY_URL),
         operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
@@ -282,7 +307,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
-    return this.#changing(() =>
+    return this.#changing(CHANGE_REFUSED, () =>
       executeProjectProvisionRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
@@ -293,7 +318,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   /** Remove one connected project's clone and provisioning remnants, never the harness. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The RPC parser validates this boundary.
   removeProject(request: unknown): Promise<WorkspaceResult> {
-    return this.#changing(() =>
+    return this.#changing(CHANGE_REFUSED, () =>
       executeProjectRemovalRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
@@ -303,7 +328,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
 
   /** Restore the managed instructions after a workspace reset, without replacing an existing file. */
   ensureManagedInstructions(): Promise<WorkspaceResult> {
-    return this.#tracked(() =>
+    return this.#changing(CHANGE_REFUSED, () =>
       ensureManagedInstructions(new ComputerWorkspaceOperations(this.#workspace, "not-required")),
     );
   }
@@ -323,30 +348,37 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    *
    * The install requires a complete sync of the workspace's durable copy: `hosts.yml` now lives
    * under the workspace root, and a copy that is still pending would be lost with the container.
-   * Status and the repository check change nothing, so they do not wait for a sync.
+   * Status and the repository check change nothing, so they do not wait for a sync, and only an
+   * install is a change a reset excludes.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
-    return this.#tracked(() =>
+    const work = () =>
       executeGitHubCredentialRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
         installOperations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
         requestId: parseRequestId(requestId),
-      }),
-    );
+      });
+
+    return requestsCredentialInstall(request)
+      ? this.#changing(CREDENTIAL_INSTALL_REFUSED, work)
+      : this.#tracked(work);
   }
 
   /**
    * Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them.
-   * A build, provision, or removal still running would be cut off halfway, and could write into the
-   * wiped store afterwards, so the reset refuses while one runs.
+   * A file change or credential install still running would be cut off halfway, and could write
+   * into the wiped store afterwards, so the reset refuses while one runs. For the same reason it
+   * excludes new ones, a project capability, and a second reset until it ends.
    */
   reset(): Promise<WorkspaceResetResult> {
-    return this.#tracked((): Effect.Effect<WorkspaceResetResult> => {
-      if (this.#changesInFlight > 0) return Effect.succeed(WORKSPACE_BUSY);
+    if (this.#resetting || this.#changesInFlight > 0) return Promise.resolve(WORKSPACE_BUSY);
 
-      return resetWorkspaceStorage(this.ctx.storage, {
+    this.#resetting = true;
+
+    return this.#tracked(() =>
+      resetWorkspaceStorage(this.ctx.storage, {
         restart: (spec) => this.#container.restartFor("workspace-reset", spec),
       }).pipe(
         Effect.ensuring(
@@ -360,13 +392,20 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
             this.#idle.forgetAlarm();
           }),
         ),
-      );
+      ),
+    ).finally(() => {
+      this.#resetting = false;
     });
   }
 
-  /** Hand out a project capability bounded to one turn and this container generation. */
+  /**
+   * Hand out a project capability bounded to one turn and this container generation. During a
+   * reset it throws instead: the Workspace it would wrap is being deleted.
+   */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   project(budget?: unknown): ProjectRpcTarget {
+    if (this.#resetting) throw new Error("workspace-busy: the workspace is resetting");
+
     const remainingMs = parseProjectBudget(budget);
     const options = remainingMs === undefined ? {} : { remainingMs };
 

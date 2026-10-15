@@ -42,7 +42,13 @@ lease is live. A lease is live until its turn releases it or its deadline passes
 would stop the running turn from saving but not from editing files, and a later turn could start
 beside it; a reset would delete the files under it and kill its commands halfway through a change.
 The Workspace Host also refuses a reset with HTTP 409 `workspace-busy` while it runs a build,
-provision, or removal, which the reset would otherwise cut off.
+provision, removal, managed-instructions write, or credential install, which the reset would
+otherwise cut off. The exclusion holds in the other direction too: from the moment a reset reaches
+the Host until it ends, each of those operations refuses without running, a request for a
+project capability throws, and a second reset answers `workspace-busy`. A file change answers
+`workspace-busy`; a credential install answers `workspace-unavailable`, which is how the
+Supervisor already reads every install failure other than a failed command. A credential
+status read or repository check is not excluded, because it changes nothing.
 
 The workspace behaves like an ordinary development machine. It has unrestricted outbound internet
 access, `git`, `gh`, and repository toolchains. GitHub credentials live in `gh` and Git

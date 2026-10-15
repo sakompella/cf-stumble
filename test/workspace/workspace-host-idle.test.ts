@@ -213,38 +213,128 @@ test("an exec started while the idle stop destroys the container waits for it", 
   expect(seen.afterwards, "it reaches the container once the destroy settled").toBeGreaterThan(0);
 });
 
-test("a reset refuses while a provision is in flight and leaves the store alone", async () => {
-  const held = { release: (): void => {} };
+const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-  const stalled = new Promise<void>((resolve) => {
-    held.release = resolve;
-  });
+test("a reset refuses while a file change or credential install is in flight and leaves the store alone", async () => {
+  const changes = {
+    provision: (host: WorkspaceHost) =>
+      host.provision({
+        kind: "provision-project",
+        projectId: sampleProjectOne.id,
+        repositoryUrl: sampleProjectOne.repositoryUrl,
+        step: "clone",
+      }),
+    credentialInstall: (host: WorkspaceHost) =>
+      host.credential({ kind: "github-credential", step: "install", token: FAKE_TOKEN }),
+    ensureManagedInstructions: (host: WorkspaceHost) => host.ensureManagedInstructions(),
+  };
 
-  const seen = await withHost("host-reset-busy", async (host, state) => {
-    // Every Workspace call waits, so the provision stays in flight until the test releases it.
-    // SAFETY: each member the provision reaches is a function that waits; nothing reads the rest.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const waiting = new Proxy({}, { get: () => () => stalled }) as never;
-    vi.spyOn(Workspace.prototype, "fs", "get").mockReturnValue(waiting);
-    vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(waiting);
-    await state.storage.put("durable-row", "kept");
+  for (const [name, change] of Object.entries(changes)) {
+    const held = { release: (): void => {} };
 
-    const provision = host.provision({
-      kind: "provision-project",
-      projectId: sampleProjectOne.id,
-      repositoryUrl: sampleProjectOne.repositoryUrl,
-      step: "clone",
+    const stalled = new Promise<void>((resolve) => {
+      held.release = resolve;
     });
 
-    await tick();
-    const refused = await host.reset();
-    const row = await state.storage.get("durable-row");
-    held.release();
-    await provision;
+    const seen = await withHost(`host-reset-busy-${name}`, async (host, state) => {
+      // Every Workspace call waits, so the change stays in flight until the test releases it.
+      // SAFETY: each member the change reaches is a function that waits; nothing reads the rest.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const waiting = new Proxy({}, { get: () => () => stalled }) as never;
+      vi.spyOn(Workspace.prototype, "fs", "get").mockReturnValue(waiting);
+      vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(waiting);
+      await state.storage.put("durable-row", "kept");
 
-    return { refused, row };
+      const inFlight = change(host);
+
+      await tick();
+      const refused = await host.reset();
+      const row = await state.storage.get("durable-row");
+      held.release();
+      await inFlight;
+
+      return { refused, row };
+    });
+
+    expect(seen.refused, name).toEqual({ ok: false, problem: { code: "workspace-busy" } });
+    expect(seen.row, `the reset refused during ${name} deleted nothing`).toBe("kept");
+    vi.restoreAllMocks();
+  }
+});
+
+/** Whether the Host hands out a project capability now, or throws. */
+function capabilityAnswer(host: WorkspaceHost): "handed out" | "refused" {
+  try {
+    host.project({ remainingMs: 60_000 });
+
+    return "handed out";
+  } catch {
+    return "refused";
+  }
+}
+
+/** Every Host change, asked while a reset runs. None of these requests would succeed anyway. */
+async function changesDuringReset(host: WorkspaceHost) {
+  return {
+    build: await host.build({ kind: "not-a-build" }),
+    provision: await host.provision({ kind: "not-a-step" }),
+    removeProject: await host.removeProject({ kind: "not-a-removal" }),
+    ensureManagedInstructions: await host.ensureManagedInstructions(),
+    credentialInstall: await host.credential({
+      kind: "github-credential",
+      step: "install",
+      token: FAKE_TOKEN,
+    }),
+    reset: await host.reset(),
+    capability: capabilityAnswer(host),
+  };
+}
+
+test("while a reset runs, file changes, credential installs, project capabilities, and a second reset refuse", async () => {
+  const seen = await withHost("host-reset-exclusion", async (host, state) => {
+    const held = { release: (): void => {} };
+
+    const deleting = new Promise<void>((resolve) => {
+      held.release = resolve;
+    });
+
+    const deleteAll = vi.spyOn(state.storage, "deleteAll").mockReturnValue(deleting);
+    const resetting = host.reset();
+
+    await vi.waitFor(() => {
+      expect(deleteAll).toHaveBeenCalledOnce();
+    });
+
+    const during = await changesDuringReset(host);
+
+    held.release();
+    // The fake container cannot launch the replacement, so the restart step rejects.
+    await resetting.catch(() => {});
+
+    return {
+      during,
+      deleteCalls: deleteAll.mock.calls.length,
+      afterwards: await host.build({ kind: "not-a-build" }),
+    };
   });
 
-  expect(seen.refused).toEqual({ ok: false, problem: { code: "workspace-busy" } });
-  expect(seen.row, "the refused reset deleted nothing").toBe("kept");
+  const changeBusy = { ok: false, error: { code: "workspace-busy" } };
+
+  expect(seen.during).toEqual({
+    build: changeBusy,
+    provision: changeBusy,
+    removeProject: changeBusy,
+    ensureManagedInstructions: changeBusy,
+    credentialInstall: {
+      ok: false,
+      error: { code: "workspace-unavailable", detail: "the workspace is resetting" },
+    },
+    reset: { ok: false, problem: { code: "workspace-busy" } },
+    capability: "refused",
+  });
+  expect(seen.deleteCalls, "the second reset deleted nothing").toBe(1);
+  expect(seen.afterwards, "the exclusion ends with the reset").toEqual({
+    ok: false,
+    error: { code: "invalid-request" },
+  });
 });
