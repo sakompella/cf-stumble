@@ -184,3 +184,53 @@ test("a sign-in that lands during a refresh wins over the refreshed pair", async
     },
   );
 });
+
+test("a Disconnect while the token server is busy leaves the caller not connected", async () => {
+  const held = heldReply();
+
+  await withConnection(
+    "chatgpt-refresh-busy-disconnect",
+    () => held.reply,
+    async (harness) => {
+      connected(harness, 60_000);
+      const refreshing = access(harness.connection);
+      await vi.waitFor(() => {
+        expect(harness.calls).toHaveLength(1);
+      });
+
+      harness.connection.disconnect();
+      held.release(new Response("busy", { status: 503 }));
+
+      await expect(refreshing).resolves.toEqual({ kind: "not-connected" });
+    },
+  );
+});
+
+test("an account that replaced the pair while the token server was busy is the one used", async () => {
+  const held = heldReply();
+
+  await withConnection(
+    "chatgpt-refresh-busy-replaced",
+    () => held.reply,
+    async (harness) => {
+      connected(harness, 60_000);
+      const refreshing = access(harness.connection);
+      await vi.waitFor(() => {
+        expect(harness.calls).toHaveLength(1);
+      });
+
+      harness.store.connect(
+        {
+          accessToken: ACCESS_TWO,
+          refreshToken: REFRESH_TWO,
+          expiresAt: harness.clock.now + HOUR,
+          clientId: CLIENT_ID,
+        },
+        harness.clock.now,
+      );
+      held.release(new Response("busy", { status: 503 }));
+
+      await expect(refreshing).resolves.toEqual({ kind: "ready", accessToken: ACCESS_TWO });
+    },
+  );
+});

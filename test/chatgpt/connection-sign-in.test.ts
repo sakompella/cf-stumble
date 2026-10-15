@@ -4,10 +4,20 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
+import { type ChatGPTConnection, ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
-import { ACCESS_ONE, challengeOf, CLIENT_ID, formOf, grant, REFRESH_ONE } from "./fixtures.js";
-import { HOUR, withConnection } from "./connection-harness.js";
+import {
+  ACCESS_ONE,
+  ACCESS_TWO,
+  challengeOf,
+  CLIENT_ID,
+  formOf,
+  grant,
+  heldReply,
+  REFRESH_ONE,
+  REFRESH_TWO,
+} from "./fixtures.js";
+import { type Harness, HOUR, withConnection } from "./connection-harness.js";
 
 /** Signing in to ChatGPT, and the Supervisor surface the owner API and the model route use. */
 
@@ -139,4 +149,99 @@ test("the Supervisor reports no credential before the first connection, and a di
     connection: { state: "disconnected" },
   });
   await expect(supervisor.chatgptAccess()).resolves.toEqual({ kind: "not-connected" });
+});
+
+/** A token endpoint that holds each exchange until the test releases it, in any order. */
+function heldExchanges(count: number) {
+  const held = Array.from({ length: count }, () => heldReply());
+  let next = 0;
+
+  return {
+    held,
+    reply: () => held[next++]?.reply ?? Promise.reject(new Error("one exchange too many")),
+  };
+}
+
+async function requestsMade(harness: Harness, count: number): Promise<void> {
+  await vi.waitFor(() => {
+    expect(harness.calls).toHaveLength(count);
+  });
+}
+
+/** Start a sign-in and return a function that finishes it with a matching address. */
+async function startSignIn(connection: ChatGPTConnection) {
+  const login = (await Effect.runPromise(connection.startLogin())).login;
+
+  if (login === null) throw new Error("a started sign-in must be visible");
+  const state = new URL(login.authorizeUrl).searchParams.get("state") ?? "";
+
+  return () =>
+    Effect.runPromise(
+      connection.completeLogin(
+        login.attemptId,
+        `http://127.0.0.1:1455/auth/callback?code=code-FAKE&state=${state}&client_id=${CLIENT_ID}`,
+      ),
+    );
+}
+
+test("a Disconnect during the code exchange is not undone by its late grant", async () => {
+  const exchanges = heldExchanges(1);
+
+  await withConnection("chatgpt-exchange-disconnect", exchanges.reply, async (harness) => {
+    const finishing = (await startSignIn(harness.connection))();
+    await requestsMade(harness, 1);
+
+    harness.connection.disconnect();
+    exchanges.held[0]?.release(grant(ACCESS_ONE, REFRESH_ONE));
+
+    await expect(finishing).resolves.toMatchObject({ ok: false, problem: { code: "no-sign-in" } });
+    expect(harness.store.connection()).toBeUndefined();
+    expect(harness.connection.view()).toMatchObject({
+      connection: { state: "disconnected" },
+      login: null,
+    });
+  });
+});
+
+test("a sign-in started during an exchange makes the older grant stale", async () => {
+  const exchanges = heldExchanges(2);
+
+  await withConnection("chatgpt-exchange-newer-sign-in", exchanges.reply, async (harness) => {
+    const older = (await startSignIn(harness.connection))();
+    await requestsMade(harness, 1);
+    const finishNewer = await startSignIn(harness.connection);
+
+    exchanges.held[0]?.release(grant(ACCESS_ONE, REFRESH_ONE));
+
+    await expect(older).resolves.toMatchObject({ ok: false, problem: { code: "no-sign-in" } });
+    expect(harness.store.connection()).toBeUndefined();
+
+    const newer = finishNewer();
+    await requestsMade(harness, 2);
+    exchanges.held[1]?.release(grant(ACCESS_TWO, REFRESH_TWO));
+
+    await expect(newer).resolves.toMatchObject({ ok: true });
+    expect(harness.store.connection()).toMatchObject({ accessToken: ACCESS_TWO });
+  });
+});
+
+test("an older exchange that finishes after a newer sign-in does not overwrite it", async () => {
+  const exchanges = heldExchanges(2);
+
+  await withConnection("chatgpt-exchange-later-first", exchanges.reply, async (harness) => {
+    const older = (await startSignIn(harness.connection))();
+    await requestsMade(harness, 1);
+    const newer = (await startSignIn(harness.connection))();
+    await requestsMade(harness, 2);
+
+    exchanges.held[1]?.release(grant(ACCESS_TWO, REFRESH_TWO));
+    await expect(newer).resolves.toMatchObject({ ok: true });
+
+    exchanges.held[0]?.release(grant(ACCESS_ONE, REFRESH_ONE));
+    await expect(older).resolves.toMatchObject({ ok: false, problem: { code: "no-sign-in" } });
+    expect(harness.store.connection()).toMatchObject({
+      accessToken: ACCESS_TWO,
+      refreshToken: REFRESH_TWO,
+    });
+  });
 });

@@ -112,6 +112,8 @@ export class ChatGPTConnection {
   private readonly model: string;
   private readonly clock: () => number;
   private refreshing: Deferred.Deferred<ChatGPTAccess> | undefined;
+  /** The sign-in whose code is being exchanged; a newer sign-in or a Disconnect clears it. */
+  private exchanging: string | undefined;
 
   constructor(input: ChatGPTConnectionInput) {
     this.store = input.store;
@@ -152,6 +154,7 @@ export class ChatGPTConnection {
 
     return authorizeUrl({ state, verifier, agentHostId: this.store.agentHostId() }).pipe(
       Effect.map((url) => {
+        this.exchanging = undefined;
         this.store.startLogin({
           attemptId: crypto.randomUUID(),
           state,
@@ -169,7 +172,8 @@ export class ChatGPTConnection {
   /**
    * Redeem the address the sign-in ended on. An address that does not parse leaves the attempt in
    * place, so the owner can paste again; once the code is sent, the attempt is used up whatever
-   * the token endpoint answers.
+   * the token endpoint answers. A grant that returns after a newer sign-in or a Disconnect is
+   * dropped.
    */
   completeLogin(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {
     return Effect.gen({ self: this }, function* () {
@@ -184,6 +188,7 @@ export class ChatGPTConnection {
   }
 
   disconnect(): ChatGPTConnectionView {
+    this.exchanging = undefined;
     this.store.disconnect();
     logEvent("info", "chatgpt.disconnect");
 
@@ -241,12 +246,16 @@ export class ChatGPTConnection {
 
       if (Result.isFailure(callback)) return refused(callback.failure);
       this.store.clearLogin();
+      this.exchanging = attemptId;
 
       return requestTokens(this.fetcher, exchangeFields(callback.success, login.verifier)).pipe(
         Effect.matchEffect({
           onFailure: ({ failure }) => refused(loginFailure(failure)),
-          onSuccess: (grant) =>
-            Effect.sync(() => {
+          onSuccess: (grant): Effect.Effect<ChatGPTLoginOutcome> => {
+            if (this.exchanging !== attemptId) return refused("no-sign-in");
+            this.exchanging = undefined;
+
+            return Effect.sync(() => {
               this.store.connect(
                 {
                   accessToken: grant.accessToken,
@@ -258,7 +267,8 @@ export class ChatGPTConnection {
               );
 
               return { ok: true, chatgpt: this.view() } as const;
-            }),
+            });
+          },
         }),
       );
     });
@@ -298,6 +308,12 @@ export class ChatGPTConnection {
               this.clock(),
             );
 
+            return this.storedAccess();
+          }
+
+          const current = this.store.connection();
+
+          if (current?.state !== "connected" || current.accessToken !== stored.accessToken) {
             return this.storedAccess();
           }
 
