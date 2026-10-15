@@ -26,7 +26,7 @@ Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this proje
 
 ## Configuration files
 
-`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares no variables or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build` reads it and passes. `cf deploy` passed on staging (see below). `cf dev` does not work yet.
+`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"), and no per-instance values or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build` reads it and passes. `cf deploy` passed on staging (see below). `cf dev` does not work yet.
 
 Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
 
@@ -45,7 +45,7 @@ Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change 
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them and no plain-text variables. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
+Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them. The only plain-text variable they declare is `CHATGPT_MODEL`, which is the same for every deployment and which `cf deploy` keeps because it is declared. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
 
 | Secret                                                          | Required by the Worker       | Purpose                                                                                         |
 | --------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -242,7 +242,7 @@ pnpm exec tsx tools/chatgpt-connect.mts --origin https://<host> \
   --profile "<Firefox profile directory>" [--account <email or exact name>]
 ```
 
-`--account` is required when OpenAI's account chooser lists more than one account. The tool never changes the original profile and deletes its copy when it exits. OpenAI may answer a headless browser with a Cloudflare challenge or a route error; the tool then stops and saves the page text and a screenshot under `/tmp/chatgpt-connect-*`. Run it again with `--headed` to show the window, or connect from the owner page. `--inspect` stops before the approval page and calls no owner API.
+The tool reads the service token from `--token-file`, which defaults to `.audit/local/access-service-token.json` relative to the directory you run it in. Run it from the owner's checkout, or pass `--token-file <path>` from anywhere else. `--account` is required when OpenAI's account chooser lists more than one account. The tool never changes the original profile and deletes its copy when it exits. OpenAI may answer a headless browser with a Cloudflare challenge or a route error; the tool then stops and saves the page text and a screenshot under `/tmp/chatgpt-connect-*`. Run it again with `--headed` to show the window, or connect from the owner page. `--inspect` stops before the approval page and calls no owner API.
 
 The page shows one of three states:
 
