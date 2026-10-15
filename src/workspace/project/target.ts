@@ -129,6 +129,14 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseStartExecInput` parses `input`.
     input: unknown,
   ): Promise<ProjectResult<StartedExec>> {
+    const ended = this.#turnEnded();
+
+    if (ended !== undefined) {
+      this.#logRefusal(null, ended.error.code);
+
+      return Promise.resolve(ended);
+    }
+
     this.#activity?.touch();
 
     return projectResult<StartedExec>(() => {
@@ -145,12 +153,13 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
-    const capabilityFailure = this.#checkCapability();
+    if (this.#containerWasReplaced()) {
+      // Filesystem state is durable across a replacement. Refuse only this first exec so callers
+      // receive an explicit restart outcome, then permit a retry against the new container.
+      this.#containerGeneration = this.#containerState?.generation;
+      this.#logRefusal(input.timeoutMs, "container-restarted");
 
-    if (capabilityFailure !== undefined) {
-      this.#logRefusal(input.timeoutMs, capabilityFailure.error.code);
-
-      return capabilityFailure;
+      return fail("container-restarted");
     }
 
     if (this.#operations.size >= MAX_CONCURRENT_EXECS) {
@@ -300,18 +309,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       this.#containerState !== undefined &&
       this.#containerState.generation !== this.#containerGeneration
     );
-  }
-
-  #checkCapability(): ProjectFailure | undefined {
-    if (this.#containerWasReplaced()) {
-      // Filesystem state is durable across a replacement. Refuse only this first exec so callers
-      // receive an explicit restart outcome, then permit a retry against the new container.
-      this.#containerGeneration = this.#containerState?.generation;
-
-      return { ok: false, error: { code: "container-restarted" } };
-    }
-
-    return this.#turnEnded();
   }
 
   #turnEnded(): ProjectFailure | undefined {

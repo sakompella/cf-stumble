@@ -76,9 +76,11 @@ for it with the admitted turn's remaining budget, so the Host ends it at the tur
 Supervisor ends it again when the turn settles. Once it has ended, `lstat`, `readFile`, `writeFile`,
 `listFiles`, and `startExec` answer `turn-ended`, also through a duplicate that the generation kept,
 so a generation that ignores the end of its turn cannot keep editing the shared workspace while a
-later turn runs. `kill` and `endTurn` still answer, so cleanup can run more than once. A container
-replacement refuses only the next command, with `container-restarted`; file calls go on, because the
-files are durable (`src/workspace/project/target.ts`).
+later turn runs. The check comes before the arguments are read, and a refused call does not count
+as workspace activity, so repeated late calls cannot keep the idle container running. `kill` and
+`endTurn` still answer, so cleanup can run more than once. A container replacement refuses only the
+next command of a live turn, with `container-restarted`; an ended turn still answers `turn-ended`,
+and file calls go on, because the files are durable (`src/workspace/project/target.ts`).
 
 ## Harness execution
 
