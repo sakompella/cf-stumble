@@ -7,6 +7,7 @@ import {
   type TerminalFrame,
   type TurnFrame,
 } from "./frames.js";
+import { FetchChatGPT } from "./commands.js";
 import type { Message } from "./message.js";
 import { Turn, type Model } from "./model.js";
 import {
@@ -120,11 +121,17 @@ function withFrame(model: Model, frame: TurnFrame): Model {
   return isTerminalFrame(frame) ? withTerminalFrame(model, frame) : withProgressFrame(model, frame);
 }
 
-/** The turn is over for this page: Send comes back and the thread facts are read again. */
+/**
+ * The turn is over for this page: Send comes back and the thread facts are read again. A connected
+ * ChatGPT is read again too, because a turn can meet the plan's usage limit (ADR-0047).
+ */
 function endedTurn(model: Model): UpdateReturn {
   const ended = { ...model, turn: Turn.Idle() };
 
-  return { model: ended, commands: quietThreadRead(ended) };
+  return {
+    model: ended,
+    commands: [...quietThreadRead(ended), ...(model.chatgpt.isConnected ? [FetchChatGPT()] : [])],
+  };
 }
 
 type TurnTags =

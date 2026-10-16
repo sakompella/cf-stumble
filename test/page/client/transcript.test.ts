@@ -33,6 +33,27 @@ test("a saved conversation shows text blocks and tool results, and nothing it ca
   expect(Option.isNone(savedTranscript("{}"))).toBe(true);
 });
 
+test("a saved answer Workers AI gave after ChatGPT's usage limit is preceded by a notice", () => {
+  const fallback = { type: "provider-fallback", timestamp: 1, details: { limitedUntil: null } };
+
+  const saved = JSON.stringify([
+    { role: "user", content: "hi" },
+    { role: "assistant", content: "from Workers AI", diagnostics: [fallback] },
+    { role: "assistant", content: "from ChatGPT", diagnostics: [{ type: "other" }] },
+  ]);
+
+  expect(Option.getOrThrow(savedTranscript(saved))).toMatchObject([
+    { role: "user", text: "hi" },
+    {
+      role: "system",
+      who: "notice",
+      text: "ChatGPT usage limit reached; answered with Workers AI",
+    },
+    { role: "assistant", text: "from Workers AI" },
+    { role: "assistant", text: "from ChatGPT" },
+  ]);
+});
+
 /**
  * One saved message of each kind the reader handles, as stored JSON, with each tool call id passed
  * through `id`. Tool `a` gets two results with other messages between them, so the later result
