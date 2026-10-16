@@ -30,6 +30,10 @@ generation called it and read the access token through the returned `access()`. 
 classes is a `#private` method or a module function. The lint rule
 `cf-stumble/no-typescript-private-rpc-member` (`tools/oxlint/cf-stumble/`) rejects the TypeScript
 form, and `test/model-route-rpc-surface.test.ts` probes the route from a loaded generation.
+The lint rule knows one spelling, so `test/rpc-method-allowlist.test.ts` also lists every method
+name on `ModelRoute` and `ProjectRpcTarget` and fails when the prototype chain has a name the list
+lacks. A new public method on either class is a new capability for mutable code. Its author adds
+the name to the list on purpose, and the reviewer decides whether a facet may call it.
 
 **The fallback is narrow.** With no connection the route calls Workers AI as before. A connection
 that needs a reconnect fails every call with `chatgpt-reconnect-required` instead of falling back,
