@@ -2,8 +2,8 @@
  * What a workspace surface decides and what it answers with.
  *
  * The build surface (`harness-build.ts`) and the provisioning surface (`project-provision.ts`)
- * each parse their own request and produce a `WorkspacePlan` from it. A plan carries a resolved
- * path or a command source the server chose, never text a caller sent, so the executor can run it
+ * each parse their own request and produce a `WorkspacePlan` from it. A plan carries a command
+ * source and directory the server chose, never text a caller sent, so the executor can run it
  * without deciding anything.
  *
  * A plan holds nothing secret. It is a plain structured-cloneable value that can be returned,
@@ -12,9 +12,12 @@
  * value that travels.
  */
 
-export type WorkspacePlan =
-  | Readonly<{ kind: "write-file"; path: string; content: string }>
-  | Readonly<{ kind: "run-command"; source: string; cwd: string; timeoutMs: number }>;
+export type WorkspacePlan = Readonly<{
+  kind: "run-command";
+  source: string;
+  cwd: string;
+  timeoutMs: number;
+}>;
 
 /**
  * `workspace-sync-incomplete` means a command ran in the container but its effect is not proven to

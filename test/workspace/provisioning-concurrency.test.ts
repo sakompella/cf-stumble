@@ -11,24 +11,33 @@ import {
   PROVISION_STALE_AFTER_MS,
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
-import {
-  planProjectProvisionRequest,
-  type ProjectProvisionRequest,
-} from "../../src/workspace/project-provision.js";
+import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 import { runToResult } from "./workspace-results.js";
 
 class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
+  /** Every Host RPC in order: a provision request by its step, and each managed-file write. */
+  readonly steps: string[] = [];
+
+  protected record(request: ProjectProvisionRequest): void {
+    this.requests.push(request);
+    this.steps.push(request.step);
+  }
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
-    this.requests.push(request);
+    this.record(request);
 
-    return Promise.resolve(
-      request.step === "instructions"
-        ? { ok: true, result: { kind: "written" } }
-        : { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } },
-    );
+    return Promise.resolve({
+      ok: true,
+      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+    });
+  }
+
+  ensureManagedInstructions(): Promise<WorkspaceResult> {
+    this.steps.push("instructions");
+
+    return Promise.resolve({ ok: true, result: { kind: "written" } });
   }
 }
 
@@ -53,7 +62,7 @@ function delayedProvisionHost(): DelayedProvision {
       this.calls += 1;
 
       if (this.calls === 1) {
-        this.requests.push(request);
+        this.record(request);
         firstCloneStarted?.();
 
         return new Promise((resolve) => {
@@ -106,7 +115,7 @@ test("serializes different projects in one shared workspace", async () => {
 
   await Promise.resolve();
 
-  expect(delayed.host.requests.map((request) => request.step)).toEqual(["clone"]);
+  expect(delayed.host.steps).toEqual(["clone"]);
 
   delayed.release();
 
@@ -114,10 +123,9 @@ test("serializes different projects in one shared workspace", async () => {
   expect(Result.isSuccess(await second)).toBe(true);
   expect(delayed.host.requests.map((request) => request.projectId)).toEqual([
     sampleProjectOne.id,
-    sampleProjectOne.id,
-    sampleProjectTwo.id,
     sampleProjectTwo.id,
   ]);
+  expect(delayed.host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
 });
 
 test("serializes replacement provisioning until an aborted run has finished", async () => {
@@ -150,7 +158,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
   await Promise.resolve();
 
   expect(
-    delayed.host.requests.map((request) => request.step),
+    delayed.host.steps,
     "a replacement must not enter the shared workspace while the aborted clone is in flight",
   ).toEqual(["clone"]);
 
@@ -158,16 +166,12 @@ test("serializes replacement provisioning until an aborted run has finished", as
 
   expect(Result.isFailure(await first)).toBe(true);
   expect(Result.isSuccess(await replacement)).toBe(true);
-  expect(delayed.host.requests.map((request) => request.step)).toEqual([
-    "clone",
-    "clone",
-    "instructions",
-  ]);
+  expect(delayed.host.steps).toEqual(["clone", "clone", "instructions"]);
 });
 
 class NeverSettlingProvisionHost extends FakeProvisionHost {
   override provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
-    this.requests.push(request);
+    this.record(request);
 
     return new Promise(() => {});
   }
@@ -234,7 +238,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
       this.calls += 1;
 
       if (this.calls === 1) {
-        this.requests.push(request);
+        this.record(request);
 
         return new Promise(() => {});
       }
@@ -328,18 +332,8 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
 });
 
 test("provision stale ceiling covers the plan command budget", () => {
-  const commandStepCount = PROJECT_PROVISION_STEP_NAMES.filter(
-    (step) =>
-      planProjectProvisionRequest({
-        kind: "provision-project",
-        project: sampleProjectOne,
-        step,
-      }).kind === "run-command",
-  ).length;
-
-  expect(commandStepCount).toBeGreaterThan(0);
   expect(PROVISION_STALE_AFTER_MS).toBeGreaterThanOrEqual(
-    commandStepCount * WORKSPACE_COMMAND_TIMEOUT_MS,
+    PROJECT_PROVISION_STEP_NAMES.length * WORKSPACE_COMMAND_TIMEOUT_MS,
   );
 });
 
@@ -354,7 +348,7 @@ test("drops an in-flight provision after the Workspace Host command ceiling", as
       this.calls += 1;
 
       if (this.calls === 1) {
-        this.requests.push(request);
+        this.record(request);
 
         return new Promise(() => {});
       }
@@ -380,11 +374,7 @@ test("drops an in-flight provision after the Workspace Host command ceiling", as
     const replacement = await runToResult(provisionProjectWorkspace(input));
 
     expect(Result.isSuccess(replacement)).toBe(true);
-    expect(host.requests.map((request) => request.step)).toEqual([
-      "clone",
-      "clone",
-      "instructions",
-    ]);
+    expect(host.steps).toEqual(["clone", "clone", "instructions"]);
   } finally {
     vi.useRealTimers();
   }

@@ -74,15 +74,12 @@ test("the build configuration and project provisioning read this layout", () => 
   const plan = planProjectProvision(projectOne);
   const clone = projectProvisionStep(plan, "clone");
 
-  expect(clone.name === "clone" ? clone.source : "").toContain(
+  expect(clone.source).toContain(
     [
       `repository=${shellQuote(projectDirectory(projectOne.id))}`,
       `git_dir=${shellQuote(projectGitDirectory(projectOne.id))}`,
     ].join("\n"),
   );
-  expect(projectProvisionStep(plan, "instructions")).toMatchObject({
-    path: MANAGED_AGENT_INSTRUCTIONS_PATH,
-  });
 });
 
 test("the facet guard and the addressed-path space share one root", () => {

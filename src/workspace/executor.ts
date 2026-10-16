@@ -46,33 +46,6 @@ function unavailable(): WorkspaceFailure {
   return { ok: false, error: { code: "workspace-unavailable" } };
 }
 
-function pathParts(path: string): string[] {
-  const parts = path.split("/");
-  const prefixes: string[] = [];
-  let current = "";
-
-  for (const part of parts) {
-    if (part === "") continue;
-    current += `/${part}`;
-    prefixes.push(current);
-  }
-
-  return prefixes;
-}
-
-function isSymlinkFree(
-  operations: WorkspaceEffects,
-  path: string,
-): Effect.Effect<boolean, WorkspaceFault> {
-  return Effect.gen(function* () {
-    for (const prefix of pathParts(path)) {
-      if ((yield* operations.lstat(prefix)) === "symbolic-link") return false;
-    }
-
-    return true;
-  });
-}
-
 /** A command the server planned: its text, where it runs, and how long it may take. */
 type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
 
@@ -111,32 +84,12 @@ function executePlan(
   plan: WorkspacePlan,
   command: string,
 ): Effect.Effect<WorkspaceResult, WorkspaceFault> {
-  switch (plan.kind) {
-    case "write-file":
-      return Effect.gen(function* () {
-        if (!(yield* isSymlinkFree(operations, plan.path))) {
-          return { ok: false, error: { code: "path-outside-root" } } as const;
-        }
-
-        yield* operations.writeFile(plan.path, plan.content);
-
-        return { ok: true, result: { kind: "written" } } as const;
-      });
-
-    case "run-command":
-      return runLoggedCommand(operations, command, plan).pipe(
-        Effect.map((output): WorkspaceResult => ({
-          ok: true,
-          result: { kind: "command", ...cloneCommandOutput(output) },
-        })),
-      );
-
-    default: {
-      const exhaustive: never = plan;
-
-      return exhaustive;
-    }
-  }
+  return runLoggedCommand(operations, command, plan).pipe(
+    Effect.map((output): WorkspaceResult => ({
+      ok: true,
+      result: { kind: "command", ...cloneCommandOutput(output) },
+    })),
+  );
 }
 
 function cloneCommandOutput(output: CommandOutput): CommandOutput {
@@ -204,8 +157,8 @@ export function executeHarnessBuildRequest(
 /**
  * The provisioning surface's effect shell. It is separate from the build shell above because it
  * plans from a catalog project rather than from a harness commit: a provision clones the
- * repository the catalog names and writes the managed instructions beside it, and a build can
- * reach neither. Everything a turn does afterwards goes through the project capability instead.
+ * repository the catalog names, and a build cannot reach it. Everything a turn does afterwards
+ * goes through the project capability instead.
  */
 export function executeProjectProvisionRequest(
   input: Readonly<{

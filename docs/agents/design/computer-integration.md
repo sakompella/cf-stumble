@@ -84,6 +84,13 @@ identity reaches a different one. No request supplies the name.
 | `/workspace/projects/<project id>` | One connected project's clone.                                                      |
 | `/tmp/cf-stumble-builds/<commit>`  | Build scratch for one labeled commit, outside `/workspace`. It holds no repository. |
 
+cf-stumble owns `/workspace/AGENTS.md`. Before every project or harness turn, provisioning calls
+the Workspace Host's `ensureManagedInstructions`, which writes the current text over whatever file
+is at that path. An instruction change therefore reaches the workspace at the first turn after a
+deploy, and an edit to the file lasts only until the next turn. The Host refuses the write when the
+workspace root or the file is a symbolic link, or when the path is a directory, rather than follow
+or replace it. Provisioning never writes a repository's own `AGENTS.md`.
+
 Selecting a project sets the working directory a turn starts in. The project capability addresses
 the whole workspace, so the agent can read a sibling repository or the managed instructions, and
 the path guard is the workspace root. Both the guard and the addressed-path translation read

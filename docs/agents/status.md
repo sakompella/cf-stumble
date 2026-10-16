@@ -57,6 +57,11 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
   The Supervisor caches the credential; Workers AI answers until a connection exists. See
   ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers
   from Workers AI only.
+- **The managed `/workspace/AGENTS.md` is rewritten before every turn** (owner, 2026-10-16).
+  Before, the harness plan wrote it only when the file was absent, so a stale copy survived a
+  release, while the project plan overwrote it through the provision surface. Both plans now call
+  the Workspace Host's one `ensureManagedInstructions`, which replaces a file and refuses a symbolic
+  link or a directory. See `design/computer-integration.md`, "Workspace layout".
 
 ## Open items
 

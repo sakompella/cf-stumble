@@ -27,17 +27,16 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
   const rpc = { settle: (): void => {} };
 
   const host: ProvisionWorkspaceHost = {
-    provision: (request) =>
-      request.step === "clone"
-        ? new Promise<WorkspaceResult>((resolve) => {
-            rpc.settle = () => {
-              resolve({
-                ok: true,
-                result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-              });
-            };
-          })
-        : Promise.resolve({ ok: true, result: { kind: "written" } }),
+    provision: () =>
+      new Promise<WorkspaceResult>((resolve) => {
+        rpc.settle = () => {
+          resolve({
+            ok: true,
+            result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+          });
+        };
+      }),
+    ensureManagedInstructions: () => Promise.resolve({ ok: true, result: { kind: "written" } }),
   };
 
   const workspaceName = tenantWorkspaceName("interrupted-provision");

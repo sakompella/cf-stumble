@@ -67,11 +67,11 @@ class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
   }
 }
 
-class DelayedProjectHost implements ProvisionWorkspaceHost {
+/** Holds a project clone open. Its plan writes the managed instructions through the harness fake. */
+class DelayedProjectHost {
   readonly started: Promise<void>;
   private resolveStarted = () => {};
   private resolveClone: ((result: WorkspaceResult) => void) | undefined;
-  readonly requests: string[] = [];
 
   constructor() {
     this.started = new Promise((resolve) => {
@@ -79,22 +79,12 @@ class DelayedProjectHost implements ProvisionWorkspaceHost {
     });
   }
 
-  provision(request: { readonly step: "clone" | "instructions" }): Promise<WorkspaceResult> {
-    this.requests.push(request.step);
+  provision(): Promise<WorkspaceResult> {
+    this.resolveStarted();
 
-    if (this.requests.length === 1) {
-      this.resolveStarted();
-
-      return new Promise((resolve) => {
-        this.resolveClone = resolve;
-      });
-    }
-
-    return Promise.resolve(
-      request.step === "instructions"
-        ? { ok: true, result: { kind: "written" } }
-        : { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } },
-    );
+    return new Promise((resolve) => {
+      this.resolveClone = resolve;
+    });
   }
 
   release(): void {
@@ -203,5 +193,5 @@ test("excludes a harness provision while a project provision is in flight", asyn
   expect(Result.isSuccess(await project)).toBe(true);
   expect(Result.isSuccess(await harnessRun)).toBe(true);
   expect(harness.builds).toHaveLength(1);
-  expect(harness.instructions).toBe(1);
+  expect(harness.instructions, "each plan writes the managed instructions once").toBe(2);
 });

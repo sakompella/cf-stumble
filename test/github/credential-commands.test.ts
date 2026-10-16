@@ -47,8 +47,7 @@ test("the install command still takes the token from standard input only", () =>
 test("clone and harness provisioning export the durable configuration for private repositories", () => {
   const plan = planProjectProvision(sampleProjectOne);
 
-  const step = projectProvisionStep(plan, "clone");
-  const clone = step.name === "clone" ? step.source : "";
+  const clone = projectProvisionStep(plan, "clone").source;
 
   const harness = provisionHarnessRepository(
     HARNESS_BUILD_CONFIGURATION,
