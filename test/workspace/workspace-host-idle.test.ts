@@ -285,13 +285,19 @@ async function changesDuringReset(host: WorkspaceHost) {
       step: "install",
       token: FAKE_TOKEN,
     }),
+    credentialStatus: await host.credential({ kind: "github-credential", step: "status" }),
+    credentialRepositoryCheck: await host.credential({
+      kind: "github-credential",
+      step: "verify-repository",
+      repositoryUrl: sampleProjectOne.repositoryUrl,
+    }),
     reset: await host.reset(),
     capability: capabilityAnswer(host),
   };
 }
 
-test("while a reset runs, file changes, credential installs, project capabilities, and a second reset refuse", async () => {
-  const seen = await withHost("host-reset-exclusion", async (host, state) => {
+test("while a reset runs, file changes, credential requests, project capabilities, and a second reset refuse", async () => {
+  const seen = await withHost("host-reset-exclusion", async (host, state, container) => {
     const held = { release: (): void => {} };
 
     const deleting = new Promise<void>((resolve) => {
@@ -306,6 +312,7 @@ test("while a reset runs, file changes, credential installs, project capabilitie
     });
 
     const during = await changesDuringReset(host);
+    const startsDuring = container.starts;
 
     held.release();
     // The fake container cannot launch the replacement, so the restart step rejects.
@@ -314,25 +321,31 @@ test("while a reset runs, file changes, credential installs, project capabilitie
     return {
       during,
       deleteCalls: deleteAll.mock.calls.length,
+      startsDuring,
       afterwards: await host.build({ kind: "not-a-build" }),
     };
   });
 
   const changeBusy = { ok: false, error: { code: "workspace-busy" } };
 
+  const credentialRefused = {
+    ok: false,
+    error: { code: "workspace-unavailable", detail: "the workspace is resetting" },
+  };
+
   expect(seen.during).toEqual({
     build: changeBusy,
     provision: changeBusy,
     removeProject: changeBusy,
     ensureManagedInstructions: changeBusy,
-    credentialInstall: {
-      ok: false,
-      error: { code: "workspace-unavailable", detail: "the workspace is resetting" },
-    },
+    credentialInstall: credentialRefused,
+    credentialStatus: credentialRefused,
+    credentialRepositoryCheck: credentialRefused,
     reset: { ok: false, problem: { code: "workspace-busy" } },
     capability: "refused",
   });
   expect(seen.deleteCalls, "the second reset deleted nothing").toBe(1);
+  expect(seen.startsDuring, "no refused request reached the container").toBe(0);
   expect(seen.afterwards, "the exclusion ends with the reset").toEqual({
     ok: false,
     error: { code: "invalid-request" },
