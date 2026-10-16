@@ -29,10 +29,10 @@ export type ModuleMapProblem =
 export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;
 
 /**
- * The Supervisor's module maps. There are two ways in and they are deliberately unequal.
- * `prepare` runs at submission and may build a commit that has nothing stored. `retain` stores a
- * map the caller already holds. Serving reads what is stored and never builds, so activating or
- * rolling back to a generation that is ready cannot depend on Computer being reachable.
+ * The Supervisor's module maps. The one way in is `prepare`, which runs at submission and may
+ * build a commit that has nothing stored. Serving reads what is stored and never builds, so
+ * activating or rolling back to a generation that is ready cannot depend on Computer being
+ * reachable.
  */
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
@@ -89,15 +89,6 @@ export class HarnessArtifacts {
     });
   }
 
-  /** Store a module map the caller already holds, replacing whatever that commit had stored. */
-  retain(
-    input: MainHarnessArtifactInput,
-  ): Result.Result<MainHarnessArtifactInput, ModuleMapProblem> {
-    return MainHarnessArtifact.parse(input).pipe(
-      Result.flatMap((artifact) => this.store.write(artifact)),
-    );
-  }
-
   /**
    * Mount the generation that serves. This waits for nothing: the module map is already in the
    * Durable Object's own SQLite, and reading it is synchronous.
@@ -126,8 +117,8 @@ export class HarnessArtifacts {
    * The module map of the generation that serves, read and nothing else. There is no built-in
    * alternative and no build: a Supervisor with no active generation reports
    * `no-active-generation`, and an active generation whose map is not stored reports that rather
-   * than rebuilding it. A generation only becomes ready once `prepare` or `retain` stored its map,
-   * so activation and rollback both load bytes that are already there.
+   * than rebuilding it. A generation only becomes ready once `prepare` stored its map, so
+   * activation and rollback both load bytes that are already there.
    */
   private load(
     active: ActiveGeneration,
@@ -187,9 +178,9 @@ function validatedBuild(
 }
 
 /**
- * `retain`, `mount`, and this group's builders all take these two as arguments, so every caller of
- * the group needs their types. Re-exporting them here means a caller does not reach into
- * `facet/index.js` for the parameter types of a method it is calling here.
+ * `mount` and this group's builders take these two as arguments, so every caller of the group
+ * needs their types. Re-exporting them here means a caller does not reach into `facet/index.js`
+ * for the parameter types of a method it is calling here.
  */
 export type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 

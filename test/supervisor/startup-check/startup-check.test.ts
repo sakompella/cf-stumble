@@ -8,6 +8,8 @@ import {
   commits,
   expectFailedCandidate,
   labelCandidate,
+  prepareWithModuleMap,
+  storeModuleMap,
 } from "../helpers.js";
 
 afterEach(async () => {
@@ -18,7 +20,8 @@ test("records a generation as ready when its candidate completes an ordinary req
   const control = await activeSupervisor("startup-check-ordinary");
   const label = await labelCandidate(control, commits.ordinary);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.ordinary,
@@ -42,7 +45,8 @@ test("records a 400 response as failed at the response stage", async () => {
   const control = await activeSupervisor("startup-check-client-error-response");
   const label = await labelCandidate(control, commits.notFound);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.notFound,
@@ -63,7 +67,8 @@ test("records a parse-invalid candidate as failed before headers", async () => {
   const control = await activeSupervisor("startup-check-parse");
   const label = await labelCandidate(control, commits.parse);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(commits.parse, "export class MainFacet extends {"),
   );
@@ -84,7 +89,8 @@ test("records a candidate without MainFacet as failed before headers", async () 
   const control = await activeSupervisor("startup-check-missing-facet");
   const label = await labelCandidate(control, commits.missingFacet);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.missingFacet,
@@ -100,7 +106,8 @@ test("records a constructor-throwing candidate as failed before headers", async 
   const control = await activeSupervisor("startup-check-constructor");
   const label = await labelCandidate(control, commits.constructor);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.constructor,
@@ -125,7 +132,8 @@ test("records a first-request throw as failed before headers", async () => {
   const control = await activeSupervisor("startup-check-request");
   const label = await labelCandidate(control, commits.request);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.request,
@@ -146,7 +154,8 @@ test("records a 500 response as failed at the response stage", async () => {
   const control = await activeSupervisor("startup-check-error-response");
   const label = await labelCandidate(control, commits.errorResponse);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.errorResponse,
@@ -167,7 +176,8 @@ test("records a candidate that never sends headers as failed at the deadline", a
   const control = await activeSupervisor("startup-check-delayed");
   const label = await labelCandidate(control, commits.delayed);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.delayed,
@@ -192,7 +202,8 @@ test("records a body above the byte bound as failed at the body stage", async ()
   const control = await activeSupervisor("startup-check-oversized");
   const label = await labelCandidate(control, commits.oversized);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.oversized,
@@ -207,51 +218,6 @@ export class MainFacet extends DurableObject {
 
   expect(result).toMatchObject({ ok: true, report: { stage: "body-failed" } });
   await expectFailedCandidate(control, label);
-});
-
-test("rejects a different harness commit without changing the labeled generation", async () => {
-  const control = await activeSupervisor("startup-check-mismatch");
-  const label = await labelCandidate(control, commits.mismatch);
-
-  const result = await control.checkGenerationStartup(
-    label,
-    artifact(
-      commits.ordinary,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  fetch() { return new Response("wrong generation"); }
-}
-`,
-    ),
-  );
-
-  expect(result).toEqual({
-    ok: false,
-    problem: {
-      code: "artifact-harness-commit-mismatch",
-      label,
-      generationHarnessCommit: commits.mismatch,
-      artifactHarnessCommit: commits.ordinary,
-    },
-  });
-  expect(await control.getGeneration(label)).toMatchObject({ status: "candidate" });
-  expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
-});
-
-test("rejects an invalid artifact without changing the labeled generation", async () => {
-  const control = await activeSupervisor("startup-check-malformed-artifact");
-  const label = await labelCandidate(control, commits.malformed);
-
-  const result = await control.checkGenerationStartup(label, {
-    harnessCommit: commits.malformed,
-    entryModule: "missing.js",
-    modules: [],
-  });
-
-  expect(result).toEqual({ ok: false, problem: { code: "empty-module-map" } });
-  expect(await control.getGeneration(label)).toMatchObject({ status: "candidate" });
-  expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
 });
 
 test("remounts a checked generation instead of reusing its warm candidate instance", async () => {
@@ -276,8 +242,9 @@ export class MainFacet extends DurableObject {
 `,
   );
 
-  const first = await control.checkGenerationStartup(label, candidate);
-  const second = await control.checkGenerationStartup(label, candidate);
+  await storeModuleMap(control, candidate);
+  const first = await control.prepareGeneration(label);
+  const second = await control.prepareGeneration(label);
 
   expect(first).toMatchObject({ ok: true, report: { stage: "ready", status: 200 } });
   expect(second).toMatchObject({

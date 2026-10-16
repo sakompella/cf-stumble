@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { artifact } from "./helpers.js";
+import { artifact, prepareWithModuleMap } from "./helpers.js";
 
 // The Worker Loader caches by harness commit, so a second source under a reused commit is ignored.
 const deadlineCommit = "cafe456789abcdef0123456789abcdef01234567";
@@ -22,6 +22,7 @@ test("the Supervisor stub type offers controlGeneration and no raw generation mu
   expectTypeOf(control).not.toHaveProperty("labelGeneration");
   expectTypeOf(control).not.toHaveProperty("recordPreparationCheck");
   expectTypeOf(control).not.toHaveProperty("activateGeneration");
+  expectTypeOf(control).not.toHaveProperty("checkGenerationStartup");
   expectTypeOf(control).toHaveProperty("controlGeneration");
 });
 
@@ -37,7 +38,8 @@ test("startup checking returns plain RPC values", async () => {
     throw new Error("a valid candidate submission must succeed");
   }
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     submission.outcome.generation.label,
     artifact(
       deadlineCommit,
@@ -68,43 +70,31 @@ export class MainFacet extends DurableObject {
   expect(result.report).not.toHaveProperty("cause");
 });
 
+/**
+ * The Supervisor holds a real build workspace builder, and a Workspace Host cannot start its
+ * container in the test pool, so a commit with no stored module map fails to build.
+ */
 test("the failure arms of startup checking return plain RPC values", async () => {
   const control = supervisor("plain-startup-check-failures");
-  const otherCommit = "cafe456789abcdef0123456789abcdef01234568";
+  const unstoredCommit = "cafe456789abcdef0123456789abcdef01234568";
 
   const submission = await control.controlGeneration({
     principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit: deadlineCommit },
+    command: { kind: "submit-candidate", harnessCommit: unstoredCommit },
   });
 
   if (!submission.ok) {
     throw new Error("a valid candidate submission must succeed");
   }
 
-  const label = submission.outcome.generation.label;
-
   const failures = [
     await control.prepareGeneration(999),
-    await control.checkGenerationStartup(label, artifact(otherCommit, "export {};")),
-    await control.checkGenerationStartup(label, {
-      harnessCommit: deadlineCommit,
-      entryModule: "missing.js",
-      modules: [{ name: "main.js", source: "" }],
-    }),
+    await control.prepareGeneration(submission.outcome.generation.label),
   ];
 
   expect(failures).toStrictEqual([
     { ok: false, problem: { code: "unknown-generation", label: 999 } },
-    {
-      ok: false,
-      problem: {
-        code: "artifact-harness-commit-mismatch",
-        label,
-        generationHarnessCommit: deadlineCommit,
-        artifactHarnessCommit: otherCommit,
-      },
-    },
-    { ok: false, problem: { code: "entry-module-not-found", entryModule: "missing.js" } },
+    { ok: false, problem: { code: "build-workspace-unavailable", harnessCommit: unstoredCommit } },
   ]);
   // A structured clone of a class instance is a plain object, so a value strictly equal to its own
   // clone holds plain objects only: no Result, no error class, no prototype.

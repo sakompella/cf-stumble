@@ -57,6 +57,12 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
   The Supervisor caches the credential; Workers AI answers until a connection exists. See
   ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers
   from Workers AI only.
+- **A generation is prepared only from its harness commit** (owner, 2026-10-16). The Supervisor
+  no longer has `checkGenerationStartup`, the RPC that checked and stored a module map the caller
+  supplied. No route called it, but it let any holder of the binding store executable code that
+  no build produced. `prepareGeneration` reads the stored map for the commit or builds it. Tests
+  write a stored map first (`storeModuleMap` in `test/supervisor/helpers.ts`), then call
+  `prepareGeneration`.
 
 ## Open items
 

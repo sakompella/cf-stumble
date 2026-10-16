@@ -5,7 +5,13 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { containsCredential } from "../../src/github/index.js";
 import { forwardToFacet, type Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateGeneration, activeSupervisor, artifact, submitCandidate } from "./helpers.js";
+import {
+  activateGeneration,
+  activeSupervisor,
+  artifact,
+  prepareWithModuleMap,
+  submitCandidate,
+} from "./helpers.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -44,7 +50,7 @@ async function activateServingCandidate(
   harnessCommit: string,
 ): Promise<void> {
   const candidate = await submitCandidate(control, harnessCommit);
-  const startup = await control.checkGenerationStartup(candidate, servingArtifact(harnessCommit));
+  const startup = await prepareWithModuleMap(control, candidate, servingArtifact(harnessCommit));
 
   if (!startup.ok || startup.report.stage !== "ready") {
     throw new Error("the candidate must pass startup before activation");
@@ -104,7 +110,8 @@ test("keeps the active retained artifact when a failed candidate cannot activate
     "f123456789abcdef0123456789abcdef01234567",
   );
 
-  const failedStartup = await control.checkGenerationStartup(
+  const failedStartup = await prepareWithModuleMap(
+    control,
     failedCandidate,
     failingArtifact("f123456789abcdef0123456789abcdef01234567"),
   );

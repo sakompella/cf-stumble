@@ -10,7 +10,12 @@ import {
   signingKey,
 } from "../access-tokens.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
-import { activateGeneration, artifact, submitCandidate } from "../supervisor/helpers.js";
+import {
+  activateGeneration,
+  artifact,
+  prepareWithModuleMap,
+  submitCandidate,
+} from "../supervisor/helpers.js";
 
 /**
  * The owner as the Worker sees them: a signed Access token, the page's own origin, and the
@@ -86,7 +91,8 @@ export async function servingScriptedGeneration(
 ): Promise<void> {
   const label = await submitCandidate(owner.supervisor, SCRIPTED_HARNESS_COMMIT);
 
-  const checked = await owner.supervisor.checkGenerationStartup(
+  const checked = await prepareWithModuleMap(
+    owner.supervisor,
     label,
     artifact(SCRIPTED_HARNESS_COMMIT, source),
   );

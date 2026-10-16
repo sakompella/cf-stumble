@@ -7,7 +7,7 @@ import * as Result from "effect/Result";
 import { loadMainFacet } from "../../../src/facet/index.js";
 import { parseHarnessCommit } from "../../../src/harness-commit.js";
 import { moduleMapFromBuildOutput } from "../../../src/supervisor/artifacts/index.js";
-import { submitCandidate } from "../../supervisor/helpers.js";
+import { prepareWithModuleMap, submitCandidate } from "../../supervisor/helpers.js";
 import type { BuiltModuleMapFile } from "../../../src/supervisor/artifacts/index.js";
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
 
@@ -86,7 +86,7 @@ test("a cold facet from the built module map passes the GET / startup check", as
 
   const control = env.SUPERVISOR.getByName("generation-0-module-map");
   const label = await submitCandidate(control, GENERATION_0_COMMIT);
-  const checked = await control.checkGenerationStartup(label, validated.success);
+  const checked = await prepareWithModuleMap(control, label, validated.success);
 
   expect(checked.ok).toBe(true);
 

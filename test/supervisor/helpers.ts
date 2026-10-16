@@ -22,8 +22,6 @@ export const commits = {
   errorResponse: "6123456789abcdef0123456789abcdef01234567",
   delayed: "7123456789abcdef0123456789abcdef01234567",
   oversized: "8123456789abcdef0123456789abcdef01234567",
-  mismatch: "9123456789abcdef0123456789abcdef01234567",
-  malformed: "a123456789abcdef0123456789abcdef01234567",
   fresh: "b123456789abcdef0123456789abcdef01234567",
 } as const;
 
@@ -168,12 +166,27 @@ export function labelCandidate(
   return submitCandidate(control, harnessCommit);
 }
 
+/**
+ * Prepare a labeled generation through the Supervisor's own `prepareGeneration`, from a module map
+ * stored for its commit first, so the preparation reads that map instead of building one.
+ */
+export async function prepareWithModuleMap(
+  control: DurableObjectStub<Supervisor>,
+  label: number,
+  moduleMap: MainHarnessArtifactInput,
+  options?: Parameters<Supervisor["prepareGeneration"]>[1],
+) {
+  await storeModuleMap(control, moduleMap);
+
+  return control.prepareGeneration(label, options);
+}
+
 export async function prepareGeneration(
   control: DurableObjectStub<Supervisor>,
   label: number,
   harnessCommit: string,
 ): Promise<void> {
-  const result = await control.checkGenerationStartup(label, readyArtifact(harnessCommit));
+  const result = await prepareWithModuleMap(control, label, readyArtifact(harnessCommit));
 
   if (!result.ok || result.report.stage !== "ready") {
     throw new Error("a valid generation must pass startup checking");
