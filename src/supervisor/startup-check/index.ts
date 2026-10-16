@@ -5,10 +5,8 @@ import type { StartupCheckOutcome } from "./body.js";
 
 import { parseGenerationLabel } from "../generations/index.js";
 import { timedEffect, type TimedOutcome } from "../../diagnostics.js";
-import type { HarnessArtifacts } from "../artifacts/index.js";
+import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
-import { startupModuleMap } from "./module-map.js";
-import type { StartupModuleMapProblem, StartupModuleMapSource } from "./module-map.js";
 
 import type { Generation, Generations, PreparationCheckProblem } from "../generations/index.js";
 
@@ -41,7 +39,7 @@ type StartupCheckReport = StartupCheckOutcome & {
 
 type StartupCheckProblem =
   | { readonly code: "unknown-generation"; readonly label: number }
-  | StartupModuleMapProblem
+  | ModuleMapProblem
   | PreparationCheckProblem;
 
 export type StartupCheckResult =
@@ -49,19 +47,18 @@ export type StartupCheckResult =
   | { readonly ok: false; readonly problem: StartupCheckProblem };
 
 /**
- * Check a labeled generation's module map from `source` and record the outcome against the
- * generation. The check is logged by label and source, with how long it took and the stage it
- * reached. The Supervisor returns the plain union over RPC from checkGenerationStartup and
- * prepareGeneration (ADR-0045), so every expected failure is already a value here.
+ * Check a labeled generation's module map, stored or built from its commit, and record the outcome
+ * against the generation. The check is logged by label, with how long it took and the stage it
+ * reached. The Supervisor returns the plain union over RPC from prepareGeneration (ADR-0045), so
+ * every expected failure is already a value here.
  */
 export function checkGenerationStartup(
   host: StartupCheckHost,
   label: number,
-  source: StartupModuleMapSource,
   options: StartupCheckOptions = {},
 ): Effect.Effect<StartupCheckResult> {
-  return checkLabeledStartup(host, label, source, options).pipe(
-    timedEffect("generation.preparation", { label, source: source.kind }, preparationOutcome),
+  return checkLabeledStartup(host, label, options).pipe(
+    timedEffect("generation.preparation", { label }, preparationOutcome),
     Effect.match({
       onSuccess: (report): StartupCheckResult => ({ ok: true, report }),
       onFailure: (problem): StartupCheckResult => ({ ok: false, problem }),
@@ -92,7 +89,6 @@ function preparationOutcome(
 function checkLabeledStartup(
   host: StartupCheckHost,
   label: number,
-  source: StartupModuleMapSource,
   options: StartupCheckOptions,
 ): Effect.Effect<StartupCheckReport, StartupCheckProblem> {
   return Effect.gen(function* () {
@@ -105,7 +101,7 @@ function checkLabeledStartup(
       return yield* Effect.fail<StartupCheckProblem>({ code: "unknown-generation", label });
     }
 
-    const moduleMap = yield* startupModuleMap(host.artifacts, generation, generationLabel, source);
+    const moduleMap = yield* host.artifacts.prepare(generation.harnessCommit);
 
     const outcome = yield* Effect.promise(() =>
       runStartupCheck(host, moduleMap, generation.harnessCommit, {

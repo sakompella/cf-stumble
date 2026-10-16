@@ -105,7 +105,7 @@ test("a preparation check logs its label, its outcome, and how long it took", as
   await prepareGeneration(control, label, commits.ordinary);
 
   const [prepared] = named(events(), "generation.preparation");
-  expect(prepared).toMatchObject({ level: "info", label, source: "submitted", outcome: "ready" });
+  expect(prepared).toMatchObject({ level: "info", label, outcome: "ready" });
   expect(prepared?.durationMs).toBeGreaterThanOrEqual(0);
 });
 

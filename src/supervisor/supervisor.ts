@@ -65,7 +65,6 @@ import {
   HarnessArtifacts,
   type BuildWorkspaceNamespace,
   type MainFacetCapabilities,
-  type MainHarnessArtifactInput,
 } from "./artifacts/index.js";
 import type {
   HarnessProvisionWorkspaceNamespace,
@@ -213,30 +212,13 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.artifacts.mount(active, this.env.LOADER, this.ctx.facets, this.#modelRoute());
   }
 
-  checkGenerationStartup(
-    label: number,
-    artifact: MainHarnessArtifactInput,
-    options?: StartupCheckOptions,
-  ): Promise<StartupCheckResult> {
-    return runAtEntryPoint(
-      checkGenerationStartup(
-        this.startupCheckHost,
-        label,
-        { kind: "submitted", input: artifact },
-        options,
-      ),
-    );
-  }
-
   /**
    * Prepare a labeled generation from its harness commit: read the stored module map or build the
    * commit and store it, then run the bounded startup check. This never changes the active
    * generation.
    */
   prepareGeneration(label: number, options?: StartupCheckOptions): Promise<StartupCheckResult> {
-    return runAtEntryPoint(
-      checkGenerationStartup(this.startupCheckHost, label, { kind: "prepared" }, options),
-    );
+    return runAtEntryPoint(checkGenerationStartup(this.startupCheckHost, label, options));
   }
 
   getActiveGeneration(): ActiveGeneration {

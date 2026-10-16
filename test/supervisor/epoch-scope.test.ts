@@ -3,14 +3,8 @@
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { fixtureMainHarnessCommit } from "../facet/fixture.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import {
-  activateFixtureGeneration,
-  prepareGeneration,
-  readyArtifact,
-  submitCandidate,
-} from "./helpers.js";
+import { activateFixtureGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -97,10 +91,7 @@ test("a repeated passing check advances the epoch and rejects an activation from
   const beforeRecheck = await control.getActiveGeneration();
   const checksBefore = await control.getPreparationCheckHistory(0);
 
-  const rechecked = await control.checkGenerationStartup(
-    0,
-    readyArtifact(fixtureMainHarnessCommit),
-  );
+  const rechecked = await control.prepareGeneration(0);
 
   const checksAfter = await control.getPreparationCheckHistory(0);
   const afterRecheck = await control.getActiveGeneration();

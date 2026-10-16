@@ -1,7 +1,13 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { expect, test } from "vitest";
-import { activeSupervisor, artifact, expectFailedCandidate, labelCandidate } from "../helpers.js";
+import {
+  activeSupervisor,
+  artifact,
+  expectFailedCandidate,
+  labelCandidate,
+  prepareWithModuleMap,
+} from "../helpers.js";
 
 /**
  * A candidate whose successful headers arrive in time can still fail the startup check while its
@@ -20,7 +26,8 @@ test("records a body that fails after successful headers as failed at the body s
   const control = await activeSupervisor("startup-check-failing-body");
   const label = await labelCandidate(control, commits.failing);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.failing,
@@ -54,7 +61,8 @@ test("records a body that never completes as failed at the deadline", async () =
   const control = await activeSupervisor("startup-check-stalled-body");
   const label = await labelCandidate(control, commits.stalled);
 
-  const result = await control.checkGenerationStartup(
+  const result = await prepareWithModuleMap(
+    control,
     label,
     artifact(
       commits.stalled,

@@ -5,7 +5,7 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { artifact, prepareGeneration, submitCandidate } from "../helpers.js";
+import { artifact, prepareGeneration, storeModuleMap, submitCandidate } from "../helpers.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -91,10 +91,10 @@ test("keeps the first preparation outcome and refuses a later contradicting one"
   const control = supervisor("records-one-preparation-outcome");
   const label = await submitCandidate(control, secondHarnessCommit);
 
-  const preparationArtifact = stagedPreparationArtifact(secondHarnessCommit);
-  const recorded = await control.checkGenerationStartup(label, preparationArtifact);
-  const repeated = await control.checkGenerationStartup(label, preparationArtifact);
-  const contradicted = await control.checkGenerationStartup(label, preparationArtifact);
+  await storeModuleMap(control, stagedPreparationArtifact(secondHarnessCommit));
+  const recorded = await control.prepareGeneration(label);
+  const repeated = await control.prepareGeneration(label);
+  const contradicted = await control.prepareGeneration(label);
 
   if (!recorded.ok || !repeated.ok) {
     throw new Error("a labeled generation must accept its first preparation check");
