@@ -145,6 +145,28 @@ test("a thread read for a project the reader left is dropped", () => {
   expect(update(switched, stale).model).toEqual(switched);
 });
 
+test("a project whose thread read is refused shows none of the previous project's thread facts", () => {
+  const first = after(readyPage(), [
+    Message.SucceededFetchThread({
+      selection: 1,
+      isQuiet: false,
+      thread: { ...THREAD, revision: "7", turnActive: "yes", messageCount: "4" },
+    }),
+  ]);
+
+  const refused = after(first, [
+    Message.ClickedProject({ projectId: "harness" }),
+    Message.RejectedFetchThread({ selection: first.selection + 1, wording: "rejected: busy" }),
+  ]);
+
+  expect(refused.conversationState).toBe("rejected: busy");
+  expect(refused).toMatchObject({
+    threadRevision: "",
+    threadTurnActive: "",
+    threadMessageCount: "",
+  });
+});
+
 test("cancelling ends the turn here and re-reads the thread", () => {
   const model = streaming(readyPage());
   const cancelled = update(model, Message.ClickedCancelTurn());

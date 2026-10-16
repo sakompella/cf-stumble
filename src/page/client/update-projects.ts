@@ -45,6 +45,9 @@ function selectProject(model: Model, project: Project): UpdateReturn {
       transcript: [],
       isAssistantOpen: false,
       conversationState: "reading",
+      threadRevision: "",
+      threadTurnActive: "",
+      threadMessageCount: "",
     },
     commands: [FetchThread({ projectId: project.id, selection, isQuiet: false })],
   };
