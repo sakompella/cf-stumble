@@ -5,11 +5,17 @@
 #   scripts/vendor/verify-computer-tarball.sh
 #
 # Exits 0 if the freshly built tarball matches the vendored checksum, 1 otherwise.
+#
+# The vendored tarball was built from cloudflare/computer at COMMIT. The expected digest is
+# tracked in vendor/cloudflare-computer-0.3.0.tgz.sha256. `pnpm verify:vendor` checks that digest
+# against the vendored blob on every run. This script goes further and rebuilds from COMMIT. A
+# matching digest proves the blob is byte-identical to the one recorded; it does not by itself
+# prove the blob came from COMMIT, which only this rebuild shows.
 
 set -euo pipefail
 
 COMMIT="12336475c9fd03f5280a4537a707797fc0131fbd"
-EXPECTED_CHECKSUM="$(awk '!/^#/{print $1}' "$(dirname "$0")/../../.audit/evidence/computer-tarball-checksum.txt")"
+EXPECTED_CHECKSUM="$(awk '{print $1}' "$(dirname "$0")/../../vendor/cloudflare-computer-0.3.0.tgz.sha256")"
 WORKDIR="$(mktemp -d)"
 
 cleanup() { rm -rf "$WORKDIR"; }
