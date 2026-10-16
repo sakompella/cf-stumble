@@ -5,7 +5,7 @@ import {
   FakeProjectTransactions,
 } from "../../workspace/project/fakes.js";
 import type {
-  ProjectFileInfo,
+  ProjectListing,
   ProjectLstatInfo,
   ProjectResult,
   ProjectRpcTargetContract,
@@ -94,7 +94,7 @@ export class FakeProjectCapability implements ProjectRpcTargetContract, Disposab
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the RPC boundary contract the real target declares.
-  listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>> {
+  listFiles(path: unknown): Promise<ProjectResult<ProjectListing>> {
     return this.#live().listFiles(path);
   }
 

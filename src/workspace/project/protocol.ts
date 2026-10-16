@@ -10,6 +10,12 @@ export const MAX_CONCURRENT_EXECS = 8;
 
 export const MAX_EXEC_FRAME_BYTES = 65_536;
 
+/** The most entries one `listFiles` call returns. */
+export const MAX_LIST_ENTRIES = 1_000;
+
+/** The most UTF-8 bytes of entry paths one `listFiles` call returns. */
+export const MAX_LIST_BYTES = 65_536;
+
 export type ProjectErrorCode =
   | "not-found"
   | "not-directory"
@@ -39,6 +45,9 @@ export type ProjectFileInfo = {
   mtimeMs: number;
 };
 
+/** `truncated` is true when the directory held more than the listing bounds allow. */
+export type ProjectListing = { entries: readonly ProjectFileInfo[]; truncated: boolean };
+
 export type ProjectLstatInfo = ProjectFileInfo & { canonicalPath: ProjectResult<string> };
 
 export type WriteMode = "overwrite" | "append" | "create-exclusive";
@@ -59,7 +68,7 @@ export interface ProjectRpcTargetContract {
   lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>>;
   readFile(path: unknown): Promise<ProjectResult<Uint8Array>>;
   writeFile(path: unknown, bytes: unknown, mode: unknown): Promise<ProjectResult<null>>;
-  listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>>;
+  listFiles(path: unknown): Promise<ProjectResult<ProjectListing>>;
   startExec(
     input: unknown,
   ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<Uint8Array> }>>;

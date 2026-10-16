@@ -21,8 +21,11 @@ import {
   fail,
   MAX_CONCURRENT_EXECS,
   MAX_FILE_BYTES,
+  MAX_LIST_BYTES,
+  MAX_LIST_ENTRIES,
   ok,
   type ProjectFileInfo,
+  type ProjectListing,
   type ProjectLstatInfo,
   type ProjectResult,
   type ProjectFailure,
@@ -121,7 +124,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#listFiles` parses `path`.
-  listFiles(path: unknown): Promise<ProjectResult<readonly ProjectFileInfo[]>> {
+  listFiles(path: unknown): Promise<ProjectResult<ProjectListing>> {
     return this.#whileTurnLasts(() => this.#listFiles(path));
   }
 
@@ -457,7 +460,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
-  #listFiles(path: unknown): ProjectResult<readonly ProjectFileInfo[]> {
+  #listFiles(path: unknown): ProjectResult<ProjectListing> {
     const segments = parseAddressedPath(path);
 
     if (!segments.ok) return segments;
@@ -478,19 +481,28 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     const directoryPath = outcome.value.path;
 
     try {
-      const entries = this.#provider.readdirSync(directoryPath, { withFileTypes: true });
+      const names = this.#provider
+        .readdirSync(directoryPath, { withFileTypes: true })
+        .map((entry) => entry.name)
+        .toSorted((a, b) => a.localeCompare(b));
 
-      const infos = entries.map((entry) => {
-        const childProviderPath = joinOne(directoryPath, entry.name);
-        const childAddressed = joinOne(addressedPathOf(segments.value), entry.name);
+      const entries: ProjectFileInfo[] = [];
+      let bytes = 0;
+
+      for (const name of names) {
+        const childAddressed = joinOne(addressedPathOf(segments.value), name);
+        bytes += new TextEncoder().encode(childAddressed).length;
+
+        if (entries.length >= MAX_LIST_ENTRIES || bytes > MAX_LIST_BYTES) {
+          return ok({ entries, truncated: true });
+        }
+
+        const childProviderPath = joinOne(directoryPath, name);
         const stat = this.#provider.lstatSync(childProviderPath);
+        entries.push(fileInfoOf(this.#provider, name, childAddressed, childProviderPath, stat));
+      }
 
-        return fileInfoOf(this.#provider, entry.name, childAddressed, childProviderPath, stat);
-      });
-
-      infos.sort((a, b) => a.name.localeCompare(b.name));
-
-      return ok(infos);
+      return ok({ entries, truncated: false });
     } catch (error) {
       return fail(mapProviderError(error), addressedPathOf(segments.value));
     }

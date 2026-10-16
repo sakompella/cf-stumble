@@ -46,7 +46,7 @@ test("listFiles through a symlinked directory lists the real directory", async (
   const listing = await target.listFiles("/dir-link");
   expect(listing.ok).toBe(true);
 
-  if (listing.ok) expect(listing.value.map((entry) => entry.name)).toEqual(["a.txt"]);
+  if (listing.ok) expect(listing.value.entries.map((entry) => entry.name)).toEqual(["a.txt"]);
 });
 
 test("lstat's canonicalPath resolves the full symlink chain", async () => {
