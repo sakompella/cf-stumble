@@ -201,9 +201,9 @@ export class ChatGPTConnection {
     logEvent("error", "chatgpt.provider-refused");
   }
 
-  /** The plan's usage limit refused a call. The connection stays connected. */
-  markUsageLimited(limitedUntil: number | null): void {
-    this.store.markUsageLimited({ reachedAt: this.clock(), limitedUntil });
+  /** The plan's usage limit refused a call sent with this token. The connection stays connected. */
+  markUsageLimited(accessToken: string, limitedUntil: number | null): void {
+    this.store.markUsageLimited(accessToken, { reachedAt: this.clock(), limitedUntil });
   }
 
   /** The recorded usage limit, unless the end OpenAI named has passed. */

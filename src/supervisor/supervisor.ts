@@ -426,10 +426,21 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     if (typeof accessToken === "string") this.chatgpt.markRefused(accessToken);
   }
 
-  /** The model route met the plan's usage limit; `limitedUntil` is when it ends, if OpenAI said. */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
-  markChatGPTUsageLimited(limitedUntil: unknown): void {
+  /**
+   * The model route met the plan's usage limit with `accessToken`; `limitedUntil` is when it ends,
+   * if OpenAI said.
+   */
+  markChatGPTUsageLimited(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+    accessToken: unknown,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+    limitedUntil: unknown,
+  ): void {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
+    if (typeof accessToken !== "string") return;
+
     this.chatgpt.markUsageLimited(
+      accessToken,
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
       typeof limitedUntil === "number" && Number.isFinite(limitedUntil) ? limitedUntil : null,
     );

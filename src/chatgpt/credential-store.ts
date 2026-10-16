@@ -185,12 +185,18 @@ export class ChatGPTCredentialStore {
       : { reachedAt: row.reached_at, limitedUntil: row.limited_until };
   }
 
-  /** Replaces any earlier usage limit. */
-  markUsageLimited(limit: StoredUsageLimit): void {
+  /**
+   * Replaces any earlier usage limit, only while `accessToken` is still the stored, connected one,
+   * so a late report from a replaced credential cannot pause a newer sign-in.
+   */
+  markUsageLimited(accessToken: string, limit: StoredUsageLimit): void {
     this.sql.exec(
-      "INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until) VALUES (1, ?, ?)",
+      `INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until)
+       SELECT 1, ?, ? FROM chatgpt_connection
+       WHERE id = 1 AND status = 'connected' AND access_token = ?`,
       limit.reachedAt,
       limit.limitedUntil,
+      accessToken,
     );
   }
 

@@ -3,8 +3,20 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { ChatGPTCredentialStore } from "../../src/chatgpt/index.js";
-import { ACCESS_ONE, CLIENT_ID, REFRESH_ONE } from "./fixtures.js";
+import * as Effect from "effect/Effect";
+import {
+  type ChatGPTConnection,
+  ChatGPTCredentialStore,
+  chatgptTurn,
+} from "../../src/chatgpt/index.js";
+import {
+  ACCESS_ONE,
+  ACCESS_TWO,
+  CLIENT_ID,
+  heldReply,
+  REFRESH_ONE,
+  REFRESH_TWO,
+} from "./fixtures.js";
 import { access, connected, HOUR, withConnection } from "./connection-harness.js";
 
 /** A ChatGPT usage limit: it keeps the connection, and the owner's view says it was reached. */
@@ -22,7 +34,7 @@ test("a usage limit with a reset time skips ChatGPT until then, and the view say
     const reachedAt = clock.now;
     const limitedUntil = reachedAt + 60_000;
 
-    connection.markUsageLimited(limitedUntil);
+    connection.markUsageLimited(ACCESS_ONE, limitedUntil);
 
     expect(connection.view().connection).toEqual({
       state: "connected",
@@ -43,7 +55,7 @@ test("a usage limit without a reset time shows until ChatGPT is asked again", as
     connected(harness);
     const { connection, clock } = harness;
 
-    connection.markUsageLimited(null);
+    connection.markUsageLimited(ACCESS_ONE, null);
 
     expect(connection.view().connection).toMatchObject({
       state: "connected",
@@ -59,16 +71,84 @@ test("a new sign-in and a disconnect forget a usage limit", async () => {
     connected(harness);
     const { connection, clock } = harness;
 
-    connection.markUsageLimited(clock.now + HOUR);
+    connection.markUsageLimited(ACCESS_ONE, clock.now + HOUR);
     connected(harness);
     expect(connection.view().connection).not.toHaveProperty("usageLimit");
 
-    connection.markUsageLimited(clock.now + HOUR);
+    connection.markUsageLimited(ACCESS_ONE, clock.now + HOUR);
     connection.disconnect();
     connected(harness);
     expect(connection.view().connection).not.toHaveProperty("usageLimit");
 
     return Promise.resolve();
+  });
+});
+
+/** A ChatGPT call over `connection` whose provider answers only when the test releases it. */
+function heldCall(connection: ChatGPTConnection) {
+  const provider = heldReply();
+  let markSent: (() => void) | undefined;
+
+  const sent = new Promise<void>((resolve) => {
+    markSent = resolve;
+  });
+
+  const outcome = Effect.runPromise(
+    chatgptTurn(
+      {
+        credential: {
+          access: (rejected) => access(connection, rejected),
+          markRefused: () => Promise.reject(new Error("no refusal is expected")),
+          markUsageLimited: (token, limitedUntil) => {
+            connection.markUsageLimited(token, limitedUntil);
+
+            return Promise.resolve();
+          },
+        },
+        fetcher: () => {
+          markSent?.();
+
+          return provider.reply;
+        },
+        model: "gpt-test",
+      },
+      { messages: [{ role: "user", content: "hi" }] },
+    )(() => {}).pipe(
+      Effect.as("answered"),
+      Effect.catchTag("ChatGPTUsageLimited", () => Effect.succeed("usage-limited")),
+    ),
+  );
+
+  return { sent, release: provider.release, outcome };
+}
+
+test("a usage limit an old call meets after a new sign-in does not pause the new account", async () => {
+  await withConnection("chatgpt-limit-stale", noTokenServer, async (harness) => {
+    connected(harness);
+    const { connection, store, clock } = harness;
+    const call = heldCall(connection);
+
+    await call.sent;
+    connection.disconnect();
+    store.connect(
+      {
+        accessToken: ACCESS_TWO,
+        refreshToken: REFRESH_TWO,
+        expiresAt: clock.now + HOUR,
+        clientId: CLIENT_ID,
+      },
+      clock.now,
+    );
+    call.release(
+      Response.json(
+        { error: { code: "subscription_sharing_usage_limit_exceeded" } },
+        { status: 429, headers: { "retry-after": "3600" } },
+      ),
+    );
+
+    await expect(call.outcome).resolves.toBe("usage-limited");
+    expect(connection.view().connection).not.toHaveProperty("usageLimit");
+    await expect(access(connection)).resolves.toEqual({ kind: "ready", accessToken: ACCESS_TWO });
   });
 });
 
@@ -88,7 +168,7 @@ test("the Supervisor records a usage limit the route reports and shows it in the
     );
   });
 
-  await supervisor.markChatGPTUsageLimited(limitedUntil);
+  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, limitedUntil);
 
   await expect(supervisor.getChatGPTConnection()).resolves.toMatchObject({
     connection: { state: "connected", usageLimit: { limitedUntil } },
@@ -98,7 +178,7 @@ test("the Supervisor records a usage limit the route reports and shows it in the
     limitedUntil,
   });
 
-  await supervisor.markChatGPTUsageLimited("not a time");
+  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, "not a time");
 
   await expect(supervisor.getChatGPTConnection()).resolves.toMatchObject({
     connection: { state: "connected", usageLimit: { limitedUntil: null } },

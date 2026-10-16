@@ -59,7 +59,7 @@ function bindingStreaming(lines: readonly string[]): FakeBinding {
 type CredentialHolder = Readonly<{
   chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
   markChatGPTRefused(accessToken: string): Promise<void>;
-  markChatGPTUsageLimited(limitedUntil: number | null): Promise<void>;
+  markChatGPTUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
 }>;
 
 const NO_SUPERVISOR = {

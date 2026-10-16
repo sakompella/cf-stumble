@@ -103,14 +103,14 @@ export const ready = (accessToken: string): ChatGPTAccess => ({ kind: "ready", a
 export type FakeCredential = ChatGPTCredential & {
   readonly asked: (string | undefined)[];
   readonly refused: string[];
-  readonly limited: (number | null)[];
+  readonly limited: (readonly [accessToken: string, limitedUntil: number | null])[];
 };
 
 /** A credential holder that answers each `access` call with the next entry of `answers`. */
 export function fakeCredential(answers: readonly ChatGPTAccess[]): FakeCredential {
   const asked: (string | undefined)[] = [];
   const refused: string[] = [];
-  const limited: (number | null)[] = [];
+  const limited: FakeCredential["limited"] = [];
 
   return {
     asked,
@@ -126,8 +126,8 @@ export function fakeCredential(answers: readonly ChatGPTAccess[]): FakeCredentia
 
       return Promise.resolve();
     },
-    markUsageLimited: (limitedUntil) => {
-      limited.push(limitedUntil);
+    markUsageLimited: (token, limitedUntil) => {
+      limited.push([token, limitedUntil]);
 
       return Promise.resolve();
     },

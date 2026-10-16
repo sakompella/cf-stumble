@@ -23,14 +23,14 @@ import {
 
 /**
  * What the model route needs from the Supervisor that holds the owner's credential: the token to
- * send now, a way to report one the provider refused after a refresh, and a way to report a usage
- * limit with the time it ends, when the provider named one. All are Supervisor RPC calls; the
- * token reaches this isolate and the provider, never a facet.
+ * send now, a way to report one the provider refused after a refresh, and a way to report the
+ * usage limit a token met, with the time it ends when the provider named one. All are Supervisor
+ * RPC calls; the token reaches this isolate and the provider, never a facet.
  */
 export type ChatGPTCredential = Readonly<{
   access(rejected?: string): Promise<ChatGPTAccess>;
   markRefused(accessToken: string): Promise<void>;
-  markUsageLimited(limitedUntil: number | null): Promise<void>;
+  markUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
 }>;
 
 /** No ChatGPT credential is connected, so the route answers from Workers AI instead. */
@@ -110,6 +110,7 @@ function errorOf(response: Response): Effect.Effect<ProviderError> {
  */
 function refused(
   credential: ChatGPTCredential,
+  token: string,
   outcome: "http-error" | "stream-failed",
   response: Response,
   error: ProviderError,
@@ -133,7 +134,7 @@ function refused(
   );
 
   return Effect.promise(() =>
-    credential.markUsageLimited(limitedUntil).catch(() => {
+    credential.markUsageLimited(token, limitedUntil).catch(() => {
       /* the limit goes unrecorded; the next call asks ChatGPT and meets it again */
     }),
   ).pipe(
@@ -182,24 +183,27 @@ function refusedTwice(
   ).pipe(Effect.andThen(Effect.fail(reconnectRequired())));
 }
 
+/** A provider response and the token that was sent for it. */
+type Answer = Readonly<{ response: Response; token: string }>;
+
 /**
  * Send the request, retrying once after a 401: with the newer token if another call already
  * replaced the refused one, otherwise after one refresh. A second 401 marks the connection as
  * needing a reconnect. Nothing is retried once the provider's stream has started.
  */
-function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Response, ChatGPTRefusal> {
+function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Answer, ChatGPTRefusal> {
   return Effect.gen(function* () {
     const first = yield* accessToken(input.credential);
     const response = yield* send(input, body, first);
 
-    if (response.status !== 401) return response;
+    if (response.status !== 401) return { response, token: first };
     yield* Effect.promise(() => discardBody(response));
     logEvent("warn", "chatgpt.model-call", { outcome: "retrying", status: 401 });
 
     const second = yield* accessToken(input.credential, first);
     const retried = yield* send(input, body, second);
 
-    if (retried.status !== 401) return retried;
+    if (retried.status !== 401) return { response: retried, token: second };
     yield* Effect.promise(() => discardBody(retried));
 
     return yield* refusedTwice(input.credential, second);
@@ -220,12 +224,12 @@ export function chatgptTurn(
 
   return (emit) =>
     Effect.gen(function* () {
-      const response = yield* answered(input, body);
+      const { response, token } = yield* answered(input, body);
 
       if (!response.ok || response.body === null) {
         const error = yield* errorOf(response);
 
-        return yield* refused(input.credential, "http-error", response, error, false);
+        return yield* refused(input.credential, token, "http-error", response, error, false);
       }
 
       let outputSent = false;
@@ -243,6 +247,7 @@ export function chatgptTurn(
       if (reader.failure !== undefined) {
         return yield* refused(
           input.credential,
+          token,
           "stream-failed",
           response,
           reader.failure,

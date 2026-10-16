@@ -45,7 +45,7 @@ function workersAi(text: string) {
 
 /** A route a Supervisor created, whose holder answers `access` and records each usage limit. */
 function supervisedRoute(ai: Ai, access: ChatGPTAccess) {
-  const limited: (number | null)[] = [];
+  const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
 
@@ -55,8 +55,8 @@ function supervisedRoute(ai: Ai, access: ChatGPTAccess) {
       getByName: () => ({
         chatgptAccess: () => Promise.resolve(access),
         markChatGPTRefused: () => Promise.resolve(),
-        markChatGPTUsageLimited: (limitedUntil) => {
-          limited.push(limitedUntil);
+        markChatGPTUsageLimited: (accessToken, limitedUntil) => {
+          limited.push([accessToken, limitedUntil]);
 
           return Promise.resolve();
         },
@@ -104,7 +104,7 @@ test("a usage limit before any output is answered by Workers AI after one fallba
 
   expect(fetchSpy).toHaveBeenCalledOnce();
   expect(binding.calls).toEqual(["@cf/zai-org/glm-5.3-flash"]);
-  expect(route.limited).toEqual([null]);
+  expect(route.limited).toEqual([[READY.accessToken, null]]);
   expect(events.slice(0, 2)).toEqual([
     { type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil: null },
     { type: "text-delta", delta: "from Workers AI" },

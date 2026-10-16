@@ -38,7 +38,7 @@ type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
     chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
     markChatGPTRefused(accessToken: string): Promise<void>;
-    markChatGPTUsageLimited(limitedUntil: number | null): Promise<void>;
+    markChatGPTUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
   }>;
 }>;
 
@@ -114,7 +114,8 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     return {
       access: (rejected) => holder.chatgptAccess(rejected),
       markRefused: (accessToken) => holder.markChatGPTRefused(accessToken),
-      markUsageLimited: (limitedUntil) => holder.markChatGPTUsageLimited(limitedUntil),
+      markUsageLimited: (accessToken, limitedUntil) =>
+        holder.markChatGPTUsageLimited(accessToken, limitedUntil),
     };
   }
 }

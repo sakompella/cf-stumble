@@ -5,6 +5,7 @@ import type { ModelRouteRequest, ModelStreamEvent } from "../../src/model-route.
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import {
   ACCESS_ONE,
+  ACCESS_TWO,
   fakeCredential,
   ready,
   recordingFetch,
@@ -75,7 +76,7 @@ test("a usage limit in the stream before any output is the typed failure the rou
 
   expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: null });
   expect(emitted).toEqual([]);
-  expect(credential.limited).toEqual([null]);
+  expect(credential.limited).toEqual([[ACCESS_ONE, null]]);
   expect(credential.refused).toEqual([]);
   expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({
@@ -105,7 +106,7 @@ test("a usage limit after output errors the call as before, and the limit is sti
 
   expect(outcome).toEqual({ kind: "failed", code: "model-unavailable" });
   expect(emitted).toEqual([{ type: "text-delta", delta: "part" }]);
-  expect(credential.limited).toEqual([null]);
+  expect(credential.limited).toEqual([[ACCESS_ONE, null]]);
   expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({ outcome: "stream-failed", fallback: false }),
   ]);
@@ -132,7 +133,7 @@ test("an HTTP 429 records when its Retry-After says the limit ends, and logs sta
   );
 
   expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: 1_800_000_120_000 });
-  expect(credential.limited).toEqual([1_800_000_120_000]);
+  expect(credential.limited).toEqual([[ACCESS_ONE, 1_800_000_120_000]]);
   expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({
       outcome: "http-error",
@@ -166,6 +167,18 @@ test.each([
   );
 
   expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: null });
+});
+
+test("a usage limit after a 401 retry is reported with the token the retry sent", async () => {
+  const credential = fakeCredential([ready(ACCESS_ONE), ready(ACCESS_TWO)]);
+  const replies = [new Response(null, { status: 401 }), Response.json({}, { status: 429 })];
+
+  const { outcome } = await outcomeOf(credential, () =>
+    Promise.resolve(replies.shift() ?? Response.error()),
+  );
+
+  expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: null });
+  expect(credential.limited).toEqual([[ACCESS_TWO, null]]);
 });
 
 test("a connection still inside its usage limit sends nothing", async () => {

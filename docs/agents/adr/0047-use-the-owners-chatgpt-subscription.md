@@ -51,9 +51,11 @@ code or type is `subscription_sharing_usage_limit_exceeded`, `rate_limit_exceede
 `provider-fallback` diagnostic on the assistant message it ends the call with, so the saved thread
 records which model answered. Once any text or tool call was sent, it never falls back: the call
 ends with one `model-unavailable` error, as before, because two providers' halves of one answer are
-not one answer. Either way the connection stays connected and the Supervisor records the limit. A
-`retry-after` header gives the time it ends, capped at a week; until then the route skips ChatGPT
-and falls back without asking. OpenAI names no end for a limit that arrives in the stream, and its
+not one answer. Either way the connection stays connected and the Supervisor records the limit,
+but only while the access token the call sent is still the stored, connected one. A call that meets
+the limit after a Disconnect, a new sign-in, or a refresh replaced its token records nothing, so an
+old account's limit never pauses a new one. A `retry-after` header gives the time it ends, capped
+at a week; until then the route skips ChatGPT and falls back without asking. OpenAI names no end for a limit that arrives in the stream, and its
 documentation says not to infer one, so the next call asks ChatGPT again and records the limit again
 if it still holds. The owner's ChatGPT view shows the limit, with its end when known. Other
 refusals, such as `subscription_sharing_user_not_eligible` or
