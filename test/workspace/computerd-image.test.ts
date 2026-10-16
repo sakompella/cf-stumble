@@ -90,6 +90,15 @@ test("the image drains command output before exit and runs the regression", () =
   expect(dockerfile).toContain("npx vitest run src/shim src/exec/runner.test.ts");
 });
 
+test("every base image is pinned by digest", () => {
+  const bases = [...dockerfile.matchAll(/^FROM (\S+)/gmu)].flatMap((match) =>
+    match[1] === "computerd-source" ? [] : [match[1] ?? ""],
+  );
+
+  expect(bases.length).toBe(2);
+  expect(bases.filter((image) => !/@sha256:[0-9a-f]{64}$/u.test(image))).toStrictEqual([]);
+});
+
 test("the build context admits every file the workspace image copies", () => {
   const admitted = new Set(
     dockerignore
