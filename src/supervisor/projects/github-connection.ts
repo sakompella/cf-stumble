@@ -23,6 +23,7 @@ import type {
   CheckedStatus,
   CredentialSource,
   GitHubConnectionStore,
+  RecordedConnection,
 } from "./github-connection-store.js";
 
 /**
@@ -180,6 +181,54 @@ function unredeemedOutcome(
   }
 }
 
+/** What one credential answer means: the status to report and the connection to keep, if any. */
+type Learned = Readonly<{ status: CheckedStatus; connection: RecordedConnection | undefined }>;
+
+/** Learning only a status leaves the stored connection as it is. */
+function statusOnly(status: CheckedStatus): (previous: RecordedConnection | undefined) => Learned {
+  return (previous) => ({ status, connection: previous });
+}
+
+/**
+ * Keep the stored connection honest about the workspace's answer. `installedBy` names the install
+ * that just ran, if one did.
+ */
+function learned(
+  answer: GitHubCredentialStatus,
+  installedBy: CredentialSource | undefined,
+  previous: RecordedConnection | undefined,
+  now: number,
+): Learned {
+  switch (answer.state) {
+    case "connected": {
+      const login = answer.login ?? previous?.login ?? "";
+      const source = installedBy ?? previous?.source ?? "device-authorization";
+      const connectedAt = installedBy === undefined ? (previous?.connectedAt ?? 0) : now;
+
+      return {
+        status: { state: "connected", login, source },
+        connection: { login, source, connectedAt },
+      };
+    }
+
+    case "tooling-missing":
+      return { status: { state: "tooling-missing" }, connection: previous };
+    case "missing":
+      return {
+        status:
+          previous === undefined ? { state: "disconnected" } : reconnect("credential-missing"),
+        connection: undefined,
+      };
+    case "unusable":
+      return { status: reconnect("credential-rejected"), connection: undefined };
+    default: {
+      const exhaustive: never = answer.state;
+
+      return exhaustive;
+    }
+  }
+}
+
 /** A status read stops at `signal` and logs under `requestId`; neither changes the answer. */
 type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal" | "requestId">;
 
@@ -198,8 +247,7 @@ export class GitHubConnection {
 
   /** Forget the connection and the last check, because a workspace reset removed the credential. */
   resetWorkspace(): void {
-    this.store.clearConnection();
-    this.store.clearCheck();
+    this.store.clear();
   }
 
   /**
@@ -391,6 +439,8 @@ export class GitHubConnection {
     signal?: AbortSignal,
   ): Effect.Effect<GitHubConnectionStatus> {
     return Effect.gen({ self: this }, function* () {
+      const revision = this.store.revision();
+
       const installed = yield* Effect.result(
         installWorkspaceCredential({
           workspaceName: this.workspaceName,
@@ -409,12 +459,12 @@ export class GitHubConnection {
 
         logCredentialInstall(source, refused);
 
-        return this.record(refused, now, signal);
+        return this.record(revision, now, signal, statusOnly(refused));
       }
 
       const status: CheckedStatus =
         installed.success === "tooling-missing"
-          ? this.record({ state: "tooling-missing" }, now, signal)
+          ? this.record(revision, now, signal, statusOnly({ state: "tooling-missing" }))
           : yield* this.observed(now, source, { signal });
 
       logCredentialInstall(source, status);
@@ -424,70 +474,56 @@ export class GitHubConnection {
   }
 
   /**
-   * Ask the workspace what its credential can do, keep the stored connection honest about the
-   * answer, and store the answer as the last check. `installedBy` names the install that just ran,
-   * if one did.
+   * Ask the workspace what its credential can do, and store the answer as the last check, with the
+   * connection it implies. `installedBy` names the install that just ran, if one did.
    */
   private observed(
     now: number,
     installedBy?: CredentialSource,
     options: StatusReadOptions = {},
   ): Effect.Effect<CheckedStatus> {
-    return readWorkspaceCredentialStatus({
-      workspaceName: this.workspaceName,
-      namespace: this.namespace,
-      ...options,
-    }).pipe(
-      Effect.match({
-        onFailure: () => reconnect("workspace-unavailable"),
-        onSuccess: (status) => this.recorded(status, installedBy, now),
-      }),
-      Effect.map((status) => this.record(status, now, options.signal)),
-    );
+    return Effect.suspend(() => {
+      const revision = this.store.revision();
+
+      return readWorkspaceCredentialStatus({
+        workspaceName: this.workspaceName,
+        namespace: this.namespace,
+        ...options,
+      }).pipe(
+        Effect.match({
+          onFailure: () =>
+            this.record(
+              revision,
+              now,
+              options.signal,
+              statusOnly(reconnect("workspace-unavailable")),
+            ),
+          onSuccess: (answer) =>
+            this.record(revision, now, options.signal, (previous) =>
+              learned(answer, installedBy, previous, now),
+            ),
+        }),
+      );
+    });
   }
 
-  /** Store what a check or install just learned. A stopped one learned nothing, so it is skipped. */
-  private record(status: CheckedStatus, now: number, signal?: AbortSignal): CheckedStatus {
-    if (signal?.aborted !== true) this.store.recordCheck(status, now);
-
-    return status;
-  }
-
-  private recorded(
-    status: GitHubCredentialStatus,
-    installedBy: CredentialSource | undefined,
+  /**
+   * Store what a check or install that started at `revision` learned, judged against the connection
+   * stored now. A stopped one learned nothing, and one a workspace reset overtook learned about the
+   * workspace before the reset; the store keeps neither.
+   */
+  private record(
+    revision: number,
     now: number,
+    signal: AbortSignal | undefined,
+    learn: (previous: RecordedConnection | undefined) => Learned,
   ): CheckedStatus {
-    const previous = this.store.connection();
+    const found = learn(this.store.connection());
 
-    switch (status.state) {
-      case "connected": {
-        const login = status.login ?? previous?.login ?? "";
-        const credentialSource = installedBy ?? previous?.source ?? "device-authorization";
-        this.store.recordConnection({
-          login,
-          source: credentialSource,
-          connectedAt: installedBy === undefined ? (previous?.connectedAt ?? 0) : now,
-        });
-
-        return { state: "connected", login, source: credentialSource };
-      }
-
-      case "tooling-missing":
-        return { state: "tooling-missing" };
-      case "missing":
-        this.store.clearConnection();
-
-        return previous === undefined ? { state: "disconnected" } : reconnect("credential-missing");
-      case "unusable":
-        this.store.clearConnection();
-
-        return reconnect("credential-rejected");
-      default: {
-        const exhaustive: never = status.state;
-
-        return exhaustive;
-      }
+    if (signal?.aborted !== true) {
+      this.store.recordCheck(revision, { status: found.status, checkedAt: now }, found.connection);
     }
+
+    return found.status;
   }
 }

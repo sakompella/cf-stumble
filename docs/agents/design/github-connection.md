@@ -170,7 +170,10 @@ fields are `null` before the first check and after a workspace reset.
 result too: a connect, a credential install, and the provisioning before a turn. A credential
 install that fails, or that finds no `gh` command, stores that outcome with its time, so a later
 read never reports the connection that the install replaced. A check that a cancelled turn stopped
-is not stored. The answers to a connect and to an authorization carry `checkedAt` too. `GET /api/projects` lists the catalog and carries no
+is not stored. Neither is a check that a workspace reset overtook: the reset advances a revision
+in the Supervisor's record, each check captures the revision when it starts, and its result is
+stored only if the revision is unchanged, in the same transaction as the write. A reset the
+Supervisor or the Workspace Host refuses leaves the revision alone. The answers to a connect and to an authorization carry `checkedAt` too. `GET /api/projects` lists the catalog and carries no
 connection status.
 
 The page sends the refresh when it loads and when the owner presses **Check again**, never on a

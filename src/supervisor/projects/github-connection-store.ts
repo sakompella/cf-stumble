@@ -4,12 +4,14 @@ import type { GitHubConnectionStatus } from "./github-connection.js";
  * What cf-stumble remembers about the workspace's GitHub authorization, which is deliberately not
  * a credential.
  *
- * Three things are stored. A pending device authorization, which holds the device code GitHub
+ * Four things are stored. A pending device authorization, which holds the device code GitHub
  * issued and the verified owner who started it, so a redemption can be bound to that owner and a
  * replayed or crossed request finds nothing to redeem. The fact of a connection: a login name, how
- * it was obtained, and when. And what the last credential check found and when it ran, which is
- * what a status read answers without asking the workspace. The access token itself is never here — it is installed into the
- * workspace's `gh` configuration and dropped (ADR-0039), so this table cannot leak one.
+ * it was obtained, and when. What the last credential check found and when it ran, which is what a
+ * status read answers without asking the workspace. And a revision that each workspace reset
+ * advances, so a check that started before a reset cannot store its answer after it. The access
+ * token itself is never here — it is installed into the workspace's `gh` configuration and dropped
+ * (ADR-0039), so this table cannot leak one.
  */
 type PendingAuthorization = Readonly<{
   deviceCode: string;
@@ -32,7 +34,7 @@ type ReconnectReason = Extract<CheckedStatus, { state: "reconnect-required" }>["
 /** The last credential check: what it found and when it ran. */
 export type LastCheck = Readonly<{ status: CheckedStatus; checkedAt: number }>;
 
-type RecordedConnection = Readonly<{
+export type RecordedConnection = Readonly<{
   login: string;
   source: CredentialSource;
   connectedAt: number;
@@ -94,9 +96,11 @@ function checkedStatus(row: CheckRow): CheckedStatus {
 }
 
 export class GitHubConnectionStore {
+  private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
 
   constructor(storage: DurableObjectStorage) {
+    this.storage = storage;
     this.sql = storage.sql;
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS github_authorization (
@@ -127,6 +131,12 @@ export class GitHubConnectionStore {
         login TEXT,
         credential_source TEXT,
         checked_at INTEGER NOT NULL
+      );
+    `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS github_connection_revision (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        revision INTEGER NOT NULL CHECK (revision >= 0)
       );
     `);
   }
@@ -218,7 +228,7 @@ export class GitHubConnectionStore {
     );
   }
 
-  clearConnection(): void {
+  private clearConnection(): void {
     this.sql.exec(`DELETE FROM github_connection WHERE id = 1`);
   }
 
@@ -240,18 +250,45 @@ export class GitHubConnectionStore {
     };
   }
 
-  /** Replace the last check with this one. */
-  recordCheck(status: CheckedStatus, checkedAt: number): void {
-    this.sql.exec(
-      `INSERT OR REPLACE INTO github_connection_check
-         (id, state, reconnect_reason, login, credential_source, checked_at)
-       VALUES (1, ?, ?, ?, ?, ?)`,
-      status.state,
-      status.state === "reconnect-required" ? status.reason : null,
-      status.state === "connected" ? status.login : null,
-      status.state === "connected" ? status.source : null,
-      checkedAt,
-    );
+  /** The current revision. A check captures it when it starts and presents it to `recordCheck`. */
+  revision(): number {
+    const row = this.sql
+      .exec<{ readonly revision: number }>(
+        `SELECT revision FROM github_connection_revision WHERE id = 1`,
+      )
+      .toArray()[0];
+
+    return row?.revision ?? 0;
+  }
+
+  /**
+   * Replace the last check and the connection it found, in one transaction, only while `revision`
+   * is still current. A check that a workspace reset overtook found the workspace before the
+   * reset, so it stores nothing. `connection` is `undefined` when the check found none.
+   */
+  recordCheck(
+    revision: number,
+    check: LastCheck,
+    connection: RecordedConnection | undefined,
+  ): void {
+    this.storage.transactionSync(() => {
+      if (this.revision() !== revision) return;
+
+      if (connection === undefined) this.clearConnection();
+      else this.recordConnection(connection);
+
+      const { status } = check;
+      this.sql.exec(
+        `INSERT OR REPLACE INTO github_connection_check
+           (id, state, reconnect_reason, login, credential_source, checked_at)
+         VALUES (1, ?, ?, ?, ?, ?)`,
+        status.state,
+        status.state === "reconnect-required" ? status.reason : null,
+        status.state === "connected" ? status.login : null,
+        status.state === "connected" ? status.source : null,
+        check.checkedAt,
+      );
+    });
   }
 
   lastCheck(): LastCheck | undefined {
@@ -267,7 +304,18 @@ export class GitHubConnectionStore {
       : { status: checkedStatus(row), checkedAt: row.checked_at };
   }
 
-  clearCheck(): void {
-    this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
+  /**
+   * Forget the connection and the last check, and advance the revision, in one transaction. Every
+   * check still running started at the old revision, so none of them can store its answer.
+   */
+  clear(): void {
+    this.storage.transactionSync(() => {
+      this.clearConnection();
+      this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
+      this.sql.exec(
+        `INSERT INTO github_connection_revision (id, revision) VALUES (1, 1)
+         ON CONFLICT (id) DO UPDATE SET revision = revision + 1`,
+      );
+    });
   }
 }
