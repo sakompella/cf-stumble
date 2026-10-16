@@ -45,6 +45,16 @@
 # Everything after the build stages repeats upstream's container example
 # (`examples/container/Dockerfile`): the binary copied into a Debian and Node userland.
 #
+# Pins. Both base images name a tag and a digest; Docker uses the digest, and the tag only records
+# what was pinned. Debian packages come from snapshot.debian.org at the date in `DEBIAN_SNAPSHOT`,
+# the date the base image's own sources file records, so a rebuild installs the same packages.
+# A snapshot's release files carry a Valid-Until date that has passed, so apt is told to ignore it.
+# `nodejs` is an exact NodeSource version and `gh` is a release package checked against its
+# SHA-256. To refresh: resolve the new digest with
+# `docker buildx imagetools inspect <tag>`, copy the snapshot date from
+# `/etc/apt/sources.list.d/debian.sources` in that image, and take the `nodejs` version from
+# `apt-cache madison nodejs` and the `gh` checksum from the release's `gh_<version>_checksums.txt`.
+#
 # `wrangler.jsonc` names this file rather than a registry reference, because Cloudflare containers
 # pull only from the deploying account's managed registry or from a registry that account has
 # configured, and a fresh account has neither. wrangler builds this file and pushes the result to
@@ -53,14 +63,21 @@
 # copies.
 
 # The pinned source, its locked dependencies and the Node binaries the executable is built on.
+# Pinned: docker.io/library/node:22.22.3-bookworm-slim, Debian 12.14
 FROM docker.io/library/node:22.22.3-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752 AS computerd-source
 
+ARG DEBIAN_SNAPSHOT=20260610T000000Z
 ARG COMPUTER_COMMIT=12336475c9fd03f5280a4537a707797fc0131fbd
 ARG NODE_VERSION=v22.22.3
 ARG NODE_LINUX_X64_SHA256=2e5d13569282d016861fae7c8f935e741693c269101a5bebcf761a5376d1f99f
 ARG NODE_DARWIN_X64_SHA256=939beff36e3adf3f93c5a9078d559e53245b488d5d47c5faf9fa0f1d21ede54d
 
-RUN apt-get update \
+RUN sed -i \
+      -e "s#deb.debian.org/debian-security#snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
+      -e "s#deb.debian.org/debian#snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}#" \
+      /etc/apt/sources.list.d/debian.sources \
+ && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/10snapshot \
+ && apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
@@ -109,9 +126,20 @@ RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare
  && npm run build:bin -w @cloudflare/computerd \
  && install -D -m 0755 artifacts/computerd/computerd-linux-x64 /usr/local/bin/computerd
 
-FROM docker.io/library/debian:stable-slim
+# Pinned: docker.io/library/debian:stable-slim, Debian 13.7 (trixie), built 2026-10-05
+FROM docker.io/library/debian:stable-slim@sha256:eb593cf2c358cacef45ca0a424bbc7d30cfa3466265fc2662b9466a0ca6ba1c5
 
-RUN apt-get update \
+ARG DEBIAN_SNAPSHOT=20261005T000000Z
+ARG NODEJS_VERSION=22.23.3-1nodesource1
+ARG GH_VERSION=2.102.0
+ARG GH_LINUX_AMD64_DEB_SHA256=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
+
+RUN sed -i \
+      -e "s#deb.debian.org/debian-security#snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
+      -e "s#deb.debian.org/debian#snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}#" \
+      /etc/apt/sources.list.d/debian.sources \
+ && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/10snapshot \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
       fuse3 libfuse2t64 ca-certificates curl gnupg git tar \
  && mkdir -p /etc/apt/keyrings \
@@ -119,14 +147,13 @@ RUN apt-get update \
       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
       > /etc/apt/sources.list.d/nodesource.list \
- && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
- && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
- && echo "deb [signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-      > /etc/apt/sources.list.d/github-cli.list \
  && apt-get update \
- && apt-get install -y --no-install-recommends nodejs gh \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends "nodejs=${NODEJS_VERSION}" \
+ && curl -fsSLo /tmp/gh.deb \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" \
+ && echo "${GH_LINUX_AMD64_DEB_SHA256}  /tmp/gh.deb" | sha256sum -c - \
+ && apt-get install -y --no-install-recommends /tmp/gh.deb \
+ && rm -rf /tmp/gh.deb /var/lib/apt/lists/*
 
 # The workspace is a development machine: it clones repositories with `git`, authorizes with `gh`,
 # and builds a harness commit with the pnpm version `package.json` pins. Corepack ships with Node
