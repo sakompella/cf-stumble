@@ -6,6 +6,7 @@ export type {
   ChatGPTConnectionView,
   ChatGPTLoginFailure,
   ChatGPTLoginOutcome,
+  ChatGPTUsageLimit,
 } from "./connection-view.js";
 
 export { ChatGPTCredentialStore, type ReconnectReason } from "./credential-store.js";
@@ -13,6 +14,7 @@ export { ChatGPTCredentialStore, type ReconnectReason } from "./credential-store
 export {
   chatgptTurn,
   ChatGPTNotConnected,
+  ChatGPTUsageLimited,
   type ChatGPTCredential,
   type ChatGPTTurnInput,
 } from "./model-turn.js";

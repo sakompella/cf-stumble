@@ -19,6 +19,9 @@ export type StoredConnection =
     }>
   | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
 
+/** A usage limit the provider reported; `limitedUntil` is `null` when it named no end. */
+export type StoredUsageLimit = Readonly<{ reachedAt: number; limitedUntil: number | null }>;
+
 export type StoredLogin = Readonly<{
   attemptId: string;
   state: string;
@@ -79,6 +82,11 @@ export class ChatGPTCredentialStore {
         authorize_url TEXT NOT NULL,
         expires_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS chatgpt_usage_limit (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        reached_at INTEGER NOT NULL,
+        limited_until INTEGER
+      );
       CREATE TABLE IF NOT EXISTS chatgpt_host (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         agent_host_id TEXT NOT NULL
@@ -107,8 +115,12 @@ export class ChatGPTCredentialStore {
       : { state: "needs-reconnect", reason: reconnectReason(row.reconnect_reason) };
   }
 
-  /** A completed sign-in replaces whatever connection there was, whichever account it is. */
+  /**
+   * A completed sign-in replaces whatever connection there was, whichever account it is, and
+   * forgets the old one's usage limit.
+   */
   connect(grant: StoredGrant, now: number): void {
+    this.clearUsageLimit();
     this.sql.exec(
       `INSERT OR REPLACE INTO chatgpt_connection
          (id, status, reconnect_reason, access_token, refresh_token, expires_at, client_id, updated_at)
@@ -158,6 +170,32 @@ export class ChatGPTCredentialStore {
   disconnect(): void {
     this.sql.exec("DELETE FROM chatgpt_connection");
     this.sql.exec("DELETE FROM chatgpt_login");
+    this.clearUsageLimit();
+  }
+
+  usageLimit(): StoredUsageLimit | undefined {
+    const row = this.sql
+      .exec<{ readonly reached_at: number; readonly limited_until: number | null }>(
+        "SELECT reached_at, limited_until FROM chatgpt_usage_limit WHERE id = 1",
+      )
+      .toArray()[0];
+
+    return row === undefined
+      ? undefined
+      : { reachedAt: row.reached_at, limitedUntil: row.limited_until };
+  }
+
+  /** Replaces any earlier usage limit. */
+  markUsageLimited(limit: StoredUsageLimit): void {
+    this.sql.exec(
+      "INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until) VALUES (1, ?, ?)",
+      limit.reachedAt,
+      limit.limitedUntil,
+    );
+  }
+
+  clearUsageLimit(): void {
+    this.sql.exec("DELETE FROM chatgpt_usage_limit");
   }
 
   login(): StoredLogin | undefined {

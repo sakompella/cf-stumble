@@ -111,6 +111,60 @@ export function safeCode(value: unknown): string {
   return typeof value === "string" && /^[\w.-]{1,80}$/u.test(value) ? value : "unknown";
 }
 
+/**
+ * What the log and the fallback may learn from a provider error: its `type` and `code`, each a
+ * {@link safeCode}. The error's message can name the owner's account, so it is never read.
+ */
+export type ProviderError = Readonly<{ type: string; code: string }>;
+
+/**
+ * The provider's error object in a JSON body or a stream event: `error`, `response.error`, or the
+ * event itself for an `error` event, whose own `type` names the event rather than the error.
+ */
+export function providerError(body: unknown): ProviderError {
+  const response = objectAt(body, "response");
+  const nested = objectAt(response, "error") ?? objectAt(body, "error");
+  const error = nested ?? (isRecord(body) ? asUntrusted(body) : undefined);
+
+  return {
+    type: safeCode(nested === undefined ? undefined : stringAt(nested, "type")),
+    code: safeCode(
+      stringAt(error, "code") ?? stringAt(objectAt(response, "incomplete_details"), "reason"),
+    ),
+  };
+}
+
+/**
+ * OpenAI's codes and types for a refusal caused by a usage, rate or quota limit
+ * (https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery and
+ * https://developers.openai.com/api/docs/guides/error-codes). HTTP 429 always means one.
+ */
+const USAGE_LIMITS: ReadonlySet<string> = new Set([
+  "subscription_sharing_usage_limit_exceeded",
+  "rate_limit_exceeded",
+  "rate_limit_error",
+  "insufficient_quota",
+]);
+
+export function isUsageLimit(status: number, error: ProviderError): boolean {
+  return status === 429 || USAGE_LIMITS.has(error.code) || USAGE_LIMITS.has(error.type);
+}
+
+/** The longest wait a `retry-after` is taken to mean: ChatGPT plans have weekly limits. */
+const MAX_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * When a `retry-after` header (seconds, or an HTTP date) says the provider answers again, at most
+ * a week after `now`. `null` when the header is absent or unreadable.
+ */
+export function retryAt(header: string | null, now: number): number | null {
+  if (header === null) return null;
+  const text = header.trim();
+  const at = /^\d+$/u.test(text) ? now + Number(text) * 1000 : Date.parse(text);
+
+  return Number.isFinite(at) && at > now ? Math.min(at, now + MAX_RETRY_AFTER_MS) : null;
+}
+
 function objectAt(value: unknown, key: string): UntrustedObject | undefined {
   const found = isRecord(value) ? field(asUntrusted(value), key) : undefined;
 
@@ -142,19 +196,6 @@ function usageOf(
 }
 
 /**
- * Why a stream ended without `response.completed`: the provider's error code, the reason a
- * response was incomplete, or `unknown`.
- */
-function failureCode(event: UntrustedObject): string {
-  const response = objectAt(event, "response");
-  const error = objectAt(response, "error") ?? objectAt(event, "error") ?? event;
-
-  return safeCode(
-    stringAt(error, "code") ?? stringAt(objectAt(response, "incomplete_details"), "reason"),
-  );
-}
-
-/**
  * Reads one Responses event stream into an accumulator. Text deltas and function call fragments
  * become chunks as they arrive; `response.completed` ends the stream with the provider's usage, and
  * `response.failed`, `response.incomplete`, `error`, or an untyped `{"error": ...}` object ends it
@@ -164,7 +205,7 @@ function failureCode(event: UntrustedObject): string {
 export class ResponsesStreamReader {
   private readonly accumulator: ProviderStreamAccumulator;
   /** Set when the stream ended without a completed response. */
-  failure: string | undefined;
+  failure: ProviderError | undefined;
 
   constructor(accumulator: ProviderStreamAccumulator) {
     this.accumulator = accumulator;
@@ -223,12 +264,12 @@ export class ResponsesStreamReader {
       case "response.failed":
       case "response.incomplete":
       case "error":
-        this.failure = failureCode(event);
+        this.failure = providerError(event);
 
         return true;
       default:
         if (!isProviderError(event)) return false;
-        this.failure = failureCode(event);
+        this.failure = providerError(event);
 
         return true;
     }

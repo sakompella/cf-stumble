@@ -1,10 +1,6 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  chatgptTurn,
-  type ChatGPTAccess,
-  type ChatGPTCredential,
-} from "../../src/chatgpt/index.js";
+import { chatgptTurn, type ChatGPTCredential } from "../../src/chatgpt/index.js";
 import { modelEventStream } from "../../src/model-route-turn.js";
 import type { ModelRouteRequest } from "../../src/model-route.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
@@ -13,6 +9,8 @@ import {
   ACCESS_ONE,
   ACCESS_TWO,
   COMPLETED,
+  fakeCredential,
+  ready,
   recordingFetch,
   responsesEvent,
   sseResponse,
@@ -47,32 +45,6 @@ const REQUEST: ModelRouteRequest = {
   ],
 };
 
-type FakeCredential = ChatGPTCredential & {
-  readonly asked: (string | undefined)[];
-  readonly refused: string[];
-};
-
-/** A credential holder that answers each `access` call with the next entry of `answers`. */
-function fakeCredential(answers: readonly ChatGPTAccess[]): FakeCredential {
-  const asked: (string | undefined)[] = [];
-  const refused: string[] = [];
-
-  return {
-    asked,
-    refused,
-    access: (rejected) => {
-      asked.push(rejected);
-
-      return Promise.resolve(answers[asked.length - 1] ?? { kind: "unavailable" });
-    },
-    markRefused: (token) => {
-      refused.push(token);
-
-      return Promise.resolve();
-    },
-  };
-}
-
 function run(
   credential: ChatGPTCredential,
   reply: (call: RecordedCall) => Promise<Response>,
@@ -82,16 +54,14 @@ function run(
 
   const stream = modelEventStream((emit) =>
     turn(emit).pipe(
-      Effect.catchTag("ChatGPTNotConnected", () =>
-        Effect.die(new Error("this test expects a connected credential")),
+      Effect.catchTag(["ChatGPTNotConnected", "ChatGPTUsageLimited"], () =>
+        Effect.die(new Error("this test expects a connected credential with no usage limit")),
       ),
     ),
   );
 
   return collectEvents(stream).then((events) => ({ events, calls }));
 }
-
-const ready = (accessToken: string): ChatGPTAccess => ({ kind: "ready", accessToken });
 
 test("a Responses stream becomes text deltas, one assembled tool call, and the provider's usage", async () => {
   const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>

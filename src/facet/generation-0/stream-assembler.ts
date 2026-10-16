@@ -1,5 +1,5 @@
 import type { Api, AssistantMessage, AssistantMessageEventStream, Model } from "@cf-stumble/pi";
-import type { ModelUsage, ToolCallDelta } from "../../model-route.js";
+import type { ModelUsage, ProviderFallback, ToolCallDelta } from "../../model-route.js";
 
 /**
  * The model descriptor Pi's `Agent` needs in its state. Every field the host actually decides —
@@ -116,6 +116,7 @@ export class TurnAssembler {
   private blocks: OpenBlock[] = [];
   private toolIndexToBlock = new Map<number, number>();
   private started = false;
+  private fallback: NonNullable<AssistantMessage["diagnostics"]>[number] | undefined;
 
   private snapshot(stopReason: AssistantMessage["stopReason"] = "pending"): AssistantMessage {
     const content: AssistantMessage["content"] = this.blocks.map((block) =>
@@ -230,6 +231,25 @@ export class TurnAssembler {
     }
   }
 
+  /**
+   * The route answered from Workers AI because the owner's ChatGPT plan reached its usage limit.
+   * The message this call ends with carries that as a diagnostic, so the saved thread shows which
+   * model answered.
+   */
+  providerFallback(event: ProviderFallback): void {
+    this.fallback = {
+      type: "provider-fallback",
+      timestamp: Date.now(),
+      details: { reason: event.reason, limitedUntil: event.limitedUntil },
+    };
+  }
+
+  private noted(message: AssistantMessage): AssistantMessage {
+    return this.fallback === undefined
+      ? message
+      : { ...message, diagnostics: [...(message.diagnostics ?? []), this.fallback] };
+  }
+
   /** Finish the turn with the model route's own final, authoritative assembly. */
   finish(stream: AssistantMessageEventStream, message: AssistantMessage): void {
     this.ensureStarted(stream);
@@ -237,7 +257,7 @@ export class TurnAssembler {
     stream.push({
       type: "done",
       reason: message.stopReason === "toolUse" ? "toolUse" : "stop",
-      message,
+      message: this.noted(message),
     });
   }
 
@@ -247,7 +267,10 @@ export class TurnAssembler {
     stream.push({
       type: "error",
       reason,
-      error: { ...assistantShell(reason, this.snapshot().content), errorMessage: detail },
+      error: this.noted({
+        ...assistantShell(reason, this.snapshot().content),
+        errorMessage: detail,
+      }),
     });
   }
 }

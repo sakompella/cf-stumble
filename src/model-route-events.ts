@@ -68,7 +68,19 @@ export type ModelStreamEvent =
   | Readonly<{ type: "text-delta"; delta: string }>
   | Readonly<{ type: "tool-call-delta"; delta: ToolCallDelta }>
   | Readonly<{ type: "done"; message: AssistantMessage; usage: ModelUsage }>
-  | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode }> }>;
+  | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode }> }>
+  | ProviderFallback;
+
+/**
+ * Sent once, before any other event, when the owner's ChatGPT plan refused the call for its usage
+ * limit and Workers AI answers instead (ADR-0047). `limitedUntil` is when the route asks ChatGPT
+ * again, or `null` when OpenAI named no end.
+ */
+export type ProviderFallback = Readonly<{
+  type: "provider-fallback";
+  reason: "chatgpt-usage-limit";
+  limitedUntil: number | null;
+}>;
 
 /**
  * Why a turn got no answer. `chatgpt-reconnect-required` means the owner's ChatGPT grant was

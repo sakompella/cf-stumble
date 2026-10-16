@@ -1,4 +1,4 @@
-import type { ProviderFetch } from "../../src/chatgpt/index.js";
+import type { ChatGPTAccess, ChatGPTCredential, ProviderFetch } from "../../src/chatgpt/index.js";
 
 /**
  * Fake OpenAI endpoints for the ChatGPT tests. Every token here is made up, and each is long and
@@ -97,3 +97,39 @@ export const COMPLETED = responsesEvent({
   type: "response.completed",
   response: { usage: { input_tokens: 12, output_tokens: 3 } },
 });
+
+export const ready = (accessToken: string): ChatGPTAccess => ({ kind: "ready", accessToken });
+
+export type FakeCredential = ChatGPTCredential & {
+  readonly asked: (string | undefined)[];
+  readonly refused: string[];
+  readonly limited: (number | null)[];
+};
+
+/** A credential holder that answers each `access` call with the next entry of `answers`. */
+export function fakeCredential(answers: readonly ChatGPTAccess[]): FakeCredential {
+  const asked: (string | undefined)[] = [];
+  const refused: string[] = [];
+  const limited: (number | null)[] = [];
+
+  return {
+    asked,
+    refused,
+    limited,
+    access: (rejected) => {
+      asked.push(rejected);
+
+      return Promise.resolve(answers[asked.length - 1] ?? { kind: "unavailable" });
+    },
+    markRefused: (token) => {
+      refused.push(token);
+
+      return Promise.resolve();
+    },
+    markUsageLimited: (limitedUntil) => {
+      limited.push(limitedUntil);
+
+      return Promise.resolve();
+    },
+  };
+}

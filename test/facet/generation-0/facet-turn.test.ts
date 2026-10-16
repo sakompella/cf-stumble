@@ -12,6 +12,7 @@ import {
   routeUnavailable,
   turnStream,
 } from "./facet-turn-helpers.js";
+import type { ModelStreamEvent } from "../../../src/model-route.js";
 
 test("streams the turn's text, tool results, and terminal state as byte frames", async () => {
   const received = FakeProjectCapability.create();
@@ -116,5 +117,39 @@ test("carries a failed model-call count in the terminal frame", async () => {
     kind: "failed",
     code: "model-error",
     modelAccounting: { calls: 1, completed: 0, failed: 1, aborted: 0 },
+  });
+});
+
+test("an answer Workers AI gave after ChatGPT's usage limit is saved with that notice", async () => {
+  const events: readonly ModelStreamEvent[] = [
+    { type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil: null },
+    { type: "text-delta", delta: "from Workers AI" },
+    {
+      type: "done",
+      message: { role: "assistant", content: "from Workers AI", tool_calls: [] },
+      usage: { inputTokens: 1, outputTokens: 1, estimated: false },
+    },
+  ];
+
+  const route = {
+    runStream: () =>
+      Promise.resolve(
+        new Response(events.map((event) => `${JSON.stringify(event)}\n`).join("")).body!,
+      ),
+  };
+
+  const frames = await readFrames(turnStream(route, FakeProjectCapability.create()));
+  const terminal = frames.at(-1);
+
+  if (terminal?.kind !== "completed") throw new Error("the turn must complete");
+  expect(terminal.state.messages.at(-1)).toMatchObject({
+    role: "assistant",
+    content: [{ type: "text", text: "from Workers AI" }],
+    diagnostics: [
+      {
+        type: "provider-fallback",
+        details: { reason: "chatgpt-usage-limit", limitedUntil: null },
+      },
+    ],
   });
 });

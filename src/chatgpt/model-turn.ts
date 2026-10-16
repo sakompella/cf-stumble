@@ -9,28 +9,43 @@ import {
   pumpSseStream,
   type ModelTurnAnswer,
 } from "../model-route-turn.js";
-import { isRecord } from "../untrusted.js";
 import type { ChatGPTAccess } from "./connection-view.js";
 import { discardBody, type ProviderFetch } from "./oauth.js";
 import {
+  isUsageLimit,
+  providerError,
   RESPONSES_ENDPOINT,
   ResponsesStreamReader,
   responsesRequest,
-  safeCode,
+  retryAt,
+  type ProviderError,
 } from "./responses.js";
 
 /**
  * What the model route needs from the Supervisor that holds the owner's credential: the token to
- * send now, and a way to report one the provider refused after a refresh. Both are Supervisor RPC
- * calls; the token reaches this isolate and the provider, never a facet.
+ * send now, a way to report one the provider refused after a refresh, and a way to report a usage
+ * limit with the time it ends, when the provider named one. All are Supervisor RPC calls; the
+ * token reaches this isolate and the provider, never a facet.
  */
 export type ChatGPTCredential = Readonly<{
   access(rejected?: string): Promise<ChatGPTAccess>;
   markRefused(accessToken: string): Promise<void>;
+  markUsageLimited(limitedUntil: number | null): Promise<void>;
 }>;
 
 /** No ChatGPT credential is connected, so the route answers from Workers AI instead. */
 export class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected") {}
+
+/**
+ * The owner's plan refused this call for a usage limit before any of its output reached the
+ * caller, so the route can still answer it from Workers AI (ADR-0047). `limitedUntil` is when the
+ * limit ends, or `null` when the provider did not say.
+ */
+export class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
+  readonly limitedUntil: number | null;
+}> {}
+
+type ChatGPTRefusal = ModelTurnFailed | ChatGPTNotConnected | ChatGPTUsageLimited;
 
 export type ChatGPTTurnInput = Readonly<{
   credential: ChatGPTCredential;
@@ -41,23 +56,25 @@ export type ChatGPTTurnInput = Readonly<{
 const reconnectRequired = (): ModelTurnFailed =>
   new ModelTurnFailed({ code: "chatgpt-reconnect-required" });
 
-/** A longer error body is not parsed, and only a parsed body's `error.code` reaches the log. */
+/** A longer error body is not parsed, and only a parsed body's error type and code reach the log. */
 const MAX_ERROR_BODY_BYTES = 4096;
 
 function accessToken(
   credential: ChatGPTCredential,
   rejected?: string,
-): Effect.Effect<string, ModelTurnFailed | ChatGPTNotConnected> {
+): Effect.Effect<string, ChatGPTRefusal> {
   return Effect.tryPromise({
     try: () => credential.access(rejected),
     catch: modelUnavailable,
   }).pipe(
-    Effect.flatMap((access): Effect.Effect<string, ModelTurnFailed | ChatGPTNotConnected> => {
+    Effect.flatMap((access): Effect.Effect<string, ChatGPTRefusal> => {
       switch (access.kind) {
         case "ready":
           return Effect.succeed(access.accessToken);
         case "not-connected":
           return Effect.fail(new ChatGPTNotConnected());
+        case "usage-limited":
+          return Effect.fail(new ChatGPTUsageLimited({ limitedUntil: access.limitedUntil }));
         case "reconnect-required":
           return Effect.fail(reconnectRequired());
         case "unavailable":
@@ -72,19 +89,58 @@ function accessToken(
   );
 }
 
-/** The provider's `error.code`, for the log. The rest of the body may echo the request. */
-function errorCode(response: Response): Effect.Effect<string> {
+/** The error in a refusal's body, without its message. The rest of the body may echo the request. */
+function errorOf(response: Response): Effect.Effect<ProviderError> {
   return Effect.promise(async () => {
     try {
       const text = await response.text();
-      const body: unknown = text.length > MAX_ERROR_BODY_BYTES ? undefined : JSON.parse(text);
-      const error = isRecord(body) ? body.error : undefined;
 
-      return safeCode(isRecord(error) ? error.code : undefined);
+      return providerError(text.length > MAX_ERROR_BODY_BYTES ? null : JSON.parse(text));
     } catch {
-      return "unknown";
+      return providerError(null);
     }
   });
+}
+
+/**
+ * End a call the provider refused, logging only the HTTP status and the error's type and code. A
+ * usage limit is reported to the Supervisor either way, so later calls can skip ChatGPT; only one
+ * that reached the caller with nothing yet fails with {@link ChatGPTUsageLimited}, because the
+ * route must never splice a second provider's answer onto a first one's partial output.
+ */
+function refused(
+  credential: ChatGPTCredential,
+  outcome: "http-error" | "stream-failed",
+  response: Response,
+  error: ProviderError,
+  outputSent: boolean,
+): Effect.Effect<never, ChatGPTRefusal> {
+  const fields = { outcome, status: response.status, type: error.type, code: error.code };
+
+  if (!isUsageLimit(response.status, error)) {
+    logEvent("error", "chatgpt.model-call", fields);
+
+    return Effect.fail(modelUnavailable());
+  }
+
+  const limitedUntil = retryAt(response.headers.get("retry-after"), Date.now());
+  const limitFields = { ...fields, fallback: !outputSent };
+
+  logEvent(
+    outputSent ? "error" : "warn",
+    "chatgpt.model-call",
+    limitedUntil === null ? limitFields : { ...limitFields, limitedUntil },
+  );
+
+  return Effect.promise(() =>
+    credential.markUsageLimited(limitedUntil).catch(() => {
+      /* the limit goes unrecorded; the next call asks ChatGPT and meets it again */
+    }),
+  ).pipe(
+    Effect.andThen(
+      Effect.fail(outputSent ? modelUnavailable() : new ChatGPTUsageLimited({ limitedUntil })),
+    ),
+  );
 }
 
 /**
@@ -131,10 +187,7 @@ function refusedTwice(
  * replaced the refused one, otherwise after one refresh. A second 401 marks the connection as
  * needing a reconnect. Nothing is retried once the provider's stream has started.
  */
-function answered(
-  input: ChatGPTTurnInput,
-  body: string,
-): Effect.Effect<Response, ModelTurnFailed | ChatGPTNotConnected> {
+function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Response, ChatGPTRefusal> {
   return Effect.gen(function* () {
     const first = yield* accessToken(input.credential);
     const response = yield* send(input, body, first);
@@ -154,16 +207,15 @@ function answered(
 }
 
 /**
- * One model call on the owner's ChatGPT plan, translated into the route's events. It fails with
- * {@link ChatGPTNotConnected} before sending anything when no credential is connected, which is the
- * one case the route answers from Workers AI instead.
+ * One model call on the owner's ChatGPT plan, translated into the route's events. The route
+ * answers from Workers AI instead in two cases, both before anything was emitted: no credential is
+ * connected ({@link ChatGPTNotConnected}), or the plan's usage limit refused the call
+ * ({@link ChatGPTUsageLimited}).
  */
 export function chatgptTurn(
   input: ChatGPTTurnInput,
   request: ModelRouteRequest,
-): (
-  emit: (event: ModelStreamEvent) => void,
-) => Effect.Effect<ModelTurnAnswer, ModelTurnFailed | ChatGPTNotConnected> {
+): (emit: (event: ModelStreamEvent) => void) => Effect.Effect<ModelTurnAnswer, ChatGPTRefusal> {
   const body = JSON.stringify(responsesRequest(input.model, request));
 
   return (emit) =>
@@ -171,26 +223,31 @@ export function chatgptTurn(
       const response = yield* answered(input, body);
 
       if (!response.ok || response.body === null) {
-        const code = yield* errorCode(response);
-        logEvent("error", "chatgpt.model-call", {
-          outcome: "http-error",
-          status: response.status,
-          code,
-        });
+        const error = yield* errorOf(response);
 
-        return yield* modelUnavailable();
+        return yield* refused(input.credential, "http-error", response, error, false);
       }
 
-      const accumulator = new ProviderStreamAccumulator(emit);
+      let outputSent = false;
+
+      const accumulator = new ProviderStreamAccumulator((event) => {
+        outputSent = true;
+        emit(event);
+      });
+
       const reader = new ResponsesStreamReader(accumulator);
 
       // oxlint-disable-next-line typescript/no-unsafe-argument -- SAFETY: a fetch response body is a byte stream.
       yield* pumpSseStream(response.body, (line) => reader.handleLine(line));
 
       if (reader.failure !== undefined) {
-        logEvent("error", "chatgpt.model-call", { outcome: "stream-failed", code: reader.failure });
-
-        return yield* modelUnavailable();
+        return yield* refused(
+          input.credential,
+          "stream-failed",
+          response,
+          reader.failure,
+          outputSent,
+        );
       }
 
       return finishedTurn(accumulator, request);
