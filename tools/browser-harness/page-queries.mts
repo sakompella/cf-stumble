@@ -12,6 +12,9 @@ import type { BrowserPage } from "./chrome.mjs";
 /** The turn's own state, plus just enough of the transcript to prove it is arriving in pieces. */
 export type TurnSnapshot = Readonly<{
   turnState: string;
+  /** How many elements on the page announce changes, and how the turn's own element does. */
+  liveRegions: number;
+  turnLive: string;
   assistantCharacters: number;
   assistantBlocks: number;
   tools: number;
@@ -28,8 +31,11 @@ export function readTurn(page: BrowserPage): Promise<TurnSnapshot> {
     const send = document.getElementById("${ID.sendTurnButton}");
     const cancel = document.getElementById("${ID.cancelTurnButton}");
     const list = document.getElementById("${ID.messageList}");
+    const turn = document.getElementById("${ID.turnState}");
     return {
-      turnState: document.getElementById("${ID.turnState}")?.textContent ?? "",
+      turnState: turn?.textContent ?? "",
+      liveRegions: document.querySelectorAll("[aria-live], [role=status], [role=alert], [role=log]").length,
+      turnLive: turn?.getAttribute("aria-live") ?? "",
       assistantCharacters: assistant.reduce((total, block) =>
         total + (block.textContent ?? "").length, 0),
       assistantBlocks: assistant.length,

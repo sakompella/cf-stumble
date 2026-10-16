@@ -3,7 +3,7 @@ import * as Option from "effect/Option";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
-import { valueRow } from "./view-parts.js";
+import { statusRow, valueRow } from "./view-parts.js";
 import { transcriptView } from "./view-transcript.js";
 
 /**
@@ -64,7 +64,7 @@ function composerView(model: Model, h: HtmlBuilder<Message>): Html {
         h.OnKeyDownPreventDefault(sendShortcut),
       ]),
       turnButtons(model, h),
-      valueRow("turn", ID.turnState, model.turnState, h),
+      statusRow("turn", ID.turnState, model.turnState, h),
       valueRow("fresh thread", ID.freshThreadStatus, model.freshThreadStatus, h),
       h.p(
         [h.Class("note")],

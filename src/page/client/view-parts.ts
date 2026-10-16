@@ -12,6 +12,20 @@ export function valueRow(label: string, id: string, value: string, h: HtmlBuilde
   );
 }
 
+/**
+ * A value row whose value a screen reader announces when it changes, once the reader is idle. Use
+ * it only for a short sentence that changes a few times, never for a stream.
+ */
+export function statusRow(label: string, id: string, value: string, h: HtmlBuilder<Message>): Html {
+  return h.div(
+    [h.Class("row")],
+    [
+      h.span([h.Class("field-label")], [label]),
+      h.span([h.Class("value"), h.Id(id), h.Role("status"), h.AriaLive("polite")], [value]),
+    ],
+  );
+}
+
 export type ControlRow = Readonly<{
   label: string;
   inputId: string;
