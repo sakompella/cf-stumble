@@ -62,7 +62,7 @@ const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as con
 const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
 
 /** The credential surface's callers treat every failure but a failed command as unavailable. */
-const CREDENTIAL_INSTALL_REFUSED = {
+const CREDENTIAL_REFUSED = {
   ok: false,
   error: { code: "workspace-unavailable", detail: "the workspace is resetting" },
 } as const;
@@ -348,8 +348,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    *
    * The install requires a complete sync of the workspace's durable copy: `hosts.yml` now lives
    * under the workspace root, and a copy that is still pending would be lost with the container.
-   * Status and the repository check change nothing, so they do not wait for a sync, and only an
-   * install is a change a reset excludes.
+   * Status and the repository check change no workspace file, so they do not wait for a sync and a
+   * reset does not wait for them. They still run a command through the container, which syncs the
+   * workspace before and after it, so a reset refuses them too while it runs.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
@@ -361,9 +362,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         requestId: parseRequestId(requestId),
       });
 
-    return requestsCredentialInstall(request)
-      ? this.#changing(CREDENTIAL_INSTALL_REFUSED, work)
-      : this.#tracked(work);
+    if (requestsCredentialInstall(request)) return this.#changing(CREDENTIAL_REFUSED, work);
+
+    return this.#resetting ? Promise.resolve(CREDENTIAL_REFUSED) : this.#tracked(work);
   }
 
   /**

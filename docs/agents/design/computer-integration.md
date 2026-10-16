@@ -47,8 +47,11 @@ otherwise cut off. The exclusion holds in the other direction too: from the mome
 the Host until it ends, each of those operations refuses without running, a request for a
 project capability throws, and a second reset answers `workspace-busy`. A file change answers
 `workspace-busy`; a credential install answers `workspace-unavailable`, which is how the
-Supervisor already reads every install failure other than a failed command. A credential
-status read or repository check is not excluded, because it changes nothing.
+Supervisor already reads every install failure other than a failed command. A credential status
+read or repository check changes no workspace file, so a reset does not wait for one that is
+running. A new one during a reset also answers `workspace-unavailable`, because it runs a command
+through the container, and the container brackets every command with a workspace sync that would
+read or write the store the reset is deleting.
 
 The Supervisor keeps its own exclusion for the same span. From the moment an owner reset reaches it,
 before it checks leases and until the Host answers, it refuses a new turn, a project connect or
