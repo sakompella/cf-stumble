@@ -20,11 +20,17 @@ function makeTarget(options: ConstructorParameters<typeof ProjectRpcTarget>[3] =
   );
 
   const target = withDecodedEvents(rawTarget);
+  madeTargets.push(rawTarget);
 
   return { execBackend, target, rawTarget };
 }
 
-afterEach(() => {
+const madeTargets: ProjectRpcTarget[] = [];
+
+afterEach(async () => {
+  // A target keeps its turn timer and its execs' timers until its turn ends. Ending each one here
+  // keeps them from firing, and logging, during a later test.
+  await Promise.all(madeTargets.splice(0).map((target) => target.endTurn()));
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -111,6 +117,52 @@ test("the turn timer ends the capability and kills its exec", async () => {
     outcome: "killed",
   });
   expect(Number(named(events(), "workspace.exec").at(0)?.timeoutMs)).toBeLessThanOrEqual(50);
+});
+
+test.each([
+  { name: "the cap lands on the deadline", requestedMs: 50, dateAheadMs: 0 },
+  { name: "the request is past the budget", requestedMs: 500, dateAheadMs: 0 },
+  { name: "the exec timer fires before the turn timer", requestedMs: 500, dateAheadMs: 10 },
+])(
+  "a timeout at the turn deadline is the turn ending: $name",
+  async ({ requestedMs, dateAheadMs }) => {
+    vi.useFakeTimers();
+    const events = capturedEvents();
+    const { execBackend, target } = makeTarget({ remainingMs: 50 });
+    const clockNow = Date.now.bind(Date);
+    vi.spyOn(Date, "now").mockImplementation(() => clockNow() + dateAheadMs);
+    const started = await target.startExec({ command: "sleep 1", timeoutMs: requestedMs });
+
+    if (!started.ok) throw new Error("expected exec to start");
+
+    const reader = started.value.events.getReader();
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(reader.read()).resolves.toMatchObject({
+      value: { kind: "terminal", outcome: "killed" },
+    });
+    expect(execBackend.handles[0]?.killCalls).toBe(1);
+    expect(named(events(), "workspace.exec")).toMatchObject([
+      { outcome: "killed", endedBy: "turn-end" },
+    ]);
+  },
+);
+
+test("a timeout before the turn deadline is still a timeout", async () => {
+  vi.useFakeTimers();
+  const events = capturedEvents();
+  const { target } = makeTarget({ remainingMs: 50 });
+  const started = await target.startExec({ command: "sleep 1", timeoutMs: 20 });
+
+  if (!started.ok) throw new Error("expected exec to start");
+
+  const reader = started.value.events.getReader();
+  await vi.advanceTimersByTimeAsync(20);
+  await expect(reader.read()).resolves.toMatchObject({
+    value: { kind: "terminal", outcome: "timed-out" },
+  });
+  expect(named(events(), "workspace.exec")).toMatchObject([
+    { outcome: "timed-out", endedBy: null },
+  ]);
 });
 
 test("logs one bounded workspace.exec event when a command exits", async () => {
