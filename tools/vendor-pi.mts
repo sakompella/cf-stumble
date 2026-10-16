@@ -547,6 +547,7 @@ async function main(): Promise<void> {
 
   if (mode === "--check" && arguments_.length === 0) {
     await checkVendorTree();
+    await checkComputerTarball();
 
     return;
   }
@@ -685,6 +686,25 @@ async function checkVendorTree(): Promise<void> {
 
   if (/\b(?:from|import)\s*["']node:/u.test(output) || /\brequire\s*\(\s*["']node:/u.test(output)) {
     throw new Error("Pi bundle contains a static node: import");
+  }
+}
+
+// A matching digest proves the vendored Computer tarball is the recorded blob. The script
+// scripts/vendor/verify-computer-tarball.sh rebuilds it from upstream to show where it came from.
+async function checkComputerTarball(): Promise<void> {
+  const tarball = resolve(repoRoot, "vendor/cloudflare-computer-0.3.0.tgz");
+
+  const recorded = await readFile(`${tarball}.sha256`, "utf8");
+
+  const expected = /^(?<hash>[a-f0-9]{64})  cloudflare-computer-0\.3\.0\.tgz\n$/u.exec(recorded)
+    ?.groups?.hash;
+
+  if (expected === undefined) {
+    throw new Error("Invalid vendor/cloudflare-computer-0.3.0.tgz.sha256");
+  }
+
+  if ((await sha256(tarball)) !== expected) {
+    throw new Error("SHA256 mismatch for vendor/cloudflare-computer-0.3.0.tgz");
   }
 }
 
