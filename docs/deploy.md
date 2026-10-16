@@ -246,7 +246,7 @@ The tool reads the service token from `--token-file`, which defaults to `.audit/
 
 The page shows one of three states:
 
-- **connected** (with the model name): model calls use your subscription.
+- **connected** (with the model name): model calls use your subscription. When OpenAI refuses a call for the plan's usage limit, the page adds **usage limit reached**, with the time the limit ends when OpenAI gave one. A call the limit refuses before it sends any output is answered by Workers AI instead, and the saved conversation shows a notice before that answer. The connection stays connected.
 - **reconnect required** (with the reason): OpenAI refused the refresh token or the access token. Every model call fails with `chatgpt-reconnect-required` until you connect again or disconnect. The route does not fall back to Workers AI here, so a broken subscription is visible.
 - **not connected (Workers AI fallback)**: model calls use Workers AI.
 

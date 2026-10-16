@@ -7,7 +7,7 @@ import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { chatGPTConnection } from "../../../src/page/client/api.js";
 import { Message } from "../../../src/page/client/message.js";
-import type { Model } from "../../../src/page/client/model.js";
+import { Turn, type Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 
 const LOGIN = { attemptId: "attempt-1", authorizeUrl: "https://auth.example/authorize?state=s" };
@@ -155,4 +155,43 @@ test("an unreachable Worker is reported in the banner and the result", () => {
 
   expect(failed.chatgptResult).toBe("request failed");
   expect(failed.pageError).toContain("offline");
+});
+
+function limited(limitedUntil: number | null) {
+  return {
+    connection: { state: "connected", expiresAt: 1, usageLimit: { reachedAt: 1, limitedUntil } },
+    login: null,
+    model: "gpt-6.1-sol",
+  };
+}
+
+test("a usage limit is worded with its end when OpenAI named one, and the connection stays", () => {
+  expect(chatGPTConnection(limited(Date.UTC(2026, 9, 16, 9, 30)))).toMatchObject({
+    connection: "connected (gpt-6.1-sol); usage limit reached until 2026-10-16 09:30 UTC",
+    isConnected: true,
+  });
+  expect(chatGPTConnection(limited(null))).toMatchObject({
+    connection: "connected (gpt-6.1-sol); usage limit reached",
+    isConnected: true,
+  });
+});
+
+function ending(start: Model): Model {
+  return {
+    ...start,
+    maybeProjectId: Option.some("harness"),
+    turn: Turn.Streaming({ turnId: 1, projectId: "harness", prompt: "go", hasTerminalFrame: true }),
+  };
+}
+
+test("a turn that ends while ChatGPT is connected reads the connection again", () => {
+  const commandsAfter = (start: Model) =>
+    (update(ending(start), Message.EndedTurnStream({ turnId: 1 })).commands ?? []).map(
+      (command) => command.name,
+    );
+
+  const connected = after(init().model, [succeeded(viewOf({ state: "connected", expiresAt: 1 }))]);
+
+  expect(commandsAfter(connected)).toEqual(["FetchThread", "FetchChatGPT"]);
+  expect(commandsAfter(init().model)).toEqual(["FetchThread"]);
 });

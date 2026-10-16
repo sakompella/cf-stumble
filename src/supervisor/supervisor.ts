@@ -426,6 +426,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     if (typeof accessToken === "string") this.chatgpt.markRefused(accessToken);
   }
 
+  /** The model route met the plan's usage limit; `limitedUntil` is when it ends, if OpenAI said. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
+  markChatGPTUsageLimited(limitedUntil: unknown): void {
+    this.chatgpt.markUsageLimited(
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
+      typeof limitedUntil === "number" && Number.isFinite(limitedUntil) ? limitedUntil : null,
+    );
+  }
+
   /**
    * The project thread surface. Each method takes the project id a client sent and resolves it
    * against the catalog before any row is touched (ADR-0038), so the thread a request reaches is

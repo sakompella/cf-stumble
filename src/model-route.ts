@@ -24,6 +24,7 @@ export type {
 export type {
   ModelRouteErrorCode,
   ModelStreamEvent,
+  ProviderFallback,
   ModelStreamInference,
   ModelUsage,
   StreamingProviderPayload,
@@ -37,6 +38,7 @@ type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
     chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
     markChatGPTRefused(accessToken: string): Promise<void>;
+    markChatGPTUsageLimited(limitedUntil: number | null): Promise<void>;
   }>;
 }>;
 
@@ -61,7 +63,8 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
    *
    * The owner's ChatGPT plan answers while a credential is connected; Workers AI answers while none
    * is. A refused or revoked grant fails the call with `chatgpt-reconnect-required` rather than
-   * switching provider (ADR-0047). */
+   * switching provider. A usage limit that refused the call before any output switches provider
+   * after a `provider-fallback` event, so the owner sees which model answered (ADR-0047). */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
   runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
     const parsed = parseRequest(request);
@@ -88,7 +91,16 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     );
 
     const turn: ModelTurn = (emit) =>
-      chatgpt(emit).pipe(Effect.catchTag("ChatGPTNotConnected", () => workersAi(emit)));
+      chatgpt(emit).pipe(
+        Effect.catchTags({
+          ChatGPTNotConnected: () => workersAi(emit),
+          ChatGPTUsageLimited: ({ limitedUntil }) => {
+            emit({ type: "provider-fallback", reason: "chatgpt-usage-limit", limitedUntil });
+
+            return workersAi(emit);
+          },
+        }),
+      );
 
     return modelEventStream(turn);
   }
@@ -102,6 +114,7 @@ export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps>
     return {
       access: (rejected) => holder.chatgptAccess(rejected),
       markRefused: (accessToken) => holder.markChatGPTRefused(accessToken),
+      markUsageLimited: (limitedUntil) => holder.markChatGPTUsageLimited(limitedUntil),
     };
   }
 }

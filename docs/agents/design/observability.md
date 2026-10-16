@@ -66,6 +66,18 @@ Common questions and the events that answer them:
 | Does the ChatGPT model answer?    | `chatgpt.model-call` with `outcome: "retrying"` (OpenAI refused a token once), `"refused"` (refused twice; the connection now needs a reconnect), `"http-error"` with the `status` and OpenAI's `code`, or `"stream-failed"` with its `code`. `chatgpt.refresh` with `outcome: "rejected"` or `"missing-scope"` means the owner must sign in again; `"temporary"`, `"rate-limited"` and `"ambiguous"` mean the token server did not answer usefully and the stored pair was kept. `chatgpt.provider-refused`, `chatgpt.login.start`, `chatgpt.login.complete` (its `outcome` is `connected` or a refusal code) and `chatgpt.disconnect` record the connection's changes. No event carries a token or a code. |
 | Why was a request refused?        | `access.refused`, `route.cross-origin-refused`, `turn.refused`, and `project.size-check`. Credential authorization and disconnect can also refuse a request; `project.disconnected` is not written for a refusal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
+### ChatGPT model-call fields
+
+`chatgpt.model-call` with `outcome: "http-error"` or `"stream-failed"` carries the provider's HTTP
+`status`, and its error `type` and `code`, each `"unknown"` when the provider sent none. A stream
+that fails after the headers has a 2xx `status`. The event never carries the error's message,
+because it can name the owner's account, and never a token.
+
+A usage limit (ADR-0047) adds two fields. `fallback` is `true` when the call had sent no output
+and Workers AI answers it, and `false` when output was already sent and the call failed.
+`limitedUntil`, in epoch milliseconds, is present when a `retry-after` header named the limit's
+end. A `fallback: true` event is logged at warn level; every other refusal at error level.
+
 ## Issues and traces
 
 Cloudflare Issues and Workers traces are on for this Worker (`observability.issues` and `observability.traces` in `cloudflare.config.ts` and `wrangler.jsonc`). Both configurations must keep them on: a deployment from a configuration without `issues` turns Issues off.

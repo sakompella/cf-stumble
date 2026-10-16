@@ -150,6 +150,19 @@ function chatGPTLogin(login: unknown): ChatGPTConnection["maybeLogin"] {
     : Option.some({ attemptId, authorizeUrl });
 }
 
+/** A usage limit on a connected plan, with its end in UTC when OpenAI named one; otherwise nothing. */
+function usageLimitText(limit: unknown): string {
+  if (!Predicate.hasProperty(limit, "limitedUntil")) {
+    return "";
+  }
+
+  const { limitedUntil } = limit;
+
+  return Predicate.isNumber(limitedUntil)
+    ? `; usage limit reached until ${new Date(limitedUntil).toISOString().slice(0, 16).replace("T", " ")} UTC`
+    : "; usage limit reached";
+}
+
 /** The `chatgpt` view the Worker sends, worded for the page. A state the page cannot word reads as unknown. */
 export function chatGPTConnection(view: unknown): ChatGPTConnection {
   const connection = field(view, "connection");
@@ -160,7 +173,7 @@ export function chatGPTConnection(view: unknown): ChatGPTConnection {
       return { connection: "not connected (Workers AI fallback)", isConnected: false, maybeLogin };
     case "connected":
       return {
-        connection: `connected (${text(field(view, "model"))})`,
+        connection: `connected (${text(field(view, "model"))})${usageLimitText(field(connection, "usageLimit"))}`,
         isConnected: true,
         maybeLogin,
       };

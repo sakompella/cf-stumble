@@ -96,7 +96,13 @@ function parseStreamEventLine(line: string): ModelStreamEvent | undefined {
   if (parsed === null || typeof parsed !== "object" || !("type" in parsed)) return undefined;
   const { type } = parsed;
 
-  if (type === "text-delta" || type === "tool-call-delta" || type === "done" || type === "error") {
+  if (
+    type === "text-delta" ||
+    type === "tool-call-delta" ||
+    type === "done" ||
+    type === "error" ||
+    type === "provider-fallback"
+  ) {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `type` narrowed to every member of the closed ModelStreamEvent union above.
     return parsed as ModelStreamEvent;
   }
@@ -135,6 +141,10 @@ function applyModelStreamEvent(
 
     case "error":
       assembler.fail(stream, "error", event.error.code);
+
+      return;
+    case "provider-fallback":
+      assembler.providerFallback(event);
 
       return;
     default: {

@@ -116,6 +116,7 @@ test("a generation that stops reading across Workers RPC cancels a quiet provide
 const CONNECTED: ChatGPTCredential = {
   access: () => Promise.resolve({ kind: "ready", accessToken: ACCESS_ONE }),
   markRefused: () => Promise.resolve(),
+  markUsageLimited: () => Promise.resolve(),
 };
 
 /** The ChatGPT call alone; a test that reaches the Workers AI fallback has gone wrong. */
@@ -124,8 +125,8 @@ function chatgptOnly(fetcher: ProviderFetch): ModelTurn {
 
   return (emit) =>
     turn(emit).pipe(
-      Effect.catchTag("ChatGPTNotConnected", () =>
-        Effect.die(new Error("this test expects a connected credential")),
+      Effect.catchTag(["ChatGPTNotConnected", "ChatGPTUsageLimited"], () =>
+        Effect.die(new Error("this test expects a connected credential with no usage limit")),
       ),
     );
 }

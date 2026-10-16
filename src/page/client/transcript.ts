@@ -178,6 +178,7 @@ const SavedMessage = Schema.Struct({
   toolCallId: Schema.optional(Schema.Unknown),
   toolName: Schema.optional(Schema.Unknown),
   isError: Schema.optional(Schema.Unknown),
+  diagnostics: Schema.optional(Schema.Unknown),
 });
 
 type SavedMessage = typeof SavedMessage.Type;
@@ -212,6 +213,22 @@ function savedTextEntry(message: SavedMessage): TranscriptEntry {
   return textEntry("system", message.role, body);
 }
 
+const ProviderFallback = Schema.Struct({ type: Schema.Literal("provider-fallback") });
+
+/**
+ * The model route answered this message from Workers AI because the owner's ChatGPT plan had
+ * reached its usage limit; generation 0 records that as a diagnostic on the message (ADR-0047).
+ */
+function isFallbackAnswer(message: SavedMessage): boolean {
+  const diagnostics: unknown = message.diagnostics;
+
+  return (
+    message.role === "assistant" &&
+    globalThis.Array.isArray(diagnostics) &&
+    diagnostics.some((diagnostic) => Schema.is(ProviderFallback)(diagnostic))
+  );
+}
+
 /**
  * The same rule as {@link withToolResult}, in one pass: a result replaces the latest block with
  * its id, which `toolBlocks` remembers, so a long conversation is not copied once per message.
@@ -223,6 +240,12 @@ function savedEntries(messages: readonly unknown[]): readonly TranscriptEntry[] 
   for (const message of messages) {
     if (!Schema.is(SavedMessage)(message)) {
       continue;
+    }
+
+    if (isFallbackAnswer(message)) {
+      entries.push(
+        textEntry("system", "notice", "ChatGPT usage limit reached; answered with Workers AI"),
+      );
     }
 
     if (message.role !== "toolResult") {

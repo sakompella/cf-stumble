@@ -40,6 +40,25 @@ that needs a reconnect fails every call with `chatgpt-reconnect-required` instea
 so the owner sees that the subscription stopped answering. A token server that is down fails the
 call with `model-unavailable`, unless the stored token is still valid.
 
+**A usage limit falls back, and says so.** On 2026-10-16 the first production turn after the owner
+connected a Plus account failed: OpenAI answered HTTP 200 and then streamed `response.failed` with
+`subscription_sharing_usage_limit_exceeded`. Every turn failed until ChatGPT was disconnected. A
+call is now treated as refused for a usage limit when the provider answers HTTP 429, or its error
+code or type is `subscription_sharing_usage_limit_exceeded`, `rate_limit_exceeded`,
+`rate_limit_error` or `insufficient_quota`, in the response body or in the stream
+(`src/chatgpt/responses.ts`). If nothing of that call reached the caller yet, the route sends one
+`provider-fallback` event and answers the call from Workers AI. Generation 0 keeps that event as a
+`provider-fallback` diagnostic on the assistant message it ends the call with, so the saved thread
+records which model answered. Once any text or tool call was sent, it never falls back: the call
+ends with one `model-unavailable` error, as before, because two providers' halves of one answer are
+not one answer. Either way the connection stays connected and the Supervisor records the limit. A
+`retry-after` header gives the time it ends, capped at a week; until then the route skips ChatGPT
+and falls back without asking. OpenAI names no end for a limit that arrives in the stream, and its
+documentation says not to infer one, so the next call asks ChatGPT again and records the limit again
+if it still holds. The owner's ChatGPT view shows the limit, with its end when known. Other
+refusals, such as `subscription_sharing_user_not_eligible` or
+`subscription_sharing_usage_unavailable`, still fail the call.
+
 **The model is fixed per deployment.** `CHATGPT_MODEL` in `cloudflare.config.ts` names it
 (`gpt-6.1-sol`, the model OpenAI's token sharing documentation uses in its examples). The request
 uses medium reasoning effort, `store: false` and streaming, and passes system messages as
@@ -57,4 +76,9 @@ Rejected alternatives:
 - **Pass the token in the route's props.** Props are fixed when the Supervisor creates the stub, so
   a refreshed token would not reach a running turn.
 - **Fall back to Workers AI when the grant is refused.** The owner would get a different model's
-  answers with no sign that the subscription stopped working.
+  answers with no sign that the subscription stopped working. A usage limit is different: the
+  grant still works, the limit ends by itself, and the `provider-fallback` event and the owner's
+  view say which model answered.
+- **Pause ChatGPT for a fixed time after a limit with no named end.** OpenAI's guidance is to pause
+  requests, but any fixed pause invents a reset time. Asking again costs one refused request per
+  model call, and ChatGPT answers again as soon as the limit lifts.

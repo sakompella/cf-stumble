@@ -9,65 +9,24 @@ import {
   randomSecret,
   refreshFields,
   requestTokens,
-  type CallbackProblem,
   type ProviderFetch,
   type TokenFailure,
 } from "./oauth.js";
+import type { ChatGPTCredentialStore, StoredConnection } from "./credential-store.js";
 import type {
-  ChatGPTCredentialStore,
-  ReconnectReason,
-  StoredConnection,
-} from "./credential-store.js";
+  ChatGPTAccess,
+  ChatGPTConnectionStatus,
+  ChatGPTConnectionView,
+  ChatGPTLoginFailure,
+  ChatGPTLoginOutcome,
+  ChatGPTUsageLimit,
+} from "./connection-view.js";
 
 /** How long a started sign-in can be finished. */
 export const LOGIN_TTL_MS = 10 * 60 * 1000;
 
 /** An access token with less than this left is refreshed before it is used. */
 export const REFRESH_WINDOW_MS = 8 * 60 * 1000;
-
-export type ChatGPTConnectionStatus =
-  | Readonly<{ state: "disconnected" }>
-  | Readonly<{ state: "connected"; expiresAt: number }>
-  | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
-
-export type ChatGPTLoginView = Readonly<{
-  attemptId: string;
-  authorizeUrl: string;
-  expiresAt: number;
-}>;
-
-/** What the owner API and the page see. It never carries a token, a verifier, or a code. */
-export type ChatGPTConnectionView = Readonly<{
-  connection: ChatGPTConnectionStatus;
-  login: ChatGPTLoginView | null;
-  model: string;
-}>;
-
-export type ChatGPTLoginFailure =
-  | "no-sign-in"
-  | "expired"
-  | CallbackProblem
-  | "exchange-refused"
-  | "exchange-unavailable"
-  | "missing-scope";
-
-export type ChatGPTLoginOutcome =
-  | Readonly<{ ok: true; chatgpt: ChatGPTConnectionView }>
-  | Readonly<{
-      ok: false;
-      problem: Readonly<{ code: ChatGPTLoginFailure }>;
-      chatgpt: ChatGPTConnectionView;
-    }>;
-
-/**
- * The credential the model route may use now. `unavailable` means the token server was busy or
- * unreachable while the stored token could not be used; the stored tokens are unchanged.
- */
-export type ChatGPTAccess =
-  | Readonly<{ kind: "ready"; accessToken: string }>
-  | Readonly<{ kind: "not-connected" }>
-  | Readonly<{ kind: "reconnect-required" }>
-  | Readonly<{ kind: "unavailable" }>;
 
 type ConnectedCredential = Extract<StoredConnection, { state: "connected" }>;
 
@@ -126,12 +85,16 @@ export class ChatGPTConnection {
     const stored = this.store.connection();
     const login = this.store.login();
 
+    const usageLimit = this.currentUsageLimit();
+
     const connection: ChatGPTConnectionStatus =
       stored === undefined
         ? { state: "disconnected" }
-        : stored.state === "connected"
-          ? { state: "connected", expiresAt: stored.expiresAt }
-          : stored;
+        : stored.state === "needs-reconnect"
+          ? stored
+          : usageLimit === undefined
+            ? { state: "connected", expiresAt: stored.expiresAt }
+            : { state: "connected", expiresAt: stored.expiresAt, usageLimit };
 
     return {
       connection,
@@ -198,6 +161,9 @@ export class ChatGPTConnection {
   /**
    * The access token to send now. `rejected` is a token the provider just refused with 401: while
    * it is still the stored one, it is refreshed; when a newer one replaced it, that one is used.
+   *
+   * A usage limit with a named end skips ChatGPT until then. Any other recorded limit is forgotten
+   * once a call is about to ask ChatGPT again; that call records it anew if the limit still holds.
    */
   access(rejected?: string): Effect.Effect<ChatGPTAccess> {
     return Effect.suspend(() => {
@@ -210,6 +176,14 @@ export class ChatGPTConnection {
       if (stored.state === "needs-reconnect") {
         return Effect.succeed({ kind: "reconnect-required" } as const);
       }
+
+      const limitedUntil = this.currentUsageLimit()?.limitedUntil ?? null;
+
+      if (limitedUntil !== null) {
+        return Effect.succeed({ kind: "usage-limited", limitedUntil } as const);
+      }
+
+      this.store.clearUsageLimit();
 
       const expiresSoon = stored.expiresAt - this.clock() < REFRESH_WINDOW_MS;
 
@@ -225,6 +199,20 @@ export class ChatGPTConnection {
   markRefused(accessToken: string): void {
     this.store.markNeedsReconnect(accessToken, "provider-refused", this.clock());
     logEvent("error", "chatgpt.provider-refused");
+  }
+
+  /** The plan's usage limit refused a call. The connection stays connected. */
+  markUsageLimited(limitedUntil: number | null): void {
+    this.store.markUsageLimited({ reachedAt: this.clock(), limitedUntil });
+  }
+
+  /** The recorded usage limit, unless the end OpenAI named has passed. */
+  private currentUsageLimit(): ChatGPTUsageLimit | undefined {
+    const limit = this.store.usageLimit();
+
+    if (limit === undefined || limit.limitedUntil === null) return limit;
+
+    return limit.limitedUntil > this.clock() ? limit : undefined;
   }
 
   private redeem(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {

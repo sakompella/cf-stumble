@@ -59,6 +59,7 @@ function bindingStreaming(lines: readonly string[]): FakeBinding {
 type CredentialHolder = Readonly<{
   chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
   markChatGPTRefused(accessToken: string): Promise<void>;
+  markChatGPTUsageLimited(limitedUntil: number | null): Promise<void>;
 }>;
 
 const NO_SUPERVISOR = {
@@ -89,6 +90,7 @@ function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRout
         return {
           chatgptAccess: () => Promise.resolve(access),
           markChatGPTRefused: () => Promise.resolve(),
+          markChatGPTUsageLimited: () => Promise.resolve(),
         };
       },
     },
