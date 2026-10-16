@@ -74,7 +74,11 @@ test("allows a public repository lookup without a configured credential", async 
   });
 
   expect(size).toEqual({ sizeKb: 7, blobCount: 0, blobBytes: 0, truncated: false });
-  expect(new Headers(requestedInit?.headers).has("authorization")).toBe(false);
+  const headers = new Headers(requestedInit?.headers);
+
+  expect(headers.has("authorization")).toBe(false);
+  // GitHub answers 403 to any request that has no User-Agent.
+  expect(headers.get("user-agent")).toBeTruthy();
 });
 
 test.each([
