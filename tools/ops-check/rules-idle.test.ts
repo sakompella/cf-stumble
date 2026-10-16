@@ -178,6 +178,52 @@ describe("rule d: a turn lease holds the container", () => {
   });
 });
 
+describe("rule d: requests that never reach the Workspace Host", () => {
+  const window = { fromMs: START, toMs: START + 60 * MINUTE_MS };
+
+  /** Host work at minute 0 only, and a `route.settled` every 10 minutes while the container runs for an hour. */
+  const hourWithSettled = (settled: JsonRecord): CheckInput =>
+    input(window, {
+      logs: logs([
+        eventRow(START, "workspace.rpc", { method: "credential", durationMs: 1 }),
+        ...[10, 20, 30, 40, 50].map((minute) =>
+          eventRow(START + minute * MINUTE_MS, "route.settled", {
+            requestId: `settled-${minute}`,
+            method: "POST",
+            durationMs: 1,
+            ...settled,
+          }),
+        ),
+      ]),
+      metrics: metrics(
+        [[START, 1]],
+        bucketsOf(window, () => 5),
+      ),
+    });
+
+  it("does not count refused requests as owner activity", () => {
+    const refusedActivate = { route: "/api/generations/activate", applicationOutcome: "refused" };
+    const refusedTurn = { route: "/api/projects/:projectId/turn", applicationOutcome: "refused" };
+
+    assert.deepEqual(firing(hourWithSettled(refusedActivate)), ["ran-past-idle"]);
+    assert.deepEqual(firing(hourWithSettled(refusedTurn)), ["ran-past-idle"]);
+  });
+
+  it("does not count activation or rollback, which the Supervisor decides alone", () => {
+    for (const route of ["/api/generations/activate", "/api/generations/rollback"]) {
+      assert.deepEqual(firing(hourWithSettled({ route, applicationOutcome: "ok" })), [
+        "ran-past-idle",
+      ]);
+    }
+  });
+
+  it("counts an accepted request on a route that reaches the Host", () => {
+    const accepted = { route: "/api/projects", applicationOutcome: "ok" };
+
+    assert.deepEqual(firing(hourWithSettled(accepted)), []);
+  });
+});
+
 describe("rule d: overlapping instances", () => {
   it("does not count the second of two overlapping instances as excess", () => {
     const lastRequest = START + 60 * MINUTE_MS;

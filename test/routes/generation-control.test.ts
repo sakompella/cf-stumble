@@ -120,7 +120,7 @@ test("repeating an activation with the epoch it already used is rejected as stal
   await control(stub, "activate", body);
   const repeated = await control(stub, "activate", body);
 
-  expect(repeated.status).toBe(200);
+  expect(repeated.status).toBe(409);
   await expect(repeated.json()).resolves.toEqual({
     ok: false,
     problem: { code: "stale-epoch" },
@@ -134,6 +134,7 @@ test("rejects an activation that carries a stale epoch", async () => {
 
   const response = await control(stub, "activate", { observedEpoch: stale, label });
 
+  expect(response.status).toBe(409);
   await expect(response.json()).resolves.toEqual({ ok: false, problem: { code: "stale-epoch" } });
   expect((await stub.getActiveGeneration()).generation?.label).toBe(0);
 });
@@ -170,10 +171,12 @@ test("refuses to roll back to a generation that never ran or is not ready", asyn
     label: candidate,
   });
 
+  expect(untried.status).toBe(409);
   await expect(untried.json()).resolves.toEqual({
     ok: false,
     problem: { code: "not-previously-active" },
   });
+  expect(notReady.status).toBe(409);
   await expect(notReady.json()).resolves.toEqual({ ok: false, problem: { code: "not-ready" } });
   expect((await stub.getActiveGeneration()).generation?.label).toBe(0);
 });

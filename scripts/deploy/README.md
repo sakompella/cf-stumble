@@ -69,5 +69,6 @@ Run these two steps as the owner, through Cloudflare Access, against the deploye
 
 There is no request journal (ADR-0030). Repeating the submission returns the existing generation
 instead of labeling the commit twice, and repeating the activation once it observes the current
-epoch is a no-op instead of acting twice. Repeating a step with a stale observed epoch still fails.
+epoch is a no-op instead of acting twice. Repeating a step with a stale observed epoch still fails,
+with HTTP 409 and `{"ok":false,"problem":{"code":"stale-epoch"}}`.
 The Supervisor decides both steps; naming a target does not perform it (ADR-0003).

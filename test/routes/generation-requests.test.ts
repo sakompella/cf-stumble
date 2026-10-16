@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { GenerationRequest } from "../../src/supervisor/control/index.js";
+import type { ControlProblemCode, GenerationRequest } from "../../src/supervisor/control/index.js";
 import {
   controlRequest,
   ownerApiResponse,
@@ -26,7 +26,7 @@ test("activates directly with a server-derived principal", async () => {
     principal: { kind: "user" },
     command: { kind: "activate", label: 2, observedEpoch: 3 },
   });
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(404);
   await expect(response.json()).resolves.toEqual({
     ok: false,
     problem: { code: "unknown-generation" },
@@ -50,8 +50,32 @@ test("rolls back through the same direct control operation", async () => {
 
   expect(received?.command).toEqual({ kind: "rollback", label: 0, observedEpoch: 4 });
   expect(received?.principal).toEqual({ kind: "user" });
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(409);
 });
+
+const refusalStatuses: readonly (readonly [ControlProblemCode, number])[] = [
+  ["invalid-harness-commit", 400],
+  ["invalid-generation-label", 400],
+  ["unknown-generation", 404],
+  ["stale-epoch", 409],
+  ["not-ready", 409],
+  ["not-previously-active", 409],
+  ["revoked-capability", 403],
+];
+
+test.each(refusalStatuses)(
+  "a %s refusal answers HTTP %i and keeps its code in the body",
+  async (code, status) => {
+    const response = await ownerApiResponse(
+      controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
+      supervisor({ controlGeneration: () => Promise.resolve({ ok: false, problem: { code } }) }),
+      ownerScope,
+    );
+
+    expect(response.status).toBe(status);
+    await expect(response.json()).resolves.toEqual({ ok: false, problem: { code } });
+  },
+);
 
 const malformedBodies: readonly (readonly [string, string])[] = [
   ["unparsable JSON", '{"observedEpoch":'],

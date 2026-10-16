@@ -53,6 +53,12 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
   `workspace-busy`, and the Workspace Host refuses file changes, credential installs, and project
   capabilities. Waiting for the reset instead is not built. See `design/computer-integration.md`,
   "Workspace layout".
+- **A refused generation control answers HTTP 4xx** (owner, 2026-10-16). Submission, activation,
+  and rollback refusals answer 400 for an invalid commit or label, 404 for an unknown generation,
+  409 for `stale-epoch`, `not-ready`, and `not-previously-active`, and 403 for
+  `revoked-capability`, instead of 200. The body still carries `ok: false` and the problem code,
+  and a successful no-op stays 200. Activation and rollback now write `route.settled`, so a refusal
+  shows there as `refused`. See `src/routes/generations.ts`.
 - **The model route uses the owner's ChatGPT subscription once connected** (owner, 2026-10-13).
   The Supervisor caches the credential; Workers AI answers until a connection exists. See
   ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers

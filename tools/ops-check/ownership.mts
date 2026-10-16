@@ -22,9 +22,27 @@ export function isOwnerWork(event: AppEvent): boolean {
   return OWNER_WORK_PREFIXES.some((prefix) => event.name.startsWith(prefix));
 }
 
-/** Any event an owner caused, including `route.settled` that touches no workspace work. */
+/** Routes the Supervisor decides alone, from its generation tables. They never reach the Host. */
+const SUPERVISOR_ONLY_ROUTES: ReadonlySet<string> = new Set([
+  "/api/generations/activate",
+  "/api/generations/rollback",
+]);
+
+/**
+ * A `route.settled` that may have kept the Host busy. A refused request stopped before any work,
+ * and activation and rollback never reach the Host, so neither one resets its idle clock.
+ */
+function settledReachesHost(event: AppEvent): boolean {
+  return (
+    event.name === "route.settled" &&
+    event.applicationOutcome !== "refused" &&
+    !(event.route !== null && SUPERVISOR_ONLY_ROUTES.has(event.route))
+  );
+}
+
+/** Any event an owner caused that can hold the Host: owner work, or an accepted request on a Host route. */
 export function isOwnerActivity(event: AppEvent): boolean {
-  return event.name === "route.settled" || isOwnerWork(event);
+  return settledReachesHost(event) || isOwnerWork(event);
 }
 
 /** Routes the owner API serves. Other paths (assets, the page) never touch the workspace. */
@@ -47,12 +65,10 @@ export function workSpans(events: readonly AppEvent[]): readonly Interval[] {
   });
 }
 
-/** `workSpans` plus requests that settled without touching the workspace. */
+/** `workSpans` plus accepted requests that settled without touching the workspace. */
 export function activitySpans(events: readonly AppEvent[]): readonly Interval[] {
   return [
     ...workSpans(events),
-    ...events.flatMap((event): Interval[] =>
-      event.name === "route.settled" ? [workSpan(event)] : [],
-    ),
+    ...events.flatMap((event): Interval[] => (settledReachesHost(event) ? [workSpan(event)] : [])),
   ];
 }
