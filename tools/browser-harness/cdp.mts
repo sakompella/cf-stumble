@@ -123,10 +123,27 @@ export class CdpConnection {
     });
   }
 
-  static open(webSocketUrl: string, commandTimeoutMs = 15_000): Promise<CdpConnection> {
+  static open(
+    webSocketUrl: string,
+    commandTimeoutMs = 15_000,
+    signal?: AbortSignal,
+  ): Promise<CdpConnection> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(webSocketUrl);
+
+      const abandon = (): void => {
+        const reason: unknown = signal?.reason;
+        reject(
+          reason instanceof Error
+            ? reason
+            : new Error(`DevTools attach aborted: ${String(reason)}`),
+        );
+        socket.close();
+      };
+
+      signal?.addEventListener("abort", abandon, { once: true });
       socket.addEventListener("open", () => {
+        signal?.removeEventListener("abort", abandon);
         resolve(new CdpConnection(socket, commandTimeoutMs));
       });
       socket.addEventListener("error", () => {

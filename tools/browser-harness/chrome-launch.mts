@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { once } from "node:events";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -28,9 +29,12 @@ const LAUNCH_ARGS = [
   "about:blank",
 ] as const;
 
+/**
+ * A browser process and its profile directory. {@link stopChromeProcess} is the only way either
+ * goes away, so every path that started one must end in a call to it.
+ */
 export type ChromeProcess = Readonly<{
   process: ChildProcess;
-  debuggerUrl: string;
   userDataDir: string;
   executable: string;
 }>;
@@ -40,17 +44,19 @@ export type ChromeProcess = Readonly<{
  *
  * The harness asks for port 0 so two runs can never collide on a fixed port, which means Chrome
  * picks the port and writes it to `DevToolsActivePort` in the profile directory. The HTTP endpoint
- * at that port then names the browser-level WebSocket.
+ * at that port then names the browser-level WebSocket. The signal ends the wait when Chrome exits
+ * or the launch deadline passes.
  */
-async function readDebuggerUrl(userDataDir: string, deadline: number): Promise<string> {
+export async function readDebuggerUrl(userDataDir: string, signal: AbortSignal): Promise<string> {
   const portFile = join(userDataDir, "DevToolsActivePort");
 
-  while (Date.now() < deadline) {
+  for (;;) {
+    signal.throwIfAborted();
     const lines = (await readFile(portFile, "utf8").catch(() => "")).split("\n");
     const port = lines[0];
 
     if (lines.length > 1 && port !== undefined && port.length > 0) {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal });
       const url = parseJsonRecord(await response.text())?.text("webSocketDebuggerUrl");
 
       if (url !== undefined) {
@@ -60,19 +66,77 @@ async function readDebuggerUrl(userDataDir: string, deadline: number): Promise<s
 
     await sleep(50);
   }
-
-  throw new Error("Chrome did not publish a DevTools port within the launch timeout");
 }
 
-export async function launchChromeProcess(): Promise<ChromeProcess> {
+/**
+ * Start Chrome in its own process group, so one signal reaches the renderer and GPU processes it
+ * forks as well as the browser itself.
+ */
+export async function startChromeProcess(): Promise<ChromeProcess> {
   const executable = await resolveChromePath();
   const userDataDir = await mkdtemp(join(tmpdir(), "cf-stumble-harness-"));
 
   const chromeProcess = spawn(executable, [...LAUNCH_ARGS, `--user-data-dir=${userDataDir}`], {
     stdio: "ignore",
+    detached: true,
   });
 
-  const debuggerUrl = await readDebuggerUrl(userDataDir, Date.now() + 30_000);
+  return { process: chromeProcess, userDataDir, executable };
+}
 
-  return { process: chromeProcess, debuggerUrl, userDataDir, executable };
+export type LaunchDeadline = Readonly<{ signal: AbortSignal; clear: () => void }>;
+
+/**
+ * Aborts when Chrome exits or fails to start, or when `timeoutMs` passes, with the reason as the
+ * error. A caller waiting on Chrome then fails at once instead of waiting out the deadline.
+ */
+export function launchDeadline(chromeProcess: ChildProcess, timeoutMs: number): LaunchDeadline {
+  const aborted = new AbortController();
+
+  const timer = setTimeout(() => {
+    aborted.abort(new Error(`Chrome was not attached within ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  chromeProcess.once("exit", (code, signal) => {
+    aborted.abort(new Error(`Chrome exited (${code ?? signal}) before the harness attached`));
+  });
+  chromeProcess.once("error", (error) => {
+    aborted.abort(error);
+  });
+
+  return {
+    signal: aborted.signal,
+    clear: () => {
+      clearTimeout(timer);
+    },
+  };
+}
+
+/**
+ * Kill the browser's whole process group, wait for the browser to exit, and remove the profile.
+ * A killed Chrome keeps writing its profile until its last child is gone, so removing the
+ * directory before the process has exited fails with ENOTEMPTY. Safe to call when Chrome already
+ * exited or never started.
+ */
+export async function stopChromeProcess(chrome: ChromeProcess): Promise<void> {
+  const { process: chromeProcess, userDataDir } = chrome;
+
+  if (chromeProcess.pid !== undefined) {
+    try {
+      process.kill(-chromeProcess.pid, "SIGKILL");
+    } catch {
+      // The group is already gone, which is what this call is for.
+    }
+  }
+
+  const running =
+    chromeProcess.pid !== undefined &&
+    chromeProcess.exitCode === null &&
+    chromeProcess.signalCode === null;
+
+  if (running) {
+    await once(chromeProcess, "exit");
+  }
+
+  await rm(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
