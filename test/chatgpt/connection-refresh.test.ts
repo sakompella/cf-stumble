@@ -206,6 +206,27 @@ test("a Disconnect while the token server is busy leaves the caller not connecte
   );
 });
 
+test("a token the provider refused while the token server was busy is not handed out", async () => {
+  const held = heldReply();
+
+  await withConnection(
+    "chatgpt-refresh-busy-refused",
+    () => held.reply,
+    async (harness) => {
+      connected(harness, 60_000);
+      const refreshing = access(harness.connection);
+      await vi.waitFor(() => {
+        expect(harness.calls).toHaveLength(1);
+      });
+
+      harness.connection.markRefused(ACCESS_ONE);
+      held.release(new Response("busy", { status: 503 }));
+
+      await expect(refreshing).resolves.toEqual({ kind: "reconnect-required" });
+    },
+  );
+});
+
 test("an account that replaced the pair while the token server was busy is the one used", async () => {
   const held = heldReply();
 
