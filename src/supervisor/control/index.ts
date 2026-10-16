@@ -6,6 +6,7 @@ import type { GenerationLabel, Generations } from "../generations/index.js";
 import type { ControlProblemCode, GenerationControlResult, GenerationRequest } from "./request.js";
 
 export type {
+  ControlProblemCode,
   GenerationCommand,
   GenerationControlResult,
   GenerationRequest,

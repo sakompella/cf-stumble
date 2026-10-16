@@ -1,7 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { parseHarnessCommit } from "../harness-commit.js";
-import type { GenerationControlResult, GenerationRequest } from "../supervisor/control/index.js";
+import type {
+  ControlProblemCode,
+  GenerationControlResult,
+  GenerationRequest,
+} from "../supervisor/control/index.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import { callSupervisor, Count, decodeRequestBody, InvalidRequestBody, jsonError } from "./json.js";
 
@@ -33,6 +37,29 @@ export type GenerationSubmissionResult =
       readonly preparation: StartupCheckResult;
     }
   | Extract<GenerationControlResult, { readonly ok: false }>;
+
+/**
+ * What each control refusal is, as an HTTP fact. A request the Supervisor can never accept is 400;
+ * a label it does not know is 404; a request that current generation state refuses, such as a stale
+ * epoch, is 409; and a harness principal whose generation no longer serves is 403. The body keeps
+ * `ok: false` and the code, so a client reads the refusal the same way at any status. The table is
+ * total over the codes, so a new code fails the compiler here until someone picks its status.
+ */
+const CONTROL_REFUSAL_STATUS = {
+  "invalid-harness-commit": 400,
+  "invalid-generation-label": 400,
+  "unknown-generation": 404,
+  "stale-epoch": 409,
+  "not-ready": 409,
+  "not-previously-active": 409,
+  "revoked-capability": 403,
+} as const satisfies Record<ControlProblemCode, number>;
+
+function refusalResponse(
+  refusal: Extract<GenerationControlResult, { readonly ok: false }>,
+): Response {
+  return Response.json(refusal, { status: CONTROL_REFUSAL_STATUS[refusal.problem.code] });
+}
 
 /** Activation and rollback take the same request. Only the command differs. */
 const GenerationControlBody = Schema.Struct({ observedEpoch: Count, label: Count });
@@ -69,7 +96,7 @@ export const handleGenerationControl = Effect.fnUntraced(
       supervisor.controlGeneration({ principal: { kind: "user" }, command: command(kind, body) }),
     );
 
-    return Response.json(result);
+    return result.ok ? Response.json(result) : refusalResponse(result);
   },
   (handled, _request, _supervisor, kind) =>
     handled.pipe(
@@ -93,8 +120,9 @@ export const handleGenerationControl = Effect.fnUntraced(
  * candidate passed while the generation that serves keeps serving.
  *
  * A build failure and a failed startup check are recorded outcomes, so they keep HTTP 200 and
- * arrive as the preparation result. A 4xx here means the request was malformed, and a 5xx means the
- * route could not reach a decision at all. Neither carries Supervisor error text.
+ * arrive as the preparation result. A 4xx here means the request was malformed or the Supervisor
+ * refused to label the commit, and a 5xx means the route could not reach a decision at all. Neither
+ * carries Supervisor error text.
  *
  * Resubmitting an already-labeled commit runs the same preparation step again rather than
  * replaying an earlier response. That check is itself idempotent: recording a preparation outcome
@@ -119,7 +147,7 @@ export const handleGenerationSubmission = Effect.fnUntraced(
     );
 
     if (!submitted.ok) {
-      return Response.json(submitted);
+      return refusalResponse(submitted);
     }
 
     const result: GenerationSubmissionResult = {

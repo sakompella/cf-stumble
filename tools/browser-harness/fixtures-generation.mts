@@ -171,7 +171,7 @@ export function runGenerationCommand(
   }
 
   if (record.status !== "ready") {
-    return refused(state, 409, "generation-not-ready");
+    return refused(state, 409, "not-ready");
   }
 
   const changed = record.label !== state.activeLabel;

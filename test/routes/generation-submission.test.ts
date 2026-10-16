@@ -238,7 +238,7 @@ test("prepares nothing when the control operation rejects the submission", async
   );
 
   expect(prepared, "an unlabeled commit has nothing to prepare").toBe(false);
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(400);
   await expect(response.json()).resolves.toEqual({
     ok: false,
     problem: { code: "invalid-harness-commit" },

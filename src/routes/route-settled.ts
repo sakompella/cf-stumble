@@ -11,8 +11,11 @@ import { withRouteSpan } from "./route-span.js";
  */
 type ApplicationOutcome = "ok" | "degraded" | "refused" | "fault";
 
-/** Owner API routes that reach the workspace, by method and route pattern. */
-const WORKSPACE_ROUTES: ReadonlySet<string> = new Set([
+/**
+ * Owner API routes that write `route.settled`, by method and route pattern: the ones that reach the
+ * workspace, and activation and rollback, which decide what serves.
+ */
+const SETTLED_ROUTES: ReadonlySet<string> = new Set([
   "GET /api/projects",
   "GET /api/github/connection",
   "POST /api/github/authorization",
@@ -21,6 +24,8 @@ const WORKSPACE_ROUTES: ReadonlySet<string> = new Set([
   "POST /api/projects/:projectId/disconnect",
   "POST /api/projects/:projectId/turn",
   "POST /api/generations/submit",
+  "POST /api/generations/activate",
+  "POST /api/generations/rollback",
   "POST /api/workspace/reset",
 ]);
 
@@ -85,9 +90,8 @@ function inRouteSpan<A, E>(
 }
 
 /**
- * Run one owner API request. A request that reaches the workspace gets a fresh `requestId` and
- * writes one `route.settled` event when its response is ready. Other requests run quietly with no
- * id. A turn's response is a stream, so its event marks the headers; `turn.settled` is the end. A
+ * Run one owner API request. A request on a settled route gets a fresh `requestId` and writes one
+ * `route.settled` event when its response is ready. Other requests run quietly with no id. A turn's response is a stream, so its event marks the headers; `turn.settled` is the end. A
  * handler that fails settles as a 500 `fault` with its redacted cause logged by the owner API;
  * `status` and `phase` are `null` only if the route wrapper itself fails, and that failure is
  * passed on unchanged.
@@ -99,7 +103,7 @@ export function settleRoute<E>(
   const pattern = routePattern(new URL(request.url).pathname);
   const route = `${request.method} ${pattern}`;
 
-  if (!WORKSPACE_ROUTES.has(route)) return Effect.suspend(() => run());
+  if (!SETTLED_ROUTES.has(route)) return Effect.suspend(() => run());
 
   return Effect.suspend(() => {
     const requestId = newRequestId();

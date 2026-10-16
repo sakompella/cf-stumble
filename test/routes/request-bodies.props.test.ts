@@ -127,6 +127,6 @@ test("activation reaches the Supervisor exactly when its body is two safe non-ne
     );
 
     expect(reached).toBe(expected);
-    expect(response.status).toBe(expected ? 200 : 400);
+    expect(response.status).toBe(expected ? 409 : 400);
   });
 });

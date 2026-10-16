@@ -6,8 +6,8 @@ import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
 /**
- * `route.settled`: one event per owner API request that reaches the workspace, with a server-made
- * request id that also reaches the Supervisor call the route makes.
+ * `route.settled`: one event per owner API request that reaches the workspace or controls a
+ * generation, with a server-made request id that also reaches the Supervisor call the route makes.
  */
 
 const ORIGIN = "https://cf-stumble.test";
@@ -20,7 +20,7 @@ function get(path: string, init: RequestInit = {}): Request {
   return new Request(`${ORIGIN}${path}`, init);
 }
 
-function post(path: string, body: Readonly<Record<string, string>>): Request {
+function post(path: string, body: Readonly<Record<string, string | number>>): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
     headers: { origin: ORIGIN },
@@ -117,6 +117,28 @@ test("a refused request is a warning", async () => {
     status: 403,
     applicationOutcome: "refused",
   });
+});
+
+test("a refused activation is a warning with the refusal's status", async () => {
+  const events = capturedEvents();
+
+  const response = await ownerApiResponse(
+    post("/api/generations/activate", { observedEpoch: 3, label: 2 }),
+    supervisor({
+      controlGeneration: () => Promise.resolve({ ok: false, problem: { code: "stale-epoch" } }),
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(409);
+  expect(named(events(), "route.settled")).toEqual([
+    expect.objectContaining({
+      level: "warn",
+      route: "/api/generations/activate",
+      status: 409,
+      applicationOutcome: "refused",
+    }),
+  ]);
 });
 
 test("a request that ran to the workspace timeout is an error even when it succeeded", async () => {

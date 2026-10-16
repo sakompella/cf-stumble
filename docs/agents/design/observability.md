@@ -252,16 +252,17 @@ an API token with Billing Read; the OAuth login cannot get that scope.
 
 ## Route events and request ids
 
-Every owner API request that reaches the workspace gets a `requestId`, a fresh UUID that the Worker
-makes with `crypto.randomUUID()` in `routeOwnerApiRequest`. No header, query, or body field can
-supply it, so a client cannot forge or reuse one. Filter on it to find the events one request
-caused. For the project list and the GitHub connection read, it is sent to the Supervisor and the
-Workspace Host as an explicit argument of each call, not stored as shared state, so overlapping
-requests keep separate ids. Other routes do not pass it on.
+Every owner API request that reaches the workspace or activates or rolls back a generation gets a
+`requestId`, a fresh UUID that the Worker makes with `crypto.randomUUID()` in
+`routeOwnerApiRequest`. No header, query, or body field can supply it, so a client cannot forge or
+reuse one. Filter on it to find the events one request caused. For the project list and the GitHub
+connection read, it is sent to the Supervisor and the Workspace Host as an explicit argument of each
+call, not stored as shared state, so overlapping requests keep separate ids. Other routes do not
+pass it on.
 
-| Event           | Level                                                                                                                           | Fields                                                                                                                                                                                                                                                       | Written when                                                                                                                                                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `route.settled` | info when `ok`; warn when `degraded` or `refused`; error when `fault` or when `durationMs` reached the workspace budget (901 s) | `requestId`, `route` (a pattern), `method`, `status` (`null` only if the route wrapper itself threw), `applicationOutcome` (`ok`, `degraded`, `refused`, or `fault`), `durationMs`, `phase` (`headers`, `body`, or `null` if the route wrapper itself threw) | The route's response was ready. It covers the project list, the GitHub connection, authorization start and complete, connect, disconnect, generation submission, workspace reset, and project turns. Other routes write nothing. |
+| Event           | Level                                                                                                                           | Fields                                                                                                                                                                                                                                                       | Written when                                                                                                                                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `route.settled` | info when `ok`; warn when `degraded` or `refused`; error when `fault` or when `durationMs` reached the workspace budget (901 s) | `requestId`, `route` (a pattern), `method`, `status` (`null` only if the route wrapper itself threw), `applicationOutcome` (`ok`, `degraded`, `refused`, or `fault`), `durationMs`, `phase` (`headers`, `body`, or `null` if the route wrapper itself threw) | The route's response was ready. It covers the project list, the GitHub connection, authorization start and complete, connect, disconnect, generation submission, activation, rollback, workspace reset, and project turns. Other routes write nothing. |
 
 - `applicationOutcome` follows the status (`refused` for 4xx, `fault` for 5xx). `degraded` is a 200
   that still reports a problem: today, a GitHub connection in `reconnect-required`. A handler that
