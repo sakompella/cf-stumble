@@ -90,22 +90,33 @@ async function effectPrebundle(): Promise<Plugin> {
  * prebundle above deliberately refuses.
  */
 /**
- * workerd rejects a promise of its own, which no code can reach or handle, when a reader cancels a
- * stream received over Workers RPC while a read is pending; the pending read itself rejects and
- * is handled. A turn that ends while its generation is quiet does exactly that, and only
- * `turn-cancel.test.ts` runs a real generation that far, so the error is ignored there alone.
+ * workerd rejects a promise of its own, which no code can reach or handle, when a stream received
+ * from another Worker or over Workers RPC is cancelled while a read is pending or fails while it
+ * is read; the pending read itself rejects and is handled. The same happens with a bare Worker
+ * Loader response and a reader that handles every promise it holds. Only these tests run a real
+ * generation or candidate that far, so the error is ignored in those files alone, and only for the
+ * message each one provokes.
+ * - `turn-cancel.test.ts`: a turn ends while its generation is quiet.
+ * - `startup-check/body.test.ts`: a candidate body fails mid-read, and a stalled body is cancelled
+ *   at the deadline.
  */
-function isRpcStreamCancelNoise(error: { message?: string; VITEST_TEST_PATH?: string }): boolean {
-  return (
-    error.message === "Stream was cancelled." &&
-    error.VITEST_TEST_PATH?.endsWith("test/supervisor/projects/turn-cancel.test.ts") === true
+const PLATFORM_STREAM_REJECTIONS = [
+  { file: "test/supervisor/projects/turn-cancel.test.ts", message: "Stream was cancelled." },
+  { file: "test/supervisor/startup-check/body.test.ts", message: "body exploded" },
+  { file: "test/supervisor/startup-check/body.test.ts", message: "startup-check deadline expired" },
+] as const;
+
+function isPlatformStreamNoise(error: { message?: string; VITEST_TEST_PATH?: string }): boolean {
+  return PLATFORM_STREAM_REJECTIONS.some(
+    ({ file, message }) =>
+      error.message === message && error.VITEST_TEST_PATH?.endsWith(file) === true,
   );
 }
 
 export default defineConfig({
   test: {
     silent: "passed-only",
-    onUnhandledError: (error) => !isRpcStreamCancelNoise(error),
+    onUnhandledError: (error) => !isPlatformStreamNoise(error),
     projects: [
       {
         plugins: [
