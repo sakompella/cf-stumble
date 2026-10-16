@@ -162,7 +162,11 @@ export default defineConfig({
       // `node:test` registers `describe` and `it` and tracks their promises itself; awaiting each
       // one at the top level would serialize the tests for no gain.
       // Test-local helper closures stay next to the test that uses them.
-      files: ["tools/ops-check/**/*.test.ts", "tools/*.test.ts"],
+      files: [
+        "tools/ops-check/**/*.test.ts",
+        "tools/browser-harness/**/*.test.ts",
+        "tools/*.test.ts",
+      ],
       rules: {
         "typescript/no-floating-promises": "off",
         "unicorn/consistent-function-scoping": "off",

@@ -94,8 +94,7 @@ last work, and a 270 s exec kept the container up until 180 s after it ended.
 12. **Code leads** from the 2026-09-27 audit, not confirmed as defects. Late refusals can write
     status into a newly selected project's page. Command decoders have no end-of-stream flush. The
     directory listing returns every entry. The Computer tarball verifier reads an ignored checksum
-    file. The Docker runtime stage and package feeds are not pinned. Browser launch and DevTools
-    attach failures leave no cleanup.
+    file. The Docker runtime stage and package feeds are not pinned.
     Terminal turn status has no concise live-region announcement. The vendor hash checks compare
     with the local manifest, not with upstream Pi.
 13. **Runtime behavior that needs a platform test.** Overlapping same-commit startup checks may

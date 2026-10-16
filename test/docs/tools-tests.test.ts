@@ -62,7 +62,9 @@ describe("Node tools tests", () => {
   });
 
   it("match every test file under tools", () => {
-    const runnerGlob = /^node --test '([^']+)'$/u.exec(gateScripts()["test:tools"])?.[1];
+    const runnerGlob = /^node --import tsx --test '([^']+)'$/u.exec(
+      gateScripts()["test:tools"],
+    )?.[1];
 
     expect(runnerGlob).toBeDefined();
     expect(toolTestFiles.length).toBeGreaterThan(0);

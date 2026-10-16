@@ -1,8 +1,11 @@
-import type { ChildProcess } from "node:child_process";
-import { once } from "node:events";
-import { rm } from "node:fs/promises";
 import { CdpConnection } from "./cdp.mjs";
-import { launchChromeProcess } from "./chrome-launch.mjs";
+import {
+  launchDeadline,
+  readDebuggerUrl,
+  startChromeProcess,
+  stopChromeProcess,
+  type ChromeProcess,
+} from "./chrome-launch.mjs";
 import { BrowserPage } from "./chrome.mjs";
 
 /**
@@ -14,29 +17,37 @@ import { BrowserPage } from "./chrome.mjs";
  * behind can reach the next one.
  */
 export class HarnessChrome {
-  private readonly process: ChildProcess;
+  private readonly chrome: ChromeProcess;
   private readonly connection: CdpConnection;
-  private readonly userDataDir: string;
   /** The binary this browser is running, so a report can say which browser produced it. */
   readonly executable: string;
 
-  private constructor(
-    chromeProcess: ChildProcess,
-    connection: CdpConnection,
-    userDataDir: string,
-    executable: string,
-  ) {
-    this.process = chromeProcess;
+  private constructor(chrome: ChromeProcess, connection: CdpConnection) {
+    this.chrome = chrome;
     this.connection = connection;
-    this.userDataDir = userDataDir;
-    this.executable = executable;
+    this.executable = chrome.executable;
   }
 
-  static async launch(): Promise<HarnessChrome> {
-    const chrome = await launchChromeProcess();
-    const connection = await CdpConnection.open(chrome.debuggerUrl);
+  /**
+   * Start Chrome and attach to it. Whatever goes wrong before the attach completes (Chrome exits,
+   * never publishes its port, or never answers the socket) stops the browser and removes its
+   * profile before the error reaches the caller.
+   */
+  static async launch(launchTimeoutMs = 30_000): Promise<HarnessChrome> {
+    const chrome = await startChromeProcess();
+    const deadline = launchDeadline(chrome.process, launchTimeoutMs);
 
-    return new HarnessChrome(chrome.process, connection, chrome.userDataDir, chrome.executable);
+    try {
+      const debuggerUrl = await readDebuggerUrl(chrome.userDataDir, deadline.signal);
+      const connection = await CdpConnection.open(debuggerUrl, undefined, deadline.signal);
+
+      return new HarnessChrome(chrome, connection);
+    } catch (error) {
+      await stopChromeProcess(chrome);
+      throw error;
+    } finally {
+      deadline.clear();
+    }
   }
 
   async openPage(): Promise<BrowserPage> {
@@ -61,23 +72,8 @@ export class HarnessChrome {
     return BrowserPage.attach(this.connection, sessionId, targetId);
   }
 
-  /**
-   * A killed Chrome keeps writing its profile until its last child is gone, so removing the
-   * directory before the process has exited fails with ENOTEMPTY and takes the whole run with it.
-   */
   async close(): Promise<void> {
     this.connection.close();
-    this.process.kill("SIGKILL");
-
-    if (this.process.exitCode === null && this.process.signalCode === null) {
-      await once(this.process, "exit");
-    }
-
-    await rm(this.userDataDir, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 100,
-    });
+    await stopChromeProcess(this.chrome);
   }
 }
