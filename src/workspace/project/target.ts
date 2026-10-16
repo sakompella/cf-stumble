@@ -63,7 +63,7 @@ function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectRes
 
 /**
  * The narrow, project-only RPC surface for one Computer workspace: exactly `lstat`, `readFile`,
- * `writeFile`, `listFiles`, `startExec`, and `kill`. It never exposes a build, fetch, raw
+ * `writeFile`, `listFiles`, `startExec`, `kill`, and `endTurn`. It never exposes a build, fetch, raw
  * Computer, container, or other generic capability. Its four filesystem methods confine addressed
  * paths beneath the fixed workspace root, and `startExec` confines its working directory there
  * while accepting an arbitrary shell command.
