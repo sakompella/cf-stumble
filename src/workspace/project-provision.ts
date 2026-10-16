@@ -107,22 +107,12 @@ export function parseProjectProvisionRequest(
 export function planProjectProvisionRequest(request: ParsedProjectProvisionRequest): WorkspacePlan {
   const step = projectProvisionStep(planProjectProvision(request.project), request.step);
 
-  switch (step.name) {
-    case "clone":
-      return {
-        kind: "run-command",
-        source: step.source,
-        cwd: step.cwd,
-        timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
-      };
-    case "instructions":
-      return { kind: "write-file", path: step.path, content: step.content };
-    default: {
-      const exhaustive: never = step;
-
-      return exhaustive;
-    }
-  }
+  return {
+    kind: "run-command",
+    source: step.source,
+    cwd: step.cwd,
+    timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+  };
 }
 
 /** The `url` of `[remote "origin"]` in a Git config file, or nothing. */

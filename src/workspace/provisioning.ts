@@ -3,11 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logEvent, logRedactedCause, timedEffect, type TimedOutcome } from "../diagnostics.js";
-import {
-  PROJECT_CLONE_SIZE_MARKER,
-  PROJECT_PROVISION_STEP_NAMES,
-  type ProjectProvisionStepName,
-} from "../project-provision.js";
+import { PROJECT_CLONE_SIZE_MARKER, type ProjectProvisionStepName } from "../project-provision.js";
 import {
   resolveProject,
   type Project,
@@ -25,16 +21,22 @@ import {
 } from "../workspace-command-timeout.js";
 import { workspaceRpc, type WorkspaceRpcFailed } from "./workspace-rpc.js";
 
-/** The Workspace Host provision surface as its caller uses it: a project and a planned step. */
-export type ProvisionWorkspaceHost = Readonly<{
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult>;
-}>;
-
-/** The harness's two operations use the build-side clone reconciler and the managed file writer. */
-export type HarnessProvisionWorkspaceHost = Readonly<{
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
+/** The Workspace Host's one writer of `/workspace/AGENTS.md`, which both plans end with. */
+type ManagedInstructionsWorkspaceHost = Readonly<{
   ensureManagedInstructions(): Promise<WorkspaceResult>;
 }>;
+
+/** A project's two operations use the provision surface's clone and the managed file writer. */
+export type ProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
+  Readonly<{
+    provision(request: ProjectProvisionRequest): Promise<WorkspaceResult>;
+  }>;
+
+/** The harness's two operations use the build-side clone reconciler and the managed file writer. */
+export type HarnessProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
+  Readonly<{
+    build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
+  }>;
 
 /**
  * Just enough of the Workspace Host binding to reach the tenant's workspace by name. The caller
@@ -78,7 +80,7 @@ export class ProvisionWorkspaceUnavailable extends Data.TaggedError(
   "ProvisionWorkspaceUnavailable",
 )<{
   readonly projectId: ProjectId;
-  readonly step: ProjectProvisionStepName;
+  readonly step: ProjectPlanStepName;
 }> {
   get code(): "provision-workspace-unavailable" {
     return "provision-workspace-unavailable";
@@ -95,6 +97,11 @@ type ProvisionedProjectWorkspace = Readonly<{
   projectId: ProjectId;
   workspaceName: string;
 }>;
+
+/** A project plan clones through the provision surface, then rewrites the managed instructions. */
+type ProjectPlanStepName = ProjectProvisionStepName | "instructions";
+
+const PROJECT_PLAN_STEP_NAMES: readonly ProjectPlanStepName[] = ["clone", "instructions"];
 
 type HarnessProvisionStepName = "provision" | "instructions";
 
@@ -148,24 +155,36 @@ interface ProvisionHarnessWorkspaceInput {
 const STEP_RESULT_KIND = {
   clone: "command",
   instructions: "written",
-} as const satisfies Record<ProjectProvisionStepName, "command" | "written">;
+} as const satisfies Record<ProjectPlanStepName, "command" | "written">;
+
+function writeManagedInstructions(
+  host: ManagedInstructionsWorkspaceHost,
+): Effect.Effect<WorkspaceResult, WorkspaceRpcFailed> {
+  return workspaceRpc(
+    { method: "ensureManagedInstructions", step: "instructions" },
+    () => host.ensureManagedInstructions(),
+    WORKSPACE_RPC_TIMEOUT_MS,
+  );
+}
 
 function runProjectHostStep(
   host: ProvisionWorkspaceHost,
   project: Project,
-  step: ProjectProvisionStepName,
+  step: ProjectPlanStepName,
 ): Effect.Effect<WorkspaceResult, WorkspaceRpcFailed> {
-  return workspaceRpc(
-    { method: "provision", step },
-    () =>
-      host.provision({
-        kind: "provision-project",
-        projectId: project.id,
-        repositoryUrl: project.repositoryUrl,
-        step,
-      }),
-    WORKSPACE_RPC_TIMEOUT_MS,
-  );
+  return step === "instructions"
+    ? writeManagedInstructions(host)
+    : workspaceRpc(
+        { method: "provision", step },
+        () =>
+          host.provision({
+            kind: "provision-project",
+            projectId: project.id,
+            repositoryUrl: project.repositoryUrl,
+            step,
+          }),
+        WORKSPACE_RPC_TIMEOUT_MS,
+      );
 }
 
 function cloneSizeKb(result: WorkspaceResult): number | null {
@@ -201,9 +220,9 @@ function logClone(
 function runProjectStep(
   host: ProvisionWorkspaceHost,
   project: Project,
-  step: ProjectProvisionStepName,
+  step: ProjectPlanStepName,
   signal: AbortSignal | undefined,
-): Effect.Effect<ProjectProvisionStepName, ProjectProvisionProblem> {
+): Effect.Effect<ProjectPlanStepName, ProjectProvisionProblem> {
   const projectId = project.id;
   const unavailable = new ProvisionWorkspaceUnavailable({ projectId, step });
 
@@ -243,7 +262,7 @@ function runProjectStep(
       return yield* unavailable;
     }
 
-    if (result.result.kind === "command" && result.result.exitCode !== 0) {
+    if (step === "clone" && result.result.kind === "command" && result.result.exitCode !== 0) {
       return yield* new ProvisionStepFailed({
         projectId,
         step,
@@ -266,11 +285,7 @@ function runHarnessHostStep(
         () => host.build({ kind: "build-step", harnessCommit, step }),
         WORKSPACE_RPC_TIMEOUT_MS,
       )
-    : workspaceRpc(
-        { method: "ensureManagedInstructions", step },
-        () => host.ensureManagedInstructions(),
-        WORKSPACE_RPC_TIMEOUT_MS,
-      );
+    : writeManagedInstructions(host);
 }
 
 function runHarnessStep(
@@ -329,7 +344,7 @@ type ActiveProvision = Readonly<{
 }>;
 
 const PROVISION_PLAN_STEP_COUNT = Math.max(
-  PROJECT_PROVISION_STEP_NAMES.length,
+  PROJECT_PLAN_STEP_NAMES.length,
   HARNESS_PROVISION_STEP_NAMES.length,
 );
 
@@ -553,11 +568,16 @@ function provisionResolvedProject(
   return Effect.gen(function* () {
     const host = input.namespace.getByName(input.workspaceName);
 
-    for (const step of PROJECT_PROVISION_STEP_NAMES) {
+    for (const step of PROJECT_PLAN_STEP_NAMES) {
       yield* runProjectStep(host, project, step, input.signal).pipe(
         timedEffect(
           "workspace.provision-step",
-          { plan: "project", projectId: project.id, step, method: "provision" },
+          {
+            plan: "project",
+            projectId: project.id,
+            step,
+            method: step === "clone" ? "provision" : "ensureManagedInstructions",
+          },
           stepOutcome,
         ),
       );

@@ -7,6 +7,8 @@ import {
   type WorkspacePathKind,
 } from "../../src/workspace/executor.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
+import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
+import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import {
   ensureManagedInstructions,
   WorkspaceHost,
@@ -79,42 +81,77 @@ test("exposes only the Workspace Host RPC methods", () => {
   ]);
 });
 
+/** A workspace store that holds only the managed file's path, as the test arranges it. */
 class ManagedInstructionsOperations implements WorkspaceOperations {
-  existing: WorkspacePathKind | undefined;
-  readonly writes: string[] = [];
+  readonly kinds = new Map<string, WorkspacePathKind>([[WORKSPACE_ROOT, "directory"]]);
+  readonly files = new Map<string, string>();
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
-    return Promise.resolve(path === "/workspace/AGENTS.md" ? this.existing : "directory");
+    return Promise.resolve(this.kinds.get(path));
   }
 
   readFile(): Promise<string> {
-    return Promise.resolve("");
+    return Promise.reject(new Error("the managed instructions writer reads nothing"));
   }
 
-  writeFile(_path: string, content: string): Promise<void> {
-    this.writes.push(content);
+  writeFile(path: string, content: string): Promise<void> {
+    this.kinds.set(path, "file");
+    this.files.set(path, content);
 
     return Promise.resolve();
   }
 
   runCommand(): Promise<CommandOutput> {
-    return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+    return Promise.reject(new Error("the managed instructions writer runs nothing"));
   }
 }
 
-test("writes managed instructions only when the workspace reset removed them", async () => {
+test("writes the managed instructions when the workspace has none", async () => {
   const operations = new ManagedInstructionsOperations();
 
-  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toMatchObject({
+  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toEqual({
     ok: true,
     result: { kind: "written" },
   });
-  expect(operations.writes).toHaveLength(1);
-
-  operations.existing = "file";
-  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toMatchObject({
-    ok: true,
-    result: { kind: "written" },
-  });
-  expect(operations.writes).toHaveLength(1);
+  expect(operations.files.get(MANAGED_AGENT_INSTRUCTIONS_PATH)).toBe(MANAGED_AGENT_INSTRUCTIONS);
 });
+
+test("replaces a stale managed instructions file with the current text", async () => {
+  const operations = new ManagedInstructionsOperations();
+  operations.kinds.set(MANAGED_AGENT_INSTRUCTIONS_PATH, "file");
+  operations.files.set(MANAGED_AGENT_INSTRUCTIONS_PATH, "# instructions from an older release\n");
+
+  await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toEqual({
+    ok: true,
+    result: { kind: "written" },
+  });
+  expect(operations.files.get(MANAGED_AGENT_INSTRUCTIONS_PATH)).toBe(MANAGED_AGENT_INSTRUCTIONS);
+});
+
+test.each([
+  [
+    "the managed file is a symbolic link",
+    MANAGED_AGENT_INSTRUCTIONS_PATH,
+    "symbolic-link",
+    "path-outside-root",
+  ],
+  ["the workspace root is a symbolic link", WORKSPACE_ROOT, "symbolic-link", "path-outside-root"],
+  [
+    "the managed path is a directory",
+    MANAGED_AGENT_INSTRUCTIONS_PATH,
+    "directory",
+    "workspace-unavailable",
+  ],
+] as const)(
+  "refuses to write the managed instructions when %s",
+  async (_case, path, kind, code) => {
+    const operations = new ManagedInstructionsOperations();
+    operations.kinds.set(path, kind);
+
+    await expect(Effect.runPromise(ensureManagedInstructions(operations))).resolves.toEqual({
+      ok: false,
+      error: { code },
+    });
+    expect(operations.files.size, "a refused write leaves the workspace as it was").toBe(0);
+  },
+);

@@ -1,11 +1,6 @@
 import { invariant } from "./invariant.js";
 import { shellQuote } from "./shell-quote.js";
-import {
-  MANAGED_AGENT_INSTRUCTIONS_PATH,
-  PROJECTS_DIRECTORY,
-  projectDirectory,
-  projectGitDirectory,
-} from "./workspace-layout.js";
+import { PROJECTS_DIRECTORY, projectDirectory, projectGitDirectory } from "./workspace-layout.js";
 import type { Project, ProjectId } from "./project-catalog.js";
 import {
   durableGitHubConfigurationSource,
@@ -37,7 +32,7 @@ export const PROJECT_CLONE_SIZE_MARKER = "cf-stumble-clone-size-kb=";
 export const MANAGED_AGENT_INSTRUCTIONS = [
   "# cf-stumble managed instructions",
   "",
-  "cf-stumble writes this file when it provisions the workspace and rewrites it on every restart.",
+  "cf-stumble rewrites this file before every turn.",
   "Record project conventions in the repository instead; an edit here does not survive.",
   "",
   "Never install dependencies or create large generated trees (node_modules, build output, virtualenvs) inside /workspace.",
@@ -50,27 +45,21 @@ export const MANAGED_AGENT_INSTRUCTIONS = [
   "",
 ].join("\n");
 
-export type ProjectProvisionStepName = "clone" | "instructions";
-
 /**
- * One provisioning step. The two steps do different kinds of work: cloning needs a shell, and the
- * instructions are a file whose content the server decides, so writing them through the
- * filesystem keeps the managed text out of any command line.
+ * The steps the Workspace Host's provision surface runs. The managed instructions are not one of
+ * them: both provisioning plans write that file through the Host's own `ensureManagedInstructions`.
  */
-type ProjectProvisionStep =
-  | Readonly<{ name: "clone"; source: string; cwd: string }>
-  | Readonly<{ name: "instructions"; path: string; content: string }>;
+export type ProjectProvisionStepName = "clone";
+
+type ProjectProvisionStep = Readonly<{ name: "clone"; source: string; cwd: string }>;
 
 type ProjectProvisionPlan = Readonly<{
   projectId: ProjectId;
   steps: readonly [ProjectProvisionStep, ...ProjectProvisionStep[]];
 }>;
 
-/** Ordered, because a caller runs the whole plan and a reader should see the order in one place. */
-export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] = [
-  "clone",
-  "instructions",
-];
+/** The step names a provision request may carry; the Host refuses any other. */
+export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] = ["clone"];
 
 /**
  * One project's provision lock, taken by the clone step and by project removal. The id alphabet is
@@ -223,9 +212,7 @@ function cloneProjectRepository(project: Project): string {
  *
  * Every path comes from `workspace-layout.ts`, which owns the whole layout. A project's clone is a
  * sibling of the harness checkout and of every other project rather than a container of its own
- * (ADR-0038), and the managed instructions sit above every clone for the reason that module
- * records: a managed file written inside a repository would either overwrite the repository's own
- * `AGENTS.md` or appear in the diff the user reviews.
+ * (ADR-0038).
  *
  * This module is shared by the workspace that provisions and the caller that asks for it, so both
  * plan a project the same way. It holds plain values only, and imports no platform API.
@@ -240,11 +227,6 @@ export function planProjectProvision(project: Project): ProjectProvisionPlan {
         // The clone moves the project root into place, so it cannot run inside it, and the
         // workspace root may not exist yet on a cold container.
         cwd: "/",
-      },
-      {
-        name: "instructions",
-        path: MANAGED_AGENT_INSTRUCTIONS_PATH,
-        content: MANAGED_AGENT_INSTRUCTIONS,
       },
     ],
   };

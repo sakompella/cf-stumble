@@ -14,7 +14,6 @@ import {
   PROVISION_STALE_AFTER_MS,
   waitForWorkspaceProvision,
   type CommandOutput,
-  type ProjectProvisionRequest,
   type ProvisionWorkspaceHost,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -48,15 +47,17 @@ class ScriptedProvisionHost implements ProvisionWorkspaceHost {
     });
   }
 
-  async provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  async provision(): Promise<WorkspaceResult> {
     await this.#held;
 
-    return request.step === "instructions"
-      ? { ok: true, result: { kind: "written" } }
-      : {
-          ok: true,
-          result: { kind: "command", stdout: "", stderr: PRIVATE_OUTPUT, exitCode: this.cloneExit },
-        };
+    return {
+      ok: true,
+      result: { kind: "command", stdout: "", stderr: PRIVATE_OUTPUT, exitCode: this.cloneExit },
+    };
+  }
+
+  ensureManagedInstructions(): Promise<WorkspaceResult> {
+    return Promise.resolve({ ok: true, result: { kind: "written" } });
   }
 }
 
@@ -89,6 +90,30 @@ test("each provision step is logged with its duration and outcome, and never its
   ]);
   expect(steps[0]?.durationMs).toBeGreaterThanOrEqual(0);
   expect(JSON.stringify(events())).not.toContain("could not read");
+});
+
+test("the managed instructions step is logged with the Host RPC it calls", async () => {
+  const events = capturedEvents();
+
+  await runToResult(
+    provisionProjectWorkspace({
+      workspaceName: tenantWorkspaceName("workspace-log-instructions"),
+      projectId: sampleProjectOne.id,
+      catalog: sampleCatalog,
+      namespace: namespaceFor(new ScriptedProvisionHost()),
+    }),
+  );
+
+  expect(
+    named(events(), "workspace.provision-step").map(({ step, method, outcome }) => ({
+      step,
+      method,
+      outcome,
+    })),
+  ).toEqual([
+    { step: "clone", method: "provision", outcome: "ok" },
+    { step: "instructions", method: "ensureManagedInstructions", outcome: "ok" },
+  ]);
 });
 
 test("a provision that waits on the workspace exclusion logs how long and how the wait ended", async () => {

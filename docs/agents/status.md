@@ -69,6 +69,11 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
   no build produced. `prepareGeneration` reads the stored map for the commit or builds it. Tests
   write a stored map first (`storeModuleMap` in `test/supervisor/helpers.ts`), then call
   `prepareGeneration`.
+- **The managed `/workspace/AGENTS.md` is rewritten before every turn** (owner, 2026-10-16).
+  Before, the harness plan wrote it only when the file was absent, so a stale copy survived a
+  release, while the project plan overwrote it through the provision surface. Both plans now call
+  the Workspace Host's one `ensureManagedInstructions`, which replaces a file and refuses a symbolic
+  link or a directory. See `design/computer-integration.md`, "Workspace layout".
 
 ## Open items
 

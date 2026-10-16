@@ -16,8 +16,6 @@ import { sampleProjectOne } from "../project-fixtures.js";
 function cloneSource(): string {
   const step = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
 
-  if (step.name !== "clone") throw new Error("the clone step must be the command step");
-
   return step.source;
 }
 

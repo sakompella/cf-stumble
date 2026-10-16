@@ -34,35 +34,25 @@ function delayedWorkspace(): DelayedWorkspace {
   let cloneStarted: (() => void) | undefined;
 
   let projectCalls = 0;
-  let provisionCalls = 0;
 
   const started = new Promise<void>((resolve) => {
     cloneStarted = resolve;
   });
 
   const host: ProvisionWorkspaceHost & { project(): Promise<ProjectCapabilityStub> } = {
-    provision(request): Promise<WorkspaceResult> {
-      provisionCalls += 1;
+    provision(): Promise<WorkspaceResult> {
+      cloneStarted?.();
 
-      if (provisionCalls === 1) {
-        cloneStarted?.();
-
-        return new Promise((resolve) => {
-          releaseClone = () => {
-            resolve({
-              ok: true,
-              result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-            });
-          };
-        });
-      }
-
-      return Promise.resolve(
-        request.step === "instructions"
-          ? { ok: true, result: { kind: "written" } }
-          : { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } },
-      );
+      return new Promise((resolve) => {
+        releaseClone = () => {
+          resolve({
+            ok: true,
+            result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+          });
+        };
+      });
     },
+    ensureManagedInstructions: () => Promise.resolve({ ok: true, result: { kind: "written" } }),
     project: () => {
       projectCalls += 1;
 

@@ -137,7 +137,12 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
   return storage as DurableObjectStorageLike;
 }
 
-/** Restore the managed instructions after reset, without replacing an existing file. */
+/**
+ * Write the current managed instructions, replacing whatever file holds that path. The file is
+ * cf-stumble's, so an older release's text or an agent's edit gives way. A symbolic link or a
+ * directory at that path is not the managed file, and the write refuses rather than follow or
+ * replace it.
+ */
 type ManagedInstructionOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   writeFile(path: string, content: string): Promise<void>;
@@ -155,15 +160,13 @@ export function ensureManagedInstructions(
       }
     }
 
-    const existing = yield* lstat(MANAGED_AGENT_INSTRUCTIONS_PATH);
-
-    if (existing === undefined) {
-      yield* attemptWorkspace(() =>
-        operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS),
-      );
-    } else if (existing !== "file") {
+    if ((yield* lstat(MANAGED_AGENT_INSTRUCTIONS_PATH)) === "directory") {
       return { ok: false, error: { code: "workspace-unavailable" } } as const;
     }
+
+    yield* attemptWorkspace(() =>
+      operations.writeFile(MANAGED_AGENT_INSTRUCTIONS_PATH, MANAGED_AGENT_INSTRUCTIONS),
+    );
 
     return { ok: true, result: { kind: "written" } } as const;
   }).pipe(
@@ -294,8 +297,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /**
-   * Reconcile this workspace against the repository the catalog names for a project, and rewrite
-   * the managed agent instructions.
+   * Reconcile this workspace against the repository the catalog names for a project.
    *
    * This is a surface of its own rather than a step of the build surface. Each surface parses
    * only its own request and plans from its own configuration, so a build can never reach a
@@ -326,7 +328,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /** Restore the managed instructions after a workspace reset, without replacing an existing file. */
+  /** Write the current managed instructions; both provisioning plans call this before a turn. */
   ensureManagedInstructions(): Promise<WorkspaceResult> {
     return this.#changing(CHANGE_REFUSED, () =>
       ensureManagedInstructions(new ComputerWorkspaceOperations(this.#workspace, "not-required")),

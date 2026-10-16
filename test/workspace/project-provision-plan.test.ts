@@ -38,21 +38,15 @@ function planFor(project: Project) {
 }
 
 function cloneSource(project: Project): string {
-  const step = projectProvisionStep(planFor(project), "clone");
-
-  if (step.name !== "clone") {
-    throw new Error("the clone step must be the command step");
-  }
-
-  return step.source;
+  return projectProvisionStep(planFor(project), "clone").source;
 }
 
-test("plans the clone before the managed instructions, with no dependency step", () => {
+test("plans only the clone, with no dependency step", () => {
   const plan = planFor(projectOne);
 
   expect(plan.projectId).toBe(projectOne.id);
-  expect(plan.steps.map((step) => step.name)).toEqual(["clone", "instructions"]);
-  expect(PROJECT_PROVISION_STEP_NAMES).toEqual(["clone", "instructions"]);
+  expect(plan.steps.map((step) => step.name)).toEqual(["clone"]);
+  expect(PROJECT_PROVISION_STEP_NAMES).toEqual(["clone"]);
 });
 
 test("clones the repository the catalog names for the project", () => {
@@ -151,27 +145,22 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
   ).not.toContain('git -C "$repository" config core.fileMode false');
 });
 
-test("writes the managed instructions above every repository in the workspace", () => {
-  const step = projectProvisionStep(planFor(projectOne), "instructions");
-
-  if (step.name !== "instructions") {
-    throw new Error("the instructions step must be the file step");
-  }
-
-  expect(step.path).toBe(MANAGED_AGENT_INSTRUCTIONS_PATH);
-
+test("keeps the managed instructions above every repository in the workspace", () => {
   for (const repository of [projectDirectory(projectOne.id), HARNESS_DIRECTORY]) {
     expect(
-      step.path.startsWith(`${repository}/`),
+      MANAGED_AGENT_INSTRUCTIONS_PATH.startsWith(`${repository}/`),
       "a managed file inside a clone would overwrite that repository's own instructions",
     ).toBe(false);
   }
 
-  expect(step.content).toBe(MANAGED_AGENT_INSTRUCTIONS);
-  expect(step.content).toContain("Never install dependencies or create large generated trees");
-  expect(step.content).toContain("--exclude=node_modules -cf - . | tar -C /tmp/cf-stumble-checks/");
-  expect(step.content).toContain("durable storage");
-  expect(step.content).toContain("Never print or commit authentication tokens.");
+  expect(MANAGED_AGENT_INSTRUCTIONS).toContain(
+    "Never install dependencies or create large generated trees",
+  );
+  expect(MANAGED_AGENT_INSTRUCTIONS).toContain(
+    "--exclude=node_modules -cf - . | tar -C /tmp/cf-stumble-checks/",
+  );
+  expect(MANAGED_AGENT_INSTRUCTIONS).toContain("durable storage");
+  expect(MANAGED_AGENT_INSTRUCTIONS).toContain("Never print or commit authentication tokens.");
 });
 
 test("gives each project its own directory inside the one workspace", () => {

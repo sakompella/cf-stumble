@@ -15,19 +15,23 @@ import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 import { runToResult } from "./workspace-results.js";
 
 class AbortAwareHost implements ProvisionWorkspaceHost {
-  readonly requests: ProjectProvisionRequest[] = [];
+  readonly steps: string[] = [];
   controller: AbortController | undefined;
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
-    this.requests.push(request);
+    this.steps.push(request.step);
+    this.controller?.abort();
 
-    if (request.step === "clone") this.controller?.abort();
+    return Promise.resolve({
+      ok: true,
+      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+    });
+  }
 
-    return Promise.resolve(
-      request.step === "instructions"
-        ? { ok: true, result: { kind: "written" } }
-        : { ok: true, result: { kind: "command", stdout: "", stderr: "", exitCode: 0 } },
-    );
+  ensureManagedInstructions(): Promise<WorkspaceResult> {
+    this.steps.push("instructions");
+
+    return Promise.resolve({ ok: true, result: { kind: "written" } });
   }
 }
 
@@ -47,7 +51,7 @@ test("does not start the next provisioning step after the turn aborts", async ()
   );
 
   expect(Result.isFailure(result)).toBe(true);
-  expect(host.requests.map(({ step }) => step)).toEqual(["clone"]);
+  expect(host.steps).toEqual(["clone"]);
 });
 
 test("bounds a running provisioning RPC after the turn aborts", async () => {
@@ -60,6 +64,7 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
         void request;
       });
     },
+    ensureManagedInstructions: () => Promise.resolve({ ok: true, result: { kind: "written" } }),
   };
 
   const controller = new AbortController();

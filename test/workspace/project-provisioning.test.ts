@@ -1,13 +1,8 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import {
-  MANAGED_AGENT_INSTRUCTIONS,
-  type ProjectProvisionStepName,
-} from "../../src/project-provision.js";
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import { MANAGED_AGENT_INSTRUCTIONS_PATH } from "../../src/workspace-layout.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
@@ -50,11 +45,14 @@ const projectOne = sampleProjectOne;
 class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
   readonly plans: WorkspacePlan[] = [];
-  failingStep: ProjectProvisionStepName | undefined;
+  /** Every Host RPC in order: a provision request by its step, and each managed-file write. */
+  readonly steps: string[] = [];
+  failingStep: "clone" | "instructions" | undefined;
   cloneStdout = "";
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
+    this.steps.push(request.step);
     const parsed = parseProjectProvisionRequest(request);
 
     if ("ok" in parsed) {
@@ -64,35 +62,27 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
     const plan = planProjectProvisionRequest(parsed);
     this.plans.push(plan);
 
-    if (request.step === this.failingStep) {
-      // A clone reports failure through its exit code; a write has none, so the host redacts it
-      // into a refusal, which is what the real surface returns when Computer throws.
-      return Promise.resolve(
-        plan.kind === "run-command"
+    return Promise.resolve({
+      ok: true,
+      result:
+        this.failingStep === "clone"
           ? {
-              ok: true,
-              result: {
-                kind: "command",
-                stdout: "",
-                stderr: "fatal: could not read from remote repository",
-                exitCode: 128,
-              },
+              kind: "command",
+              stdout: "",
+              stderr: "fatal: could not read from remote repository",
+              exitCode: 128,
             }
-          : { ok: false, error: { code: "workspace-unavailable" } },
-      );
-    }
+          : { kind: "command", stdout: this.cloneStdout, stderr: "", exitCode: 0 },
+    });
+  }
+
+  /** A write has no exit code, so a failing one answers the refusal the real Host gives. */
+  ensureManagedInstructions(): Promise<WorkspaceResult> {
+    this.steps.push("instructions");
 
     return Promise.resolve(
-      plan.kind === "run-command"
-        ? {
-            ok: true,
-            result: {
-              kind: "command",
-              stdout: request.step === "clone" ? this.cloneStdout : "",
-              stderr: "",
-              exitCode: 0,
-            },
-          }
+      this.failingStep === "instructions"
+        ? { ok: false, error: { code: "workspace-unavailable" } }
         : { ok: true, result: { kind: "written" } },
     );
   }
@@ -109,10 +99,6 @@ function provisionerFor(host: FakeProvisionHost) {
         provisionProjectWorkspace({ workspaceName, projectId, catalog: sampleCatalog, namespace }),
       ),
   };
-}
-
-function stepsOf(host: FakeProvisionHost): ProjectProvisionStepName[] {
-  return host.requests.map((request) => request.step);
 }
 
 test("namespace fixtures record names independently", () => {
@@ -159,12 +145,10 @@ test("clones and then writes the managed instructions into the tenant's workspac
       repositoryUrl: projectOne.repositoryUrl,
       step: "clone",
     },
-    {
-      kind: "provision-project",
-      projectId: projectOne.id,
-      repositoryUrl: projectOne.repositoryUrl,
-      step: "instructions",
-    },
+  ]);
+  expect(host.steps, "the managed file is written through its own Host RPC").toEqual([
+    "clone",
+    "instructions",
   ]);
   expect(namespace.names, "one project reaches the tenant's one workspace").toEqual([
     workspaceName,
@@ -218,7 +202,7 @@ test("an interrupted provision and its resumption ask for the same state", async
     step: "clone",
     exitCode: 128,
   });
-  expect(stepsOf(host), "a failed clone stops before the instructions step").toEqual([
+  expect(host.steps, "a failed clone stops before the instructions step").toEqual([
     "clone",
     "clone",
     "instructions",
@@ -250,12 +234,7 @@ test("repeats the clone after the instructions step failed, rather than resuming
     projectId: projectOne.id,
     step: "instructions",
   });
-  expect(stepsOf(host)).toEqual(["clone", "instructions", "clone", "instructions"]);
-  expect(host.plans.at(-1)).toEqual({
-    kind: "write-file",
-    path: MANAGED_AGENT_INSTRUCTIONS_PATH,
-    content: MANAGED_AGENT_INSTRUCTIONS,
-  });
+  expect(host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
 });
 
 test("reconciles again on a plain repeat, holding no memory of the last run", async () => {
@@ -265,8 +244,8 @@ test("reconciles again on a plain repeat, holding no memory of the last run", as
   await provision();
   await provision();
 
-  expect(stepsOf(host)).toEqual(["clone", "instructions", "clone", "instructions"]);
-  expect(host.plans.slice(2)).toEqual(host.plans.slice(0, 2));
+  expect(host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
+  expect(host.plans.slice(1)).toEqual(host.plans.slice(0, 1));
 });
 
 test("refuses a project the catalog does not resolve before naming a workspace", async () => {

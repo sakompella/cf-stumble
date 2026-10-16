@@ -15,6 +15,7 @@ import {
 import { parseRequestId } from "../../../src/diagnostics.js";
 import type { GitHubCredentialState } from "../../../src/github/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
+import { ensureManagedInstructions } from "../../../src/workspace/host.js";
 import type { WorkspaceResult } from "../../../src/workspace/decisions.js";
 
 /** A command the fake has been told to hold open until the test answers it. */
@@ -255,7 +256,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
-    return Promise.resolve({ ok: true, result: { kind: "written" } });
+    return Effect.runPromise(ensureManagedInstructions(this));
   }
 
   /** The namespace view the Supervisor holds. One tenant, so every name reaches this host. */

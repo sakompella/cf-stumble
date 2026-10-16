@@ -2,17 +2,12 @@ import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import {
-  MANAGED_AGENT_INSTRUCTIONS,
   planProjectProvision,
   projectProvisionStep,
   type ProjectProvisionStepName,
 } from "../../src/project-provision.js";
 import type { Project } from "../../src/project-catalog.js";
-import {
-  MANAGED_AGENT_INSTRUCTIONS_PATH,
-  projectDirectory,
-  projectGitDirectory,
-} from "../../src/workspace-layout.js";
+import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
   executeProjectProvisionRequest,
@@ -48,33 +43,13 @@ function provisionRequest(
   };
 }
 
-/** The prefixes the executor stats before it writes, which is one per path component. */
-function pathParts(path: string): string[] {
-  const prefixes: string[] = [];
-  let current = "";
-
-  for (const part of path.split("/").filter((segment) => segment.length > 0)) {
-    current += `/${part}`;
-    prefixes.push(current);
-  }
-
-  return prefixes;
-}
-
 function cloneSource(): string {
-  const step = projectProvisionStep(planProjectProvision(projectOne), "clone");
-
-  if (step.name !== "clone") {
-    throw new Error("the clone step must be the command step");
-  }
-
-  return step.source;
+  return projectProvisionStep(planProjectProvision(projectOne), "clone").source;
 }
 
 class FakeProjectOperations implements WorkspaceOperations {
   readonly calls: string[] = [];
   readonly sources: string[] = [];
-  readonly symlinks = new Set<string>();
   exitCode = 0;
   /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
    * the provision shell's catch-all logs a redacted cause instead of discarding it. */
@@ -91,8 +66,6 @@ class FakeProjectOperations implements WorkspaceOperations {
   }
 
   private kindOf(path: string): WorkspacePathKind | undefined {
-    if (this.symlinks.has(path)) return "symbolic-link";
-
     if (path.startsWith(projectDirectory(projectOne.id)) && this.durableGitConfig === undefined) {
       return undefined;
     }
@@ -154,30 +127,13 @@ test("plans the clone from the resolved project the caller sent, and its directo
   ).not.toEqual(planProjectProvisionRequest({ ...parsed, project: projectTwo }));
 });
 
-test("plans the managed instructions as a file the server decides", () => {
-  const parsed = parseProjectProvisionRequest(provisionRequest(projectTwo, "instructions"));
-
-  if ("ok" in parsed) {
-    throw new Error("a catalog project and a planned step must parse");
-  }
-
-  expect(planProjectProvisionRequest(parsed)).toEqual({
-    kind: "write-file",
-    path: MANAGED_AGENT_INSTRUCTIONS_PATH,
-    content: MANAGED_AGENT_INSTRUCTIONS,
-  });
-});
-
-test("runs the clone above the project root and writes the instructions beside it", async () => {
+test("runs the clone above the project root, then checks the clone is durable", async () => {
   const operations = new FakeProjectOperations();
 
   await expect(provision(operations, provisionRequest(projectOne, "clone"))).resolves.toEqual({
     ok: true,
     result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
   });
-  await expect(
-    provision(operations, provisionRequest(projectOne, "instructions")),
-  ).resolves.toEqual({ ok: true, result: { kind: "written" } });
 
   const gitDir = projectGitDirectory(projectOne.id);
 
@@ -187,8 +143,6 @@ test("runs the clone above the project root and writes the instructions beside i
     `lstat:${gitDir}`,
     `lstat:${gitDir}/config`,
     `read:${gitDir}/config`,
-    ...pathParts(MANAGED_AGENT_INSTRUCTIONS_PATH).map((prefix) => `lstat:${prefix}`),
-    `write:${MANAGED_AGENT_INSTRUCTIONS_PATH}:${MANAGED_AGENT_INSTRUCTIONS.length}`,
   ]);
   expect(operations.sources).toEqual([cloneSource()]);
 });
@@ -281,19 +235,10 @@ test("refuses a caller supplied repository URL, command, or project", async () =
     [{ kind: "run-command", command: "check" }, "invalid-request"],
     [{ kind: "read-file", path: "readme.md" }, "invalid-request"],
     [{ ...provisionRequest(projectOne, "clone"), step: "whoami" }, "unknown-command"],
+    [{ ...provisionRequest(projectOne, "clone"), step: "instructions" }, "unknown-command"],
   ] as const) {
     await expect(provision(operations, request)).resolves.toEqual({ ok: false, error: { code } });
   }
 
   expect(operations.calls, "a refused provision request runs nothing").toEqual([]);
-});
-
-test("refuses managed instructions reached through a symbolic link", async () => {
-  const operations = new FakeProjectOperations();
-  operations.symlinks.add(MANAGED_AGENT_INSTRUCTIONS_PATH);
-
-  await expect(
-    provision(operations, provisionRequest(projectOne, "instructions")),
-  ).resolves.toEqual({ ok: false, error: { code: "path-outside-root" } });
-  expect(operations.calls.every((call) => call.startsWith("lstat:"))).toBe(true);
 });

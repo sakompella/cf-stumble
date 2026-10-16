@@ -423,7 +423,6 @@ export class ProjectConnections {
       if (Result.isFailure(provisioned)) {
         const diskFailure =
           provisioned.failure instanceof ProvisionStepFailed &&
-          provisioned.failure.step === "clone" &&
           provisioned.failure.exitCode === PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE;
 
         return {

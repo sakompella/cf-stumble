@@ -179,8 +179,6 @@ function clone(scenario: Scenario) {
 
   const step = projectProvisionStep(planProjectProvision(project), "clone");
 
-  if (step.name !== "clone") throw new Error("the clone step must be the command step");
-
   const ran = run(prepared, underScratch(step.source, prepared.directory));
 
   const log = (name: string) =>
