@@ -9,65 +9,23 @@ import {
   randomSecret,
   refreshFields,
   requestTokens,
-  type CallbackProblem,
   type ProviderFetch,
   type TokenFailure,
 } from "./oauth.js";
+import type { ChatGPTCredentialStore, StoredConnection } from "./credential-store.js";
 import type {
-  ChatGPTCredentialStore,
-  ReconnectReason,
-  StoredConnection,
-} from "./credential-store.js";
+  ChatGPTAccess,
+  ChatGPTConnectionStatus,
+  ChatGPTConnectionView,
+  ChatGPTLoginFailure,
+  ChatGPTLoginOutcome,
+} from "./connection-view.js";
 
 /** How long a started sign-in can be finished. */
 export const LOGIN_TTL_MS = 10 * 60 * 1000;
 
 /** An access token with less than this left is refreshed before it is used. */
 export const REFRESH_WINDOW_MS = 8 * 60 * 1000;
-
-export type ChatGPTConnectionStatus =
-  | Readonly<{ state: "disconnected" }>
-  | Readonly<{ state: "connected"; expiresAt: number }>
-  | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
-
-export type ChatGPTLoginView = Readonly<{
-  attemptId: string;
-  authorizeUrl: string;
-  expiresAt: number;
-}>;
-
-/** What the owner API and the page see. It never carries a token, a verifier, or a code. */
-export type ChatGPTConnectionView = Readonly<{
-  connection: ChatGPTConnectionStatus;
-  login: ChatGPTLoginView | null;
-  model: string;
-}>;
-
-export type ChatGPTLoginFailure =
-  | "no-sign-in"
-  | "expired"
-  | CallbackProblem
-  | "exchange-refused"
-  | "exchange-unavailable"
-  | "missing-scope";
-
-export type ChatGPTLoginOutcome =
-  | Readonly<{ ok: true; chatgpt: ChatGPTConnectionView }>
-  | Readonly<{
-      ok: false;
-      problem: Readonly<{ code: ChatGPTLoginFailure }>;
-      chatgpt: ChatGPTConnectionView;
-    }>;
-
-/**
- * The credential the model route may use now. `unavailable` means the token server was busy or
- * unreachable while the stored token could not be used; the stored tokens are unchanged.
- */
-export type ChatGPTAccess =
-  | Readonly<{ kind: "ready"; accessToken: string }>
-  | Readonly<{ kind: "not-connected" }>
-  | Readonly<{ kind: "reconnect-required" }>
-  | Readonly<{ kind: "unavailable" }>;
 
 type ConnectedCredential = Extract<StoredConnection, { state: "connected" }>;
 

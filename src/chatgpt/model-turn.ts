@@ -10,7 +10,7 @@ import {
   type ModelTurnAnswer,
 } from "../model-route-turn.js";
 import { isRecord } from "../untrusted.js";
-import type { ChatGPTAccess } from "./connection.js";
+import type { ChatGPTAccess } from "./connection-view.js";
 import { discardBody, type ProviderFetch } from "./oauth.js";
 import {
   RESPONSES_ENDPOINT,
