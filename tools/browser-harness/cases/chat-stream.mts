@@ -77,6 +77,8 @@ export const CASES: readonly HarnessCase[] = [
       assertSame(held.turnState, "running", "the turn state at the barrier");
       assertSame(held.sendDisabled, true, "Send while the turn runs");
       assertSame(held.cancelDisabled, false, "Cancel while the turn runs");
+      assertSame(held.liveRegions, 1, "live regions while text streams in");
+      assertSame(held.turnLive, "polite", "the turn state's live region");
       assertAtLeast(held.assistantCharacters, 1, "assistant characters at the barrier");
       assertAtLeast(held.tools, 1, "tool blocks at the barrier");
       assertAtLeast(held.finishedTools, 1, "finished tools at the barrier");
@@ -109,6 +111,7 @@ export const CASES: readonly HarnessCase[] = [
       const finished = await readTurn(page);
       assertSame(finished.tools, 3, "tool blocks when the turn ended");
       assertSame(finished.turnState, SAVED_STATE, "the terminal turn state");
+      assertSame(finished.liveRegions, 1, "live regions when the turn ended");
       assertAtLeast(assistantBefore.length, 2, "assistant blocks rendered before success");
 
       return `${held.tools} tool(s) and ${held.assistantCharacters} assistant characters were visible at the barrier; ${running.length} running samples never decreased and the turn finished with 3 tools`;
