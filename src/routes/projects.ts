@@ -138,7 +138,7 @@ const connectResponse = Effect.fnUntraced(
         {
           ok: false,
           problem: result.problem,
-          ...("github" in result && { github: result.github }),
+          ...("github" in result && { github: result.github, checkedAt: result.checkedAt }),
         },
         { status: CONNECT_STATUS[result.problem.code] },
       );
@@ -149,6 +149,7 @@ const connectResponse = Effect.fnUntraced(
       project: result.project,
       alreadyConnected: result.alreadyConnected,
       github: result.github,
+      checkedAt: result.checkedAt,
     });
   },
   Effect.catchTag("InvalidRequestBody", () =>
@@ -162,7 +163,7 @@ function authorizationResponse(
   return callSupervisor(outcome).pipe(
     Effect.map((result) =>
       result.ok
-        ? Response.json({ ok: true, github: result.status })
+        ? Response.json({ ok: true, github: result.status, checkedAt: result.checkedAt })
         : Response.json(
             { ok: false, problem: { code: result.problem } },
             { status: AUTHORIZATION_STATUS[result.problem] },

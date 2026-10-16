@@ -22,7 +22,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     isSidebarExpanded: true,
     projectListStatus: "reading",
     projects: [],
-    github: { state: "", detail: "", verificationUri: "" },
+    github: { state: "", detail: "", verificationUri: "", checked: "" },
     connectRepositoryInput: "",
     connectStatus: "",
     chatgpt: { connection: "", isConnected: false, maybeLogin: Option.none() },

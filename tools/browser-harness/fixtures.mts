@@ -140,14 +140,23 @@ export function connectPayload(scenario: HarnessScenario, alreadyConnected: bool
     },
     alreadyConnected,
     github: github(scenario),
+    checkedAt: CHECKED_AT,
   };
 }
 
+/**
+ * When the stub's workspace last answered. It is built in the local zone, as the page shows it, and
+ * falls on an earlier day than any run, so the page words it with its date.
+ */
+export const CHECKED_AT = new Date(2026, 9, 15, 14, 32).getTime();
+
+export const CHECKED_WORDING = "2026-10-15 14:32";
+
 export function authorizationPayload(scenario: HarnessScenario): JsonValue {
-  return { ok: true, github: github(scenario) };
+  return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
 /** A refresh's answer: what the workspace said, and when it said it. */
 export function refreshPayload(scenario: HarnessScenario): JsonValue {
-  return { ok: true, github: github(scenario), checkedAt: 1_760_000_000_000 };
+  return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }

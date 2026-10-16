@@ -216,7 +216,7 @@ Set `GITHUB_OAUTH_CLIENT_ID` as a Worker secret before you authorize (see "Insta
 
 Set the `GH_TOKEN` secret if you want an unattended run to authorize without a person at a browser. cf-stumble installs `GH_TOKEN` as the workspace credential whenever the workspace has no usable one, and treats it as a test and development path, not a second production login. A deployment with neither value set reports `disconnected`.
 
-The page checks the GitHub connection when it loads and when you press **Check again**. `GET /api/github/connection` answers the last check and when it ran (`checkedAt`, in milliseconds since the epoch) without waking the workspace container. `POST /api/github/connection/refresh` runs a new check in the container. Do not poll the refresh: each one counts as workspace work, so a client that repeats it keeps the container running.
+The page checks the GitHub connection when it loads and when you press **Check again**, and shows when the last check ran. `GET /api/github/connection` answers the last check and when it ran (`checkedAt`, in milliseconds since the epoch) without waking the workspace container. `POST /api/github/connection/refresh` runs a new check in the container. Do not poll the refresh: each one counts as workspace work, so a client that repeats it keeps the container running.
 
 The sidebar also contains the harness project. It selects `/workspace/harness`, which is a Git clone of the harness repository. It is not a second connected repository or a separate workspace.
 

@@ -25,7 +25,12 @@ function withGitHub(model: Model, report: GitHubReport): Model {
   const github =
     report._tag === "Known"
       ? report.connection
-      : { state: "unknown", detail: "", verificationUri: model.github.verificationUri };
+      : {
+          state: "unknown",
+          detail: "",
+          verificationUri: model.github.verificationUri,
+          checked: "",
+        };
 
   return { ...model, github };
 }
@@ -175,12 +180,12 @@ export function gitHubHandlers(
     ClickedRefreshGitHub: () => ({ model: askingGitHub(model), commands: [RefreshGitHub()] }),
     SucceededGitHub: ({ github }) => ({ model: withGitHub(model, github) }),
     RejectedGitHub: ({ wording }) => ({
-      model: { ...model, github: { ...model.github, state: wording } },
+      model: { ...model, github: { ...model.github, state: wording, checked: "" } },
     }),
     FailedGitHub: ({ detail }) => ({
       model: {
         ...withError(model, "the GitHub request", detail),
-        github: { ...model.github, state: "request failed" },
+        github: { ...model.github, state: "request failed", checked: "" },
       },
     }),
   };

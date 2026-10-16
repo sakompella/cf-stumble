@@ -217,6 +217,7 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
             alreadyConnected: false,
             project: sampleProjectOne,
             github: { state: "disconnected" },
+            checkedAt: null,
           });
         },
       });
@@ -234,6 +235,7 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
               expiresAt: 1,
               intervalSeconds: 5,
             },
+            checkedAt: null,
           });
         },
       });
@@ -242,7 +244,7 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
         completeGitHubAuthorization: () => {
           calls.value += 1;
 
-          return Promise.resolve({ ok: true, status: { state: "disconnected" } });
+          return Promise.resolve({ ok: true, status: { state: "disconnected" }, checkedAt: 1_000 });
         },
       });
     case "refresh":

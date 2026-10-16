@@ -59,6 +59,7 @@ function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
       h.h3([], ["GitHub"]),
       valueRow("connection", ID.githubState, model.github.state, h),
       valueRow("detail", ID.githubDetail, model.github.detail, h),
+      valueRow("last checked", ID.githubChecked, model.github.checked, h),
       h.p([h.Class("row")], [link]),
       h.div(
         [h.Class("row")],

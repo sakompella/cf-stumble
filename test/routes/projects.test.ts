@@ -145,6 +145,7 @@ test("connects the repository the body names, and nothing else it carries", asyn
           alreadyConnected: false,
           project: connectedProject,
           github: { state: "connected", login: "octocat", source: "configured-token" },
+          checkedAt: 3_000,
         });
       },
     }),
@@ -153,7 +154,11 @@ test("connects the repository the body names, and nothing else it carries", asyn
 
   expect(response.status).toBe(200);
   expect(sent).toEqual([connectedProject.repositoryUrl, "Repo one"]);
-  await expect(response.json()).resolves.toMatchObject({ ok: true, alreadyConnected: false });
+  await expect(response.json()).resolves.toMatchObject({
+    ok: true,
+    alreadyConnected: false,
+    checkedAt: 3_000,
+  });
 });
 
 test.each([
@@ -194,6 +199,7 @@ test.each([
           ok: false,
           problem: { code, detail: "" },
           github: { state: "disconnected" },
+          checkedAt: null,
         }),
     }),
     ownerScope,
@@ -221,6 +227,7 @@ test("starts an authorization for the verified owner, not for one the body names
             expiresAt: 1,
             intervalSeconds: 5,
           },
+          checkedAt: 4_000,
         });
       },
     }),
@@ -238,6 +245,7 @@ test("starts an authorization for the verified owner, not for one the body names
       expiresAt: 1,
       intervalSeconds: 5,
     },
+    checkedAt: 4_000,
   });
 });
 

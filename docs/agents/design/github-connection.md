@@ -167,12 +167,15 @@ fields are `null` before the first check and after a workspace reset.
 
 `POST /api/github/connection/refresh` runs a check in the workspace (`gh auth status` and
 `gh api user`), stores the result, and answers in the same shape. Every other check stores its
-result too: a connect, a credential install, and the provisioning before a turn. A check that a
-cancelled turn stopped is not stored. `GET /api/projects` lists the catalog and carries no
+result too: a connect, a credential install, and the provisioning before a turn. A credential
+install that fails, or that finds no `gh` command, stores that outcome with its time, so a later
+read never reports the connection that the install replaced. A check that a cancelled turn stopped
+is not stored. The answers to a connect and to an authorization carry `checkedAt` too. `GET /api/projects` lists the catalog and carries no
 connection status.
 
 The page sends the refresh when it loads and when the owner presses **Check again**, never on a
-timer. Each check runs container commands, and the Workspace Host counts every call as work, so a
+timer. It shows the time of the last check next to the state ("last checked", the time of day, or
+the date and time for an earlier day) and shows none for a pending authorization. Each check runs container commands, and the Workspace Host counts every call as work, so a
 client that repeated a status read kept the container running all day
 (`docs/agents/incident-2026-09-container-cost.md`).
 

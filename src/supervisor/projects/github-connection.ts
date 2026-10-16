@@ -75,7 +75,7 @@ export type GitHubConnectionRecord = Readonly<{
 }>;
 
 export type GitHubAuthorizationOutcome =
-  | Readonly<{ ok: true; status: GitHubConnectionStatus }>
+  | Readonly<{ ok: true; status: GitHubConnectionStatus; checkedAt: number | null }>
   | Readonly<{ ok: false; problem: GitHubAuthorizationProblem }>;
 
 /**
@@ -223,8 +223,17 @@ export class GitHubConnection {
 
     return {
       github: this.pendingStatus(now) ?? lastCheck?.status ?? null,
-      checkedAt: lastCheck?.checkedAt ?? null,
+      checkedAt: this.checkedAt(),
     };
+  }
+
+  /** When the last check was stored, or `null` before the first and after a reset. */
+  checkedAt(): number | null {
+    return this.store.lastCheck()?.checkedAt ?? null;
+  }
+
+  private answered(status: GitHubConnectionStatus): GitHubAuthorizationOutcome {
+    return { ok: true, status, checkedAt: this.checkedAt() };
   }
 
   private pendingStatus(now: number): GitHubConnectionStatus | undefined {
@@ -308,7 +317,7 @@ export class GitHubConnection {
         audience: scope.audience,
       });
 
-      return { ok: true, status: yield* this.status(now) } as const;
+      return this.answered(yield* this.status(now));
     });
   }
 
@@ -355,23 +364,20 @@ export class GitHubConnection {
       if (settled && !this.store.consumeAuthorization(pending.deviceCode)) {
         logAuthorization("complete", "superseded");
 
-        return { ok: true, status: yield* this.status(now) } as const;
+        return this.answered(yield* this.status(now));
       }
 
       if (redeemed.kind === "authorized") {
         logAuthorization("complete", "authorized");
 
-        return {
-          ok: true,
-          status: yield* this.install(redeemed.token, "device-authorization", now),
-        } as const;
+        return this.answered(yield* this.install(redeemed.token, "device-authorization", now));
       }
 
       const unredeemed = unredeemedOutcome(redeemed.kind);
       logAuthorization("complete", unredeemed);
 
       if (unredeemed === "pending") {
-        return { ok: true, status: yield* this.status(now) } as const;
+        return this.answered(yield* this.status(now));
       }
 
       return { ok: false, problem: unredeemed } as const;
@@ -403,12 +409,12 @@ export class GitHubConnection {
 
         logCredentialInstall(source, refused);
 
-        return refused;
+        return this.record(refused, now, signal);
       }
 
-      const status: GitHubConnectionStatus =
+      const status: CheckedStatus =
         installed.success === "tooling-missing"
-          ? { state: "tooling-missing" }
+          ? this.record({ state: "tooling-missing" }, now, signal)
           : yield* this.observed(now, source, { signal });
 
       logCredentialInstall(source, status);
@@ -420,7 +426,7 @@ export class GitHubConnection {
   /**
    * Ask the workspace what its credential can do, keep the stored connection honest about the
    * answer, and store the answer as the last check. `installedBy` names the install that just ran,
-   * if one did. A check stopped by its signal asked nothing, so it is not stored.
+   * if one did.
    */
   private observed(
     now: number,
@@ -436,12 +442,15 @@ export class GitHubConnection {
         onFailure: () => reconnect("workspace-unavailable"),
         onSuccess: (status) => this.recorded(status, installedBy, now),
       }),
-      Effect.tap((status) =>
-        Effect.sync(() => {
-          if (options.signal?.aborted !== true) this.store.recordCheck(status, now);
-        }),
-      ),
+      Effect.map((status) => this.record(status, now, options.signal)),
     );
+  }
+
+  /** Store what a check or install just learned. A stopped one learned nothing, so it is skipped. */
+  private record(status: CheckedStatus, now: number, signal?: AbortSignal): CheckedStatus {
+    if (signal?.aborted !== true) this.store.recordCheck(status, now);
+
+    return status;
   }
 
   private recorded(

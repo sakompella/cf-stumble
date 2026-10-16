@@ -156,7 +156,11 @@ test("an RPC failure during authorization logs a redacted cause and never the to
   expect(
     completed,
     "an RPC failure is a status, not a thrown error, at every caller above the workspace",
-  ).toEqual({ ok: true, status: { state: "reconnect-required", reason: "workspace-unavailable" } });
+  ).toEqual({
+    ok: true,
+    status: { state: "reconnect-required", reason: "workspace-unavailable" },
+    checkedAt: NOW + 1_000,
+  });
   expect(
     loggedErrors,
     "the RPC failure that reached credential-access.ts must be logged",

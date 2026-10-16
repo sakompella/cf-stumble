@@ -118,19 +118,41 @@ function connectionDetail(status: unknown, state: string): string {
   }
 }
 
-export function gitHubReport(status: unknown): GitHubReport {
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/**
+ * When the Worker last checked GitHub, in the reader's time zone: the time of day for today, and
+ * the date with it for any other day. A pending authorization is the Worker's own live state, so it
+ * carries no check time, and neither does an answer without one.
+ */
+export function checkedWording(checkedAt: unknown, now: number): string {
+  if (!Predicate.isNumber(checkedAt) || !Number.isFinite(checkedAt)) {
+    return "";
+  }
+
+  const then = new Date(checkedAt);
+  const clock = `${pad2(then.getHours())}:${pad2(then.getMinutes())}`;
+
+  return then.toDateString() === new Date(now).toDateString()
+    ? clock
+    : `${then.getFullYear()}-${pad2(then.getMonth() + 1)}-${pad2(then.getDate())} ${clock}`;
+}
+
+export function gitHubReport(status: unknown, checkedAt: unknown, now: number): GitHubReport {
   const state = field(status, "state");
 
   if (!truthy(status) || !Predicate.isString(state)) {
     return GitHubReport.Unknown();
   }
 
+  const isPending = state === "awaiting-authorization";
+
   return GitHubReport.Known({
     connection: {
       state,
       detail: connectionDetail(status, state),
-      verificationUri:
-        state === "awaiting-authorization" ? text(field(status, "verificationUri")) : "",
+      verificationUri: isPending ? text(field(status, "verificationUri")) : "",
+      checked: isPending ? "" : checkedWording(checkedAt, now),
     },
   });
 }

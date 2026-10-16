@@ -5,7 +5,7 @@
 
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import { freshRefusalText } from "../../../src/page/client/api.js";
+import { checkedWording, freshRefusalText, gitHubReport } from "../../../src/page/client/api.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import type { TurnFrame } from "../../../src/page/client/frames.js";
@@ -56,6 +56,41 @@ test("the page checks the GitHub connection on load and again only when the owne
     "FetchChatGPT",
   ]);
   expect(commandNames(readyPage(), Message.ClickedRefreshGitHub())).toEqual(["RefreshGitHub"]);
+});
+
+const CONNECTED_GITHUB = { state: "connected", login: "octocat", source: "device-authorization" };
+
+const LATE_MORNING = new Date(2026, 9, 16, 11, 5).getTime();
+
+test("the page words when the Worker last checked GitHub, with the date once it is not today", () => {
+  const now = new Date(2026, 9, 16, 15, 0).getTime();
+
+  expect(checkedWording(LATE_MORNING, now)).toBe("11:05");
+  expect(checkedWording(new Date(2026, 9, 15, 23, 59).getTime(), now)).toBe("2026-10-15 23:59");
+  expect(checkedWording(null, now)).toBe("");
+});
+
+test("a pending authorization is the Worker's live state, so it carries no check time", () => {
+  const awaiting = { state: "awaiting-authorization", userCode: "WDJB-MJHT", verificationUri: "u" };
+
+  expect(gitHubReport(awaiting, LATE_MORNING, LATE_MORNING)).toMatchObject({
+    connection: { checked: "" },
+  });
+});
+
+test("the last-known check time stays with its state until a request replaces the state", () => {
+  const known = Message.SucceededGitHub({
+    github: gitHubReport(CONNECTED_GITHUB, LATE_MORNING, LATE_MORNING),
+  });
+
+  const checked = after(readyPage(), [known]);
+
+  expect(checked.github).toMatchObject({ state: "connected", checked: "11:05" });
+  expect(after(checked, [Message.ClickedRefreshGitHub()]).github.checked).toBe("11:05");
+  expect(after(checked, [Message.FailedGitHub({ detail: "offline" })]).github.checked).toBe("");
+  expect(after(checked, [Message.RejectedGitHub({ wording: "error: 503" })]).github.checked).toBe(
+    "",
+  );
 });
 
 test("sending a turn trims the prompt, shows it, and starts the stream", () => {

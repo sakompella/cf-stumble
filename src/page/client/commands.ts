@@ -77,7 +77,10 @@ export const ConnectRepository = Command.define("ConnectRepository", {
     requestJson("POST", "/api/projects/connect", Option.some({ repositoryUrl })).pipe(
       Effect.map((answer) => {
         const github = field(answer.payload, "github");
-        const maybeGitHub = truthy(github) ? Option.some(gitHubReport(github)) : Option.none();
+
+        const maybeGitHub = truthy(github)
+          ? Option.some(gitHubReport(github, field(answer.payload, "checkedAt"), Date.now()))
+          : Option.none();
 
         return isOk(answer.payload)
           ? Message.SucceededConnect({
@@ -101,7 +104,13 @@ function gitHubRequest(path: string) {
   return requestJson("POST", path, Option.some({})).pipe(
     Effect.map((answer) =>
       isOk(answer.payload)
-        ? Message.SucceededGitHub({ github: gitHubReport(field(answer.payload, "github")) })
+        ? Message.SucceededGitHub({
+            github: gitHubReport(
+              field(answer.payload, "github"),
+              field(answer.payload, "checkedAt"),
+              Date.now(),
+            ),
+          })
         : Message.RejectedGitHub({ wording: problemText(answer) }),
     ),
     Effect.catch((detail) => Effect.succeed(Message.FailedGitHub({ detail }))),

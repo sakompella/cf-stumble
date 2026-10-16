@@ -19,6 +19,7 @@ export const OWNER_PAGE_IDS = {
   projectListStatus: "project-list-status",
   githubState: "github-connection-state",
   githubDetail: "github-connection-detail",
+  githubChecked: "github-connection-checked",
   githubVerificationLink: "github-verification-link",
   authorizeButton: "github-authorize-button",
   completeAuthorizationButton: "github-authorize-complete-button",

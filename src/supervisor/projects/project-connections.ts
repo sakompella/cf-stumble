@@ -107,8 +107,14 @@ export type ConnectRepositoryResult =
       project: Project;
       alreadyConnected: boolean;
       github: GitHubConnectionStatus;
+      checkedAt: number | null;
     }>
-  | Readonly<{ ok: false; problem: ConnectRepositoryProblem; github: GitHubConnectionStatus }>
+  | Readonly<{
+      ok: false;
+      problem: ConnectRepositoryProblem;
+      github: GitHubConnectionStatus;
+      checkedAt: number | null;
+    }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
 /** Why a project could not be provisioned when it was used. */
@@ -436,6 +442,7 @@ export class ProjectConnections {
         project: connected.project,
         alreadyConnected: connected.alreadyConnected,
         github,
+        checkedAt: this.github.checkedAt(),
       } as const;
     });
   }
@@ -480,6 +487,6 @@ export class ProjectConnections {
     problem: ConnectRepositoryProblem,
     github: GitHubConnectionStatus,
   ): ConnectRepositoryResult {
-    return { ok: false, problem, github };
+    return { ok: false, problem, github, checkedAt: this.github.checkedAt() };
   }
 }
