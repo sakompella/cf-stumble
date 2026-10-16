@@ -101,11 +101,16 @@ export function unownedCpu(
 
 /**
  * Time the owner may legitimately hold the container: each owner event's work, plus the idle
- * limit after it. Metrics buckets with allocated time outside this are running with nobody to
- * keep them up.
+ * limit after it. The Host's idle clock starts at the later of its last work and the end of its
+ * turn lease, so a lease the logs record holds the container until that end plus the idle limit.
+ * Metrics buckets with allocated time outside this are running with nobody to keep them up.
  */
 function allowedRunning(logs: LogData, idleLimitMs: number): readonly Interval[] {
   const events = activitySpans(logs.events);
+
+  const leases = logs.events.flatMap((event): Interval[] =>
+    event.leaseEndsAtMs === null ? [] : [{ beginMs: event.atMs, endMs: event.leaseEndsAtMs }],
+  );
 
   const invocations = logs.invocations.map((invocation) => ({
     beginMs: invocation.atMs - invocation.wallTimeMs,
@@ -113,7 +118,10 @@ function allowedRunning(logs: LogData, idleLimitMs: number): readonly Interval[]
   }));
 
   return mergeIntervals(
-    [...events, ...invocations].map((span) => ({ ...span, endMs: span.endMs + idleLimitMs })),
+    [...events, ...invocations, ...leases].map((span) => ({
+      ...span,
+      endMs: span.endMs + idleLimitMs,
+    })),
   );
 }
 
