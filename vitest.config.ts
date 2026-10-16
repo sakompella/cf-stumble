@@ -125,6 +125,10 @@ export default defineConfig({
         ],
         test: {
           name: "workers",
+          // A test that is the first in its file to call the Worker loads the whole Worker module
+          // (Effect and the Foldkit page included), which can pass Vitest's 5 s default on a busy
+          // machine. The tests assert behavior, not load time.
+          testTimeout: 20_000,
           include: ["test/**/*.test.ts"],
           exclude: [
             ...defaultExclude,
