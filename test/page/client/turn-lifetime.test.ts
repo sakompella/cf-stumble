@@ -35,7 +35,7 @@ function after(start: Model, messages: readonly Message[]): Model {
 
 function streamingPage(): Model {
   return after(init().model, [
-    Message.SucceededFetchProjects({ projects: PROJECTS, github: { _tag: "Unknown" } }),
+    Message.SucceededFetchProjects({ projects: PROJECTS }),
     Message.UpdatedPrompt({ value: "do it" }),
     Message.ClickedSendTurn(),
   ]);

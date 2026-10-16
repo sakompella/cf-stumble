@@ -20,6 +20,12 @@ function thrown(): Promise<never> {
 
 const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSupervisor>])[] = [
   ["GET /api/status", new Request(`${ORIGIN}/api/status`), { getActiveGeneration: thrown }],
+  ["GET /api/projects", new Request(`${ORIGIN}/api/projects`), { listProjects: thrown }],
+  [
+    "GET /api/github/connection",
+    new Request(`${ORIGIN}/api/github/connection`),
+    { getGitHubConnection: thrown },
+  ],
   [
     "GET /api/projects/:projectId/thread",
     new Request(`${ORIGIN}${THREAD_PATH}`),

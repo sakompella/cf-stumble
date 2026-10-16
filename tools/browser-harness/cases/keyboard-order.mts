@@ -17,6 +17,7 @@ const EXPECTED = [
   { id: "harness", name: "harness" },
   { id: ID.authorizeButton, name: "Authorize GitHub" },
   { id: ID.completeAuthorizationButton, name: "I authorized it" },
+  { id: ID.refreshGitHubButton, name: "Check again" },
   { id: ID.chatgptConnectButton, name: "Connect ChatGPT" },
   { id: ID.connectRepositoryInput, name: "REPOSITORY URL" },
   { id: ID.connectButton, name: "Connect" },
@@ -60,7 +61,7 @@ export const CASES: readonly HarnessCase[] = [
         seen.push(expected.name);
       }
 
-      assertAtLeast(seen.length, 13, "primary keyboard stops");
+      assertAtLeast(seen.length, 14, "primary keyboard stops");
 
       return `${seen.length} primary controls were reached in order with a visible 2px focus outline`;
     },

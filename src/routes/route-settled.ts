@@ -13,8 +13,7 @@ type ApplicationOutcome = "ok" | "degraded" | "refused" | "fault";
 
 /** Owner API routes that reach the workspace, by method and route pattern. */
 const WORKSPACE_ROUTES: ReadonlySet<string> = new Set([
-  "GET /api/projects",
-  "GET /api/github/connection",
+  "POST /api/github/connection/refresh",
   "POST /api/github/authorization",
   "POST /api/github/authorization/complete",
   "POST /api/projects/connect",

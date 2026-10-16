@@ -5,19 +5,20 @@ import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed
 import { logRedactedCause, type RequestId } from "../diagnostics.js";
 import { projectIdFromPath } from "./route-pattern.js";
 import { markDegraded } from "./route-settled.js";
+import type { SelectableCatalog } from "../selectable-projects.js";
 import type {
   ConnectRepositoryResult,
   DisconnectRepositoryResult,
   GitHubAuthorizationOutcome,
   GitHubAuthorizationProblem,
+  GitHubConnectionRecord,
   GitHubConnectionStatus,
-  ProjectListView,
   VerifiedAccessScope,
 } from "../supervisor/projects/index.js";
 
 /**
  * The project surface the page reads and writes: list the tenant's connected repositories, connect
- * another one, and drive the GitHub authorization.
+ * another one, read or refresh the GitHub connection, and drive the GitHub authorization.
  *
  * Two things never arrive in a request here. The tenant, because the Worker resolved it from the
  * verified token before this module ran and passes the scope as an argument; a body field named
@@ -29,12 +30,13 @@ import type {
  * reaches a client and no status shape can gain a token by accident.
  */
 export type ProjectApiSupervisor = Readonly<{
-  listProjects: (requestId?: RequestId) => Promise<ProjectListView>;
+  listProjects: () => Promise<SelectableCatalog>;
   connectProject: (
     repositoryUrl: unknown,
     displayName: unknown,
   ) => Promise<ConnectRepositoryResult>;
-  getGitHubConnection: (requestId?: RequestId) => Promise<GitHubConnectionStatus>;
+  getGitHubConnection: () => Promise<GitHubConnectionRecord>;
+  refreshGitHubConnection: (requestId?: RequestId) => Promise<GitHubConnectionRecord>;
   startGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
@@ -84,48 +86,36 @@ const AUTHORIZATION_STATUS = {
   "authorization-denied": 403,
 } as const satisfies Record<GitHubAuthorizationProblem, number>;
 
+/**
+ * The recorded connection and when the workspace last answered for it. A read answers this from
+ * the Supervisor's storage; a refresh answers it after asking the workspace.
+ */
+function recordResponse(record: GitHubConnectionRecord): Response {
+  return Response.json({ ok: true, github: record.github, checkedAt: record.checkedAt });
+}
+
 /** A connection that needs the owner's attention is still a 200, so the log marks it. */
-function reportingGitHub(response: Response, github: GitHubConnectionStatus): Response {
-  return github.state === "reconnect-required" ? markDegraded(response) : response;
+function reportingGitHub(response: Response, github: GitHubConnectionStatus | null): Response {
+  return github?.state === "reconnect-required" ? markDegraded(response) : response;
 }
 
 /**
- * The list and the connection status read the workspace. When that read fails, the owner sees the
- * workspace as unavailable, and the cause goes to the operator log redacted.
+ * A refresh asks the workspace. When that call fails, the owner sees the workspace as unavailable,
+ * and the cause goes to the operator log redacted.
  */
-function workspaceUnavailable(
-  operation: "list" | "connection",
-): (failure: SupervisorCallFailed) => Effect.Effect<Response> {
-  return (failure) =>
-    Effect.sync(() => {
-      logRedactedCause(`routes.projects.${operation}: workspace-unavailable`, failure.cause);
-
-      return jsonError(503, "internal-error");
-    });
-}
-
-function listResponse(
+function refreshResponse(
   supervisor: ProjectApiSupervisor,
   requestId: RequestId | undefined,
 ): Effect.Effect<Response> {
-  return callSupervisor(() => supervisor.listProjects(requestId)).pipe(
-    Effect.map((view) =>
-      reportingGitHub(
-        Response.json({ ok: true, projects: view.projects, github: view.github }),
-        view.github,
-      ),
+  return callSupervisor(() => supervisor.refreshGitHubConnection(requestId)).pipe(
+    Effect.map((record) => reportingGitHub(recordResponse(record), record.github)),
+    Effect.catchTag("SupervisorCallFailed", (failure) =>
+      Effect.sync(() => {
+        logRedactedCause("routes.projects.connection: workspace-unavailable", failure.cause);
+
+        return jsonError(503, "internal-error");
+      }),
     ),
-    Effect.catchTag("SupervisorCallFailed", workspaceUnavailable("list")),
-  );
-}
-
-function connectionResponse(
-  supervisor: ProjectApiSupervisor,
-  requestId: RequestId | undefined,
-): Effect.Effect<Response> {
-  return callSupervisor(() => supervisor.getGitHubConnection(requestId)).pipe(
-    Effect.map((github) => reportingGitHub(Response.json({ ok: true, github }), github)),
-    Effect.catchTag("SupervisorCallFailed", workspaceUnavailable("connection")),
   );
 }
 
@@ -197,17 +187,22 @@ export function routeProjectApiRequest(
   const isPost = request.method === "POST";
 
   if (isGet && pathname === "/api/projects") {
-    return listResponse(supervisor, requestId);
+    return callSupervisor(() => supervisor.listProjects()).pipe(
+      Effect.map((projects) => Response.json({ ok: true, projects })),
+    );
   }
 
   if (isGet && pathname === "/api/github/connection") {
-    return connectionResponse(supervisor, requestId);
+    return callSupervisor(() => supervisor.getGitHubConnection()).pipe(
+      Effect.map((record) => recordResponse(record)),
+    );
   }
 
   const disconnectedProjectId = projectIdFromPath(pathname, "/disconnect");
 
   const mutation =
     pathname === "/api/projects/connect" ||
+    pathname === "/api/github/connection/refresh" ||
     pathname === "/api/github/authorization" ||
     pathname === "/api/github/authorization/complete" ||
     disconnectedProjectId !== undefined;
@@ -218,6 +213,10 @@ export function routeProjectApiRequest(
 
   if (pathname === "/api/projects/connect") {
     return connectResponse(request, supervisor);
+  }
+
+  if (pathname === "/api/github/connection/refresh") {
+    return refreshResponse(supervisor, requestId);
   }
 
   if (disconnectedProjectId !== undefined) {

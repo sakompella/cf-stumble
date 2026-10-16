@@ -23,6 +23,7 @@ import {
   readThread,
   readTranscript,
   readTurn,
+  sampleWhile,
   sleep,
   selectRequests,
   selectRequestsLike,
@@ -239,6 +240,31 @@ export const CASES: readonly HarnessCase[] = [
       await connectRepository(page, server, reopen);
 
       return `connected, awaiting, and disconnected GitHub states exposed 0 credential inputs; connecting ${CONNECTED_PROJECT_URL} reread projects and preserved ${HARNESS_PROJECT_ID}`;
+    },
+  },
+  {
+    // A GitHub check wakes the workspace container, so the page must never repeat one by itself.
+    id: "SIDE-7",
+    title: "the GitHub connection is checked on load and when the owner asks, never by itself",
+    rank: "must",
+    scenario: "ready",
+    run: async ({ page, server }) => {
+      const checks = () =>
+        selectRequests(server.requests(), "POST", "/api/github/connection/refresh").length;
+
+      assertSame(checks(), 1, "GitHub checks once the page loaded");
+      await sleep(1_000);
+      assertSame(checks(), 1, "GitHub checks while the owner did nothing");
+      await page.click(byId(ID.refreshGitHubButton));
+      await sampleWhile(
+        () => Promise.resolve(checks()),
+        (count) => count < 2,
+      );
+      await waitForText(page, ID.githubDetail, "octocat (owner-authorization)");
+      assertSame(checks(), 2, "GitHub checks after Check again");
+      assertSame((await readProjectList(page)).githubState, "connected", "the GitHub state");
+
+      return "the page checked GitHub once on load, not again in the next second, and once more on Check again";
     },
   },
   {

@@ -24,9 +24,9 @@ opaque origin, whatever its content type.
   because `allow-forms` is not granted.
 - The owner API sends no CORS headers, so the document cannot read an owner API answer, even when
   the browser attaches the Access cookie to a credentialed request.
-- No owner API `GET` changes owner state, so a request the document causes without reading it,
-  or a navigation of its own window to `/api/...`, gains nothing. `GET /api/projects` and
-  `GET /api/github/connection` can wake the workspace container to read the credential status.
+- No owner API `GET` changes owner state or reaches the workspace, so a request the document
+  causes without reading it, or a navigation of its own window to `/api/...`, gains nothing. The
+  GitHub connection refresh, which wakes the workspace container, is a `POST`.
 - A service worker cannot be registered from an opaque origin, and the document cannot open
   pop-ups or reach `document.cookie` or same-origin storage.
 - `frame-ancestors 'none'` matches the owner page, so no site can frame generation content.

@@ -26,20 +26,21 @@ function idsOnEvents(events: readonly LogFields[]): (string | number | boolean |
   return events.flatMap((entry) => (entry.requestId === undefined ? [] : [entry.requestId]));
 }
 
-test.each(["listProjects", "getGitHubConnection"] as const)(
-  "Supervisor.%s drops a malformed request id and keeps a real one",
-  async (method) => {
-    const events = capturedEvents();
-    const real = newRequestId();
+test("Supervisor.refreshGitHubConnection drops a malformed request id and keeps a real one", async () => {
+  const events = capturedEvents();
+  const real = newRequestId();
+  const NOW = 1_700_000_000_000;
 
-    const [withBad, withReal] = await runInDurableObject(
-      env.SUPERVISOR.getByName(`rpc-${method}`),
-      async (supervisor) => [await supervisor[method](FORGED), await supervisor[method](real)],
-    );
+  const [withBad, withReal] = await runInDurableObject(
+    env.SUPERVISOR.getByName("rpc-refreshGitHubConnection"),
+    async (supervisor) => [
+      await supervisor.refreshGitHubConnection(FORGED, NOW),
+      await supervisor.refreshGitHubConnection(real, NOW),
+    ],
+  );
 
-    expect(idsOnEvents(events())).not.toContain(FORGED);
-    expect(idsOnEvents(events())).toContain(real);
-    expect(withBad).toEqual(withReal);
-    expect(everythingLogged()).not.toContain("event=forged");
-  },
-);
+  expect(idsOnEvents(events())).not.toContain(FORGED);
+  expect(idsOnEvents(events())).toContain(real);
+  expect(withBad).toEqual(withReal);
+  expect(everythingLogged()).not.toContain("event=forged");
+});

@@ -30,10 +30,7 @@ function commandNames(model: Model, message: Message): readonly string[] {
 /** A page that listed both projects, selected the first, and read its empty thread. */
 function readyPage(): Model {
   return after(init().model, [
-    Message.SucceededFetchProjects({
-      projects: PROJECTS,
-      github: { _tag: "Unknown" },
-    }),
+    Message.SucceededFetchProjects({ projects: PROJECTS }),
     Message.SucceededFetchThread({ selection: 1, isQuiet: false, thread: THREAD }),
   ]);
 }
@@ -43,15 +40,22 @@ function streaming(model: Model): Model {
 }
 
 test("the first listed project is selected and its thread read", () => {
-  const listed = update(
-    init().model,
-    Message.SucceededFetchProjects({ projects: PROJECTS, github: { _tag: "Unknown" } }),
-  );
+  const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS }));
 
   expect(listed.model.projectListStatus).toBe("1 connected");
   expect(listed.model.conversationState).toBe("reading");
   expect(Option.getOrNull(listed.model.maybeProjectId)).toBe("repo");
   expect((listed.commands ?? []).map((command) => command.name)).toEqual(["FetchThread"]);
+});
+
+test("the page checks the GitHub connection on load and again only when the owner asks", () => {
+  expect((init().commands ?? []).map((command) => command.name)).toEqual([
+    "FetchStatus",
+    "FetchProjects",
+    "RefreshGitHub",
+    "FetchChatGPT",
+  ]);
+  expect(commandNames(readyPage(), Message.ClickedRefreshGitHub())).toEqual(["RefreshGitHub"]);
 });
 
 test("sending a turn trims the prompt, shows it, and starts the stream", () => {

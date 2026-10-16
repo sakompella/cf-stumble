@@ -125,15 +125,8 @@ function projectJson(project: ProjectEntry): JsonValue {
 }
 
 /** The sidebar list, in the shape and the order the Supervisor sends it. */
-export function projectsPayload(
-  scenario: HarnessScenario,
-  projects: readonly ProjectEntry[],
-): JsonValue {
-  return {
-    ok: true,
-    projects: projects.map((project) => projectJson(project)),
-    github: github(scenario),
-  };
+export function projectsPayload(projects: readonly ProjectEntry[]): JsonValue {
+  return { ok: true, projects: projects.map((project) => projectJson(project)) };
 }
 
 export function connectPayload(scenario: HarnessScenario, alreadyConnected: boolean): JsonValue {
@@ -152,4 +145,9 @@ export function connectPayload(scenario: HarnessScenario, alreadyConnected: bool
 
 export function authorizationPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario) };
+}
+
+/** A refresh's answer: what the workspace said, and when it said it. */
+export function refreshPayload(scenario: HarnessScenario): JsonValue {
+  return { ok: true, github: github(scenario), checkedAt: 1_760_000_000_000 };
 }

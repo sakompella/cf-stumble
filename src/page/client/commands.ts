@@ -63,11 +63,7 @@ export const FetchProjects = Command.define("FetchProjects", {
     Effect.map((answer) =>
       Option.match(projects(answer.payload), {
         onNone: () => Message.RejectedFetchProjects({ wording: problemText(answer) }),
-        onSome: (list) =>
-          Message.SucceededFetchProjects({
-            projects: list,
-            github: gitHubReport(field(answer.payload, "github")),
-          }),
+        onSome: (list) => Message.SucceededFetchProjects({ projects: list }),
       }),
     ),
     Effect.catch((detail) => Effect.succeed(Message.FailedFetchProjects({ detail }))),
@@ -94,18 +90,38 @@ export const ConnectRepository = Command.define("ConnectRepository", {
     ),
 });
 
+const GITHUB_MESSAGES = [
+  Message.SucceededGitHub,
+  Message.RejectedGitHub,
+  Message.FailedGitHub,
+] as const;
+
+/** A GitHub `POST` whose answer carries the connection as the Worker now sees it. */
+function gitHubRequest(path: string) {
+  return requestJson("POST", path, Option.some({})).pipe(
+    Effect.map((answer) =>
+      isOk(answer.payload)
+        ? Message.SucceededGitHub({ github: gitHubReport(field(answer.payload, "github")) })
+        : Message.RejectedGitHub({ wording: problemText(answer) }),
+    ),
+    Effect.catch((detail) => Effect.succeed(Message.FailedGitHub({ detail }))),
+  );
+}
+
 export const AuthorizeGitHub = Command.define("AuthorizeGitHub", {
   args: { path: Schema.String },
-  messages: [Message.SucceededAuthorize, Message.RejectedAuthorize, Message.FailedAuthorize],
-  execute: ({ path }) =>
-    requestJson("POST", path, Option.some({})).pipe(
-      Effect.map((answer) =>
-        isOk(answer.payload)
-          ? Message.SucceededAuthorize({ github: gitHubReport(field(answer.payload, "github")) })
-          : Message.RejectedAuthorize({ wording: problemText(answer) }),
-      ),
-      Effect.catch((detail) => Effect.succeed(Message.FailedAuthorize({ detail }))),
-    ),
+  messages: GITHUB_MESSAGES,
+  execute: ({ path }) => gitHubRequest(path),
+});
+
+/**
+ * Ask the workspace what its GitHub credential can do now. This is the one GitHub read that wakes
+ * the workspace container, so the page sends it when it loads and when the owner asks, never on a
+ * timer.
+ */
+export const RefreshGitHub = Command.define("RefreshGitHub", {
+  messages: GITHUB_MESSAGES,
+  execute: gitHubRequest("/api/github/connection/refresh"),
 });
 
 type ChatGPTAnswer = Extract<Message, { readonly _tag: "SucceededChatGPT" | "RejectedChatGPT" }>;

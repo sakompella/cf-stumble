@@ -8,14 +8,14 @@ ADR-0043 and ADR-0044.
 
 ## Summary
 
-| Item                                                                                                   | Value                                                                                                                                             |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Invoice (2026-09-27, as reported; the $4.30 equals the sum of the container lines in the usage export) | $10.25: Workers Paid $5.00, Containers overage $4.30, and an unclassified remainder of $0.95 (no invoice line items were read)                    |
-| Container running time                                                                                 | 2.74 h on 09-25, 18.39 h on 09-26, 18.79 h on 09-27, 4.47 h on 09-28                                                                              |
-| Container size                                                                                         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                   |
-| Causes                                                                                                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU |
-| Fixed (three of four causes)                                                                           | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail                                                       |
-| Not fixed                                                                                              | A client that polls a route that touches the workspace still keeps the container up. `ops:check` detects it.                                      |
+| Item                                                                                                   | Value                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Invoice (2026-09-27, as reported; the $4.30 equals the sum of the container lines in the usage export) | $10.25: Workers Paid $5.00, Containers overage $4.30, and an unclassified remainder of $0.95 (no invoice line items were read)                                     |
+| Container running time                                                                                 | 2.74 h on 09-25, 18.39 h on 09-26, 18.79 h on 09-27, 4.47 h on 09-28                                                                                               |
+| Container size                                                                                         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                                    |
+| Causes                                                                                                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU                  |
+| Fixed                                                                                                  | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail; on `main` only, status reads that answer from the Supervisor's record |
+| Not fixed                                                                                              | A client that polls a route that still touches the workspace, such as the connection refresh or a turn, keeps the container up. `ops:check` detects it.            |
 
 The aggregated daily charges are in `docs/agents/evidence/container-cost-2026-09.json`.
 
@@ -43,9 +43,9 @@ The usage export reports the invoice of 09-27 as covering the cycle from 08-27 t
 
 ## Root causes
 
-1. **A status read is paid container work.** `GET /api/github/connection` calls
+1. **A status read is paid container work.** `GET /api/github/connection` called
    `GitHubConnection.status`, which runs `gh auth status` and `gh api user` in the container. Each
-   call wakes the container or keeps it busy. A client that repeats the call every 95 seconds keeps
+   call woke the container or kept it busy. A client that repeats the call every 95 seconds keeps
    the container running all day. The page itself does not poll; the client in this incident was an
    agent end-to-end pass. Its exact source, and why the platform canceled calls at about 90
    seconds, were not established.
@@ -74,16 +74,21 @@ The usage export reports the invoice of 09-27 as covering the cycle from 08-27 t
 
 ## Fixes
 
-| Cause                  | Fix                                                                                                                                               | Commits                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 2, never-ending socket | The Workspace Host stops an idle container: an alarm closes the Workspace, then destroys the container after ten minutes with no work (ADR-0043). | `0521455`, `632e1aa`, `ff9ce47`, `2ca99c7`, then `d5b83e3` to `2dc6512`, `ee43f84`, `281f2bb` |
-| 3, shim walk           | The shim polls every 5 s (`COMPUTERD_POLL_MS`), with a cap at the timer limit (ADR-0044).                                                         | `53366fb`, `58b8d26`                                                                          |
-| 4, lost credential     | `gh` and Git configuration live under `/workspace`.                                                                                               | `3adf75c` to `fad987a`                                                                        |
-| Visibility             | Container events, request ids, `route.settled`, traces, Issues, and `pnpm ops:check`.                                                             | `71f03be` to `f8b03b3`, `c0816a9`, `94ef17c` to `4636cc5`                                     |
+| Cause                  | Fix                                                                                                                                                                               | Commits                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1, paid status read    | `GET /api/github/connection` and `GET /api/projects` answer from the Supervisor's record; only `POST /api/github/connection/refresh` asks the workspace. On `main`, not deployed. | see `docs/agents/status.md`                                                                   |
+| 2, never-ending socket | The Workspace Host stops an idle container: an alarm closes the Workspace, then destroys the container after ten minutes with no work (ADR-0043).                                 | `0521455`, `632e1aa`, `ff9ce47`, `2ca99c7`, then `d5b83e3` to `2dc6512`, `ee43f84`, `281f2bb` |
+| 3, shim walk           | The shim polls every 5 s (`COMPUTERD_POLL_MS`), with a cap at the timer limit (ADR-0044).                                                                                         | `53366fb`, `58b8d26`                                                                          |
+| 4, lost credential     | `gh` and Git configuration live under `/workspace`.                                                                                                                               | `3adf75c` to `fad987a`                                                                        |
+| Visibility             | Container events, request ids, `route.settled`, traces, Issues, and `pnpm ops:check`.                                                                                             | `71f03be` to `f8b03b3`, `c0816a9`, `94ef17c` to `4636cc5`                                     |
 
-Cause 1 has no code fix. The idle stop does not help against a client that keeps calling a route
-that touches the workspace, because each call counts as work. The defenses are detection
-(`ops:check` rule `poller`) and the stop that follows ten minutes after the client goes away.
+Cause 1 is fixed on `main` and not deployed yet (2026-10-16). The project list and the connection
+status answer from the Supervisor's own record and never reach the Workspace Host. Only
+`POST /api/github/connection/refresh` runs `gh` in the container, and the page sends it when it
+loads and when the owner presses **Check again**. The idle stop still does not help against a
+client that keeps calling a route that does touch the workspace, because each call counts as work.
+The defenses there are detection (`ops:check` rule `poller`) and the stop that follows ten minutes
+after the client goes away.
 
 Production verification on 2026-10-02: the last work ended at 21:31:20Z and the stop fired at
 21:41:20Z (`reasonCode: idle-stop`, `outcome: stopped`). The instances API showed `inactive` one

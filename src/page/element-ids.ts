@@ -22,6 +22,7 @@ export const OWNER_PAGE_IDS = {
   githubVerificationLink: "github-verification-link",
   authorizeButton: "github-authorize-button",
   completeAuthorizationButton: "github-authorize-complete-button",
+  refreshGitHubButton: "github-refresh-button",
   chatgptConnection: "chatgpt-connection",
   chatgptConnectButton: "chatgpt-connect-button",
   chatgptSignInLink: "chatgpt-sign-in-link",

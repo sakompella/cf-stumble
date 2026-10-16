@@ -15,7 +15,7 @@ const READING = "reading";
 
 /**
  * Every element the page fills from a read of the owner API, and its "still reading" wording. The
- * ChatGPT connection has no such wording: it is empty until its read answers.
+ * GitHub and ChatGPT connections have no such wording: each is empty until its request answers.
  */
 const READ_STATES: readonly string[] = [
   ID.statusStatus,
@@ -28,7 +28,8 @@ function textExpression(elementId: string): string {
 }
 
 /**
- * The state every case starts from: the status, project, and thread reads have all answered.
+ * The state every case starts from: the status, project, thread, and connection requests have all
+ * answered.
  *
  * A scenario in which one of those reads is refused settles too — the element then holds the
  * refusal instead of `reading`, which is the observation those cases are about.
@@ -38,6 +39,7 @@ export async function waitForSettledReads(page: BrowserPage, timeoutMs = 15_000)
     ...READ_STATES.map(
       (elementId) => `${textExpression(elementId)} === ${JSON.stringify(READING)}`,
     ),
+    `${textExpression(ID.githubState)} === ""`,
     `${textExpression(ID.chatgptConnection)} === ""`,
   ].join(" || ");
 

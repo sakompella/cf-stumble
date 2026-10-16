@@ -261,7 +261,7 @@ acting on the page or by calling a control.
 | `timed-out`                     | `timed out`                                                                                                                                    |
 | `turn-conflict`                 | HTTP 409 `turn-conflict` before any frame                                                                                                      |
 | `no-active-generation`          | HTTP 503 `no-active-generation` before any frame                                                                                               |
-| `no-projects`                   | `GET /api/projects` answers an empty catalog with connected GitHub                                                                             |
+| `no-projects`                   | `GET /api/projects` answers an empty catalog, and GitHub is connected                                                                          |
 | `github-disconnected`           | GitHub state `disconnected`                                                                                                                    |
 | `github-awaiting-authorization` | state `awaiting-authorization`, code `WDJB-MJHT`, GitHub's device link                                                                         |
 | `chatgpt-connected`             | the ChatGPT connection starts `connected`, with model `gpt-6.1-sol`                                                                            |

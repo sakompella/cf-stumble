@@ -60,6 +60,7 @@ const noStoreRoutes = [
   ["GET", "/api/status"],
   ["GET", "/api/unknown"],
   ["POST", "/api/projects/connect"],
+  ["POST", "/api/github/connection/refresh"],
   ["POST", "/api/github/authorization"],
   ["POST", "/api/github/authorization/complete"],
   ["POST", "/api/generations/submit"],
