@@ -321,19 +321,25 @@ function startBackendExec(
   }
 }
 
-/** Arms the host timeout: whichever of timeout, manual kill, or backend settlement fires first wins. */
+/**
+ * Arms the host timeout: whichever of timeout, manual kill, or backend settlement fires first wins.
+ * A timeout that stands for the turn's deadline is the turn ending, so it settles as `killed` by
+ * `turn-end`, exactly as the capability's own turn timer would have settled it.
+ */
 function armTimeout(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
   onSettle: (settlement: ExecSettlement) => void,
   timeoutMs: number,
+  timeoutEndsTurn: boolean,
 ): void {
   state.timer = setTimeout(() => {
+    if (timeoutEndsTurn) state.killReason = "turn-end";
     settle(
       state,
       controller,
       onSettle,
-      { kind: "terminal", seq: state.seq++, outcome: "timed-out" },
+      { kind: "terminal", seq: state.seq++, outcome: timeoutEndsTurn ? "killed" : "timed-out" },
       true,
     );
   }, timeoutMs);
@@ -396,11 +402,15 @@ function watchBackendExec(
  * backend kill can never block or reject this operation. `onSettle` runs synchronously with the
  * terminal event so the caller can drop its own references (map entry, timer) the instant the
  * operation ends.
+ *
+ * `timeoutEndsTurn` marks a `timeoutMs` that was capped at the turn's deadline: reaching it is the
+ * turn ending, so it settles as `killed` by `turn-end` rather than `timed-out`.
  */
 export function startExecOperation(
   execBackend: ExecBackend,
   input: ExecBackendInput,
   onSettle: (settlement: ExecSettlement) => void,
+  timeoutEndsTurn = false,
 ): ExecOperation {
   const state: SettleState = {
     settled: false,
@@ -417,7 +427,7 @@ export function startExecOperation(
   const events = new ReadableStream<Uint8Array>(
     {
       start(controller) {
-        armTimeout(state, controller, onSettle, input.timeoutMs);
+        armTimeout(state, controller, onSettle, input.timeoutMs, timeoutEndsTurn);
         requestKillImpl = (reason = "manual") => {
           state.killReason = reason;
           settle(

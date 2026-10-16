@@ -53,6 +53,19 @@ type ProjectRpcTargetOptions = Readonly<{
   activity?: ProjectActivity;
 }>;
 
+/**
+ * A timeout capped at the turn's budget is the turn deadline: the turn timer and the exec timer
+ * both mean "the turn ended", so whichever fires first must report the same outcome.
+ */
+function capAtBudget(requestedMs: number, remainingMs: number | undefined) {
+  if (remainingMs === undefined) return { timeoutMs: requestedMs, timeoutEndsTurn: false };
+
+  return {
+    timeoutMs: Math.min(requestedMs, remainingMs),
+    timeoutEndsTurn: requestedMs >= remainingMs,
+  };
+}
+
 function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
   try {
     return Promise.resolve(operation());
@@ -196,8 +209,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return fail("turn-ended");
     }
 
-    const timeoutMs =
-      remainingMs === undefined ? input.timeoutMs : Math.min(input.timeoutMs, remainingMs);
+    const { timeoutMs, timeoutEndsTurn } = capAtBudget(input.timeoutMs, remainingMs);
 
     // The operation identity, its event stream, and its host timeout timer are all produced
     // synchronously here, before `execBackend.exec()` is ever awaited: see `startExecOperation`
@@ -213,6 +225,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       cwdOutcome.value.path,
       input,
       timeoutMs,
+      timeoutEndsTurn,
       endActivity,
     );
 
@@ -226,6 +239,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     cwd: string,
     input: ParsedStartExecInput,
     timeoutMs: number,
+    timeoutEndsTurn: boolean,
     endActivity: (() => void) | undefined,
   ): ExecOperation {
     try {
@@ -237,6 +251,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
           endActivity?.();
           this.#logSettlement(settlement, timeoutMs);
         },
+        timeoutEndsTurn,
       );
     } catch (error) {
       endActivity?.();
