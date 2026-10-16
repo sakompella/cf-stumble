@@ -269,19 +269,19 @@ function beginOnFacet(
 
 /** Ask the tenant's Workspace Host for the project capability, or learn that it cannot answer. */
 function obtainCapability(input: ProjectTurnInput): Effect.Effect<ProjectCapabilityStub | null> {
-  return Effect.promise(() =>
-    timedWorkspaceRpc(
-      { method: "project" },
-      () =>
-        input.namespace
-          .getByName(input.workspaceName)
-          .project({ remainingMs: input.remainingMs() }),
+  return Effect.promise(() => {
+    const remainingMs = input.remainingMs();
+
+    return timedWorkspaceRpc(
+      // The Host holds the container until this instant plus its idle limit (`ops:check` reads it).
+      { method: "project", leaseEndsAtMs: Date.now() + remainingMs },
+      () => input.namespace.getByName(input.workspaceName).project({ remainingMs }),
       () => ({ outcome: "ok" }),
     ).then(
       (capability) => capability,
       () => null,
-    ),
-  );
+    );
+  });
 }
 
 /** Wait for provision before generation or capability admission, including harness turns. */

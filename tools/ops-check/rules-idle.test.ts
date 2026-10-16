@@ -1,6 +1,7 @@
 /** Rule d: container time past the idle limit, from usage buckets and from the running instance. */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { JsonRecord } from "../json.mts";
 import { runChecks } from "./check.mts";
 import { bucketsOf, eventRow, input, logs, metrics } from "./fixtures.mts";
 import { MINUTE_MS, type CheckInput, type TimeWindow } from "./model.mts";
@@ -138,6 +139,42 @@ describe("rule d: the default idle limit", () => {
     assert.equal(runFor(5).idleLimitMs, idleStopMs);
     assert.deepEqual(firing(runFor(20)), []);
     assert.deepEqual(firing(runFor(25)), ["ran-past-idle"]);
+  });
+});
+
+describe("rule d: a turn lease holds the container", () => {
+  const lastRequest = START + 60 * MINUTE_MS;
+  const LEASE_MINUTES = 30;
+
+  /** A short turn took a 30 min lease, and the container then ran for `runMinutes`. */
+  const leasedRun = (runMinutes: number, lease: JsonRecord = {}): CheckInput =>
+    input(WINDOW, {
+      logs: logs([
+        eventRow(lastRequest, "route.settled", { requestId: "r", route: "/api/x", durationMs: 1 }),
+        eventRow(lastRequest, "workspace.rpc", {
+          method: "project",
+          durationMs: 1,
+          ...lease,
+        }),
+      ]),
+      metrics: metrics(
+        [[START, 1]],
+        bucketsOf({ fromMs: lastRequest, toMs: lastRequest + runMinutes * MINUTE_MS }, () => 5),
+      ),
+    });
+
+  const lease = { leaseEndsAtMs: lastRequest + LEASE_MINUTES * MINUTE_MS };
+
+  it("is quiet while the container stops one idle limit after the lease ends", () => {
+    assert.deepEqual(firing(leasedRun(45, lease)), []);
+  });
+
+  it("fires for the same run when the logs carry no lease end", () => {
+    assert.deepEqual(firing(leasedRun(45)), ["ran-past-idle"]);
+  });
+
+  it("fires when the container runs past the lease end plus the idle limit and the tolerance", () => {
+    assert.deepEqual(firing(leasedRun(55, lease)), ["ran-past-idle"]);
   });
 });
 

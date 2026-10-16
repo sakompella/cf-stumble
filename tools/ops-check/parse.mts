@@ -75,6 +75,7 @@ function parseAppEvent(row: JsonRecord, source: JsonRecord): AppEvent | null {
     reasonSource: text(source["reasonSource"]),
     phase: text(source["phase"]),
     trigger: text(source["trigger"]),
+    leaseEndsAtMs: number(source["leaseEndsAtMs"]),
   };
 }
 
