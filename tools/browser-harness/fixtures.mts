@@ -125,15 +125,8 @@ function projectJson(project: ProjectEntry): JsonValue {
 }
 
 /** The sidebar list, in the shape and the order the Supervisor sends it. */
-export function projectsPayload(
-  scenario: HarnessScenario,
-  projects: readonly ProjectEntry[],
-): JsonValue {
-  return {
-    ok: true,
-    projects: projects.map((project) => projectJson(project)),
-    github: github(scenario),
-  };
+export function projectsPayload(projects: readonly ProjectEntry[]): JsonValue {
+  return { ok: true, projects: projects.map((project) => projectJson(project)) };
 }
 
 export function connectPayload(scenario: HarnessScenario, alreadyConnected: boolean): JsonValue {
@@ -147,9 +140,23 @@ export function connectPayload(scenario: HarnessScenario, alreadyConnected: bool
     },
     alreadyConnected,
     github: github(scenario),
+    checkedAt: CHECKED_AT,
   };
 }
 
+/**
+ * When the stub's workspace last answered. It is built in the local zone, as the page shows it, and
+ * falls on an earlier day than any run, so the page words it with its date.
+ */
+export const CHECKED_AT = new Date(2026, 9, 15, 14, 32).getTime();
+
+export const CHECKED_WORDING = "2026-10-15 14:32";
+
 export function authorizationPayload(scenario: HarnessScenario): JsonValue {
-  return { ok: true, github: github(scenario) };
+  return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
+}
+
+/** A refresh's answer: what the workspace said, and when it said it. */
+export function refreshPayload(scenario: HarnessScenario): JsonValue {
+  return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }

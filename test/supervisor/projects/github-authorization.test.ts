@@ -129,6 +129,7 @@ test("shows the verification page and the user code, and never the device code",
       expiresAt: NOW + 900_000,
       intervalSeconds: 5,
     },
+    checkedAt: null,
   });
   expect(JSON.stringify(status)).not.toContain("device-code-secret");
 });
@@ -148,6 +149,7 @@ test("installs the token into the workspace and returns a status without it", as
   expect(completed).toEqual({
     ok: true,
     status: { state: "connected", login: "octocat", source: "device-authorization" },
+    checkedAt: NOW + 1_000,
   });
   expect(
     subject.workspace.credentialRequests.filter((sent) => sent.includes(FAKE_TOKEN)),

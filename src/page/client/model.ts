@@ -21,6 +21,8 @@ const GitHubConnection = Schema.Struct({
   state: Schema.String,
   detail: Schema.String,
   verificationUri: Schema.String,
+  /** When the Worker last checked, or empty when this state is not the result of a check. */
+  checked: Schema.String,
 });
 
 type GitHubConnection = typeof GitHubConnection.Type;

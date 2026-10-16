@@ -25,7 +25,7 @@ function after(start: Model, messages: readonly Message[]): Model {
 
 function turnWithFrames(frames: readonly TurnFrame[]): Model {
   const sent = after(init().model, [
-    Message.SucceededFetchProjects({ projects: [PROJECT], github: { _tag: "Unknown" } }),
+    Message.SucceededFetchProjects({ projects: [PROJECT] }),
     Message.SucceededFetchThread({ selection: 1, isQuiet: false, thread: THREAD }),
     Message.UpdatedPrompt({ value: "do it" }),
     Message.ClickedSendTurn(),

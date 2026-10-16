@@ -34,8 +34,7 @@ import {
   type VerifiedAccessScope,
   type GitHubAuthorizationOutcome,
   type GitHubConnectionEnvironment,
-  type GitHubConnectionStatus,
-  type ProjectListView,
+  type GitHubConnectionRecord,
   type ProjectTurnRun,
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
@@ -59,6 +58,7 @@ import {
   type ChatGPTLoginOutcome,
 } from "../chatgpt/index.js";
 import { PROJECT_TURN_DEADLINE_MS, PROJECT_TURN_LEASE_MS } from "../turn-budget.js";
+import type { SelectableCatalog } from "../selectable-projects.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
 import { ProjectThreads, type LiveTurn, type ProjectThreadResult } from "./threads/index.js";
 import {
@@ -248,20 +248,35 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * The tenant's connected repositories, with a GitHub connection status that carries no
-   * credential. This is what the page's project sidebar reads.
+   * Everything this tenant may select, for the page's project sidebar. The harness entry has no
+   * repository URL, which tells the sidebar it is not a connection. It never reaches the workspace.
    */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
-  listProjects(requestId?: unknown, now: number = Date.now()): Promise<ProjectListView> {
-    return runAtEntryPoint(this.connections.list(now, parseRequestId(requestId)));
+  listProjects(): SelectableCatalog {
+    return this.connections.catalog();
   }
 
-  getGitHubConnection(
+  /**
+   * The GitHub connection as last checked, from this object's own storage. It never reaches the
+   * Workspace Host, so a client that keeps reading it cannot keep the workspace container running.
+   */
+  getGitHubConnection(now: number = Date.now()): GitHubConnectionRecord {
+    return this.github.lastKnown(now);
+  }
+
+  /**
+   * Ask the workspace what its GitHub credential can do now, store the answer, and answer the
+   * record. This is the one status read that reaches the Workspace Host.
+   */
+  refreshGitHubConnection(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
     requestId?: unknown,
     now: number = Date.now(),
-  ): Promise<GitHubConnectionStatus> {
-    return runAtEntryPoint(this.connections.connectionStatus(now, parseRequestId(requestId)));
+  ): Promise<GitHubConnectionRecord> {
+    return runAtEntryPoint(
+      this.github
+        .status(now, { requestId: parseRequestId(requestId) })
+        .pipe(Effect.map(() => this.github.lastKnown(now))),
+    );
   }
 
   /**

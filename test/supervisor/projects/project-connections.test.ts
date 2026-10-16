@@ -9,9 +9,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import { newRequestId } from "../../../src/diagnostics.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { capturedEvents, named } from "../../log-capture.js";
-import {
+import type {
   GitHubConnection,
-  type ProjectConnections,
+  ProjectConnections,
 } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections, type TenantConnections } from "./tenant-connections.js";
@@ -236,7 +236,9 @@ test("connects a repository once the workspace credential works, and provisions 
     connections.connect(REPOSITORY, "Repo one", NOW),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(connected).toMatchObject({
     ok: true,
@@ -244,7 +246,7 @@ test("connects a repository once the workspace credential works, and provisions 
     project: { id: "sample-repo-1", displayName: "Repo one", repositoryUrl: REPOSITORY },
     github: { state: "connected", login: "octocat", source: "configured-token" },
   });
-  expect(listed.projects.map((project) => project.id)).toEqual(["sample-repo-1", "harness"]);
+  expect(listed.map((project) => project.id)).toEqual(["sample-repo-1", "harness"]);
   expect(
     subject.workspace.commands.filter((command) => command.includes("git clone")),
     "connecting provisions the repository it just verified",
@@ -262,9 +264,11 @@ test("a third repository joins the same one workspace, not a workspace of its ow
     expect(connected).toMatchObject({ ok: true });
   }
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
-  expect(listed.projects.map((project) => project.id)).toEqual([
+  expect(listed.map((project) => project.id)).toEqual([
     "sample-repo-one",
     "sample-repo-three",
     "sample-repo-two",
@@ -285,10 +289,12 @@ test("keeps a repository the workspace cannot read out of the catalog", async ()
     connections.connect(REPOSITORY, undefined, NOW),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "repository-not-accessible" } });
-  expect(listed.projects, "nothing was connected, so the harness entry is the whole list").toEqual([
+  expect(listed, "nothing was connected, so the harness entry is the whole list").toEqual([
     HARNESS_PROJECT,
   ]);
   expect(
@@ -318,18 +324,23 @@ test("takes a project back out when its clone fails, so a listed project has fil
     connections.connect(REPOSITORY, undefined, NOW),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed).toEqual([HARNESS_PROJECT]);
 });
 
 test("lists the harness with no connection, and clones nothing for it", async () => {
   const subject = tenant("harness-entry", { fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, "Repo one", NOW));
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
-  const harness = listed.projects.find((project) => project.kind === "harness");
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
+
+  const harness = listed.find((project) => project.kind === "harness");
 
   // The entry is a working-directory selection and nothing else: no repository URL, so nothing
   // about it can be authorized, cloned, or disconnected, and it is there whatever GitHub says.
@@ -348,13 +359,15 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
     connections.connect("https://github.com/-/harness", undefined, NOW),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   // The earlier id rule reduced this URL to `harness`, the harness entry's id. `-` is no GitHub
   // owner, so it now derives no id at all, and no GitHub repository derives an id without a
   // hyphen. The explicit refusal in `ConnectedProjects.connect` stays as a second line.
   expect(refused).toMatchObject({ ok: false, problem: { code: "invalid-repository-url" } });
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed).toEqual([HARNESS_PROJECT]);
   expect(
     subject.workspace.commands.filter((command) => command.includes("https://github.com/-/")),
     "a URL that derives no project id is never handed to the workspace",
@@ -369,14 +382,16 @@ test("disconnects a project row and removes its clone through the narrow workspa
     connections.disconnect("sample-repo-1", () => ({ ok: true })),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(disconnected).toEqual({
     ok: true,
     projectId: "sample-repo-1",
     workspace: "removed",
   });
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed).toEqual([HARNESS_PROJECT]);
   const removal = subject.workspace.commands.find((command) => command.includes("rm -rf"));
   expect(removal).toContain("/workspace/projects/sample-repo-1");
   expect(removal).toContain("/workspace/projects/sample-repo-1.provisioning");
@@ -393,14 +408,16 @@ test("removes the project row when workspace cleanup fails", async () => {
     connections.disconnect("sample-repo-1", () => ({ ok: true })),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(disconnected).toEqual({
     ok: true,
     projectId: "sample-repo-1",
     workspace: "failed",
   });
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed).toEqual([HARNESS_PROJECT]);
   expect(named(events(), "project.disconnected")).toContainEqual(
     expect.objectContaining({ project: "sample-repo-1", workspace: "failed" }),
   );
@@ -417,11 +434,13 @@ test("reports a removal that the durable store does not show as failed, not remo
     connections.disconnect("sample-repo-1", () => ({ ok: true })),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   // The row and thread are gone, as for any failed cleanup; the result says the clone may remain.
   expect(disconnected).toEqual({ ok: true, projectId: "sample-repo-1", workspace: "failed" });
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed).toEqual([HARNESS_PROJECT]);
   expect(named(events(), "workspace.rpc")).toContainEqual(
     expect.objectContaining({ step: "remove", outcome: "workspace-sync-incomplete" }),
   );
@@ -437,10 +456,12 @@ test("keeps a repository whose clone the durable store does not show out of the 
     connections.connect(REPOSITORY, undefined, NOW),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "provisioning-failed" } });
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
+  expect(listed).toEqual([HARNESS_PROJECT]);
 });
 
 test("refuses provisioning on use when the clone's sync does not complete", async () => {
@@ -489,10 +510,12 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
     connections.ensureProvisioned("sample-repo-1"),
   );
 
-  const listed = await subject.connections((connections) => connections.list(NOW));
+  const listed = await subject.connections((connections) =>
+    Effect.sync(() => connections.catalog()),
+  );
 
   expect(used).toEqual({ ok: false, problem: { code: "repository-too-large" } });
-  expect(listed.projects.map((project) => project.id)).toContain("sample-repo-1");
+  expect(listed.map((project) => project.id)).toContain("sample-repo-1");
 });
 
 test("reinstalls the configured credential before repairing a repository after a reset", async () => {
@@ -554,16 +577,14 @@ test("asks for a reconnection after a restart left the workspace without a crede
   const workspace = new FakeTenantWorkspace();
   const subject = tenant("credential-after-restart", { workspace, fallbackToken: FAKE_TOKEN });
   await subject.github((github) => github.ensureCredential(NOW));
-  const connected = await subject.connections((connections) => connections.connectionStatus(NOW));
+  const connected = await subject.github((github) => github.status(NOW));
 
   // A recreated container keeps the tenant's storage and loses the workspace filesystem, so `gh`
   // has no credential and cf-stumble's record of one is the only thing left.
   workspace.credentialState = "missing";
   const withoutFallback = tenant("credential-after-restart", { workspace });
 
-  const reported = await withoutFallback.connections((connections) =>
-    connections.connectionStatus(NOW + 1),
-  );
+  const reported = await withoutFallback.github((github) => github.status(NOW + 1));
 
   const repaired = await subject.github((github) => github.ensureCredential(NOW + 2));
 
@@ -588,8 +609,11 @@ test("clears cached GitHub status after resetting the workspace", async () => {
   workspace.credentialState = "missing";
 
   await expect(
-    subject.connections((connections) => connections.connectionStatus(NOW + 1)),
-  ).resolves.toEqual({ state: "disconnected" });
+    subject.github((github) => Effect.sync(() => github.lastKnown(NOW + 1))),
+  ).resolves.toEqual({ github: null, checkedAt: null });
+  await expect(subject.github((github) => github.status(NOW + 1))).resolves.toEqual({
+    state: "disconnected",
+  });
 
   await expect(subject.github((github) => github.ensureCredential(NOW + 2))).resolves.toMatchObject(
     { state: "connected", source: "configured-token" },
@@ -601,28 +625,9 @@ test("reports a reconnect requirement rather than a connection it cannot use", a
   workspace.credentialState = "unusable";
   const subject = tenant("credential-rejected", { workspace });
 
-  const status = await subject.connections((connections) => connections.connectionStatus(NOW));
+  const status = await subject.github((github) => github.status(NOW));
 
   expect(status).toEqual({ state: "reconnect-required", reason: "credential-rejected" });
-});
-
-test.each([
-  ["rejects", new Error("status RPC is unavailable")],
-  ["times out", new DOMException("status RPC timed out", "TimeoutError")],
-] as const)("lists projects when the credential status call %s", async (_kind, cause) => {
-  const workspace = new FakeTenantWorkspace();
-  const subject = tenant("status-rpc-failure", { workspace });
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(GitHubConnection.prototype, "status").mockReturnValue(Effect.die(cause));
-
-  const listed = await subject.connections((connections) => connections.list(NOW));
-
-  expect(listed.projects).toEqual([HARNESS_PROJECT]);
-  expect(listed.github).toEqual({
-    state: "reconnect-required",
-    reason: "workspace-unavailable",
-  });
-  expect(loggedErrors.mock.calls.join(" ")).toContain(cause.message);
 });
 
 test("reports a workspace it cannot reach as a reconnect requirement, never as connected", async () => {
@@ -645,31 +650,24 @@ test("shows a workspace image without gh instead of installing one", async () =>
   expect(status).toEqual({ state: "tooling-missing" });
 });
 
-test.each(["list", "connection"] as const)(
-  "a %s read passes its request id to the Workspace Host and the events it writes",
-  async (read) => {
-    const events = capturedEvents();
-    const subject = tenant(`request-id-${read}`);
-    const requestId = newRequestId();
+test("a status read passes its request id to the Workspace Host and the events it writes", async () => {
+  const events = capturedEvents();
+  const subject = tenant("request-id-status");
+  const requestId = newRequestId();
 
-    await subject.connections((connections) =>
-      read === "list"
-        ? Effect.asVoid(connections.list(NOW, requestId))
-        : Effect.asVoid(connections.connectionStatus(NOW, requestId)),
-    );
+  await subject.github((github) => github.status(NOW, { requestId }));
 
-    expect(subject.workspace.credentialRequestIds).toEqual([requestId]);
+  expect(subject.workspace.credentialRequestIds).toEqual([requestId]);
 
-    for (const event of ["workspace.rpc", "github-credential.status", "workspace.command"]) {
-      expect(named(events(), event).map((entry) => entry.requestId)).toEqual([requestId]);
-    }
-  },
-);
+  for (const event of ["workspace.rpc", "github-credential.status", "workspace.command"]) {
+    expect(named(events(), event).map((entry) => entry.requestId)).toEqual([requestId]);
+  }
+});
 
 test("a read with no request id sends none to the Workspace Host", async () => {
   const subject = tenant("request-id-absent");
 
-  await subject.connections((connections) => connections.connectionStatus(NOW));
+  await subject.github((github) => github.status(NOW));
 
   expect(subject.workspace.credentialRequestIds).toEqual([undefined]);
 });

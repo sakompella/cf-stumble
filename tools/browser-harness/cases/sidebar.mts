@@ -14,6 +14,7 @@ import {
   HARNESS_SELF_PROJECT_ID,
   CONNECTED_PROJECT_ID,
   CONNECTED_PROJECT_URL,
+  CHECKED_WORDING,
   FRAME_INTERVAL_MS,
   projectButton,
   readConversation,
@@ -23,6 +24,7 @@ import {
   readThread,
   readTranscript,
   readTurn,
+  sampleWhile,
   sleep,
   selectRequests,
   selectRequestsLike,
@@ -42,12 +44,14 @@ async function inspectGithubStates(
   const connected = await readProjectList(page);
   assertSame(connected.githubState, "connected", "connected GitHub state");
   assertSame(connected.githubDetail, "octocat (owner-authorization)", "connected GitHub detail");
+  assertSame(connected.githubChecked, CHECKED_WORDING, "connected GitHub last-checked time");
   assertSame(connected.verificationHref, "", "connected verification link");
   assertSame(connected.credentialInputs.length, 0, "credential inputs in connected state");
   await reopen("github-awaiting-authorization");
   const awaiting = await readProjectList(page);
   assertSame(awaiting.githubState, "awaiting-authorization", "awaiting GitHub state");
   assertIncludes(awaiting.githubDetail, "WDJB-MJHT", "awaiting GitHub code");
+  assertSame(awaiting.githubChecked, "", "a pending authorization is not a check");
   assertSame(awaiting.verificationHref, "https://github.com/login/device", "device link");
   assertSame(awaiting.verificationText, "https://github.com/login/device", "device link text");
   assertSame(awaiting.verificationTarget, "_blank", "device link target");
@@ -239,6 +243,33 @@ export const CASES: readonly HarnessCase[] = [
       await connectRepository(page, server, reopen);
 
       return `connected, awaiting, and disconnected GitHub states exposed 0 credential inputs; connecting ${CONNECTED_PROJECT_URL} reread projects and preserved ${HARNESS_PROJECT_ID}`;
+    },
+  },
+  {
+    // A GitHub check wakes the workspace container, so the page must never repeat one by itself.
+    id: "SIDE-7",
+    title: "the GitHub connection is checked on load and when the owner asks, never by itself",
+    rank: "must",
+    scenario: "ready",
+    run: async ({ page, server }) => {
+      const checks = () =>
+        selectRequests(server.requests(), "POST", "/api/github/connection/refresh").length;
+
+      assertSame(checks(), 1, "GitHub checks once the page loaded");
+      await sleep(1_000);
+      assertSame(checks(), 1, "GitHub checks while the owner did nothing");
+      await page.click(byId(ID.refreshGitHubButton));
+      await sampleWhile(
+        () => Promise.resolve(checks()),
+        (count) => count < 2,
+      );
+      await waitForText(page, ID.githubDetail, "octocat (owner-authorization)");
+      assertSame(checks(), 2, "GitHub checks after Check again");
+      const checked = await readProjectList(page);
+      assertSame(checked.githubState, "connected", "the GitHub state");
+      assertSame(checked.githubChecked, CHECKED_WORDING, "the GitHub last-checked time");
+
+      return "the page checked GitHub once on load, not again in the next second, once more on Check again, and showed when the Worker last checked";
     },
   },
   {

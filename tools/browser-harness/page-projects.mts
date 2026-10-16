@@ -19,6 +19,7 @@ export type ProjectListSnapshot = Readonly<{
   ariaCurrent: readonly string[];
   githubState: string;
   githubDetail: string;
+  githubChecked: string;
   connectStatus: string;
   verificationHref: string;
   verificationText: string;
@@ -45,6 +46,7 @@ export function readProjectList(page: BrowserPage): Promise<ProjectListSnapshot>
       ariaCurrent: buttons.map((button) => button.getAttribute("aria-current") ?? ""),
       githubState: read("${ID.githubState}"),
       githubDetail: read("${ID.githubDetail}"),
+      githubChecked: read("${ID.githubChecked}"),
       connectStatus: read("${ID.connectStatus}"),
       verificationHref: link === null ? "" : (link.getAttribute("href") ?? ""),
       verificationText: link === null ? "" : (link.textContent ?? ""),

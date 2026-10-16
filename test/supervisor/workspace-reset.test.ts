@@ -74,17 +74,16 @@ test("resets the named workspace while preserving thread and generation state", 
   const fake = fakeWorkspace(resetResult);
   const getByName = vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
 
-  await expect(control.getGitHubConnection()).resolves.toEqual({
-    state: "connected",
-    login: "reset-user",
-    source: "configured-token",
+  await expect(control.refreshGitHubConnection(undefined, NOW)).resolves.toEqual({
+    github: { state: "connected", login: "reset-user", source: "configured-token" },
+    checkedAt: NOW,
   });
 
   await expect(control.resetWorkspace()).resolves.toEqual(resetResult);
 
   expect(getByName).toHaveBeenCalledWith("tenant:workspace-reset-preserves-supervisor-state");
   expect(fake.resetWorkspace).toHaveBeenCalledOnce();
-  await expect(control.getGitHubConnection()).resolves.toEqual({ state: "disconnected" });
+  await expect(control.getGitHubConnection()).resolves.toEqual({ github: null, checkedAt: null });
   expect(await control.getProjectThread("sample-project-one")).toEqual(threadBeforeReset);
   expect(await control.getGenerations()).toEqual(generationsBeforeReset);
 });
@@ -127,9 +126,12 @@ test("a reset the Workspace Host refuses keeps the GitHub connection record", as
   const busy = { ok: false, problem: { code: "workspace-busy" } } as const;
   const fake = fakeWorkspace(busy);
   vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+  await control.refreshGitHubConnection();
 
   await expect(control.resetWorkspace()).resolves.toEqual(busy);
-  await expect(control.getGitHubConnection()).resolves.toMatchObject({ state: "connected" });
+  await expect(control.getGitHubConnection()).resolves.toMatchObject({
+    github: { state: "connected" },
+  });
 });
 
 /** A Workspace Host whose first reset waits until the test finishes it; later resets succeed. */

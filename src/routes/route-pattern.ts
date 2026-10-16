@@ -13,6 +13,7 @@ const FIXED_ROUTES: ReadonlySet<string> = new Set([
   "/api/projects",
   "/api/projects/connect",
   "/api/github/connection",
+  "/api/github/connection/refresh",
   "/api/github/authorization",
   "/api/github/authorization/complete",
   "/api/chatgpt/connection",

@@ -40,15 +40,80 @@ type RequestBody =
     }>
   | string;
 
+function post(path: string, body: RequestBody, origin: string | undefined = ORIGIN): Request {
+  return new Request(`${ORIGIN}${path}`, {
+    method: "POST",
+    headers: origin === undefined ? {} : { origin },
+    body: JSON.stringify(body),
+  });
+}
+
+test("lists the tenant's projects", async () => {
+  const response = await ownerApiResponse(
+    get("/api/projects"),
+    supervisor({
+      listProjects: () => Promise.resolve([{ kind: "repository", ...connectedProject }]),
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toEqual({
+    ok: true,
+    projects: [{ kind: "repository", ...connectedProject }],
+  });
+});
+
+const CONNECTED = { state: "connected", login: "octocat", source: "device-authorization" } as const;
+
+test("answers the recorded connection with the time the workspace was last checked", async () => {
+  const response = await ownerApiResponse(
+    get("/api/github/connection"),
+    supervisor({
+      getGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 1_000 }),
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(200);
+  const body = await response.text();
+  expect(JSON.parse(body)).toEqual({ ok: true, github: CONNECTED, checkedAt: 1_000 });
+  expect(body).not.toContain(FAKE_TOKEN);
+});
+
+test("refreshes the connection on a POST from the page, with the route's request id", async () => {
+  const received: (string | undefined)[] = [];
+
+  const response = await ownerApiResponse(
+    post("/api/github/connection/refresh", {}),
+    supervisor({
+      refreshGitHubConnection: (requestId) => {
+        received.push(requestId);
+
+        return Promise.resolve({ github: CONNECTED, checkedAt: 2_000 });
+      },
+    }),
+    ownerScope,
+  );
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toEqual({
+    ok: true,
+    github: CONNECTED,
+    checkedAt: 2_000,
+  });
+  expect(received).toEqual([expect.stringMatching(/^[0-9a-f-]{36}$/u)]);
+});
+
 test.each([
   ["rejects", new Error("workspace RPC is unavailable")],
   ["times out", new DOMException("workspace RPC timed out", "TimeoutError")],
-] as const)("maps a total connection Supervisor RPC that %s to 503", async (_kind, cause) => {
+] as const)("maps a connection refresh whose Supervisor RPC %s to 503", async (_kind, cause) => {
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
 
   const response = await ownerApiResponse(
-    get("/api/github/connection"),
-    supervisor({ getGitHubConnection: () => Promise.reject(cause) }),
+    post("/api/github/connection/refresh", {}),
+    supervisor({ refreshGitHubConnection: () => Promise.reject(cause) }),
     ownerScope,
   );
 
@@ -61,56 +126,6 @@ test.each([
     expect.stringContaining("routes.projects.connection: workspace-unavailable"),
   );
   expect(loggedErrors.mock.calls.join(" ")).toContain(cause.message);
-});
-
-test("maps a total project-list Supervisor RPC failure to 503", async () => {
-  const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  const response = await ownerApiResponse(
-    get("/api/projects"),
-    supervisor({ listProjects: () => Promise.reject(new Error("workspace is busy")) }),
-    ownerScope,
-  );
-
-  expect(response.status).toBe(503);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    error: { code: "internal-error" },
-  });
-  expect(loggedErrors).toHaveBeenCalledWith(
-    expect.stringContaining("routes.projects.list: workspace-unavailable"),
-  );
-});
-
-function post(path: string, body: RequestBody, origin: string | undefined = ORIGIN): Request {
-  return new Request(`${ORIGIN}${path}`, {
-    method: "POST",
-    headers: origin === undefined ? {} : { origin },
-    body: JSON.stringify(body),
-  });
-}
-
-test("lists the tenant's projects and its connection status", async () => {
-  const response = await ownerApiResponse(
-    get("/api/projects"),
-    supervisor({
-      listProjects: () =>
-        Promise.resolve({
-          projects: [{ kind: "repository", ...connectedProject }],
-          github: { state: "connected", login: "octocat", source: "device-authorization" },
-        }),
-    }),
-    ownerScope,
-  );
-
-  expect(response.status).toBe(200);
-  const body = await response.text();
-  expect(JSON.parse(body)).toEqual({
-    ok: true,
-    projects: [{ kind: "repository", ...connectedProject }],
-    github: { state: "connected", login: "octocat", source: "device-authorization" },
-  });
-  expect(body).not.toContain(FAKE_TOKEN);
 });
 
 test("connects the repository the body names, and nothing else it carries", async () => {
@@ -130,6 +145,7 @@ test("connects the repository the body names, and nothing else it carries", asyn
           alreadyConnected: false,
           project: connectedProject,
           github: { state: "connected", login: "octocat", source: "configured-token" },
+          checkedAt: 3_000,
         });
       },
     }),
@@ -138,7 +154,11 @@ test("connects the repository the body names, and nothing else it carries", asyn
 
   expect(response.status).toBe(200);
   expect(sent).toEqual([connectedProject.repositoryUrl, "Repo one"]);
-  await expect(response.json()).resolves.toMatchObject({ ok: true, alreadyConnected: false });
+  await expect(response.json()).resolves.toMatchObject({
+    ok: true,
+    alreadyConnected: false,
+    checkedAt: 3_000,
+  });
 });
 
 test.each([
@@ -179,6 +199,7 @@ test.each([
           ok: false,
           problem: { code, detail: "" },
           github: { state: "disconnected" },
+          checkedAt: null,
         }),
     }),
     ownerScope,
@@ -206,6 +227,7 @@ test("starts an authorization for the verified owner, not for one the body names
             expiresAt: 1,
             intervalSeconds: 5,
           },
+          checkedAt: 4_000,
         });
       },
     }),
@@ -223,6 +245,7 @@ test("starts an authorization for the verified owner, not for one the body names
       expiresAt: 1,
       intervalSeconds: 5,
     },
+    checkedAt: 4_000,
   });
 });
 
@@ -305,5 +328,11 @@ test("keeps the project routes to their methods", async () => {
 
   const getConnect = await ownerApiResponse(get("/api/projects/connect"), supervisor(), ownerScope);
 
-  expect([postList.status, getConnect.status]).toEqual([404, 404]);
+  const getRefresh = await ownerApiResponse(
+    get("/api/github/connection/refresh"),
+    supervisor(),
+    ownerScope,
+  );
+
+  expect([postList.status, getConnect.status, getRefresh.status]).toEqual([404, 404, 404]);
 });

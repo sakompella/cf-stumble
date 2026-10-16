@@ -1,5 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
+import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import type { TurnFrame } from "../../../src/page/client/frames.js";
 import { Message } from "../../../src/page/client/message.js";
@@ -103,11 +104,20 @@ function staleSelection(model: Model, tc: hegel.TestCase): number {
   return tc.draw(gs.integers({ minValue: 0, maxValue: Math.max(0, model.selection - 1) }));
 }
 
+/** The GitHub and ChatGPT answers a page can receive, in any order with the steps above. */
+const ANSWERS: readonly Step[] = [
+  () => Message.SucceededGitHub({ github: { _tag: "Unknown" } }),
+  () => Message.RejectedGitHub({ wording: "rejected: x" }),
+  () => Message.FailedGitHub({ detail: "x" }),
+  () => Message.SucceededChatGPT({ chatgpt: CONNECTED_CHATGPT }),
+  () => Message.SucceededFetchProjects({ projects: PROJECTS }),
+  () => Message.ClickedAuthorize({ path: "/api/github/authorization" }),
+];
+
+const CONNECTED_CHATGPT = { connection: "connected", isConnected: true, maybeLogin: Option.none() };
+
 function listedPage(): Model {
-  return update(
-    init().model,
-    Message.SucceededFetchProjects({ projects: PROJECTS, github: { _tag: "Unknown" } }),
-  ).model;
+  return update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS })).model;
 }
 
 test("a queued answer for a left project or an ended turn changes nothing", () => {
@@ -128,6 +138,25 @@ test("a queued answer for a left project or an ended turn changes nothing", () =
 
       expect(after.model, stale._tag).toEqual(model);
       expect(after.commands ?? [], stale._tag).toEqual([]);
+    },
+    { testCases: 300 },
+  );
+});
+
+test("only the owner's own request checks the GitHub connection again after the page loads", () => {
+  hegel.test(
+    (tc) => {
+      const steps = tc.draw(gs.integers({ minValue: 1, maxValue: 12 }));
+      let model = listedPage();
+
+      for (let index = 0; index < steps; index += 1) {
+        const message = tc.draw(gs.sampledFrom([...STEPS, ...ANSWERS]))(model, tc);
+        const next = update(model, message);
+        const names = (next.commands ?? []).map((command) => command.name);
+
+        expect(names, message._tag).not.toContain("RefreshGitHub");
+        model = next.model;
+      }
     },
     { testCases: 300 },
   );

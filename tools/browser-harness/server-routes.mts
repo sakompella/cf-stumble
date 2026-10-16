@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../../src/page/index.js";
-import { NEW_PROJECT, authorizationPayload, connectPayload, projectsPayload } from "./fixtures.mjs";
+import {
+  NEW_PROJECT,
+  authorizationPayload,
+  connectPayload,
+  projectsPayload,
+  refreshPayload,
+} from "./fixtures.mjs";
 import {
   disconnect,
   finishLogin,
@@ -176,20 +182,12 @@ const JSON_ROUTES: readonly Readonly<{
   {
     method: "GET",
     path: "/api/projects",
-    answer: (state) => ({
-      status: 200,
-      payload: projectsPayload(state.scenario, state.projects),
-    }),
+    answer: (state) => ({ status: 200, payload: projectsPayload(state.projects) }),
   },
   {
     method: "GET",
     path: "/api/status",
     answer: (state) => statusPayload(state.generation, state.scenario),
-  },
-  {
-    method: "GET",
-    path: "/api/github/connection",
-    answer: (state) => ({ status: 200, payload: authorizationPayload(state.scenario) }),
   },
   {
     method: "GET",
@@ -208,6 +206,11 @@ const JSON_ROUTES: readonly Readonly<{
     answer: chatgptRoute((state) => disconnect(state.chatgpt)),
   },
   { method: "POST", path: "/api/projects/connect", answer: connect },
+  {
+    method: "POST",
+    path: "/api/github/connection/refresh",
+    answer: (state) => ({ status: 200, payload: refreshPayload(state.scenario) }),
+  },
   {
     method: "POST",
     path: "/api/github/authorization",

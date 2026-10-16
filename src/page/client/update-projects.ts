@@ -7,6 +7,7 @@ import {
   FetchProjects,
   FetchThread,
   FinishChatGPTLogin,
+  RefreshGitHub,
   StartChatGPTLogin,
 } from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
@@ -24,7 +25,12 @@ function withGitHub(model: Model, report: GitHubReport): Model {
   const github =
     report._tag === "Known"
       ? report.connection
-      : { state: "unknown", detail: "", verificationUri: model.github.verificationUri };
+      : {
+          state: "unknown",
+          detail: "",
+          verificationUri: model.github.verificationUri,
+          checked: "",
+        };
 
   return { ...model, github };
 }
@@ -111,8 +117,7 @@ export function projectHandlers(
         Array.findFirst(model.projects, (project) => project.id === projectId),
         { onNone: () => ({ model }), onSome: (project) => selectProject(model, project) },
       ),
-    SucceededFetchProjects: ({ projects, github }) =>
-      listedProjects(withGitHub(model, github), projects),
+    SucceededFetchProjects: ({ projects }) => listedProjects(model, projects),
     RejectedFetchProjects: ({ wording }) => ({ model: { ...model, projectListStatus: wording } }),
     FailedFetchProjects: ({ detail }) => ({
       model: {
@@ -154,22 +159,33 @@ export function connectHandlers(
   };
 }
 
+function askingGitHub(model: Model): Model {
+  return { ...clearError(model), github: { ...model.github, detail: "asking GitHub" } };
+}
+
 export function gitHubHandlers(
   model: Model,
-): Handlers<"ClickedAuthorize" | "SucceededAuthorize" | "RejectedAuthorize" | "FailedAuthorize"> {
+): Handlers<
+  | "ClickedAuthorize"
+  | "ClickedRefreshGitHub"
+  | "SucceededGitHub"
+  | "RejectedGitHub"
+  | "FailedGitHub"
+> {
   return {
     ClickedAuthorize: ({ path }) => ({
-      model: { ...clearError(model), github: { ...model.github, detail: "asking GitHub" } },
+      model: askingGitHub(model),
       commands: [AuthorizeGitHub({ path })],
     }),
-    SucceededAuthorize: ({ github }) => ({ model: withGitHub(model, github) }),
-    RejectedAuthorize: ({ wording }) => ({
-      model: { ...model, github: { ...model.github, state: wording } },
+    ClickedRefreshGitHub: () => ({ model: askingGitHub(model), commands: [RefreshGitHub()] }),
+    SucceededGitHub: ({ github }) => ({ model: withGitHub(model, github) }),
+    RejectedGitHub: ({ wording }) => ({
+      model: { ...model, github: { ...model.github, state: wording, checked: "" } },
     }),
-    FailedAuthorize: ({ detail }) => ({
+    FailedGitHub: ({ detail }) => ({
       model: {
-        ...withError(model, "the GitHub authorization request", detail),
-        github: { ...model.github, state: "request failed" },
+        ...withError(model, "the GitHub request", detail),
+        github: { ...model.github, state: "request failed", checked: "" },
       },
     }),
   };

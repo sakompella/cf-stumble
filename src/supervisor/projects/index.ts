@@ -16,6 +16,7 @@ export {
   type GitHubAuthorizationOutcome,
   type GitHubAuthorizationProblem,
   type GitHubConnectionEnvironment,
+  type GitHubConnectionRecord,
   type GitHubConnectionStatus,
 } from "./github-connection.js";
 
@@ -25,7 +26,6 @@ export {
   ProjectConnections,
   type ConnectRepositoryResult,
   type DisconnectRepositoryResult,
-  type ProjectListView,
 } from "./project-connections.js";
 
 export { startFacetTurn } from "./project-turn.js";

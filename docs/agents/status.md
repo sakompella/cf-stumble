@@ -53,6 +53,12 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
   `workspace-busy`, and the Workspace Host refuses file changes, credential installs, and project
   capabilities. Waiting for the reset instead is not built. See `design/computer-integration.md`,
   "Workspace layout".
+- **Status reads answer from the Supervisor's record** (owner, 2026-10-16). `GET /api/projects`
+  and `GET /api/github/connection` no longer reach the Workspace Host, so a client that polls them
+  cannot keep the container running. The connection read says when the workspace last answered
+  (`checkedAt`). `POST /api/github/connection/refresh` asks the workspace; the page sends it when
+  it loads and when the owner presses **Check again**, never on a timer. Not deployed yet. See
+  `design/github-connection.md`, "Reading the connection status".
 - **A refused generation control answers HTTP 4xx** (owner, 2026-10-16). Submission, activation,
   and rollback refusals answer 400 for an invalid commit or label, 404 for an unknown generation,
   409 for `stale-epoch`, `not-ready`, and `not-previously-active`, and 403 for
@@ -77,9 +83,12 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
 
 ## Open items
 
-1. **Polling clients still cost money.** A client that keeps calling a route that touches the
-   workspace keeps the container running, because each call counts as work. There is no code fix;
-   `pnpm ops:check` rule `poller` detects it. See the incident record, "Not fixed".
+1. **Polling clients still cost money in production.** Production's status reads still reach the
+   workspace, so a client that repeats them keeps the container running. `main` answers them from
+   the Supervisor's record (see "Decided outside an ADR"). After that is deployed, only a client
+   that repeats the connection refresh, a turn, or another route that touches the workspace keeps
+   the container running. `pnpm ops:check` rule `poller` detects both. See the incident record,
+   "Not fixed".
 2. **Early platform stops with an unknown reason.** On 2026-10-02 the container stopped after a
    transport close while `running` was `true`, at about 16:03Z, 16:32Z, and 21:25Z. These are not
    Host stops, and their cause is unverified. `ops:check` reports them as `running-close` and

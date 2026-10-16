@@ -36,6 +36,10 @@ function projectButton(project: Project, model: Model, h: HtmlBuilder<Message>):
   );
 }
 
+function button(id: string, message: Message, label: string, h: HtmlBuilder<Message>): Html {
+  return h.button([h.Id(id), h.Type("button"), h.OnClick(message)], [label]);
+}
+
 function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
   const uri = model.github.verificationUri;
 
@@ -55,26 +59,24 @@ function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
       h.h3([], ["GitHub"]),
       valueRow("connection", ID.githubState, model.github.state, h),
       valueRow("detail", ID.githubDetail, model.github.detail, h),
+      valueRow("last checked", ID.githubChecked, model.github.checked, h),
       h.p([h.Class("row")], [link]),
       h.div(
         [h.Class("row")],
         [
-          h.button(
-            [
-              h.Id(ID.authorizeButton),
-              h.Type("button"),
-              h.OnClick(Message.ClickedAuthorize({ path: "/api/github/authorization" })),
-            ],
-            ["Authorize GitHub"],
+          button(
+            ID.authorizeButton,
+            Message.ClickedAuthorize({ path: "/api/github/authorization" }),
+            "Authorize GitHub",
+            h,
           ),
-          h.button(
-            [
-              h.Id(ID.completeAuthorizationButton),
-              h.Type("button"),
-              h.OnClick(Message.ClickedAuthorize({ path: "/api/github/authorization/complete" })),
-            ],
-            ["I authorized it"],
+          button(
+            ID.completeAuthorizationButton,
+            Message.ClickedAuthorize({ path: "/api/github/authorization/complete" }),
+            "I authorized it",
+            h,
           ),
+          button(ID.refreshGitHubButton, Message.ClickedRefreshGitHub(), "Check again", h),
         ],
       ),
       h.p(

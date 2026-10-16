@@ -19,7 +19,11 @@ import {
   type WorkspaceCredentialInput,
 } from "../../workspace/index.js";
 import type { VerifiedAccessScope } from "../../access/index.js";
-import type { CredentialSource, GitHubConnectionStore } from "./github-connection-store.js";
+import type {
+  CheckedStatus,
+  CredentialSource,
+  GitHubConnectionStore,
+} from "./github-connection-store.js";
 
 /**
  * The workspace's GitHub authorization, as the rest of cf-stumble sees it.
@@ -59,8 +63,19 @@ export type GitHubAuthorizationProblem =
   | "authorization-expired"
   | "authorization-denied";
 
+/**
+ * The connection as this Supervisor last saw it, read without asking the workspace. `checkedAt` is
+ * when the workspace last answered a credential check, and `github` is what that check found. A
+ * pending authorization is this object's own state, so it is current whatever `checkedAt` says.
+ * Both are `null` before the first check, and again after a workspace reset.
+ */
+export type GitHubConnectionRecord = Readonly<{
+  github: GitHubConnectionStatus | null;
+  checkedAt: number | null;
+}>;
+
 export type GitHubAuthorizationOutcome =
-  | Readonly<{ ok: true; status: GitHubConnectionStatus }>
+  | Readonly<{ ok: true; status: GitHubConnectionStatus; checkedAt: number | null }>
   | Readonly<{ ok: false; problem: GitHubAuthorizationProblem }>;
 
 /**
@@ -85,7 +100,7 @@ interface GitHubConnectionInput {
 
 function reconnect(
   reason: "credential-missing" | "credential-rejected" | "workspace-unavailable",
-): GitHubConnectionStatus {
+): CheckedStatus {
   return { state: "reconnect-required", reason };
 }
 
@@ -181,30 +196,58 @@ export class GitHubConnection {
     this.environment = input.environment;
   }
 
-  /** Clear the cached status because a workspace reset removed its credential. */
+  /** Forget the connection and the last check, because a workspace reset removed the credential. */
   resetWorkspace(): void {
     this.store.clearConnection();
+    this.store.clearCheck();
   }
 
   /**
-   * What the connection is doing, read and not repaired. A pending authorization outranks the
-   * workspace's own answer, because the owner is mid-flow and the credential legitimately is not
-   * there yet.
+   * What the connection is doing, asked of the workspace and not repaired. A pending authorization
+   * outranks the workspace's own answer, because the owner is mid-flow and the credential
+   * legitimately is not there yet.
    */
   status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
     return Effect.suspend(() => {
-      const pending = this.store.pendingAuthorization(now);
+      const pending = this.pendingStatus(now);
 
       return pending === undefined
-        ? this.observed(undefined, undefined, options)
-        : Effect.succeed({
-            state: "awaiting-authorization",
-            verificationUri: pending.verificationUri,
-            userCode: pending.userCode,
-            expiresAt: pending.expiresAt,
-            intervalSeconds: pending.intervalSeconds,
-          });
+        ? this.observed(now, undefined, options)
+        : Effect.succeed(pending);
     });
+  }
+
+  /** The connection from this object's own storage. It never reaches the workspace. */
+  lastKnown(now: number): GitHubConnectionRecord {
+    const lastCheck = this.store.lastCheck();
+
+    return {
+      github: this.pendingStatus(now) ?? lastCheck?.status ?? null,
+      checkedAt: this.checkedAt(),
+    };
+  }
+
+  /** When the last check was stored, or `null` before the first and after a reset. */
+  checkedAt(): number | null {
+    return this.store.lastCheck()?.checkedAt ?? null;
+  }
+
+  private answered(status: GitHubConnectionStatus): GitHubAuthorizationOutcome {
+    return { ok: true, status, checkedAt: this.checkedAt() };
+  }
+
+  private pendingStatus(now: number): GitHubConnectionStatus | undefined {
+    const pending = this.store.pendingAuthorization(now);
+
+    return pending === undefined
+      ? undefined
+      : {
+          state: "awaiting-authorization",
+          verificationUri: pending.verificationUri,
+          userCode: pending.userCode,
+          expiresAt: pending.expiresAt,
+          intervalSeconds: pending.intervalSeconds,
+        };
   }
 
   /**
@@ -274,7 +317,7 @@ export class GitHubConnection {
         audience: scope.audience,
       });
 
-      return { ok: true, status: yield* this.status(now) } as const;
+      return this.answered(yield* this.status(now));
     });
   }
 
@@ -321,23 +364,20 @@ export class GitHubConnection {
       if (settled && !this.store.consumeAuthorization(pending.deviceCode)) {
         logAuthorization("complete", "superseded");
 
-        return { ok: true, status: yield* this.status(now) } as const;
+        return this.answered(yield* this.status(now));
       }
 
       if (redeemed.kind === "authorized") {
         logAuthorization("complete", "authorized");
 
-        return {
-          ok: true,
-          status: yield* this.install(redeemed.token, "device-authorization", now),
-        } as const;
+        return this.answered(yield* this.install(redeemed.token, "device-authorization", now));
       }
 
       const unredeemed = unredeemedOutcome(redeemed.kind);
       logAuthorization("complete", unredeemed);
 
       if (unredeemed === "pending") {
-        return { ok: true, status: yield* this.status(now) } as const;
+        return this.answered(yield* this.status(now));
       }
 
       return { ok: false, problem: unredeemed } as const;
@@ -369,13 +409,13 @@ export class GitHubConnection {
 
         logCredentialInstall(source, refused);
 
-        return refused;
+        return this.record(refused, now, signal);
       }
 
-      const status: GitHubConnectionStatus =
+      const status: CheckedStatus =
         installed.success === "tooling-missing"
-          ? { state: "tooling-missing" }
-          : yield* this.observed(source, now, { signal });
+          ? this.record({ state: "tooling-missing" }, now, signal)
+          : yield* this.observed(now, source, { signal });
 
       logCredentialInstall(source, status);
 
@@ -383,12 +423,16 @@ export class GitHubConnection {
     });
   }
 
-  /** Ask the workspace what its credential can do, and keep the record honest about the answer. */
+  /**
+   * Ask the workspace what its credential can do, keep the stored connection honest about the
+   * answer, and store the answer as the last check. `installedBy` names the install that just ran,
+   * if one did.
+   */
   private observed(
-    source?: CredentialSource,
-    at?: number,
+    now: number,
+    installedBy?: CredentialSource,
     options: StatusReadOptions = {},
-  ): Effect.Effect<GitHubConnectionStatus> {
+  ): Effect.Effect<CheckedStatus> {
     return readWorkspaceCredentialStatus({
       workspaceName: this.workspaceName,
       namespace: this.namespace,
@@ -396,26 +440,34 @@ export class GitHubConnection {
     }).pipe(
       Effect.match({
         onFailure: () => reconnect("workspace-unavailable"),
-        onSuccess: (status) => this.recorded(status, source, at),
+        onSuccess: (status) => this.recorded(status, installedBy, now),
       }),
+      Effect.map((status) => this.record(status, now, options.signal)),
     );
+  }
+
+  /** Store what a check or install just learned. A stopped one learned nothing, so it is skipped. */
+  private record(status: CheckedStatus, now: number, signal?: AbortSignal): CheckedStatus {
+    if (signal?.aborted !== true) this.store.recordCheck(status, now);
+
+    return status;
   }
 
   private recorded(
     status: GitHubCredentialStatus,
-    source: CredentialSource | undefined,
-    at: number | undefined,
-  ): GitHubConnectionStatus {
+    installedBy: CredentialSource | undefined,
+    now: number,
+  ): CheckedStatus {
     const previous = this.store.connection();
 
     switch (status.state) {
       case "connected": {
         const login = status.login ?? previous?.login ?? "";
-        const credentialSource = source ?? previous?.source ?? "device-authorization";
+        const credentialSource = installedBy ?? previous?.source ?? "device-authorization";
         this.store.recordConnection({
           login,
           source: credentialSource,
-          connectedAt: at ?? previous?.connectedAt ?? 0,
+          connectedAt: installedBy === undefined ? (previous?.connectedAt ?? 0) : now,
         });
 
         return { state: "connected", login, source: credentialSource };

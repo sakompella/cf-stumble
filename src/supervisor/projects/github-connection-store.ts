@@ -1,11 +1,14 @@
+import type { GitHubConnectionStatus } from "./github-connection.js";
+
 /**
  * What cf-stumble remembers about the workspace's GitHub authorization, which is deliberately not
  * a credential.
  *
- * Two things are stored. A pending device authorization, which holds the device code GitHub issued
- * and the verified owner who started it, so a redemption can be bound to that owner and a replayed
- * or crossed request finds nothing to redeem. And the fact of a connection: a login name, how it
- * was obtained, and when. The access token itself is never here — it is installed into the
+ * Three things are stored. A pending device authorization, which holds the device code GitHub
+ * issued and the verified owner who started it, so a redemption can be bound to that owner and a
+ * replayed or crossed request finds nothing to redeem. The fact of a connection: a login name, how
+ * it was obtained, and when. And what the last credential check found and when it ran, which is
+ * what a status read answers without asking the workspace. The access token itself is never here — it is installed into the
  * workspace's `gh` configuration and dropped (ADR-0039), so this table cannot leak one.
  */
 type PendingAuthorization = Readonly<{
@@ -20,6 +23,14 @@ type PendingAuthorization = Readonly<{
 
 /** How the workspace got the credential it has. The configured token is a test path, and says so. */
 export type CredentialSource = "device-authorization" | "configured-token";
+
+/** What one credential check found. A pending authorization is never asked of the workspace. */
+export type CheckedStatus = Exclude<GitHubConnectionStatus, { state: "awaiting-authorization" }>;
+
+type ReconnectReason = Extract<CheckedStatus, { state: "reconnect-required" }>["reason"];
+
+/** The last credential check: what it found and when it ran. */
+export type LastCheck = Readonly<{ status: CheckedStatus; checkedAt: number }>;
 
 type RecordedConnection = Readonly<{
   login: string;
@@ -42,6 +53,45 @@ type ConnectionRow = {
   readonly credential_source: string;
   readonly connected_at: number;
 };
+
+type CheckRow = {
+  readonly state: CheckedStatus["state"];
+  readonly reconnect_reason: string | null;
+  readonly login: string | null;
+  readonly credential_source: string | null;
+  readonly checked_at: number;
+};
+
+function credentialSource(value: string | null): CredentialSource {
+  return value === "configured-token" ? "configured-token" : "device-authorization";
+}
+
+function reconnectReason(value: string | null): ReconnectReason {
+  return value === "credential-missing" || value === "credential-rejected"
+    ? value
+    : "workspace-unavailable";
+}
+
+function checkedStatus(row: CheckRow): CheckedStatus {
+  switch (row.state) {
+    case "connected":
+      return {
+        state: "connected",
+        login: row.login ?? "",
+        source: credentialSource(row.credential_source),
+      };
+    case "reconnect-required":
+      return { state: "reconnect-required", reason: reconnectReason(row.reconnect_reason) };
+    case "disconnected":
+    case "tooling-missing":
+      return { state: row.state };
+    default: {
+      const exhaustive: never = row.state;
+
+      return exhaustive;
+    }
+  }
+}
 
 export class GitHubConnectionStore {
   private readonly sql: SqlStorage;
@@ -66,6 +116,17 @@ export class GitHubConnectionStore {
         login TEXT NOT NULL,
         credential_source TEXT NOT NULL,
         connected_at INTEGER NOT NULL
+      );
+    `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS github_connection_check (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        state TEXT NOT NULL
+          CHECK (state IN ('connected', 'disconnected', 'tooling-missing', 'reconnect-required')),
+        reconnect_reason TEXT,
+        login TEXT,
+        credential_source TEXT,
+        checked_at INTEGER NOT NULL
       );
     `);
   }
@@ -172,9 +233,41 @@ export class GitHubConnectionStore {
       return undefined;
     }
 
-    const source: CredentialSource =
-      row.credential_source === "configured-token" ? "configured-token" : "device-authorization";
+    return {
+      login: row.login,
+      source: credentialSource(row.credential_source),
+      connectedAt: row.connected_at,
+    };
+  }
 
-    return { login: row.login, source, connectedAt: row.connected_at };
+  /** Replace the last check with this one. */
+  recordCheck(status: CheckedStatus, checkedAt: number): void {
+    this.sql.exec(
+      `INSERT OR REPLACE INTO github_connection_check
+         (id, state, reconnect_reason, login, credential_source, checked_at)
+       VALUES (1, ?, ?, ?, ?, ?)`,
+      status.state,
+      status.state === "reconnect-required" ? status.reason : null,
+      status.state === "connected" ? status.login : null,
+      status.state === "connected" ? status.source : null,
+      checkedAt,
+    );
+  }
+
+  lastCheck(): LastCheck | undefined {
+    const row = this.sql
+      .exec<CheckRow>(
+        `SELECT state, reconnect_reason, login, credential_source, checked_at
+         FROM github_connection_check WHERE id = 1`,
+      )
+      .toArray()[0];
+
+    return row === undefined
+      ? undefined
+      : { status: checkedStatus(row), checkedAt: row.checked_at };
+  }
+
+  clearCheck(): void {
+    this.sql.exec(`DELETE FROM github_connection_check WHERE id = 1`);
   }
 }

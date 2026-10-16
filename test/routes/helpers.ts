@@ -69,14 +69,15 @@ export function ownerApiSupervisor(
       return Promise.reject(new Error("this test must not reach generation preparation"));
     },
     listProjects() {
-      return Promise.resolve({ projects: [], github: { state: "disconnected" } });
+      return Promise.resolve([]);
     },
     connectProject() {
       return Promise.reject(new Error("this test must not connect a repository"));
     },
     getGitHubConnection() {
-      return Promise.resolve({ state: "disconnected" });
+      return Promise.resolve({ github: null, checkedAt: null });
     },
+    refreshGitHubConnection: notCalled("check the workspace's GitHub credential"),
     startGitHubAuthorization() {
       return Promise.reject(new Error("this test must not start a GitHub authorization"));
     },

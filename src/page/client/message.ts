@@ -14,6 +14,7 @@ export const Message = defineMessageUnion({
   UpdatedConnectRepositoryInput: { value: Schema.String },
   ClickedConnect: {},
   ClickedAuthorize: { path: Schema.String },
+  ClickedRefreshGitHub: {},
   ClickedChatGPTLogin: {},
   UpdatedChatGPTCallbackInput: { value: Schema.String },
   ClickedChatGPTFinish: {},
@@ -40,10 +41,7 @@ export const Message = defineMessageUnion({
   RejectedFetchStatus: { wording: Schema.String },
   FailedFetchStatus: { detail: Schema.String },
 
-  SucceededFetchProjects: {
-    projects: Schema.Array(Project),
-    github: GitHubReport,
-  },
+  SucceededFetchProjects: { projects: Schema.Array(Project) },
   RejectedFetchProjects: { wording: Schema.String },
   FailedFetchProjects: { detail: Schema.String },
 
@@ -54,9 +52,9 @@ export const Message = defineMessageUnion({
   RejectedConnect: { wording: Schema.String, maybeGitHub: Schema.Option(GitHubReport) },
   FailedConnect: { detail: Schema.String },
 
-  SucceededAuthorize: { github: GitHubReport },
-  RejectedAuthorize: { wording: Schema.String },
-  FailedAuthorize: { detail: Schema.String },
+  SucceededGitHub: { github: GitHubReport },
+  RejectedGitHub: { wording: Schema.String },
+  FailedGitHub: { detail: Schema.String },
 
   SucceededChatGPT: { chatgpt: ChatGPTConnection },
   RejectedChatGPT: { wording: Schema.String, maybeChatGPT: Schema.Option(ChatGPTConnection) },

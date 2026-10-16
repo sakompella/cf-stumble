@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import { settleRoute } from "../../src/routes/route-settled.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
+import type { GitHubConnectionStatus } from "../../src/supervisor/projects/index.js";
 import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
 
 /**
@@ -28,21 +29,24 @@ function post(path: string, body: Readonly<Record<string, string | number>>): Re
   });
 }
 
-test("a connection read logs one info event, and the Supervisor receives the same request id", async () => {
+/** A refresh's answer: what the check found, at the time it ran. */
+function refreshed(github: GitHubConnectionStatus) {
+  return Promise.resolve({ github, checkedAt: 0 });
+}
+
+const UNAVAILABLE = { state: "reconnect-required", reason: "workspace-unavailable" } as const;
+
+test("a connection refresh logs one info event, and the Supervisor receives the same request id", async () => {
   const events = capturedEvents();
   const received: (string | undefined)[] = [];
 
   const response = await ownerApiResponse(
-    get("/api/github/connection"),
+    post("/api/github/connection/refresh", {}),
     supervisor({
-      getGitHubConnection: (requestId) => {
+      refreshGitHubConnection: (requestId) => {
         received.push(requestId);
 
-        return Promise.resolve({
-          state: "connected",
-          login: "someone",
-          source: "device-authorization",
-        });
+        return refreshed({ state: "connected", login: "someone", source: "device-authorization" });
       },
     }),
     ownerScope,
@@ -53,8 +57,8 @@ test("a connection read logs one info event, and the Supervisor receives the sam
   expect(settled).toEqual([
     expect.objectContaining({
       level: "info",
-      route: "/api/github/connection",
-      method: "GET",
+      route: "/api/github/connection/refresh",
+      method: "POST",
       status: 200,
       applicationOutcome: "ok",
       phase: "body",
@@ -68,11 +72,8 @@ test("a 200 that needs a reconnect is degraded, at warn", async () => {
   const events = capturedEvents();
 
   const response = await ownerApiResponse(
-    get("/api/github/connection"),
-    supervisor({
-      getGitHubConnection: () =>
-        Promise.resolve({ state: "reconnect-required", reason: "workspace-unavailable" }),
-    }),
+    post("/api/github/connection/refresh", {}),
+    supervisor({ refreshGitHubConnection: () => refreshed(UNAVAILABLE) }),
     ownerScope,
   );
 
@@ -84,12 +85,12 @@ test("a 200 that needs a reconnect is degraded, at warn", async () => {
   });
 });
 
-test("a thrown status read is a fault at error, with the status the client saw", async () => {
+test("a thrown connection refresh is a fault at error, with the status the client saw", async () => {
   const events = capturedEvents();
 
   const response = await ownerApiResponse(
-    get("/api/github/connection"),
-    supervisor({ getGitHubConnection: () => Promise.reject(new Error("boom")) }),
+    post("/api/github/connection/refresh", {}),
+    supervisor({ refreshGitHubConnection: () => Promise.reject(new Error("boom")) }),
     ownerScope,
   );
 
@@ -149,7 +150,11 @@ test("a request that ran to the workspace timeout is an error even when it succe
     .mockReturnValueOnce(0)
     .mockReturnValue(WORKSPACE_RPC_TIMEOUT_MS);
 
-  await ownerApiResponse(get("/api/projects"), supervisor(), ownerScope);
+  await ownerApiResponse(
+    post("/api/github/connection/refresh", {}),
+    supervisor({ refreshGitHubConnection: () => refreshed({ state: "disconnected" }) }),
+    ownerScope,
+  );
 
   clock.mockRestore();
   expect(named(events(), "route.settled").at(0)).toMatchObject({
@@ -168,11 +173,8 @@ test("a degraded response that returned in time stays a warning", async () => {
     .mockReturnValue(WORKSPACE_RPC_TIMEOUT_MS - 1);
 
   await ownerApiResponse(
-    get("/api/github/connection"),
-    supervisor({
-      getGitHubConnection: () =>
-        Promise.resolve({ state: "reconnect-required", reason: "workspace-unavailable" }),
-    }),
+    post("/api/github/connection/refresh", {}),
+    supervisor({ refreshGitHubConnection: () => refreshed(UNAVAILABLE) }),
     ownerScope,
   );
 
@@ -213,6 +215,8 @@ test("requests that never touch the workspace stay quiet", async () => {
   const events = capturedEvents();
 
   await ownerApiResponse(get("/api/status"), supervisor(), ownerScope);
+  await ownerApiResponse(get("/api/projects"), supervisor(), ownerScope);
+  await ownerApiResponse(get("/api/github/connection"), supervisor(), ownerScope);
   await ownerApiResponse(get("/api/projects/some-id/thread"), supervisor(), ownerScope);
 
   expect(named(events(), "route.settled")).toEqual([]);
@@ -223,15 +227,18 @@ test("overlapping requests each get their own id, whatever the client sent", asy
   const forged = "00000000-0000-4000-8000-000000000000";
   const received: (string | undefined)[] = [];
 
-  const routeOne = (headers: HeadersInit) =>
+  const routeOne = (headers: Readonly<Record<string, string>>) =>
     ownerApiResponse(
-      get(`/api/github/connection?requestId=${forged}`, { headers }),
+      get(`/api/github/connection/refresh?requestId=${forged}`, {
+        method: "POST",
+        headers: { ...headers, origin: ORIGIN },
+      }),
       supervisor({
-        getGitHubConnection: async (requestId) => {
+        refreshGitHubConnection: async (requestId) => {
           await Promise.resolve();
           received.push(requestId);
 
-          return { state: "disconnected" };
+          return { github: { state: "disconnected" }, checkedAt: 0 };
         },
       }),
       ownerScope,
@@ -274,13 +281,15 @@ test("a dispatch that fails passes on the same error after one fault event with 
   const failure = new Error("dispatch failed");
 
   await expect(
-    Effect.runPromise(settleRoute(get("/api/github/connection"), () => Effect.die(failure))),
+    Effect.runPromise(
+      settleRoute(post("/api/github/connection/refresh", {}), () => Effect.die(failure)),
+    ),
   ).rejects.toBe(failure);
 
   expect(named(events(), "route.settled")).toEqual([
     expect.objectContaining({
       level: "error",
-      route: "/api/github/connection",
+      route: "/api/github/connection/refresh",
       applicationOutcome: "fault",
       status: null,
       phase: null,

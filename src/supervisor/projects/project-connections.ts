@@ -40,29 +40,9 @@ import {
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
-import {
-  logEvent,
-  logRedactedCause,
-  timedWorkspaceRpc,
-  type RequestId,
-} from "../../diagnostics.js";
+import { logEvent, logRedactedCause, timedWorkspaceRpc } from "../../diagnostics.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import type { DisconnectProjectResult } from "../threads/index.js";
-
-/**
- * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
- * provisioning that makes a connected repository usable.
- *
- * The Supervisor holds one of these and delegates to it, so the RPC class stays a surface and the
- * order of the steps lives here. That order is the point of the module. Access proves who the
- * owner is and grants no repository access (ADR-0039); the workspace's own credential is what
- * reaches GitHub; a repository is checked before it becomes a project; and a project is stored
- * only once its clone is in the workspace, so a project in the list is a project with files.
- */
-export type ProjectListView = Readonly<{
-  projects: SelectableCatalog;
-  github: GitHubConnectionStatus;
-}>;
 
 function repositorySizeAllowed(
   project: ProjectId,
@@ -127,8 +107,14 @@ export type ConnectRepositoryResult =
       project: Project;
       alreadyConnected: boolean;
       github: GitHubConnectionStatus;
+      checkedAt: number | null;
     }>
-  | Readonly<{ ok: false; problem: ConnectRepositoryProblem; github: GitHubConnectionStatus }>
+  | Readonly<{
+      ok: false;
+      problem: ConnectRepositoryProblem;
+      github: GitHubConnectionStatus;
+      checkedAt: number | null;
+    }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
 /** Why a project could not be provisioned when it was used. */
@@ -158,6 +144,16 @@ interface ProjectConnectionsInput {
   readonly github: GitHubConnection;
 }
 
+/**
+ * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
+ * provisioning that makes a connected repository usable.
+ *
+ * The Supervisor holds one of these and delegates to it, so the RPC class stays a surface and the
+ * order of the steps lives here. That order is the point of the module. Access proves who the
+ * owner is and grants no repository access (ADR-0039); the workspace's own credential is what
+ * reaches GitHub; a repository is checked before it becomes a project; and a project is stored
+ * only once its clone is in the workspace, so a project in the list is a project with files.
+ */
 export class ProjectConnections {
   private readonly projects: ConnectedProjects;
   private readonly lifecycle = new ProjectLifecycleQueue();
@@ -189,34 +185,6 @@ export class ProjectConnections {
    */
   catalog(): SelectableCatalog {
     return selectableCatalog(this.projects.catalog());
-  }
-
-  /**
-   * The page's list: everything selectable, and a connection status that carries no credential.
-   *
-   * The harness entry is in it and has no repository URL, which is what tells the sidebar that
-   * this one is not a connection: there is nothing to authorize and nothing to clone.
-   */
-  list(now: number, requestId?: RequestId): Effect.Effect<ProjectListView> {
-    return Effect.suspend(() => {
-      const projects = this.catalog();
-
-      return this.connectionStatus(now, requestId).pipe(
-        Effect.map((github) => ({ projects, github })),
-      );
-    });
-  }
-
-  connectionStatus(now: number, requestId?: RequestId): Effect.Effect<GitHubConnectionStatus> {
-    return this.github.status(now, { requestId }).pipe(
-      Effect.catchDefect((cause) =>
-        Effect.sync((): GitHubConnectionStatus => {
-          logRedactedCause("project-connections.connection-status: workspace-unavailable", cause);
-
-          return { state: "reconnect-required", reason: "workspace-unavailable" };
-        }),
-      ),
-    );
   }
 
   /**
@@ -473,6 +441,7 @@ export class ProjectConnections {
         project: connected.project,
         alreadyConnected: connected.alreadyConnected,
         github,
+        checkedAt: this.github.checkedAt(),
       } as const;
     });
   }
@@ -517,6 +486,6 @@ export class ProjectConnections {
     problem: ConnectRepositoryProblem,
     github: GitHubConnectionStatus,
   ): ConnectRepositoryResult {
-    return { ok: false, problem, github };
+    return { ok: false, problem, github, checkedAt: this.github.checkedAt() };
   }
 }

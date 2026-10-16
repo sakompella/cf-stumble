@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
-import { FetchChatGPT, FetchProjects, FetchStatus } from "./commands.js";
+import { FetchChatGPT, FetchProjects, FetchStatus, RefreshGitHub } from "./commands.js";
 import { Message } from "./message.js";
 import { Turn, type Model } from "./model.js";
 import { controlHandlers, statusHandlers, submitHandlers } from "./update-generation.js";
@@ -22,7 +22,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     isSidebarExpanded: true,
     projectListStatus: "reading",
     projects: [],
-    github: { state: "", detail: "", verificationUri: "" },
+    github: { state: "", detail: "", verificationUri: "", checked: "" },
     connectRepositoryInput: "",
     connectStatus: "",
     chatgpt: { connection: "", isConnected: false, maybeLogin: Option.none() },
@@ -58,7 +58,7 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     activate: EMPTY_PANEL,
     rollback: EMPTY_PANEL,
   },
-  commands: [FetchStatus(), FetchProjects(), FetchChatGPT()],
+  commands: [FetchStatus(), FetchProjects(), RefreshGitHub(), FetchChatGPT()],
 });
 
 export function update(model: Model, message: Message): UpdateReturn {

@@ -16,8 +16,7 @@ type ApplicationOutcome = "ok" | "degraded" | "refused" | "fault";
  * workspace, and activation and rollback, which decide what serves.
  */
 const SETTLED_ROUTES: ReadonlySet<string> = new Set([
-  "GET /api/projects",
-  "GET /api/github/connection",
+  "POST /api/github/connection/refresh",
   "POST /api/github/authorization",
   "POST /api/github/authorization/complete",
   "POST /api/projects/connect",

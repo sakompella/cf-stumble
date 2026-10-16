@@ -24,6 +24,7 @@ type Mutation = Readonly<{
     | "connect"
     | "authorize"
     | "complete"
+    | "refresh"
     | "reset"
     | "disconnect";
 }>;
@@ -76,6 +77,12 @@ const mutations: readonly Mutation[] = [
     path: "/api/github/authorization/complete",
     body: {},
     operation: "complete",
+  },
+  {
+    name: "GitHub connection refresh",
+    path: "/api/github/connection/refresh",
+    body: {},
+    operation: "refresh",
   },
   {
     name: "workspace reset",
@@ -210,6 +217,7 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
             alreadyConnected: false,
             project: sampleProjectOne,
             github: { state: "disconnected" },
+            checkedAt: null,
           });
         },
       });
@@ -227,6 +235,7 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
               expiresAt: 1,
               intervalSeconds: 5,
             },
+            checkedAt: null,
           });
         },
       });
@@ -235,7 +244,15 @@ function successfulSupervisor(operation: Mutation["operation"], calls: { value: 
         completeGitHubAuthorization: () => {
           calls.value += 1;
 
-          return Promise.resolve({ ok: true, status: { state: "disconnected" } });
+          return Promise.resolve({ ok: true, status: { state: "disconnected" }, checkedAt: 1_000 });
+        },
+      });
+    case "refresh":
+      return ownerApiSupervisor({
+        refreshGitHubConnection: () => {
+          calls.value += 1;
+
+          return Promise.resolve({ github: { state: "disconnected" }, checkedAt: 0 });
         },
       });
     case "reset":
