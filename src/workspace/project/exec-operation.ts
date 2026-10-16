@@ -192,6 +192,23 @@ interface Decoders {
   stderr: TextDecoder;
 }
 
+/**
+ * Emits whatever each decoder still holds, so a truncated trailing sequence reaches the consumer
+ * as U+FFFD before the terminal event. Run only when the backend itself ends the stream (exit, or
+ * a close without an exit); a kill, timeout, or failed read settles at once and drops pending bytes.
+ */
+function flushDecoders(
+  state: SettleState,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  decoders: Decoders,
+): void {
+  for (const kind of ["stdout", "stderr"] as const) {
+    const tail = decoders[kind].decode();
+
+    if (tail !== "") enqueueOutput(state, controller, kind, tail);
+  }
+}
+
 /** Applies one backend read result. Returns `true` once the operation has reached a terminal outcome. */
 function applyBackendRead(
   state: SettleState,
@@ -201,6 +218,7 @@ function applyBackendRead(
   read: { done: false; value: BackendExecEvent } | { done: true },
 ): boolean {
   if (read.done) {
+    flushDecoders(state, controller, decoders);
     settleWith(failed(state), true);
 
     return true;
@@ -230,6 +248,7 @@ function applyBackendRead(
     return false;
   }
 
+  flushDecoders(state, controller, decoders);
   settleWith(
     { kind: "terminal", seq: state.seq++, outcome: "exited", exitCode: value.exitCode },
     false,
