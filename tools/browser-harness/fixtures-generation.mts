@@ -75,7 +75,6 @@ export function statusPayload(state: GenerationState, scenario: HarnessScenario)
       activeGeneration: {
         generation: generationJson(active(state)),
         epoch: state.epoch,
-        activationId: `activation-${state.epoch}`,
       },
     },
     next: state,

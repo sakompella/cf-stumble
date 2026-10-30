@@ -207,6 +207,6 @@ test("says plainly when no generation is active, rather than reporting epoch 0 a
 
   const body: unknown = await response.json();
   expect(body, "an absent generation is null, not a missing field").toEqual({
-    activeGeneration: { generation: null, epoch: 0, activationId: null },
+    activeGeneration: { generation: null, epoch: 0 },
   });
 });

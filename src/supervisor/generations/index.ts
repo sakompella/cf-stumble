@@ -32,7 +32,6 @@ export type {
 type StateRow = {
   readonly active_label: number | null;
   readonly epoch: number;
-  readonly activation_id: number;
 };
 
 /**
@@ -56,6 +55,7 @@ export class Generations {
         harness_commit TEXT NOT NULL UNIQUE,
         status TEXT NOT NULL CHECK (status IN ('candidate', 'ready', 'failed'))
       );
+      -- activation_id is no longer read or written; it stays so existing rows keep their shape.
       CREATE TABLE IF NOT EXISTS generation_state (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
         active_label INTEGER REFERENCES generations(label),
@@ -141,7 +141,7 @@ export class Generations {
           effect: "no-op",
         });
       case "activate":
-        this.applyActivation(label, decision.nextEpoch, decision.nextActivationId);
+        this.applyActivation(label, decision.nextEpoch);
 
         return Result.succeed({
           generation: decision.generation,
@@ -160,7 +160,6 @@ export class Generations {
       generation:
         state.activeLabel === undefined ? undefined : this.generationByLabel(state.activeLabel),
       epoch: state.epoch,
-      activationId: state.activeLabel === undefined ? undefined : state.activationId,
     };
   }
 
@@ -220,9 +219,7 @@ export class Generations {
 
   private readState(): GenerationState {
     const row = this.sql
-      .exec<StateRow>(
-        "SELECT active_label, epoch, activation_id FROM generation_state WHERE singleton = 1",
-      )
+      .exec<StateRow>("SELECT active_label, epoch FROM generation_state WHERE singleton = 1")
       .one();
 
     return {
@@ -231,7 +228,6 @@ export class Generations {
           ? undefined
           : generationLabelFromPersistence(row.active_label, "active generation label"),
       epoch: row.epoch,
-      activationId: row.activation_id,
     };
   }
 
@@ -239,12 +235,11 @@ export class Generations {
     this.sql.exec("UPDATE generation_state SET epoch = ? WHERE singleton = 1", epoch);
   }
 
-  private applyActivation(label: GenerationLabel, epoch: number, activationId: number): void {
+  private applyActivation(label: GenerationLabel, epoch: number): void {
     this.sql.exec(
-      "UPDATE generation_state SET active_label = ?, epoch = ?, activation_id = ? WHERE singleton = 1",
+      "UPDATE generation_state SET active_label = ?, epoch = ? WHERE singleton = 1",
       label,
       epoch,
-      activationId,
     );
     this.activationHistory.recordActive(label);
   }

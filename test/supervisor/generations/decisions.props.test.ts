@@ -14,7 +14,7 @@ import {
 import { label } from "./fixtures.js";
 
 // The deciders are pure functions over plain values, so these exercise their invariants across
-// generated labels, statuses, outcomes, and clock positions — no Durable Object, no storage.
+// generated labels, statuses, outcomes, and epochs — no Durable Object, no storage.
 
 const COMMIT = testHarnessCommit("a".repeat(40));
 
@@ -26,10 +26,10 @@ const count = gs.integers({ minValue: 0, maxValue: 2 ** 40 });
 
 const labelValue = gs.integers({ minValue: 0, maxValue: 2 ** 39 });
 
-test("activation always rejects an unknown generation, whatever the clocks say", () => {
+test("activation always rejects an unknown generation, whatever the epoch", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
-    const state = { activeLabel: undefined, epoch: tc.draw(count), activationId: tc.draw(count) };
+    const state = { activeLabel: undefined, epoch: tc.draw(count) };
 
     expect(decideActivation(label(target), undefined, state)).toEqual({
       kind: "rejected",
@@ -42,7 +42,7 @@ test("activation always rejects a generation that is not ready", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const status = tc.draw(gs.sampledFrom(["candidate", "failed"] as const));
-    const state = { activeLabel: undefined, epoch: tc.draw(count), activationId: tc.draw(count) };
+    const state = { activeLabel: undefined, epoch: tc.draw(count) };
 
     expect(decideActivation(label(target), generation(target, status), state)).toEqual({
       kind: "rejected",
@@ -51,11 +51,10 @@ test("activation always rejects a generation that is not ready", () => {
   });
 });
 
-test("a ready generation advances both clocks by exactly one, and only when it is not already active", () => {
+test("a ready generation advances the epoch by exactly one, and only when it is not already active", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
-    const activationId = tc.draw(count);
     const active = tc.draw(gs.sampledFrom(["none", "same", "other"] as const));
 
     const activeLabel =
@@ -63,7 +62,7 @@ test("a ready generation advances both clocks by exactly one, and only when it i
 
     const ready = generation(target, "ready");
 
-    const decision = decideActivation(label(target), ready, { activeLabel, epoch, activationId });
+    const decision = decideActivation(label(target), ready, { activeLabel, epoch });
 
     if (active === "same") {
       expect(decision).toEqual({ kind: "no-op", generation: ready, epoch });
@@ -72,7 +71,6 @@ test("a ready generation advances both clocks by exactly one, and only when it i
         kind: "activate",
         generation: ready,
         nextEpoch: epoch + 1,
-        nextActivationId: activationId + 1,
       });
     }
   });
@@ -83,7 +81,7 @@ test("a check that changes the status records it and advances the epoch by one",
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
     const outcome = tc.draw(gs.sampledFrom(["passed", "failed"] as const));
-    const state = { activeLabel: undefined, epoch, activationId: tc.draw(count) };
+    const state = { activeLabel: undefined, epoch };
     const expectedStatus: GenerationStatus = outcome === "passed" ? "ready" : "failed";
 
     const previous: GenerationStatus = tc.draw(
@@ -109,7 +107,7 @@ test("a check that confirms the recorded status is a no-op that still advances t
     const outcome = tc.draw(gs.sampledFrom(["passed", "failed"] as const));
     const recorded: GenerationStatus = outcome === "passed" ? "ready" : "failed";
     const settled = generation(target, recorded);
-    const state = { activeLabel: undefined, epoch, activationId: tc.draw(count) };
+    const state = { activeLabel: undefined, epoch };
 
     expect(decidePreparationCheck(label(target), outcome, settled, state)).toEqual({
       kind: "record",

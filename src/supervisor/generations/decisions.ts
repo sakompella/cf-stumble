@@ -13,15 +13,14 @@ import type {
  * unit-tested with literals, no Durable Object and no storage. The imperative shell in index.ts
  * reads this, calls a decider, and applies the effects the decision names.
  *
- * The deciders compute the next epoch and activation id as absolute values (current + 1). That is
+ * The deciders compute the next epoch as an absolute value (current + 1). That is
  * safe only because the shell runs them inside a single Durable Object transaction, which is
  * single-threaded, so nothing interleaves between the read and the write. In a concurrent store
- * this would be a lost update and the counters would have to be incremented atomically in SQL.
+ * this would be a lost update and the epoch would have to be incremented atomically in SQL.
  */
 export type GenerationState = {
   readonly activeLabel: GenerationLabel | undefined;
   readonly epoch: number;
-  readonly activationId: number;
 };
 
 type ActivationDecision =
@@ -31,7 +30,6 @@ type ActivationDecision =
       readonly kind: "activate";
       readonly generation: Generation;
       readonly nextEpoch: number;
-      readonly nextActivationId: number;
     };
 
 export function decideActivation(
@@ -51,12 +49,7 @@ export function decideActivation(
     return { kind: "no-op", generation, epoch: state.epoch };
   }
 
-  return {
-    kind: "activate",
-    generation,
-    nextEpoch: state.epoch + 1,
-    nextActivationId: state.activationId + 1,
-  };
+  return { kind: "activate", generation, nextEpoch: state.epoch + 1 };
 }
 
 type PreparationCheckDecision =

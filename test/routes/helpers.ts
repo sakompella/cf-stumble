@@ -51,7 +51,7 @@ export function ownerApiSupervisor(
 ): OwnerApiSupervisor {
   return {
     getActiveGeneration() {
-      return Promise.resolve({ generation: undefined, epoch: 0, activationId: undefined });
+      return Promise.resolve({ generation: undefined, epoch: 0 });
     },
     getProjectThread(projectId) {
       return Promise.resolve(unknownProjectOr(projectId));

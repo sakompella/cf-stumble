@@ -53,7 +53,7 @@ test("reclaiming a previous instance lease is logged with its lease suffix", asy
         threads: second,
         resetting: () => false,
         attribution: () => ({
-          active: { generation: undefined, epoch: 0, activationId: undefined },
+          active: { generation: undefined, epoch: 0 },
         }),
         start: () => Effect.succeed({ ok: false, reason: "workspace-unavailable" as const }),
         now: () => NOW,

@@ -256,7 +256,7 @@ The page shows one of three states:
 
 ## First run
 
-Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0,"activationId":null}}`. `GET /`, `/status`, `/generations`, and `/projects` relay to a generation and return HTTP 503 with `{"ok":false,"problem":{"code":"no-active-generation"}}`. That response is normal on a new instance. It does not mean that the deployment failed. A browser request for `/` with `Accept: text/html` still receives the owner page. `GET /health` is answered by the Worker itself, so it returns `{"ok":true}` before any generation exists. It still sits behind Access.
+Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0}}`. `GET /`, `/status`, `/generations`, and `/projects` relay to a generation and return HTTP 503 with `{"ok":false,"problem":{"code":"no-active-generation"}}`. That response is normal on a new instance. It does not mean that the deployment failed. A browser request for `/` with `Accept: text/html` still receives the owner page. `GET /health` is answered by the Worker itself, so it returns `{"ok":true}` before any generation exists. It still sits behind Access.
 
 The first generation does not happen by itself. Submit it as the verified owner, then activate it:
 
