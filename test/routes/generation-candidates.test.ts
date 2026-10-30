@@ -145,7 +145,6 @@ test("records a candidate that fails its startup check and keeps the active gene
     preparation: { ok: true, report: { stage: "response-rejected", status: 500 } },
   });
   expect(await control.getGeneration(label)).toMatchObject({ label, status: "failed" });
-  expect(await control.getPreparationCheckHistory(label)).toMatchObject([{ outcome: "failed" }]);
   await expectActiveFixtureStillServing(control);
 });
 

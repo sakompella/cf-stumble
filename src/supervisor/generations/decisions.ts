@@ -3,7 +3,6 @@ import type {
   Generation,
   GenerationLabel,
   GenerationStatus,
-  PreparationCheckOutcome,
   PreparationCheckProblem,
 } from "./generation.js";
 
@@ -63,7 +62,6 @@ type PreparationCheckDecision =
   | { readonly kind: "rejected"; readonly problem: PreparationCheckProblem }
   | {
       readonly kind: "record";
-      readonly outcome: PreparationCheckOutcome;
       readonly generation: Generation;
       // A resulting status to write, or undefined when the recorded outcome only confirms the
       // current one and the effect is a no-op.
@@ -94,7 +92,6 @@ export function decidePreparationCheck(
   if (generation.status === status) {
     return {
       kind: "record",
-      outcome,
       generation,
       statusUpdate: undefined,
       nextEpoch,
@@ -104,7 +101,6 @@ export function decidePreparationCheck(
 
   return {
     kind: "record",
-    outcome,
     generation: { ...generation, status },
     statusUpdate: status,
     nextEpoch,

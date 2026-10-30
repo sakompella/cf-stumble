@@ -47,7 +47,6 @@ import {
   parseGenerationLabel,
   type ActiveGeneration,
   type Generation,
-  type PreparationCheck,
 } from "./generations/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
@@ -237,14 +236,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   controlGeneration(request: GenerationRequest): GenerationControlResult {
     return this.control.execute(request);
-  }
-
-  getPreparationCheckHistory(label: number): readonly PreparationCheck[] {
-    const generationLabel = parseGenerationLabel(label);
-
-    return generationLabel === undefined
-      ? []
-      : this.generations.preparationCheckHistory(generationLabel);
   }
 
   /**

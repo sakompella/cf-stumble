@@ -89,11 +89,8 @@ test("a repeated passing check advances the epoch and rejects an activation from
   await prepareGeneration(control, targetLabel, replacementCommit);
 
   const beforeRecheck = await control.getActiveGeneration();
-  const checksBefore = await control.getPreparationCheckHistory(0);
-
   const rechecked = await control.prepareGeneration(0);
 
-  const checksAfter = await control.getPreparationCheckHistory(0);
   const afterRecheck = await control.getActiveGeneration();
 
   const result = await control.controlGeneration({
@@ -110,8 +107,6 @@ test("a repeated passing check advances the epoch and rejects an activation from
   }
 
   expect(rechecked.report.effect).toBe("no-op");
-  expect(checksAfter).toHaveLength(checksBefore.length + 1);
-  expect(checksAfter.at(-1)?.id).not.toBe(checksBefore.at(-1)?.id);
   expect(afterRecheck).toEqual({ ...beforeRecheck, epoch: beforeRecheck.epoch + 1 });
   expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
 });

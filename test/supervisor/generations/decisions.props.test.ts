@@ -111,7 +111,6 @@ test("a check that changes the status records it and advances the epoch by one",
       decidePreparationCheck(label(target), outcome, generation(target, previous), state),
     ).toEqual({
       kind: "record",
-      outcome,
       generation: generation(target, expectedStatus),
       statusUpdate: expectedStatus,
       nextEpoch: epoch + 1,
@@ -131,7 +130,6 @@ test("a check that confirms the recorded status is a no-op that still advances t
 
     expect(decidePreparationCheck(label(target), outcome, settled, state)).toEqual({
       kind: "record",
-      outcome,
       generation: settled,
       statusUpdate: undefined,
       nextEpoch: epoch + 1,

@@ -71,7 +71,6 @@ test("a check on a candidate records the resulting status and advances the epoch
     decidePreparationCheck(label(1), "passed", generation(1, "candidate"), stateAt(5, 2)),
   ).toEqual({
     kind: "record",
-    outcome: "passed",
     generation: generation(1, "ready"),
     statusUpdate: "ready",
     nextEpoch: 6,
@@ -83,7 +82,6 @@ test("a check confirming the recorded status is a no-op that still advances the 
   expect(decidePreparationCheck(label(1), "passed", generation(1, "ready"), stateAt(5, 2))).toEqual(
     {
       kind: "record",
-      outcome: "passed",
       generation: generation(1, "ready"),
       statusUpdate: undefined,
       nextEpoch: 6,
@@ -96,7 +94,6 @@ test("a check contradicting the recorded status replaces it", () => {
   expect(decidePreparationCheck(label(1), "failed", generation(1, "ready"), stateAt(5, 2))).toEqual(
     {
       kind: "record",
-      outcome: "failed",
       generation: generation(1, "failed"),
       statusUpdate: "failed",
       nextEpoch: 6,

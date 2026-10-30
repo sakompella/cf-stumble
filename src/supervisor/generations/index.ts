@@ -1,8 +1,6 @@
 import * as Result from "effect/Result";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { ActivationHistory } from "./activation-history.js";
-import { PreparationChecks } from "./preparation-checks.js";
-import type { PreparationCheck } from "./preparation-checks.js";
 import {
   assertNever,
   decideActivation,
@@ -31,8 +29,6 @@ export type {
   PreparationCheckResult,
 } from "./generation.js";
 
-export type { PreparationCheck } from "./preparation-checks.js";
-
 type StateRow = {
   readonly active_label: number | null;
   readonly epoch: number;
@@ -49,13 +45,11 @@ type StateRow = {
 export class Generations {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
-  private readonly preparationChecks: PreparationChecks;
   private readonly activationHistory: ActivationHistory;
 
   constructor(storage: DurableObjectStorage) {
     this.storage = storage;
     this.sql = storage.sql;
-    this.preparationChecks = new PreparationChecks(storage);
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS generations (
         label INTEGER PRIMARY KEY CHECK (label >= 0),
@@ -113,8 +107,6 @@ export class Generations {
         case "rejected":
           return Result.fail(decision.problem);
         case "record":
-          this.preparationChecks.record(label, decision.outcome);
-
           if (decision.statusUpdate !== undefined) {
             this.sql.exec(
               "UPDATE generations SET status = ? WHERE label = ?",
@@ -183,10 +175,6 @@ export class Generations {
       )
       .toArray()
       .map((row) => generationFromRow(row));
-  }
-
-  preparationCheckHistory(label: GenerationLabel): readonly PreparationCheck[] {
-    return this.preparationChecks.all(label);
   }
 
   hasBeenActive(label: GenerationLabel): boolean {

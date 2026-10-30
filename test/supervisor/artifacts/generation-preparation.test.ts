@@ -84,7 +84,6 @@ test("leaves the active generation serving when the module map cannot be built",
     await control.getGeneration(label),
     "an unbuildable commit is no evidence about the candidate",
   ).toMatchObject({ label, status: "candidate" });
-  expect(await control.getPreparationCheckHistory(label)).toEqual([]);
 
   const active = await control.getActiveGeneration();
   const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));
