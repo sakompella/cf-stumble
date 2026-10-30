@@ -1,126 +1,104 @@
 /**
- * The network edge of `ops:check`: three Cloudflare APIs, each answered as a typed source.
- * No rule logic lives here and no test covers it, because it needs a live account. Tokens go in
- * the Authorization header only; no message or error text includes one.
+ * The network edge of `ops:check`: Workers Logs, the Containers API and GraphQL, each read into
+ * the types of `check.mts`. A failure or a cut-off answer throws `ApiFailure`, which the caller
+ * reports as `unknown`. A token goes in the Authorization header only; no message includes one.
  */
 import { readFileSync } from "node:fs";
+import { routePattern } from "../../src/routes/route-pattern.ts";
 import {
   isJsonArray,
+  isJsonNumber,
   isJsonRecord,
   isJsonString,
   parseJsonRecordText,
   type JsonRecord,
   type JsonValue,
 } from "../json.mts";
-import {
-  BUCKET_MS,
-  type RunningInstance,
-  type LogData,
-  type MetricData,
-  type Source,
-  type TimeWindow,
-} from "./model.mts";
-import {
-  parseApplications,
-  parseInstances,
-  parseMetrics,
-  parseTelemetry,
-  type ContainerApplication,
-} from "./parse.mts";
-import { METRICS_ROW_LIMIT, TELEMETRY_ROW_LIMIT } from "./thresholds.mts";
+import { BUCKET_MS, type Invocation, type TimeWindow, type UsageBucket } from "./check.mts";
 
 const API = "https://api.cloudflare.com/client/v4";
 
-/**
- * The token from CLOUDFLARE_API_TOKEN, or from a file holding the bare token or `cf` login JSON.
- * A missing token or an unreadable file is an `unavailable` source, never an exception.
- */
-export function readToken(tokenFile: string | null, env: NodeJS.ProcessEnv): Source<string> {
-  const noToken: Source<string> = {
-    status: "unavailable",
-    reason: "no CLOUDFLARE_API_TOKEN and no --token-file",
-  };
+/** An answer this long may be cut off. */
+const TELEMETRY_ROW_LIMIT = 2000;
+
+const METRICS_ROW_LIMIT = 5000;
+
+export class ApiFailure extends Error {}
+
+function dig(value: JsonValue | undefined, ...keys: readonly string[]) {
+  return keys.reduce<JsonValue | undefined>(
+    (current, key) => (current !== undefined && isJsonRecord(current) ? current[key] : undefined),
+    value,
+  );
+}
+
+function digString(value: JsonValue | undefined, ...keys: readonly string[]) {
+  const found = dig(value, ...keys);
+
+  return found !== undefined && isJsonString(found) ? found : null;
+}
+
+function digNumber(value: JsonValue | undefined, ...keys: readonly string[]) {
+  const found = dig(value, ...keys);
+
+  return found !== undefined && isJsonNumber(found) ? found : null;
+}
+
+function digArray(value: JsonValue | undefined, ...keys: readonly string[]) {
+  const found = dig(value, ...keys);
+
+  return found !== undefined && isJsonArray(found) ? found : null;
+}
+
+/** The token from CLOUDFLARE_API_TOKEN, or from a file holding the bare token or `cf` login JSON. */
+export function readToken(tokenFile: string | null, env: NodeJS.ProcessEnv): string {
+  let content: string;
 
   try {
-    const content =
+    content =
       tokenFile === null ? (env["CLOUDFLARE_API_TOKEN"] ?? "") : readFileSync(tokenFile, "utf8");
-
-    const trimmed = content.trim();
-    const login = parseJsonRecordText(trimmed);
-    const oauth = login?.["oauth_token"];
-
-    if (login === undefined) {
-      return trimmed === "" ? noToken : { status: "ok", data: trimmed };
-    }
-
-    return oauth !== undefined && isJsonString(oauth) ? { status: "ok", data: oauth } : noToken;
   } catch {
-    return { status: "unavailable", reason: "cannot read --token-file" };
+    throw new ApiFailure("cannot read --token-file");
   }
+
+  const trimmed = content.trim();
+  const login = parseJsonRecordText(trimmed);
+  const token = login === undefined ? trimmed : digString(login, "oauth_token");
+
+  if (token === null || token === "") {
+    throw new ApiFailure("no CLOUDFLARE_API_TOKEN and no --token-file");
+  }
+
+  return token;
 }
 
-class ApiFailure extends Error {}
-
-function post(token: string, url: string, body: JsonRecord): Promise<JsonValue> {
-  return send(token, url, { method: "POST", body: JSON.stringify(body) });
-}
-
-async function send(token: string, url: string, init: RequestInit): Promise<JsonValue> {
+async function send(token: string, url: string, body?: JsonRecord): Promise<JsonValue> {
   const response = await fetch(url, {
-    ...init,
+    method: body === undefined ? "GET" : "POST",
+    body: body === undefined ? null : JSON.stringify(body),
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
   });
-
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: a JSON response body is JSON; the parsers check its shape before reading it.
-  const body = (await response.json().catch(() => null)) as JsonValue;
 
   if (!response.ok) {
     throw new ApiFailure(`HTTP ${response.status} from ${new URL(url).pathname}`);
   }
 
-  return body;
-}
-
-function describe(cause: Error | string): string {
-  return cause instanceof Error ? cause.message : cause;
-}
-
-async function guarded<T>(run: () => Promise<Source<T>>): Promise<Source<T>> {
-  try {
-    return await run();
-  } catch (cause) {
-    return {
-      status: "unavailable",
-      reason: describe(cause instanceof Error ? cause : String(cause)),
-    };
-  }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: a JSON response body is JSON; callers check its shape before reading it.
+  return (await response.json().catch(() => null)) as JsonValue;
 }
 
 /** The account to query: `--account`, then CLOUDFLARE_ACCOUNT_ID, then the token's only account. */
-export function resolveAccount(
+export async function resolveAccount(
   token: string,
   requested: string | null,
   env: NodeJS.ProcessEnv,
-): Promise<Source<string>> {
+): Promise<string> {
   const named = requested ?? env["CLOUDFLARE_ACCOUNT_ID"]?.trim() ?? "";
 
-  return named === ""
-    ? guarded(async () => ({ status: "ok", data: await soleAccount(token) }))
-    : Promise.resolve({ status: "ok", data: named });
-}
+  if (named !== "") return named;
 
-async function soleAccount(token: string): Promise<string> {
-  const response = await send(token, `${API}/accounts`, { method: "GET" });
-  const accounts = isJsonRecord(response) ? response["result"] : undefined;
-
-  const ids =
-    accounts !== undefined && isJsonArray(accounts)
-      ? accounts.flatMap((account) => {
-          const id = isJsonRecord(account) ? account["id"] : undefined;
-
-          return id !== undefined && isJsonString(id) ? [id] : [];
-        })
-      : [];
+  const accounts = digArray(await send(token, `${API}/accounts`), "result") ?? [];
+  const ids = accounts.flatMap((account) => digString(account, "id") ?? []);
 
   if (ids.length !== 1 || ids[0] === undefined) {
     throw new ApiFailure(`token sees ${ids.length} accounts; pass --account`);
@@ -129,120 +107,125 @@ async function soleAccount(token: string): Promise<string> {
   return ids[0];
 }
 
-function telemetryQuery(window: TimeWindow, filters: readonly JsonRecord[]): JsonRecord {
-  return {
-    queryId: "adhoc",
-    view: "events",
-    dry: true,
-    limit: TELEMETRY_ROW_LIMIT,
-    timeframe: { from: window.fromMs, to: window.toMs },
-    parameters: { filters },
-  };
+export function parseInvocations(response: JsonValue): readonly Invocation[] {
+  const rows = digArray(response, "result", "events", "events");
+
+  if (rows === null) throw new ApiFailure("telemetry response had an unexpected shape");
+
+  if (rows.length >= TELEMETRY_ROW_LIMIT) {
+    throw new ApiFailure(
+      `telemetry returned ${TELEMETRY_ROW_LIMIT} requests, the most it gives; use a shorter --since`,
+    );
+  }
+
+  return rows.map((row) => {
+    const endMs = digNumber(row, "timestamp");
+    const wallTimeMs = digNumber(row, "$workers", "wallTimeMs");
+    const url = digString(row, "$workers", "event", "request", "url");
+
+    if (endMs === null || wallTimeMs === null || url === null) {
+      throw new ApiFailure("telemetry row had an unexpected shape");
+    }
+
+    return { endMs, wallTimeMs, route: routePattern(URL.parse(url)?.pathname ?? url) };
+  });
 }
 
-/** Every event and canceled fetch invocation that `worker` wrote over `window`. */
-export function fetchLogs(
+/** Every fetch invocation `worker` ran over `window`. */
+export async function fetchInvocations(
   token: string,
   account: string,
   worker: string,
   window: TimeWindow,
-): Promise<Source<LogData>> {
-  const url = `${API}/accounts/${account}/workers/observability/telemetry/query`;
-  const service = { key: "$metadata.service", operation: "eq", type: "string", value: worker };
-  const events = [service, { key: "event", operation: "exists", type: "string" }];
-
-  const canceled = [
-    service,
-    { key: "$workers.outcome", operation: "eq", type: "string", value: "canceled" },
-    { key: "$workers.eventType", operation: "eq", type: "string", value: "fetch" },
-  ];
-
-  return guarded(async () =>
-    parseTelemetry(
-      await post(token, url, telemetryQuery(window, events)),
-      await post(token, url, telemetryQuery(window, canceled)),
-      worker,
-    ),
+): Promise<readonly Invocation[]> {
+  const response = await send(
+    token,
+    `${API}/accounts/${account}/workers/observability/telemetry/query`,
+    {
+      queryId: "adhoc",
+      view: "events",
+      dry: true,
+      limit: TELEMETRY_ROW_LIMIT,
+      timeframe: { from: window.fromMs, to: window.toMs },
+      parameters: {
+        filters: [
+          { key: "$metadata.service", operation: "eq", type: "string", value: worker },
+          { key: "$workers.eventType", operation: "eq", type: "string", value: "fetch" },
+        ],
+      },
+    },
   );
+
+  return parseInvocations(response);
 }
 
-const METRICS = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{accounts(filter:{accountTag:$a}){
-  containersMetricsAdaptiveGroups(limit:${METRICS_ROW_LIMIT},filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
-    dimensions{datetimeFiveMinutes applicationId instanceId} sum{cpuTimeSec}}}}}`;
+/** Running minutes per five-minute bucket: `allocatedMemory` byte-seconds over provisioned memory. */
+export function parseUsage(response: JsonValue, memoryBytes: number): readonly UsageBucket[] {
+  const account = digArray(response, "data", "viewer", "accounts")?.[0];
+  const rows = digArray(account, "containersUsageAdaptiveGroups");
 
-const USAGE = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{accounts(filter:{accountTag:$a}){
+  if (dig(response, "errors") !== undefined || rows === null) {
+    throw new ApiFailure("GraphQL response had errors or an unexpected shape");
+  }
+
+  if (rows.length >= METRICS_ROW_LIMIT) {
+    throw new ApiFailure("GraphQL usage reached its row limit; use a shorter --since");
+  }
+
+  const byteSeconds = new Map<number, number>();
+
+  for (const row of rows) {
+    const bucket = digString(row, "dimensions", "datetimeFiveMinutes");
+    const value = digNumber(row, "sum", "allocatedMemory");
+    const startMs = bucket === null ? Number.NaN : Date.parse(bucket);
+
+    if (Number.isNaN(startMs) || value === null) {
+      throw new ApiFailure("GraphQL usage row had an unexpected shape");
+    }
+
+    byteSeconds.set(startMs, (byteSeconds.get(startMs) ?? 0) + value);
+  }
+
+  return [...byteSeconds].map(([startMs, total]) => ({
+    startMs,
+    runningMinutes: total / memoryBytes / 60,
+  }));
+}
+
+const USAGE_QUERY = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{accounts(filter:{accountTag:$a}){
   containersUsageAdaptiveGroups(limit:${METRICS_ROW_LIMIT},filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
     dimensions{datetimeFiveMinutes applicationId instanceId} sum{allocatedMemory}}}}}`;
 
-/** The Worker's Containers application is named after the Worker and its class, lowercased. */
-export function fetchApplications(
+/** Running time of the Worker's Containers application, which is named after the Worker and its class. */
+export async function fetchUsage(
   token: string,
   account: string,
   worker: string,
-): Promise<Source<readonly ContainerApplication[]>> {
-  const name = `${worker}-workspacehost`;
-
-  return guarded(async () => {
-    const all = parseApplications(
-      await send(token, `${API}/accounts/${account}/containers/applications`, { method: "GET" }),
-    );
-
-    const found = all?.filter((application) => application.name === name) ?? [];
-
-    return found.length === 0
-      ? { status: "unavailable", reason: `no container application named ${name}` }
-      : { status: "ok", data: found };
-  });
-}
-
-/** Container CPU and allocated time for the Worker's container application. */
-export function fetchMetrics(
-  token: string,
-  account: string,
-  applications: readonly ContainerApplication[],
   window: TimeWindow,
-): Promise<Source<MetricData>> {
-  return guarded(async () => {
-    const memory = applications[0]?.memoryBytes;
+): Promise<readonly UsageBucket[]> {
+  const name = `${worker}-workspacehost`;
+  const applications = await send(token, `${API}/accounts/${account}/containers/applications`);
 
-    if (memory === undefined) {
-      return { status: "unavailable", reason: "no container application" };
-    }
+  const application = digArray(applications, "result")?.find(
+    (app) => digString(app, "name") === name,
+  );
 
-    const variables = {
+  const id = digString(application, "id");
+  const memoryMib = digNumber(application, "configuration", "memory_mib");
+
+  if (id === null || memoryMib === null) {
+    throw new ApiFailure(`no container application named ${name}`);
+  }
+
+  const response = await send(token, `${API}/graphql`, {
+    query: USAGE_QUERY,
+    variables: {
       a: account,
       f: new Date(Math.floor(window.fromMs / BUCKET_MS) * BUCKET_MS).toISOString(),
       t: new Date(window.toMs).toISOString(),
-      apps: applications.map((application) => application.id),
-    };
-
-    const run = (query: string) => post(token, `${API}/graphql`, { query, variables });
-
-    return parseMetrics(await run(METRICS), await run(USAGE), memory);
+      apps: [id],
+    },
   });
-}
 
-/** What the Containers API says is running now. Metrics lag; this does not. */
-export function fetchInstances(
-  token: string,
-  account: string,
-  applications: readonly ContainerApplication[],
-): Promise<Source<readonly RunningInstance[]>> {
-  return guarded(async () => {
-    const answers = await Promise.all(
-      applications.map(async (application) =>
-        parseInstances(
-          await send(
-            token,
-            `${API}/accounts/${account}/containers/applications/${application.id}/instances`,
-            { method: "GET" },
-          ),
-        ),
-      ),
-    );
-
-    return answers.includes(null)
-      ? { status: "unavailable", reason: "instances response had an unexpected shape" }
-      : { status: "ok", data: answers.flatMap((instances) => instances ?? []) };
-  });
+  return parseUsage(response, memoryMib * 1024 * 1024);
 }
