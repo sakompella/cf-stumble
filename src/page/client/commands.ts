@@ -99,9 +99,9 @@ const GITHUB_MESSAGES = [
   Message.FailedGitHub,
 ] as const;
 
-/** A GitHub `POST` whose answer carries the connection as the Worker now sees it. */
-function gitHubRequest(path: string) {
-  return requestJson("POST", path, Option.some({})).pipe(
+/** A GitHub request whose answer carries the connection as the Worker now sees it. */
+function gitHubRequest(method: "GET" | "POST", path: string) {
+  return requestJson(method, path, method === "POST" ? Option.some({}) : Option.none()).pipe(
     Effect.map((answer) =>
       isOk(answer.payload)
         ? Message.SucceededGitHub({
@@ -120,17 +120,19 @@ function gitHubRequest(path: string) {
 export const AuthorizeGitHub = Command.define("AuthorizeGitHub", {
   args: { path: Schema.String },
   messages: GITHUB_MESSAGES,
-  execute: ({ path }) => gitHubRequest(path),
+  execute: ({ path }) => gitHubRequest("POST", path),
 });
 
-/**
- * Ask the workspace what its GitHub credential can do now. This is the one GitHub read that wakes
- * the workspace container, so the page sends it when it loads and when the owner asks, never on a
- * timer.
- */
+/** The connection as the Supervisor last recorded it. This read never wakes the workspace. */
+export const FetchGitHub = Command.define("FetchGitHub", {
+  messages: GITHUB_MESSAGES,
+  execute: gitHubRequest("GET", "/api/github/connection"),
+});
+
+/** Ask the workspace what its GitHub credential can do now. This wakes the workspace container. */
 export const RefreshGitHub = Command.define("RefreshGitHub", {
   messages: GITHUB_MESSAGES,
-  execute: gitHubRequest("/api/github/connection/refresh"),
+  execute: gitHubRequest("POST", "/api/github/connection/refresh"),
 });
 
 type ChatGPTAnswer = Extract<Message, { readonly _tag: "SucceededChatGPT" | "RejectedChatGPT" }>;
