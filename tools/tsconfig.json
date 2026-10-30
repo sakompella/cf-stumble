@@ -7,7 +7,7 @@
   },
   "include": [
     "build-loaded-execution-env-fixture.mts",
-    "build-generation-0.mts",
+    "build-generation-1.mts",
     "build-owner-page.mts",
     "bundle-budgets.test.ts",
     "foldkit-lint.test.ts",
