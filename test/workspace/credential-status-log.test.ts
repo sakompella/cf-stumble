@@ -10,7 +10,7 @@ import {
   type GitHubCredentialResult,
   type WorkspaceOperations,
 } from "../../src/workspace/index.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
+import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import { runToResult } from "./workspace-results.js";
 
@@ -58,14 +58,14 @@ test("a status read logs its timed outcome and command with the request id, and 
       requestId,
       outcome: "connected",
       timeout: false,
-      timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+      timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
     }),
   ]);
   expect(named(events(), "workspace.command")).toEqual([
     expect.objectContaining({
       requestId,
       command: "github-credential.status",
-      timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+      timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
       exitCode: 0,
     }),
   ]);
@@ -167,7 +167,9 @@ test("overlapping status reads keep their own request ids on the rpc events and 
   expect(rpc.map((entry) => entry.requestId).toSorted(byText)).toEqual(
     [first, second].toSorted(byText),
   );
-  expect(rpc.every((entry) => entry.timeoutMs === WORKSPACE_COMMAND_TIMEOUT_MS + 1_000)).toBe(true);
+  expect(rpc.every((entry) => entry.timeoutMs === WORKSPACE_SHORT_COMMAND_TIMEOUT_MS + 1_000)).toBe(
+    true,
+  );
   expect(host.received.toSorted(byText)).toEqual([first, second].toSorted(byText));
 });
 

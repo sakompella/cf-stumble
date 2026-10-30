@@ -8,7 +8,7 @@ import {
 } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
-import { WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import { WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { workspaceRpc } from "./workspace-rpc.js";
 
 /**
@@ -92,7 +92,7 @@ function ask(
     const answered = yield* workspaceRpc(
       { ...requestIdFields(input.requestId), method: "credential", step: request.step },
       () => input.namespace.getByName(input.workspaceName).credential(request, input.requestId),
-      WORKSPACE_RPC_TIMEOUT_MS,
+      WORKSPACE_SHORT_RPC_TIMEOUT_MS,
     ).pipe(
       Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
         logRedactedCause(

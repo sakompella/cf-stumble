@@ -76,11 +76,6 @@ test("marks a clone that runs out of disk as a repository size failure", () => {
   expect(source).toContain("exit 122");
 });
 
-test("prints the resulting clone size for structured provisioning telemetry", () => {
-  expect(cloneSource(projectOne)).toContain('du -sk -- "$repository"');
-  expect(cloneSource(projectOne)).toContain("cf-stumble-clone-size-kb=%s");
-});
-
 test("quotes an interpolated repository URL the catalog would accept", () => {
   // The catalog's URL checks accept an embedded single quote, so the planner cannot be the place
   // that assumes a URL is shell-safe. A later configuration edit is all it would take.
@@ -133,7 +128,7 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
     "nothing here may delete a directory this step did not create",
   ).toBe(false);
   expect(source, "an unexpected origin fails the step rather than being repaired").toContain(
-    'test "$actual_remote" = "$expected_remote"',
+    'if test "$actual_remote" != "$expected_remote"; then',
   );
   expect(
     source.includes("git fetch") || source.includes("git reset") || source.includes("git checkout"),

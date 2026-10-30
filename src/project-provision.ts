@@ -21,9 +21,6 @@ const PROJECT_CLONE_DEPTH = 50;
  */
 export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
 
-/** Prefix emitted only by the clone shell so its caller can record durable size without a path. */
-export const PROJECT_CLONE_SIZE_MARKER = "cf-stumble-clone-size-kb=";
-
 /**
  * The instructions cf-stumble manages for the shared workspace. The second paragraph is the
  * instruction ADR-0039 requires, because that ADR is what grants the workspace a shell, ordinary
@@ -135,7 +132,10 @@ export function reconcileClone(
     '  mv "$staging" "$repository"',
     "fi",
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
-    'test "$actual_remote" = "$expected_remote"',
+    'if test "$actual_remote" != "$expected_remote"; then',
+    '  printf "%s has a different origin than %s\\n" "$repository" "$expected_remote" >&2',
+    "  exit 1",
+    "fi",
   ];
 }
 
@@ -200,8 +200,6 @@ function cloneProjectRepository(project: Project): string {
         "  fi",
       ],
     }),
-    'clone_size_kb="$(du -sk -- "$repository" | cut -f1)"',
-    `printf "${PROJECT_CLONE_SIZE_MARKER}%s\\n" "$clone_size_kb"`,
   ].join("\n");
 }
 

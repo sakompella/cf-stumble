@@ -165,7 +165,7 @@ test("offline fake workspace refuses an unexpected origin before the labeled che
   expect(plan.steps[0]?.source).toContain(
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
   );
-  expect(plan.steps[0]?.source).toContain('test "$actual_remote" = "$expected_remote"');
+  expect(plan.steps[0]?.source).toContain('if test "$actual_remote" != "$expected_remote"; then');
   expect(built.failure).toEqual({
     code: "build-step-failed",
     harnessCommit: commit,

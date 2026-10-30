@@ -116,5 +116,5 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
 10. **ChatGPT is unproved end to end.** On 2026-10-16 the agent tool connected the owner's account
     headless, and the first turn hit `subscription_sharing_usage_limit_exceeded`, so no real
     ChatGPT answer has streamed yet. `main` now falls back to Workers AI with a notice on a usage
-    limit and keeps the connection. After that is deployed, reconnect with
-    `tools/chatgpt-connect.mts`, run one turn, and check `chatgpt.model-call`.
+    limit and keeps the connection. After that is deployed, reconnect from
+    the owner page, run one turn, and check `chatgpt.model-call`.

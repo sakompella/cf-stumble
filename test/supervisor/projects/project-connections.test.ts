@@ -518,9 +518,10 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
   expect(listed.map((project) => project.id)).toContain("sample-repo-1");
 });
 
-test("reinstalls the configured credential before repairing a repository after a reset", async () => {
+test("reinstalls the configured credential and clones again when a clone after a reset fails", async () => {
   const workspace = new FakeTenantWorkspace();
-  const subject = tenant("credential-before-use", { workspace, fallbackToken: FAKE_TOKEN });
+  workspace.cloneNeedsCredential = true;
+  const subject = tenant("credential-after-failed-clone", { workspace, fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
   await subject.connections((connections) =>
@@ -537,11 +538,32 @@ test("reinstalls the configured credential before repairing a repository after a
 
   expect(used).toMatchObject({ ok: true });
   const useCommands = workspace.commands.slice(beforeUse);
-  const install = useCommands.findIndex((command) => command.includes("gh auth login"));
-  const clone = useCommands.findIndex((command) => command.includes("git clone"));
 
-  expect(install).toBeGreaterThanOrEqual(0);
-  expect(clone).toBeGreaterThan(install);
+  const clones = useCommands.flatMap((command, index) =>
+    command.includes("git clone") ? [index] : [],
+  );
+
+  const install = useCommands.findIndex((command) => command.includes("gh auth login"));
+
+  expect(clones).toHaveLength(2);
+  expect(install).toBeGreaterThan(clones[0] ?? Infinity);
+  expect(install).toBeLessThan(clones[1] ?? 0);
+});
+
+test("a turn whose clone is in place runs no credential command", async () => {
+  const workspace = new FakeTenantWorkspace();
+  const subject = tenant("no-credential-check-per-turn", { workspace, fallbackToken: FAKE_TOKEN });
+  await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
+  const beforeUse = workspace.commands.length;
+
+  const used = await subject.connections((connections) =>
+    connections.ensureProvisioned("sample-repo-1"),
+  );
+
+  expect(used).toMatchObject({ ok: true });
+  expect(
+    workspace.commands.slice(beforeUse).filter((command) => command.includes("gh auth")),
+  ).toEqual([]);
 });
 
 test("still attempts the clone without a credential, so a public repository re-clones after a reset", async () => {

@@ -125,7 +125,8 @@ export function credentialStatusSource(): string {
  * `git ls-remote` is the check rather than a `gh` API call because it exercises the credential
  * helper `gh auth setup-git` configured, which is the path a clone will take. `GIT_TERMINAL_PROMPT`
  * is off so a missing credential fails immediately instead of waiting for a password nobody can
- * type.
+ * type. The `timeout` is shorter than the command ceiling so a stalled network answers `denied`
+ * instead of the Host killing the command.
  */
 export function repositoryAccessSource(repositoryUrl: string): string {
   return [
@@ -133,7 +134,7 @@ export function repositoryAccessSource(repositoryUrl: string): string {
     ...durableGitHubConfigurationSource(),
     "export GIT_TERMINAL_PROMPT=0",
     `url=${shellQuote(repositoryUrl)}`,
-    'if error="$(git ls-remote --heads "$url" 2>&1 >/dev/null)"; then',
+    'if error="$(timeout 30 git ls-remote --heads "$url" 2>&1 >/dev/null)"; then',
     "  printf 'granted\\n'",
     "else",
     "  printf 'denied %s\\n' \"$error\"",

@@ -20,7 +20,7 @@ import {
   type GitHubCredentialStatus,
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
-import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { runLoggedCommand } from "./executor.js";
 import {
   answerFailures,
@@ -174,14 +174,14 @@ function runInstall(
   return runLoggedCommand(
     operations.durable,
     "github-credential.install",
-    { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+    { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
     { stdin: `${token}\n` },
   ).pipe(
     Effect.catchTag("WorkspaceSyncIncomplete", (incomplete) =>
       runLoggedCommand(operations.lenient, "github-credential.logout", {
         source: logoutCredentialSource(),
         cwd: "/",
-        timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+        timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
       }).pipe(
         Effect.asVoid,
         answerFailures((thrown) => {
@@ -200,7 +200,7 @@ function credentialStatus(
   return runLoggedCommand(
     operations,
     "github-credential.status",
-    { source: credentialStatusSource(), cwd: "/", timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+    { source: credentialStatusSource(), cwd: "/", timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
     { requestId },
   ).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
 }
@@ -216,7 +216,7 @@ function timedCredentialStatus(
   return credentialStatus(operations, requestId).pipe(
     timedEffect(
       "github-credential.status",
-      { ...requestIdFields(requestId), timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS },
+      { ...requestIdFields(requestId), timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
       (read) =>
         Result.isSuccess(read)
           ? {
@@ -244,7 +244,7 @@ function repositoryAccess(
   return runLoggedCommand(operations, "github-credential.verify-repository", {
     source: repositoryAccessSource(repositoryUrl),
     cwd: "/",
-    timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
+    timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
   }).pipe(
     Effect.map((output): GitHubCredentialResult => {
       const access = parseRepositoryAccess(output.stdout);
