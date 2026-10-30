@@ -100,7 +100,15 @@ export class MainFacet
    * Supervisor's alarm consumed, and `resume` continues the work a lost instance left.
    */
   async attach(host: ReceivedHost): Promise<void> {
-    this.#session ??= this.#open(host.dup());
+    if (this.#session === undefined) {
+      const opening = this.#open(host.dup());
+
+      this.#session = opening;
+      void opening.catch(() => {
+        this.#session = undefined;
+      });
+    }
+
     const session = await this.#session;
 
     await session.host.arm(session.harness.wake());
