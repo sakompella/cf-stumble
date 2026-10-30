@@ -6,12 +6,10 @@ import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { GitHubReport, type ChatGPTConnection, type Project, type ThreadFacts } from "./model.js";
 
 /**
- * Requests to this Worker, and the readers that turn an answer into what the page shows. Every
- * path is relative, so every call stays on this origin; the Content Security Policy refuses the
+ * Every path is relative, so every call stays on this origin; the Content Security Policy refuses the
  * rest. The page asks for no credential and stores none.
  */
 
-/** What the page error banner says about a request that never reached the Worker. */
 export function transportDetail(error: unknown): string {
   return Predicate.isError(error) ? error.message : String(error);
 }
@@ -19,9 +17,8 @@ export function transportDetail(error: unknown): string {
 export type JsonBody = Readonly<Record<string, string | number>>;
 
 /**
- * `fetch` as an Effect. Interrupting it aborts the request. `fetch` is read when the request
- * starts, so the page uses whatever `fetch` the document has then; the browser harness replaces
- * it to hold a submission in flight.
+ * `fetch` is read when the request starts; the browser harness replaces it to hold a submission in
+ * flight.
  */
 export function fetchEffect(
   path: string,
@@ -45,7 +42,7 @@ export function fetchEffect(
 
 export type Answer = Readonly<{ status: number; payload: unknown }>;
 
-/** A response read as JSON. A body that is not JSON reads as `null`, as the Worker's 5xx can be. */
+/** A body that is not JSON reads as `null`, as the Worker's 5xx can be. */
 export function answerOf(response: Response): Effect.Effect<Answer> {
   return Effect.promise(() =>
     response.json().then(
@@ -55,7 +52,6 @@ export function answerOf(response: Response): Effect.Effect<Answer> {
   ).pipe(Effect.map((payload) => ({ status: response.status, payload })));
 }
 
-/** A request whose answer is read as JSON. */
 export function requestJson(
   method: "GET" | "POST",
   path: string,
@@ -77,7 +73,6 @@ export function field(value: unknown, ...path: readonly string[]): unknown {
   );
 }
 
-/** A JSON scalar as the page shows it; anything else shows as nothing. */
 export function text(value: unknown): string {
   return Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
     ? String(value)
@@ -119,11 +114,7 @@ function connectionDetail(status: unknown, state: string): string {
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-/**
- * When the Worker last checked GitHub, in the reader's time zone: the time of day for today, and
- * the date with it for any other day. A pending authorization is the Worker's own live state, so it
- * carries no check time, and neither does an answer without one.
- */
+/** A pending authorization is the Worker's own live state, so it carries no check time. */
 export function checkedWording(checkedAt: unknown, now: number): string {
   if (!Predicate.isNumber(checkedAt) || !Number.isFinite(checkedAt)) {
     return "";
@@ -171,7 +162,6 @@ function chatGPTLogin(login: unknown): ChatGPTConnection["maybeLogin"] {
     : Option.some({ attemptId, authorizeUrl });
 }
 
-/** A usage limit on a connected plan, with its end in UTC when OpenAI named one; otherwise nothing. */
 function usageLimitText(limit: unknown): string {
   if (!Predicate.hasProperty(limit, "limitedUntil")) {
     return "";
@@ -184,7 +174,6 @@ function usageLimitText(limit: unknown): string {
     : "; usage limit reached";
 }
 
-/** The `chatgpt` view the Worker sends, worded for the page. A state the page cannot word reads as unknown. */
 export function chatGPTConnection(view: unknown): ChatGPTConnection {
   const connection = field(view, "connection");
   const maybeLogin = chatGPTLogin(field(view, "login"));
@@ -257,7 +246,7 @@ export function preparationText(preparation: unknown): string {
   return `rejected: ${text(field(preparation, "problem", "code"))}`;
 }
 
-/** The tail of a failed build step. It is untrusted command output, so it is only ever text. */
+/** Untrusted command output, so it is only ever text. */
 export function diagnosticsText(preparation: unknown): Option.Option<string> {
   const diagnostics =
     truthy(preparation) && field(preparation, "ok") === false

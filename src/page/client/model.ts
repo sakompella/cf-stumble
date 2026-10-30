@@ -2,12 +2,6 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import { TranscriptEntry } from "./transcript.js";
 
-/**
- * Everything the owner page shows, as one value. The page renders what a reader must observe
- * rather than keeping it in a script variable, so most fields here are the wording an element
- * holds; the browser harness reads the same values the owner reads.
- */
-
 export const Project = Schema.Struct({
   id: Schema.String,
   displayName: Schema.String,
@@ -21,13 +15,12 @@ const GitHubConnection = Schema.Struct({
   state: Schema.String,
   detail: Schema.String,
   verificationUri: Schema.String,
-  /** When the Worker last checked, or empty when this state is not the result of a check. */
+  /** Empty when this state is not the result of a check. */
   checked: Schema.String,
 });
 
 type GitHubConnection = typeof GitHubConnection.Type;
 
-/** What a response said about the GitHub connection: a state the page knows how to word, or not. */
 export const GitHubReport = defineTaggedUnion({
   Unknown: {},
   Known: { connection: GitHubConnection },
@@ -40,11 +33,6 @@ const ChatGPTLogin = Schema.Struct({
   authorizeUrl: Schema.String,
 });
 
-/**
- * What a response said about the ChatGPT connection. `connection` is the wording the page shows
- * (`unknown` when the response was unreadable), and `maybeLogin` is the sign-in the owner is in the
- * middle of, if the Worker holds one.
- */
 export const ChatGPTConnection = Schema.Struct({
   connection: Schema.String,
   isConnected: Schema.Boolean,
@@ -53,7 +41,6 @@ export const ChatGPTConnection = Schema.Struct({
 
 export type ChatGPTConnection = typeof ChatGPTConnection.Type;
 
-/** What a project's thread read reported, already worded for its four elements. */
 export const ThreadFacts = Schema.Struct({
   revision: Schema.String,
   turnActive: Schema.String,
@@ -64,9 +51,8 @@ export const ThreadFacts = Schema.Struct({
 export type ThreadFacts = typeof ThreadFacts.Type;
 
 /**
- * A turn the page is streaming. `turnId` is the guard that keeps a turn's frames in the
- * conversation they belong to: every Message the stream produces carries it, and a Message for a
- * turn the Model no longer holds is dropped rather than appended to another conversation.
+ * `turnId` keeps a turn's frames in their conversation: a Message for a turn the Model no longer
+ * holds is dropped.
  */
 export const Turn = defineTaggedUnion({
   Idle: {},
@@ -136,8 +122,8 @@ export const Model = Schema.Struct({
   submitPreparation: Schema.String,
   maybeDiagnostics: Schema.Option(Schema.String),
   /**
-   * Counts every change to the build output. The panel is keyed by it, so each new output is a new,
-   * closed disclosure, and the reader's own open or close never races a render.
+   * The panel is keyed by it, so each new output is a new, closed disclosure and the reader's own open
+   * or close never races a render.
    */
   diagnosticsShown: Schema.Number,
 

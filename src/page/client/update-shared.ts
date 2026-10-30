@@ -7,7 +7,6 @@ export type UpdateReturn = Update.Return<Model, Message>;
 
 type Tag = Message["_tag"];
 
-/** The handlers for some of the Message tags. The full update spreads every group together. */
 export type Handlers<Tags extends Tag> = {
   readonly [K in Tags]: (message: Extract<Message, { readonly _tag: K }>) => UpdateReturn;
 };

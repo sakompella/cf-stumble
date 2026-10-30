@@ -21,12 +21,6 @@ import {
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 import { quietThreadRead } from "./update-thread.js";
 
-/**
- * Sending a turn and applying its frames. The stream itself is a Subscription (`turn.ts`); this
- * file decides what each frame does to the transcript. A Message for a turn the Model no longer
- * holds — the reader cancelled, or picked another project — is dropped.
- */
-
 function sendTurn(model: Model): UpdateReturn {
   const cleared = clearError(model);
   const prompt = model.prompt.trim();
@@ -121,10 +115,7 @@ function withFrame(model: Model, frame: TurnFrame): Model {
   return isTerminalFrame(frame) ? withTerminalFrame(model, frame) : withProgressFrame(model, frame);
 }
 
-/**
- * The turn is over for this page: Send comes back and the thread facts are read again. A connected
- * ChatGPT is read again too, because a turn can meet the plan's usage limit (ADR-0047).
- */
+/** A connected ChatGPT is read again too, because a turn can meet the plan's usage limit. */
 function endedTurn(model: Model): UpdateReturn {
   const ended = { ...model, turn: Turn.Idle() };
 

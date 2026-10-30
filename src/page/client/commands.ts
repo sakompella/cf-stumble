@@ -24,9 +24,8 @@ import { Message } from "./message.js";
 import { ControlKind } from "./model.js";
 
 /**
- * Every request the page makes, as a Command. Each one turns its answer into exactly one of its
- * declared Messages, so a refused or unreachable request is a fact update handles rather than an
- * exception that escapes.
+ * Each Command turns its answer into exactly one declared Message, so a refused or unreachable
+ * request is a fact update handles rather than an exception.
  */
 
 export const FetchStatus = Command.define("FetchStatus", {
@@ -99,7 +98,6 @@ const GITHUB_MESSAGES = [
   Message.FailedGitHub,
 ] as const;
 
-/** A GitHub request whose answer carries the connection as the Worker now sees it. */
 function gitHubRequest(method: "GET" | "POST", path: string) {
   return requestJson(method, path, method === "POST" ? Option.some({}) : Option.none()).pipe(
     Effect.map((answer) =>
@@ -123,13 +121,13 @@ export const AuthorizeGitHub = Command.define("AuthorizeGitHub", {
   execute: ({ path }) => gitHubRequest("POST", path),
 });
 
-/** The connection as the Supervisor last recorded it. This read never wakes the workspace. */
+/** This read never wakes the workspace. */
 export const FetchGitHub = Command.define("FetchGitHub", {
   messages: GITHUB_MESSAGES,
   execute: gitHubRequest("GET", "/api/github/connection"),
 });
 
-/** Ask the workspace what its GitHub credential can do now. This wakes the workspace container. */
+/** This wakes the workspace container. */
 export const RefreshGitHub = Command.define("RefreshGitHub", {
   messages: GITHUB_MESSAGES,
   execute: gitHubRequest("POST", "/api/github/connection/refresh"),

@@ -8,11 +8,7 @@ import { chatGPTPanel } from "./view-chatgpt.js";
 import { generationBarView } from "./view-generation.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
-/**
- * The whole page: the generation bar, then a sidebar of connected projects beside the
- * conversation. The sidebar toggle sits above the panel it controls rather than inside it, so
- * hiding the projects never hides the control that shows them again.
- */
+/** The sidebar toggle sits above the panel it controls so hiding the projects never hides it. */
 
 function projectButton(project: Project, model: Model, h: HtmlBuilder<Message>): Html {
   const isSelected = Option.contains(model.maybeProjectId, project.id);

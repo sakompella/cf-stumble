@@ -3,13 +3,11 @@ import * as Schema from "effect/Schema";
 import type { ProjectTurnFrame } from "../../supervisor/projects/turn-frames.js";
 
 /**
- * The browser's half of the turn stream: the frames `routes/turns.ts` writes, one JSON object per
- * line (`supervisor/projects/turn-frames.ts`). Exactly one terminal frame ends a stream, and it is
- * the Supervisor's own statement about what was durably saved, so this page never reports success
- * from an HTTP status: `saved` is the only success wording.
+ * Exactly one terminal frame ends a stream, and it is the Supervisor's statement about what was
+ * durably saved, so this page never reports success from an HTTP status.
  *
- * The Schema is checked against the Supervisor's own type below, so a frame kind added on the
- * server without a reader here fails to compile.
+ * The Schema is checked against the Supervisor's type, so a frame kind added on the server without a
+ * reader here fails to compile.
  */
 export const TurnFrame = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("text"), text: Schema.String }),
@@ -67,10 +65,8 @@ export const FRAME_KINDS_MATCH_THE_SUPERVISOR: FrameKinds = true;
 
 const PROGRESS_KINDS = ["text", "tool-start", "tool-result", "diff", "diff-unavailable"] as const;
 
-/** A frame that adds to the transcript while the turn runs. */
 export type ProgressFrame = Extract<TurnFrame, Readonly<{ kind: (typeof PROGRESS_KINDS)[number] }>>;
 
-/** The Supervisor's one statement about how the turn ended. */
 export type TerminalFrame = Exclude<TurnFrame, ProgressFrame>;
 
 export function isTerminalFrame(frame: TurnFrame): frame is TerminalFrame {

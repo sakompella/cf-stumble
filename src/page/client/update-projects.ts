@@ -15,10 +15,8 @@ import { Turn } from "./model.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 /**
- * The sidebar: what the owner may work in, the GitHub and ChatGPT connections, and connecting
- * another repository. Selecting a project is the only way this page names one, and it is a boundary: it
- * bumps `selection`, so a thread read for the project a reader left is dropped, and it stops any
- * turn still streaming.
+ * Selecting a project bumps `selection`, so a thread read for the project a reader left is dropped,
+ * and it stops any turn still streaming.
  */
 
 function withGitHub(model: Model, report: GitHubReport): Model {
@@ -191,10 +189,7 @@ export function gitHubHandlers(
   };
 }
 
-/**
- * Every ChatGPT answer carries the Worker's whole view of the connection, so the page replaces what
- * it showed instead of working out what the request changed.
- */
+/** Every ChatGPT answer carries the whole view of the connection, so the page replaces what it showed. */
 const ASKING = "asking ChatGPT";
 
 function asking(model: Model): Model {

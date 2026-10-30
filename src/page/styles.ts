@@ -1,13 +1,7 @@
 /**
- * One inline stylesheet. The page loads no external asset, so the Content Security Policy the route
- * sends can refuse every remote origin and the page renders the same way with no network beyond
- * this Worker.
- *
- * Two rules carry weight rather than taste. The transcript scrolls inside its own box, so a long
- * turn cannot push the composer off the screen. And below 52rem the sidebar leaves the flow
- * entirely, so a narrow window shows the conversation at full width; the toggle button puts the
- * project list back. The toggle sits in the sidebar's column but outside the panel that collapses,
- * so hiding the projects never hides the control that shows them again.
+ * The transcript scrolls inside its own box so a long turn cannot push the composer off screen. Below
+ * 52rem the sidebar leaves the flow; the toggle sits outside the collapsing panel so hiding the
+ * projects never hides the control that shows them.
  */
 export const OWNER_PAGE_STYLES = `
   :root { color-scheme: light dark; }
