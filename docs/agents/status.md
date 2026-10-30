@@ -1,119 +1,26 @@
 # Status
 
-This file records what runs in production, what was decided outside an ADR, and what is still
-open. "What is deployed" was refreshed on 2026-10-13 against `main` at `f4191af`; the open items
-were last checked against `86fb16f` on 2026-10-09. Refresh it in place when the state changes; Git
-keeps the history. It does not replace an ADR or a design document.
+What runs in production, what was decided outside an ADR, and what is still open. Edit it in place when the state changes; Git keeps the history.
 
 ## What is deployed
 
-Production is the Worker `cf-stumble`, deployed only with `cf deploy`. It runs `27fdbd1`, deployed
-on 2026-10-16 at about 07:40 UTC as Worker version `563aee12`, with container application version 51
-and generation `eafaf99` active at epoch 3. That release carries the Effect and Foldkit port, the
-cancel fix, the review fixes, and the ChatGPT provider. It was staged first on a throwaway Worker
-(`.audit/cleanup-2026-10/release-27fdbd1.md`). GitHub is connected through the configured token,
-and no project is connected. ChatGPT was connected with the owner's account and then disconnected,
-because the first ChatGPT turn hit `subscription_sharing_usage_limit_exceeded`; turns answer from
-Workers AI. Later commits on `main` (the follow-up fixes, the usage-limit fallback, the pinned
-container image) are not deployed. Run `pnpm exec cf workers deployments list` before you assume
-that production matches a commit.
+Production is the Worker `cf-stumble`, deployed only with `cf deploy`. Run `pnpm exec cf workers deployments list` before you assume that production matches a commit.
 
-Checked on the 2026-10-16 staging run: the idle stop fired 600 s after the turn lease ended, a
-cancelled turn freed its lease within seconds, and the first turn after the stop saved.
+The last recorded deploy was `27fdbd1` on 2026-10-16, with generation `eafaf99` active at epoch 3. Later commits on `main` are not deployed, and this section has not been refreshed since.
+
+The Worker has no authentication: every request reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret and no project is connected. ChatGPT is disconnected after its first turn hit `subscription_sharing_usage_limit_exceeded`, so turns answer from Workers AI.
 
 ## Decided outside an ADR
 
+- **No authentication** (owner, 2026-10-30). State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
 - **No Bombadil for now** (owner, 2026-09-28). Do not add it to `pnpm verify` or run a pilot.
-- **Keep the second `monitor()` call** (owner, 2026-10-02). Reading Computer's stored exit instead
-  was examined and rejected. The reasoning is in `design/observability.md`, "What the container
-  events do not show".
-- **Skip Cloudflare Artifacts for now.** See `design/computer-integration.md`, "Artifacts
-  (deferred)".
-- **No authentication** (owner, 2026-10-30). The Worker answers every request without a sign-in
-  and reaches one Supervisor named `owner`. State under the old per-identity name was abandoned;
-  `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
-- **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance
-  secrets".
-- **Reset Supervisor state once instead of migrating it** (owner, October 2026). Production's
-  Supervisor dropped every table except `github_authorization` and `github_connection` on
-  2026-10-12 at 08:38:33Z (9 tables, 35 rows). The reset code is removed; the `legacy_state_reset`
-  table stays. See `design/github-connection.md`, "The connected project list".
-- **An ended turn's capability refuses file access as well as commands** (owner default,
-  2026-10-13). Before, ending a turn killed its commands but left reads and writes open, and main's
-  capability had no deadline at all. See `design/computer-integration.md`, "Workspace layout".
-- **A fresh thread or a workspace reset is refused while a turn runs** (owner default, 2026-10-13).
-  The answer is HTTP 409 `turn-active`, or `workspace-busy` when the Workspace Host is running a
-  file change or credential install. The alternative, cancelling and fencing the running turn, is
-  not built. See `design/computer-integration.md`, "Workspace layout".
-- **Work that starts during a workspace reset is refused** (owner default, 2026-10-15). While a reset
-  runs, the Supervisor answers a new turn, a connect, a disconnect, or a second reset with HTTP 409
-  `workspace-busy`, and the Workspace Host refuses file changes, credential installs, and project
-  capabilities. Waiting for the reset instead is not built. See `design/computer-integration.md`,
-  "Workspace layout".
-- **Status reads answer from the Supervisor's record** (owner, 2026-10-16). `GET /api/projects`
-  and `GET /api/github/connection` no longer reach the Workspace Host, so a client that polls them
-  cannot keep the container running. The connection read says when the workspace last answered
-  (`checkedAt`). `POST /api/github/connection/refresh` asks the workspace; the page sends it when
-  it loads and when the owner presses **Check again**, never on a timer. Not deployed yet. See
-  `design/github-connection.md`, "Reading the connection status".
-- **A refused generation control answers HTTP 4xx** (owner, 2026-10-16). Submission, activation,
-  and rollback refusals answer 400 for an invalid commit or label, 404 for an unknown generation,
-  and 409 for `stale-epoch`, `not-ready`, and `not-previously-active`, instead of 200. The body still carries `ok: false` and the problem code,
-  and a successful no-op stays 200. Activation and rollback now write `route.settled`, so a refusal
-  shows there as `refused`. See `src/routes/generations.ts`.
-- **The model route uses the owner's ChatGPT subscription once connected** (owner, 2026-10-13).
-  The Supervisor caches the credential; Workers AI answers until a connection exists. See
-  ADR-0047 and `docs/deploy.md`, "Connect ChatGPT". Not deployed yet: production still answers
-  from Workers AI only.
-- **A generation is prepared only from its harness commit** (owner, 2026-10-16). The Supervisor
-  no longer has `checkGenerationStartup`, the RPC that checked and stored a module map the caller
-  supplied. No route called it, but it let any holder of the binding store executable code that
-  no build produced. `prepareGeneration` reads the stored map for the commit or builds it. Tests
-  write a stored map first (`storeModuleMap` in `test/supervisor/helpers.ts`), then call
-  `prepareGeneration`.
-- **The managed `/workspace/AGENTS.md` is rewritten before every turn** (owner, 2026-10-16).
-  Before, the harness plan wrote it only when the file was absent, so a stale copy survived a
-  release, while the project plan overwrote it through the provision surface. Both plans now call
-  the Workspace Host's one `ensureManagedInstructions`, which replaces a file and refuses a symbolic
-  link or a directory. See `design/computer-integration.md`, "Workspace layout".
+- **Skip Cloudflare Artifacts for now** (owner, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
+- **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".
 
 ## Open items
 
-1. **Polling clients still cost money in production.** Production's status reads still reach the
-   workspace, so a client that repeats them keeps the container running. `main` answers them from
-   the Supervisor's record (see "Decided outside an ADR"). After that is deployed, only a client
-   that repeats the connection refresh, a turn, or another route that touches the workspace keeps
-   the container running. `pnpm ops:check` rule `poller` detects both. See the incident record,
-   "Not fixed".
-2. **Early platform stops with an unknown reason.** On 2026-10-02 the container stopped after a
-   transport close while `running` was `true`, at about 16:03Z, 16:32Z, and 21:25Z. These are not
-   Host stops, and their cause is unverified. `ops:check` reports them as `running-close` and
-   `unexplained-stop`.
-3. **Process accounting is not built.** A staging sampler showed computerd's shim walk as the only
-   CPU user, which fits production's idle load. Production's processes were never sampled.
-4. **Artifacts checkpoint pilot.** Deferred. It needs the owner to approve a new paid product.
-5. **Live Computer paths not proved.** Two staging runs on 2026-09-28 connected and disconnected a
-   public repository. They did not induce `sync.status: "pending"` or skipped entries, so the
-   `workspace-sync-incomplete` branch is tested only with local fakes. No run proved a partial copy
-   across Workspace Host eviction, or that the clone was absent from the store after removal. The
-   project lifecycle queue and the shell lock are not proved to order work across eviction and the
-   post-command sync. See `design/github-connection.md`, "Partial copies".
-6. **Test leads** from the 2026-09-28 review, at an older commit. Reproduce each before you act:
-   weak composition coverage of the Supervisor class; whether the HTTP and Playwright persistence
-   tests now catch dropped prompts or history; facet mutations for empty tool lists, ignored
-   directories, and compaction policy; and streamed startup-check errors and Computer file
-   bounds. Seven proposed whole-test deletions were never reviewed.
-7. **Code leads** from the 2026-09-27 audit, not confirmed as defects. The vendor hash checks
-   compare with the local manifest, not with upstream Pi.
-8. **Runtime behavior that needs a platform test.** Overlapping same-commit startup checks may
-   abort each other. When a provider reports no usage, or a negative or fractional count, the
-   route estimates usage from bytes, which can undercount. Workspace exclusion during a turn is
-   isolate-local, not held by the Workspace Host.
-9. **Owner decisions.** Whether the repository size thresholds in `src/github/repository-size.ts`
-   need an ADR. A self-hosted remote runner (computerd behind a Cloudflare Tunnel) was researched
-   on 2026-09-27; the note is lost and nothing was decided.
-10. **ChatGPT is unproved end to end.** On 2026-10-16 the agent tool connected the owner's account
-    headless, and the first turn hit `subscription_sharing_usage_limit_exceeded`, so no real
-    ChatGPT answer has streamed yet. `main` now falls back to Workers AI with a notice on a usage
-    limit and keeps the connection. After that is deployed, reconnect from
-    the owner page, run one turn, and check `chatgpt.model-call`.
+1. **A polling client still costs money.** A client that repeats the connection refresh, a turn, or any other route that reaches the workspace keeps the container running. Status reads answer from the Supervisor's record and do not. See the incident record, "Not fixed".
+2. **Early platform stops with an unknown reason.** On 2026-10-02 the container stopped after a transport close while `running` was `true`, at about 16:03Z, 16:32Z, and 21:25Z. These were not Host stops. Their cause is unverified, and production's processes were never sampled.
+3. **Live Computer paths are not proved.** Two staging runs on 2026-09-28 connected and disconnected a public repository. They did not induce `sync.status: "pending"` or skipped entries, so the `workspace-sync-incomplete` branch is tested only with fakes. No run proved a partial copy across Workspace Host eviction, or that the clone was absent from the store after removal. See `design/github-connection.md`, "Partial copies".
+4. **ChatGPT is unproved end to end.** No real ChatGPT answer has streamed yet. Reconnect from the owner page, run one turn, and check the Worker log for the call.
+5. **Token usage can be undercounted.** When a provider reports no usage, or a negative or fractional count, the model route estimates usage from bytes.
