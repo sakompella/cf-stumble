@@ -2,8 +2,7 @@ import * as Effect from "effect/Effect";
 import type * as Result from "effect/Result";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { runAtEntryPoint } from "../../run-entry-point.js";
-import { classifyWorkspaceAnswer, timedWorkspaceRpc } from "../../diagnostics.js";
-import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../harness-build.js";
 import type {
   HarnessBuildConfiguration,
@@ -50,15 +49,13 @@ class CommitBuildWorkspace implements BuildWorkspace {
   }
 
   async runStep(step: HarnessBuildStep): Promise<CommandOutput> {
-    const result = await timedWorkspaceRpc(
-      { method: "build", step: step.name },
+    const result = await boundedRpc(
       () =>
         this.host().build({
           kind: "build-step",
           harnessCommit: this.harnessCommit,
           step: step.name,
         }),
-      classifyWorkspaceAnswer,
       WORKSPACE_RPC_TIMEOUT_MS,
     );
 
@@ -78,14 +75,12 @@ class CommitBuildWorkspace implements BuildWorkspace {
   }
 
   async readModuleMap(): Promise<string> {
-    const result = await timedWorkspaceRpc(
-      { method: "build", step: "output" },
+    const result = await boundedRpc(
       () =>
         this.host().build({
           kind: "build-output",
           harnessCommit: this.harnessCommit,
         }),
-      classifyWorkspaceAnswer,
       WORKSPACE_RPC_TIMEOUT_MS,
     );
 

@@ -1,10 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import type { MainFacetCapabilities } from "../../facet/index.js";
 import type { StartupCheckOutcome } from "./body.js";
 
 import { parseGenerationLabel } from "../generations/index.js";
-import { timedEffect, type TimedOutcome } from "../../diagnostics.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import { runStartupCheck } from "./candidate.js";
 
@@ -48,8 +46,7 @@ export type StartupCheckResult =
 
 /**
  * Check a labeled generation's module map, stored or built from its commit, and record the outcome
- * against the generation. The check is logged by label, with how long it took and the stage it
- * reached. The Supervisor returns the plain union over RPC from prepareGeneration (ADR-0045), so
+ * against the generation. The Supervisor returns the plain union over RPC from prepareGeneration (ADR-0045), so
  * every expected failure is already a value here.
  */
 export function checkGenerationStartup(
@@ -58,27 +55,11 @@ export function checkGenerationStartup(
   options: StartupCheckOptions = {},
 ): Effect.Effect<StartupCheckResult> {
   return checkLabeledStartup(host, label, options).pipe(
-    timedEffect("generation.preparation", { label }, preparationOutcome),
     Effect.match({
       onSuccess: (report): StartupCheckResult => ({ ok: true, report }),
       onFailure: (problem): StartupCheckResult => ({ ok: false, problem }),
     }),
   );
-}
-
-/** The stage the check reached, never its reason text: that is whatever the harness threw. */
-function preparationOutcome(
-  result: Result.Result<StartupCheckReport, StartupCheckProblem>,
-): TimedOutcome {
-  if (Result.isFailure(result)) return { outcome: result.failure.code, level: "warn" };
-
-  const report = result.success;
-
-  return {
-    outcome: report.stage,
-    level: report.stage === "ready" ? "info" : "warn",
-    fields: { effect: report.effect },
-  };
 }
 
 /**

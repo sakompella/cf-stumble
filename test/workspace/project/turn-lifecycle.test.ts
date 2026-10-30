@@ -1,5 +1,4 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { named, capturedEvents } from "../../log-capture.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import { withDecodedEvents } from "./decoded-events.js";
 import {
@@ -73,7 +72,6 @@ test("a replacement preserves filesystem access and reports one restart before e
 });
 
 test("endTurn kills every live exec, is idempotent, and refuses later starts", async () => {
-  const events = capturedEvents();
   const { execBackend, target } = makeTarget({ remainingMs: 1_000 });
   const first = await target.startExec({ command: "one" });
   const second = await target.startExec({ command: "two" });
@@ -87,17 +85,10 @@ test("endTurn kills every live exec, is idempotent, and refuses later starts", a
     ok: false,
     error: { code: "turn-ended" },
   });
-  const execEvents = named(events(), "workspace.exec");
-  expect(execEvents.filter((event) => event.outcome === "killed")).toHaveLength(2);
-  expect(execEvents.at(-1)).toMatchObject({
-    outcome: "refused",
-    errorCode: "turn-ended",
-  });
 });
 
 test("the turn timer ends the capability and kills its exec", async () => {
   vi.useFakeTimers();
-  const events = capturedEvents();
   const { execBackend, target } = makeTarget({ remainingMs: 50 });
   const started = await target.startExec({ command: "sleep 1" });
 
@@ -113,10 +104,6 @@ test("the turn timer ends the capability and kills its exec", async () => {
     error: { code: "turn-ended" },
   });
   expect(execBackend.handles[0]?.killCalls).toBe(1);
-  expect(named(events(), "workspace.exec").at(0)).toMatchObject({
-    outcome: "killed",
-  });
-  expect(Number(named(events(), "workspace.exec").at(0)?.timeoutMs)).toBeLessThanOrEqual(50);
 });
 
 test.each([
@@ -127,7 +114,6 @@ test.each([
   "a timeout at the turn deadline is the turn ending: $name",
   async ({ requestedMs, dateAheadMs }) => {
     vi.useFakeTimers();
-    const events = capturedEvents();
     const { execBackend, target } = makeTarget({ remainingMs: 50 });
     const clockNow = Date.now.bind(Date);
     vi.spyOn(Date, "now").mockImplementation(() => clockNow() + dateAheadMs);
@@ -141,15 +127,11 @@ test.each([
       value: { kind: "terminal", outcome: "killed" },
     });
     expect(execBackend.handles[0]?.killCalls).toBe(1);
-    expect(named(events(), "workspace.exec")).toMatchObject([
-      { outcome: "killed", endedBy: "turn-end" },
-    ]);
   },
 );
 
 test("a timeout before the turn deadline is still a timeout", async () => {
   vi.useFakeTimers();
-  const events = capturedEvents();
   const { target } = makeTarget({ remainingMs: 50 });
   const started = await target.startExec({ command: "sleep 1", timeoutMs: 20 });
 
@@ -160,29 +142,4 @@ test("a timeout before the turn deadline is still a timeout", async () => {
   await expect(reader.read()).resolves.toMatchObject({
     value: { kind: "terminal", outcome: "timed-out" },
   });
-  expect(named(events(), "workspace.exec")).toMatchObject([
-    { outcome: "timed-out", endedBy: null },
-  ]);
-});
-
-test("logs one bounded workspace.exec event when a command exits", async () => {
-  const events = capturedEvents();
-  const { execBackend, target } = makeTarget();
-  const started = await target.startExec({ command: "echo secret", timeoutMs: 120 });
-
-  if (!started.ok) throw new Error("expected exec to start");
-  const reader = started.value.events.getReader();
-  execBackend.handles[0]?.push({ name: "exit", exitCode: 7 });
-  await reader.read();
-
-  const [event] = named(events(), "workspace.exec");
-  expect(event).toMatchObject({
-    level: "info",
-    outcome: "exited",
-    exitCode: 7,
-    timeoutMs: 120,
-    endedBy: null,
-  });
-  expect(event?.durationMs).toEqual(expect.any(Number));
-  expect(JSON.stringify(event)).not.toContain("secret");
 });

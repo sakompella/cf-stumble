@@ -1,8 +1,7 @@
 // oxlint-disable max-lines -- Capability lifetime, process cleanup, and RPC methods share one bounded target.
 import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
-import { startExecOperation, type ExecOperation, type ExecSettlement } from "./exec-operation.js";
-import { logEvent } from "../../diagnostics.js";
+import { startExecOperation, type ExecOperation } from "./exec-operation.js";
 import type { ProjectActivity } from "../idle-controller.js";
 import {
   mapProviderError,
@@ -30,7 +29,6 @@ import {
   type ProjectResult,
   type ProjectFailure,
   type ProjectRpcTargetContract,
-  type ProjectErrorCode,
   type WriteMode,
 } from "./protocol.js";
 import {
@@ -148,8 +146,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     const ended = this.#turnEnded();
 
     if (ended !== undefined) {
-      this.#logRefusal(null, ended.error.code);
-
       return Promise.resolve(ended);
     }
 
@@ -159,8 +155,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       const parsed = parseStartExecInput(input);
 
       if (!parsed.ok) {
-        this.#logRefusal(null, parsed.error.code);
-
         return parsed;
       }
 
@@ -173,14 +167,11 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       // Filesystem state is durable across a replacement. Refuse only this first exec so callers
       // receive an explicit restart outcome, then permit a retry against the new container.
       this.#containerGeneration = this.#containerState?.generation;
-      this.#logRefusal(input.timeoutMs, "container-restarted");
 
       return fail("container-restarted");
     }
 
     if (this.#operations.size >= MAX_CONCURRENT_EXECS) {
-      this.#logRefusal(input.timeoutMs, "too-many-operations");
-
       return fail("too-many-operations");
     }
 
@@ -204,7 +195,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
     if (remainingMs !== undefined && remainingMs <= 0) {
       void this.endTurn();
-      this.#logRefusal(input.timeoutMs, "turn-ended");
 
       return fail("turn-ended");
     }
@@ -246,10 +236,9 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return startExecOperation(
         this.#execBackend,
         { command: input.command, cwd, timeoutMs },
-        (settlement) => {
+        () => {
           this.#operations.delete(operationId);
           endActivity?.();
-          this.#logSettlement(settlement, timeoutMs);
         },
         timeoutEndsTurn,
       );
@@ -354,28 +343,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#activity?.touch();
 
     return projectResult(operation);
-  }
-
-  #logSettlement(settlement: ExecSettlement, timeoutMs: number): void {
-    logEvent("info", "workspace.exec", {
-      outcome: settlement.outcome,
-      exitCode: settlement.exitCode,
-      durationMs: settlement.durationMs,
-      timeoutMs,
-      endedBy: settlement.endedBy,
-      errorCode: settlement.errorCode,
-    });
-  }
-
-  #logRefusal(timeoutMs: number | null, code: ProjectErrorCode): void {
-    logEvent("info", "workspace.exec", {
-      outcome: "refused",
-      exitCode: null,
-      durationMs: 0,
-      timeoutMs,
-      endedBy: code === "turn-ended" ? "turn-end" : null,
-      errorCode: code,
-    });
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.

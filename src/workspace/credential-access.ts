@@ -80,7 +80,6 @@ function ask(
     if (signalAborted(input.signal)) return yield* unavailable();
 
     const answered = yield* workspaceRpc(
-      { method: "credential", step: request.step },
       () => input.namespace.getByName(input.workspaceName).credential(request),
       WORKSPACE_SHORT_RPC_TIMEOUT_MS,
     ).pipe(

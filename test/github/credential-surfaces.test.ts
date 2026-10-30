@@ -246,12 +246,8 @@ test("no log line at any level carries the token, and the install is logged with
     await Effect.runPromise(connections.connect(REPOSITORY, "Repo one", NOW + 2_000));
   });
 
-  const logged = events();
-  expect(named(logged, "github-credential.install")).toEqual([
+  expect(named(events(), "github-credential.install")).toEqual([
     expect.objectContaining({ source: "device-authorization", outcome: "connected" }),
-  ]);
-  expect(named(logged, "github-authorization.complete")).toEqual([
-    expect.objectContaining({ outcome: "authorized" }),
   ]);
 
   const everything = everythingLogged();

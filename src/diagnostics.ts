@@ -12,16 +12,9 @@
  * GitHub's documented token shapes, so a caller that is holding a specific value the cause might
  * echo passes it as `knownToken` and this module strips that exact value first.
  *
- * The same module owns the structured operational log (`logEvent`, `timed`). A structured event
- * is one plain object per console call, so Workers Logs indexes each field and an operator can
- * filter on `event`, `projectId`, or `outcome` instead of matching prose. Its fields are ids,
- * names, codes, counts, byte sizes, and durations; `docs/agents/design/observability.md` lists
- * every event.
+ * The same module owns `logEvent`, the structured operational log;
+ * `docs/agents/design/observability.md` lists every event.
  */
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Result from "effect/Result";
 import { REDACTED, redactCredentials } from "./github/index.js";
 
 /** How much of a redacted cause reaches the log. Long enough to diagnose, short enough to bound. */
@@ -100,209 +93,26 @@ export type LogLevel = "info" | "warn" | "error";
 /** Every string field is an id, a name, or a code, so anything longer than this is a mistake. */
 const FIELD_TEXT_LIMIT = 200;
 
-/** The keys the logger writes itself. A field of the same name is dropped, not merged. */
-const RESERVED_KEYS: ReadonlySet<string> = new Set(["event", "level", "ts"]);
+const CONSOLE_METHOD = { info: "log", warn: "warn", error: "error" } as const;
 
-const WRITERS = {
-  info: (entry: LogFields) => {
-    console.log(entry);
-  },
-  warn: (entry: LogFields) => {
-    console.warn(entry);
-  },
-  error: (entry: LogFields) => {
-    console.error(entry);
-  },
-} as const satisfies Record<LogLevel, (entry: LogFields) => void>;
+/**
+ * Write one structured operational event as one plain object, so Workers Logs indexes each field.
+ * Every string field is redacted and bounded here, so a caller cannot leak a credential through a
+ * code it built from tool output. A field cannot replace `event`, `level`, or `ts`.
+ */
+export function logEvent(level: LogLevel, event: string, fields: LogFields = {}): void {
+  const redacted = Object.entries(fields).map(([key, value]) =>
+    isText(value) ? [key, redactLogText(value).slice(0, FIELD_TEXT_LIMIT)] : [key, value],
+  );
+
+  console[CONSOLE_METHOD[level]]({
+    ...Object.fromEntries(redacted),
+    event,
+    level,
+    ts: new Date().toISOString(),
+  });
+}
 
 function isText(value: LogValue): value is string {
   return typeof value === "string";
-}
-
-function logValue(value: LogValue): LogValue {
-  if (!isText(value)) return value;
-
-  try {
-    return redactLogText(value).slice(0, FIELD_TEXT_LIMIT);
-  } catch {
-    return UNPRINTABLE_CAUSE;
-  }
-}
-
-/**
- * Write one structured operational event: `event` is a stable dotted name, and `fields` carry
- * only what an operator filters or aggregates on. Every string field is redacted and bounded
- * here, so a caller cannot leak a credential through a code it built from tool output.
- *
- * Keep this out of per-frame and per-byte paths: an event describes a step, not a stream.
- */
-export function logEvent(level: LogLevel, event: string, fields: LogFields = {}): void {
-  const caller = Object.entries(fields)
-    .filter(([key]) => !RESERVED_KEYS.has(key))
-    .map(([key, value]) => [key, logValue(value)] as const);
-
-  WRITERS[level]({ event, level, ts: new Date().toISOString(), ...Object.fromEntries(caller) });
-}
-
-/** A commit as the log names it: the prefix `git` itself abbreviates to, long enough to be unique. */
-export function logCommit(commit: string): string {
-  return commit.slice(0, 12);
-}
-
-/** How a measured step ended: its outcome code, the level to log it at, and any extra fields. */
-export type TimedOutcome = Readonly<{
-  outcome: string;
-  level?: LogLevel;
-  fields?: LogFields;
-}>;
-
-/**
- * Run one step and log its `outcome` and `durationMs` as `event`. A step that rejects is logged
- * at error level as `threw` and the rejection is rethrown unchanged; its cause is the caller's to
- * log with {@link logRedactedCause}, because only the caller knows which secret it might echo.
- */
-export async function timed<T>(
-  event: string,
-  fields: LogFields,
-  run: () => Promise<T>,
-  classify: (value: T) => TimedOutcome,
-): Promise<T> {
-  const startedAt = Date.now();
-  let value: T;
-
-  try {
-    value = await run();
-  } catch (cause) {
-    logEvent("error", event, {
-      ...fields,
-      outcome: "threw",
-      timeout: isTimeoutFailure(cause),
-      durationMs: Date.now() - startedAt,
-    });
-
-    throw cause;
-  }
-
-  const classified = classify(value);
-  logEvent(classified.level ?? "info", event, {
-    ...fields,
-    ...classified.fields,
-    outcome: classified.outcome,
-    durationMs: Date.now() - startedAt,
-  });
-
-  return value;
-}
-
-/**
- * `timed` for an Effect: log the step's `outcome` and `durationMs` as `event` when it ends.
- * `classify` sees the success or the typed failure. A defect or an interruption is logged at error
- * level as `threw`, as `timed` logs a rejection, and the cause passes through unchanged; its text
- * is the caller's to log with {@link logRedactedCause}.
- */
-export function timedEffect<A, E>(
-  event: string,
-  fields: LogFields,
-  classify: (result: Result.Result<A, E>) => TimedOutcome,
-): <R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R> {
-  return (effect) =>
-    Effect.suspend(() => {
-      const startedAt = Date.now();
-
-      return Effect.onExit(effect, (exit) =>
-        Effect.sync(() => {
-          const classified = exitOutcome(exit, classify);
-          logEvent(classified.level ?? "info", event, {
-            ...fields,
-            ...classified.fields,
-            outcome: classified.outcome,
-            durationMs: Date.now() - startedAt,
-          });
-        }),
-      );
-    });
-}
-
-function exitOutcome<A, E>(
-  exit: Exit.Exit<A, E>,
-  classify: (result: Result.Result<A, E>) => TimedOutcome,
-): TimedOutcome {
-  if (Exit.isSuccess(exit)) return classify(Result.succeed(exit.value));
-
-  const error = Cause.findError(exit.cause);
-
-  if (Result.isSuccess(error)) return classify(Result.fail(error.success));
-
-  return {
-    outcome: "threw",
-    level: "error",
-    fields: { timeout: isTimeoutFailure(Cause.squash(exit.cause)) },
-  };
-}
-
-/** How often a Workspace Host RPC reports that it is still waiting. */
-const WORKSPACE_RPC_WATCH_INTERVAL_MS = 30_000;
-
-/**
- * Measure one Supervisor-side Workspace Host RPC and make a long wait visible. The warning timer
- * belongs to this call, so a settled RPC clears it before it can report again. `timeoutMs` bounds
- * a step whose container command cannot be interrupted by an AbortSignal; the underlying RPC still
- * owns that command and is expected to stop at the same command ceiling.
- */
-export async function timedWorkspaceRpc<T>(
-  fields: LogFields,
-  run: () => Promise<T>,
-  classify: (value: T) => TimedOutcome,
-  timeoutMs?: number,
-): Promise<T> {
-  const startedAt = Date.now();
-  const logged = timeoutMs === undefined ? fields : { ...fields, timeoutMs };
-
-  const waitingTimer = setInterval(() => {
-    logEvent("warn", "workspace.rpc-waiting", {
-      ...logged,
-      elapsedMs: Date.now() - startedAt,
-    });
-  }, WORKSPACE_RPC_WATCH_INTERVAL_MS);
-
-  try {
-    return await timed("workspace.rpc", logged, () => boundedRpc(run, timeoutMs), classify);
-  } finally {
-    clearInterval(waitingTimer);
-  }
-}
-
-type WorkspaceAnswer =
-  | Readonly<{ ok: true }>
-  | Readonly<{ ok: false; error: Readonly<{ code: string }> }>;
-
-/** Log a Workspace Host answer as `ok`, or as its problem code at warn level. */
-export function classifyWorkspaceAnswer(answered: WorkspaceAnswer): TimedOutcome {
-  return answered.ok ? { outcome: "ok" } : { outcome: answered.error.code, level: "warn" };
-}
-
-async function boundedRpc<T>(run: () => Promise<T>, timeoutMs: number | undefined): Promise<T> {
-  const operation = run();
-
-  // Promise.race observes this rejection, but keep a handler on the original RPC too: a remote
-  // call may reject after the timeout winner has already settled the race.
-  void operation.catch(() => {});
-
-  if (timeoutMs === undefined) return operation;
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      const error = new Error("Workspace Host RPC timed out");
-      error.name = "TimeoutError";
-      reject(error);
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([operation, timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }

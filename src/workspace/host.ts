@@ -16,10 +16,9 @@ import {
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logEvent, logRedactedCause, timedEffect } from "../diagnostics.js";
+import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ObservedWorkspaceContainer } from "./container-observer.js";
@@ -90,22 +89,13 @@ export function resetWorkspaceStorage(
   container: WorkspaceContainerReset,
 ): Effect.Effect<WorkspaceResetResult> {
   // A step that rejects is a defect: the reset RPC rejects with what it threw, as it always has.
-  return Effect.promise(() => storage.deleteAll()).pipe(
-    timedEffect("workspace.reset-step", { step: "delete-all" }, () => ({ outcome: "ok" })),
-    Effect.andThen(
-      Effect.sync(() => {
-        logEvent("info", "workspace.container.stop-requested", { reasonCode: "workspace-reset" });
-      }),
-    ),
-    Effect.andThen(
-      Effect.promise(() => container.restart(WORKSPACE_CONTAINER_RESET_SPEC)).pipe(
-        timedEffect("workspace.reset-step", { step: "restart-container" }, (restarted) => ({
-          outcome: Result.isSuccess(restarted) ? restarted.success.outcome : "threw",
-        })),
-      ),
-    ),
-    Effect.as({ ok: true, reset: "workspace" } as const),
-  );
+  return Effect.promise(async () => {
+    await storage.deleteAll();
+    const restarted = await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
+    logEvent("info", "workspace.reset", { runtimeId: restarted.runtimeId });
+
+    return { ok: true, reset: "workspace" } as const;
+  });
 }
 
 interface WorkspaceHostEnv {

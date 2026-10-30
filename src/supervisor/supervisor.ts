@@ -33,8 +33,6 @@ import {
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
   type TurnStartContext,
-  timedTurnMount,
-  timedTurnProvision,
 } from "./projects/index.js";
 import { Generations, type ActiveGeneration } from "./generations/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
@@ -464,31 +462,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
       // on the same generation it was admitted against (`turn-run.ts`).
       mount: () =>
-        Effect.suspend(() =>
-          Effect.fromResult(this.#mountServing(context.attribution.active)),
-        ).pipe(timedTurnMount(context.trace)),
+        Effect.suspend(() => Effect.fromResult(this.#mountServing(context.attribution.active))),
       // The harness checkout is owned by the active generation's repository. Reconcile it before
       // mounting so a reset cannot leave Computer with a missing working directory.
       provisionHarness:
         generation === undefined
           ? undefined
-          : (signal) =>
-              this.connections
-                .ensureHarnessProvisioned(generation.harnessCommit, signal)
-                .pipe(
-                  timedTurnProvision(context.trace, "harness", (ready) =>
-                    ready ? undefined : "unavailable",
-                  ),
-                ),
+          : (signal) => this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: (project, signal) =>
-        this.connections.ensureProvisioned(project.id, signal).pipe(
-          timedTurnProvision(context.trace, "repository", (used) =>
-            used.ok ? undefined : used.problem.code,
-          ),
-          Effect.map((used) => used.ok),
-        ),
+        this.connections.ensureProvisioned(project.id, signal).pipe(Effect.map((used) => used.ok)),
     });
   }
 

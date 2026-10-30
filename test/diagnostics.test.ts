@@ -3,7 +3,6 @@ import {
   isTimeoutFailure,
   logEvent,
   logRedactedCause,
-  timed,
   type LogFields,
 } from "../src/diagnostics.js";
 import { textLines } from "./log-capture.js";
@@ -192,48 +191,4 @@ test("a long string field is bounded", () => {
   logEvent("info", "route.refused", { route: "x".repeat(10_000) });
 
   expect(String(onlyEntry(logged).route).length).toBeLessThanOrEqual(200);
-});
-
-test("timed logs the outcome and duration of what it measured and returns its value", async () => {
-  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
-
-  const value = await timed(
-    "turn.mounted",
-    { generation: 4 },
-    () => Promise.resolve(7),
-    (answer) => ({ outcome: answer === 7 ? "ok" : "wrong" }),
-  );
-
-  expect(value).toBe(7);
-  const entry = onlyEntry(logged);
-  expect(entry).toMatchObject({
-    event: "turn.mounted",
-    level: "info",
-    generation: 4,
-    outcome: "ok",
-  });
-  expect(entry.durationMs).toBeGreaterThanOrEqual(0);
-});
-
-test("timed logs a rejection at error level as `threw` and rethrows it unchanged", async () => {
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  const failure = new Error("the RPC went away");
-
-  await expect(
-    timed(
-      "workspace.rpc",
-      { method: "provision" },
-      () => Promise.reject(failure),
-      () => ({ outcome: "ok" }),
-    ),
-  ).rejects.toBe(failure);
-
-  const entry = onlyEntry(error);
-  expect(entry).toMatchObject({
-    event: "workspace.rpc",
-    level: "error",
-    method: "provision",
-    outcome: "threw",
-  });
-  expect(entry.durationMs).toBeGreaterThanOrEqual(0);
 });

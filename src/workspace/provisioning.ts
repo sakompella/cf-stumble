@@ -1,8 +1,7 @@
 // oxlint-disable max-lines, import/max-dependencies -- Project and harness provisioning share one workspace exclusion.
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { logEvent, logRedactedCause, timedEffect, type TimedOutcome } from "../diagnostics.js";
+import { logRedactedCause } from "../diagnostics.js";
 import type { ProjectProvisionStepName } from "../project-provision.js";
 import {
   resolveProject,
@@ -160,11 +159,7 @@ const STEP_RESULT_KIND = {
 function writeManagedInstructions(
   host: ManagedInstructionsWorkspaceHost,
 ): Effect.Effect<WorkspaceResult, WorkspaceRpcFailed> {
-  return workspaceRpc(
-    { method: "ensureManagedInstructions", step: "instructions" },
-    () => host.ensureManagedInstructions(),
-    WORKSPACE_RPC_TIMEOUT_MS,
-  );
+  return workspaceRpc(() => host.ensureManagedInstructions(), WORKSPACE_RPC_TIMEOUT_MS);
 }
 
 function runProjectHostStep(
@@ -175,7 +170,6 @@ function runProjectHostStep(
   return step === "instructions"
     ? writeManagedInstructions(host)
     : workspaceRpc(
-        { method: "provision", step },
         () =>
           host.provision({
             kind: "provision-project",
@@ -185,16 +179,6 @@ function runProjectHostStep(
           }),
         WORKSPACE_RPC_TIMEOUT_MS,
       );
-}
-
-type CloneOutcome = "ok" | "failed" | "unavailable";
-
-function logClone(projectId: ProjectId, startedAt: number, outcome: CloneOutcome): void {
-  logEvent(outcome === "ok" ? "info" : "warn", "workspace.clone", {
-    project: projectId,
-    durationMs: Date.now() - startedAt,
-    outcome,
-  });
 }
 
 function runProjectStep(
@@ -209,11 +193,8 @@ function runProjectStep(
   return Effect.gen(function* () {
     if (signal !== undefined && signal.aborted) return yield* unavailable;
 
-    const startedAt = Date.now();
-
     const result = yield* runProjectHostStep(host, project, step).pipe(
       Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
-        if (step === "clone") logClone(projectId, startedAt, "unavailable");
         logRedactedCause(
           `project-provision.${step}: provision-workspace-unavailable (${projectId})`,
           cause,
@@ -222,17 +203,6 @@ function runProjectStep(
         return Effect.fail(unavailable);
       }),
     );
-
-    if (step === "clone") {
-      const outcome: CloneOutcome =
-        !result.ok || result.result.kind !== "command"
-          ? "unavailable"
-          : result.result.exitCode === 0
-            ? "ok"
-            : "failed";
-
-      logClone(projectId, startedAt, outcome);
-    }
 
     if (
       (signal !== undefined && signal.aborted) ||
@@ -261,7 +231,6 @@ function runHarnessHostStep(
 ): Effect.Effect<WorkspaceResult, WorkspaceRpcFailed> {
   return step === "provision"
     ? workspaceRpc(
-        { method: "build", step },
         () => host.build({ kind: "build-step", harnessCommit, step }),
         WORKSPACE_RPC_TIMEOUT_MS,
       )
@@ -301,21 +270,6 @@ function runHarnessStep(
 
     return step;
   });
-}
-
-/** A step's log outcome: `ok`, or the problem code and, for a command, its exit code. */
-function stepOutcome<Step>(
-  ran: Result.Result<Step, ProjectProvisionProblem | HarnessProvisionProblem>,
-): TimedOutcome {
-  if (Result.isSuccess(ran)) return { outcome: "ok" };
-
-  const problem = ran.failure;
-
-  return {
-    outcome: problem.code,
-    level: "warn",
-    fields: "exitCode" in problem ? { exitCode: problem.exitCode } : {},
-  };
 }
 
 type ActiveProvision = Readonly<{
@@ -371,15 +325,13 @@ function provisionInWorkspace<A, E>(
       const active = activeProvisions.get(input.workspaceName);
 
       if (active !== undefined && !provisionIsStale(active, Date.now())) {
-        const wait = yield* Effect.promise(() =>
-          waitForActiveProvision(active, input.signal, "provision"),
-        );
+        const wait = yield* Effect.promise(() => settleActiveProvision(active, input.signal));
 
         if (wait === "aborted") return yield* Effect.fail(input.aborted);
         continue;
       }
 
-      if (active !== undefined) clearStaleProvision(input.workspaceName, active);
+      if (active !== undefined) clearStaleProvision(input.workspaceName);
 
       if (input.signal !== undefined && input.signal.aborted) {
         return yield* Effect.fail(input.aborted);
@@ -414,34 +366,13 @@ function removeActiveProvision(workspaceName: string, active: ActiveProvision): 
 
 /**
  * A plan older than its whole command budget is presumed lost and forgotten. The Workspace Host
- * may still be running it, which is why this is worth a warning.
+ * may still be running it.
  */
-function clearStaleProvision(workspaceName: string, active: ActiveProvision): void {
+function clearStaleProvision(workspaceName: string): void {
   activeProvisions.delete(workspaceName);
-  logEvent("warn", "workspace.exclusion-stale", { heldForMs: Date.now() - active.startedAt });
 }
 
 type ProvisionWait = "settled" | "aborted" | "stale";
-
-/** Who is waiting: another provision plan, or a turn about to use the workspace. */
-type ProvisionWaiter = "provision" | "turn";
-
-async function waitForActiveProvision(
-  active: ActiveProvision,
-  signal: AbortSignal | undefined,
-  waiter: ProvisionWaiter,
-): Promise<ProvisionWait> {
-  const waitStartedAt = Date.now();
-  const result = await settleActiveProvision(active, signal);
-
-  logEvent(result === "stale" ? "warn" : "info", "workspace.exclusion-wait", {
-    waiter,
-    result,
-    waitedMs: Date.now() - waitStartedAt,
-  });
-
-  return result;
-}
 
 function settleActiveProvision(
   active: ActiveProvision,
@@ -499,12 +430,12 @@ export function waitForWorkspaceProvision(
       if (active === undefined) return signal?.aborted !== true;
 
       if (provisionIsStale(active, Date.now())) {
-        clearStaleProvision(workspaceName, active);
+        clearStaleProvision(workspaceName);
 
         continue;
       }
 
-      const wait = yield* Effect.promise(() => waitForActiveProvision(active, signal, "turn"));
+      const wait = yield* Effect.promise(() => settleActiveProvision(active, signal));
 
       if (wait === "aborted") return false;
 
@@ -549,18 +480,7 @@ function provisionResolvedProject(
     const host = input.namespace.getByName(input.workspaceName);
 
     for (const step of PROJECT_PLAN_STEP_NAMES) {
-      yield* runProjectStep(host, project, step, input.signal).pipe(
-        timedEffect(
-          "workspace.provision-step",
-          {
-            plan: "project",
-            projectId: project.id,
-            step,
-            method: step === "clone" ? "provision" : "ensureManagedInstructions",
-          },
-          stepOutcome,
-        ),
-      );
+      yield* runProjectStep(host, project, step, input.signal);
     }
 
     return { projectId: project.id, workspaceName: input.workspaceName };
@@ -574,17 +494,7 @@ function provisionResolvedHarness(
     const host = input.namespace.getByName(input.workspaceName);
 
     for (const step of HARNESS_PROVISION_STEP_NAMES) {
-      yield* runHarnessStep(host, input.harnessCommit, step, input.signal).pipe(
-        timedEffect(
-          "workspace.provision-step",
-          {
-            plan: "harness",
-            step,
-            method: step === "provision" ? "build" : "ensureManagedInstructions",
-          },
-          stepOutcome,
-        ),
-      );
+      yield* runHarnessStep(host, input.harnessCommit, step, input.signal);
     }
 
     return { workspaceName: input.workspaceName };

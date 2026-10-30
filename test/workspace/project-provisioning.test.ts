@@ -112,18 +112,6 @@ test("namespace fixtures record names independently", () => {
   expect(second.names).toEqual(["second-workspace"]);
 });
 
-test("logs the clone duration without a path", async () => {
-  const host = new FakeProvisionHost();
-  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
-
-  await provisionerFor(host).provision();
-
-  const event = JSON.stringify(logged.mock.calls);
-  expect(event).toContain("workspace.clone");
-  expect(event).toContain(projectOne.id);
-  expect(event).not.toContain("/workspace");
-});
-
 test("clones and then writes the managed instructions into the tenant's workspace", async () => {
   const host = new FakeProvisionHost();
   const { provision, namespace } = provisionerFor(host);

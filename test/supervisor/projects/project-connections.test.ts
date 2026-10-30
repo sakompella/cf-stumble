@@ -1,4 +1,4 @@
-// oxlint-disable max-lines, import/max-dependencies -- This file covers the connection workflow and reset regression across the GitHub, workspace and Supervisor boundaries.
+// oxlint-disable max-lines -- This file covers the connection workflow and reset regression across the GitHub, workspace and Supervisor boundaries.
 
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
@@ -7,7 +7,6 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
-import { capturedEvents, named } from "../../log-capture.js";
 import type {
   GitHubConnection,
   ProjectConnections,
@@ -104,8 +103,6 @@ afterEach(async () => {
 });
 
 test("refuses a repository that exceeds the durable workspace size budget before cloning", async () => {
-  const logged = vi.spyOn(console, "warn").mockImplementation(() => {});
-
   const subject = tenant("repository-too-large", {
     fallbackToken: FAKE_TOKEN,
     replies: [
@@ -120,12 +117,6 @@ test("refuses a repository that exceeds the durable workspace size budget before
 
   expect(refused).toMatchObject({ ok: false, problem: { code: "repository-too-large" } });
   expect(subject.workspace.commands.filter((command) => command.includes("git clone"))).toEqual([]);
-  const event = JSON.stringify(logged.mock.calls);
-  expect(event).toContain("project.size-check");
-  expect(event).toContain("blobBytes");
-  expect(event).toContain("sample-repo-1");
-  expect(event).toContain("repository-too-large");
-  expect(event).not.toContain(REPOSITORY);
 });
 
 test("allows a measured repository within both workspace limits", async () => {
@@ -398,7 +389,6 @@ test("disconnects a project row and removes its clone through the narrow workspa
 });
 
 test("removes the project row when workspace cleanup fails", async () => {
-  const events = capturedEvents();
   const subject = tenant("disconnect-workspace-fails", { fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
   subject.workspace.unavailable = true;
@@ -417,14 +407,10 @@ test("removes the project row when workspace cleanup fails", async () => {
     workspace: "failed",
   });
   expect(listed).toEqual([HARNESS_PROJECT]);
-  expect(named(events(), "project.disconnected")).toContainEqual(
-    expect.objectContaining({ project: "sample-repo-1", workspace: "failed" }),
-  );
 });
 
 test("reports a removal that the durable store does not show as failed, not removed", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
-  const events = capturedEvents();
   const subject = tenant("disconnect-sync-incomplete", { fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
   subject.workspace.commandSync = "incomplete";
@@ -440,9 +426,6 @@ test("reports a removal that the durable store does not show as failed, not remo
   // The row and thread are gone, as for any failed cleanup; the result says the clone may remain.
   expect(disconnected).toEqual({ ok: true, projectId: "sample-repo-1", workspace: "failed" });
   expect(listed).toEqual([HARNESS_PROJECT]);
-  expect(named(events(), "workspace.rpc")).toContainEqual(
-    expect.objectContaining({ step: "remove", outcome: "workspace-sync-incomplete" }),
-  );
 });
 
 test("keeps a repository whose clone the durable store does not show out of the catalog", async () => {
