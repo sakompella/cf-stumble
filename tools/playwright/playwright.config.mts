@@ -6,6 +6,8 @@ import { defineConfig } from "@playwright/test";
  * They drive the real page served by a local stub of the owner API. Playwright uses its own
  * Chromium unless `CHROMIUM_PATH` names another executable, which NixOS needs.
  */
+const chromiumPath = process.env["CHROMIUM_PATH"];
+
 export default defineConfig({
   testDir: ".",
   testMatch: "*.spec.mts",
@@ -15,7 +17,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     browserName: "chromium",
-    launchOptions: { executablePath: process.env["CHROMIUM_PATH"] },
+    launchOptions: chromiumPath === undefined ? {} : { executablePath: chromiumPath },
     viewport: { width: 1280, height: 900 },
     trace: "retain-on-failure",
   },

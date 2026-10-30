@@ -13,8 +13,9 @@ test("a phone stacks the sidebar above the conversation without sideways scrolli
   await expect(owner.getByLabel("prompt")).toBeVisible();
   await expect(owner.locator(`#${ID.sendTurnButton}`)).toBeVisible();
 
-  const overflow = await owner.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  const overflow = await owner.evaluate<number>(
+    "document.documentElement.scrollWidth - document.documentElement.clientWidth",
   );
+
   expect(overflow).toBeLessThanOrEqual(1);
 });

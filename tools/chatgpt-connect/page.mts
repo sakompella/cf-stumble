@@ -1,5 +1,5 @@
 import { isJsonArray, isJsonRecord, isJsonString } from "../json.mjs";
-import { parseJsonRecord, type CdpResult } from "../browser-harness/cdp.mjs";
+import { parseJsonRecord, type CdpResult } from "./cdp-result.mjs";
 import { ToolError } from "./error.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";

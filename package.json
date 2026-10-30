@@ -21,7 +21,6 @@
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
     "probe:clean-build": "scripts/probe/clean-build.sh",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 2h",
-    "harness:browser": "pnpm build:page && pnpm exec tsx tools/browser-harness/run.mts",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
     "verify": "pnpm build:pi && pnpm verify:vendor && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"

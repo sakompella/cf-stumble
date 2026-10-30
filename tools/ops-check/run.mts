@@ -17,7 +17,7 @@ import type { CheckInput, Source } from "./model.mts";
  * window, then print one line if all is well, or one line per rule violation and exit 1.
  *
  * This is a thin wrapper. The rules are pure (`check.mts`) and tested in `pnpm verify`; this file
- * and `fetch.mts` need a live account and stay outside the gate, like `harness:browser`.
+ * and `fetch.mts` need a live account and stay outside the gate, like `test:browser`.
  */
 
 const parsed = parseOptions(process.argv.slice(2), Date.now());

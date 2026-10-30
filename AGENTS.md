@@ -32,7 +32,7 @@ Deploying with `cf deploy`, checking a deployment or runtime with `pnpm ops:chec
 
 ### Browser harness
 
-`pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. `pnpm harness:browser` does: it starts a local stub of the owner API, serves the real page, drives headless Chromium over the DevTools protocol, and asserts the streaming conversation, the project sidebar, the generation drawer, keyboard access, and narrow and wide viewports. It needs a local Chromium and about a minute, so it stays outside the commit gate. Read `tools/browser-harness/README.md` before you change the page.
+`pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. `pnpm test:browser` does: Playwright specs in `tools/playwright` drive the real page against a local stub of the owner API (`tools/browser-harness`) and cover the streamed turn, cancel, reload persistence, the project sidebar, GitHub states, the generation drawer, and a phone viewport. It needs Chromium and stays outside the commit gate; set `CHROMIUM_PATH` to an executable when Playwright's own download does not run, as on NixOS.
 
 ### Project architecture
 
