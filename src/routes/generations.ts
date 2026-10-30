@@ -14,9 +14,9 @@ export type GenerationControlSupervisor = {
 };
 
 /**
- * Submission needs the directly-applied control operation (ADR-0030) and the preparation the
+ * Submission needs the directly-applied control operation and the preparation the
  * Supervisor runs for the label that operation returns. `prepareGeneration` resolves the module map
- * for the labeled harness commit and runs the bounded startup check of ADR-0029; it never changes
+ * for the labeled harness commit and runs the bounded startup check; it never changes
  * the active generation.
  */
 export type GenerationSubmissionSupervisor = GenerationControlSupervisor & {
@@ -66,9 +66,9 @@ const GenerationControlBody = Schema.Struct({ observedEpoch: Count, label: Count
 type ControlCommandKind = "activate" | "rollback";
 
 /**
- * A submission carries only a harness commit. ADR-0030 gives the observed epoch to activation and
- * rollback alone, because labeling a commit and checking it decide nothing about what serves, so a
- * body that carries one is malformed rather than stale.
+ * A submission carries only a harness commit. Only activation and rollback carry the observed
+ * epoch, because labeling a commit and checking it decide nothing about what serves, so a body
+ * that carries one is malformed rather than stale.
  */
 const GenerationSubmissionBody = Schema.Struct({ harnessCommit: Schema.String });
 
@@ -83,7 +83,7 @@ function command(
 
 /**
  * The Supervisor applies activation and rollback directly to the generation tables and returns the
- * outcome (ADR-0030): there is no request journal, so a rejected request is a fresh decision from
+ * outcome: there is no request journal, so a rejected request is a fresh decision from
  * current state rather than a replayed one. The caller never names a Durable Object.
  */
 export const handleGenerationControl = Effect.fnUntraced(
@@ -109,8 +109,8 @@ export const handleGenerationControl = Effect.fnUntraced(
 
 /**
  * Submit a harness commit as a generation candidate. The Supervisor labels the commit directly
- * (ADR-0030: labeling a commit that already has a generation returns the existing generation
- * rather than labeling it twice), then prepares that label: it reads the stored module map or
+ * (labeling a commit that already has a generation returns the existing generation rather
+ * than labeling it twice), then prepares that label: it reads the stored module map or
  * builds and stores the commit, then runs the bounded startup check. Both steps record evidence
  * against the candidate and neither touches the active generation, so the owner learns whether the
  * candidate passed while the generation that serves keeps serving.

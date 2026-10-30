@@ -1,5 +1,5 @@
 /**
- * When an idle workspace container may stop (ADR-0036: a pure decision, no I/O).
+ * When an idle workspace container may stop (a pure decision, no I/O).
  *
  * The Workspace Host holds one RPC WebSocket open to computerd for the whole container run, and an
  * open request keeps a Durable Object active, so the platform never stops the container by

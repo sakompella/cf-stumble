@@ -16,7 +16,7 @@ type CandidateMount =
   | Readonly<{ ok: false; reason: string }>;
 
 /**
- * ADR-0029: mount the module map as a candidate facet of the Supervisor's own and send it one
+ * Mount the module map as a candidate facet of the Supervisor's own and send it one
  * ordinary `GET /` under a deadline and a byte bound. This never touches the serving facet.
  */
 export async function runStartupCheck(

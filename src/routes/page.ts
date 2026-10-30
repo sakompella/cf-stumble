@@ -3,7 +3,7 @@ import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../page/index.js";
 /**
  * The owner page is served for one path and one kind of request: a browser navigation to `GET /`.
  * Every other `GET /` keeps its current behavior, because the Supervisor relays that path to the
- * active main facet and ADR-0029 makes the same request the generation startup check.
+ * active main facet, and the generation startup check sends the same request.
  *
  * The test is an explicit `text/html` in the Accept header. A browser navigation always sends it;
  * `curl`, the startup check, and a JSON client do not. `* /*` alone is not enough, so a machine

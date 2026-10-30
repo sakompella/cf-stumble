@@ -44,7 +44,7 @@ Run these two steps against the deployed hostname:
        -d "{\"observedEpoch\":$EPOCH,\"label\":$LABEL}"
    ```
 
-There is no request journal (ADR-0030). Repeating the submission returns the existing generation
+There is no request journal. Repeating the submission returns the existing generation
 instead of labeling the commit twice, and repeating the activation once it observes the current
 epoch is a no-op instead of acting twice. Repeating a step with a stale observed epoch still fails,
 with HTTP 409 and `{"ok":false,"problem":{"code":"stale-epoch"}}`.
