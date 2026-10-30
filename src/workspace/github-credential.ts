@@ -5,8 +5,6 @@ import {
   logRedactedCause,
   redactedExcerpt,
   timedEffect,
-  requestIdFields,
-  type RequestId,
 } from "../diagnostics.js";
 import {
   credentialStatusSource,
@@ -195,14 +193,12 @@ function runInstall(
 
 function credentialStatus(
   operations: WorkspaceEffects,
-  requestId: RequestId | undefined,
 ): Effect.Effect<GitHubCredentialStatus, WorkspaceFault> {
-  return runLoggedCommand(
-    operations,
-    "github-credential.status",
-    { source: credentialStatusSource(), cwd: "/", timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
-    { requestId },
-  ).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
+  return runLoggedCommand(operations, "github-credential.status", {
+    source: credentialStatusSource(),
+    cwd: "/",
+    timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
+  }).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
 }
 
 /**
@@ -211,12 +207,11 @@ function credentialStatus(
  */
 function timedCredentialStatus(
   operations: WorkspaceEffects,
-  requestId: RequestId | undefined,
 ): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
-  return credentialStatus(operations, requestId).pipe(
+  return credentialStatus(operations).pipe(
     timedEffect(
       "github-credential.status",
-      { ...requestIdFields(requestId), timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
+      { timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
       (read) =>
         Result.isSuccess(read)
           ? {
@@ -276,8 +271,6 @@ type CredentialSurfaceInput = Readonly<{
    */
   installOperations: WorkspaceOperations;
   request: unknown;
-  /** Names the owner request this call serves, for the log only. It changes no behavior. */
-  requestId?: RequestId | undefined;
 }>;
 
 function credentialWork(
@@ -294,7 +287,7 @@ function credentialWork(
         parsed.token,
       );
     case "status":
-      return timedCredentialStatus(workspaceEffects(input.operations), input.requestId);
+      return timedCredentialStatus(workspaceEffects(input.operations));
     case "verify-repository":
       return repositoryAccess(workspaceEffects(input.operations), parsed.repositoryUrl);
     default: {

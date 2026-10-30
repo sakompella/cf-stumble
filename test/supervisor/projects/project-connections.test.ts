@@ -6,7 +6,6 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
-import { newRequestId } from "../../../src/diagnostics.js";
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { capturedEvents, named } from "../../log-capture.js";
 import type {
@@ -670,26 +669,4 @@ test("shows a workspace image without gh instead of installing one", async () =>
   const status = await subject.github((github) => github.ensureCredential(NOW));
 
   expect(status).toEqual({ state: "tooling-missing" });
-});
-
-test("a status read passes its request id to the Workspace Host and the events it writes", async () => {
-  const events = capturedEvents();
-  const subject = tenant("request-id-status");
-  const requestId = newRequestId();
-
-  await subject.github((github) => github.status(NOW, { requestId }));
-
-  expect(subject.workspace.credentialRequestIds).toEqual([requestId]);
-
-  for (const event of ["workspace.rpc", "github-credential.status", "workspace.command"]) {
-    expect(named(events(), event).map((entry) => entry.requestId)).toEqual([requestId]);
-  }
-});
-
-test("a read with no request id sends none to the Workspace Host", async () => {
-  const subject = tenant("request-id-absent");
-
-  await subject.github((github) => github.status(NOW));
-
-  expect(subject.workspace.credentialRequestIds).toEqual([undefined]);
 });

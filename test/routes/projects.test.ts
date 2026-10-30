@@ -75,17 +75,11 @@ test("answers the recorded connection with the time the workspace was last check
   expect(body).not.toContain(FAKE_TOKEN);
 });
 
-test("refreshes the connection on a POST from the page, with the route's request id", async () => {
-  const received: (string | undefined)[] = [];
-
+test("refreshes the connection on a POST from the page", async () => {
   const response = await ownerApiResponse(
     post("/api/github/connection/refresh", {}),
     supervisor({
-      refreshGitHubConnection: (requestId) => {
-        received.push(requestId);
-
-        return Promise.resolve({ github: CONNECTED, checkedAt: 2_000 });
-      },
+      refreshGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 2_000 }),
     }),
   );
 
@@ -95,7 +89,6 @@ test("refreshes the connection on a POST from the page, with the route's request
     github: CONNECTED,
     checkedAt: 2_000,
   });
-  expect(received).toEqual([expect.stringMatching(/^[0-9a-f-]{36}$/u)]);
 });
 
 test.each([

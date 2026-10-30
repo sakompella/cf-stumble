@@ -8,12 +8,7 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import {
-  isTimeoutFailure,
-  logRedactedCause,
-  parseRequestId,
-  timedWorkspaceRpc,
-} from "../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -237,15 +232,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * Ask the workspace what its GitHub credential can do now, store the answer, and answer the
    * record. This is the one status read that reaches the Workspace Host.
    */
-  refreshGitHubConnection(
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
-    requestId?: unknown,
-    now: number = Date.now(),
-  ): Promise<GitHubConnectionRecord> {
+  refreshGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionRecord> {
     return runAtEntryPoint(
-      this.github
-        .status(now, { requestId: parseRequestId(requestId) })
-        .pipe(Effect.map(() => this.github.lastKnown(now))),
+      this.github.status(now).pipe(Effect.map(() => this.github.lastKnown(now))),
     );
   }
 
@@ -274,12 +263,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
       const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
 
-      const result = await timedWorkspaceRpc(
-        { method: "reset" },
-        () => namespace.getByName(this.workspaceName).reset(),
-        (reset) =>
-          reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" },
-      );
+      const result = await namespace.getByName(this.workspaceName).reset();
 
       if (result.ok) this.connections.resetWorkspace();
 

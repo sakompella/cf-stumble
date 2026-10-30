@@ -1,11 +1,5 @@
 import * as Effect from "effect/Effect";
-import {
-  isTimeoutFailure,
-  logEvent,
-  logRedactedCause,
-  requestIdFields,
-  type RequestId,
-} from "../diagnostics.js";
+import { isTimeoutFailure, logEvent, logRedactedCause } from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {
@@ -58,7 +52,7 @@ export function runLoggedCommand(
   operations: WorkspaceEffects,
   command: string,
   plan: PlannedCommand,
-  options: Readonly<{ stdin?: string; requestId?: RequestId | undefined }> = {},
+  options: Readonly<{ stdin?: string }> = {},
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
   return Effect.suspend(() => {
     const startedAt = Date.now();
@@ -67,7 +61,6 @@ export function runLoggedCommand(
       Effect.tap((output) =>
         Effect.sync(() => {
           logEvent(output.exitCode === 0 ? "info" : "warn", "workspace.command", {
-            ...requestIdFields(options.requestId),
             command,
             timeoutMs: plan.timeoutMs,
             exitCode: output.exitCode,

@@ -1,11 +1,6 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import {
-  isTimeoutFailure,
-  logRedactedCause,
-  requestIdFields,
-  type RequestId,
-} from "../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import type { GitHubCredentialRequest, GitHubCredentialResult } from "./github-credential.js";
 import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../github/index.js";
 import { WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
@@ -21,10 +16,7 @@ import { workspaceRpc } from "./workspace-rpc.js";
  * that forwards a result verbatim still forwards no credential.
  */
 export type CredentialWorkspaceHost = Readonly<{
-  credential(
-    request: GitHubCredentialRequest,
-    requestId?: RequestId,
-  ): Promise<GitHubCredentialResult>;
+  credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult>;
 }>;
 
 /** Just enough of the Workspace Host binding to reach the tenant's workspace by name. */
@@ -66,8 +58,6 @@ export interface WorkspaceCredentialInput {
   readonly namespace: CredentialWorkspaceNamespace;
   /** Stops a turn at the next credential RPC boundary. */
   readonly signal?: AbortSignal | undefined;
-  /** The owner request this call serves. It reaches the log only. */
-  readonly requestId?: RequestId | undefined;
 }
 
 interface InstallWorkspaceCredentialInput extends WorkspaceCredentialInput {
@@ -90,8 +80,8 @@ function ask(
     if (signalAborted(input.signal)) return yield* unavailable();
 
     const answered = yield* workspaceRpc(
-      { ...requestIdFields(input.requestId), method: "credential", step: request.step },
-      () => input.namespace.getByName(input.workspaceName).credential(request, input.requestId),
+      { method: "credential", step: request.step },
+      () => input.namespace.getByName(input.workspaceName).credential(request),
       WORKSPACE_SHORT_RPC_TIMEOUT_MS,
     ).pipe(
       Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {

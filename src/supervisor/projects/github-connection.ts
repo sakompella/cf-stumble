@@ -218,8 +218,7 @@ function learned(
   }
 }
 
-/** A status read stops at `signal` and logs under `requestId`; neither changes the answer. */
-type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal" | "requestId">;
+type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal">;
 
 export class GitHubConnection {
   private readonly store: GitHubConnectionStore;

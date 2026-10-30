@@ -61,7 +61,7 @@ test("a refresh asks the workspace once, and later reads report what it found an
   const host = workspaceAnswering(CONNECTED);
   const connected = { state: "connected", login: "octocat", source: "device-authorization" };
 
-  await expect(control.refreshGitHubConnection(undefined, NOW)).resolves.toEqual({
+  await expect(control.refreshGitHubConnection(NOW)).resolves.toEqual({
     github: connected,
     checkedAt: NOW,
   });
@@ -76,11 +76,11 @@ test("a refresh asks the workspace once, and later reads report what it found an
 test("a check that could not reach the workspace is the last known state, with its time", async () => {
   const control = env.SUPERVISOR.getByName("record-unavailable");
   const host = workspaceAnswering(CONNECTED);
-  await control.refreshGitHubConnection(undefined, NOW);
+  await control.refreshGitHubConnection(NOW);
   host.credential.mockRejectedValue(new Error("the Workspace Host went away"));
   vi.spyOn(console, "error").mockImplementation(() => {});
 
-  await control.refreshGitHubConnection(undefined, NOW + HOUR_MS);
+  await control.refreshGitHubConnection(NOW + HOUR_MS);
 
   await expect(control.getGitHubConnection(NOW + 2 * HOUR_MS)).resolves.toEqual({
     github: { state: "reconnect-required", reason: "workspace-unavailable" },
@@ -141,7 +141,7 @@ test.each([
 
   // Inside the object, because the held check resolves from this test's own request.
   await runInDurableObject(control, async (supervisor) => {
-    const refreshing = supervisor.refreshGitHubConnection(undefined, NOW);
+    const refreshing = supervisor.refreshGitHubConnection(NOW);
     await fake.started;
     await expect(supervisor.resetWorkspace()).resolves.toEqual(resetAnswer);
     fake.answer(CONNECTED);

@@ -19,7 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logEvent, logRedactedCause, parseRequestId, timedEffect } from "../diagnostics.js";
+import { logEvent, logRedactedCause, timedEffect } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
 import { ObservedWorkspaceContainer } from "./container-observer.js";
@@ -327,13 +327,12 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * a reset refuses while they run and they refuse while a reset runs.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
-  credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
+  credential(request: unknown): Promise<GitHubCredentialResult> {
     const work = () =>
       executeGitHubCredentialRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
         installOperations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
-        requestId: parseRequestId(requestId),
       });
 
     return this.#unlessResetting(CREDENTIAL_REFUSED, work);
