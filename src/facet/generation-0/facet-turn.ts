@@ -24,13 +24,8 @@ function encodeFrame(frame: FacetTurnFrame): Uint8Array {
 
 function outcomeFrame(outcome: PiAgentTurnOutcome): FacetTurnFrame {
   return outcome.ok
-    ? { kind: "completed", state: outcome.state, modelAccounting: outcome.model }
-    : {
-        kind: "failed",
-        code: outcome.problem.code,
-        state: outcome.state,
-        modelAccounting: outcome.model,
-      };
+    ? { kind: "completed", state: outcome.state }
+    : { kind: "failed", code: outcome.problem.code, state: outcome.state };
 }
 
 function diffFrame(diff: WorkspaceDiff): FacetTurnFrame {

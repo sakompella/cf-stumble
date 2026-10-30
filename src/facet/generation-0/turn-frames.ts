@@ -3,7 +3,6 @@ import { isRecord } from "../../untrusted.js";
 import { TOOL_RESULT_DISPLAY_MAX_BYTES, TOOL_RESULT_DISPLAY_MAX_LINES } from "./turn-policy.js";
 import type { AgentEvent, AgentMessage } from "@cf-stumble/pi";
 import type { PiAgentTurnState } from "./pi-agent-turn.js";
-import type { ModelTurnAccounting } from "./model-accounting.js";
 
 /**
  * One frame of a turn's byte stream.
@@ -22,8 +21,7 @@ import type { ModelTurnAccounting } from "./model-accounting.js";
  * means no turn ran, so there is no conversation to keep. `completed` and `failed` both carry the
  * Pi state the next turn continues from, because a turn that hit its model-call limit or a model
  * error still produced conversation the thread must keep. `completed` is this facet's terminal
- * success and stays provisional until the Supervisor saves the thread (ADR-0037). Both terminal
- * frames carry numeric model accounting for the host's operational log.
+ * success and stays provisional until the Supervisor saves the thread (ADR-0037).
  */
 export type FacetTurnFrame =
   | Readonly<{ kind: "text"; text: string }>
@@ -44,13 +42,8 @@ export type FacetTurnFrame =
     }>
   | Readonly<{ kind: "diff"; content: string; truncated: boolean }>
   | Readonly<{ kind: "diff-unavailable"; detail: string }>
-  | Readonly<{ kind: "completed"; state: PiAgentTurnState; modelAccounting: ModelTurnAccounting }>
-  | Readonly<{
-      kind: "failed";
-      code: "model-call-limit" | "model-error";
-      state: PiAgentTurnState;
-      modelAccounting: ModelTurnAccounting;
-    }>
+  | Readonly<{ kind: "completed"; state: PiAgentTurnState }>
+  | Readonly<{ kind: "failed"; code: "model-call-limit" | "model-error"; state: PiAgentTurnState }>
   | Readonly<{ kind: "rejected"; code: "invalid-project-capability" | "invalid-turn-request" }>;
 
 function assistantText(message: AgentMessage): string {
