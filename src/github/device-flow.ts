@@ -5,19 +5,13 @@ import * as Effect from "effect/Effect";
 import { isRecord } from "../untrusted.js";
 
 /**
- * GitHub's OAuth device flow, as the two calls cf-stumble makes and the values it may keep.
- *
- * This flow is what grants the workspace repository access (ADR-0039). With the device flow, the only thing a browser ever sees is a verification URL and a short user code, and the
- * access token exists in one place — the reply to the redemption call below, which the caller
- * installs into the workspace's `gh` configuration and then drops.
- *
- * Everything here is one HTTP call plus parsing, with `fetch` supplied by the caller. No value in
- * this module is stored, logged, or returned to a browser by anything in it.
+ * The access token exists in one place, the reply to the redemption call, which the caller installs
+ * into the workspace's `gh` configuration and then drops. Nothing here stores, logs, or returns a
+ * value to a browser.
  */
 
 declare const gitHubTokenBrand: unique symbol;
 
-/** An access token, branded so it cannot be assigned into an ordinary string field by accident. */
 export type GitHubToken = string & {
   readonly [gitHubTokenBrand]: "GitHubToken";
 };
@@ -37,22 +31,14 @@ const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
-/**
- * `repo` is what a coding agent needs to clone, push, and open a pull request in a private
- * repository. Nothing here asks for organization administration or user data scopes.
- */
+/** `repo` is what an agent needs to clone, push, and open a pull request in a private repository. */
 const GITHUB_DEVICE_SCOPE = "repo";
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
-/** The `fetch` this flow uses. Injected so a test drives the provider without a network. */
 export type GitHubFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-/**
- * What GitHub answered the first call with. `deviceCode` is a secret: it is the value that
- * redeems the authorization, so it stays server-side and never reaches a browser or a log. The
- * other three fields are exactly what the owner needs to see.
- */
+/** `deviceCode` is a secret that redeems the authorization; it never reaches a browser or a log. */
 type DeviceAuthorization = Readonly<{
   deviceCode: string;
   userCode: string;
@@ -61,21 +47,14 @@ type DeviceAuthorization = Readonly<{
   intervalSeconds: number;
 }>;
 
-/**
- * Why no authorization started. `not-configured` means this deployment has no GitHub OAuth client
- * id, which is the owner's setup step rather than a caller's mistake.
- */
+/** `not-configured` means this deployment has no GitHub OAuth client id. */
 type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
 
-/** GitHub did not start a device authorization. */
 export class DeviceAuthorizationNotStarted extends Data.TaggedError(
   "DeviceAuthorizationNotStarted",
 )<{ readonly problem: DeviceFlowProblem }> {}
 
-/**
- * The result of one redemption attempt. `pending` and `slow-down` are the ordinary states while
- * the owner is still at GitHub's verification page; the rest are terminal.
- */
+/** `pending` and `slow-down` are ordinary while the owner is still at GitHub's verification page. */
 export type DeviceRedemption =
   | Readonly<{ kind: "authorized"; token: GitHubToken }>
   | Readonly<{ kind: "pending" }>
@@ -88,7 +67,6 @@ function positiveSeconds(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
-/** Parse the device-code reply. A reply missing either code is unusable, not partially usable. */
 export function parseDeviceAuthorization(value: unknown): DeviceAuthorization | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -118,7 +96,7 @@ export function parseDeviceAuthorization(value: unknown): DeviceAuthorization | 
   };
 }
 
-/** Parse the redemption reply. An unrecognized error code is `unavailable`, never `authorized`. */
+/** An unrecognized error code is `unavailable`, never `authorized`. */
 export function parseDeviceRedemption(value: unknown): DeviceRedemption {
   if (!isRecord(value)) {
     return { kind: "unavailable" };
@@ -144,10 +122,8 @@ export function parseDeviceRedemption(value: unknown): DeviceRedemption {
   }
 }
 
-/** One JSON object as GitHub returned it. The two parsers above turn it into a domain value. */
 type GitHubDeviceReply = Readonly<Record<string, unknown>>;
 
-/** The device endpoint could not be reached, refused the request, or sent no JSON. */
 class DeviceEndpointUnavailable extends Data.TaggedError("DeviceEndpointUnavailable") {}
 
 function postForm(
@@ -180,10 +156,7 @@ function postForm(
   });
 }
 
-/**
- * Ask GitHub to start one device authorization. The reply is the only place a device code exists,
- * so the caller stores it beside the owner it belongs to rather than returning it anywhere.
- */
+/** The reply is the only place a device code exists, so the caller stores it beside its owner. */
 export function requestDeviceAuthorization(
   clientId: string,
   fetcher: GitHubFetch,
@@ -210,10 +183,7 @@ export function requestDeviceAuthorization(
   );
 }
 
-/**
- * Redeem one device code. This is the single call that can yield a token, and it yields it to its
- * caller only: nothing here writes it down.
- */
+/** The single call that can yield a token, and it yields it to its caller only. */
 export function redeemDeviceAuthorization(
   input: Readonly<{ clientId: string; deviceCode: string }>,
   fetcher: GitHubFetch,

@@ -9,15 +9,11 @@ import {
   repositoryApiPath,
 } from "./repository-size.js";
 
-/** The shell function that `repositorySizeVerdictSource` defines. */
 export const REPOSITORY_SIZE_VERDICT_FUNCTION = "repository_size_verdict";
 
 const REQUEST_TIMEOUT_SECONDS = Math.ceil(REPOSITORY_SIZE_TIMEOUT_MS / 1_000);
 
-/**
- * Prints `<size-kb> <url-encoded default branch>` for a well-formed repository response, and
- * `unmeasured` otherwise. The safe-integer bound keeps jq printing the size as plain digits.
- */
+/** The safe-integer bound keeps jq printing the size as plain digits. */
 const REPOSITORY_FILTER = [
   'if (.size | type) == "number" and .size >= 0 and .size == (.size | floor)',
   "and .size <= 9007199254740991",
@@ -26,10 +22,7 @@ const REPOSITORY_FILTER = [
   'else "unmeasured" end',
 ].join(" ");
 
-/**
- * Applies the tree ceilings in the order `repositorySizeReason` does. It prints `measured` when the
- * tree is within them, which leaves only the repository-size ceiling to the shell.
- */
+/** Same order as `repositorySizeReason`, leaving only the repository-size ceiling to the shell. */
 const TREE_FILTER = [
   'if (.tree | type) != "array" or (.truncated | type) != "boolean" then "unmeasured"',
   'else [.tree[] | select(type == "object" and .type == "blob") | .size] as $sizes',
@@ -42,20 +35,10 @@ const TREE_FILTER = [
 ].join(" ");
 
 /**
- * Shell text that defines `repository_size_verdict`, which measures one repository with the
- * workspace's own `gh` credential. It prints one `RepositorySizeReason`, or `unmeasured`.
- *
- * The Supervisor's preflight can only use `GH_TOKEN`, so it cannot see a private repository that
- * the owner authorized through the device flow. This check runs inside the workspace, where that
- * credential lives, and makes the same two REST requests: the repository's `size` in kilobytes and
- * its default branch, then that branch's recursive tree, whose blob sizes are bytes. `gh` reads the
- * credential from its own configuration, so no token appears in this text, on a command line, or
- * in what the function prints.
- *
- * Any failure to measure prints `unmeasured`: no `gh`, no credential, a failed, slow, or
- * rate-limited request, or a response of the wrong shape. The caller then clones anyway, which
- * keeps the fail-open policy of the Supervisor's preflight for transient GitHub problems. `timeout`
- * bounds each request when the image provides it.
+ * The Supervisor's preflight can only use `GH_TOKEN`, so it cannot see a private repository
+ * authorized through the device flow; this runs in the workspace where that credential lives. Any
+ * failure to measure prints `unmeasured` and the caller clones anyway, keeping the preflight's
+ * fail-open policy for transient GitHub problems.
  */
 export function repositorySizeVerdictSource(repositoryUrl: PublicRepositoryUrl): string {
   const apiPath = repositoryApiPath(repositoryUrl);

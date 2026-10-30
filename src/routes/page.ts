@@ -1,13 +1,9 @@
 import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../page/index.js";
 
 /**
- * The owner page is served for one path and one kind of request: a browser navigation to `GET /`.
- * Every other `GET /` keeps its current behavior, because the Supervisor relays that path to the
- * active main facet, and the generation startup check sends the same request.
- *
- * The test is an explicit `text/html` in the Accept header. A browser navigation always sends it;
- * `curl`, the startup check, and a JSON client do not. `* /*` alone is not enough, so a machine
- * client that accepts anything still receives the relayed response rather than a page.
+ * Every other `GET /` is relayed to the active main facet, and the startup check sends the same
+ * request. A browser navigation always sends an explicit `text/html` Accept; a wildcard alone is not
+ * enough, so a machine client still gets the relayed response.
  */
 function acceptsHtmlDocument(accept: string | null): boolean {
   if (accept === null) {
@@ -28,10 +24,8 @@ export function isOwnerPageRequest(request: Request): boolean {
 }
 
 /**
- * The page and the policy that bounds it. `connect-src 'self'` keeps the page's own requests on
- * this origin. `script-src 'self'` admits the page's script file and refuses inline and evaluated
- * code, and a fresh nonce admits only the inline style this response carries. `no-store` keeps
- * the page out of a shared cache, and the page itself holds no credential.
+ * `script-src 'self'` refuses inline and evaluated code, and a fresh nonce admits only this
+ * response's inline style. `no-store` keeps the page out of a shared cache.
  */
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
@@ -50,10 +44,8 @@ function ownerPage(nonce: string): Response {
 }
 
 /**
- * The page's script. Its path names a hash of its bytes, so a browser may keep it for a year: a
- * changed script gets a new path, and the `no-store` page always names the current one. It holds
- * no identity or credential, which is what makes a shared cache harmless. Only the current path is
- * served here; any other path goes on to the active generation like every other request.
+ * The path names a hash of the bytes, so a browser may keep it for a year; the `no-store` page always
+ * names the current one. Any other path goes on to the active generation.
  */
 function ownerPageScript(): Response {
   return new Response(OWNER_PAGE_SCRIPT_FILE.source, {
@@ -72,10 +64,6 @@ function isOwnerPageScriptRequest(request: Request): boolean {
   return request.method === "GET" && new URL(request.url).pathname === OWNER_PAGE_SCRIPT_FILE.path;
 }
 
-/**
- * The owner page or its script for a browser request, and `undefined` for everything else so the
- * caller keeps its current behavior.
- */
 export function ownerPageResponse(
   request: Request,
   nonce = crypto.randomUUID(),

@@ -6,10 +6,8 @@ import * as Result from "effect/Result";
 import { isRecord } from "../untrusted.js";
 
 /**
- * The OpenAI sign-in and token endpoints, as "Sign in with ChatGPT" for open-source clients uses
- * them (https://developers.openai.com/siwc/token-sharing-open-source/sign-in). Every destination
- * is fixed here, so nothing a request carries can send a grant or a token anywhere else. Nothing in
- * this module stores, logs, or returns a token to a browser.
+ * Every destination is fixed here, so nothing a request carries can send a grant or a token
+ * elsewhere. Nothing here stores, logs, or returns a token to a browser.
  */
 
 const AUTH_ORIGIN = "https://auth.openai.com";
@@ -20,7 +18,7 @@ export const TOKEN_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/oauth/token`;
 
 /**
  * Nothing listens here. A hosted Worker cannot receive a loopback redirect, so the owner hands back
- * the address the browser ends on, and the Worker reads its parameters without fetching it.
+ * the address the browser ends on.
  */
 export const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 
@@ -31,7 +29,6 @@ const AGENT_NAME = "cf-stumble";
 
 const RESOURCE = "https://api.openai.com/v1";
 
-/** The scope that lets the access token spend the owner's ChatGPT plan on the Responses API. */
 const DIRECT_TOKEN_SCOPE = "chatgpt.tokens.use.direct";
 
 const SCOPE = `openid profile email offline_access resource.invoke ${DIRECT_TOKEN_SCOPE}`;
@@ -40,7 +37,7 @@ const MAX_CALLBACK_BYTES = 4096;
 
 const TOKEN_TIMEOUT_MS = 20_000;
 
-/** A bearer token is visible ASCII with no spaces, which also rules out header injection. */
+/** Visible ASCII with no spaces, which also rules out header injection. */
 const BEARER_PATTERN = /^[\u0021-\u007E]{1,16384}$/u;
 
 function base64Url(bytes: Uint8Array): string {
@@ -77,7 +74,7 @@ export function authorizeUrl(input: AuthorizeInput): Effect.Effect<string> {
         state: input.state,
         code_challenge: challenge,
         code_challenge_method: "S256",
-        // Never checked: the ID token is not read. Sent because the flow requires one.
+        // Never checked; sent because the flow requires one.
         nonce: randomSecret(),
       }).toString();
 
@@ -86,7 +83,7 @@ export function authorizeUrl(input: AuthorizeInput): Effect.Effect<string> {
   );
 }
 
-/** Why a pasted callback address cannot be redeemed. None of these consumes the sign-in. */
+/** None of these consumes the sign-in. */
 export type CallbackProblem =
   | "bad-address"
   | "provider-refused"
@@ -96,7 +93,6 @@ export type CallbackProblem =
 
 export type Callback = Readonly<{ code: string; clientId: string }>;
 
-/** The one value of a parameter that must appear at most once, or `undefined`. */
 function single(params: URLSearchParams, name: string): string | undefined {
   const values = params.getAll(name);
   const value = values.length === 1 ? values[0]?.trim() : undefined;
@@ -104,7 +100,6 @@ function single(params: URLSearchParams, name: string): string | undefined {
   return value === "" ? undefined : value;
 }
 
-/** Read the address the browser ended on, without fetching it. */
 export function parseCallback(
   pasted: string,
   expectedState: string,
@@ -134,7 +129,6 @@ export function parseCallback(
   if (code === undefined) return Result.fail("missing-code");
   const clientId = single(params, "client_id");
 
-  // A first registration must name the client it issued; `dynamic_agent_client` is not one.
   if (clientId === undefined || clientId === DYNAMIC_CLIENT_ID)
     return Result.fail("missing-client");
 
@@ -142,10 +136,8 @@ export function parseCallback(
 }
 
 /**
- * Why the token endpoint granted nothing. `rate-limited` (429) and `temporary` (5xx): it was busy
- * and consumed nothing. `ambiguous`: the request may have reached it and rotated a refresh token,
- * so the next refresh may be refused. `rejected`: the grant is refused, for good.
- * `missing-scope`: the grant cannot spend the ChatGPT plan.
+ * `ambiguous` means the request may have reached the server and rotated a refresh token.
+ * `rate-limited` and `temporary` consumed nothing.
  */
 export type TokenFailure =
   | "rate-limited"
@@ -164,14 +156,12 @@ export type TokenGrant = Readonly<{
   expiresInMs: number;
 }>;
 
-/** The `fetch` the token and model calls use. Injected so a test drives the provider offline. */
 export type ProviderFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 function bearer(value: unknown): string | undefined {
   return typeof value === "string" && BEARER_PATTERN.test(value) ? value : undefined;
 }
 
-/** The grant in a 200 reply, or why this route cannot use it. */
 export function parseTokenGrant(value: unknown): Result.Result<TokenGrant, TokenFailure> {
   if (!isRecord(value)) return Result.fail("ambiguous");
 
@@ -204,10 +194,7 @@ function statusFailure(status: number): TokenFailure {
   return status >= 400 ? "rejected" : "ambiguous";
 }
 
-/**
- * Post one grant to the fixed token endpoint. A failed reply's body is never read: it may echo a
- * token or a code.
- */
+/** A failed reply's body is never read; it may echo a token or a code. */
 export function requestTokens(
   fetcher: ProviderFetch,
   fields: Readonly<Record<string, string>>,
@@ -245,7 +232,6 @@ export function requestTokens(
   });
 }
 
-/** Stop reading a reply that will not be used. A failing cancel changes nothing for the caller. */
 export function discardBody(response: Response): Promise<void> {
   return (response.body?.cancel() ?? Promise.resolve()).catch(() => {
     /* the body was going to be thrown away */

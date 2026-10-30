@@ -7,13 +7,8 @@ import type { ToolCallDelta } from "../model-route-events.js";
 import { asUntrusted, field, isRecord, type UntrustedObject } from "../untrusted.js";
 
 /**
- * The OpenAI Responses API as the model route uses it with the owner's ChatGPT plan: one request
- * per model call, built from the route's closed message union, and a reader that turns the
- * streamed events into the chunks every provider's answer is assembled from.
- *
  * "Sign in with ChatGPT" requires `store: false` and `stream: true`, takes system text only as
- * `instructions`, and refuses `max_output_tokens` and `temperature`
- * (https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
+ * `instructions`, and refuses `max_output_tokens` and `temperature`.
  */
 
 export const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
@@ -106,21 +101,14 @@ export function responsesRequest(model: string, request: ModelRouteRequest): Res
   return body;
 }
 
-/** A provider error code as a log field: short and plain, or `unknown`. */
 export function safeCode(value: unknown): string {
   return typeof value === "string" && /^[\w.-]{1,80}$/u.test(value) ? value : "unknown";
 }
 
-/**
- * What the log and the fallback may learn from a provider error: its `type` and `code`, each a
- * {@link safeCode}. The error's message can name the owner's account, so it is never read.
- */
+/** The error message can name the owner's account, so it is never read. */
 export type ProviderError = Readonly<{ type: string; code: string }>;
 
-/**
- * The provider's error object in a JSON body or a stream event: `error`, `response.error`, or the
- * event itself for an `error` event, whose own `type` names the event rather than the error.
- */
+/** For an `error` event, its own `type` names the event rather than the error. */
 export function providerError(body: unknown): ProviderError {
   const response = objectAt(body, "response");
   const nested = objectAt(response, "error") ?? objectAt(body, "error");
@@ -134,11 +122,6 @@ export function providerError(body: unknown): ProviderError {
   };
 }
 
-/**
- * OpenAI's codes and types for a refusal caused by a usage, rate or quota limit
- * (https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery and
- * https://developers.openai.com/api/docs/guides/error-codes). HTTP 429 always means one.
- */
 const USAGE_LIMITS: ReadonlySet<string> = new Set([
   "subscription_sharing_usage_limit_exceeded",
   "rate_limit_exceeded",
@@ -150,13 +133,9 @@ export function isUsageLimit(status: number, error: ProviderError): boolean {
   return status === 429 || USAGE_LIMITS.has(error.code) || USAGE_LIMITS.has(error.type);
 }
 
-/** The longest wait a `retry-after` is taken to mean: ChatGPT plans have weekly limits. */
+/** ChatGPT plans have weekly limits. */
 const MAX_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * When a `retry-after` header (seconds, or an HTTP date) says the provider answers again, at most
- * a week after `now`. `null` when the header is absent or unreadable.
- */
 export function retryAt(header: string | null, now: number): number | null {
   if (header === null) return null;
   const text = header.trim();
@@ -195,23 +174,16 @@ function usageOf(
     : { inputTokens, outputTokens };
 }
 
-/**
- * Reads one Responses event stream into an accumulator. Text deltas and function call fragments
- * become chunks as they arrive; `response.completed` ends the stream with the provider's usage, and
- * `response.failed`, `response.incomplete`, `error`, or an untyped `{"error": ...}` object ends it
- * with {@link failure} set. A call's
- * `output_index` is its slot, so a reasoning item before it leaves a gap rather than a merge.
- */
+/** A call's `output_index` is its slot, so a reasoning item before it leaves a gap rather than a merge. */
 export class ResponsesStreamReader {
   private readonly accumulator: ProviderStreamAccumulator;
-  /** Set when the stream ended without a completed response. */
   failure: ProviderError | undefined;
 
   constructor(accumulator: ProviderStreamAccumulator) {
     this.accumulator = accumulator;
   }
 
-  /** Apply one decoded SSE line; returns `true` at the terminal event. */
+  /** Returns `true` at the terminal event. */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
 
