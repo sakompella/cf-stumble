@@ -102,9 +102,9 @@ function detailsView(model: Model, h: HtmlBuilder<Message>): Html {
       valueRow("epoch", ID.generationEpoch, model.generationEpoch, h),
       valueRow("harness commit", ID.activeGenerationCommit, model.activeGenerationCommit, h),
       valueRow("last read", ID.statusStatus, model.statusStatus, h),
-      valueRow("thread revision", ID.threadRevision, model.threadRevision, h),
-      valueRow("thread turn active", ID.threadTurnActive, model.threadTurnActive, h),
-      valueRow("messages", ID.threadMessageCount, model.threadMessageCount, h),
+      valueRow("run active", ID.threadRunActive, model.conversation.isRunning ? "yes" : "no", h),
+      valueRow("queued", ID.threadQueued, String(model.conversation.inbox.length), h),
+      valueRow("entries", ID.threadMessageCount, String(model.conversation.entries.length), h),
     ],
   );
 }

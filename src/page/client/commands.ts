@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
 import {
@@ -8,7 +9,6 @@ import {
   chatGPTConnection,
   diagnosticsText,
   field,
-  freshRefusalText,
   gitHubReport,
   isOk,
   preparationText,
@@ -16,8 +16,8 @@ import {
   projectPath,
   projects,
   requestJson,
+  sendRefusalText,
   text,
-  threadFacts,
   truthy,
 } from "./api.js";
 import { Message } from "./message.js";
@@ -181,34 +181,61 @@ export const DisconnectChatGPT = Command.define("DisconnectChatGPT", {
   execute: chatGPTRequest("POST", "/api/chatgpt/disconnect", Option.some({})),
 });
 
-export const FetchThread = Command.define("FetchThread", {
-  args: { projectId: Schema.String, selection: Schema.Number, isQuiet: Schema.Boolean },
-  messages: [Message.SucceededFetchThread, Message.RejectedFetchThread, Message.FailedFetchThread],
-  execute: ({ projectId, selection, isQuiet }) =>
-    requestJson("GET", projectPath(projectId, "/thread"), Option.none()).pipe(
+/** Pi Durable answers a repeated `requestId` with the first submission, so each send mints one. */
+export const MintRequestId = Command.define("MintRequestId", {
+  args: { projectId: Schema.String, content: Schema.String },
+  messages: [Message.MintedRequestId],
+  execute: ({ projectId, content }) =>
+    Effect.sync(() =>
+      Message.MintedRequestId({ projectId, content, requestId: globalThis.crypto.randomUUID() }),
+    ),
+});
+
+export const SendMessage = Command.define("SendMessage", {
+  args: { projectId: Schema.String, requestId: Schema.String, content: Schema.String },
+  messages: [Message.SucceededSend, Message.RejectedSend, Message.FailedSend],
+  execute: ({ projectId, requestId, content }) =>
+    requestJson(
+      "POST",
+      projectPath(projectId, "/messages"),
+      Option.some({ content, requestId }),
+    ).pipe(
+      Effect.map((answer) => {
+        const submissionId = field(answer.payload, "submissionId");
+
+        return isOk(answer.payload) && Predicate.isNumber(submissionId)
+          ? Message.SucceededSend({ requestId, submissionId })
+          : Message.RejectedSend({ requestId, wording: sendRefusalText(answer) });
+      }),
+      Effect.catch((detail) => Effect.succeed(Message.FailedSend({ requestId, detail }))),
+    ),
+});
+
+export const AbortRun = Command.define("AbortRun", {
+  args: { projectId: Schema.String },
+  messages: [Message.SucceededAbort, Message.RejectedAbort, Message.FailedAbort],
+  execute: ({ projectId }) =>
+    requestJson("POST", projectPath(projectId, "/abort"), Option.none()).pipe(
       Effect.map((answer) =>
-        Option.match(threadFacts(answer.payload), {
-          onNone: () => Message.RejectedFetchThread({ selection, wording: problemText(answer) }),
-          onSome: (thread) => Message.SucceededFetchThread({ selection, isQuiet, thread }),
-        }),
+        isOk(answer.payload)
+          ? Message.SucceededAbort()
+          : Message.RejectedAbort({ wording: problemText(answer) }),
       ),
-      Effect.catch((detail) => Effect.succeed(Message.FailedFetchThread({ selection, detail }))),
+      Effect.catch((detail) => Effect.succeed(Message.FailedAbort({ detail }))),
     ),
 });
 
 export const ReplaceThread = Command.define("ReplaceThread", {
-  args: { projectId: Schema.String, selection: Schema.Number },
+  args: { projectId: Schema.String, streamId: Schema.Number },
   messages: [Message.SucceededFreshThread, Message.RejectedFreshThread, Message.FailedFreshThread],
-  execute: ({ projectId, selection }) =>
+  execute: ({ projectId, streamId }) =>
     requestJson("POST", projectPath(projectId, "/thread/fresh"), Option.none()).pipe(
       Effect.map((answer) =>
-        Option.match(threadFacts(answer.payload), {
-          onNone: () =>
-            Message.RejectedFreshThread({ selection, wording: freshRefusalText(answer) }),
-          onSome: (thread) => Message.SucceededFreshThread({ selection, thread }),
-        }),
+        isOk(answer.payload)
+          ? Message.SucceededFreshThread({ streamId })
+          : Message.RejectedFreshThread({ streamId, wording: problemText(answer) }),
       ),
-      Effect.catch((detail) => Effect.succeed(Message.FailedFreshThread({ selection, detail }))),
+      Effect.catch((detail) => Effect.succeed(Message.FailedFreshThread({ streamId, detail }))),
     ),
 });
 

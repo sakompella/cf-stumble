@@ -2,7 +2,7 @@ import { Runtime } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Model } from "./model.js";
-import { subscriptions } from "./turn.js";
+import { subscriptions } from "./events-stream.js";
 import { init, update } from "./update.js";
 import { view } from "./view.js";
 

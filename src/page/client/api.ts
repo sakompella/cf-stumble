@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
-import { GitHubReport, type ChatGPTConnection, type Project, type ThreadFacts } from "./model.js";
+import { GitHubReport, type ChatGPTConnection, type Project } from "./model.js";
 
 /**
  * Every path is relative, so every call stays on this origin; the Content Security Policy refuses the
@@ -217,23 +217,6 @@ export function projects(payload: unknown): Option.Option<readonly Project[]> {
     : Option.none();
 }
 
-export function threadFacts(payload: unknown): Option.Option<ThreadFacts> {
-  const thread = field(payload, "thread");
-
-  if (!isOk(payload) || !truthy(thread)) {
-    return Option.none();
-  }
-
-  const conversation = field(thread, "conversation");
-
-  return Option.some({
-    revision: text(field(thread, "revision")),
-    turnActive: truthy(field(thread, "turnActive")) ? "yes" : "no",
-    messageCount: text(field(thread, "messageCount")),
-    conversation: Predicate.isString(conversation) ? conversation : "[]",
-  });
-}
-
 export function preparationText(preparation: unknown): string {
   if (!truthy(preparation)) {
     return "";
@@ -271,20 +254,10 @@ export function diagnosticsText(preparation: unknown): Option.Option<string> {
   return Option.some(parts.join("\n\n"));
 }
 
-export function freshRefusalText(answer: Answer): string {
-  return field(answer.payload, "problem", "code") === "turn-active"
-    ? "a turn is running on this project; start a fresh thread once it ends"
-    : problemText(answer);
-}
-
-export function turnRefusalText(answer: Answer): string {
+export function sendRefusalText(answer: Answer): string {
   switch (field(answer.payload, "problem", "code")) {
-    case "turn-conflict":
-      return "busy: another turn holds this project";
     case "no-active-generation":
       return "no active generation: activate one in the generation controls";
-    case "stale-revision":
-      return "conflict: this thread moved on; reload the project";
     case "workspace-busy":
       return "busy: the workspace is resetting; send again once it finishes";
     default:

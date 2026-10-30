@@ -4,11 +4,12 @@
  */
 
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
-import { checkedWording, freshRefusalText, gitHubReport } from "../../../src/page/client/api.js";
+import { checkedWording, gitHubReport } from "../../../src/page/client/api.js";
+import type { AgentEvent } from "../../../src/page/client/events.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
-import type { TurnFrame } from "../../../src/page/client/frames.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
 import { init, update } from "../../../src/page/client/update.js";
 
@@ -17,35 +18,53 @@ const PROJECTS = [
   { id: "harness", displayName: "harness", isHarness: true, location: "/workspace/harness" },
 ];
 
-const THREAD = { revision: "3", turnActive: "no", messageCount: "0", conversation: "[]" };
+const MINTED = { projectId: "repo", requestId: "r1", content: "do it" };
 
-function after(start: Model, messages: readonly Message[]): Model {
-  return messages.reduce((model, message) => update(model, message).model, start);
+type Step = Message | ((model: Model) => Message);
+
+function after(start: Model, steps: readonly Step[]): Model {
+  return steps.reduce(
+    (model, step) => update(model, Predicate.isFunction(step) ? step(model) : step).model,
+    start,
+  );
 }
 
 function commandNames(model: Model, message: Message): readonly string[] {
   return (update(model, message).commands ?? []).map((command) => command.name);
 }
 
-/** A page that listed both projects, selected the first, and read its empty thread. */
+/** A page that listed both projects, selected the first, and read its empty snapshot. */
 function readyPage(): Model {
-  return after(init().model, [
-    Message.SucceededFetchProjects({ projects: PROJECTS }),
-    Message.SucceededFetchThread({ selection: 1, isQuiet: false, thread: THREAD }),
+  const listed = after(init().model, [Message.SucceededFetchProjects({ projects: PROJECTS })]);
+
+  return after(listed, [
+    Message.ReceivedEvent({
+      streamId: listed.eventsStreamId,
+      event: { type: "snapshot", entries: [], tools: [], inbox: [] },
+    }),
   ]);
 }
 
-function streaming(model: Model): Model {
-  return after(model, [Message.UpdatedPrompt({ value: "  do it  " }), Message.ClickedSendTurn()]);
+/** An event of the stream the page holds open. */
+function event(value: AgentEvent): (model: Model) => Message {
+  return (model) => Message.ReceivedEvent({ streamId: model.eventsStreamId, event: value });
 }
 
-test("the first listed project is selected and its thread read", () => {
+function sentPage(model: Model) {
+  return update(
+    after(model, [Message.UpdatedPrompt({ value: "do it" }), Message.ClickedSendTurn()]),
+    Message.MintedRequestId(MINTED),
+  );
+}
+
+test("the first listed project is selected and its events stream opened", () => {
   const listed = update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS }));
 
   expect(listed.model.projectListStatus).toBe("1 connected");
   expect(listed.model.conversationState).toBe("reading");
   expect(Option.getOrNull(listed.model.maybeProjectId)).toBe("repo");
-  expect((listed.commands ?? []).map((command) => command.name)).toEqual(["FetchThread"]);
+  expect(listed.model.eventsStreamId).toBe(init().model.eventsStreamId + 1);
+  expect(listed.commands ?? []).toEqual([]);
 });
 
 test("the page reads the recorded GitHub connection on load and checks it again only when the owner asks", () => {
@@ -93,164 +112,131 @@ test("the last-known check time stays with its state until a request replaces th
   );
 });
 
-test("sending a turn trims the prompt, shows it, and starts the stream", () => {
-  const sent = streaming(readyPage());
+test("sending trims the prompt, clears it, and posts it under a minted request id", () => {
+  const clicked = update(
+    after(readyPage(), [Message.UpdatedPrompt({ value: "  do it  " })]),
+    Message.ClickedSendTurn(),
+  );
 
-  expect(sent.turn).toMatchObject({ _tag: "Streaming", projectId: "repo", prompt: "do it" });
-  expect(sent.prompt).toBe("");
-  expect(sent.turnState).toBe("running");
-  expect(sent.transcript.at(-1)).toMatchObject({ _tag: "Text", role: "user", text: "do it" });
+  expect(clicked.model.prompt).toBe("");
+  expect(clicked.commands?.[0]?.name).toBe("MintRequestId");
+  expect(clicked.commands?.[0]?.args).toEqual({ projectId: "repo", content: "do it" });
+
+  const minted = update(clicked.model, Message.MintedRequestId(MINTED));
+
+  expect(minted.commands?.[0]?.name).toBe("SendMessage");
+  expect(minted.commands?.[0]?.args).toEqual(MINTED);
+  expect(minted.model.outbox).toEqual([
+    { requestId: "r1", text: "do it", maybeSubmissionId: Option.none() },
+  ]);
 });
 
-const FRAMES: readonly (readonly [TurnFrame, string])[] = [
-  [{ kind: "saved", revision: 4, messageCount: 2 }, "saved · revision 4 · 2 messages"],
-  [
-    { kind: "turn-failed", code: "model-error", saved: true, revision: 4 },
-    "failed: model-error · saved at revision 4",
-  ],
-  [{ kind: "turn-failed", code: "model-error", saved: false }, "failed: model-error · not saved"],
-  [{ kind: "turn-rejected", code: "invalid-turn-request" }, "rejected: invalid-turn-request"],
-  [{ kind: "save-failed", code: "stale-revision" }, "not saved: stale-revision"],
-  [{ kind: "stream-invalid", code: "malformed-frame" }, "unreadable turn stream: malformed-frame"],
-  [{ kind: "cancelled" }, "cancelled"],
-  [{ kind: "timed-out" }, "timed out"],
-];
+test("a message sent while a run is active is accepted, shown as queued, then placed", () => {
+  const running = after(readyPage(), [event({ type: "run_start", inputs: [1] })]);
+  const sent = sentPage(running);
 
-test("every terminal frame states its own ending, and only saved is not a problem", () => {
-  for (const [frame, wording] of FRAMES) {
-    const model = streaming(readyPage());
-    const turnId = model.turnCount;
-    const ended = after(model, [Message.ReceivedTurnFrame({ turnId, frame })]);
+  expect(sent.commands?.[0]?.name).toBe("SendMessage");
 
-    expect(ended.turnState).toBe(wording);
-    expect(ended.transcript.at(-1)).toMatchObject({
-      _tag: "Terminal",
-      wording,
-      isProblem: frame.kind !== "saved",
-    });
-  }
-});
-
-test("streamed text joins one assistant block until a tool interrupts it", () => {
-  const model = streaming(readyPage());
-  const turnId = model.turnCount;
-  const frame = (value: TurnFrame) => Message.ReceivedTurnFrame({ turnId, frame: value });
-
-  const streamed = after(model, [
-    frame({ kind: "text", text: "Hel" }),
-    frame({ kind: "text", text: "lo" }),
-    frame({ kind: "tool-start", toolCallId: "t1", toolName: "read", arguments: { path: "a" } }),
-    frame({
-      kind: "tool-result",
-      toolCallId: "t1",
-      toolName: "read",
-      isError: true,
-      content: "no such file",
-      truncated: false,
-    }),
-    frame({ kind: "text", text: "again" }),
+  const queued = after(sent.model, [
+    Message.SucceededSend({ requestId: "r1", submissionId: 5 }),
+    event({ type: "submission", record: { id: 5, requestId: "r1", status: "queued" } }),
+    event({ type: "inbox_update", items: [{ id: 5 }] }),
   ]);
 
-  const kinds = streamed.transcript.map((entry) => entry._tag);
+  expect(queued.outbox.map((item) => item.maybeSubmissionId)).toEqual([Option.some(5)]);
 
-  expect(kinds).toEqual(["Text", "Text", "Tool", "Text"]);
-  expect(streamed.transcript[1]).toMatchObject({ role: "assistant", text: "Hello" });
-  expect(streamed.transcript[2]).toMatchObject({ summary: "read — failed", isFailed: true });
-});
-
-test("a frame for a turn the page no longer holds is dropped", () => {
-  const model = streaming(readyPage());
-  const turnId = model.turnCount;
-  const switched = after(model, [Message.ClickedProject({ projectId: "harness" })]);
-
-  const late = after(switched, [
-    Message.ReceivedTurnFrame({ turnId, frame: { kind: "text", text: "EXTERNAL-LATE" } }),
-    Message.EndedTurnStream({ turnId }),
+  const placed = after(queued, [
+    event({ type: "submission", record: { id: 5, requestId: "r1", status: "placed" } }),
   ]);
 
-  expect(switched.turn._tag).toBe("Idle");
-  expect(late).toEqual(switched);
+  expect(placed.outbox).toEqual([]);
 });
 
-test("a thread read for a project the reader left is dropped", () => {
-  const switched = after(readyPage(), [Message.ClickedProject({ projectId: "harness" })]);
-
-  const stale = Message.SucceededFetchThread({
-    selection: switched.selection - 1,
-    isQuiet: false,
-    thread: { ...THREAD, revision: "99" },
-  });
-
-  expect(update(switched, stale).model).toEqual(switched);
-});
-
-test("a project whose thread read is refused shows none of the previous project's thread facts", () => {
-  const first = after(readyPage(), [
-    Message.SucceededFetchThread({
-      selection: 1,
-      isQuiet: false,
-      thread: { ...THREAD, revision: "7", turnActive: "yes", messageCount: "4" },
-    }),
+test("a reconnect keeps only the sent messages its snapshot still holds queued", () => {
+  const page = after(readyPage(), [
+    Message.MintedRequestId({ ...MINTED, requestId: "placed" }),
+    Message.MintedRequestId({ ...MINTED, requestId: "queued" }),
+    Message.MintedRequestId({ ...MINTED, requestId: "sending" }),
+    Message.SucceededSend({ requestId: "placed", submissionId: 1 }),
+    Message.SucceededSend({ requestId: "queued", submissionId: 2 }),
+    event({ type: "snapshot", entries: [], tools: [], inbox: [{ id: 2 }] }),
   ]);
 
-  const refused = after(first, [
-    Message.ClickedProject({ projectId: "harness" }),
-    Message.RejectedFetchThread({ selection: first.selection + 1, wording: "rejected: busy" }),
+  expect(page.outbox.map((item) => item.requestId)).toEqual(["queued", "sending"]);
+  expect(page.conversationState).toBe("live");
+});
+
+test("a refused send drops the message and says why", () => {
+  const refused = after(sentPage(readyPage()).model, [
+    Message.RejectedSend({ requestId: "r1", wording: "busy: the workspace is resetting" }),
   ]);
 
-  expect(refused.conversationState).toBe("rejected: busy");
-  expect(refused).toMatchObject({
-    threadRevision: "",
-    threadTurnActive: "",
-    threadMessageCount: "",
-  });
+  expect(refused.outbox).toEqual([]);
+  expect(refused.runNote).toBe("busy: the workspace is resetting");
 });
 
-test("cancelling ends the turn here and re-reads the thread", () => {
-  const model = streaming(readyPage());
-  const cancelled = update(model, Message.ClickedCancelTurn());
+test("a settled submission says how the run ended", () => {
+  const noteAfter = (record: Readonly<{ id: number; status: string; reason?: string }>) =>
+    after(readyPage(), [event({ type: "submission", record })]).runNote;
 
-  expect(cancelled.model.turn._tag).toBe("Idle");
-  expect(cancelled.model.turnState).toBe("cancelled: this browser stopped the turn");
-  expect(commandNames(model, Message.ClickedCancelTurn())).toEqual(["FetchThread"]);
+  expect(noteAfter({ id: 1, status: "done" })).toBe("answered");
+  expect(noteAfter({ id: 1, status: "unanswered", reason: "aborted" })).toBe("stopped: aborted");
+  expect(noteAfter({ id: 1, status: "placed" })).toBe("");
 });
 
-test("a stream that ends without a terminal frame says so", () => {
-  const model = streaming(readyPage());
-  const ended = after(model, [Message.EndedTurnStream({ turnId: model.turnCount })]);
+test("cancelling posts an abort for the selected project", () => {
+  const cancelled = update(readyPage(), Message.ClickedCancelTurn());
 
-  expect(ended.turnState).toBe("the turn stream ended without a terminal frame");
+  expect(cancelled.commands?.[0]?.name).toBe("AbortRun");
+  expect(cancelled.commands?.[0]?.args).toEqual({ projectId: "repo" });
 });
 
-test("a fresh thread needs two clicks and no running turn", () => {
+test("an event or refusal from a stream the page replaced is dropped", () => {
   const page = readyPage();
+  const switched = after(page, [Message.ClickedProject({ projectId: "harness" })]);
+  const old = page.eventsStreamId;
 
-  expect(commandNames(page, Message.ClickedFreshThread())).toEqual([]);
+  expect(switched.eventsStreamId).not.toBe(old);
+  expect(
+    after(switched, [
+      Message.ReceivedEvent({ streamId: old, event: { type: "run_start", inputs: [1] } }),
+      Message.RefusedEvents({ streamId: old, wording: "rejected: x" }),
+    ]),
+  ).toEqual(switched);
+});
 
-  const armed = after(page, [Message.ClickedFreshThread()]);
+test("a dropped stream says it is reconnecting and keeps the conversation it showed", () => {
+  const running = after(readyPage(), [event({ type: "run_start", inputs: [1] })]);
 
+  const dropped = after(running, [
+    Message.DisconnectedEvents({ streamId: running.eventsStreamId, detail: "the stream ended" }),
+  ]);
+
+  expect(dropped.conversationState).toBe("reconnecting: the stream ended");
+  expect(dropped.conversation).toEqual(running.conversation);
+});
+
+test("a fresh thread needs two clicks and no active run, then opens a new stream", () => {
+  const armed = after(readyPage(), [Message.ClickedFreshThread()]);
+
+  expect(armed.isFreshArmed).toBe(true);
   expect(commandNames(armed, Message.ClickedFreshThread())).toEqual(["ReplaceThread"]);
-  expect(after(streaming(page), [Message.ClickedFreshThread()]).freshThreadStatus).toBe(
-    "a turn is running; cancel it first",
+
+  const running = after(armed, [event({ type: "run_start", inputs: [1] })]);
+
+  expect(commandNames(running, Message.ClickedFreshThread())).toEqual([]);
+  expect(update(running, Message.ClickedFreshThread()).model.freshThreadStatus).toBe(
+    "a run is active; cancel it first",
   );
-});
 
-test("a fresh thread refused for a turn running elsewhere says so and leaves the conversation", () => {
-  const page = readyPage();
-
-  const wording = freshRefusalText({
-    status: 409,
-    payload: { ok: false, problem: { code: "turn-active" } },
-  });
-
-  const refused = after(page, [
-    Message.RejectedFreshThread({ selection: page.selection, wording }),
+  const fresh = after(armed, [
+    event({ type: "message_end", entry: { id: 3, kind: "pi.user" } }),
+    Message.SucceededFreshThread({ streamId: armed.eventsStreamId }),
   ]);
 
-  expect(refused.freshThreadStatus).toBe(
-    "not started: a turn is running on this project; start a fresh thread once it ends",
-  );
-  expect(refused.conversationState).toBe(page.conversationState);
+  expect(fresh.eventsStreamId).toBe(armed.eventsStreamId + 1);
+  expect(fresh.conversation.entries).toEqual([]);
+  expect(fresh.freshThreadStatus).toBe("fresh thread started; repository files are untouched");
 });
 
 test("activation sends nothing until the page has rendered an epoch", () => {
