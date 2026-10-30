@@ -1,8 +1,6 @@
-import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { afterIdleStop, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import type { ExecBackend } from "../../src/workspace/project/exec-backend.js";
-import { capturedEvents } from "../log-capture.js";
 
 /** Work that arrives while an idle stop is closing or destroying must wait for it. */
 
@@ -46,29 +44,33 @@ function gated(phase: "close" | "destroy") {
   return { idle, clock, calls, release };
 }
 
-test("the controller says an idle stop is in progress from its first step", async () => {
-  capturedEvents();
+test("work that arrives in the same step the stop begins waits for it", async () => {
   const { idle, clock, release } = gated("close");
   idle.begin()();
   clock.now = 11_000;
 
-  expect(idle.stopping()).toBe(false);
-  const alarm = Effect.runPromise(idle.onAlarm());
-  expect(idle.stopping()).toBe(true);
+  const alarm = idle.onAlarm();
+  let stopFinished = false;
+  void idle.settled().then(() => {
+    stopFinished = true;
+  });
+  await tick();
+  expect(stopFinished).toBe(false);
 
   release.open();
   await alarm;
-  expect(idle.stopping()).toBe(false);
+  await tick();
+  expect(stopFinished).toBe(true);
 });
 
 test.each(["close", "destroy"] as const)(
   "an exec that starts during the %s waits for the stop, then runs",
   async (phase) => {
-    capturedEvents();
+    vi.spyOn(console, "log").mockImplementation(() => {});
     const { idle, clock, calls, release } = gated(phase);
     idle.begin()();
     clock.now = 11_000;
-    const alarm = Effect.runPromise(idle.onAlarm());
+    const alarm = idle.onAlarm();
     await tick();
     const started: string[] = [];
 

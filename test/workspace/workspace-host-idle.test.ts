@@ -8,7 +8,6 @@ import { WorkspaceHost } from "../../src/workspace/host.js";
 import { PROJECT_TURN_LEASE_MS } from "../../src/turn-budget.js";
 import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
-import { capturedEvents, named } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
 /**
@@ -33,10 +32,6 @@ class FakeContainer {
     this.starts += 1;
 
     throw new Error("the fake container does not launch");
-  }
-
-  monitor(): Promise<void> {
-    return new Promise<void>(() => {});
   }
 
   destroy(reason: string): Promise<void> {
@@ -112,7 +107,7 @@ test("a project capability leases the workspace until the end of its turn", asyn
 });
 
 test("a past-due alarm closes the Workspace and destroys the container for being idle", async () => {
-  const events = capturedEvents();
+  vi.spyOn(console, "log").mockImplementation(() => {});
 
   const destroyed = await withHost("host-seam-stop", async (host, _state, container) => {
     await host.build({ kind: "not-a-build" });
@@ -123,9 +118,6 @@ test("a past-due alarm closes the Workspace and destroys the container for being
   });
 
   expect(destroyed).toEqual(["idle"]);
-  expect(named(events(), "workspace.container.idle-stop")).toEqual([
-    expect.objectContaining({ outcome: "stopped", runningBefore: true }),
-  ]);
 });
 
 test("a call on the project capability counts as activity", async () => {
@@ -179,7 +171,7 @@ const tick = () =>
   });
 
 test("an exec started while the idle stop destroys the container waits for it", async () => {
-  capturedEvents();
+  vi.spyOn(console, "log").mockImplementation(() => {});
 
   const seen = await withHost("host-seam-exec-wait", async (host, state, container) => {
     const open = { release: (): void => {} };
