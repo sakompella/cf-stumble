@@ -41,6 +41,21 @@ function streamingPage(): Model {
   ]);
 }
 
+test("a read error after the saved frame leaves the saved outcome and ends the turn", () => {
+  const start = streamingPage();
+  const turnId = start.turnCount;
+  const frame = { kind: "saved", revision: 1, messageCount: 2 } as const;
+
+  const ended = after(start, [
+    Message.ReceivedTurnFrame({ turnId, frame }),
+    Message.DisconnectedTurnStream({ turnId, detail: "reset" }),
+  ]);
+
+  expect(ended.turnState).toBe("saved · revision 1 · 2 messages");
+  expect(ended.pageError).toBe("");
+  expect(ended.turn._tag).toBe("Idle");
+});
+
 test("the turn's dependencies stay equal while its frames arrive", () => {
   const start = streamingPage();
   const turnId = start.turnCount;
