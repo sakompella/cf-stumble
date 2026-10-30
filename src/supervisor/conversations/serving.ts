@@ -10,7 +10,7 @@ import {
   type SelectableProject,
 } from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
-import { logRedactedCause } from "../../diagnostics.js";
+import { logEvent, logRedactedCause } from "../../diagnostics.js";
 import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
 import {
   SERVING_FACET_NAME,
@@ -161,6 +161,8 @@ export class ServingConversations {
 
       if (deadline === undefined || now < deadline) return;
 
+      logEvent("warn", "run.deadline-aborted");
+
       for (const conversationId of this.#projects.conversations()) {
         yield* this.#call(() => facet.abort(conversationId));
       }
@@ -249,9 +251,11 @@ export class ServingConversations {
     if (wake.active && deadline === undefined) {
       deadline = now + PROJECT_RUN_DEADLINE_MS;
       storage.kv.put(RUN_DEADLINE_KEY, deadline);
+      logEvent("info", "run.started");
     }
 
     if (!wake.active && deadline !== undefined) {
+      logEvent("info", "run.settled", { totalMs: now - (deadline - PROJECT_RUN_DEADLINE_MS) });
       deadline = undefined;
       storage.kv.delete(RUN_DEADLINE_KEY);
       this.endWorkspaces();
