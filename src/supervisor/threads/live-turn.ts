@@ -5,22 +5,27 @@ export type LiveTurn = Readonly<{ projectId: ProjectId; deadlineAt: number }>;
 
 /**
  * The live lease that ends last, on one project or, without `projectId`, on any project or the
- * harness. It reads only the lease columns, so a damaged conversation cannot hide a lease. A lease
- * counts whichever Supervisor instance took it, because an instance that has since been replaced
- * may have left commands running in the workspace.
+ * harness. It reads only the lease columns, so a damaged conversation cannot hide a lease.
+ *
+ * A lease taken by another Supervisor instance is not live: that instance is gone, and so is the
+ * turn that read its stream. Admission already takes such a lease over, so reset, fresh thread and
+ * disconnect must not refuse while a new turn is let in.
  */
 export function findLiveTurn(
   sql: SqlStorage,
   now: number,
+  holderId: string | undefined,
   projectId?: ProjectId,
 ): LiveTurn | undefined {
   const row = sql
     .exec<{ readonly project_id: ProjectId; readonly turn_deadline_at: number }>(
       `SELECT project_id, turn_deadline_at FROM project_threads
        WHERE turn_active = 1 AND turn_deadline_at > ?1 AND (?2 IS NULL OR project_id = ?2)
+         AND (?3 IS NULL OR turn_holder_id IS NULL OR turn_holder_id = ?3)
        ORDER BY turn_deadline_at DESC LIMIT 1`,
       now,
       projectId ?? null,
+      holderId ?? null,
     )
     .toArray()[0];
 

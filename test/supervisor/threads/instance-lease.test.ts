@@ -87,3 +87,24 @@ test("the same Supervisor instance still gets a turn conflict", async () => {
     },
   });
 });
+
+test("a previous instance's lease blocks neither a fresh thread, a reset nor a disconnect", async () => {
+  const control = await supervisor("turn-lease-previous-instance-free");
+
+  const observed = await runInDurableObject(control, (_instance, state) => {
+    threadsOf(state, "instance-a").startTurn("sample-project-one", 0, NOW, PROJECT_TURN_LEASE_MS);
+    const restarted = threadsOf(state, "instance-b");
+
+    return {
+      liveTurn: restarted.liveTurn(NOW),
+      fresh: restarted.startFreshThread("sample-project-one", NOW),
+      disconnected: restarted.disconnectProject("sample-project-one", NOW),
+    };
+  });
+
+  expect(observed).toMatchObject({
+    liveTurn: undefined,
+    fresh: { ok: true },
+    disconnected: { ok: true },
+  });
+});
