@@ -2,9 +2,9 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sakompella/cf-stumble)
 
-Deploy a private, owner-only cf-stumble instance to your Cloudflare account.
+Deploy a cf-stumble instance to your Cloudflare account.
 
-cf-stumble is an owner-only coding agent. It runs in your Cloudflare account and uses Cloudflare Access to identify its one owner.
+cf-stumble is a coding agent that runs in your Cloudflare account. It has no authentication: anyone who can reach its hostname can use it.
 
 ## Before you start
 
@@ -12,7 +12,7 @@ You need:
 
 - A Cloudflare account on the Workers Paid plan. This project uses Durable Objects with SQLite storage, Containers, and Worker Loaders. They are not available on the free plan.
 - A GitHub account.
-- A domain in the same Cloudflare account if you want Cloudflare Access in front of the Worker. Access needs a hostname in an active Cloudflare zone.
+- A domain in the same Cloudflare account for the Worker's route.
 
 The workspace runs project commands and can make Workers AI requests. Use an account where you can control the resulting charges.
 
@@ -20,7 +20,7 @@ The workspace runs project commands and can make Workers AI requests. Use an acc
 
 Select the button at the top of this page. Cloudflare copies the public source repository into your GitHub account, lets you choose names, provisions the resources declared in `wrangler.jsonc`, sets up Workers Builds, builds the project, and deploys it.
 
-The button does not configure Cloudflare Access. It also does not provision Containers. Workers Builds builds the Container image, but Cloudflare must create the Container application as part of the deployment. The button declares no secrets, so the first deploy works without them. Until you set the Access secrets below, the Worker refuses every request. Complete the Access setup before you use the app.
+The button does not provision Containers. Workers Builds builds the Container image, but Cloudflare must create the Container application as part of the deployment. The button declares no secrets, so the first deploy works without them.
 
 Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this project, that includes the Durable Objects, Workers AI binding, and Worker Loader. A Durable Object is Cloudflare's stateful Worker component. The configuration also declares the workspace Container, but Containers are outside the button's provisioning list.
 
@@ -47,16 +47,13 @@ Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change 
 
 Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them. The only plain-text variable they declare is `CHATGPT_MODEL`, which is the same for every deployment and which `cf deploy` keeps because it is declared. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
 
-| Secret                                                          | Required by the Worker       | Purpose                                                                                         |
-| --------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB` | Yes                          | The Access check. Without them the Worker refuses every request.                                |
-| `CF_ACCESS_AGENT_CLIENT_ID`                                     | No                           | The Client ID of the service token admitted as the owner. See "Agent access without a sign-in". |
-| `HARNESS_REPOSITORY_URL`                                        | No                           | The fork the instance builds its harness from.                                                  |
-| `GITHUB_OAUTH_CLIENT_ID`                                        | No                           | The GitHub OAuth app for the device flow.                                                       |
-| `GH_TOKEN`                                                      | No                           | An unattended-run GitHub credential.                                                            |
-| `CF_ACCESS_PUBLIC_KEYS`                                         | Must be absent in production | Replaces the Access signing keys with local ones. Staging and local development only.           |
+| Secret                   | Required by the Worker | Purpose                                        |
+| ------------------------ | ---------------------- | ---------------------------------------------- |
+| `HARNESS_REPOSITORY_URL` | No                     | The fork the instance builds its harness from. |
+| `GITHUB_OAUTH_CLIENT_ID` | No                     | The GitHub OAuth app for the device flow.      |
+| `GH_TOKEN`               | No                     | An unattended-run GitHub credential.           |
 
-Set them in one of two ways, after the Access login for the three Access values:
+Set them in one of two ways:
 
 - Put them in a JSON or `.env` file outside the repository and run `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
 - Run `npx wrangler secret put <NAME> --name <worker>` for each name.
@@ -65,7 +62,7 @@ Every later deploy keeps them. An instance whose values are still plain-text var
 
 `cf deploy` stops with "Aborting the upload operation because of conflicts ... remove the --strict flag" when someone last changed the live Worker through the dashboard or the script API, and it still prints "Deploy complete". Check the exit code. `wrangler secret put` does not cause this. A Worker last deployed by Wrangler or `cf` does not hit it either. The one-path rule still applies: do not alternate `wrangler deploy` and `cf deploy` on one Worker.
 
-`scripts/deploy/check-config.sh` checks that the three Access values and `CF_STUMBLE_HARNESS_COMMIT` are in your shell before you write the secrets file.
+`scripts/deploy/check-config.sh` checks that `CF_STUMBLE_HARNESS_COMMIT` is in your shell.
 
 ## Deploy an update
 
@@ -75,7 +72,7 @@ Before you deploy:
 
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
 2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
-3. Check that the instance secrets exist: `npx wrangler secret list --name <worker>` shows `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB`, and does not show `CF_ACCESS_PUBLIC_KEYS`. It shows `CF_ACCESS_AGENT_CLIENT_ID` if agents reach the instance with a service token. A deploy keeps secrets, so a missing one stays missing and the Worker refuses every request. `CF_ACCESS_PUBLIC_KEYS` replaces the Access signing keys, so anyone who holds the matching private key could sign in as the owner.
+3. Check that the instance secrets you rely on exist: `npx wrangler secret list --name <worker>`. A deploy keeps secrets, so a missing one stays missing.
 4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Query recipes", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
 5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
 
@@ -117,64 +114,9 @@ On the earlier `standard-1` container, a cold start added ten to sixty seconds t
 
 The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 
-## Configure Cloudflare Access
-
-The Worker rejects every route until you configure Access. Set up Access after the deployment and before the first normal use.
-
-1. Create your Zero Trust team if you do not already have one.
-2. In the Cloudflare dashboard, open **Zero Trust** > **Access controls** > **Applications**. Create a new application, choose **Self-hosted and private**, and add the public hostname that serves this Worker. Choose a hostname in the Cloudflare zone in your account.
-3. Add one Allow policy for your own identity. Access denies requests that do not match an Allow policy.
-4. Save the application and sign in to that hostname once. Then read your own `sub` claim. The simplest way is to open `https://<your-hostname>/cdn-cgi/access/get-identity` in the same browser, which returns your Access identity as JSON. The other way is to decode the `CF_Authorization` cookie, which is an ordinary JWT whose payload carries `sub` and `aud`.
-5. Set the three values below as Worker secrets (see "Instance secrets"), then deploy or save so the Worker picks them up.
-
-| Worker value            | Value to set                                                                                                     |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `CF_ACCESS_TEAM_DOMAIN` | Your Zero Trust team domain. It is the domain that identifies the Zero Trust team.                               |
-| `CF_ACCESS_AUD`         | The application audience tag. The dashboard shows it on the application, and it is the `aud` claim in the token. |
-| `CF_ACCESS_OWNER_SUB`   | The `sub` claim in your own Access token after your first login.                                                 |
-
-These three are not declared in the configuration, so the first deploy works before you have them. Set them after you sign in to the deployed hostname, because `CF_ACCESS_OWNER_SUB` only exists then. A request with a valid Access credential gets 500 `invalid-configuration` until all three are set; a request with no credential, or with one the Worker cannot verify, gets 401.
-
-Do not use another person's token to set `CF_ACCESS_OWNER_SUB`. The Worker accepts only the identity whose `sub` claim matches this value.
-
-The deployed smoke test verified the safe order. A request with no credential receives 401. A request that carries a credential while the Access values are missing receives 500 for `invalid-configuration`. This is deliberate. The Worker does not choose a default owner while configuration is incomplete.
-
-## Agent access without a sign-in
-
-An agent can read and operate the production owner API without the owner signing in to Access. It sends a Cloudflare Access service token. Access checks the token against a Service Auth policy and passes the request to the Worker with a signed assertion. A service token's assertion has an empty `sub` and carries the token's Client ID in `common_name`. The Worker checks the signature, issuer, audience, and expiry as for a person's token. Then it admits the token as the owner when `common_name` equals the `CF_ACCESS_AGENT_CLIENT_ID` secret. The agent reaches the owner's own Supervisor, so it sees the same projects and generations as the owner. Any other service token is refused with 401 (`missing-identity`), and so is every service token while the secret is unset or blank.
-
-Production was set up this way on 2026-10-12:
-
-- The service token `cf-stumble-agent` (id `4972e490-1b5d-41b8-aa0f-a688cc76b8ee`) was created with a duration of one year. The id is not a secret. The Client Secret is, and Cloudflare shows it only once, when the token is created.
-- The reusable policy "cf-stumble agent service token" (id `b9d78057-3a03-4c96-9e48-6a2fc138f3f0`) has the decision `non_identity`, which the dashboard calls Service Auth. It includes only that service token. It is attached to the `stumble` Access application at precedence 2, after the owner's Allow policy.
-- The application's session duration is 730 hours.
-- The token's values are in `.audit/local/access-service-token.json` in the owner's checkout, with mode 600. The file holds `clientId`, `clientSecret`, `tokenId`, and `expiresAt`. `.audit/` is ignored by Git, so the file is never committed.
-
-On 2026-10-12 a request with the token passed Access, and Access set a `CF_Authorization` cookie. The assertion it sent had `sub` set to `""` and `common_name` set to the Client ID. The Worker deployed then answered 401 with `missing-identity`, because it did not yet read `common_name`. A deploy that includes the agent token check fixes that.
-
-To set this up on another instance:
-
-1. Create a service token: **Zero Trust** > **Access controls** > **Service credentials** > **Service Tokens** > **Create Service Token**, or `pnpm exec cf zero-trust access service-tokens create`. Copy the Client ID and Client Secret into a local file outside Git.
-2. Add a policy to the Access application with the action Service Auth (`non_identity` in the API) and one Include rule for that service token. Without a Service Auth policy, Access sends the caller to the identity provider login.
-3. Set the Worker secret to the token's Client ID, which is also the value Access puts in `common_name`: `jq -r .clientId <file> | npx wrangler secret put CF_ACCESS_AGENT_CLIENT_ID --name <worker>`. A deploy keeps it.
-
-An agent sends the token in two headers on every request, `CF-Access-Client-Id` and `CF-Access-Client-Secret`. This command reads them from the file and pipes them to curl, so the secret does not appear in the process list:
-
-```sh
-jq -r '"CF-Access-Client-Id: \(.clientId)\nCF-Access-Client-Secret: \(.clientSecret)"' \
-  .audit/local/access-service-token.json |
-  curl -sS -H @- https://stumble.akompella.dev/api/status
-```
-
-When the token is refused, the response says which side refused it. A 401 with the body `Unauthorized` comes from the Worker: `CF_ACCESS_AGENT_CLIENT_ID` is unset or differs from the Client ID, or the deployed Worker has no agent token check. The Worker logs it as `access.refused` with `reason: "missing-identity"`. Any other refusal, such as a 403 or a redirect to the login page, comes from Access: the token is expired, revoked, or not included in the Service Auth policy, or the Client Secret is wrong.
-
-The owner API refuses a `POST` whose `Origin` header is not the page's own origin, and a service token does not change that. Add `-H 'Origin: https://stumble.akompella.dev'` to every `POST`. The Worker removes the two service token headers, like the Access assertion and cookie, before it relays a request to a generation.
-
-To replace the Client Secret, run `pnpm exec cf zero-trust access service-tokens rotate <token-id>` and write the new secret into the file. The Client ID stays the same, so the Worker secret does not change. To withdraw the token, run `pnpm exec cf zero-trust access service-tokens delete <token-id>` and delete the Worker secret. `pnpm exec cf zero-trust access applications revoke-tokens <app-id>` ends every session issued for the application, the owner's browser session included. The token expires after one year (`expiresAt` in the file). Before then, run `pnpm exec cf zero-trust access service-tokens refresh <token-id>` to extend it, and update `expiresAt`.
-
 ## Troubleshooting a hostname that serves another site
 
-Access can accept your login and then show a page that is not cf-stumble. The hostname can also answer another site before Access appears.
+The hostname can answer another site instead of cf-stumble.
 
 A deployed Worker does not claim a hostname on its own. A proxied DNS record on the zone may already point that hostname somewhere else. This is often a wildcard record such as `*.example.com`.
 
@@ -182,7 +124,7 @@ Check the hostname in the dashboard:
 
 - Open **Websites** > your zone > **DNS** > **Records**. Look for a record for the hostname and for a proxied wildcard record.
 - Open **Workers & Pages** > your Worker > **Settings** > **Domains & Routes**. Check whether the hostname has a Worker route or custom domain.
-- Run `curl -I https://<your-hostname>`. The response shows whether Access redirects the request or another site answers it.
+- Run `curl -I https://<your-hostname>`. The response shows whether another site answers it.
 
 Use a Worker route when a proxied record already covers the hostname. Add a route for `<your-hostname>/*` in the zone. A route sends matching requests to the Worker and does not write DNS.
 
@@ -199,14 +141,7 @@ As the owner, send `POST /api/workspace/reset` to recover. Projects and the harn
 `cloudflare.config.ts` sets `workersDev: false`, and `wrangler.jsonc` sets `"workers_dev": false`. Your instance answers on the hostname you gave the
 Worker a route for, and nowhere else.
 
-This is deliberate. A `workers.dev` subdomain is reachable without Cloudflare Access, so leaving it
-on would put a second door on the same Worker with nothing watching it, and the Worker's own
-refusal would be the only thing standing there. One door, behind Access, is easier to reason about
-and easier to check.
-
-If you want the subdomain as well, set `"workers_dev": true`. Know what you are choosing: anything
-that reaches that address skips Access, and only the `CF_ACCESS_*` check inside the Worker refuses
-it.
+If you want the subdomain as well, set `"workers_dev": true`.
 
 ## Connect a project
 
@@ -222,7 +157,7 @@ The sidebar also contains the harness project. It selects `/workspace/harness`, 
 
 A connection is refused when GitHub's complete tree reports more than 3,000 files or 150 MB of current-tree blobs. The existing truncated-tree and 5,000,000 KB repository-history limits still apply. This check queries GitHub's API with the `GH_TOKEN` secret. If you authorize only through the interactive device flow and never set `GH_TOKEN`, the query runs unauthenticated. GitHub answers an unauthenticated request for a private repository the same way it answers one that does not exist, so the check cannot read the repository and skips it. The clone step then measures the repository again with the workspace's own `gh` credential and refuses one over a ceiling. A repository it cannot measure is cloned anyway. See `docs/agents/design/github-connection.md`, "Connecting a repository".
 
-To remove a connected project, send the owner-only `POST /api/projects/{id}/disconnect` request with the page's exact `Origin`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
+To remove a connected project, send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
 
 ## Connect ChatGPT
 
@@ -237,14 +172,14 @@ Connect from the owner page:
 
 A sign-in expires after 10 minutes, and only the most recent one can be finished. The address holds a one-time code; it is useless without the verifier the Supervisor kept.
 
-An agent can do the same with `tools/chatgpt-connect.mts`. It starts a sign-in through the owner API with the agent service token (see "Agent access without a sign-in"), drives a temporary copy of a Firefox profile that is already signed in to ChatGPT, catches the redirect, and finishes the sign-in:
+An agent can do the same with `tools/chatgpt-connect.mts`. It starts a sign-in through the owner API, drives a temporary copy of a Firefox profile that is already signed in to ChatGPT, catches the redirect, and finishes the sign-in:
 
 ```sh
 pnpm exec tsx tools/chatgpt-connect.mts --origin https://<host> \
   --profile "<Firefox profile directory>" [--account <email or exact name>]
 ```
 
-The tool reads the service token from `--token-file`, which defaults to `.audit/local/access-service-token.json` relative to the directory you run it in. Run it from the owner's checkout, or pass `--token-file <path>` from anywhere else. `--account` is required when OpenAI's account chooser lists more than one account. The tool never changes the original profile and deletes its copy when it exits. OpenAI may answer a headless browser with a Cloudflare challenge or a route error; the tool then stops and saves the page text and a screenshot under `/tmp/chatgpt-connect-*`. Run it again with `--headed` to show the window, or connect from the owner page. `--inspect` stops before the approval page and calls no owner API.
+`--account` is required when OpenAI's account chooser lists more than one account. The tool never changes the original profile and deletes its copy when it exits. OpenAI may answer a headless browser with a Cloudflare challenge or a route error; the tool then stops and saves the page text and a screenshot under `/tmp/chatgpt-connect-*`. Run it again with `--headed` to show the window, or connect from the owner page. `--inspect` stops before the approval page and calls no owner API.
 
 The page shows one of three states:
 
@@ -256,16 +191,14 @@ The page shows one of three states:
 
 ## First run
 
-Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0,"activationId":null}}`. `GET /`, `/status`, `/generations`, and `/projects` relay to a generation and return HTTP 503 with `{"ok":false,"problem":{"code":"no-active-generation"}}`. That response is normal on a new instance. It does not mean that the deployment failed. A browser request for `/` with `Accept: text/html` still receives the owner page. `GET /health` is answered by the Worker itself, so it returns `{"ok":true}` before any generation exists. It still sits behind Access.
+Before you submit a generation, `GET /api/status` returns `{"activeGeneration":{"generation":null,"epoch":0,"activationId":null}}`. `GET /`, `/status`, `/generations`, and `/projects` relay to a generation and return HTTP 503 with `{"ok":false,"problem":{"code":"no-active-generation"}}`. That response is normal on a new instance. It does not mean that the deployment failed. A browser request for `/` with `Accept: text/html` still receives the owner page. `GET /health` is answered by the Worker itself, so it returns `{"ok":true}` before any generation exists.
 
-The first generation does not happen by itself. Submit it as the verified owner, then activate it:
+The first generation does not happen by itself. Submit it, then activate it:
 
 1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
 2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label.
 
 One submission extracts the requested commit, installs dependencies, builds the vendored Pi package, bundles the module map, and stores that map in the Supervisor's SQLite storage. It cold-starts the candidate and runs `GET /` against it before it reports the candidate ready. These are separate build steps, so a failure reports its phase. On the measured first cold run, submission took 321 seconds. Activation took 0.4 seconds, and the ready generation answered `GET /` in 0.3 seconds. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
-
-Each verified Access identity gets its own Supervisor, workspace, and instance. If you sign in as another identity, you see a separate empty instance.
 
 ## Point the instance at your own fork
 
@@ -283,7 +216,6 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 - Compaction across a reload is tested locally (`test/facet/generation-0/compaction.test.ts`), not on a deployment. Pi owns compaction.
 - The Deploy to Cloudflare button flow has not been recorded against a clean account. The deployed instance has been tested after the button flow. On an empty instance, the owner submitted and activated a generation, then served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
-- The deployed probe tested Access token verification with an injected key. It did not prove that a real Cloudflare Access application admits the configured owner.
 
 ## Cost and cleanup
 

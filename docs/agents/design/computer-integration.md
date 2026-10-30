@@ -67,10 +67,9 @@ The workspace behaves like an ordinary development machine. It has unrestricted 
 access, `git`, `gh`, and repository toolchains. GitHub credentials live in `gh` and Git
 configuration under `/workspace`, outside the repositories, so they survive a container replacement.
 
-The workspace name comes from the tenant and from nothing else. The Worker turns a verified Access
-token into the Supervisor's name, and the Supervisor derives its one workspace name from that name,
-so harness builds and every project of one owner reach the same container and a different verified
-identity reaches a different one. No request supplies the name.
+The workspace name comes from the tenant and from nothing else. The Worker reaches one Supervisor
+by a constant name, and the Supervisor derives its one workspace name from that name, so harness
+builds and every project reach the same container. No request supplies the name.
 
 `src/workspace-layout.ts` owns the layout:
 
@@ -208,7 +207,7 @@ present, so `pnpm verify` fails before the checklist is reached.
 
 ## Generation requests
 
-A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The current implementation exposes `POST /api/generations/submit`, `/activate`, and `/rollback` (`src/routes/owner-api.ts`, `src/routes/generations.ts`), and the Worker sets the owner principal from a verified Cloudflare Access token before routing to those handlers (`src/worker.ts`). ADR-0003 does not fix this command, transport, or authentication mechanism as a durable commitment, so a future redesign may still change them.
+A harness commit becomes a generation when the Supervisor gives that specific commit a generation label; a commit alone does not activate it. The user or mutable main harness may submit a harness revision as a generation candidate and may request activation or rollback of a specific existing generation. The immutable supervisor validates and performs or rejects those requests directly, without a request ID or request journal. The current implementation exposes `POST /api/generations/submit`, `/activate`, and `/rollback` (`src/routes/owner-api.ts`, `src/routes/generations.ts`) (`src/worker.ts`). ADR-0003 does not fix this command or transport as a durable commitment, so a future redesign may still change them.
 
 ## Owner approval for a paid environment
 

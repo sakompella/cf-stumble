@@ -29,7 +29,7 @@ Print the configuration's name and check that it equals `<stage>`, that it is no
 
 ## Secrets and requests
 
-Write the Access values to a file outside the repository and pass it with `pnpm exec cf deploy --secrets-file <file>`. With `pnpm local:access-session` the script writes a throwaway signing key; set its public keys as `CF_ACCESS_PUBLIC_KEYS` in the same file. Send `Cf-Access-Jwt-Assertion` on each request and `Origin: <base-url>` on each POST. Delete the file afterward.
+Write the secrets to a file outside the repository and pass it with `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
 
 An HTTP client with a default user agent may get 403 from the API; set your own `User-Agent`.
 

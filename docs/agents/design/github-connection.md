@@ -3,13 +3,8 @@
 This document describes how cf-stumble connects a GitHub repository to the owner's tenant, where
 the GitHub credential lives, and which credential source an automated run uses. ADR-0038 and
 ADR-0039 are the decisions behind it: one shared Computer workspace per tenant, and repository
-authorization that is separate from Cloudflare Access.
-
-## Two different permissions
-
-Cloudflare Access proves who the caller is. It grants no access to any repository. A caller who
-passes Access reaches their own Supervisor and nothing on GitHub. Repository access comes from a
-GitHub credential that lives in the workspace, in the normal local `gh` configuration.
+authorization through a GitHub credential that lives in the workspace, in the normal local `gh`
+configuration.
 
 ## The connected project list
 
@@ -142,16 +137,12 @@ GitHub for a device code, and the page shows only the verification URL and the s
 owner signs in at that page. The Supervisor then redeems the authorization and installs the token
 into the workspace.
 
-Three rules protect the flow:
+One rule protects the flow:
 
-- The pending authorization records the verified Access identity and audience that started it. A
-  redemption presented by any other verified owner is refused.
 - The device code is deleted when it is redeemed, denied, or expires, so the same request replayed
   finds nothing to redeem. The deletion names the redeemed device code. GitHub's answer for a code
   that a newer authorization replaced during the wait is discarded, token included, and the newer
   code stays pending.
-- Every state-changing route under `/api/` requires an `Origin` header that exactly matches
-  cf-stumble's own request origin; a missing, `null`, or other value is refused.
 
 The owner completed the live authorization on the deployment on 2026-09-11. [GitHub connection
 evidence](../../release/v0/evidence/github-connection.md) records the result. Everything above is

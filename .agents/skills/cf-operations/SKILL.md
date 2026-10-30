@@ -9,7 +9,7 @@ Placeholders: `<worker>` is `worker.name` in `cloudflare.config.ts`. `<account-i
 
 Run `cf` under Node as `pnpm exec cf`. Run `pnpm exec cf auth whoami` before any live `cf` or `wrangler` call: it shows the account and refreshes the login that `cf` keeps in its config. `pnpm ops:check` does not use that login by itself; see the Check branch.
 
-To read or operate the production owner API, never ask the owner to sign in. Send the agent service token from `.audit/local/access-service-token.json` in the owner's checkout as `CF-Access-Client-Id` and `CF-Access-Client-Secret`, and add the page's `Origin` to every `POST`. The curl recipe, and what to do if the token is refused, are in `docs/deploy.md`, "Agent access without a sign-in". Never print or log the Client Secret.
+The owner API needs no credential: call it with plain `curl`.
 
 ## Choose the branch
 
@@ -24,7 +24,7 @@ To read or operate the production owner API, never ask the owner to sign in. Sen
 
 Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call in `docs/agents/design/observability.md`, "Query recipes".
 
-**Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `CF_ACCESS_OWNER_SUB` are listed, `CF_ACCESS_PUBLIC_KEYS` is not, and no rollout is in progress.
+**Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, and no rollout is in progress.
 
 ### 2. Deploy
 
@@ -70,7 +70,7 @@ Create a worktree and a staging directory with a unique Worker name and containe
 
 ### 3. Deploy and exercise
 
-Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. For the owner API, authenticate with a local Access session: `pnpm local:access-session` writes a throwaway signing key and the staging Worker trusts its public key. Exercise the change, then read the events with the Query recipes and `pnpm ops:check --worker <name>`.
+Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. Exercise the change, then read the events with the Query recipes and `pnpm ops:check --worker <name>`.
 
 **Complete when:** the change did what you claim, with timestamps and event names as evidence, and you recorded the container minutes used (the instances API, start to `inactive`).
 
