@@ -26,9 +26,6 @@ The first labeled mutable main-harness commit, initially based closely on Pi. It
 **Active generation**:
 The generation currently selected and running as the main harness.
 
-**Last active generation**:
-The generation that most recently ran as the main harness when no generation is currently active.
-
 **Real turn**:
 A user interaction. A successful HTTP status alone does not prove that a streamed interaction completed.
 

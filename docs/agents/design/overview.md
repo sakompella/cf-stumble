@@ -6,120 +6,53 @@ The product is meant first for one person. It should grow around that person's p
 
 ## The two harnesses
 
-The system separates the harness that changes from the supervisor that does not.
+The **main harness** handles the user's work. Its model loop, prompts, tools, policies, and use of files may all change. One generation of the main harness runs in a Dynamic Worker facet. Generation 0 is the first one, initially based closely on Pi, and is not a special rollback target.
 
-The **main harness** handles the user's work. Its model loop, prompts, tools, policies, and use of files may all change. One generation of the main harness runs in a Dynamic Worker facet.
+The **supervisor** is the immutable half. It lives in the Supervisor Durable Object, which is the primary Durable Object for a cf-stumble instance and is not a facet. It creates main-harness facets, decides which generation may run, and refuses a candidate whose startup check fails so the generation that is serving keeps serving.
 
-The **supervisor** is the immutable half. It lives in the Supervisor Durable Object, which is the primary Durable Object for a cf-stumble instance and is not a facet. It creates or obtains main-harness facets, decides which generation may run, and refuses a candidate whose startup check fails so the generation that is serving keeps serving.
+There is no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing.
 
-Version 0 has no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing. The earlier design put a second Pi-derived fork in the Supervisor and gave it recovery episodes, eligibility rules and relay evidence. Handoff decision 7 deleted all of it and kept the turn lease. A future multi-user or self-healing version can add it back, and this paragraph is the record that it once existed.
-
-The interface between the supervisor and a main facet is ordinary Worker `fetch(Request): Promise<Response>` forwarding today: `forwardToFacet` calls the facet's `fetch` and returns its response unchanged (`src/supervisor/supervisor.ts`). It uses the platform's native interface and keeps the permanent contract small. ADR-0003 does not fix this as a durable commitment, so a future redesign may still replace it.
-
-Generation 0 is the first mutable main harness, initially based closely on Pi. It is not a special rollback target; it is the first generation like any other.
+The supervisor calls a facet with ordinary Worker `fetch(Request): Promise<Response>` forwarding (`forwardToFacet` in `src/supervisor/supervisor.ts`). ADR-0003 does not fix this as a permanent contract.
 
 ## What the main harness knows and tries to do
 
-For a piece of work, the main harness should receive the user's request, applicable instructions, relevant session history, accumulated context, and access to the files and commands needed for that work. It does not need unrestricted access to every project or to the supervisor's protected state.
+For a piece of work, the main harness receives the user's request, applicable instructions, relevant session history, accumulated context, and access to the files and commands the work needs. It does not need unrestricted access to every project or to the supervisor's protected state. Its aim is to help the user finish useful work. It may edit code, run commands, or improve its own harness when that serves the goal, but self-modification is a capability, not the purpose of every session.
 
-Its primary aim is to help the user complete useful work. It may inspect and edit code, run commands, explain results, preserve context, or improve its own harness when that serves the user's goal. Self-modification is a capability, not the purpose of every session.
-
-The supervisor has a narrower aim. It keeps a usable main harness available by refusing a candidate that fails its startup check and by letting the owner roll back. It needs the generation record and the startup check's own result, not the user's project context.
+The supervisor has a narrower aim: keep a usable main harness available. It needs the generation record and the startup check's result, not the user's project context.
 
 ## Projects and files
 
-In version 0, a project is a GitHub repository that the user connects to cf-stumble. Each project
-has one current Pi thread. One Computer workspace contains the harness repository and every
-connected project repository in separate directories. The page lists projects in a collapsible left
-sidebar.
+A project is a GitHub repository that the user connects to cf-stumble. Each project has one current Pi thread. One Computer workspace holds the harness repository and every connected project repository in separate directories. The page lists projects in a collapsible left sidebar.
 
-Starting a fresh thread resets Pi's conversation and compacted context but preserves the project
-files. Changing the main-harness generation also preserves both. Project and harness Git histories
-remain separate repositories, but their directories share one workspace and are not security
-boundaries.
+Starting a fresh thread resets Pi's conversation and compacted context but keeps the project files. Changing the generation keeps both. The Git histories stay separate, but the directories share one workspace and are not security boundaries.
 
-The workspace behaves like a normal development machine. It has unrestricted internet access and
-ordinary tools such as `git` and `gh`. GitHub credentials stay in local tool configuration outside
-the repositories, and the supervisor does not own or interpret project files or thread state.
+The workspace behaves like a normal development machine, with unrestricted internet access and tools such as `git` and `gh`. GitHub credentials stay in local tool configuration outside the repositories. The supervisor does not own or interpret project files or thread state.
 
 ## Generations and self-improvement
 
-A project Git commit is just a Git commit. A harness commit becomes a generation only when the Supervisor gives that specific commit a generation label; committing it alone does not activate it.
+A project commit is an ordinary commit. A harness commit becomes a generation only when the Supervisor gives that commit a generation label.
 
-A new main-harness revision may be submitted as a **generation candidate**. The Supervisor labels the specific harness commit, checks it, records the result against that generation, and decides whether it may run. The current implementation submits over `POST /api/generations/submit` (`src/routes/generations.ts`); ADR-0003 does not fix this transport as a durable commitment.
-
-The owner may also request that the supervisor activate a specific existing generation or return to an earlier one. ADR-0024 lets the mutable main harness make the same requests, but version 0 does not build that path, so only the owner sends generation requests. Naming a target is not the same as controlling the live system. The supervisor validates the request and performs or rejects the state change; mutable code cannot write the protected generation state directly or bypass the supervisor's checks.
-
-A newly started generation should pass a basic cold-start check before normal use.
+The owner submits a harness commit as a **generation candidate** with `POST /api/generations/submit` (`src/routes/generations.ts`). The Supervisor labels the commit, prepares it, runs the startup check, and records the result against that generation. The owner may then ask the Supervisor to activate a generation or roll back to an earlier one. The Supervisor validates each request and performs or rejects it. Mutable code cannot write protected generation state or bypass those checks. ADR-0024 lets the main harness make the same requests, but that path is not built, so only the owner sends them.
 
 ## Runtime and Computer
 
-Computer's Worker-shell backend is useful for text operations and host-forwarded Git. Its container backend provides Node, pnpm, TypeScript compilation, tests, and project commands. The tested source and image pair are recorded in `computer-integration.md`.
+Computer's Worker-shell backend does text operations and host-forwarded Git. Its container backend runs Node, pnpm, TypeScript compilation, tests, and project commands. `computer-integration.md` records the pinned source and image pair.
 
-The harness source is TypeScript. Dynamic Workers execute Worker-compatible modules, so Computer
-builds a canonical module map before a generation runs. The Supervisor uses each generation's
-labeled harness commit ID as its Worker Loader identity, so a changed commit cannot reuse old loaded
-code. The Supervisor stores that module map in its own Durable Object SQLite under the commit, so
-activating or rolling back to a generation loads stored bytes and never rebuilds.
+The harness source is TypeScript, and Dynamic Workers execute Worker-compatible modules, so Computer builds a module map for a labeled harness commit. The Supervisor stores it in its own SQLite under that commit and uses the commit ID as the Worker Loader identity, so a changed commit cannot reuse old loaded code, and activating or rolling back loads stored bytes without rebuilding.
 
-## The first useful version
+## Not built
 
-The first version should provide:
-
-- a streaming conversation with the Pi-based main harness;
-- a collapsible left sidebar for connected GitHub projects;
-- enough project access to complete a real coding task;
-- visible generation state;
-- generation candidate submission and checked activation requests; and
-- rollback to a generation that already ran.
-
-A broad administration console, configuration editor, metrics dashboard, and browser IDE can wait. The first UI only needs to support the agent conversation and the small amount of generation information the user needs.
-
-## Not built yet
-
-Version 0 deliberately postponed these:
-
-- an automatic promotion rule, or activating a fallback automatically;
-- letting the agent repair itself, submit generations, or approve changes through replay tests;
-- reconnect, resume, steering, and background turns beyond what a correct streamed turn needs;
+- automatic promotion, or activating a fallback automatically;
+- the agent repairing itself, submitting generations, or approving changes;
+- reconnect, resume, steering, and background turns;
 - combined project and harness views;
-- public signup, teams, roles, invitations, tenant administration, or a custom account system;
-- provider selection by the owner or the agent; and
-- a better cache policy and thread migrations.
+- public signup, teams, roles, or a custom account system; and
+- model selection by the owner or the agent. The host picks the model: the owner's ChatGPT subscription once connected, otherwise Workers AI (ADR-0047).
 
-Ideas outside version 0: `patch.md` profiles; code-server; Cloudflare OS Gadget or Blueprint
-compatibility; issue triage, CI webhooks, and a product-level pull-request workflow; custom Git
-object storage, Artifacts compatibility, and a Git protocol server; skills, MCP, plugin, and tool
-marketplaces; a metrics dashboard, full admin console, canaries, quarantine, attestations, and
-garbage collection; and distributed-systems demos such as a Durable Object-backed Trustix log, an
-R2 Nix cache, a rate limiter, and a sharded KV store.
+## Behavior to know
 
-## Open design questions
+The Worker has no authentication. Every request reaches the one Supervisor, and the owner API exposes generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`). The main facet's only capability is the model route (`src/facet/index.ts`).
 
-The main open questions are:
+A running turn does not outlive its browser. While a turn is open the Supervisor writes an empty line on the stream every 2 s, so it hears of a disconnect within about 4 s even while a command runs. It then settles the turn as `cancelled`, frees the lease, and ends the turn's capability, which kills its running commands (`src/supervisor/projects/turn-stream.ts`).
 
-- whether ordinary `fetch` forwarding stays the supervisor-to-facet interface, or a future
-  redesign replaces it (current implementation: `fetch`, see "The two harnesses" above);
-- whether a running turn should outlive its browser. Today it does not: while a turn is open the
-  Supervisor writes an empty line on the turn stream every 2 s, so it hears of a disconnect within
-  about 4 s even while a command runs. It then settles the turn as `cancelled`, frees the lease,
-  and ends the turn's capability, which kills the turn's running commands
-  (`src/supervisor/projects/turn-stream.ts`, ADR-0045); and
-- whether the current module-map build path (see "Runtime and Computer" above) stays the way
-  executable Worker modules are produced, identified, and retained.
-
-In version 0 the Worker has no authentication: every request reaches the one Supervisor, and the
-owner API exposes generation submission, activation, and rollback (`src/worker.ts`,
-`src/routes/owner-api.ts`, `src/routes/generations.ts`). The harness request path is not built:
-the main facet's only capability is the model route (`src/facet/index.ts`).
-
-The cold-start check is settled by ADR-0029. ADR-0037 settles UI transport. The host selects the
-model: the owner's ChatGPT subscription once the owner connects it, and the Workers AI model through
-its binding until then (ADR-0047). A caller cannot select the model, effort, or endpoint, as the
-[version 0 release notes](../../release/v0/release-notes.md) record.
-
-A successful HTTP status does not prove that a streamed turn completed. A stream can fail after sending headers, and a disconnect can leave work unresolved. The implementation should measure those cases before using them as evidence that a generation is reliable.
-
-## Reading the design
-
-See [`../domain.md`](../domain.md) for the required reading order.
+A successful HTTP status does not prove that a streamed turn completed. A stream can fail after sending headers, and a disconnect can leave work unresolved. ADR-0037 credits only terminal, saved success.
