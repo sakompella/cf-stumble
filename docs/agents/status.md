@@ -6,13 +6,13 @@ What runs in production, what was decided outside an ADR, and what is still open
 
 Production is the Worker `cf-stumble`, deployed only with `cf deploy`. Run `pnpm exec cf workers deployments list` before you assume that production matches a commit.
 
-The last recorded deploy was `27fdbd1` on 2026-10-16, with generation `eafaf99` active at epoch 3. Later commits on `main` are not deployed, and this section has not been refreshed since.
+On 2026-10-30 production runs `b93531c` (Worker version deployed about 14:10Z), with generation 0 (`e6e4a6e`) active at epoch 3. The container image is unchanged since 2026-10-16 because `containers/` has not changed.
 
-The Worker has no authentication: every request reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret and no project is connected. ChatGPT is disconnected after its first turn hit `subscription_sharing_usage_limit_exceeded`, so turns answer from Workers AI.
+The Worker has no authentication: every request reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. A Workers AI turn on the harness ran a `bash` tool call and saved. ChatGPT is not connected, so turns answer from Workers AI.
 
 ## Decided outside an ADR
 
-- **No authentication** (owner, 2026-10-30). State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
+- **No authentication** (Aditya, 2026-10-30). Anyone who finds the URL can run turns, which use the GitHub token and cost container time. State under the old per-identity Supervisor name was abandoned, and `GH_TOKEN` reinstalls the GitHub credential on the fresh workspace.
 - **No Bombadil for now** (owner, 2026-09-28). Do not add it to `pnpm verify` or run a pilot.
 - **Skip Cloudflare Artifacts for now** (owner, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".
