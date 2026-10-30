@@ -156,3 +156,17 @@ test("an idle events stream writes a line now and then, so a reader that left is
 
   expect(read.split("\n")[0]).toContain('"type":"snapshot"');
 });
+
+test("a fresh thread ends the events stream open on the old conversation", async () => {
+  scriptModel();
+  const control = await servingGeneration1("generation-1-events-fresh", new ProjectWorkspace());
+  const opened = await control.projectEvents(project);
+
+  if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
+  const reader = opened.events.getReader();
+  await reader.read();
+
+  expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
+
+  while (!(await reader.read()).done);
+});

@@ -44,6 +44,8 @@ export class ServingConversations {
   readonly #projects: ProjectConversations;
   readonly #host: ConversationHostTarget;
   readonly #workspaces: HeldWorkspaces;
+  /** The events streams open on each conversation, so a fresh thread can end its predecessor's. */
+  readonly #readers = new Map<string, Set<() => void>>();
 
   constructor(ports: ServingPorts) {
     this.#ports = ports;
@@ -98,7 +100,7 @@ export class ServingConversations {
         const conversationId = yield* this.#conversation(facet, project);
         const events = yield* this.#call(() => facet.events(conversationId));
 
-        return { events };
+        return { events: this.#endedWhenReplaced(conversationId, events) };
       }),
     );
   }
@@ -135,6 +137,8 @@ export class ServingConversations {
         );
 
         this.#projects.point(project.id, conversationId);
+
+        for (const end of previous === undefined ? [] : (this.#readers.get(previous) ?? [])) end();
 
         return { conversationId };
       }),
@@ -245,6 +249,60 @@ export class ServingConversations {
 
       return facet;
     });
+  }
+
+  /**
+   * A stream ends cleanly when its conversation is replaced, which tells the page to open the
+   * project's events again; however the relay stops, the facet's stream is cancelled.
+   */
+  #endedWhenReplaced(
+    conversationId: string,
+    events: ReadableStream<Uint8Array>,
+  ): ReadableStream<Uint8Array> {
+    const source = events.getReader();
+    const readers = this.#readers.get(conversationId) ?? new Set();
+    let opened: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let replaced = false;
+
+    const forget = () => {
+      readers.delete(end);
+
+      if (readers.size === 0) this.#readers.delete(conversationId);
+    };
+
+    const end = () => {
+      replaced = true;
+      forget();
+      opened?.close();
+    };
+
+    const readable = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        opened = controller;
+      },
+      pull: async (controller) => {
+        const next = await source.read();
+
+        if (replaced) {
+          void source.cancel().catch(() => {});
+        } else if (next.done) {
+          forget();
+          controller.close();
+        } else {
+          controller.enqueue(next.value);
+        }
+      },
+      cancel: (reason) => {
+        forget();
+
+        return source.cancel(reason);
+      },
+    });
+
+    readers.add(end);
+    this.#readers.set(conversationId, readers);
+
+    return readable;
   }
 
   #runDeadline(): number | undefined {
