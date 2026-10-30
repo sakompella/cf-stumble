@@ -124,7 +124,7 @@ Use a custom domain when the hostname has no record and you want Cloudflare to c
 
 ## Troubleshooting a wedged workspace
 
-If workspace operations hang, turns end with `turn-not-started` or `internal-error`, or GitHub status times out after a large `npm install`, a large dependency tree may be inside the durable workspace. Installing one there makes the workspace unresponsive because its files live in Durable Object storage. The managed instructions steer the agent to copy projects to container-local scratch before installing dependencies or running checks.
+If workspace operations hang, runs fail their tool calls, routes answer `internal-error`, or GitHub status times out after a large `npm install`, a large dependency tree may be inside the durable workspace. Installing one there makes the workspace unresponsive because its files live in Durable Object storage. The managed instructions steer the agent to copy projects to container-local scratch before installing dependencies or running checks.
 
 As the owner, send `POST /api/workspace/reset` to recover. Projects and the harness re-clone on the next use. The reset loses uncommitted work in the workspace.
 
@@ -149,7 +149,7 @@ The sidebar also contains the harness project. It selects `/workspace/harness`, 
 
 A connection is refused when the repository is over the size limits in `docs/agents/design/github-connection.md`, "Connecting a repository". Set `GH_TOKEN` so the preflight can read private repositories.
 
-To remove a connected project, send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
+To remove a connected project, send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or any request while a run is active (`run-active`). Otherwise it drops the project's conversation pointer, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The conversation itself stays in storage, unused. The clone removal is best-effort: it can fail after the catalog entry is already gone, leaving the project's files on disk with no project that owns them.
 
 ## Connect ChatGPT
 
@@ -181,7 +181,9 @@ The first generation does not happen by itself. Submit it, then activate it:
 1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
 2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label.
 
-One submission extracts the requested commit, installs dependencies, builds the vendored Pi package, bundles the module map, and stores that map in the Supervisor's SQLite storage. It cold-starts the candidate and runs `GET /` against it before it reports the candidate ready. These are separate build steps, so a failure reports its phase. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
+One submission extracts the requested commit, installs dependencies, builds the vendored Pi package, bundles the module map, and stores that map in the Supervisor's SQLite storage. It cold-starts the candidate and runs `GET /` against it before it reports the candidate ready. These are separate build steps, so a failure reports its phase. The startup check also asks the candidate for its Pi Durable version and fails it unless it equals the exact version the deployed Worker pins (ADR-0048). A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
+
+A generation built before the Pi Durable migration has no conversation methods. After you deploy a Worker from the migration onward, submit and activate a harness commit from the migration onward before you send a message; until then messages answer 503 `generation-failed`. Do not roll back to an older generation: rollback does not repeat the startup check. Turn history from before the migration is not carried over.
 
 ## Point the instance at your own fork
 

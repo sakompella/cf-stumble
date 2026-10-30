@@ -1,18 +1,18 @@
 # Product overview
 
-cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main harness starts from a Pi-derived fork, running on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
+cf-stumble is a personal agent that primarily helps with coding and can improve its own main harness. It is inspired by Autolith, Amp's Orbs, NixOS, and Cloudflare's Think. Its main harness runs its agent loop on Pi Durable, on Cloudflare Durable Objects, Dynamic Workers, Dynamic Worker facets, and Computer.
 
 The product is meant first for one person. It should grow around that person's projects, instructions, working habits, and accumulated context. Coding is its primary use, not a permanent limit on what the harness may help with.
 
 ## The two harnesses
 
-The **main harness** handles the user's work. Its model loop, prompts, tools, policies, and use of files may all change. One generation of the main harness runs in a Dynamic Worker facet. Generation 0 is the first one, initially based closely on Pi, and is not a special rollback target.
+The **main harness** handles the user's work. Its model loop, prompts, tools, policies, and use of files may all change. One generation of the main harness runs in a Dynamic Worker facet, and Pi Durable runs its agent loop there (ADR-0048). No generation is a special rollback target.
 
 The **supervisor** is the immutable half. It lives in the Supervisor Durable Object, which is the primary Durable Object for a cf-stumble instance and is not a facet. It creates main-harness facets, decides which generation may run, and refuses a candidate whose startup check fails so the generation that is serving keeps serving.
 
 There is no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing.
 
-The supervisor calls a facet with ordinary Worker `fetch(Request): Promise<Response>` forwarding (`forwardToFacet` in `src/supervisor/supervisor.ts`). ADR-0003 does not fix this as a permanent contract.
+The supervisor reaches a facet through RPC: `piDurableVersion` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). Other paths are forwarded with ordinary `fetch` (`forwardToFacet` in `src/supervisor/supervisor.ts`). ADR-0003 does not fix this as a permanent contract.
 
 ## What the main harness knows and tries to do
 
@@ -22,11 +22,11 @@ The supervisor has a narrower aim: keep a usable main harness available. It need
 
 ## Projects and files
 
-A project is a GitHub repository that the user connects to cf-stumble. Each project has one current Pi thread. One Computer workspace holds the harness repository and every connected project repository in separate directories. The page lists projects in a collapsible left sidebar.
+A project is a GitHub repository that the user connects to cf-stumble. Each project has one current Pi Durable conversation, its thread. One Computer workspace holds the harness repository and every connected project repository in separate directories. The page lists projects in a collapsible left sidebar.
 
-Starting a fresh thread resets Pi's conversation and compacted context but keeps the project files. Changing the generation keeps both. The Git histories stay separate, but the directories share one workspace and are not security boundaries.
+Starting a fresh thread points the project at a new conversation, so the old conversation and its compacted context stop being used, but the project files stay. Changing the generation keeps both. The Git histories stay separate, but the directories share one workspace and are not security boundaries.
 
-The workspace behaves like a normal development machine, with unrestricted internet access and tools such as `git` and `gh`. GitHub credentials stay in local tool configuration outside the repositories. The supervisor does not own or interpret project files or thread state.
+The workspace behaves like a normal development machine, with unrestricted internet access and tools such as `git` and `gh`. GitHub credentials stay in local tool configuration outside the repositories. The supervisor does not interpret project files or conversation records; it only maps each project to its current conversation.
 
 ## Generations and self-improvement
 
@@ -44,15 +44,15 @@ The harness source is TypeScript, and Dynamic Workers execute Worker-compatible 
 
 - automatic promotion, or activating a fallback automatically;
 - the agent repairing itself, submitting generations, or approving changes;
-- reconnect, resume, steering, and background turns;
+- steering a running turn;
 - combined project and harness views;
 - public signup, teams, roles, or a custom account system; and
 - model selection by the owner or the agent. The host picks the model: the owner's ChatGPT subscription once connected, otherwise Workers AI (ADR-0047).
 
 ## Behavior to know
 
-The Worker has no authentication. Every request reaches the one Supervisor, and the owner API exposes generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`). The main facet's only capability is the model route (`src/facet/index.ts`).
+The Worker has no authentication. Every request reaches the one Supervisor, and the owner API exposes generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`). The main facet's capabilities are the model route and the host the Supervisor attaches, which relays wakes and hands out project capabilities (`src/facet/index.ts`, `src/supervisor/conversations/host-target.ts`).
 
-A running turn does not outlive its browser. While a turn is open the Supervisor writes an empty line on the stream every 2 s, so it hears of a disconnect within about 4 s even while a command runs. It then settles the turn as `cancelled`, frees the lease, and ends the turn's capability, which kills its running commands (`src/supervisor/projects/turn-stream.ts`).
+A run outlives its browser. `POST /api/projects/{id}/messages` answers 202 once Pi Durable has the message; a message sent while a run is busy is answered after it. The page watches `GET /api/projects/{id}/events`, which starts with a snapshot, so a reload or a dropped stream recovers by watching again. A run that loses its facet instance resumes from the Supervisor's alarm. The Supervisor aborts a run after 8 minutes and ends its project capability when it settles, which kills its running commands (`src/supervisor/conversations/serving.ts`).
 
-A successful HTTP status does not prove that a streamed turn completed. A stream can fail after sending headers, and a disconnect can leave work unresolved. ADR-0037 credits only terminal, saved success.
+A 202 does not prove that the run completed. Only the conversation's events show its result.

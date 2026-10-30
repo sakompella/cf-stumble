@@ -18,10 +18,10 @@ Add an ADR only for a decision that is expensive to reverse, has a real alternat
 ## Agent-only decisions
 
 - **[ADR-0028](0028-harness-artifacts-are-module-maps.md)**: a generation's executable form is a module map, and a bundle is a one-module map.
-- **[ADR-0040](0040-harness-produces-the-turn-diff.md)**: the harness runs the repository's diff at the end of a turn that changed files, instead of asking the model to run one.
 - **[ADR-0042](0042-build-computerd-from-source-with-walk-patch.md)**: the workspace image builds computerd from the pinned source with a patch that stops its shim from following symlinks and walking ignored trees.
 - **[ADR-0043](0043-workspace-host-stops-its-idle-container.md)**: the Workspace Host stops its container after ten idle minutes, because computerd's open WebSocket keeps the object active.
 - **[ADR-0044](0044-poll-the-shim-disk-walk-every-five-seconds.md)**: the workspace image polls the shim's disk walk every five seconds, because sync reconciles before every pull anyway.
 - **[ADR-0045](0045-use-effect-inside-the-immutable-host.md)**: the immutable host composes asynchronous work and recoverable failures with Effect; boundaries keep plain values, pure decisions and SQLite transactions stay synchronous, and each entry point runs its program once.
 - **[ADR-0046](0046-serve-the-owner-page-script-as-a-hashed-file.md)**: the owner page is a Foldkit application whose script the Worker serves as a content-hashed, immutable same-origin file, under `script-src 'self'`.
 - **[ADR-0047](0047-use-the-owners-chatgpt-subscription.md)**: the model route answers from the owner's ChatGPT subscription once connected, with the credential cached in Supervisor SQLite and never visible to a facet, and from Workers AI until then.
+- **[ADR-0048](0048-run-the-agent-loop-on-pi-durable.md)**: the main harness runs its agent loop on one pinned Pi Durable version, with the session in the serving facet's storage under one name for every generation, while the Supervisor keeps alarms, the project-to-conversation map, workspace capabilities and the run deadline.
