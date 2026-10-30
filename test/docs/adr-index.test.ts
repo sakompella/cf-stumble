@@ -26,7 +26,7 @@ const index = Object.values(
 test("the ADR index links every ADR", () => {
   const missing = Object.keys(adrFiles)
     .map((path) => path.slice(path.lastIndexOf("/") + 1))
-    .filter((file) => !index?.includes(`(${file})`));
+    .filter((file) => index?.includes(`(${file})`) !== true);
 
   expect(index).toBeDefined();
   expect(missing).toEqual([]);
