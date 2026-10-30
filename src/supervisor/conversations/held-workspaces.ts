@@ -30,7 +30,7 @@ export class HeldWorkspaces {
   async capability(
     project: SelectableProject,
     remainingMs: number,
-  ): Promise<ProjectRpcTargetContract> {
+  ): Promise<ProjectRpcTargetContract & Disposable> {
     const held = this.#held.get(project.id) ?? this.#hold(project, remainingMs);
     const capability = await held.capability;
 

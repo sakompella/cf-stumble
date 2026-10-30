@@ -81,6 +81,6 @@ test("the loader environment type has no project slot and the host hands one out
     keyof MainFacetCapabilities
   >();
   expectTypeOf<ConversationHost["workspace"]>().returns.toEqualTypeOf<
-    Promise<ProjectRpcTargetContract>
+    Promise<ProjectRpcTargetContract & Disposable>
   >();
 });

@@ -5,7 +5,7 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
 
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;
-  workspace: (conversationId: string) => Promise<ProjectRpcTargetContract>;
+  workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
 
 /** The one capability the serving facet holds into the Supervisor. */
@@ -23,7 +23,7 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the conversation id arrives over RPC.
-  workspace(conversationId: unknown): Promise<ProjectRpcTargetContract> {
+  workspace(conversationId: unknown): Promise<ProjectRpcTargetContract & Disposable> {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
     if (typeof conversationId !== "string") {
       return Promise.reject(new Error("no workspace for this request"));

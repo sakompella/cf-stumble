@@ -30,6 +30,11 @@ export const ROUTE_MODEL: Model<"host-model-route"> = {
 
 const CANCELLED = "the turn was cancelled";
 
+/** A function, so the check after each `await` is not narrowed away by the one before the loop. */
+function aborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
 async function pump(
   capability: ModelCapability,
   context: TranscriptContext,
@@ -56,10 +61,17 @@ async function pump(
   let buffer = "";
 
   try {
+    // A signal that aborted while the route answered fires no event for the listener above.
+    if (aborted(signal)) {
+      reply.fail("aborted", CANCELLED);
+
+      return;
+    }
+
     for (;;) {
       const next = await reader.read();
 
-      if (signal?.aborted === true) {
+      if (aborted(signal)) {
         reply.fail("aborted", CANCELLED);
 
         return;

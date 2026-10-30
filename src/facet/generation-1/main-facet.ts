@@ -13,6 +13,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
+import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
 import type { ConversationFacet, ConversationHost } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
@@ -40,6 +41,36 @@ type ReceivedHost = ConversationHost & Readonly<{ dup(): ConversationHost }>;
 type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 
 const encoder = new TextEncoder();
+
+async function computerEnv(
+  host: ConversationHost,
+  conversationId: string,
+  cwd: string,
+  signal: AbortSignal | undefined,
+): Promise<ExecutionEnv> {
+  const target = await host.workspace(conversationId);
+  disposeOnAbort(signal, target);
+
+  return createComputerEnv({ cwd, target });
+}
+
+function disposeOnAbort(signal: AbortSignal | undefined, stub: Disposable): void {
+  if (signal === undefined) return;
+
+  if (signal.aborted) {
+    stub[Symbol.dispose]();
+
+    return;
+  }
+
+  signal.addEventListener(
+    "abort",
+    () => {
+      stub[Symbol.dispose]();
+    },
+    { once: true },
+  );
+}
 
 /**
  * Generation 1's main facet (ADR-0048). Pi Durable's session lives in this facet's own SQLite,
@@ -142,11 +173,12 @@ export class MainFacet
         models,
         registry,
         settings: SETTINGS,
-        // The Supervisor ends a capability when the run settles, so each use asks for a live one.
-        env: async ({ conversationId, cwd }) =>
+        // The Supervisor ends a capability when the run settles, so each use asks for a live one,
+        // and the stub goes when the use's context ends, since Pi Durable never cleans an env up.
+        env: ({ conversationId, cwd }, invocation) =>
           cwd === undefined
             ? undefined
-            : createComputerEnv({ cwd, target: await host.workspace(String(conversationId)) }),
+            : computerEnv(host, String(conversationId), cwd, invocation.abortSignal),
         // A wake the Supervisor did not arm could strand work, so the instance starts over.
         onWake: (wake) => {
           void host.arm(wake).catch(() => {

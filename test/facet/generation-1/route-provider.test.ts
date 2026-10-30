@@ -153,3 +153,25 @@ test("abort mid-stream ends as aborted and drops what arrives afterwards", async
     content: [{ type: "text", text: "before" }],
   });
 });
+
+test("an abort while the route is still answering ends as aborted and cancels the stream it returns", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+
+  const silent = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  const { capability } = scriptedRoute(() => {
+    controller.abort();
+
+    return Promise.resolve(silent);
+  });
+
+  const reply = stream(capability, GO, controller.signal);
+
+  expect(await reply.result()).toMatchObject({ stopReason: "aborted" });
+  expect(cancelled).toBe(true);
+});

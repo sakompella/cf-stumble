@@ -8,7 +8,8 @@ import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js"
  */
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
-  workspace(conversationId: string): Promise<ProjectRpcTargetContract>;
+  /** The caller owns the capability it gets and disposes it when its use ends. */
+  workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
 }
 
 /**

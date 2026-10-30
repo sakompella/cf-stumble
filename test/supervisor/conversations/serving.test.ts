@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { reset, runInDurableObject } from "cloudflare:test";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import {
   activateGeneration,
   artifact,
@@ -26,14 +26,24 @@ const SCRIPTED_COMMITS = [
   "d0d0000000000000000000000000000000000002",
 ] as const;
 
-/** Answers `generation` with its commit; a conversation id counts creations in the facet's own storage. */
+/**
+ * Answers `generation` with its commit; a conversation id counts creations in the facet's own
+ * storage. `refuse the next attach` starts a run and makes the next attach throw once.
+ */
 function scriptedFacet(harnessCommit: string): string {
   return `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
   ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("ready"); }
-  async attach(host) { this.host ??= host.dup(); }
+  async attach(host) {
+    const refusals = this.ctx.storage.kv.get("refuse-attach") ?? 0;
+    if (refusals > 0) {
+      this.ctx.storage.kv.put("refuse-attach", refusals - 1);
+      throw new Error("attach refused");
+    }
+    this.host ??= host.dup();
+  }
   async createConversation(cwd) {
     const created = (this.ctx.storage.kv.get("created") ?? 0) + 1;
     this.ctx.storage.kv.put("created", created);
@@ -41,6 +51,7 @@ export class MainFacet extends DurableObject {
   }
   async submit(conversationId, content) {
     if (content === "generation") return "${harnessCommit}";
+    if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
     await this.host.arm({ active: true });
     return conversationId + "/" + content;
   }
@@ -160,4 +171,17 @@ test("activation and rollback replace the serving facet, and its storage carries
   expect(await control.submitProjectMessage("harness", "generation", "r3")).toMatchObject({
     submissionId: first,
   });
+});
+
+test("an alarm whose attach fails throws, so the platform retries it, and the retry resumes the run", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const control = await servingScripted("conversations-alarm-retry");
+
+  await control.submitProjectMessage("harness", "refuse the next attach", "r1");
+
+  await expect(runInDurableObject(control, (instance) => instance.alarm())).rejects.toThrow();
+  await expect(
+    runInDurableObject(control, (instance) => instance.alarm()),
+  ).resolves.toBeUndefined();
+  expect(await alarm(control)).not.toBeNull();
 });

@@ -153,13 +153,21 @@ export class ServingConversations {
     return true;
   }
 
-  /** Attaching resumes the session; past the run's deadline every current conversation is aborted. */
+  /**
+   * Attaching resumes the session; past the run's deadline every current conversation is aborted.
+   * A failure throws, so the platform retries the alarm instead of stranding the run.
+   */
   alarm(now: number): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const facet = yield* this.#facet();
       const deadline = this.#runDeadline();
+      const expired = deadline !== undefined && now >= deadline;
 
-      if (deadline === undefined || now < deadline) return;
+      // Commands stop at the deadline even when the facet cannot be reached to abort its work.
+      if (expired) this.endWorkspaces();
+
+      const facet = yield* this.#facet();
+
+      if (!expired) return;
 
       logEvent("warn", "run.deadline-aborted");
 
@@ -168,13 +176,13 @@ export class ServingConversations {
       }
 
       this.#ports.ctx.storage.kv.delete(RUN_DEADLINE_KEY);
-      this.endWorkspaces();
     }).pipe(
-      Effect.catch((problem) =>
+      Effect.tapError((problem) =>
         Effect.sync(() => {
           logRedactedCause("supervisor.conversations.alarm", problem);
         }),
       ),
+      Effect.orDie,
     );
   }
 
@@ -266,7 +274,7 @@ export class ServingConversations {
     await (at === undefined ? storage.deleteAlarm() : storage.setAlarm(at));
   }
 
-  #workspace(conversationId: string): Promise<ProjectRpcTargetContract> {
+  #workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable> {
     const projectId = this.#projects.projectOf(conversationId);
     const project = this.#ports.catalog().find((candidate) => candidate.id === projectId);
 
