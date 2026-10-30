@@ -73,6 +73,8 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
   login = "octocat";
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
+  /** A private repository: the clone fails (exit 128) until a credential is installed. */
+  cloneNeedsCredential = false;
   unavailable = false;
   private readonly held: HeldCommand[] = [];
 
@@ -186,7 +188,9 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
       );
     }
 
-    return { stdout: "", stderr: "", exitCode: this.cloneExitCode };
+    const unauthorized = this.cloneNeedsCredential && this.credentialState !== "connected";
+
+    return { stdout: "", stderr: "", exitCode: unauthorized ? 128 : this.cloneExitCode };
   }
 
   private async heldOutput(command: HeldCommand): Promise<CommandOutput> {

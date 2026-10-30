@@ -367,25 +367,35 @@ export class ProjectConnections {
         return { ok: false, problem: { code: resolved.reason } } as const;
       }
 
-      // A workspace reset removes the credential along with the checkout. Re-establish the same
-      // unattended credential that connection uses before handing the repository to the clone
-      // script. Best effort: a public repository clones without any credential, so a missing one
-      // must not block it. A private repository without a credential fails in the clone step.
-      yield* this.github.ensureCredential(Date.now(), signal);
+      const provision = provisionProjectWorkspace({
+        workspaceName: this.workspaceName,
+        projectId: resolved.project.id,
+        catalog,
+        namespace: this.namespace,
+        signal,
+      });
 
-      if (signal?.aborted === true) {
-        return { ok: false, problem: { code: "provisioning-failed" } } as const;
+      let provisioned = yield* Effect.result(provision);
+
+      // A workspace reset removes the credential along with the checkout, and a private repository
+      // then fails to clone. Re-establish the same unattended credential that connection uses and
+      // clone again once. A public repository clones without one, so a turn that succeeds never
+      // pays for the credential check. A credential this Supervisor last saw working is not the
+      // cause, so that failure is not retried.
+      const credentialWasWorking = this.github.lastKnown(Date.now()).github?.state === "connected";
+
+      if (
+        !credentialWasWorking &&
+        Result.isFailure(provisioned) &&
+        provisioned.failure instanceof ProvisionStepFailed &&
+        provisioned.failure.exitCode !== PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE
+      ) {
+        const github = yield* this.github.ensureCredential(Date.now(), signal);
+
+        if (github.state === "connected" && signal?.aborted !== true) {
+          provisioned = yield* Effect.result(provision);
+        }
       }
-
-      const provisioned = yield* Effect.result(
-        provisionProjectWorkspace({
-          workspaceName: this.workspaceName,
-          projectId: resolved.project.id,
-          catalog,
-          namespace: this.namespace,
-          signal,
-        }),
-      );
 
       if (Result.isFailure(provisioned)) {
         const diskFailure =
