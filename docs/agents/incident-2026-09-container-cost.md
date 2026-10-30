@@ -15,7 +15,7 @@ ADR-0043 and ADR-0044.
 | Container size                                                                                         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                                    |
 | Causes                                                                                                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU                  |
 | Fixed                                                                                                  | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail; on `main` only, status reads that answer from the Supervisor's record |
-| Not fixed                                                                                              | A client that polls a route that still touches the workspace, such as the connection refresh or a turn, keeps the container up. `ops:check` detects it.            |
+| Not fixed                                                                                              | A client that polls a route that still touches the workspace, such as the connection refresh or a turn, keeps the container up. `ops:check` does not flag it.      |
 
 The aggregated daily charges are in `docs/agents/evidence/container-cost-2026-09.json`.
 
@@ -80,15 +80,15 @@ The usage export reports the invoice of 09-27 as covering the cycle from 08-27 t
 | 2, never-ending socket | The Workspace Host stops an idle container: an alarm closes the Workspace, then destroys the container after ten minutes with no work (ADR-0043).                                 | `0521455`, `632e1aa`, `ff9ce47`, `2ca99c7`, then `d5b83e3` to `2dc6512`, `ee43f84`, `281f2bb` |
 | 3, shim walk           | The shim polls every 5 s (`COMPUTERD_POLL_MS`), with a cap at the timer limit (ADR-0044).                                                                                         | `53366fb`, `58b8d26`                                                                          |
 | 4, lost credential     | `gh` and Git configuration live under `/workspace`.                                                                                                                               | `3adf75c` to `fad987a`                                                                        |
-| Visibility             | Container events, request ids, `route.settled`, traces, Issues, and `pnpm ops:check`.                                                                                             | `71f03be` to `f8b03b3`, `c0816a9`, `94ef17c` to `4636cc5`                                     |
+| Visibility             | Traces, Issues, the idle-stop event, and `pnpm ops:check`. The request ids, `route.settled`, the container lifecycle events, and most `ops:check` rules were removed later.       | `71f03be` to `f8b03b3`, `c0816a9`, `94ef17c` to `4636cc5`                                     |
 
 Cause 1 is fixed on `main` and not deployed yet (2026-10-16). The project list and the connection
 status answer from the Supervisor's own record and never reach the Workspace Host. Only
 `POST /api/github/connection/refresh` runs `gh` in the container, and the page sends it when it
 loads and when the owner presses **Check again**. The idle stop still does not help against a
 client that keeps calling a route that does touch the workspace, because each call counts as work.
-The defenses there are detection (`ops:check` rule `poller`) and the stop that follows ten minutes
-after the client goes away.
+The only defense there is the stop that follows ten minutes after the client goes away;
+`ops:check` counts each such call as work, so it does not flag the poller.
 
 Production verification on 2026-10-02: the last work ended at 21:31:20Z and the stop fired at
 21:41:20Z (`reasonCode: idle-stop`, `outcome: stopped`). The instances API showed `inactive` one
@@ -96,18 +96,13 @@ second later.
 
 ## Detecting a recurrence
 
-Run `pnpm ops:check` after a deploy, after an end-to-end run, and when the bill looks wrong. The
-rules that matter here:
+Run `pnpm ops:check` after a deploy, after an end-to-end run, and when the bill looks wrong. Its one
+rule, `ran-past-idle`, flags a container that ran more than ten minutes beyond the idle limit after
+the last owner API request, and names the requests before it. Cause 2 would fire it; a poller
+(cause 1) and idle CPU (cause 3) would not.
 
-- `poller`: a route called 20 or more times in a rolling hour, with at least 10 touching the
-  workspace or over 10% canceled. The 09-26 client would have fired it within the first hour.
-- `ran-past-idle`: running time beyond the idle limit after the last owner activity.
-- `unowned-cpu`: 30 minutes of CPU above about 0.1 vCPU with no owner work in the logs.
-- `running-close` and `unexplained-stop`: container stops that were not an intentional Host stop; their cause is unknown.
-
-`docs/agents/design/observability.md`, "Query recipes", has the queries behind each rule so you can
-run them by hand. The cost check is: compute running minutes from the usage dataset, compare them
-with the days in the billing data, and expect agreement.
+The queries are in `tools/ops-check/fetch.mts`. The cost check is: compute running minutes from the
+usage dataset, compare them with the days in the billing data, and expect agreement.
 
 ## What is still unknown
 

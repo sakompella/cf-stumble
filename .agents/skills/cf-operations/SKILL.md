@@ -1,6 +1,6 @@
 ---
 name: cf-operations
-description: Operate a cf-stumble instance on Cloudflare with `cf`. Use when deploying with `cf deploy`, checking a deployment or runtime with `pnpm ops:check`, staging a risky change on a throwaway Worker, or diagnosing container cost, idle stops, and container lifecycle events.
+description: Operate a cf-stumble instance on Cloudflare with `cf`. Use when deploying with `cf deploy`, checking a deployment or runtime with `pnpm ops:check`, staging a risky change on a throwaway Worker, or diagnosing container cost and idle stops.
 ---
 
 # Operate a cf-stumble instance
@@ -22,7 +22,7 @@ The owner API needs no credential: call it with plain `curl`.
 
 ### 1. Prepare
 
-Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call in `docs/agents/design/observability.md`, "Query recipes".
+Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call at the end of `docs/agents/design/observability.md`, "Checking a running deployment".
 
 **Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, and no rollout is in progress.
 
@@ -48,9 +48,9 @@ Give `ops:check` a credential: it reads only `CLOUDFLARE_API_TOKEN` or the file 
 
 ### 2. Read the result
 
-A line starting with a check mark means all is well. A cross names a rule, the measured value against its threshold, the window, and up to three evidence ids. A line saying `unknown` means a source failed, hit its row limit, or returned nothing; it exits 1 because the command cannot say all is well. Missing data is never zero.
+A line starting with a check mark means all is well. A cross (`ran-past-idle`) names a container run that went past the idle stop, by how much, and the routes and end times of the last three requests before it. A line saying `unknown` means a source failed, hit its row limit, or returned nothing; it exits 1 because the command cannot say all is well. Missing data is never zero.
 
-**Complete when:** every cross and every `unknown` line is explained from its evidence ids or reported as open. The rules and their thresholds are in `docs/agents/design/observability.md`, "Checking a running deployment".
+**Complete when:** every cross and every `unknown` line is explained from its evidence or reported as open. The rule and its threshold are in `docs/agents/design/observability.md`, "Checking a running deployment".
 
 ## Stage
 
@@ -70,7 +70,7 @@ Create a worktree and a staging directory with a unique Worker name and containe
 
 ### 3. Deploy and exercise
 
-Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. Exercise the change, then read the events with the Query recipes and `pnpm ops:check --worker <name>`.
+Set the secrets with `--secrets-file`. Deploy with `pnpm exec cf deploy` from the staging directory. Exercise the change, then read the events (`docs/agents/design/observability.md`, "Querying") and `pnpm ops:check --worker <name>`.
 
 **Complete when:** the change did what you claim, with timestamps and event names as evidence, and you recorded the container minutes used (the instances API, start to `inactive`).
 
@@ -84,9 +84,9 @@ Delete the Worker, the container application, the registry images you pushed, an
 
 ### 1. Establish what ran
 
-Run the Check branch over the window. Then follow `docs/agents/design/observability.md`, "Query recipes", "Cost check", to turn usage buckets into running minutes per day.
+Run the Check branch over the window. Sum running minutes per day from the usage query in `tools/ops-check/fetch.mts` (byte-seconds divided by provisioned memory and 60) and compare them with the day's container charge.
 
-**Complete when:** you have running minutes per day, the stop events for each run, and who owned the work (`route.settled`, canceled invocations, `turn.*`).
+**Complete when:** you have running minutes per day, how each run ended (`workspace.container.idle-stop`, `workspace.reset`), and who owned the work (the `ran-past-idle` evidence, canceled invocations, `turn.settled`).
 
 ### 2. Match the known causes
 
