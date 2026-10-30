@@ -1,19 +1,7 @@
-/**
- * The startup-check response. `GET /` is an ordinary request that must stay cheap and
- * deterministic: it reads no capability, so a passing check proves this generation's request
- * handling started rather than that a model or a workspace answered.
- */
+/** Reads no capability, so a passing check proves request handling started, not that a model or workspace answered. */
 const READY_BODY = "generation-0 main facet ready";
 
-/**
- * The whole request surface of a Generation 0 facet: the startup check, and nothing else.
- *
- * A turn is not a request here. It arrives as `MainFacet.startTurn`, a Durable Object RPC method,
- * because it must receive a project capability that cannot be serialized into a request and must
- * answer with frames while it runs (ADR-0037). There is therefore no `POST /turn`: a second,
- * buffered definition of a turn would be a second answer to the question the streamed turn already
- * answers.
- */
+/** A turn is not a request: `MainFacet.startTurn` is an RPC method because it must receive a capability that cannot be serialized into a request. */
 export function handleGeneration0Request(request: Request): Promise<Response> {
   const path = new URL(request.url).pathname;
 

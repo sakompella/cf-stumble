@@ -57,8 +57,6 @@ async function pumpTurn(
 
   const outcome = await runPiAgentTurn({
     prompt: request.prompt,
-    // The conversation arrives from the host's saved thread; everything else about the state is
-    // this generation's own, so it is built here rather than accepted from a request.
     state: { ...createPiAgentTurnState(ROUTE_MODEL), messages: [...request.messages] },
     env,
     streamFn: createRouteStreamFn(capabilities.MODEL, signal),
@@ -71,10 +69,8 @@ async function pumpTurn(
     signal,
   });
 
-  // The turn's own diff, asked for here rather than in the system prompt. It
-  // runs after the model has stopped and before the terminal frame, so a turn that used a tool
-  // which can change a file ends by showing what changed even when the model never mentioned it.
-  // A failed turn gets one too: it may have changed files before it failed.
+  // Asked for after the model stops, so a turn that used a file-changing tool shows what changed even
+  // if the model never said; a failed turn gets one too.
   if (touchedFiles && !signal.aborted) {
     publish(diffFrame(await readWorkspaceDiff(env, signal)));
   }
@@ -83,18 +79,10 @@ async function pumpTurn(
 }
 
 /**
- * Runs one turn against a workspace capability received as an RPC method argument, starting in the
- * working directory the host selected, and returns the newline-delimited JSON frames it produces.
- *
- * The capability is request-scoped by construction. It never reaches this generation's
- * environment, which the Worker Loader caches per harness commit and which therefore cannot hold
- * anything belonging to one project. The stream is returned before the turn starts, so the turn
- * runs after the RPC call that started it has already returned; that is why it holds a lease on a
- * duplicate rather than the received stub, which Workers RPC disposes at that moment.
- *
- * The lease is released on all three of the turn's endings: the turn finishing, the turn throwing,
- * and the caller cancelling this stream. The last one also aborts the run, so a caller that stops
- * reading stops the work rather than merely stopping the frames.
+ * The capability is request-scoped because the Worker Loader caches this environment per harness
+ * commit. The turn runs after the starting RPC call returned, so it leases a duplicate; Workers RPC
+ * disposes the received stub at that moment. The lease is released on finish, throw, and cancel, and
+ * cancel also aborts the run.
  */
 // oxlint-disable-next-line max-lines-per-function -- The stream lifecycle keeps parsing, leasing, and cancellation in one boundary.
 export function startFacetTurn(
@@ -158,8 +146,7 @@ export function startFacetTurn(
     },
     cancel() {
       cancellation.abort();
-      // Released here rather than left to the pump: a turn stops when the capability it is
-      // calling through goes away, so this both frees the stub and ends the work behind it.
+      // A turn stops when the capability it calls through goes away, so releasing it also ends the work.
       lease?.release();
     },
   });

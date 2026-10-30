@@ -6,10 +6,7 @@ import type {
 } from "../../model-route.js";
 import { ZERO_USAGE } from "./stream-assembler.js";
 
-// -- Narrow Pi shapes the adapter consumes ----------------------------------
-//
-// These mirror the vendored Pi types without importing the package, so the
-// adapter stays pure and separately testable.
+// Mirrors the vendored Pi types without importing the package, so the adapter stays pure and testable.
 
 export type PiTextContent = Readonly<{ type: "text"; text: string }>;
 
@@ -84,8 +81,6 @@ export type PiContext = Readonly<{
   tools?: ReadonlyArray<PiTool>;
 }>;
 
-// -- Pi Context -> ModelRouteRequest ----------------------------------------
-
 function userContentToString(content: PiUserMessage["content"]): string {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: Pi UserMessage.content is a union of string and array; typeof is the narrowing required by the union.
   if (typeof content === "string") return content;
@@ -156,11 +151,6 @@ function piToolToRoute(tool: PiTool): ToolDefinition {
   };
 }
 
-/**
- * Convert a Pi-shaped context into a {@link ModelRouteRequest}.
- *
- * Never selects a model, sets reasoning effort, or accesses credentials.
- */
 export function piContextToRouteRequest(context: PiContext): ModelRouteRequest {
   const messages: RouteMessage[] = [];
 
@@ -178,8 +168,6 @@ export function piContextToRouteRequest(context: PiContext): ModelRouteRequest {
 
   return { messages };
 }
-
-// -- Route AssistantMessage -> Pi AssistantMessage ---------------------------
 
 function routeToolCallToPi(tc: RouteAssistantMessage["tool_calls"][number]): PiToolCall {
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Boundary: JSON.parse of tool arguments returns an unvalidated object from the model route.
@@ -202,11 +190,6 @@ function routeToolCallToPi(tc: RouteAssistantMessage["tool_calls"][number]): PiT
   return { type: "toolCall", id: tc.id, name: tc.function.name, arguments: parsed };
 }
 
-/**
- * Convert the route's final assistant message into a Pi-shaped assistant message.
- *
- * Never selects a model, sets reasoning effort, or accesses credentials.
- */
 export function routeMessageToPiAssistant(message: RouteAssistantMessage): PiAssistantMessage {
   const content: PiContentBlock[] = [];
 

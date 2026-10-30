@@ -7,19 +7,11 @@ import {
 } from "./turn-policy.js";
 import type { ExecutionEnv } from "@cf-stumble/pi";
 
-/**
- * The diff a turn produces about itself: the repository's answer to "what changed", bounded by the
- * same limits a tool result carries, or the reason the repository could not answer.
- */
 export type WorkspaceDiff =
   | Readonly<{ available: true; content: string; truncated: boolean }>
   | Readonly<{ available: false; detail: string }>;
 
-/**
- * The stock tools that can leave a file different from how the turn found it. `read` cannot, so a
- * turn that only read is a turn with nothing to show; `bash` can, because a command changes files
- * as readily as the `write` and `edit` tools do.
- */
+/** `read` cannot change a file; `bash` can. */
 const WORKSPACE_MUTATING_TOOLS: ReadonlySet<string> = new Set(["bash", "edit", "write"]);
 
 export function mutatesWorkspace(toolName: string): boolean {
@@ -46,18 +38,8 @@ function utf8Length(text: string): number {
 }
 
 /**
- * Runs {@link TURN_DIFF_COMMAND} in the turn's working directory and returns what it printed.
- *
- * This is the harness asking, not the model: it runs after the model has stopped, through the same
- * `ExecutionEnv` the turn's tools ran on, so it reaches exactly the project directory the turn
- * worked in and nothing else. Every failure the command can have — a rejected capability, a
- * timeout, a directory that is not a repository — resolves to an `available: false` diff carrying
- * the command's own words rather than throwing into the turn.
- *
- * The exec path already bounds a command's buffered output to the tail of the same two limits, and
- * it does so silently, so re-truncating here cannot tell a reader whether anything was dropped.
- * Counting the bytes the command printed can: a diff longer than what survived is a diff the frame
- * carries the end of, and it says so.
+ * Every failure resolves to an `available: false` diff carrying the command's own words. The exec path
+ * silently tail-truncates output, so the bytes printed are counted to tell whether anything was dropped.
  */
 export async function readWorkspaceDiff(
   env: ExecutionEnv,

@@ -10,20 +10,12 @@ import {
 import { isNull, isProjectLstatValue, isUint8Array, parseEnvelope } from "./execution-env-rpc.js";
 import type { ParsedEnvelope, ProjectLstatValue } from "./execution-env-rpc.js";
 
-/**
- * The read/write/stat file operations `createFacetExecutionEnv` needs from the project RPC target.
- * Every function here takes `cwd` and `target` as plain arguments rather than closing over them, so
- * `createFacetExecutionEnv` stays a thin composition and nothing here can hold the target longer
- * than one call.
- */
 type FsTarget = Pick<ProjectRpcTargetContract, "lstat" | "readFile" | "writeFile">;
 
 const TEMP_DIR_ADDRESSED = "/.cf-stumble/tmp";
 
 const MAX_TEMP_FILE_ATTEMPTS = 16;
 
-/** The one failure shape every unsupported or already-aborted method resolves to. Named (rather
- * than an inline anonymous object type) so it composes into `Result<T, FileError>` for any `T`. */
 type FileFailure = Readonly<{ ok: false; error: FileError }>;
 
 function abortedError(path?: string): FileFailure {
@@ -64,10 +56,6 @@ function translatePath(
 
 type ProjectReply<T> = Exclude<ParsedEnvelope<T>, { readonly kind: "malformed" }>;
 
-/**
- * Calls one project RPC and parses its reply. A rejected call or a malformed reply becomes an
- * `unknown` error that names the RPC; a failure reply is left for the caller to read.
- */
 async function callProjectRpc<T>(
   rpc: keyof FsTarget,
   path: string | undefined,
@@ -91,7 +79,6 @@ async function callProjectRpc<T>(
   return { ok: true, value: envelope };
 }
 
-/** {@link callProjectRpc}, with a failure reply mapped to Pi's own `FileError`. */
 async function callProject<T>(
   rpc: keyof FsTarget,
   path: string,

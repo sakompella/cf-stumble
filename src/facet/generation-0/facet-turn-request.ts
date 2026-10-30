@@ -6,13 +6,8 @@ import { isRecord } from "../../untrusted.js";
 import type { AgentMessage } from "@cf-stumble/pi";
 
 /**
- * What the host sends to start one turn: the prompt, and the conversation so far.
- *
- * The conversation is all the host has and all it may send. The system prompt, the model, and the
- * thinking level are this generation's own: the prompt is rebuilt from the workspace's
- * instructions on every turn, and the model is the route this facet was given. A request that
- * carried them would let a caller choose a model, replace this generation's instructions, or hand
- * the turn a history the host never saved, which is exactly what the host's saved thread is for.
+ * The host sends only the prompt and conversation. The system prompt and model are this
+ * generation's own; accepting them would let a caller choose a model or replace instructions.
  */
 export type FacetTurnRequest = Readonly<{
   prompt: string;
@@ -20,10 +15,8 @@ export type FacetTurnRequest = Readonly<{
 }>;
 
 /**
- * Recognize a conversation without reading inside its messages. Pi owns the schema of a message,
- * so parsing one here would fork that schema into this generation and break the next Pi upgrade;
- * the host proved every message against its own stored-field rules before it saved them
- * (`supervisor/threads/messages.ts`). An absent conversation is a first turn, not a fault.
+ * Pi owns the message schema, so messages are not parsed here; the host validated them before
+ * saving. An absent conversation is a first turn.
  */
 function parseTurnMessages(value: unknown): readonly AgentMessage[] | undefined {
   if (value === undefined || value === null) {

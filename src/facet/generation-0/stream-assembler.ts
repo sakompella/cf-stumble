@@ -2,17 +2,9 @@ import type { Api, AssistantMessage, AssistantMessageEventStream, Model } from "
 import type { ModelUsage, ProviderFallback, ToolCallDelta } from "../../model-route.js";
 
 /**
- * The model descriptor Pi's `Agent` needs in its state. Every field the host actually decides —
- * which model, which reasoning effort, which endpoint, which credential — lives behind the model
- * route in the immutable `src/model-route.ts`, so nothing here selects anything. This describes
- * the route, not a model. Its costs are zero because Generation 0 has no way to learn the real
- * prices and must not invent them.
- *
- * The context window and the output budget are not zero, and that is deployed evidence rather
- * than taste. With a zero window and a zero output budget, every deployed turn saved an assistant
- * message with empty content while the route itself streamed the text: Pi sizes a response against
- * these numbers, and zero leaves no room for one. They mirror what the host route asks for in
- * `model-route-stream.ts`, which is the only place that selects a model.
+ * The context window and output budget are nonzero on purpose: with zeros every deployed turn saved an
+ * empty assistant message, because Pi sizes a response against them. They mirror
+ * `model-route-stream.ts`. Costs are zero because real prices are unknown.
  */
 export const ROUTE_MODEL = {
   id: "host-model-route",
@@ -36,12 +28,6 @@ export const ZERO_USAGE: AssistantMessage["usage"] = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-/**
- * Build the `usage` field Pi's `AssistantMessage` requires from what the model route reported.
- * Cache fields stay zero because this generation never attempts prompt caching, and `estimated`
- * on the route's usage tells us whether `inputTokens`/`outputTokens` are a real provider count or
- * this route's own conservative guess — either way they are never asserted as a silent zero.
- */
 export function toPiUsage(usage: ModelUsage): AssistantMessage["usage"] {
   return {
     input: usage.inputTokens,
@@ -70,12 +56,7 @@ export function assistantShell(
   };
 }
 
-/**
- * Best-effort parse of one accumulated tool call's argument text, mirroring the model route's own
- * recovery rule: invalid or partial JSON becomes an empty object rather than a thrown error,
- * because "no arguments yet" is honest mid-stream and a final malformed payload is the model's
- * fault, not a reason to crash the turn.
- */
+/** Invalid or partial JSON becomes an empty object: "no arguments yet" is honest mid-stream. */
 // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Boundary: mirrors Pi's own ToolCall.arguments, an open object from the model.
 function parseToolArgs(text: string): Record<string, unknown> {
   try {
@@ -106,12 +87,7 @@ type OpenToolBlock = Readonly<{
 
 type OpenBlock = OpenTextBlock | OpenToolBlock;
 
-/**
- * Tracks the content blocks one streamed turn has opened so far, in the order this route saw them
- * arrive, and turns each `ModelStreamEvent` into the Pi `AssistantMessageEvent`(s) it implies.
- * Every push carries a full `partial` snapshot because that is what `AssistantMessageEvent`
- * requires and what the agent loop replaces its working message with on each update.
- */
+/** Every push carries a full `partial` snapshot because the agent loop replaces its working message with it. */
 export class TurnAssembler {
   private blocks: OpenBlock[] = [];
   private toolIndexToBlock = new Map<number, number>();
@@ -205,7 +181,6 @@ export class TurnAssembler {
     });
   }
 
-  /** Close every still-open block with its `_end` event, in the order it was opened. */
   private closeOpenBlocks(stream: AssistantMessageEventStream): void {
     for (const block of this.blocks) {
       if (block.kind === "text") {
@@ -231,11 +206,7 @@ export class TurnAssembler {
     }
   }
 
-  /**
-   * The route answered from Workers AI because the owner's ChatGPT plan reached its usage limit.
-   * The message this call ends with carries that as a diagnostic, so the saved thread shows which
-   * model answered.
-   */
+  /** The route answered from Workers AI because the ChatGPT plan hit its usage limit; the diagnostic records which model answered. */
   providerFallback(event: ProviderFallback): void {
     this.fallback = {
       type: "provider-fallback",
@@ -250,7 +221,6 @@ export class TurnAssembler {
       : { ...message, diagnostics: [...(message.diagnostics ?? []), this.fallback] };
   }
 
-  /** Finish the turn with the model route's own final, authoritative assembly. */
   finish(stream: AssistantMessageEventStream, message: AssistantMessage): void {
     this.ensureStarted(stream);
     this.closeOpenBlocks(stream);

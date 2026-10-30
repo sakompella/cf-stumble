@@ -22,7 +22,6 @@ export type ParsedEnvelope<T> =
   | { readonly kind: "failure"; readonly error: EnvelopeFailure }
   | { readonly kind: "malformed" };
 
-/** Parses a raw RPC return value into one of `ProjectResult<T>`'s two shapes, or `"malformed"`. */
 export function parseEnvelope<T>(
   raw: unknown,
   isValue: (value: unknown) => value is T,
@@ -70,7 +69,6 @@ function isParsedCanonicalPath(value: unknown): value is ParsedCanonicalPath {
   return isRecord(value.error) && typeof value.error.code === "string";
 }
 
-/** `lstat`'s value: a `ProjectFileInfo` plus its own nested `ProjectResult<string>` canonical path. */
 export type ProjectLstatValue = ProjectFileInfo & { readonly canonicalPath: ParsedCanonicalPath };
 
 export function isProjectLstatValue(value: unknown): value is ProjectLstatValue {
@@ -105,7 +103,6 @@ export type ParsedExecEvent =
   | { readonly kind: "terminal"; readonly outcome: "exited"; readonly exitCode: number }
   | { readonly kind: "terminal"; readonly outcome: "killed" | "timed-out" | "failed" };
 
-/** Parses one raw exec-stream event, or `undefined` if its shape does not match a known event. */
 export function parseExecEvent(value: unknown): ParsedExecEvent | undefined {
   if (!isRecord(value) || typeof value.kind !== "string") return undefined;
 
