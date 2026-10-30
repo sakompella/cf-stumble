@@ -172,15 +172,6 @@ Connect from the owner page:
 
 A sign-in expires after 10 minutes, and only the most recent one can be finished. The address holds a one-time code; it is useless without the verifier the Supervisor kept.
 
-An agent can do the same with `tools/chatgpt-connect.mts`. It starts a sign-in through the owner API, drives a temporary copy of a Firefox profile that is already signed in to ChatGPT, catches the redirect, and finishes the sign-in:
-
-```sh
-pnpm exec tsx tools/chatgpt-connect.mts --origin https://<host> \
-  --profile "<Firefox profile directory>" [--account <email or exact name>]
-```
-
-`--account` is required when OpenAI's account chooser lists more than one account. The tool never changes the original profile and deletes its copy when it exits. OpenAI may answer a headless browser with a Cloudflare challenge or a route error; the tool then stops and saves the page text and a screenshot under `/tmp/chatgpt-connect-*`. Run it again with `--headed` to show the window, or connect from the owner page. `--inspect` stops before the approval page and calls no owner API.
-
 The page shows one of three states:
 
 - **connected** (with the model name): model calls use your subscription. When OpenAI refuses a call for the plan's usage limit, the page adds **usage limit reached**, with the time the limit ends when OpenAI gave one. A call the limit refuses before it sends any output is answered by Workers AI instead, and the saved conversation shows a notice before that answer. The connection stays connected.

@@ -6,9 +6,6 @@
     "types": ["node"]
   },
   "include": [
-    "chatgpt-connect.mts",
-    "chatgpt-connect/**/*.mts",
-    "chatgpt-connect/**/*.ts",
     "build-loaded-execution-env-fixture.mts",
     "build-generation-0.mts",
     "build-owner-page.mts",

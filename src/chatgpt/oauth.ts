@@ -19,9 +19,8 @@ export const AUTHORIZE_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/authorize`;
 export const TOKEN_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/oauth/token`;
 
 /**
- * Nothing listens here. A hosted Worker cannot receive a loopback redirect, so the owner (or
- * `tools/chatgpt-connect.mts`) hands back the address the browser ends on, and the Worker reads
- * its parameters without fetching it.
+ * Nothing listens here. A hosted Worker cannot receive a loopback redirect, so the owner hands back
+ * the address the browser ends on, and the Worker reads its parameters without fetching it.
  */
 export const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 
