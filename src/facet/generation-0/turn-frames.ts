@@ -69,9 +69,36 @@ function toolResultText(message: Extract<AgentMessage, { role: "toolResult" }>):
     .join("\n");
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- A tool call's arguments are whatever JSON the model wrote, and keep that shape with each string bounded.
+function boundedArgument(value: unknown): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Any string in the model's JSON may be the large one.
+  if (typeof value === "string") {
+    return truncateTail(value, {
+      maxLines: TOOL_RESULT_DISPLAY_MAX_LINES,
+      maxBytes: TOOL_RESULT_DISPLAY_MAX_BYTES,
+    }).content;
+  }
+
+  if (Array.isArray(value)) return value.map((item) => boundedArgument(item));
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, boundedArgument(item)]),
+    );
+  }
+
+  return value;
+}
+
+/**
+ * The arguments as a frame shows them, with each string bounded like a tool result, so a `write`
+ * of a large file cannot outgrow the Supervisor's progress frame bound.
+ */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- Boundary: Pi types a tool call's arguments as an open value, so the shape is proven here.
 function toolArguments(args: unknown): Record<string, unknown> {
-  return isRecord(args) ? args : {};
+  return isRecord(args)
+    ? Object.fromEntries(Object.entries(args).map(([key, item]) => [key, boundedArgument(item)]))
+    : {};
 }
 
 /**
