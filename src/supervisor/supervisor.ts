@@ -227,12 +227,12 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * Ask the workspace what its GitHub credential can do now, store the answer, and answer the
-   * record. This is the one status read that reaches the Workspace Host.
+   * Ask the workspace what its GitHub credential can do now, install `GH_TOKEN` when the workspace
+   * has no usable credential, and answer the stored record. This reaches the Workspace Host.
    */
   refreshGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionRecord> {
     return runAtEntryPoint(
-      this.github.status(now).pipe(Effect.map(() => this.github.lastKnown(now))),
+      this.github.ensureCredential(now).pipe(Effect.map(() => this.github.lastKnown(now))),
     );
   }
 
