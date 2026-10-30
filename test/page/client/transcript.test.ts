@@ -33,6 +33,19 @@ test("a saved conversation shows text blocks and tool results, and nothing it ca
   expect(Option.isNone(savedTranscript("{}"))).toBe(true);
 });
 
+test("a saved assistant message that holds only tool calls adds no empty entry", () => {
+  const saved = JSON.stringify([
+    { role: "user", content: "hi" },
+    { role: "assistant", content: [{ type: "toolCall", id: "t", name: "read", arguments: {} }] },
+    { role: "toolResult", toolCallId: "t", toolName: "read", content: "out", isError: false },
+  ]);
+
+  expect(Option.getOrThrow(savedTranscript(saved))).toMatchObject([
+    { _tag: "Text", role: "user" },
+    { _tag: "Tool", summary: "read — done" },
+  ]);
+});
+
 test("a saved answer Workers AI gave after ChatGPT's usage limit is preceded by a notice", () => {
   const fallback = { type: "provider-fallback", timestamp: 1, details: { limitedUntil: null } };
 

@@ -69,6 +69,10 @@ function oneAtATime(messages: readonly Drawn[]): readonly TranscriptEntry[] {
   let transcript: readonly TranscriptEntry[] = [];
 
   for (const message of messages) {
+    if (message.kind === "text" && message.role === "assistant" && message.content === "") {
+      continue;
+    }
+
     if (message.kind === "text") {
       const role = ROLES.find((known) => known === message.role) ?? "system";
       const [entryRole, who] = WHO[role];
