@@ -2,6 +2,7 @@ import * as Option from "effect/Option";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { OWNER_PAGE_CLASSES as CLASS } from "../element-ids.js";
 import type { Message } from "./message.js";
+import { markdownBlocks } from "./markdown.js";
 import { FollowTranscript } from "./mount.js";
 import {
   boundedLines,
@@ -72,7 +73,18 @@ function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>
   const pre = (children: readonly (Html | string)[]) => h.pre([h.Class("text")], children);
 
   return TranscriptEntry.match<Html>(item, {
-    Text: ({ role, who, text }) => entry(role, who, [pre([text])], key, h),
+    Text: ({ role, who, text }) =>
+      entry(
+        role,
+        who,
+        [
+          role === "assistant"
+            ? h.div([h.Class("text markdown")], markdownBlocks(text, h))
+            : pre([text]),
+        ],
+        key,
+        h,
+      ),
     Tool: (tool) => entry("tool", "tool call", [toolView(tool, h)], key, h),
     Diff: ({ content, isTruncated }) =>
       entry(

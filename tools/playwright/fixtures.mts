@@ -60,7 +60,7 @@ export function projectButton(page: Page, projectId: string) {
 
 /** The transcript entries of one role, each read as the text a reader sees under its label. */
 export function transcriptTexts(page: Page, role: "user" | "assistant") {
-  return page.locator(`#${ID.messageList} > li.${role} > pre.text`);
+  return page.locator(`#${ID.messageList} > li.${role} > .text`);
 }
 
 export function requestsTo(server: HarnessServer, method: "GET" | "POST", path: string) {
