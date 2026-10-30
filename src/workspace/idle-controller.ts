@@ -3,15 +3,11 @@ import { logEvent, logRedactedCause } from "../diagnostics.js";
 import type { ExecBackend } from "./project/index.js";
 import { decideIdleStop, type WorkspaceActivity } from "./idle-stop.js";
 
-/** What the project capability reports about its own work. */
 export type ProjectActivity = Readonly<{
-  /** Mark a unit of work as started; the returned function marks it settled. */
   begin(): () => void;
-  /** Mark that work just happened, without holding the workspace busy. */
   touch(): void;
 }>;
 
-/** The effects the controller needs. Tests supply fakes; the Host supplies the real ones. */
 type IdleControllerPorts = Readonly<{
   nowMs(): number;
   idleLimitMs: number;
@@ -23,10 +19,8 @@ type IdleControllerPorts = Readonly<{
 }>;
 
 /**
- * Tracks the Workspace Host's work in memory and stops the container once it has been idle for the
- * limit (the decision is `decideIdleStop`). The alarm is armed once per quiet period and
- * re-armed when it fires early, so a burst of work writes it at most once. Nothing is armed while
- * no container runs, and nothing here is a timer, so it cannot keep the object in memory.
+ * The alarm is armed once per quiet period and re-armed when it fires early. Nothing here is a
+ * timer, so it cannot keep the object in memory.
  */
 export class WorkspaceIdleController implements ProjectActivity {
   readonly #ports: IdleControllerPorts;
@@ -60,7 +54,6 @@ export class WorkspaceIdleController implements ProjectActivity {
     this.#armForQuietPeriod();
   }
 
-  /** Work may still arrive until `endsAtMs`, the end of a turn a project capability was handed to. */
   leaseUntil(endsAtMs: number): void {
     this.#leaseEndsAtMs = Math.max(this.#leaseEndsAtMs ?? 0, endsAtMs);
     this.#armForQuietPeriod();
@@ -74,12 +67,10 @@ export class WorkspaceIdleController implements ProjectActivity {
     };
   }
 
-  /** Forget the alarm this instance armed, because storage may have dropped it. Work re-arms it. */
   forgetAlarm(): void {
     this.#armed = false;
   }
 
-  /** Settles once any stop in progress has finished. Work calls this after it has begun. */
   settled(): Promise<void> {
     return this.#stopping ?? Promise.resolve();
   }
@@ -94,7 +85,6 @@ export class WorkspaceIdleController implements ProjectActivity {
     );
   }
 
-  /** A failed write is logged and rethrown, so an alarm handler that re-arms fails and is retried. */
   async #arm(atMs: number): Promise<void> {
     this.#armed = true;
 
@@ -131,9 +121,8 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   /**
-   * Close the Workspace, then destroy the container if nothing began meanwhile. Work that begins
-   * during the close keeps the container: it connects again and adopts the running container. A
-   * failed close does not stop the destroy, because the destroy also ends the WebSocket.
+   * A failed close does not stop the destroy, because the destroy also ends the WebSocket. Work
+   * that begins during the close keeps the container.
    */
   async #stop(idleForMs: number): Promise<void> {
     try {
@@ -154,7 +143,6 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   async #destroyIfStillIdle(): Promise<"stopped" | "not-running" | "skipped-busy" | "threw"> {
-    // Decide again: work, or a turn lease taken during the close, cancels the stop.
     const decision = decideIdleStop(this.snapshot(), this.#ports.nowMs(), this.#ports.idleLimitMs);
 
     if (decision.kind !== "stop") return "skipped-busy";
@@ -174,12 +162,8 @@ export class WorkspaceIdleController implements ProjectActivity {
 }
 
 /**
- * Run one unit of Host work as work in flight, so the idle check never counts it as quiet time.
- *
- * An idle stop in progress sees this work as in flight and keeps the container; the work waits
- * for the stop to finish closing the Workspace before it touches it. The work is uninterruptible:
- * the Host cannot cancel a native Computer call it has made, so an interruption waits for the work
- * to settle, and the work stays counted until it has.
+ * The work is uninterruptible: the Host cannot cancel a native Computer call, so an interruption
+ * waits for the work to settle, and the work stays counted until then.
  */
 export function trackedWork<A, E>(
   activity: Pick<WorkspaceIdleController, "begin" | "settled">,
@@ -193,11 +177,7 @@ export function trackedWork<A, E>(
   );
 }
 
-/**
- * An exec backend that waits for an idle stop in progress before it starts a command. The exec has
- * already been counted as in flight, so the stop keeps the container; this only keeps the command
- * from starting on a Workspace that is half closed.
- */
+/** The exec is already counted, so the stop keeps the container; this keeps the command from starting on a half-closed Workspace. */
 export function afterIdleStop(
   controller: Pick<WorkspaceIdleController, "settled">,
   backend: ExecBackend,

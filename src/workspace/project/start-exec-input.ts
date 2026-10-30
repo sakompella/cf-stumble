@@ -35,7 +35,6 @@ export interface ParsedStartExecInput {
 
 const START_EXEC_KEYS = new Set(["command", "cwd", "timeoutMs"]);
 
-/** Parses `startExec`'s RPC input: a `command`, and optional `cwd` and `timeoutMs`, nothing else. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary for `startExec`; every field is parsed below.
 export function parseStartExecInput(input: unknown): ProjectResult<ParsedStartExecInput> {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC input shape is untrusted.

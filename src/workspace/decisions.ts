@@ -1,16 +1,4 @@
-/**
- * What a workspace surface decides and what it answers with.
- *
- * The build surface (`harness-build.ts`) and the provisioning surface (`project-provision.ts`)
- * each parse their own request and produce a `WorkspacePlan` from it. A plan carries a command
- * source and directory the server chose, never text a caller sent, so the executor can run it
- * without deciding anything.
- *
- * A plan holds nothing secret. It is a plain structured-cloneable value that can be returned,
- * compared, or written into a report, so `run-command` has no field for standard input: the one
- * caller that sends a secret on standard input passes it at the call instead of putting it in a
- * value that travels.
- */
+/** A plan carries a command source and directory the server chose, never caller text. It holds nothing secret, so `run-command` has no stdin field. */
 
 export type WorkspacePlan = Readonly<{
   kind: "run-command";
@@ -20,10 +8,9 @@ export type WorkspacePlan = Readonly<{
 }>;
 
 /**
- * `workspace-sync-incomplete` means a command ran in the container but its effect is not proven to
- * be in the durable workspace store: Computer's post-command sync did not complete, or the store
- * does not show the result. After the container is replaced, the store is what comes back.
- * `workspace-busy` means a workspace reset was running, so the change was refused before it began.
+ * `workspace-sync-incomplete`: the command ran but is not proven in the durable store, which is
+ * what returns after container replacement. `workspace-busy`: a reset was running, so the change
+ * was refused before it began.
  */
 export type WorkspaceFailure = Readonly<{
   ok: false;

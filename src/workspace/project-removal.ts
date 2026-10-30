@@ -9,7 +9,6 @@ import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisio
 import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
 import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
-/** The only workspace removal request. Its paths are derived from the parsed id. */
 export type ProjectRemovalRequest = Readonly<{
   kind: "remove-project";
   projectId: string;
@@ -30,7 +29,6 @@ function parsedProjectId(value: UntrustedObject): ProjectId | undefined {
   return projectId === undefined || projectId === HARNESS_PROJECT_ID ? undefined : projectId;
 }
 
-/** Parse the narrow host RPC before deriving any filesystem path. */
 export function parseProjectRemovalRequest(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the Workspace Host RPC boundary.
   value: unknown,
@@ -51,18 +49,13 @@ export function parseProjectRemovalRequest(
   return projectId === undefined ? invalidRequest() : { kind: "remove-project", projectId };
 }
 
-/** The directories a removal deletes and then expects to be gone from the durable store. */
 function removedDirectories(projectId: ProjectId): readonly [string, string] {
   const root = projectDirectory(projectId);
 
   return [root, `${root}.provisioning`];
 }
 
-/**
- * Remove only the project clone and its staging directory, while holding the project's provision
- * lock. The Supervisor orders its own requests, but a removal can outlive the RPC that asked for
- * it, and the lock is what keeps a later clone out of the directory it is deleting.
- */
+/** A removal can outlive the RPC that asked for it; the provision lock keeps a later clone out of the directory it is deleting. */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
@@ -81,11 +74,7 @@ export function planProjectRemovalRequest(
   };
 }
 
-/**
- * Whether a removal that exited successfully is in the durable workspace store: neither the clone
- * nor its staging directory is there. The store is what the next container starts from, so a
- * directory still present there would come back.
- */
+/** The store is what the next container starts from, so a directory still present there would come back. */
 export function removalIsDurable(
   operations: WorkspaceEffects,
   projectId: ProjectId,

@@ -1,6 +1,5 @@
 import { asUntrusted, field, hasExactKeys } from "../../untrusted.js";
 
-/** Parse the optional turn budget without letting untrusted data enter the capability. */
 export function parseProjectBudget(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   value: unknown,
