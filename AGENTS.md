@@ -34,6 +34,16 @@ Deploying with `cf deploy`, checking a deployment or runtime with `pnpm ops:chec
 
 `pnpm verify` never opens a browser, so it cannot see that the owner page fills itself in. `pnpm test:browser` does: Playwright specs in `tools/playwright` drive the real page against a local stub of the owner API (`tools/browser-harness`) and cover the streamed turn, cancel, reload persistence, the project sidebar, GitHub states, the generation drawer, and a phone viewport. It needs Chromium and stays outside the commit gate; set `CHROMIUM_PATH` to an executable when Playwright's own download does not run, as on NixOS.
 
+### Scope
+
+Earlier agents on this repository built far past what Aditya asked (see the Oct 2026 forensics in `.audit/opus-overhaul-2026-10-30/forensics.md` on his machines). Before you build:
+
+- Do the plain request first. If you choose a heavier option than the one he named, say so before you build it.
+- Guard only against failures that have happened. Name the incident in the commit message.
+- One writer pass and one review pass. Fold review nits into the same commit.
+- Keep plans, evidence, and decision logs in `.audit/` or `_*.md`; never commit them.
+- Prove a change on the deployed instance or a staging copy, not only against fakes.
+
 ### Project architecture
 
 For architecture, planning, or implementation work, read `docs/agents/domain.md` before exploring. It gives the required reading order for the product overview, glossary, current ADRs, Computer integration, and current status. Everything under `docs/agents/` is agent-generated. Never change the content of `README.md` unless Aditya asks. If it only needs reformatting to pass `pnpm format:check`, reformat it in a commit of its own.
