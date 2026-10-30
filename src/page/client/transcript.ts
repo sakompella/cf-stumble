@@ -199,18 +199,19 @@ function savedToolResult(message: SavedMessage): ToolResult {
   };
 }
 
-function savedTextEntry(message: SavedMessage): TranscriptEntry {
+/** An assistant message that holds only tool calls has no text, and its tool results show it. */
+function savedTextEntry(message: SavedMessage): Option.Option<TranscriptEntry> {
   const body = contentText(message.content);
 
   if (message.role === "user") {
-    return textEntry("user", "you", body);
+    return Option.some(textEntry("user", "you", body));
   }
 
   if (message.role === "assistant") {
-    return textEntry("assistant", "assistant", body);
+    return body === "" ? Option.none() : Option.some(textEntry("assistant", "assistant", body));
   }
 
-  return textEntry("system", message.role, body);
+  return Option.some(textEntry("system", message.role, body));
 }
 
 const ProviderFallback = Schema.Struct({ type: Schema.Literal("provider-fallback") });
@@ -249,7 +250,7 @@ function savedEntries(messages: readonly unknown[]): readonly TranscriptEntry[] 
     }
 
     if (message.role !== "toolResult") {
-      entries.push(savedTextEntry(message));
+      entries.push(...Option.toArray(savedTextEntry(message)));
       continue;
     }
 

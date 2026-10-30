@@ -37,8 +37,8 @@ cannot be made to load one, because it creates no script element and renders mod
 output only as text. A source pinned to the exact path would be stricter, but it needs the request
 origin in the policy, and the page's own guarantees already close the gap.
 
-**Builds.** `pnpm verify` runs `build:page` before the typecheck. `pnpm harness:browser` and
-`pnpm test:browser` run it first, and the harness serves the file with the Worker's headers and
+**Builds.** `pnpm verify` runs `build:page` before the typecheck. `pnpm test:browser` runs it first,
+and the stub server serves the file with the Worker's headers and
 policy. Every Wrangler build runs it through `build.command`, which `cf build` and `cf deploy` read
 from `wrangler.config.ts` and `wrangler deploy` reads from `wrangler.jsonc`. On a fresh checkout,
 run `pnpm build:page` before `pnpm typecheck` or `pnpm test` alone. The page is immutable host

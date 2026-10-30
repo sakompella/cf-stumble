@@ -48,11 +48,11 @@ test("the first listed project is selected and its thread read", () => {
   expect((listed.commands ?? []).map((command) => command.name)).toEqual(["FetchThread"]);
 });
 
-test("the page checks the GitHub connection on load and again only when the owner asks", () => {
+test("the page reads the recorded GitHub connection on load and checks it again only when the owner asks", () => {
   expect((init().commands ?? []).map((command) => command.name)).toEqual([
     "FetchStatus",
     "FetchProjects",
-    "RefreshGitHub",
+    "FetchGitHub",
     "FetchChatGPT",
   ]);
   expect(commandNames(readyPage(), Message.ClickedRefreshGitHub())).toEqual(["RefreshGitHub"]);

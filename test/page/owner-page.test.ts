@@ -3,7 +3,7 @@
  *
  * These tests read text. What the Foldkit program in `src/page/client` renders and how it behaves
  * is tested against its update function and views in `test/page/client/`, and in a real browser by
- * `tools/browser-harness/`.
+ * `tools/playwright/`.
  */
 
 import { expect, test } from "vitest";

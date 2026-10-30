@@ -207,6 +207,11 @@ const JSON_ROUTES: readonly Readonly<{
   },
   { method: "POST", path: "/api/projects/connect", answer: connect },
   {
+    method: "GET",
+    path: "/api/github/connection",
+    answer: (state) => ({ status: 200, payload: refreshPayload(state.scenario) }),
+  },
+  {
     method: "POST",
     path: "/api/github/connection/refresh",
     answer: (state) => ({ status: 200, payload: refreshPayload(state.scenario) }),

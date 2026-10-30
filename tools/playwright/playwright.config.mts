@@ -1,14 +1,13 @@
 import { defineConfig } from "@playwright/test";
-import { resolveChromePath } from "../browser-harness/chrome-binary.mjs";
 
 /**
  * Behavioral browser tests for the owner page, run with `pnpm test:browser`.
  *
- * They drive the real page served by the browser harness stub, like `pnpm harness:browser`, but
- * through Playwright locators that name elements by role and label. The browser is the one the
- * harness already finds, so this suite downloads nothing; Playwright's own build is used only
- * when no other Chrome is present and `CF_STUMBLE_CHROME` is unset.
+ * They drive the real page served by a local stub of the owner API. Playwright uses its own
+ * Chromium unless `CHROMIUM_PATH` names another executable, which NixOS needs.
  */
+const chromiumPath = process.env["CHROMIUM_PATH"];
+
 export default defineConfig({
   testDir: ".",
   testMatch: "*.spec.mts",
@@ -18,7 +17,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     browserName: "chromium",
-    launchOptions: { executablePath: await resolveChromePath() },
+    launchOptions: chromiumPath === undefined ? {} : { executablePath: chromiumPath },
     viewport: { width: 1280, height: 900 },
     trace: "retain-on-failure",
   },

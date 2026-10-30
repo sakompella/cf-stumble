@@ -181,11 +181,15 @@ export function turnHandlers(
         ),
       ),
     DisconnectedTurnStream: (message) =>
-      forCurrentTurn(model, message, () =>
-        endedTurn({
-          ...withError(model, "the turn request", message.detail),
-          turnState: "disconnected: the turn stream ended early",
-        }),
+      forCurrentTurn(model, message, (current) =>
+        endedTurn(
+          current.hasTerminalFrame
+            ? model
+            : {
+                ...withError(model, "the turn request", message.detail),
+                turnState: "disconnected: the turn stream ended early",
+              },
+        ),
       ),
   };
 }

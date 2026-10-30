@@ -1,6 +1,6 @@
 import { ToolError } from "./error.mjs";
 import { readFile } from "node:fs/promises";
-import { parseJsonRecord, type CdpResult } from "../browser-harness/cdp.mjs";
+import { parseJsonRecord, type CdpResult } from "./cdp-result.mjs";
 import { type JsonRecord } from "../json.mjs";
 import { type Options } from "./options.mjs";
 

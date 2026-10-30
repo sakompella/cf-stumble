@@ -1,5 +1,5 @@
 import { ToolError } from "./error.mjs";
-import { parseJsonRecord, type CdpResult } from "../browser-harness/cdp.mjs";
+import { parseJsonRecord, type CdpResult } from "./cdp-result.mjs";
 import { type JsonRecord } from "../json.mjs";
 
 type Pending = Readonly<{

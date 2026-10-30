@@ -19,7 +19,6 @@
     "vendor-pi.mts",
     "verify-project-protocol.mts",
     "browser-harness/**/*.mts",
-    "browser-harness/**/*.test.ts",
     "playwright/**/*.mts",
     "ops-check/**/*.mts",
     "ops-check/**/*.ts",
