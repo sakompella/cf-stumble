@@ -17,13 +17,6 @@ test("a connect to a different runtime is a replacement", () => {
   expect(lifecycle.generation).toBe(1);
 });
 
-test("a status read that shows a replacement bumps the generation", () => {
-  const lifecycle = new ContainerLifecycle();
-  lifecycle.replaced();
-
-  expect(lifecycle.generation).toBe(1);
-});
-
 test("after the Host stops the container on purpose, the next runtime is not a replacement", () => {
   const lifecycle = new ContainerLifecycle();
   lifecycle.connected("run-1");

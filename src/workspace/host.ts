@@ -21,7 +21,6 @@ import type { WorkspacePathKind } from "./executor.js";
 import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
-import { ObservedWorkspaceContainer } from "./container-observer.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
 import {
   executeHarnessBuildRequest,
@@ -47,7 +46,6 @@ import { answerFailures, attemptWorkspace } from "./operations.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
-import { observeBackendClose, type BackendCloseTrigger } from "./container-exit.js";
 
 export { parseProjectBudget };
 
@@ -170,7 +168,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
-  readonly #container: ObservedWorkspaceContainer;
+  readonly #container: WorkspaceContainerAPI;
   readonly #idle: WorkspaceIdleController;
   readonly #containerLifecycle = new ContainerLifecycle();
   /** Set from the moment a reset arrives until it ends. Host RPCs and project capabilities refuse. */
@@ -180,27 +178,14 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     super(ctx, env);
     const platformContainer = ctx.container;
 
-    this.#container = new ObservedWorkspaceContainer(new WorkspaceContainerAPI(ctx), {
-      monitor: platformContainer === undefined ? undefined : () => platformContainer.monitor(),
-      destroy:
-        platformContainer === undefined ? undefined : (reason) => platformContainer.destroy(reason),
-    });
+    this.#container = new WorkspaceContainerAPI(ctx);
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
-    this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, {
-      connected: (runtimeId) => {
-        this.#containerLifecycle.connected(runtimeId);
-        logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
-      },
-      closed: () => {
-        // The close an idle stop causes is its own doing, and is named so.
-        void this.#observeContainerClose(this.#idle.stopping() ? "idle-stop" : "transport-closed");
-      },
-      failed: () => {
-        void this.#observeContainerClose("connect-failed");
-      },
+    this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, (runtimeId) => {
+      this.#containerLifecycle.connected(runtimeId);
+      logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
     });
     this.#workspace = this.#newWorkspace();
     this.#idle = new WorkspaceIdleController({
@@ -210,7 +195,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       containerRunning: () => platformContainer?.running ?? false,
       closeWorkspace: () => this.#workspace.close(),
       stopContainer: async () => {
-        await this.#container.stopFor("idle");
+        await platformContainer?.destroy("idle");
         this.#containerLifecycle.stoppedByHost();
       },
     });
@@ -224,12 +209,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   /** Run one Host RPC as tracked work, or answer `refused` without running it while a reset runs. */
   #unlessResetting<A>(refused: A, work: () => Effect.Effect<A>): Promise<A> {
     return this.#resetting ? Promise.resolve(refused) : this.#tracked(work);
-  }
-
-  #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
-    return observeBackendClose(this.#container, trigger, () => {
-      this.#containerLifecycle.replaced();
-    });
   }
 
   /** A Workspace creates its SQLite tables when constructed, so a wiped store needs a new one. */
@@ -342,9 +321,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     this.#resetting = true;
 
     return this.#tracked(() =>
-      resetWorkspaceStorage(this.ctx.storage, {
-        restart: (spec) => this.#container.restartFor("workspace-reset", spec),
-      }).pipe(
+      resetWorkspaceStorage(this.ctx.storage, this.#container).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the

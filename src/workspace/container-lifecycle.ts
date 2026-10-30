@@ -16,11 +16,6 @@ export class ContainerLifecycle {
     this.#runtimeId = runtimeId;
   }
 
-  /** A status read showed the container was replaced or gone. */
-  replaced(): void {
-    this.generation += 1;
-  }
-
   /**
    * The Host stopped the container on purpose while nothing used it. The next connect reaches a
    * fresh runtime that nobody holds a capability for, so it is not a replacement to report.

@@ -5,25 +5,7 @@ type SyncRPC = BackendHandle["rpc"]["sync"];
 
 type FetchChangesInput = Parameters<SyncRPC["fetchChanges"]>[0];
 
-interface WorkspaceBackendLifecycle {
-  connected?(runtimeId: string | undefined): void;
-  closed?(): void;
-  failed?(): void;
-}
-
-function withIgnoredFetchChanges(
-  handle: BackendHandle,
-  lifecycle?: WorkspaceBackendLifecycle,
-): BackendHandle {
-  lifecycle?.connected?.(handle.runtimeId);
-
-  if (handle.closed !== undefined) {
-    void handle.closed.then(
-      () => lifecycle?.closed?.(),
-      () => lifecycle?.closed?.(),
-    );
-  }
-
+function withIgnoredFetchChanges(handle: BackendHandle): BackendHandle {
   const sync = handle.rpc.sync;
 
   const wrappedSync: SyncRPC = {
@@ -46,19 +28,20 @@ function withIgnoredFetchChanges(
   };
 }
 
-/** Decorate one backend without changing its transport or any RPC except sync.fetchChanges. */
+/**
+ * Decorate one backend without changing its transport or any RPC except sync.fetchChanges, and
+ * report the runtime each connect reached.
+ */
 export function withWorkspaceSyncIgnore(
   backend: WorkspaceBackend,
-  lifecycle?: WorkspaceBackendLifecycle,
+  connected?: (runtimeId: string | undefined) => void,
 ): WorkspaceBackend {
   const connect: WorkspaceBackend["connect"] = (host) =>
-    backend.connect(host).then(
-      (handle) => withIgnoredFetchChanges(handle, lifecycle),
-      (error) => {
-        lifecycle?.failed?.();
-        throw error;
-      },
-    );
+    backend.connect(host).then((handle) => {
+      connected?.(handle.runtimeId);
+
+      return withIgnoredFetchChanges(handle);
+    });
 
   if (backend.callable === undefined) {
     return { id: backend.id, type: backend.type, connect };
