@@ -10,7 +10,7 @@ import { abandonProjectTurn, startProjectTurn } from "../supervisor/threads/turn
 
 /**
  * Disconnecting a project through the owner's HTTP route, with every cf-stumble layer real: the
- * Worker's Access check and routing, the Supervisor Durable Object, its thread store and project
+ * Worker's routing, the Supervisor Durable Object, its thread store and project
  * catalog, and the Workspace Host's request parsing and removal plan. Only Computer's shell (the
  * fake in `fake-tenant-workspace.ts`) and GitHub's REST API are replaced.
  *
@@ -34,7 +34,7 @@ test("a disconnect refused for a live turn leaves the clone, and removes it once
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   const workspace = stubExternalBoundaries(new FakeTenantWorkspace());
-  const owner = await ownerSession("integration-disconnect-live-turn");
+  const owner = ownerSession();
   const projectPath = `/api/projects/${sampleProjectOne.id}`;
 
   const connected = await owner.post("/api/projects/connect", {

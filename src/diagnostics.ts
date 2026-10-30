@@ -50,7 +50,7 @@ export function isTimeoutFailure(cause: unknown): boolean {
 const UNPRINTABLE_CAUSE = "[unprintable cause]";
 
 /**
- * An Access JWT, which the GitHub-shaped redaction does not recognize. Nothing should pass one to
+ * A JWT, which the GitHub-shaped redaction does not recognize. Nothing should pass one to
  * a log; this pattern is the last defense if something does.
  */
 const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;

@@ -1,15 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import worker from "../src/worker.js";
-import { supervisorNameFor } from "./access-results.js";
-import {
-  accessAudience,
-  accessIssuer,
-  accessOwnerSubject,
-  signAccessToken,
-  signingKey,
-  type SigningKey,
-} from "./access-tokens.js";
 import { sampleProjectOne } from "./project-fixtures.js";
 
 /**
@@ -25,25 +16,6 @@ const encoder = new TextEncoder();
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-function workerEnvironment(key: SigningKey) {
-  return {
-    ...env,
-    CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
-    CF_ACCESS_AUD: accessAudience,
-    CF_ACCESS_PUBLIC_KEYS: JSON.stringify({ keys: [key.publicJwk] }),
-    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
-  };
-}
-
-function ownerToken(key: SigningKey): Promise<string> {
-  return signAccessToken(key, {
-    iss: accessIssuer,
-    aud: [accessAudience],
-    exp: Math.floor(Date.now() / 1000) + 600,
-    sub: accessOwnerSubject,
-  });
-}
 
 type HeldStream = Readonly<{ stream: ReadableStream<Uint8Array>; cancelled: Promise<void> }>;
 
@@ -69,9 +41,8 @@ function heldStream(first: string): HeldStream {
   return held;
 }
 
-async function ownersSupervisor() {
-  const name = await supervisorNameFor({ identity: accessOwnerSubject, audience: accessAudience });
-  const supervisor = env.SUPERVISOR.getByName(name);
+function ownersSupervisor() {
+  const supervisor = env.SUPERVISOR.getByName("owner");
   vi.spyOn(env.SUPERVISOR, "getByName").mockReturnValue(supervisor);
 
   return supervisor;
@@ -89,9 +60,7 @@ async function firstChunkThenCancel(response: Response): Promise<string> {
 }
 
 test("a turn's frames reach the client while the turn runs, and a cancel reaches the turn", async () => {
-  const key = await signingKey("worker-turn-stream");
-  const token = await ownerToken(key);
-  const supervisor = await ownersSupervisor();
+  const supervisor = ownersSupervisor();
   const frames = heldStream('{"kind":"text","text":"working"}\n');
 
   // An RPC result is disposable; a result made in this isolate has nothing to release.
@@ -104,10 +73,10 @@ test("a turn's frames reach the client while the turn runs, and a cancel reaches
   const response = await worker.fetch(
     new Request(`${ORIGIN}/api/projects/${sampleProjectOne.id}/turn`, {
       method: "POST",
-      headers: { "cf-access-jwt-assertion": token, origin: ORIGIN },
+
       body: JSON.stringify({ prompt: "hello" }),
     }),
-    workerEnvironment(key),
+    env,
   );
 
   expect(response.status).toBe(200);
@@ -118,17 +87,12 @@ test("a turn's frames reach the client while the turn runs, and a cancel reaches
 });
 
 test("a relayed generation response streams through, and a cancel reaches the generation", async () => {
-  const key = await signingKey("worker-relay-stream");
-  const token = await ownerToken(key);
-  const supervisor = await ownersSupervisor();
+  const supervisor = ownersSupervisor();
   const body = heldStream("first part");
 
   vi.spyOn(supervisor, "fetch").mockResolvedValue(new Response(body.stream));
 
-  const response = await worker.fetch(
-    new Request(`${ORIGIN}/generation/page`, { headers: { "cf-access-jwt-assertion": token } }),
-    workerEnvironment(key),
-  );
+  const response = await worker.fetch(new Request(`${ORIGIN}/generation/page`), env);
 
   expect(response.status).toBe(200);
   await expect(firstChunkThenCancel(response)).resolves.toBe("first part");

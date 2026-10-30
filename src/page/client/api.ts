@@ -8,8 +8,7 @@ import { GitHubReport, type ChatGPTConnection, type Project, type ThreadFacts } 
 /**
  * Requests to this Worker, and the readers that turn an answer into what the page shows. Every
  * path is relative, so every call stays on this origin; the Content Security Policy refuses the
- * rest. The browser sends the Access session cookie it already holds, so the page asks for no
- * credential and stores none.
+ * rest. The page asks for no credential and stores none.
  */
 
 /** What the page error banner says about a request that never reached the Worker. */

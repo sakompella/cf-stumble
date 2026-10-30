@@ -31,7 +31,6 @@ import {
   type CredentialWorkspaceNamespace,
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
-  type VerifiedAccessScope,
   type GitHubAuthorizationOutcome,
   type GitHubConnectionEnvironment,
   type GitHubConnectionRecord,
@@ -111,13 +110,8 @@ type SupervisorEnv = {
   readonly CHATGPT_MODEL: string;
 };
 
-/**
- * The name the Worker reached this Supervisor by, which it derived from the verified owner. A
- * Supervisor reached by raw id has no verified tenant behind it, and its one workspace is named from
- * this name. Falling back to the id would mint a valid workspace name for a request that never
- * proved whose workspace it is.
- */
-function verifiedName(ctx: DurableObjectState): string {
+/** The name the Worker reached this Supervisor by. Its one workspace is named from it. */
+function reachedName(ctx: DurableObjectState): string {
   const name = ctx.id.name;
 
   if (name === undefined) throw new Error("a Supervisor must be reached by name, not by id");
@@ -139,7 +133,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly chatgpt: ChatGPTConnection;
   /** The tenant's one workspace, named from this object's own name (`workspace-names.ts`). */
   private readonly workspaceName: string;
-  /** This object's name, which the Worker derived from the verified owner. */
+  /** The name the Worker reached this object by. */
   private readonly name: string;
   /** Fences leases held by an instance that Durable Objects have since replaced. */
   private readonly instanceId = crypto.randomUUID();
@@ -152,7 +146,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
     this.generations = new Generations(ctx.storage);
-    this.name = verifiedName(ctx);
+    this.name = reachedName(ctx);
     this.workspaceName = tenantWorkspaceName(this.name);
     this.artifacts = HarnessArtifacts.forWorkspace(
       ctx.storage,
@@ -355,22 +349,15 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   /**
-   * Start and finish the GitHub device authorization (ADR-0039). The scope is the one the Access
-   * check verified at the boundary, and the authorization is bound to it: a redemption presented by a
-   * different verified owner, or a second redemption of a consumed code, is refused.
+   * Start and finish the GitHub device authorization (ADR-0039). A second redemption of a consumed
+   * code is refused.
    */
-  startGitHubAuthorization(
-    scope: VerifiedAccessScope,
-    now: number = Date.now(),
-  ): Promise<GitHubAuthorizationOutcome> {
-    return runAtEntryPoint(this.github.startAuthorization(scope, now));
+  startGitHubAuthorization(now: number = Date.now()): Promise<GitHubAuthorizationOutcome> {
+    return runAtEntryPoint(this.github.startAuthorization(now));
   }
 
-  completeGitHubAuthorization(
-    scope: VerifiedAccessScope,
-    now: number = Date.now(),
-  ): Promise<GitHubAuthorizationOutcome> {
-    return runAtEntryPoint(this.github.completeAuthorization(scope, now));
+  completeGitHubAuthorization(now: number = Date.now()): Promise<GitHubAuthorizationOutcome> {
+    return runAtEntryPoint(this.github.completeAuthorization(now));
   }
 
   /** The ChatGPT connection as the owner sees it. It carries no token. */

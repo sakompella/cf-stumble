@@ -30,9 +30,8 @@ export function isOwnerPageRequest(request: Request): boolean {
 /**
  * The page and the policy that bounds it. `connect-src 'self'` keeps the page's own requests on
  * this origin. `script-src 'self'` admits the page's script file and refuses inline and evaluated
- * code, and a fresh nonce admits only the inline style this response carries. `no-store` keeps a
- * page rendered for one Access session out of a shared cache, and the page itself holds no
- * credential and no identity.
+ * code, and a fresh nonce admits only the inline style this response carries. `no-store` keeps
+ * the page out of a shared cache, and the page itself holds no credential.
  */
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
@@ -75,8 +74,7 @@ function isOwnerPageScriptRequest(request: Request): boolean {
 
 /**
  * The owner page or its script for a browser request, and `undefined` for everything else so the
- * caller keeps its current behavior. The Worker calls this only after Cloudflare Access verified
- * the owner, so the script is refused to everyone the page is refused to.
+ * caller keeps its current behavior.
  */
 export function ownerPageResponse(
   request: Request,

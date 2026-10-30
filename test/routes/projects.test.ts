@@ -1,14 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
-import type { VerifiedAccessScope } from "../../src/access/index.js";
 
 /**
  * The project and authorization routes at the HTTP boundary.
  *
- * The Worker verifies Access and derives the Supervisor before any of this runs, so what is left
- * to hold here is narrow and important: a body cannot name an owner, a state-changing request has
- * to come from cf-stumble's own page, and nothing a route returns carries a credential.
+ * What holds here is narrow and important: a body cannot carry a credential, and nothing a route
+ * returns carries one.
  */
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
@@ -35,15 +33,13 @@ type RequestBody =
       repositoryUrl?: string | number;
       displayName?: string | number | null;
       tenant?: string;
-      identity?: string;
       token?: string;
     }>
   | string;
 
-function post(path: string, body: RequestBody, origin: string | undefined = ORIGIN): Request {
+function post(path: string, body: RequestBody): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
-    headers: origin === undefined ? {} : { origin },
     body: JSON.stringify(body),
   });
 }
@@ -54,7 +50,6 @@ test("lists the tenant's projects", async () => {
     supervisor({
       listProjects: () => Promise.resolve([{ kind: "repository", ...connectedProject }]),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -72,7 +67,6 @@ test("answers the recorded connection with the time the workspace was last check
     supervisor({
       getGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 1_000 }),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -93,7 +87,6 @@ test("refreshes the connection on a POST from the page, with the route's request
         return Promise.resolve({ github: CONNECTED, checkedAt: 2_000 });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -114,7 +107,6 @@ test.each([
   const response = await ownerApiResponse(
     post("/api/github/connection/refresh", {}),
     supervisor({ refreshGitHubConnection: () => Promise.reject(cause) }),
-    ownerScope,
   );
 
   expect(response.status).toBe(503);
@@ -149,7 +141,6 @@ test("connects the repository the body names, and nothing else it carries", asyn
         });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -170,11 +161,7 @@ test.each([
   [{ repositoryUrl: "https://github.com/sample/repo-1", token: FAKE_TOKEN }],
   ["not an object"],
 ])("refuses the connect body %j before it reaches the Supervisor", async (body) => {
-  const response = await ownerApiResponse(
-    post("/api/projects/connect", body),
-    supervisor(),
-    ownerScope,
-  );
+  const response = await ownerApiResponse(post("/api/projects/connect", body), supervisor());
 
   expect(response.status).toBe(400);
   await expect(response.json()).resolves.toEqual({
@@ -202,23 +189,18 @@ test.each([
           checkedAt: null,
         }),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(status);
   await expect(response.json()).resolves.toMatchObject({ ok: false, problem: { code } });
 });
 
-test("starts an authorization for the verified owner, not for one the body names", async () => {
-  const scopes: VerifiedAccessScope[] = [];
-
+test("starts an authorization and answers its status", async () => {
   const response = await ownerApiResponse(
-    post("/api/github/authorization", { identity: "someone-else" }),
+    post("/api/github/authorization", {}),
     supervisor({
-      startGitHubAuthorization: (scope) => {
-        scopes.push(scope);
-
-        return Promise.resolve({
+      startGitHubAuthorization: () =>
+        Promise.resolve({
           ok: true,
           status: {
             state: "awaiting-authorization",
@@ -228,14 +210,11 @@ test("starts an authorization for the verified owner, not for one the body names
             intervalSeconds: 5,
           },
           checkedAt: 4_000,
-        });
-      },
+        }),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
-  expect(scopes).toEqual([ownerScope]);
   await expect(response.json()).resolves.toEqual({
     ok: true,
     github: {
@@ -250,7 +229,6 @@ test("starts an authorization for the verified owner, not for one the body names
 });
 
 test.each([
-  ["not-the-initiating-owner", 403],
   ["no-pending-authorization", 409],
   ["authorization-expired", 410],
   ["authorization-denied", 403],
@@ -260,7 +238,6 @@ test.each([
   const response = await ownerApiResponse(
     post("/api/github/authorization/complete", {}),
     supervisor({ completeGitHubAuthorization: () => Promise.resolve({ ok: false, problem }) }),
-    ownerScope,
   );
 
   expect(response.status).toBe(status);
@@ -283,7 +260,6 @@ test("disconnects the project id in the path", async () => {
         });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -306,7 +282,6 @@ test.each([
     supervisor({
       disconnectProject: () => Promise.resolve({ ok: false, problem: { code } }),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(status);
@@ -317,22 +292,17 @@ test("keeps disconnect POST-only", async () => {
   const response = await ownerApiResponse(
     get(`/api/projects/${connectedProject.id}/disconnect`),
     supervisor(),
-    ownerScope,
   );
 
   expect(response.status).toBe(404);
 });
 
 test("keeps the project routes to their methods", async () => {
-  const postList = await ownerApiResponse(post("/api/projects", {}), supervisor(), ownerScope);
+  const postList = await ownerApiResponse(post("/api/projects", {}), supervisor());
 
-  const getConnect = await ownerApiResponse(get("/api/projects/connect"), supervisor(), ownerScope);
+  const getConnect = await ownerApiResponse(get("/api/projects/connect"), supervisor());
 
-  const getRefresh = await ownerApiResponse(
-    get("/api/github/connection/refresh"),
-    supervisor(),
-    ownerScope,
-  );
+  const getRefresh = await ownerApiResponse(get("/api/github/connection/refresh"), supervisor());
 
   expect([postList.status, getConnect.status, getRefresh.status]).toEqual([404, 404, 404]);
 });

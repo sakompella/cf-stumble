@@ -1,11 +1,6 @@
 import { expect, test } from "vitest";
 import type { ControlProblemCode, GenerationRequest } from "../../src/supervisor/control/index.js";
-import {
-  controlRequest,
-  ownerApiResponse,
-  ownerApiSupervisor as supervisor,
-  ownerScope,
-} from "./helpers.js";
+import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 test("activates directly with a server-derived principal", async () => {
   let received: GenerationRequest | undefined;
@@ -19,7 +14,6 @@ test("activates directly with a server-derived principal", async () => {
         return Promise.resolve({ ok: false, problem: { code: "unknown-generation" } });
       },
     }),
-    ownerScope,
   );
 
   expect(received).toEqual({
@@ -45,7 +39,6 @@ test("rolls back through the same direct control operation", async () => {
         return Promise.resolve({ ok: false, problem: { code: "not-previously-active" } });
       },
     }),
-    ownerScope,
   );
 
   expect(received?.command).toEqual({ kind: "rollback", label: 0, observedEpoch: 4 });
@@ -69,7 +62,6 @@ test.each(refusalStatuses)(
     const response = await ownerApiResponse(
       controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
       supervisor({ controlGeneration: () => Promise.resolve({ ok: false, problem: { code } }) }),
-      ownerScope,
     );
 
     expect(response.status).toBe(status);
@@ -104,7 +96,6 @@ test.each(malformedBodies)(
           return Promise.resolve({ ok: false, problem: { code: "stale-epoch" } });
         },
       }),
-      ownerScope,
     );
 
     expect(invoked).toBe(false);
@@ -120,7 +111,6 @@ test("rejects a malformed rollback with its own code", async () => {
   const response = await ownerApiResponse(
     controlRequest("/api/generations/rollback", JSON.stringify({ label: 0 })),
     supervisor(),
-    ownerScope,
   );
 
   expect(response.status).toBe(400);
@@ -138,7 +128,6 @@ test("reports a control failure without echoing the internal error", async () =>
         return Promise.reject(new Error("Bearer token-abc leaked from SQLite"));
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(500);

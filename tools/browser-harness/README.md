@@ -5,8 +5,6 @@ and drives headless Chrome through the DevTools Protocol. It runs every case in 
 its own stub server and its own tab, and prints one line per case with the evidence that case
 gathered.
 
-It does not test Cloudflare Access. Access needs a deployed environment.
-
 ## Run it
 
 ```sh

@@ -18,7 +18,6 @@ import {
   type CredentialWorkspaceNamespace,
   type WorkspaceCredentialInput,
 } from "../../workspace/index.js";
-import type { VerifiedAccessScope } from "../../access/index.js";
 import type {
   CheckedStatus,
   CredentialSource,
@@ -51,16 +50,11 @@ export type GitHubConnectionStatus =
       reason: "credential-missing" | "credential-rejected" | "workspace-unavailable";
     }>;
 
-/**
- * Why an authorization step produced no status. `not-the-initiating-owner` covers both a different
- * verified owner and a replay of a device code this Supervisor has already consumed: in each case
- * there is no pending authorization belonging to this caller.
- */
+/** Why an authorization step produced no status. */
 export type GitHubAuthorizationProblem =
   | "not-configured"
   | "provider-unavailable"
   | "no-pending-authorization"
-  | "not-the-initiating-owner"
   | "authorization-expired"
   | "authorization-denied";
 
@@ -103,11 +97,6 @@ function reconnect(
   reason: "credential-missing" | "credential-rejected" | "workspace-unavailable",
 ): CheckedStatus {
   return { state: "reconnect-required", reason };
-}
-
-/** One owner's authorization: the scope T3a verified, and never a field a request supplied. */
-function sameOwner(scope: VerifiedAccessScope, identity: string, audience: string): boolean {
-  return scope.identity === identity && scope.audience === audience;
 }
 
 /**
@@ -330,13 +319,10 @@ export class GitHubConnection {
   }
 
   /**
-   * Start one device authorization and bind it to the owner who asked for it. The device code
-   * stays in storage; what comes back is the verification URL and the user code.
+   * Start one device authorization. The device code stays in storage; what comes back is the
+   * verification URL and the user code.
    */
-  startAuthorization(
-    scope: VerifiedAccessScope,
-    now: number,
-  ): Effect.Effect<GitHubAuthorizationOutcome> {
+  startAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
 
@@ -361,8 +347,6 @@ export class GitHubConnection {
         verificationUri: authorization.verificationUri,
         expiresAt: now + authorization.expiresInSeconds * 1_000,
         intervalSeconds: authorization.intervalSeconds,
-        identity: scope.identity,
-        audience: scope.audience,
       });
 
       return this.answered(yield* this.status(now));
@@ -370,21 +354,17 @@ export class GitHubConnection {
   }
 
   /**
-   * Redeem the pending authorization once, for the owner that started it.
+   * Redeem the pending authorization once.
    *
-   * A caller whose verified scope is not the initiating one is refused before the device code is
-   * used, and a code that has been redeemed, denied, or has expired is deleted, so the same
-   * request replayed finds nothing. A successful redemption installs the token into the workspace
+   * A code that has been redeemed, denied, or has expired is deleted, so the same request replayed
+   * finds nothing. A successful redemption installs the token into the workspace
    * inside this call; the token is a local value that never reaches storage or a response.
    *
    * GitHub's answer arrives after a network wait, during which a newer authorization can replace
    * the one this call redeemed, or a concurrent completion can consume it. Such an answer is
    * discarded, token included, and the caller gets the current status.
    */
-  completeAuthorization(
-    scope: VerifiedAccessScope,
-    now: number,
-  ): Effect.Effect<GitHubAuthorizationOutcome> {
+  completeAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
       const pending = this.store.pendingAuthorization(now);
@@ -395,10 +375,6 @@ export class GitHubConnection {
 
       if (pending === undefined) {
         return { ok: false, problem: "no-pending-authorization" } as const;
-      }
-
-      if (!sameOwner(scope, pending.identity, pending.audience)) {
-        return { ok: false, problem: "not-the-initiating-owner" } as const;
       }
 
       const redeemed = yield* redeemDeviceAuthorization(

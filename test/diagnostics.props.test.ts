@@ -4,7 +4,7 @@ import { expect, test, vi } from "vitest";
 import { logEvent, logRedactedCause } from "../src/diagnostics.js";
 
 /**
- * Whatever a string field holds, a GitHub token or an Access JWT inside it never reaches the log.
+ * Whatever a string field holds, a GitHub token or a JWT inside it never reaches the log.
  * Fields are meant to be ids and codes, but a code built from text a tool printed is still text,
  * so the logger redacts every string rather than trusting its caller.
  */
@@ -60,13 +60,13 @@ test("no segment of a JWT inside a thrown cause reaches the log, wherever the ca
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
     logRedactedCause(
-      "access-keys.load: key-service-unavailable",
+      "example.step: unavailable",
       new Error(`${leading}${header}.${payload}.${signature}`),
     );
 
     const written = JSON.stringify(logged.mock.calls);
     logged.mockRestore();
-    expect(written).toContain("access-keys.load: key-service-unavailable");
+    expect(written).toContain("example.step: unavailable");
 
     for (const segment of [header, payload, signature]) expect(written).not.toContain(segment);
   });

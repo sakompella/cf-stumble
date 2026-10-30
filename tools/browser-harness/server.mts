@@ -29,7 +29,7 @@ import { serveTurn } from "./server-turn.mjs";
  *
  * The page markup and its script file come from `src/page`, so the harness drives the code that
  * ships rather than a copy of it. Only the Supervisor is replaced, because a real turn would call
- * a paid model API and a real Cloudflare Access check needs a deployed environment. Everything the
+ * a paid model API. Everything the
  * page can observe about its own environment is kept identical: the same headers, the same policy
  * with a per-response nonce for the style, the script at its hashed path, and a turn that arrives
  * as newline-delimited frames over time.

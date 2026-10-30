@@ -1,5 +1,5 @@
 /**
- * A JWT-shaped string for redaction tests. Its three segments are base64url text, as in an Access
+ * A JWT-shaped string for redaction tests. Its three segments are base64url text, as in a real
  * token, but the signature is fixed prose, so it is not a credential for any key. A test asserts
  * each segment is absent: a cut through a token can remove the whole token and still leave its
  * header or claims readable.

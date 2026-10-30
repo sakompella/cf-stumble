@@ -9,7 +9,7 @@ import {
   prepareGeneration,
   submitCandidate,
 } from "../supervisor/helpers.js";
-import { ownerApiResponse, ownerScope } from "./helpers.js";
+import { ownerApiResponse } from "./helpers.js";
 
 const commits = {
   second: "0123456789abcdef0123456789abcdef01234567",
@@ -34,21 +34,16 @@ function control(
   return ownerApiResponse(
     new Request(`https://cf-stumble.test/api/generations/${command}`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     stub,
-    ownerScope,
   );
 }
 
 /** The epoch the owner page reads is the epoch an activation request must carry. */
 async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number> {
-  const response = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/status"),
-    stub,
-    ownerScope,
-  );
+  const response = await ownerApiResponse(new Request("https://cf-stumble.test/api/status"), stub);
 
   const body = await response.json<{ readonly activeGeneration: { readonly epoch: number } }>();
 

@@ -5,12 +5,7 @@ import type { Generation, GenerationStatus } from "../../src/supervisor/generati
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
-import {
-  controlRequest,
-  ownerApiResponse,
-  ownerApiSupervisor as supervisor,
-  ownerScope,
-} from "./helpers.js";
+import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -108,7 +103,6 @@ test("labels the commit directly, then prepares that label", async () => {
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     recordingSupervisor(record),
-    ownerScope,
   );
 
   expect(record.received, "the principal is derived here, never taken from the request").toEqual([
@@ -147,7 +141,6 @@ test("returns a failed startup check as the recorded preparation result", async 
         });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status, "a checked candidate that fails is a decision, not a fault").toBe(200);
@@ -171,7 +164,6 @@ test("returns a build failure as a preparation problem rather than a transport e
         });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -209,7 +201,6 @@ test("returns a failed build step's output tail to the owner and writes none of 
         });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -234,7 +225,6 @@ test("prepares nothing when the control operation rejects the submission", async
         return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label: 1 } });
       },
     }),
-    ownerScope,
   );
 
   expect(prepared, "an unlabeled commit has nothing to prepare").toBe(false);
@@ -277,7 +267,6 @@ test.each(malformedBodies)(
           return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label: 1 } });
         },
       }),
-      ownerScope,
     );
 
     expect(invoked).toBe(false);
@@ -297,7 +286,6 @@ test("reports a labeling failure without echoing the internal error", async () =
         return Promise.reject(new Error("Bearer token-abc leaked from SQLite"));
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(500);
@@ -317,7 +305,6 @@ test("reports a preparation failure without echoing the internal error", async (
         return Promise.reject(new Error("storage rejected a row with account secret sk-live-1"));
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(500);

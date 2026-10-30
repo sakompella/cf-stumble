@@ -1,14 +1,6 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
-import { supervisorNameFor } from "../access-results.js";
 import worker from "../../src/worker.js";
-import {
-  accessAudience,
-  accessIssuer,
-  accessOwnerSubject,
-  signAccessToken,
-  signingKey,
-} from "../access-tokens.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import {
   activateGeneration,
@@ -18,48 +10,22 @@ import {
 } from "../supervisor/helpers.js";
 
 /**
- * The owner as the Worker sees them: a signed Access token, the page's own origin, and the
- * Supervisor that the Worker derives from that token. Integration tests send every request through
- * `worker.fetch`, so Access verification and routing run as in a deployment.
+ * The owner as the Worker sees them. Integration tests send every request through `worker.fetch`,
+ * so routing runs as in a deployment.
  */
 
 const ORIGIN = "https://cf-stumble.test";
 
-export async function ownerSession(keyName: string) {
-  const key = await signingKey(keyName);
-
-  const token = await signAccessToken(key, {
-    iss: accessIssuer,
-    aud: [accessAudience],
-    exp: Math.floor(Date.now() / 1000) + 600,
-    sub: accessOwnerSubject,
-  });
-
-  const environment = {
-    ...env,
-    CF_ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
-    CF_ACCESS_AUD: accessAudience,
-    CF_ACCESS_PUBLIC_KEYS: JSON.stringify({ keys: [key.publicJwk] }),
-    CF_ACCESS_OWNER_SUB: accessOwnerSubject,
-  };
-
-  const headers = { "cf-access-jwt-assertion": token, origin: ORIGIN };
-
-  const get = (path: string) =>
-    worker.fetch(new Request(`${ORIGIN}${path}`, { headers }), environment);
+export function ownerSession() {
+  const get = (path: string) => worker.fetch(new Request(`${ORIGIN}${path}`), env);
 
   const post = (path: string, body: Readonly<Record<string, string>> = {}) =>
     worker.fetch(
-      new Request(`${ORIGIN}${path}`, { method: "POST", headers, body: JSON.stringify(body) }),
-      environment,
+      new Request(`${ORIGIN}${path}`, { method: "POST", body: JSON.stringify(body) }),
+      env,
     );
 
-  const supervisorName = await supervisorNameFor({
-    identity: accessOwnerSubject,
-    audience: accessAudience,
-  });
-
-  return { get, post, supervisor: env.SUPERVISOR.getByName(supervisorName) };
+  return { get, post, supervisor: env.SUPERVISOR.getByName("owner") };
 }
 
 /**
@@ -86,7 +52,7 @@ const SCRIPTED_HARNESS_COMMIT = "c0ffee0000000000000000000000000000000001";
 
 /** Prepare and activate a generation whose whole main facet module is `source`. */
 export async function servingScriptedGeneration(
-  owner: Awaited<ReturnType<typeof ownerSession>>,
+  owner: ReturnType<typeof ownerSession>,
   source: string,
 ): Promise<void> {
   const label = await submitCandidate(owner.supervisor, SCRIPTED_HARNESS_COMMIT);

@@ -18,7 +18,6 @@
     "build:page": "pnpm exec tsx tools/build-owner-page.mts",
     "build:loaded-execution-env-fixture": "pnpm exec tsx tools/build-loaded-execution-env-fixture.mts",
     "verify:project-protocol": "pnpm exec tsx tools/verify-project-protocol.mts",
-    "local:access-session": "pnpm exec tsx tools/access-session.mts",
     "verify:vendor": "pnpm exec tsx tools/vendor-pi.mts --check",
     "probe:clean-build": "scripts/probe/clean-build.sh",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 2h",

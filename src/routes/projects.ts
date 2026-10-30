@@ -13,18 +13,15 @@ import type {
   GitHubAuthorizationProblem,
   GitHubConnectionRecord,
   GitHubConnectionStatus,
-  VerifiedAccessScope,
 } from "../supervisor/projects/index.js";
 
 /**
  * The project surface the page reads and writes: list the tenant's connected repositories, connect
  * another one, read or refresh the GitHub connection, and drive the GitHub authorization.
  *
- * Two things never arrive in a request here. The tenant, because the Worker resolved it from the
- * verified token before this module ran and passes the scope as an argument; a body field named
- * `identity` or `tenant` is refused at the boundary and is inert here in any case. And a
- * credential, because there is no field for one: the owner authorizes at GitHub's page, and the
- * token goes from GitHub to the workspace without passing through a browser.
+ * A credential never arrives in a request here, because there is no field for one: the owner
+ * authorizes at GitHub's page, and the token goes from GitHub to the workspace without passing
+ * through a browser.
  *
  * Every response is built from named fields of a Supervisor result, so no internal error text
  * reaches a client and no status shape can gain a token by accident.
@@ -37,8 +34,8 @@ export type ProjectApiSupervisor = Readonly<{
   ) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
   refreshGitHubConnection: (requestId?: RequestId) => Promise<GitHubConnectionRecord>;
-  startGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
-  completeGitHubAuthorization: (scope: VerifiedAccessScope) => Promise<GitHubAuthorizationOutcome>;
+  startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
+  completeGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
 }>;
 
@@ -81,7 +78,6 @@ const AUTHORIZATION_STATUS = {
   "not-configured": 503,
   "provider-unavailable": 502,
   "no-pending-authorization": 409,
-  "not-the-initiating-owner": 403,
   "authorization-expired": 410,
   "authorization-denied": 403,
 } as const satisfies Record<GitHubAuthorizationProblem, number>;
@@ -174,13 +170,11 @@ function authorizationResponse(
 
 /**
  * Route one project or authorization request, or answer `undefined` so the owner API can try its
- * other routes. The scope is the verified one; it reaches the Supervisor as an argument and never
- * as request data.
+ * other routes.
  */
 export function routeProjectApiRequest(
   request: Request,
   supervisor: ProjectApiSupervisor,
-  scope: VerifiedAccessScope,
   requestId?: RequestId,
 ): Effect.Effect<Response, SupervisorCallFailed> | undefined {
   const pathname = new URL(request.url).pathname;
@@ -226,7 +220,7 @@ export function routeProjectApiRequest(
 
   return authorizationResponse(() =>
     pathname === "/api/github/authorization"
-      ? supervisor.startGitHubAuthorization(scope)
-      : supervisor.completeGitHubAuthorization(scope),
+      ? supervisor.startGitHubAuthorization()
+      : supervisor.completeGitHubAuthorization(),
   );
 }

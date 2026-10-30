@@ -76,7 +76,7 @@ test("the program never writes markup, evaluates code, or stores anything", () =
   // view text. The page asks for no credential and keeps none.
   for (const [path, source] of files) {
     expect(source, path).not.toMatch(
-      /InnerHTML|innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|localStorage|sessionStorage|indexedDB|document\.cookie|CF_Authorization/u,
+      /InnerHTML|innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|localStorage|sessionStorage|indexedDB|document\.cookie/u,
     );
   }
 });

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 import { textLines } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import type { ProjectTurnRunProblemCode } from "../../src/supervisor/projects/index.js";
@@ -7,8 +7,7 @@ import type { ProjectTurnRunProblemCode } from "../../src/supervisor/projects/in
 /**
  * The turn route at the HTTP boundary: `POST /api/projects/{id}/turn`.
  *
- * The Worker verifies Access and derives the Supervisor before any of this runs, so what is left
- * to hold here is what a request may carry, where a refusal lands as a status, and that nothing a
+ * What is left to hold here is what a request may carry, where a refusal lands as a status, and that nothing a
  * failure returns describes what went wrong inside the Supervisor.
  */
 
@@ -31,10 +30,9 @@ type TurnBody = Readonly<{
   model?: string;
 }>;
 
-function post(path: string, body: TurnBody | string, origin: string | undefined = ORIGIN): Request {
+function post(path: string, body: TurnBody | string): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
-    headers: origin === undefined ? {} : { origin },
     body: JSON.stringify(body),
   });
 }
@@ -64,7 +62,6 @@ test("runs the turn the path names with the prompt the body carries, and nothing
   const response = await ownerApiResponse(
     post(TURN_PATH, { prompt: "read the file" }),
     streamingSupervisor(sent),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -92,7 +89,6 @@ test("passes the turn stream to the browser byte for byte, keepalive lines inclu
           }),
         }),
     }),
-    ownerScope,
   );
 
   await expect(response.text()).resolves.toBe(body);
@@ -118,7 +114,6 @@ test.each([
         return Promise.reject(new Error("this body must not reach the Supervisor"));
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(400);
@@ -146,7 +141,6 @@ test.each([
     const response = await ownerApiResponse(
       post(TURN_PATH, { prompt: "do it" }),
       supervisor({ runProjectTurn: () => Promise.resolve({ ok: false, problem: { code } }) }),
-      ownerScope,
     );
 
     expect(response.status).toBe(status);
@@ -163,7 +157,6 @@ test("a turn that throws logs a redacted cause and answers a bare fault", async 
       runProjectTurn: () =>
         Promise.reject(new Error(`container timed out with ${SECRET} in /root/.git-credentials`)),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(500);
@@ -183,13 +176,11 @@ test("the turn route keeps to its method and its path", async () => {
   const read = await ownerApiResponse(
     new Request(`${ORIGIN}${TURN_PATH}`),
     streamingSupervisor(sent),
-    ownerScope,
   );
 
   const nested = await ownerApiResponse(
     post(`/api/projects/${sampleProjectOne.id}/turn/fresh`, { prompt: "do it" }),
     streamingSupervisor(sent),
-    ownerScope,
   );
 
   expect([read.status, nested.status]).toEqual([404, 404]);
@@ -208,7 +199,6 @@ test("the project id in the path reaches the Supervisor as the client wrote it",
         return Promise.resolve({ ok: false, problem: { code: "unknown-project-id" } });
       },
     }),
-    ownerScope,
   );
 
   // The route decodes the path segment and refuses an empty one; deciding whether the string is a

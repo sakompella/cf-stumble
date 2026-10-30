@@ -252,11 +252,11 @@ test("a token that straddles the cut is redacted before the cut, so no fragment 
   expect(stderrTail.endsWith("y")).toBe(true);
 });
 
-test("an Access token in the output is redacted from the owner's tail too", async () => {
+test("a JWT in the output is redacted from the owner's tail too", async () => {
   const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl";
 
   const { stdoutTail, stderrTail } = await failedDiagnostics({
-    stdout: `cookie CF_Authorization=${jwt}`,
+    stdout: `token ${jwt}`,
     stderr: `denied for ${jwt}`,
   });
 

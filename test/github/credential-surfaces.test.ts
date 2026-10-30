@@ -8,7 +8,6 @@ import { containsCredential } from "../../src/github/index.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { tenantConnections } from "../supervisor/projects/tenant-connections.js";
 import type { GitHubFetch } from "../../src/github/index.js";
-import type { VerifiedAccessScope } from "../../src/access/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 
 /**
@@ -48,8 +47,6 @@ const NOW = 1_700_000_000_000;
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const REPOSITORY = "https://github.com/sample/repo-1";
-
-const owner: VerifiedAccessScope = { identity: "owner-subject", audience: "owner-audience" };
 
 /** The modules that can hold a credential at all. None of them may write one anywhere. */
 function credentialModules(): [string, string][] {
@@ -146,10 +143,10 @@ test("an RPC failure during authorization logs a redacted cause and never the to
         fetcher: githubReplying(),
       });
 
-      await Effect.runPromise(github.startAuthorization(owner, NOW));
+      await Effect.runPromise(github.startAuthorization(NOW));
       workspace.unavailable = true;
 
-      return Effect.runPromise(github.completeAuthorization(owner, NOW + 1_000));
+      return Effect.runPromise(github.completeAuthorization(NOW + 1_000));
     },
   );
 
@@ -184,8 +181,8 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
         fetcher: githubReplying(),
       });
 
-      const started = await Effect.runPromise(github.startAuthorization(owner, NOW));
-      const completed = await Effect.runPromise(github.completeAuthorization(owner, NOW + 1_000));
+      const started = await Effect.runPromise(github.startAuthorization(NOW));
+      const completed = await Effect.runPromise(github.completeAuthorization(NOW + 1_000));
 
       const connected = await Effect.runPromise(
         connections.connect(REPOSITORY, "Repo one", NOW + 2_000),
@@ -244,8 +241,8 @@ test("no log line at any level carries the token, and the install is logged with
       fetcher: githubReplying(),
     });
 
-    await Effect.runPromise(github.startAuthorization(owner, NOW));
-    await Effect.runPromise(github.completeAuthorization(owner, NOW + 1_000));
+    await Effect.runPromise(github.startAuthorization(NOW));
+    await Effect.runPromise(github.completeAuthorization(NOW + 1_000));
     await Effect.runPromise(connections.connect(REPOSITORY, "Repo one", NOW + 2_000));
   });
 

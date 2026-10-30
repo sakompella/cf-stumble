@@ -5,12 +5,11 @@ import {
   disconnectedChatGPT,
   ownerApiResponse,
   ownerApiSupervisor,
-  ownerScope,
 } from "./helpers.js";
 
 /**
  * The owner's ChatGPT routes: what each answers, and that the address carrying the one-time code
- * reaches the Supervisor only through a same-origin POST with exactly the two fields it names.
+ * reaches the Supervisor only through a POST with exactly the two fields it names.
  */
 
 afterEach(() => {
@@ -35,19 +34,13 @@ test("the connection, a started sign-in and a disconnect each answer the view", 
   const read = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/chatgpt/connection"),
     supervisor,
-    ownerScope,
   );
 
-  const started = await ownerApiResponse(
-    controlRequest("/api/chatgpt/login", "{}"),
-    supervisor,
-    ownerScope,
-  );
+  const started = await ownerApiResponse(controlRequest("/api/chatgpt/login", "{}"), supervisor);
 
   const disconnected = await ownerApiResponse(
     controlRequest("/api/chatgpt/disconnect", "{}"),
     supervisor,
-    ownerScope,
   );
 
   expect(await read.json()).toEqual({ ok: true, chatgpt: disconnectedChatGPT });
@@ -79,13 +72,11 @@ test("finishing a sign-in passes exactly the attempt and the address, and words 
   const refused = await ownerApiResponse(
     controlRequest("/api/chatgpt/login/complete", body),
     supervisor,
-    ownerScope,
   );
 
   const busy = await ownerApiResponse(
     controlRequest("/api/chatgpt/login/complete", body),
     supervisor,
-    ownerScope,
   );
 
   const extraField = await ownerApiResponse(
@@ -94,7 +85,6 @@ test("finishing a sign-in passes exactly the attempt and the address, and words 
       JSON.stringify({ attemptId: "a", callbackUrl: "b", clientId: "c" }),
     ),
     supervisor,
-    ownerScope,
   );
 
   expect(refused.status).toBe(400);
@@ -109,26 +99,4 @@ test("finishing a sign-in passes exactly the attempt and the address, and words 
     ["attempt-1", "http://127.0.0.1:1455/auth/callback?code=c&state=s&client_id=a"],
     ["attempt-1", "http://127.0.0.1:1455/auth/callback?code=c&state=s&client_id=a"],
   ]);
-});
-
-test("a cross-site POST cannot start or finish a sign-in", async () => {
-  const supervisor = ownerApiSupervisor();
-
-  for (const path of [
-    "/api/chatgpt/login",
-    "/api/chatgpt/login/complete",
-    "/api/chatgpt/disconnect",
-  ]) {
-    const response = await ownerApiResponse(
-      new Request(`https://cf-stumble.test${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: "https://elsewhere.test" },
-        body: "{}",
-      }),
-      supervisor,
-      ownerScope,
-    );
-
-    expect(response.status, path).toBe(403);
-  }
 });

@@ -1,6 +1,6 @@
 # Deploy configuration guard
 
-`check-config.sh` checks the required Access values before they are set as Worker secrets. It has no network or Wrangler calls, writes no files, and can run repeatedly.
+`check-config.sh` checks the harness commit a deploy publishes. It has no network or Wrangler calls, writes no files, and can run repeatedly.
 
 Run it in the same shell or CI job that will start the deploy:
 
@@ -8,38 +8,15 @@ Run it in the same shell or CI job that will start the deploy:
 ./scripts/deploy/check-config.sh
 ```
 
-The guard reads these environment variables. The shell or CI secret manager supplies the values. Do not put them in tracked files.
+The guard reads this environment variable. The shell or CI secret manager supplies the values. Do not put them in tracked files.
 
-| Environment variable        | Value source at deploy time                                               | Worker delivery                                                                                                                                                                      |
-| --------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CF_ACCESS_TEAM_DOMAIN`     | The Cloudflare Access team domain from the Access dashboard.              | A Worker secret with this name, set with `cf deploy --secrets-file` or `wrangler secret put`. It is not declared in the configuration. The Worker reads `env.CF_ACCESS_TEAM_DOMAIN`. |
-| `CF_ACCESS_AUD`             | The Access application audience tag, also called the application AUD.     | A Worker secret with this name, set the same way. The Worker reads `env.CF_ACCESS_AUD`.                                                                                              |
-| `CF_ACCESS_OWNER_SUB`       | The owner's stable `sub` subject claim from the Access identity provider. | A Worker secret with this name, set the same way. The Worker reads `env.CF_ACCESS_OWNER_SUB`.                                                                                        |
-| `CF_STUMBLE_HARNESS_COMMIT` | The full harness commit the deploy publishes, from `git rev-parse HEAD`.  | The Worker receives no binding for it. The owner submits it after the deploy, as the Generation 0 step below describes.                                                              |
-
-## The Access application and policy this Worker requires
-
-The Worker verifies the token itself, but it verifies it against one application and admits one
-subject. A deploy that configures the application differently leaves the Worker refusing every
-request, so record these three facts with the deploy.
-
-1. **One self-hosted Access application** covering the deployed hostname and every path under it,
-   including `/api/`. The Worker has no unauthenticated route: a request without a usable token is
-   `401`, whatever it asks for.
-2. **One policy on that application, of action Allow, with a single include rule that names the
-   owner's identity** — the owner's email through the configured identity provider. The application
-   audience tag is `CF_ACCESS_AUD` and the owner's stable `sub` claim is `CF_ACCESS_OWNER_SUB`. The
-   Worker checks the `sub` itself, so an Access policy that admitted a second identity would still
-   be refused here; the two are configured to agree, and the Worker is the one that fails closed.
-3. **No bypass, service-token, or "everyone" rule** on the application, and no second policy. The
-   Worker takes the tenant from the verified token alone.
-
-`test/access-owner.test.ts` holds the Worker side of this to its contract locally. The application
-and policy themselves are deployed configuration, so they are checked when the owner deploys.
+| Environment variable        | Value source at deploy time                                              | Worker delivery                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `CF_STUMBLE_HARNESS_COMMIT` | The full harness commit the deploy publishes, from `git rev-parse HEAD`. | The Worker receives no binding for it. The owner submits it after the deploy, as the Generation 0 step below describes. |
 
 `CF_STUMBLE_HARNESS_COMMIT` must be a full SHA-1 or SHA-256 Git object ID in lowercase hexadecimal, because a generation is one specific labeled commit (ADR-0002). A branch name or a short ref fails the guard rather than the submission.
 
-A deploy wrapper must invoke the guard before it starts the deploy. The three Access values are Worker secrets that the configuration does not declare, so the first deploy works without them and the Worker refuses every request until they are set. Set them after the Access login: write them to a file outside the repository and pass it with `cf deploy --secrets-file <file>`, or run `wrangler secret put <NAME> --name <worker>` for each. Later deploys keep them. Do not pass them with `--var`: `cf deploy` removes plain-text variables the configuration does not declare. The guard does not set, persist, or forward any value itself. See "Instance secrets" in `docs/deploy.md`.
+A deploy wrapper must invoke the guard before it starts the deploy. The guard does not set, persist, or forward any value itself.
 
 The output reports only whether each variable is present and its character length. It never prints a value.
 
@@ -47,7 +24,7 @@ The output reports only whether each variable is present and its character lengt
 
 A deployed Worker serves nothing yet. The Supervisor holds no built-in harness code and labels no generation of its own, so a request to it answers `503` with `{"ok":false,"problem":{"code":"no-active-generation"}}` until a generation is active. Generation 0 is an ordinary owner submission of the commit the deploy published.
 
-Run these two steps as the owner, through Cloudflare Access, against the deployed hostname:
+Run these two steps against the deployed hostname:
 
 1. Submit the deployed harness commit. The Supervisor labels it, and the first submission takes label 0. It then prepares that label: it builds the commit or reads its cached module map, and runs the bounded startup check.
 

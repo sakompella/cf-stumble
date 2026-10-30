@@ -1,9 +1,8 @@
 // oxlint-disable import/max-dependencies -- The owner API is where every route group meets, so it imports each of them.
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { logEvent, logRedactedCause, timed, type RequestId } from "../diagnostics.js";
+import { logRedactedCause, timed, type RequestId } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
-import type { VerifiedAccessScope } from "../supervisor/projects/index.js";
 import type { ProjectThreadProblem, ProjectThreadResult } from "../supervisor/threads/index.js";
 import {
   handleGenerationControl,
@@ -101,76 +100,16 @@ function threadProblemStatus(code: ProjectThreadProblem["code"]): number {
 }
 
 /**
- * The Worker calls this only after it verifies Cloudflare Access and derives the Supervisor name.
- * Request data selects only one of the tenant's projects, a generation label, and an epoch within
- * that already-selected Supervisor. It never names a tenant, an identity, or a Durable Object.
- *
- * The verified scope arrives as an argument, from the boundary that proved it. It is the same
- * scope the Supervisor's name was derived from (`access/index.ts`), so the project routes bind an
- * authorization to an owner without deriving a second opinion of who that owner is.
+ * Request data selects only one of the projects, a generation label, and an epoch within the one
+ * Supervisor. It never names a Durable Object.
  */
 export function routeOwnerApiRequest(
   request: Request,
   supervisor: OwnerApiSupervisor,
-  scope: VerifiedAccessScope,
 ): Effect.Effect<Response> {
   return settleRoute(request, (requestId) =>
-    dispatchOwnerApiRequest(request, supervisor, scope, requestId),
+    dispatchOwnerApiRequest(request, supervisor, requestId),
   );
-}
-
-function originKind(origin: string | null, ownOrigin: string): string {
-  if (origin === null) return "missing";
-
-  if (origin === "null") return "null";
-
-  return origin === ownOrigin ? "same" : "foreign";
-}
-
-/** The `Sec-Fetch-Site` values a browser sends, so a log never carries a client's own text. */
-const FETCH_SITES: ReadonlySet<string> = new Set([
-  "same-origin",
-  "same-site",
-  "cross-site",
-  "none",
-]);
-
-function fetchSiteKind(fetchSite: string | null): string {
-  if (fetchSite === null) return "missing";
-
-  return FETCH_SITES.has(fetchSite) ? fetchSite : "other";
-}
-
-/**
- * The owner API treats every `POST` as a state change, so each one has to come from cf-stumble's
- * own page.
- *
- * Access sits in front of everything here, so a cross-site request cannot be a stranger's; it can
- * still be the owner's own browser driven by another site, which is what would let a page the
- * owner happens to visit start an authorization or connect a repository in their name. The
- * browser must send an `Origin` that exactly matches the request URL's origin. A missing value,
- * `null`, and every other value are refused. A browser's `Sec-Fetch-Site`, when present, must also
- * say `same-origin`; a client that is not a browser does not send it.
- *
- * The refusal is logged here: the route pattern and which kind of origin and fetch site it was,
- * never the origin itself.
- */
-function isCrossOriginMutation(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  const fetchSite = request.headers.get("sec-fetch-site");
-  const url = new URL(request.url);
-  const crossOrigin = origin !== url.origin || (fetchSite !== null && fetchSite !== "same-origin");
-
-  if (crossOrigin) {
-    logEvent("warn", "route.cross-origin-refused", {
-      route: routePattern(url.pathname),
-      method: request.method,
-      origin: originKind(origin, url.origin),
-      fetchSite: fetchSiteKind(fetchSite),
-    });
-  }
-
-  return crossOrigin;
 }
 
 /**
@@ -181,14 +120,9 @@ function isCrossOriginMutation(request: Request): boolean {
 function dispatchOwnerApiRequest(
   request: Request,
   supervisor: OwnerApiSupervisor,
-  scope: VerifiedAccessScope,
   requestId: RequestId | undefined,
 ): Effect.Effect<Response> {
-  if (request.method === "POST" && isCrossOriginMutation(request)) {
-    return Effect.succeed(jsonError(403, "cross-origin-request"));
-  }
-
-  return Effect.suspend(() => ownerApiRoute(request, supervisor, scope, requestId)).pipe(
+  return Effect.suspend(() => ownerApiRoute(request, supervisor, requestId)).pipe(
     Effect.catchCause((cause) =>
       Cause.hasInterruptsOnly(cause)
         ? Effect.interrupt
@@ -207,11 +141,10 @@ function dispatchOwnerApiRequest(
 function ownerApiRoute(
   request: Request,
   supervisor: OwnerApiSupervisor,
-  scope: VerifiedAccessScope,
   requestId: RequestId | undefined,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   const pathname = new URL(request.url).pathname;
-  const projectRoute = routeProjectApiRequest(request, supervisor, scope, requestId);
+  const projectRoute = routeProjectApiRequest(request, supervisor, requestId);
 
   if (projectRoute !== undefined) {
     return projectRoute;

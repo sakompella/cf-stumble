@@ -6,7 +6,7 @@ import type {
 import { afterEach, expect, test, vi } from "vitest";
 import { resetWorkspaceStorage } from "../../src/workspace/host.js";
 import { capturedEvents, named } from "../log-capture.js";
-import { ownerApiResponse, ownerApiSupervisor, ownerScope } from "../routes/helpers.js";
+import { ownerApiResponse, ownerApiSupervisor } from "../routes/helpers.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -129,10 +129,8 @@ test("the owner's reset request is logged with how long the whole reset took", a
   const response = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/workspace/reset", {
       method: "POST",
-      headers: { origin: "https://cf-stumble.test" },
     }),
     ownerApiSupervisor(),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);

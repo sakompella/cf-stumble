@@ -24,12 +24,10 @@
     "issues": { "enabled": true },
   },
   "routes": [{ "pattern": "stumble.akompella.dev/*", "zone_name": "akompella.dev" }],
-  // One entry point, and it is the one Cloudflare Access sits in front of. A `workers.dev`
-  // subdomain is reachable without Access, so it would leave the Worker's own fail-closed check as
-  // the only guard on a second door nobody watches. wrangler turns the subdomain off by default
-  // once a route exists; this says so on purpose rather than relying on that.
+  // One entry point: the route. wrangler turns the `workers.dev` subdomain off by default once a
+  // route exists; this says so on purpose rather than relying on that.
   "workers_dev": false,
-  // Workers Cache would skip the Worker's Access check, and its key ignores identity.
+  // Workers Cache stays off, so every request reaches the Worker.
   "cache": { "enabled": false },
   "durable_objects": {
     "bindings": [

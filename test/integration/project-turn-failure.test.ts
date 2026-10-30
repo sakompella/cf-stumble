@@ -191,7 +191,7 @@ test("a failed turn's saved conversation is what the next request reads and the 
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   stubExternalBoundaries(new TurnWorkspace());
-  const owner = await ownerSession("integration-failed-turn");
+  const owner = ownerSession();
   await servingScriptedGeneration(owner, generationSource);
 
   // The catalog row a connection writes. Connecting over HTTP is covered by
@@ -233,7 +233,7 @@ test("a failed turn's saved conversation is what the next request reads and the 
 test("a turn that read several large files keeps its whole conversation", async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   stubExternalBoundaries(new TurnWorkspace());
-  const owner = await ownerSession("integration-large-reads");
+  const owner = ownerSession();
   await servingScriptedGeneration(owner, generationSource);
   await connectSampleProjects(owner.supervisor);
 

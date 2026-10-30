@@ -85,8 +85,7 @@ function command(
 /**
  * The Supervisor applies activation and rollback directly to the generation tables and returns the
  * outcome (ADR-0030): there is no request journal, so a rejected request is a fresh decision from
- * current state rather than a replayed one. The principal is fixed here. Cloudflare Access already
- * proved the owner, and the caller never names a tenant, an identity, or a Durable Object.
+ * current state rather than a replayed one. The caller never names a Durable Object.
  */
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {

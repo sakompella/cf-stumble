@@ -156,9 +156,7 @@ export function view(model: Model, h: HtmlBuilder<Message>): Html {
           h.h1([], ["cf-stumble"]),
           h.p(
             [h.Class("note")],
-            [
-              "Cloudflare Access already signed you in. This page asks for no credential, stores none, and calls only this origin.",
-            ],
+            ["This page asks for no credential, stores none, and calls only this origin."],
           ),
           h.p([h.Id(ID.pageError)], model.pageError === "" ? [] : [model.pageError]),
         ],

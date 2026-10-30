@@ -5,8 +5,7 @@ import type { GitHubConnectionStatus } from "./github-connection.js";
  * a credential.
  *
  * Four things are stored. A pending device authorization, which holds the device code GitHub
- * issued and the verified owner who started it, so a redemption can be bound to that owner and a
- * replayed or crossed request finds nothing to redeem. The fact of a connection: a login name, how
+ * issued, deleted once redeemed so a replayed request finds nothing to redeem. The fact of a connection: a login name, how
  * it was obtained, and when. What the last credential check found and when it ran, which is what a
  * status read answers without asking the workspace. And a revision that each workspace reset
  * advances, so a check that started before a reset cannot store its answer after it. The access
@@ -19,8 +18,6 @@ type PendingAuthorization = Readonly<{
   verificationUri: string;
   expiresAt: number;
   intervalSeconds: number;
-  identity: string;
-  audience: string;
 }>;
 
 /** How the workspace got the credential it has. The configured token is a test path, and says so. */
@@ -46,8 +43,6 @@ type PendingRow = {
   readonly verification_uri: string;
   readonly expires_at: number;
   readonly interval_seconds: number;
-  readonly identity: string;
-  readonly audience: string;
 };
 
 type ConnectionRow = {
@@ -109,9 +104,7 @@ export class GitHubConnectionStore {
         user_code TEXT NOT NULL,
         verification_uri TEXT NOT NULL,
         expires_at INTEGER NOT NULL,
-        interval_seconds INTEGER NOT NULL,
-        identity TEXT NOT NULL,
-        audience TEXT NOT NULL
+        interval_seconds INTEGER NOT NULL
       );
     `);
     this.sql.exec(`
@@ -145,23 +138,19 @@ export class GitHubConnectionStore {
   startAuthorization(pending: PendingAuthorization): void {
     this.sql.exec(
       `INSERT INTO github_authorization
-         (id, device_code, user_code, verification_uri, expires_at, interval_seconds, identity, audience)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+         (id, device_code, user_code, verification_uri, expires_at, interval_seconds)
+       VALUES (1, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET
          device_code = excluded.device_code,
          user_code = excluded.user_code,
          verification_uri = excluded.verification_uri,
          expires_at = excluded.expires_at,
-         interval_seconds = excluded.interval_seconds,
-         identity = excluded.identity,
-         audience = excluded.audience`,
+         interval_seconds = excluded.interval_seconds`,
       pending.deviceCode,
       pending.userCode,
       pending.verificationUri,
       pending.expiresAt,
       pending.intervalSeconds,
-      pending.identity,
-      pending.audience,
     );
   }
 
@@ -172,7 +161,7 @@ export class GitHubConnectionStore {
   pendingAuthorization(now: number): PendingAuthorization | undefined {
     const row = this.sql
       .exec<PendingRow>(
-        `SELECT device_code, user_code, verification_uri, expires_at, interval_seconds, identity, audience
+        `SELECT device_code, user_code, verification_uri, expires_at, interval_seconds
          FROM github_authorization WHERE id = 1`,
       )
       .toArray()[0];
@@ -193,8 +182,6 @@ export class GitHubConnectionStore {
       verificationUri: row.verification_uri,
       expiresAt: row.expires_at,
       intervalSeconds: row.interval_seconds,
-      identity: row.identity,
-      audience: row.audience,
     };
   }
 

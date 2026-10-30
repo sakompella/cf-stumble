@@ -75,7 +75,7 @@ function admits(
 }
 
 function post(path: string, body: string): Request {
-  return new Request(`${ORIGIN}${path}`, { method: "POST", headers: { origin: ORIGIN }, body });
+  return new Request(`${ORIGIN}${path}`, { method: "POST", body });
 }
 
 test("a turn reaches the Supervisor exactly when its body is one string prompt", async () => {

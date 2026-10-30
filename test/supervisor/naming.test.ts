@@ -2,9 +2,8 @@ import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
 
 /**
- * The Supervisor's one workspace is named from the Supervisor's own name, and that name comes from
- * a verified Access identity. A stub obtained from a raw id carries no such name, so construction
- * must fail rather than name a workspace from the id.
+ * The Supervisor's one workspace is named from the Supervisor's own name. A stub obtained from a
+ * raw id carries no name, so construction must fail rather than name a workspace from the id.
  */
 /**
  * The budget is generous because this test cold-starts a real Durable Object and waits for its

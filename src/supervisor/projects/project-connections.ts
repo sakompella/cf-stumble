@@ -149,9 +149,8 @@ interface ProjectConnectionsInput {
  * provisioning that makes a connected repository usable.
  *
  * The Supervisor holds one of these and delegates to it, so the RPC class stays a surface and the
- * order of the steps lives here. That order is the point of the module. Access proves who the
- * owner is and grants no repository access (ADR-0039); the workspace's own credential is what
- * reaches GitHub; a repository is checked before it becomes a project; and a project is stored
+ * order of the steps lives here. That order is the point of the module. The workspace's own
+ * credential is what reaches GitHub (ADR-0039); a repository is checked before it becomes a project; and a project is stored
  * only once its clone is in the workspace, so a project in the list is a project with files.
  */
 export class ProjectConnections {

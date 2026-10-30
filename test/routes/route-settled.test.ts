@@ -4,7 +4,7 @@ import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js
 import { settleRoute } from "../../src/routes/route-settled.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 import type { GitHubConnectionStatus } from "../../src/supervisor/projects/index.js";
-import { ownerApiResponse, ownerApiSupervisor as supervisor, ownerScope } from "./helpers.js";
+import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 /**
  * `route.settled`: one event per owner API request that reaches the workspace or controls a
@@ -24,7 +24,6 @@ function get(path: string, init: RequestInit = {}): Request {
 function post(path: string, body: Readonly<Record<string, string | number>>): Request {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
-    headers: { origin: ORIGIN },
     body: JSON.stringify(body),
   });
 }
@@ -49,7 +48,6 @@ test("a connection refresh logs one info event, and the Supervisor receives the 
         return refreshed({ state: "connected", login: "someone", source: "device-authorization" });
       },
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -74,7 +72,6 @@ test("a 200 that needs a reconnect is degraded, at warn", async () => {
   const response = await ownerApiResponse(
     post("/api/github/connection/refresh", {}),
     supervisor({ refreshGitHubConnection: () => refreshed(UNAVAILABLE) }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -91,7 +88,6 @@ test("a thrown connection refresh is a fault at error, with the status the clien
   const response = await ownerApiResponse(
     post("/api/github/connection/refresh", {}),
     supervisor({ refreshGitHubConnection: () => Promise.reject(new Error("boom")) }),
-    ownerScope,
   );
 
   expect(response.status).toBe(503);
@@ -99,24 +95,6 @@ test("a thrown connection refresh is a fault at error, with the status the clien
     level: "error",
     status: 503,
     applicationOutcome: "fault",
-  });
-});
-
-test("a refused request is a warning", async () => {
-  const events = capturedEvents();
-
-  const response = await ownerApiResponse(
-    new Request(`${ORIGIN}/api/workspace/reset`, { method: "POST" }),
-    supervisor(),
-    ownerScope,
-  );
-
-  expect(response.status).toBe(403);
-  expect(named(events(), "route.settled").at(0)).toMatchObject({
-    level: "warn",
-    route: "/api/workspace/reset",
-    status: 403,
-    applicationOutcome: "refused",
   });
 });
 
@@ -128,7 +106,6 @@ test("a refused activation is a warning with the refusal's status", async () => 
     supervisor({
       controlGeneration: () => Promise.resolve({ ok: false, problem: { code: "stale-epoch" } }),
     }),
-    ownerScope,
   );
 
   expect(response.status).toBe(409);
@@ -153,7 +130,6 @@ test("a request that ran to the workspace timeout is an error even when it succe
   await ownerApiResponse(
     post("/api/github/connection/refresh", {}),
     supervisor({ refreshGitHubConnection: () => refreshed({ state: "disconnected" }) }),
-    ownerScope,
   );
 
   clock.mockRestore();
@@ -175,7 +151,6 @@ test("a degraded response that returned in time stays a warning", async () => {
   await ownerApiResponse(
     post("/api/github/connection/refresh", {}),
     supervisor({ refreshGitHubConnection: () => refreshed(UNAVAILABLE) }),
-    ownerScope,
   );
 
   clock.mockRestore();
@@ -193,7 +168,6 @@ test("a turn is logged at its headers without reading the stream", async () => {
   const response = await ownerApiResponse(
     post("/api/projects/sample-project-one/turn", { prompt: "do not log this prompt" }),
     supervisor({ runProjectTurn: () => Promise.resolve({ ok: true, frames }) }),
-    ownerScope,
   );
 
   expect(response.status).toBe(200);
@@ -214,10 +188,10 @@ test("a turn is logged at its headers without reading the stream", async () => {
 test("requests that never touch the workspace stay quiet", async () => {
   const events = capturedEvents();
 
-  await ownerApiResponse(get("/api/status"), supervisor(), ownerScope);
-  await ownerApiResponse(get("/api/projects"), supervisor(), ownerScope);
-  await ownerApiResponse(get("/api/github/connection"), supervisor(), ownerScope);
-  await ownerApiResponse(get("/api/projects/some-id/thread"), supervisor(), ownerScope);
+  await ownerApiResponse(get("/api/status"), supervisor());
+  await ownerApiResponse(get("/api/projects"), supervisor());
+  await ownerApiResponse(get("/api/github/connection"), supervisor());
+  await ownerApiResponse(get("/api/projects/some-id/thread"), supervisor());
 
   expect(named(events(), "route.settled")).toEqual([]);
 });
@@ -231,7 +205,7 @@ test("overlapping requests each get their own id, whatever the client sent", asy
     ownerApiResponse(
       get(`/api/github/connection/refresh?requestId=${forged}`, {
         method: "POST",
-        headers: { ...headers, origin: ORIGIN },
+        headers,
       }),
       supervisor({
         refreshGitHubConnection: async (requestId) => {
@@ -241,7 +215,6 @@ test("overlapping requests each get their own id, whatever the client sent", asy
           return { github: { state: "disconnected" }, checkedAt: 0 };
         },
       }),
-      ownerScope,
     );
 
   await Promise.all([
@@ -268,7 +241,6 @@ test("the event carries the route pattern and never the path, query, or project 
       disconnectProject: () =>
         Promise.resolve({ ok: false, problem: { code: "unknown-project-id" } }),
     }),
-    ownerScope,
   );
 
   const settled = named(events(), "route.settled");

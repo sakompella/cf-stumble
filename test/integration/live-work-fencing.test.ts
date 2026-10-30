@@ -112,7 +112,7 @@ test("a second client cannot start a fresh thread or reset the workspace under a
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   const workspace = stubExternalBoundaries(new LiveWorkWorkspace());
-  const owner = await ownerSession("integration-live-work-fencing");
+  const owner = ownerSession();
   await servingScriptedGeneration(owner, generationSource);
   await connectSampleProjects(owner.supervisor);
   const projectPath = `/api/projects/${sampleProjectOne.id}`;

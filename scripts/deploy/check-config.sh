@@ -43,27 +43,6 @@ is_git_object_id() {
     esac
 }
 
-if has_non_whitespace "${CF_ACCESS_TEAM_DOMAIN-}"; then
-    printf 'CF_ACCESS_TEAM_DOMAIN: present (length %s)\n' "${#CF_ACCESS_TEAM_DOMAIN}"
-else
-    printf 'CF_ACCESS_TEAM_DOMAIN: missing (length 0)\n'
-    record_missing CF_ACCESS_TEAM_DOMAIN
-fi
-
-if has_non_whitespace "${CF_ACCESS_AUD-}"; then
-    printf 'CF_ACCESS_AUD: present (length %s)\n' "${#CF_ACCESS_AUD}"
-else
-    printf 'CF_ACCESS_AUD: missing (length 0)\n'
-    record_missing CF_ACCESS_AUD
-fi
-
-if has_non_whitespace "${CF_ACCESS_OWNER_SUB-}"; then
-    printf 'CF_ACCESS_OWNER_SUB: present (length %s)\n' "${#CF_ACCESS_OWNER_SUB}"
-else
-    printf 'CF_ACCESS_OWNER_SUB: missing (length 0)\n'
-    record_missing CF_ACCESS_OWNER_SUB
-fi
-
 # The deployed harness commit becomes Generation 0. Nothing is built into the Worker: after the
 # deploy, the owner submits this commit, the Supervisor labels and prepares it, and the owner
 # activates it. A deploy without it would serve nothing, so the guard requires it.

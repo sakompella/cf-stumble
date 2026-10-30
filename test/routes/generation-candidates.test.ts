@@ -7,7 +7,7 @@ import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { GenerationSubmissionResult } from "../../src/routes/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activeSupervisor, storeModuleMap } from "../supervisor/helpers.js";
-import { ownerApiResponse, ownerScope } from "./helpers.js";
+import { ownerApiResponse } from "./helpers.js";
 
 const commits = {
   passing: "5100000000000000000000000000000000000001",
@@ -49,11 +49,10 @@ function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): 
   return ownerApiResponse(
     new Request("https://cf-stumble.test/api/generations/submit", {
       method: "POST",
-      headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ harnessCommit }),
     }),
     control,
-    ownerScope,
   );
 }
 

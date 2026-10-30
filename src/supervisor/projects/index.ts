@@ -1,10 +1,7 @@
 export { ConnectedProjects } from "./connected-projects.js";
 
-// The connection surface is written in terms of the tenant the boundary verified and of the two
-// workspace views it uses, so the group states them here rather than making every consumer reach
-// for `access` and `workspace` to name one argument.
-export type { VerifiedAccessScope } from "../../access/index.js";
-
+// The connection surface is written in terms of the workspace views it uses, so the group states
+// them here rather than making every consumer reach for `workspace` to name one argument.
 export type {
   CredentialWorkspaceNamespace,
   ProvisionWorkspaceNamespace,

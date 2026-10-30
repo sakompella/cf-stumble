@@ -32,12 +32,10 @@ export default defineConfig({
     // without nodejs_compat. Vitest resolves those itself, which is why the suite passed while
     // `wrangler dev` failed to boot.
     compatibilityFlags: ["enable_ctx_exports", "nodejs_compat"],
-    // One entry point, and it is the one Cloudflare Access sits in front of. A `workers.dev`
-    // subdomain is reachable without Access, so it would leave the Worker's own fail-closed check
-    // as the only guard on a second door nobody watches. Turning it off is stated on purpose
+    // One entry point: the route. Turning the `workers.dev` subdomain off is stated on purpose
     // rather than left to a default.
     workersDev: false,
-    // Workers Cache would skip the Worker's Access check, and its key ignores identity.
+    // Workers Cache stays off, so every request reaches the Worker.
     cache: { enabled: false },
     // Operator diagnostics go to console.error (src/diagnostics.ts); without logs they vanish.
     // Every rate is 1: the start and end events of one request must both survive, and a sampled
@@ -68,13 +66,11 @@ export default defineConfig({
       }),
     },
     env: {
-      // Instance values (`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `CF_ACCESS_OWNER_SUB`,
-      // `HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID`, `GH_TOKEN`) are Worker secrets that each
-      // instance sets itself, and they are deliberately not declared here. `cf deploy` keeps
-      // undeclared secrets but removes undeclared plain-text variables. Declaring a secret makes it
-      // required, which stops the first deploy of a new Worker: `CF_ACCESS_OWNER_SUB` only exists
-      // after you sign in to the deployed hostname. The Worker fails closed until they are set.
-      // See `docs/deploy.md`.
+      // Instance values (`HARNESS_REPOSITORY_URL`, `GITHUB_OAUTH_CLIENT_ID`, `GH_TOKEN`) are
+      // Worker secrets that each instance sets itself, and they are deliberately not declared here.
+      // `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables. Declaring
+      // a secret makes it required, which stops the first deploy of a new Worker. See
+      // `docs/deploy.md`.
       SUPERVISOR: bindings.durableObject({ worker: WORKER_NAME, exportName: "Supervisor" }),
       WORKSPACE_HOST: bindings.durableObject({ worker: WORKER_NAME, exportName: "WorkspaceHost" }),
       LOADER: bindings.workerLoader(),

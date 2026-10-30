@@ -47,12 +47,11 @@ test.each(["unavailable", "tooling-missing"] as const)(
 
         await Effect.runPromise(github.status(NOW));
         expect(github.lastKnown(NOW).github?.state).toBe("connected");
-        const owner = { identity: "synthetic-owner", audience: "synthetic-audience" };
-        await Effect.runPromise(github.startAuthorization(owner, NOW + 1_000));
+        await Effect.runPromise(github.startAuthorization(NOW + 1_000));
 
         if (failure === "unavailable") workspace.unavailable = true;
         else workspace.credentialState = "tooling-missing";
-        const result = await Effect.runPromise(github.completeAuthorization(owner, NOW + 2_000));
+        const result = await Effect.runPromise(github.completeAuthorization(NOW + 2_000));
 
         if (!result.ok) throw new Error("authorization result must carry install status");
         expect(result.status.state).toBe(

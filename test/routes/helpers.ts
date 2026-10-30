@@ -6,25 +6,14 @@ import {
   type ProjectThreadResult,
 } from "../../src/supervisor/threads/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
-import type { VerifiedAccessScope } from "../../src/supervisor/projects/index.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
-
-/**
- * The verified scope the Worker hands the owner API. Boundary tests pass it explicitly, because
- * the routes take the tenant from the boundary and never from request data.
- */
-export const ownerScope: VerifiedAccessScope = {
-  identity: "owner-subject",
-  audience: "owner-api-audience",
-};
 
 /** The owner API's answer to one request, run as the Worker's entry point runs it. */
 export function ownerApiResponse(
   request: Request,
   supervisor: OwnerApiSupervisor,
-  scope: VerifiedAccessScope,
 ): Promise<Response> {
-  return Effect.runPromise(routeOwnerApiRequest(request, supervisor, scope));
+  return Effect.runPromise(routeOwnerApiRequest(request, supervisor));
 }
 
 export const disconnectedChatGPT: ChatGPTConnectionView = {
@@ -108,7 +97,7 @@ function unknownProjectOr(projectId: string): ProjectThreadResult {
 export function controlRequest(path: string, body: string): Request {
   return new Request(`https://cf-stumble.test${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: "https://cf-stumble.test" },
+    headers: { "content-type": "application/json" },
     body,
   });
 }

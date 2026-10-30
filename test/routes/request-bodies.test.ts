@@ -13,7 +13,6 @@ async function turnStatus(body: string): Promise<number> {
   const route = routeProjectTurnRequest(
     new Request(`${ORIGIN}/api/projects/p/turn`, {
       method: "POST",
-      headers: { origin: ORIGIN },
       body,
     }),
     {
