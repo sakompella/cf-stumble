@@ -32,9 +32,10 @@ export type ActiveGeneration = {
 
 export type PreparationCheckOutcome = "passed" | "failed";
 
-export type PreparationCheckProblem =
-  | { readonly code: "unknown-generation"; readonly label: number }
-  | { readonly code: "invalid-preparation-check-outcome" };
+export type PreparationCheckProblem = {
+  readonly code: "unknown-generation";
+  readonly label: number;
+};
 
 export type PreparationCheckResult = Result.Result<
   {

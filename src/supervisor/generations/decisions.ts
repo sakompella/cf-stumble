@@ -3,6 +3,7 @@ import type {
   Generation,
   GenerationLabel,
   GenerationStatus,
+  PreparationCheckOutcome,
   PreparationCheckProblem,
 } from "./generation.js";
 
@@ -72,16 +73,10 @@ type PreparationCheckDecision =
 
 export function decidePreparationCheck(
   label: GenerationLabel,
-  // Untrusted input: callers forward an outcome that has not been validated, so parse it here and
-  // let control-flow analysis narrow it to PreparationCheckOutcome past this guard.
-  outcome: string,
+  outcome: PreparationCheckOutcome,
   generation: Generation | undefined,
   state: GenerationState,
 ): PreparationCheckDecision {
-  if (outcome !== "passed" && outcome !== "failed") {
-    return { kind: "rejected", problem: { code: "invalid-preparation-check-outcome" } };
-  }
-
   if (generation === undefined) {
     return { kind: "rejected", problem: { code: "unknown-generation", label } };
   }

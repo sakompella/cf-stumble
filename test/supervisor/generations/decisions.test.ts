@@ -60,12 +60,6 @@ test("activating a ready generation advances epoch and activation id by one", ()
   });
 });
 
-test("a preparation check with an invalid outcome is rejected", () => {
-  expect(
-    decidePreparationCheck(label(1), "bogus", generation(1, "candidate"), stateAt(5, 2)),
-  ).toEqual({ kind: "rejected", problem: { code: "invalid-preparation-check-outcome" } });
-});
-
 test("a check on a candidate records the resulting status and advances the epoch", () => {
   expect(
     decidePreparationCheck(label(1), "passed", generation(1, "candidate"), stateAt(5, 2)),

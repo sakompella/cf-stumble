@@ -78,23 +78,6 @@ test("a ready generation advances both clocks by exactly one, and only when it i
   });
 });
 
-test("a preparation check with an invalid outcome is rejected for any generation or clock", () => {
-  hegel.test((tc) => {
-    const target = tc.draw(labelValue);
-    const status = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
-
-    const outcome = tc.draw(
-      gs.sampledFrom(["", "pass", "PASSED", "Passed", "failed ", "bogus", "ready"] as const),
-    );
-
-    const state = { activeLabel: undefined, epoch: tc.draw(count), activationId: tc.draw(count) };
-
-    expect(
-      decidePreparationCheck(label(target), outcome, generation(target, status), state),
-    ).toEqual({ kind: "rejected", problem: { code: "invalid-preparation-check-outcome" } });
-  });
-});
-
 test("a check that changes the status records it and advances the epoch by one", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
