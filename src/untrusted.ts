@@ -25,7 +25,6 @@ export function hasOwn(value: UntrustedObject, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-/** A request must carry exactly the fields it names, in any order, so an extra field is a rejection. */
 export function hasExactKeys(
   value: UntrustedObject | Readonly<Record<string, unknown>>,
   expected: readonly string[],

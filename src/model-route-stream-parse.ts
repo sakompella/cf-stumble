@@ -1,40 +1,22 @@
-/**
- * Defensive parsing of one provider Server-Sent Event chunk. This is the provider's own untrusted
- * output, so it gets the same boundary treatment `model-route.ts` gives untrusted request input
- * (ADR-0045): every field is narrowed before use, and an unrecognized shape degrades to "nothing
- * understood on this line" rather than throwing.
- *
- * The deployed model streams its text and tool calls in `choices[0].delta` (see
- * `firstChoiceDelta`). The repository does not record whether it sends a tool call's arguments
- * fragment by fragment or complete in one chunk. Either behavior parses correctly here: a
- * complete-in-one-chunk provider just means every tool call's `argumentsDelta` arrives in a single
- * `tool-call-delta` event instead of several.
- */
-
 import { asUntrusted, field, isRecord, type UntrustedObject } from "./untrusted.js";
 import type { ToolCallDelta } from "./model-route-events.js";
 
-/** One provider stream chunk's fields this route understands, after defensive parsing. */
 export type ParsedProviderChunk = Readonly<{
   textDelta?: string;
   toolCallDeltas?: ReadonlyArray<ToolCallDelta>;
   usage?: Readonly<{ inputTokens: number; outputTokens: number }>;
 }>;
 
-/** Same fields as {@link ParsedProviderChunk}, but mutable while this module builds one. */
 type MutableParsedChunk = {
   textDelta?: string;
   toolCallDeltas?: ToolCallDelta[];
   usage?: Readonly<{ inputTokens: number; outputTokens: number }>;
 };
 
-/** The tool call function fields one provider chunk entry reports, before assembly into a delta. */
 type ParsedToolCallFunction = Readonly<{ name?: string; argumentsDelta?: string }>;
 
-/** Same fields as {@link ParsedToolCallFunction}, but mutable while this module builds one. */
 type MutableToolCallFunction = { name?: string; argumentsDelta?: string };
 
-/** Same fields as {@link ToolCallDelta}, but mutable while this module builds one. */
 type MutableToolCallDelta = { index: number; id?: string; name?: string; argumentsDelta?: string };
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted provider field.
@@ -44,13 +26,8 @@ function stringField(value: unknown): string | undefined {
 }
 
 /**
- * The `delta` of the first choice, for a provider that streams chat completions rather than
- * Workers AI's classic `{ response }` events.
- *
- * This is where a deployed turn was losing its whole answer. The model streams
- * `{"choices":[{"delta":{"content":"ready"}}]}` and reports its usage at the top level, so the
- * route recorded three output tokens and no text, and Pi saved an assistant message with nothing
- * in it. Only the first choice matters: the route never asks for more than one.
+ * Chat-completion providers stream text and tool calls in `choices[0].delta`, with usage at the top
+ * level. Only the first choice matters.
  */
 function firstChoiceDelta(obj: UntrustedObject): UntrustedObject | undefined {
   const choices = field(obj, "choices");
@@ -73,7 +50,6 @@ function numberField(obj: UntrustedObject, key: string): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
-/** A provider's reported token count, if it is one: a non-negative whole number. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted provider usage field.
 export function tokenCount(value: unknown): number | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider usage field.
@@ -117,7 +93,6 @@ function parseProviderToolCallFunction(fn: unknown): ParsedToolCallFunction {
   return parsed satisfies ParsedToolCallFunction;
 }
 
-/** One untrusted tool call delta entry from the provider's own stream. */
 function parseProviderToolCallDelta(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream entry.
   entry: unknown,
@@ -158,9 +133,8 @@ function parseProviderToolCallDeltas(toolCalls: unknown): ToolCallDelta[] {
 }
 
 /**
- * Whether one decoded provider event reports a failure instead of carrying part of the answer. An
- * OpenAI-compatible server reports a failure mid-stream as `{"error": ...}` and can still send
- * `[DONE]` after it, so this event, not the end of the stream, has to fail the turn.
+ * An OpenAI-compatible server can send `{"error": ...}` mid-stream and still `[DONE]`, so this
+ * event, not the stream end, must fail the turn.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream event.
 export function isProviderError(raw: unknown): boolean {
@@ -172,12 +146,8 @@ export function isProviderError(raw: unknown): boolean {
 }
 
 /**
- * Parse one decoded provider SSE data payload, tolerating both shapes this route sees on
- * `env.AI.run(model, { ..., stream: true })`: Workers AI's classic `{ response }` token events, and
- * chat-completion chunks, whose text and tool calls live in `choices[0].delta` while usage stays at
- * the top level. The deployed model streams the second shape.
- * Unrecognized fields are ignored rather than rejected — this seam degrades, it does not throw,
- * because a provider detail this route does not model must not fail an otherwise-good turn.
+ * Unrecognized fields are ignored: a provider detail this route does not model must not fail an
+ * otherwise-good turn.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this IS the parse boundary for the provider's own untrusted stream chunk.
 export function parseProviderChunk(raw: unknown): ParsedProviderChunk | undefined {

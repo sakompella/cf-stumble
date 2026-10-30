@@ -1,9 +1,6 @@
 /**
- * Assert an internal invariant that must hold if the code is correct. A failure means a broken
- * build-time constant or a caller precondition violation, not a recoverable runtime condition, so
- * this throws rather than returning a Result (ADR-0045). Use it to name "should never happen"
- * checks; keep Result for expected failures, and keep the persistence decoders' own throws for
- * corrupt stored data.
+ * Throws rather than returning a Result: a failure is a broken constant or caller bug, not a
+ * recoverable condition.
  */
 export function invariant(condition: boolean, message: string): asserts condition {
   if (!condition) {
