@@ -3,6 +3,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
+import { SERVING_FACET_NAME } from "../../../src/supervisor/artifacts/index.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import {
   calls,
@@ -169,4 +170,21 @@ test("a fresh thread ends the events stream open on the old conversation", async
   expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
 
   while (!(await reader.read()).done);
+});
+
+test("an events stream whose facet was replaced ends, and a fresh thread still answers", async () => {
+  scriptModel();
+  const control = await servingGeneration1("generation-1-events-replaced", new ProjectWorkspace());
+  const opened = await control.projectEvents(project);
+
+  if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
+  const reader = opened.events.getReader();
+  await reader.read();
+
+  await runInDurableObject(control, (_instance, state) => {
+    state.facets.abort(SERVING_FACET_NAME, "another generation serves");
+  });
+
+  while (!(await reader.read()).done);
+  expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
 });

@@ -253,7 +253,8 @@ export class ServingConversations {
 
   /**
    * A stream ends cleanly when its conversation is replaced, which tells the page to open the
-   * project's events again; however the relay stops, the facet's stream is cancelled.
+   * project's events again. A stream whose source failed, as when a generation activation replaces
+   * the facet, ends the same way. However the relay stops, the facet's stream is cancelled.
    */
   #endedWhenReplaced(
     conversationId: string,
@@ -281,7 +282,7 @@ export class ServingConversations {
         opened = controller;
       },
       pull: async (controller) => {
-        const next = await source.read();
+        const next = await source.read().catch(() => ({ done: true }) as const);
 
         if (replaced) {
           void source.cancel().catch(() => {});

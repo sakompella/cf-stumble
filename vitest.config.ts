@@ -95,11 +95,17 @@ async function effectPrebundle(): Promise<Plugin> {
  * Loader response and a reader that handles every promise it holds. Only these tests run a real
  * generation or candidate that far, so the error is ignored in those files alone, and only for the
  * message each one provokes.
+ * - `conversations/generation-1.test.ts`: the serving facet is replaced while an events stream
+ *   reads it.
  * - `turn-cancel.test.ts`: a turn ends while its generation is quiet.
  * - `startup-check/body.test.ts`: a candidate body fails mid-read, and a stalled body is cancelled
  *   at the deadline.
  */
 const PLATFORM_STREAM_REJECTIONS = [
+  {
+    file: "test/supervisor/conversations/generation-1.test.ts",
+    message: "ReadableStream received over RPC disconnected prematurely.",
+  },
   { file: "test/supervisor/projects/turn-cancel.test.ts", message: "Stream was cancelled." },
   { file: "test/supervisor/startup-check/body.test.ts", message: "body exploded" },
   { file: "test/supervisor/startup-check/body.test.ts", message: "startup-check deadline expired" },
