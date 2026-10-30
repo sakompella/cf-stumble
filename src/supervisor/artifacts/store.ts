@@ -5,18 +5,9 @@ import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { canonicalModuleMap, encodeModuleMap } from "./module-map.js";
 
-/**
- * The largest chunk of a stored module map. A Durable Object row, string, or BLOB may not exceed
- * 2 MB, and one generated module can be larger than that on its own, so neither the whole map nor
- * one module may occupy a row. The canonical encoding is split at this bound instead, which keeps
- * every row well under the platform limit whatever the harness compiles to.
- */
+/** A Durable Object row, string, or BLOB may not exceed 2 MB and one module can exceed that alone, so the encoding is chunked. */
 export const MODULE_MAP_CHUNK_BYTES = 1_048_576;
 
-/**
- * The only storage operations a module-map store needs. `DurableObjectStorage` satisfies it. The
- * narrow shape is what lets a test drive the real transaction with a statement that fails.
- */
 export type ModuleMapStorage = Readonly<{
   sql: Pick<SqlStorage, "exec">;
   transactionSync: <T>(operation: () => T) => T;
@@ -28,7 +19,6 @@ export type StoredModuleMapProblem =
   | { readonly code: "corrupt-artifact"; readonly harnessCommit: string }
   | { readonly code: "artifact-write-failed"; readonly harnessCommit: string };
 
-/** A read either found a complete stored module map or found none. Neither answer builds. */
 type StoredModuleMap =
   | Readonly<{ kind: "stored"; moduleMap: MainHarnessArtifactInput }>
   | Readonly<{ kind: "absent" }>;
@@ -39,11 +29,6 @@ type ManifestRow = { readonly chunk_count: number; readonly byte_count: number }
 
 type ChunkRow = { readonly chunk_index: number; readonly bytes: ArrayBuffer };
 
-/**
- * The Supervisor's module maps, in the Durable Object's own SQLite. A generation that is ready has
- * its map here, so activation and rollback load code that is already stored and never ask Computer
- * to build again. Nothing here decides which code may serve.
- */
 export class ModuleMapStore {
   private readonly storage: ModuleMapStorage;
 
@@ -64,12 +49,7 @@ export class ModuleMapStore {
     `);
   }
 
-  /**
-   * Read the stored map for a labeled commit. The manifest's chunk count and byte count and the
-   * contiguous chunk indexes are all checked, so a damaged row set is reported rather than
-   * assembled: `MainHarnessArtifact.parse` accepts a map whose entry module is present even when
-   * an imported module is missing, and that map would load as a broken generation.
-   */
+  /** Checks chunk count, byte count and contiguous indexes: `MainHarnessArtifact.parse` accepts a map with an imported module missing. */
   read(harnessCommit: HarnessCommit): StoredModuleMapResult {
     const manifest = this.storage.sql
       .exec<ManifestRow>(
@@ -98,11 +78,7 @@ export class ModuleMapStore {
     return decoded(bytes, harnessCommit);
   }
 
-  /**
-   * Store a validated module map. The manifest and every chunk are written inside one
-   * `transactionSync`, so a restart between two statements sees the map that was there before or
-   * the whole new one, never a map missing a module.
-   */
+  /** One `transactionSync`, so a restart sees the old map or the whole new one. */
   write(
     artifact: MainHarnessArtifact,
   ): Result.Result<MainHarnessArtifactInput, StoredModuleMapProblem> {
@@ -157,14 +133,12 @@ function chunked(bytes: Uint8Array): readonly Uint8Array[] {
   const chunks: Uint8Array[] = [];
 
   for (let offset = 0; offset < bytes.byteLength; offset += MODULE_MAP_CHUNK_BYTES) {
-    // `slice`, so each chunk is its own copy and a row holds no more than the bytes it names.
     chunks.push(bytes.slice(offset, offset + MODULE_MAP_CHUNK_BYTES));
   }
 
   return chunks;
 }
 
-/** The stored bytes, or nothing when the manifest and the chunk rows disagree. */
 function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Array | undefined {
   if (chunks.length !== manifest.chunk_count) {
     return undefined;

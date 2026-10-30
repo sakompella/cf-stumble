@@ -8,15 +8,11 @@ import { runStartupCheck } from "./candidate.js";
 
 import type { Generation, Generations, PreparationCheckProblem } from "../generations/index.js";
 
-/**
- * A generous bound, because the check has to cover a Dynamic Worker load and a cold Durable
- * Object start. Nothing local can measure what production needs, so tests pass their own.
- */
+/** Covers a Dynamic Worker load and a cold Durable Object start. Tests pass their own. */
 const STARTUP_CHECK_DEADLINE_MS = 5_000;
 
 const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
 
-/** What a startup check reads, records and mounts through. The Supervisor builds it once. */
 export type StartupCheckHost = Readonly<{
   ctx: DurableObjectState;
   loader: WorkerLoader;
@@ -44,11 +40,6 @@ export type StartupCheckResult =
   | { readonly ok: true; readonly report: StartupCheckReport }
   | { readonly ok: false; readonly problem: StartupCheckProblem };
 
-/**
- * Check a labeled generation's module map, stored or built from its commit, and record the outcome
- * against the generation. The Supervisor returns the plain union over RPC from prepareGeneration (ADR-0045), so
- * every expected failure is already a value here.
- */
 export function checkGenerationStartup(
   host: StartupCheckHost,
   label: number,
@@ -62,11 +53,7 @@ export function checkGenerationStartup(
   );
 }
 
-/**
- * A module map that cannot be obtained records no preparation check. A missing build workspace or
- * a store that refused the write is not evidence about the candidate, and the active generation
- * keeps serving.
- */
+/** A map that cannot be obtained records no check: that is no evidence about the candidate, and the active generation keeps serving. */
 function checkLabeledStartup(
   host: StartupCheckHost,
   label: number,

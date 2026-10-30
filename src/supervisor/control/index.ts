@@ -10,19 +10,13 @@ type ControlOutcome = Extract<GenerationControlResult, { readonly ok: true }>["o
 
 type ActivationKind = Exclude<ControlOutcome["kind"], "candidate-submitted">;
 
-// Control runs on Result internally and converts to the plain GenerationControlResult union once,
-// in execute(), because that value crosses the Supervisor RPC boundary and is written to SQLite.
-// Everything here runs inside one `transactionSync` callback, so it is synchronous code: a Result
-// is a value, not an Effect, and nothing in the callback can suspend.
+// Runs on Result and converts once in execute(): the value crosses the RPC boundary and is written to SQLite.
+// Everything here runs inside one `transactionSync` callback, so it must stay synchronous.
 type ControlDecision = Result.Result<ControlOutcome, ControlProblemCode>;
 
 /**
- * Applies a generation request directly to the generation tables in one Durable Object
- * transaction. There is no request journal: a candidate resubmission is safe because
- * labeling an already-labeled harness commit returns the existing generation (Generations
- * .labelInTransaction), and activating the generation that is already active is a no-op
- * (Generations.activateInTransaction). Activation and rollback still carry the epoch the requester
- * observed, and a request built on stale generation-control state is rejected.
+ * No request journal: resubmitting a candidate is safe because labeling a labeled commit returns the
+ * existing generation, and activating the active generation is a no-op. A stale epoch is rejected.
  */
 export class GenerationControl {
   private readonly generations: Generations;

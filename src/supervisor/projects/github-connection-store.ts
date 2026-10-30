@@ -1,16 +1,8 @@
 import type { GitHubConnectionStatus } from "./github-connection.js";
 
 /**
- * What cf-stumble remembers about the workspace's GitHub authorization, which is deliberately not
- * a credential.
- *
- * Four things are stored. A pending device authorization, which holds the device code GitHub
- * issued, deleted once redeemed so a replayed request finds nothing to redeem. The fact of a connection: a login name, how
- * it was obtained, and when. What the last credential check found and when it ran, which is what a
- * status read answers without asking the workspace. And a revision that each workspace reset
- * advances, so a check that started before a reset cannot store its answer after it. The access
- * token itself is never here — it is installed into the workspace's `gh` configuration and dropped
- * (ADR-0039), so this table cannot leak one.
+ * The access token is never stored. It is installed into the workspace's `gh` configuration and
+ * dropped, so this table cannot leak one.
  */
 type PendingAuthorization = Readonly<{
   deviceCode: string;
@@ -20,15 +12,12 @@ type PendingAuthorization = Readonly<{
   intervalSeconds: number;
 }>;
 
-/** How the workspace got the credential it has. The configured token is a test path, and says so. */
 export type CredentialSource = "device-authorization" | "configured-token";
 
-/** What one credential check found. A pending authorization is never asked of the workspace. */
 export type CheckedStatus = Exclude<GitHubConnectionStatus, { state: "awaiting-authorization" }>;
 
 type ReconnectReason = Extract<CheckedStatus, { state: "reconnect-required" }>["reason"];
 
-/** The last credential check: what it found and when it ran. */
 export type LastCheck = Readonly<{ status: CheckedStatus; checkedAt: number }>;
 
 export type RecordedConnection = Readonly<{
@@ -134,7 +123,6 @@ export class GitHubConnectionStore {
     `);
   }
 
-  /** Start one authorization, replacing any earlier one. A tenant waits at one page at a time. */
   startAuthorization(pending: PendingAuthorization): void {
     this.sql.exec(
       `INSERT INTO github_authorization
@@ -154,10 +142,7 @@ export class GitHubConnectionStore {
     );
   }
 
-  /**
-   * The authorization still worth redeeming. An expired one is deleted as it is read, so a device
-   * code outlives its window nowhere: a late redemption finds nothing rather than a stale secret.
-   */
+  /** Deletes an expired authorization as it is read, so a device code never outlives its window. */
   pendingAuthorization(now: number): PendingAuthorization | undefined {
     const row = this.sql
       .exec<PendingRow>(
@@ -185,11 +170,7 @@ export class GitHubConnectionStore {
     };
   }
 
-  /**
-   * Consume the pending authorization if it is still the one for `deviceCode`, and answer whether
-   * this call consumed it. A redeemed device code is never redeemable twice, and a redemption that
-   * ends after a newer authorization started leaves the newer one in place.
-   */
+  /** A redemption that ends after a newer authorization started leaves the newer one in place. */
   consumeAuthorization(deviceCode: string): boolean {
     const consumed = this.sql
       .exec(
@@ -237,7 +218,6 @@ export class GitHubConnectionStore {
     };
   }
 
-  /** The current revision. A check captures it when it starts and presents it to `recordCheck`. */
   revision(): number {
     const row = this.sql
       .exec<{ readonly revision: number }>(
@@ -249,9 +229,8 @@ export class GitHubConnectionStore {
   }
 
   /**
-   * Replace the last check and the connection it found, in one transaction, only while `revision`
-   * is still current. A check that a workspace reset overtook found the workspace before the
-   * reset, so it stores nothing. `connection` is `undefined` when the check found none.
+   * Stores nothing when `revision` is stale: a check a workspace reset overtook saw the old
+   * workspace.
    */
   recordCheck(
     revision: number,
@@ -291,10 +270,7 @@ export class GitHubConnectionStore {
       : { status: checkedStatus(row), checkedAt: row.checked_at };
   }
 
-  /**
-   * Forget the connection and the last check, and advance the revision, in one transaction. Every
-   * check still running started at the old revision, so none of them can store its answer.
-   */
+  /** Advancing the revision stops checks already running from storing their answer. */
   clear(): void {
     this.storage.transactionSync(() => {
       this.clearConnection();

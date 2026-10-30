@@ -22,18 +22,12 @@ export type ModuleMapProblem =
   | HarnessBuildProblem;
 
 /**
- * Why the main facet could not be mounted. `no-active-generation` is not a fault: no generation is
- * labeled active, so there is no code to serve. Every other problem describes the active
- * generation's stored module map, and none of them fall back to other code or to a build.
+ * `no-active-generation` is not a fault: there is no code to serve. Every other problem describes the active
+ * generation's stored map, and none fall back to other code or a build.
  */
 export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;
 
-/**
- * The Supervisor's module maps. The one way in is `prepare`, which runs at submission and may
- * build a commit that has nothing stored. Serving reads what is stored and never builds, so
- * activating or rolling back to a generation that is ready cannot depend on Computer being
- * reachable.
- */
+/** Only `prepare` builds. Serving reads what is stored, so activation and rollback cannot depend on Computer being reachable. */
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
   private readonly builder: HarnessModuleMapBuilder;
@@ -43,11 +37,6 @@ export class HarnessArtifacts {
     this.builder = builder;
   }
 
-  /**
-   * The artifacts of a tenant that builds in its own workspace. A commit with nothing stored is
-   * built there, in the scratch subtree that holds no repository, so a build neither reads nor
-   * replaces a checkout, and one build per commit runs at a time.
-   */
   static forWorkspace(
     storage: ModuleMapStorage,
     namespace: BuildWorkspaceNamespace,
@@ -59,12 +48,7 @@ export class HarnessArtifacts {
     );
   }
 
-  /**
-   * The module map of a labeled commit at submission time: the stored map when there is one, or a
-   * build of that commit, validated and stored before this returns. A store that cannot be written
-   * fails preparation, because a generation that becomes ready must have its code stored; nothing
-   * later is allowed to rebuild it.
-   */
+  /** The stored map or a build, validated and stored before this returns. A store failure fails preparation: a ready generation must have its code stored. */
   prepare(harnessCommit: string): Effect.Effect<MainHarnessArtifactInput, ModuleMapProblem> {
     return Effect.gen({ self: this }, function* () {
       const validatedCommit = parseHarnessCommit(harnessCommit);
@@ -89,10 +73,7 @@ export class HarnessArtifacts {
     });
   }
 
-  /**
-   * Mount the generation that serves. This waits for nothing: the module map is already in the
-   * Durable Object's own SQLite, and reading it is synchronous.
-   */
+  /** Synchronous: the module map is already in the Durable Object's SQLite. */
   mount(
     active: ActiveGeneration,
     loader: WorkerLoader,
@@ -113,13 +94,7 @@ export class HarnessArtifacts {
     );
   }
 
-  /**
-   * The module map of the generation that serves, read and nothing else. There is no built-in
-   * alternative and no build: a Supervisor with no active generation reports
-   * `no-active-generation`, and an active generation whose map is not stored reports that rather
-   * than rebuilding it. A generation only becomes ready once `prepare` stored its map, so
-   * activation and rollback both load bytes that are already there.
-   */
+  /** Reads only, never builds. A generation becomes ready only after `prepare` stored its map. */
   private load(
     active: ActiveGeneration,
   ): Result.Result<MainHarnessArtifactInput, MainFacetMountProblem> {
@@ -148,10 +123,7 @@ export class HarnessArtifacts {
   }
 }
 
-/**
- * Validate and identify every build before it is stored or loaded. A build cannot deliver an
- * unloadable map, and it cannot deliver a map for another commit.
- */
+/** A build cannot deliver an unloadable map or a map for another commit. */
 function validatedBuild(
   harnessCommit: HarnessCommit,
   built: MainHarnessArtifactInput,
@@ -177,11 +149,6 @@ function validatedBuild(
   return parsed;
 }
 
-/**
- * `mount` and this group's builders take these two as arguments, so every caller of the group
- * needs their types. Re-exporting them here means a caller does not reach into `facet/index.js`
- * for the parameter types of a method it is calling here.
- */
 export type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 
 export { mainFacetName } from "./facet-name.js";

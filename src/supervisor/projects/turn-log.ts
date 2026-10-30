@@ -2,12 +2,8 @@ import { logEvent, type LogFields, type LogLevel } from "../../diagnostics.js";
 import type { ProjectTurnFrame } from "./turn-frames.js";
 
 /**
- * How one turn appears in the operational log (`docs/agents/design/observability.md`).
- *
- * Every event of a turn carries the same three fields, so an operator can pull one turn's whole
- * history out of Workers Logs: the project, the generation it was admitted against, and a suffix
- * of its lease id. The whole lease id never leaves the Supervisor (`turn-run.ts`); the suffix is
- * enough to tell two turns of one project apart and not enough to present as a lease.
+ * The whole lease id never leaves the Supervisor; the suffix tells two turns of one project apart
+ * and cannot present as a lease.
  */
 export type TurnTrace = Readonly<{
   projectId: string;
@@ -36,7 +32,6 @@ export function turnFields(trace: TurnTrace): LogFields {
   return { projectId: trace.projectId, lease: trace.lease, generation: trace.generation };
 }
 
-/** The frames a generation forwarded, counted by kind. The frames themselves are never logged. */
 type ForwardedFrameCounts = Readonly<{
   text: number;
   toolStart: number;
@@ -53,7 +48,7 @@ const NO_FRAMES: ForwardedFrameCounts = {
   diffUnavailable: 0,
 };
 
-/** Count one forwarded frame. A terminal frame is the settlement, so it is not counted here. */
+/** A terminal frame is the settlement, so it is not counted here. */
 function countFrame(counts: ForwardedFrameCounts, frame: ProjectTurnFrame): ForwardedFrameCounts {
   switch (frame.kind) {
     case "text":
@@ -96,11 +91,6 @@ function frameCountFields(counts: ForwardedFrameCounts): LogFields {
 
 type Settlement = Readonly<{ level: LogLevel; fields: LogFields }>;
 
-/**
- * What the terminal frame the Supervisor wrote says about the turn, as log fields. A save and a
- * browser that left are ordinary; a failure Pi reported is degraded; a stream the Supervisor could
- * not read, a save it could not make, and a turn that ran out of time are faults.
- */
 function settlement(frame: ProjectTurnFrame): Settlement {
   switch (frame.kind) {
     case "saved":
@@ -134,13 +124,8 @@ function settlement(frame: ProjectTurnFrame): Settlement {
   }
 }
 
-/** Why a progress frame was left out of the browser's stream instead of ending the turn. */
 export type DroppedFrame = "oversized-frame" | "unknown-kind";
 
-/**
- * The log of one turn's stream: the first frame dropped for each reason, and the settlement with
- * frame counts. Nothing is logged per frame.
- */
 export class TurnStreamLog {
   readonly #trace: TurnTrace;
   readonly #now: () => number;
@@ -152,7 +137,6 @@ export class TurnStreamLog {
     this.#now = now;
   }
 
-  /** Wrap the publisher of forwarded frames so each one is counted on its way to the browser. */
   counting(publish: (frame: ProjectTurnFrame) => void): (frame: ProjectTurnFrame) => void {
     return (frame) => {
       this.#counts = countFrame(this.#counts, frame);
@@ -167,7 +151,6 @@ export class TurnStreamLog {
     logEvent("warn", "turn.frame-dropped", { ...turnFields(this.#trace), reason });
   }
 
-  /** Log the terminal frame the Supervisor wrote, and hand it back to be published. */
   settled(frame: ProjectTurnFrame): ProjectTurnFrame {
     const settled = settlement(frame);
 
@@ -183,7 +166,6 @@ export class TurnStreamLog {
   }
 }
 
-/** The turn gave its lease back before it settled, and why. */
 export function logLeaseAbandoned(trace: TurnTrace, why: string, level: LogLevel): void {
   logEvent(level, "turn.lease-abandoned", { ...turnFields(trace), why });
 }

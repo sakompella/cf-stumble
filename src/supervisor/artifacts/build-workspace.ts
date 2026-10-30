@@ -13,33 +13,18 @@ import type { CommandOutput, WorkspaceResult } from "../../workspace/index.js";
 import { WorkspaceModuleMapBuilder } from "./builder.js";
 import type { BuildWorkspace, HarnessBuild, HarnessModuleMapBuilder } from "./builder.js";
 
-/** The Workspace Host build surface as the Supervisor uses it: a commit and a planned step. */
 export type BuildWorkspaceHost = Readonly<{
   build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
 }>;
 
-/**
- * Just enough of the Workspace Host binding to reach one workspace by name. The Supervisor builds
- * in the tenant's own workspace and names it from its own server-derived tenant key, so no request
- * can point a build at another workspace and no build shares a container with another tenant.
- */
+/** Names the workspace from the server-derived tenant key, so no request can point a build at another tenant's workspace. */
 export type BuildWorkspaceNamespace = Readonly<{
   getByName(name: string): BuildWorkspaceHost;
 }>;
 
-/**
- * The `BuildWorkspace` the builder runs against, bound to one harness commit. It sends the
- * Workspace Host a step's name, never its command text: the Host plans the same commit itself and
- * runs only the step of that name.
- */
+/** Sends the Host a step name, never command text: the Host plans the commit itself. */
 class CommitBuildWorkspace implements BuildWorkspace {
-  /**
-   * A fresh stub for every call, not one stub for the whole build.
-   *
-   * A build is minutes long and its steps are separate calls. The Workspace Host can restart
-   * meanwhile ("this Durable Object instance is no longer active"), and a stub taken before the
-   * build would die with it. A stub is cheap, so each call takes its own.
-   */
+  /** A fresh stub per call: the Workspace Host can restart mid-build and an older stub would die with it. */
   private readonly host: () => BuildWorkspaceHost;
   private readonly harnessCommit: HarnessCommit;
 
@@ -93,9 +78,7 @@ class CommitBuildWorkspace implements BuildWorkspace {
     }
 
     if (result.result.exitCode !== 0) {
-      // A build that wrote no module map, or wrote it through a symbolic link, is an ordinary
-      // build failure rather than an impossible state, so this throws for the builder to report
-      // as `build-output-missing`.
+      // A missing or symlinked module map is an ordinary build failure; the builder reports `build-output-missing`.
       throw new Error(`the build wrote no readable module map: exit ${result.result.exitCode}`);
     }
 
@@ -104,25 +87,11 @@ class CommitBuildWorkspace implements BuildWorkspace {
 }
 
 /**
- * The builder the Supervisor uses for a cache miss. Every build gets a workspace bound to its own
- * commit, so two builds cannot confuse each other's steps, and every failure stays a plain typed
- * `HarnessBuildProblem` that leaves the active generation serving.
+ * One build per commit at a time: the plan extracts into a scratch directory named after the commit
+ * and clears it first, so concurrent builds of one commit would delete each other's files. Later
+ * callers join the build in flight.
  *
- * One build per commit at a time. The build plan extracts a commit into a scratch directory named
- * after that commit and clears it first, so a second build of the same commit would delete the
- * files the first is compiling. A request for a commit already building therefore joins the build
- * in flight and receives its result, and the entry is dropped as soon as that build settles, so a
- * later request for the same commit builds again. This is a conflict rule, not a queue: nothing is
- * deferred, ordered, or retried here, and builds of different commits do not wait for each other.
- * Their provision steps still share the harness checkout, so the provision shell takes its own
- * lock in the workspace container (`provisionHarnessRepository`) rather than relying on this map.
- *
- * Two tenants cannot collide at all, because the workspace name is the tenant's own and each
- * tenant's scratch subtree lives in that tenant's container.
- *
- * A build in flight is a native Promise of its settled result, run as its own program. It belongs
- * to every caller that joined it, so no one caller's fiber runs it, and a caller that stops
- * waiting does not stop it or drop it from the map before it settles.
+ * The build runs as its own program, not in a caller's fiber, so a caller that stops waiting does not stop it.
  */
 export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
   private readonly namespace: BuildWorkspaceNamespace;
@@ -161,7 +130,6 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
   }
 
   private runBuild(harnessCommit: HarnessCommit): HarnessBuild {
-    // The name is the tenant's own, never request data.
     const workspace = new CommitBuildWorkspace(
       () => this.namespace.getByName(this.workspaceName),
       harnessCommit,
@@ -171,5 +139,4 @@ export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
   }
 }
 
-/** A build that has finished, with its outcome as a value, so every caller that joined it reads it. */
 type SettledBuild = Result.Result<Effect.Success<HarnessBuild>, Effect.Error<HarnessBuild>>;

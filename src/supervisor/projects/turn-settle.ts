@@ -2,7 +2,6 @@ import type { ProjectThreadResult } from "../threads/index.js";
 import { logRedactedCause } from "../../diagnostics.js";
 import type { FacetTerminalFrame, ProjectTurnFrame, TurnStreamProblem } from "./turn-frames.js";
 
-/** The two thread writes a running turn can still make. Admission already happened. */
 export type TurnThreadWrites = Readonly<{
   finishTurn(
     projectId: string,
@@ -13,14 +12,12 @@ export type TurnThreadWrites = Readonly<{
   abandonTurn(projectId: string, leaseId: string): ProjectThreadResult;
 }>;
 
-/** How a turn's stream ended, before the Supervisor decides what to write down. */
 export type StreamEnding =
   | Readonly<{ kind: "terminal"; frame: FacetTerminalFrame }>
   | Readonly<{ kind: "invalid"; problem: TurnStreamProblem }>
   | Readonly<{ kind: "cancelled" }>
   | Readonly<{ kind: "timed-out" }>;
 
-/** Everything the settlement needs. `readTurnStream` holds it for the length of one turn. */
 export type TurnSettlement = Readonly<{
   projectId: string;
   leaseId: string;
@@ -29,10 +26,9 @@ export type TurnSettlement = Readonly<{
 }>;
 
 /**
- * Give a turn's lease back immediately rather than at its deadline, so the project is free for the
- * next turn. Storage can close while a turn is ending. The lease deadline still fences a later
- * admission, so a failed release is logged under `context` and never replaces the error or the
- * terminal frame the caller already has.
+ * Storage can close while a turn is ending. The lease deadline still fences a later admission, so a
+ * failed release is logged under `context` and never replaces the error or terminal frame the
+ * caller has.
  */
 export function releaseLease(
   turn: Pick<TurnSettlement, "projectId" | "leaseId" | "threads">,
@@ -45,7 +41,6 @@ export function releaseLease(
   }
 }
 
-/** A turn that ended without producing a conversation the Supervisor may keep. */
 function released(turn: TurnSettlement, frame: ProjectTurnFrame): ProjectTurnFrame {
   releaseLease(turn, "turn-settle");
 
@@ -53,25 +48,15 @@ function released(turn: TurnSettlement, frame: ProjectTurnFrame): ProjectTurnFra
 }
 
 /**
- * Terminal success, made durable or not made at all.
- *
- * This is where the save-versus-cancel race is decided, and the durable commit is the line. The
- * block runs synchronously inside a single-threaded Durable Object, so a disconnect is observed
- * either before it, where the read that was waiting ends as a cancellation and nothing is written,
- * or after it, where the commit already returned and stands. There is no third outcome, and
- * nothing here can undo a save a previous statement committed.
- *
- * A disconnect before this point leaves no conversation to keep, and that is a fact about the
- * protocol rather than a choice: Pi state travels only in a terminal frame, so a turn cancelled
- * before its terminal frame has produced no messages the Supervisor could save (Q3). The text and
- * tool frames already sent are what the browser saw, not messages Pi handed over. Files the turn
- * changed stay changed, as on a normal development machine.
+ * The durable commit decides the save-versus-cancel race. The block runs synchronously in a single-
+ * threaded Durable Object, so a disconnect is observed either before the commit (nothing is
+ * written) or after it (the save stands). A turn cancelled before its terminal frame has no
+ * messages to save, because Pi state travels only in that frame.
  */
 function saveCompletedTurn(turn: TurnSettlement, messages: readonly unknown[]): ProjectTurnFrame {
   const saved = turn.threads.finishTurn(turn.projectId, turn.leaseId, messages, turn.now());
 
   if (!saved.ok) {
-    // Terminal success the Supervisor could not make durable is not success (ADR-0037).
     releaseLease(turn, "turn-settle");
 
     return { kind: "save-failed", code: saved.problem.code };
@@ -85,8 +70,8 @@ function saveCompletedTurn(turn: TurnSettlement, messages: readonly unknown[]): 
 }
 
 /**
- * A turn Pi ended with a failure. Its conversation is still saved, under the documented policy
- * that a model-call limit or a model error leaves real conversation the next turn continues from.
+ * Its conversation is still saved, so the next turn continues from it after a model-call limit or
+ * model error.
  */
 function saveFailedTurn(
   turn: TurnSettlement,
@@ -107,7 +92,6 @@ function saveFailedTurn(
   };
 }
 
-/** The three endings a generation can state, each written down as the turn it actually was. */
 function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): ProjectTurnFrame {
   switch (frame.kind) {
     case "rejected":
@@ -124,7 +108,6 @@ function settleTerminal(turn: TurnSettlement, frame: FacetTerminalFrame): Projec
   }
 }
 
-/** The turn's ending as the one frame the browser reads. */
 export function endTurn(turn: TurnSettlement, ending: StreamEnding): ProjectTurnFrame {
   switch (ending.kind) {
     case "terminal":
@@ -132,9 +115,8 @@ export function endTurn(turn: TurnSettlement, ending: StreamEnding): ProjectTurn
     case "invalid":
       return released(turn, { kind: "stream-invalid", code: ending.problem });
     case "cancelled":
-      // The lease goes back at once rather than at its deadline, and only this turn's own lease:
-      // a turn that already lost the slot presents an id the store no longer holds, so the
-      // release is refused and the replacement turn is untouched.
+      // Release only this turn's own lease: a turn that lost the slot presents an id the store no
+      // longer holds, so the replacement turn is untouched.
       return released(turn, { kind: "cancelled" });
     case "timed-out":
       return released(turn, { kind: "timed-out" });

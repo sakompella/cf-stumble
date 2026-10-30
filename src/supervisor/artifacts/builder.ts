@@ -13,25 +13,17 @@ import {
   type HarnessBuildStep,
 } from "./build-plan.js";
 
-/** A build of one labeled commit: its validated module map, or why there is none. */
 export type HarnessBuild = Effect.Effect<MainHarnessArtifactInput, HarnessBuildProblem>;
 
-/** How the resolver asks for a module map it does not have. */
 export type HarnessModuleMapBuilder = Readonly<{
   build(harnessCommit: HarnessCommit): HarnessBuild;
 }>;
 
-/**
- * The only operations a build needs from its workspace. It stays narrower than the operations the
- * project capability offers: a build runs its planned steps and reads its own module map, nothing
- * else.
- */
 export type BuildWorkspace = Readonly<{
   runStep(step: HarnessBuildStep): Promise<CommandOutput>;
   readModuleMap(): Promise<string>;
 }>;
 
-/** Builds a labeled harness commit in the scratch subtree kept apart from every repository. */
 export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
   private readonly workspace: BuildWorkspace;
   private readonly configuration: HarnessBuildConfiguration;
@@ -41,7 +33,6 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     this.configuration = configuration;
   }
 
-  /** The planned steps one after another, then the module map they wrote. */
   build(harnessCommit: HarnessCommit): HarnessBuild {
     const plan = planHarnessBuild(this.configuration, harnessCommit);
 
@@ -59,9 +50,6 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     const ran = Effect.tryPromise({
       try: () => this.workspace.runStep(step),
       catch: (error): HarnessBuildProblem => {
-        // `build-workspace-unavailable` says nothing about which of the workspace, the container
-        // or the connection to them gave way, and each of those failed at least once during this
-        // project's deployed builds.
         logRedactedCause(
           `harness-build.${step.name}: ${isTimeoutFailure(error) ? "timeout" : "build-workspace-unavailable"}`,
           error,
@@ -71,9 +59,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       },
     });
 
-    // The tail of a failed step's own output is the only account of why the build failed, and it
-    // exists nowhere else once the build directory is cleared. It goes to the owner in the
-    // submission response and is not logged: command output can hold file contents.
+    // The tail goes to the owner, not the log: command output can hold file contents.
     return ran.pipe(
       Effect.flatMap((output) =>
         output.exitCode === 0
@@ -102,8 +88,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     return encoded.pipe(
       Effect.flatMap((text) =>
         Effect.tryPromise({
-          // `Response.json` decodes without asserting a type the build has not proved yet;
-          // `moduleMapFromBuildOutput` validates the decoded value.
+          // `Response.json` decodes without asserting a type; `moduleMapFromBuildOutput` validates.
           try: () => new Response(text).json<BuiltModuleMapFile>(),
           catch: (): HarnessBuildProblem => ({
             code: "build-output-invalid",
@@ -121,7 +106,6 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 
 const DIAGNOSTIC_TAIL_LIMIT = 2_000;
 
-/** The last `DIAGNOSTIC_TAIL_LIMIT` UTF-16 units, without a surrogate pair cut in half. */
 function lastUnits(text: string): string {
   const tail = text.slice(-DIAGNOSTIC_TAIL_LIMIT);
   const first = tail.codePointAt(0) ?? 0;
@@ -131,7 +115,7 @@ function lastUnits(text: string): string {
   return cut && first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
 }
 
-/** The redacted tail of each stream. Redaction runs first: a cut could leave half a token. */
+/** Redact before cutting: a cut could leave half a token. */
 function stepDiagnostics(output: CommandOutput): BuildStepDiagnostics {
   const stdout = redactLogText(output.stdout);
   const stderr = redactLogText(output.stderr);

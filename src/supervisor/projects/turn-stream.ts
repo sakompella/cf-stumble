@@ -17,14 +17,8 @@ import { logLeaseAbandoned, TurnStreamLog, type DroppedFrame, type TurnTrace } f
 type ReadTurnStreamInput = TurnSettlement &
   Readonly<{
     frames: ReadableStream<Uint8Array>;
-    /**
-     * When this turn ends, and the cancellation that ends it. The bound was opened at admission
-     * and the start already spent part of it, so what is left here is what is left of the turn.
-     */
     bound: TurnBound;
-    /** The turn's capability, ended once the turn has settled, however it ended. */
     workspace: TurnWorkspace;
-    /** Who this turn is in the operational log. */
     trace: TurnTrace;
   }>;
 
@@ -51,12 +45,8 @@ const OVERSIZED: StreamEnding = { kind: "invalid", problem: "oversized-frame" };
 const NEWLINE = 0x0a;
 
 /**
- * The server's reader of one generation's turn stream.
- *
- * The Supervisor does the reading, not the browser: every frame is proved here before any byte
- * reaches a client, and the turn's ending is decided from what this loop saw rather than from what
- * a client managed to receive. It holds the reader itself, because both a disconnect and the turn
- * deadline end a turn by cancelling it.
+ * Every frame is proved here before any byte reaches a client, and the ending is decided from what
+ * this loop saw, not from what a client received.
  */
 class TurnReader {
   readonly #reader: ReadableStreamDefaultReader<Uint8Array>;
@@ -64,8 +54,8 @@ class TurnReader {
   readonly #drop: Drop;
   readonly #decoder = new TextDecoder();
   /**
-   * The bytes of the line not yet ended. Lines are split on the newline byte, which never occurs
-   * inside a multi-byte UTF-8 character, so each line is measured in bytes before it is decoded.
+   * Lines are split on the newline byte, which never occurs inside a multi-byte UTF-8 character, so
+   * each line is measured in bytes before it is decoded.
    */
   #pending: Uint8Array[] = [];
   #pendingBytes = 0;
@@ -77,14 +67,9 @@ class TurnReader {
   }
 
   /**
-   * Read until the turn ends, which is the terminal frame and not the end of the stream.
-   *
-   * A turn that has said how it ended has nothing left to say, so the read stops at that frame
-   * and never looks at what follows it. That is what makes a second terminal frame harmless: it
-   * is not read, so it cannot save a second conversation, and the spent lease would refuse it
-   * even if it were. The caller cancels the reader once the read has ended or was interrupted
-   * ({@link stop}), which is why a generation that goes quiet after its terminal frame cannot hold
-   * the project until the deadline.
+   * Stops at the terminal frame and never reads what follows, so a second terminal frame cannot
+   * save a second conversation. The caller cancels the reader afterwards, so a generation that goes
+   * quiet after its terminal frame cannot hold the project until the deadline.
    */
   read(): Effect.Effect<StreamEnding> {
     return Effect.gen({ self: this }, function* () {
@@ -109,18 +94,13 @@ class TurnReader {
     });
   }
 
-  /**
-   * Stop the generation's work. Cancelling its stream is what ends the Pi turn behind it. The
-   * acknowledgement comes from mutable code and may never arrive, so it is not awaited: the turn
-   * settles and ends its capability without it.
-   */
+  /** The acknowledgement comes from mutable code and may never arrive, so it is not awaited. */
   stop(): Effect.Effect<void> {
     return Effect.sync(() => {
       this.#reader.cancel().catch(() => {});
     });
   }
 
-  /** Publish every whole frame this chunk completed, or end the stream. */
   #consume(chunk: Uint8Array): StreamEnding | undefined {
     let start = 0;
 
@@ -141,11 +121,7 @@ class TurnReader {
     }
   }
 
-  /**
-   * Keep part of the line being read. No line may pass the terminal bound, because its kind is not
-   * known until it is whole; {@link #accept} drops a progress frame past the smaller progress bound
-   * once it is.
-   */
+  /** No line may pass the terminal bound, because its kind is not known until it is whole. */
   #hold(bytes: Uint8Array): StreamEnding | undefined {
     this.#pendingBytes += bytes.byteLength;
 
@@ -194,8 +170,8 @@ class TurnReader {
       return undefined;
     }
 
-    // Progress only shows the turn; it is never saved. A frame too large to show is left out
-    // rather than costing the conversation the terminal frame will carry.
+    // Progress is never saved, so an oversized frame is left out rather than costing the
+    // conversation.
     if (line.byteLength > TURN_PROGRESS_FRAME_MAX_BYTES) {
       this.#drop("oversized-frame");
 
@@ -208,7 +184,6 @@ class TurnReader {
   }
 }
 
-/** The browser's side of the stream. Once the browser cancels, nothing more is written to it. */
 class TurnOutput {
   #controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   #cancelled = false;
@@ -225,12 +200,10 @@ class TurnOutput {
     if (!this.#cancelled) this.#controller?.enqueue(encodeFrame(frame));
   };
 
-  /** Write an empty line, which every reader of a turn skips. */
   readonly keepAlive = (): void => {
     if (!this.#cancelled) this.#controller?.enqueue(KEEPALIVE_LINE);
   };
 
-  /** Write the one terminal frame and close, which happens exactly once per turn. */
   finish(frame: ProjectTurnFrame): void {
     if (this.#cancelled) return;
 
@@ -239,7 +212,6 @@ class TurnOutput {
   }
 }
 
-/** A read that was interrupted is a disconnect. Any other failure is the stream's, and stays one. */
 function endingOf(read: Exit.Exit<StreamEnding>): Effect.Effect<StreamEnding> {
   if (Exit.isSuccess(read) || !Cause.hasInterruptsOnly(read.cause)) return read;
 
@@ -247,18 +219,13 @@ function endingOf(read: Exit.Exit<StreamEnding>): Effect.Effect<StreamEnding> {
 }
 
 /**
- * Read the generation's stream to its ending and settle the turn from it.
- *
- * The read is the only interruptible part. A disconnect interrupts it, and that becomes the
- * `cancelled` ending; the settlement after it runs whole, so a disconnect that arrives during a
- * save cannot leave the lease neither saved nor released. The deadline races the read on the
- * instant admission fixed, not a second budget.
+ * A disconnect interrupts the read and becomes `cancelled`; the settlement after it runs whole, so
+ * a disconnect during a save cannot leave the lease neither saved nor released.
  */
 function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Effect<void> {
   const log = new TurnStreamLog(input.trace, input.now);
 
-  // The deadline races the read alone. Cancelling the reader, which also ends the work behind it,
-  // follows whichever ending won, whether the read ended, timed out, or was interrupted.
+  // The deadline races the read alone. The reader is cancelled after whichever ending won.
   const reading = Effect.suspend(() => {
     const reader = new TurnReader(input.frames, log.counting(output.publish), (reason) => {
       log.dropped(reason);
@@ -278,9 +245,8 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
       });
     }),
   ).pipe(
-    // A stream can fail before its reader exists, or while settling a terminal frame. Neither path
-    // finished `endTurn`, so release the admitted lease before the stream error reaches its
-    // caller. A failed stream must not make the next turn wait for this one's deadline.
+    // A failed stream must not make the next turn wait for this one's deadline, so release the
+    // lease before the error propagates.
     Effect.onError((cause) =>
       Cause.hasInterruptsOnly(cause)
         ? Effect.void
@@ -299,17 +265,9 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
 }
 
 /**
- * The turn as the browser reads it: the generation's proven frames, then exactly one terminal
- * frame the Supervisor writes after it has decided what is durable.
- *
- * The body runs its own program (`runResponseBody`), started by the stream and not by the RPC
- * that returned it, so the turn lives as long as the body and not as long as the answer that
- * carried it (ADR-0037). Cancelling this stream is how a disconnected browser stops the work: it
- * interrupts the read, which cancels the generation's stream and so ends the Pi turn
- * (`facet/generation-0/facet-turn.ts`), and the lease is then released so the next turn is not
- * made to wait out a deadline nobody is using. The deadline covers the case a disconnect never
- * arrives: a lost facet or an interrupted host leaves a stream that never ends, and the turn must
- * still stop holding the project.
+ * The body runs its own program, started by the stream and not by the RPC that returned it, so the
+ * turn lives as long as the body. Cancelling the stream is how a disconnected browser stops the
+ * work. The deadline covers a lost facet or host that leaves a stream that never ends.
  */
 export function readTurnStream(input: ReadTurnStreamInput): ReadableStream<Uint8Array> {
   const output = new TurnOutput();
@@ -325,8 +283,8 @@ export function readTurnStream(input: ReadTurnStreamInput): ReadableStream<Uint8
     },
     cancel() {
       output.cancel();
-      // The browser going away ends the whole turn and not only its frames, so the one signal
-      // every step of the turn holds is aborted here too.
+      // The browser going away ends the whole turn, so the one signal every step holds is aborted
+      // too.
       input.bound.stop();
       disconnected.abort();
 

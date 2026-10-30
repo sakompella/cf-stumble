@@ -1,44 +1,20 @@
 // oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type -- This module is the parse boundary for a generation's turn stream. A generation is mutable harness code, so nothing it writes into a frame has a proven shape until these functions prove it.
 import { isRecord } from "../../untrusted.js";
 
-/**
- * The turn stream, in both of its forms.
- *
- * A generation writes newline-delimited {@link FacetTurnFrame}s (`facet/generation-0/turn-frames.ts`).
- * The Supervisor reads them, proves each one, and writes {@link ProjectTurnFrame}s to the browser.
- * The two vocabularies differ where it matters: a generation's `completed` frame is provisional
- * evidence that carries Pi state, while the browser's terminal frame is the Supervisor's own
- * statement about what was durably saved (ADR-0037). Nothing a generation emits reaches a browser
- * unparsed, and the Pi state never does at all.
- */
+/** Nothing a generation emits reaches a browser unparsed, and its Pi state never does. */
 
 /**
- * The most one line of a generation's stream may occupy, in UTF-8 bytes. A line past the terminal
- * bound ends the turn as an invalid stream rather than growing a buffer until the isolate dies. A
- * progress frame past the progress bound is dropped, because it only shows the turn.
- *
- * A progress frame carries at most one tool result, diff, or set of tool-call arguments, which
- * Generation 0 bounds to 50 KiB per string (`facet/generation-0/turn-policy.ts`); the progress bound
- * leaves room for JSON escaping on top.
- *
- * A terminal frame carries the whole conversation, so it has its own, larger bound. The model route
- * refuses a request over 1 MiB (`model-route.ts`), so the conversation a turn's last model call
- * sent is at most that. After it the turn adds one reply of at most 4096 output tokens and the
- * results of that reply's tool calls, each again at most 50 KiB.
- *
- * The Supervisor stores that conversation as one SQLite value, and Cloudflare caps a Durable Object
- * string, BLOB, or row at 2 MB. The terminal bound stays below that with margin, so a conversation
- * the store could not hold ends the turn as `oversized-frame` instead of failing the save. It
- * still leaves room for about fifteen full tool results after the last 1 MiB request.
+ * A line past the terminal bound ends the turn as an invalid stream rather than growing a buffer
+ * until the isolate dies. A progress frame past the progress bound is dropped. The terminal bound
+ * stays below Cloudflare's 2 MB Durable Object string, BLOB, and row cap, so a conversation the
+ * store could not hold ends the turn as `oversized-frame` instead of failing the save.
  */
 export const TURN_PROGRESS_FRAME_MAX_BYTES = 262_144;
 
 export const TURN_TERMINAL_FRAME_MAX_BYTES = 1_835_008;
 
-/** Why a turn stream could not be read as frames. Each one ends the turn without a save. */
 export type TurnStreamProblem = "malformed-frame" | "oversized-frame" | "missing-terminal-frame";
 
-/** A generation's terminal frame: the three endings a turn can reach inside the facet. */
 export type FacetTerminalFrame =
   | Readonly<{ kind: "completed"; messages: readonly unknown[] }>
   | Readonly<{
@@ -49,15 +25,9 @@ export type FacetTerminalFrame =
   | Readonly<{ kind: "rejected"; code: "invalid-project-capability" | "invalid-turn-request" }>;
 
 /**
- * What the browser receives. The first three kinds are a generation's own frames, re-encoded from
- * proven fields so an extra field a generation invented cannot travel further; the rest are the
- * Supervisor's, and exactly one of them ends every stream.
- *
- * The `diff` pair is the generation's own answer to what the turn changed, produced by the harness
- * rather than by the model (`facet/generation-0/workspace-diff.ts`), and forwarded here on the
- * same terms as a tool result: proven fields only, and bounded by the frame limit above.
- *
- * `saved` is the only authoritative success, and it exists only after the thread commit returned.
+ * The first three kinds are re-encoded from proven fields, so an extra field a generation invented
+ * cannot travel further. `saved` is the only authoritative success, and exists only after the
+ * thread commit returned.
  */
 export type ProjectTurnFrame =
   | Readonly<{ kind: "text"; text: string }>
@@ -90,10 +60,6 @@ export type ProjectTurnFrame =
   | Readonly<{ kind: "cancelled" }>
   | Readonly<{ kind: "timed-out" }>;
 
-/**
- * One proven frame of a generation's stream: something to forward, a progress kind this
- * Supervisor does not know, or the turn's ending.
- */
 type ParsedFacetFrame =
   | Readonly<{ kind: "forwarded"; frame: ProjectTurnFrame }>
   | Readonly<{ kind: "unknown-kind" }>
@@ -119,9 +85,8 @@ function terminal(frame: FacetTerminalFrame): ParsedFacetFrame {
 const malformed: ParsedFacetFrame = { kind: "invalid", problem: "malformed-frame" };
 
 /**
- * The conversation a terminal frame carries. Only the list is proven here: each message is proved
- * by the thread's own parser when the save runs (`threads/messages.ts`), so this module does not
- * fork that schema into a second opinion about what a Pi message is.
+ * Only the list is proven here; each message is proved by the thread's own parser when the save
+ * runs.
  */
 function terminalMessages(value: unknown): readonly unknown[] | undefined {
   if (!isRecord(value)) {
@@ -215,12 +180,9 @@ function parseRejected(frame: Record<string, unknown>): ParsedFacetFrame {
 }
 
 /**
- * Prove one line of a generation's turn stream.
- *
- * Every accepted frame is rebuilt from the fields its kind declares, so a field a generation added
- * is dropped here rather than forwarded to a browser. A kind this Supervisor does not know is
- * dropped too rather than ending the turn, so a generation that adds a progress frame keeps its
- * turns; a known kind with bad fields is still a malformed stream.
+ * Every accepted frame is rebuilt from the fields its kind declares, so an added field is dropped.
+ * An unknown kind is dropped rather than ending the turn; a known kind with bad fields is
+ * malformed.
  */
 export function parseFacetFrameLine(line: string): ParsedFacetFrame {
   let decoded: unknown;

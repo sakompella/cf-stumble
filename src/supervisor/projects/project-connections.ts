@@ -59,15 +59,14 @@ function repositorySizeAllowed(
   });
 }
 
-/** `workspace-busy`: an owner reset was running, so nothing was disconnected. */
 export type DisconnectRepositoryResult =
   | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
   | Extract<DisconnectProjectResult, { ok: false }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy" }> }>;
 
 /**
- * Removes the project's thread, or refuses because a turn still owns it. It runs inside the
- * disconnect's ordered operation, so no turn can be admitted between it and the row removal.
+ * Runs inside the disconnect's ordered operation, so no turn can be admitted between it and the row
+ * removal.
  */
 type ReleaseProjectThread = () => DisconnectProjectResult;
 
@@ -84,8 +83,8 @@ type ConnectRepositoryProblem = Readonly<{
 }>;
 
 /**
- * A refused connect carries the GitHub status it saw, except one refused `workspace-busy` because
- * an owner reset was running: that one asked nothing of the workspace.
+ * A connect refused `workspace-busy` carries no GitHub status, since an owner reset was running and
+ * the workspace was not asked.
  */
 export type ConnectRepositoryResult =
   | Readonly<{
@@ -103,7 +102,6 @@ export type ConnectRepositoryResult =
     }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy"; detail: "" }> }>;
 
-/** Why a project could not be provisioned when it was used. */
 type ProjectUseProblem = Readonly<{
   code:
     | "invalid-project-id"
@@ -118,26 +116,17 @@ type ProjectUseResult =
 
 interface ProjectConnectionsInput {
   readonly storage: DurableObjectStorage;
-  /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
   readonly namespace: CredentialWorkspaceNamespace &
     ProvisionWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace &
     ProjectRemovalWorkspaceNamespace;
-  /** The size check asks GitHub for repository metadata with the connection's token and fetcher. */
   readonly environment: Pick<GitHubConnectionEnvironment, "fallbackToken" | "fetcher">;
-  /** The tenant's one GitHub connection. The Supervisor builds it and serves its authorization. */
   readonly github: GitHubConnection;
 }
 
 /**
- * Connecting repositories to one tenant: the catalog, the GitHub authorization behind it, and the
- * provisioning that makes a connected repository usable.
- *
- * The Supervisor holds one of these and delegates to it, so the RPC class stays a surface and the
- * order of the steps lives here. That order is the point of the module. The workspace's own
- * credential is what reaches GitHub (ADR-0039); a repository is checked before it becomes a project; and a project is stored
- * only once its clone is in the workspace, so a project in the list is a project with files.
+ * A project is stored only once its clone is in the workspace, so a project in the list has files.
  */
 export class ProjectConnections {
   private readonly projects: ConnectedProjects;
@@ -160,26 +149,13 @@ export class ProjectConnections {
     this.github = input.github;
   }
 
-  /**
-   * Everything this tenant may select: the connected repositories and the harness entry.
-   *
-   * It is read on each call rather than cached, because connecting a repository has to be visible
-   * to the next request without restarting anything. The harness entry is added here, in the one
-   * place the catalog is built, so the sidebar, the thread surface and the turn path all see the
-   * same set and none of them has to remember a special case.
-   */
   catalog(): SelectableCatalog {
     return selectableCatalog(this.projects.catalog());
   }
 
   /**
-   * Connect one repository to this tenant.
-   *
-   * The credential is made usable first, because a private repository is unreachable without one
-   * and the `GH_TOKEN` fallback exists exactly so an unattended run can get that far. The access
-   * check then runs through the workspace's own Git, so what is verified is what a clone will do
-   * rather than what cf-stumble believes. Only then is the project stored and provisioned, and a
-   * clone that fails takes a newly stored project back out: a project in the list has files.
+   * The access check runs through the workspace's own Git, so what is verified is what a clone will
+   * do. A clone that fails removes the newly stored project.
    */
   // oxlint-disable-next-line max-lines-per-function -- The workflow keeps guard, credential, access, and catalog effects ordered.
   connect(
@@ -189,13 +165,10 @@ export class ProjectConnections {
     displayName: unknown,
     now: number,
   ): Effect.Effect<ConnectRepositoryResult> {
-    // oxlint-disable-next-line max-lines-per-function -- The same workflow, as the generator that runs it.
     return Effect.gen({ self: this }, function* () {
       const canonical = canonicalRepositoryUrl(repositoryUrl);
       const projectId = canonical === undefined ? undefined : projectIdForRepository(canonical);
 
-      // A URL that derives no project id could never be stored, so it is refused before the
-      // workspace is asked to reach it.
       if (canonical === undefined || projectId === undefined) {
         return this.refused(
           { code: "invalid-repository-url", detail: "" },
@@ -253,9 +226,8 @@ export class ProjectConnections {
   }
 
   /**
-   * Release a connected project's thread, remove its catalog row, then best-effort remove its
-   * durable workspace directories. The whole sequence is one ordered operation for the project id,
-   * so a reconnect cannot clone into the directory while this removal is still running.
+   * One ordered operation per project id, so a reconnect cannot clone into the directory while this
+   * removal is still running.
    */
   disconnect(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
@@ -289,13 +261,11 @@ export class ProjectConnections {
     );
   }
 
-  /** Forget workspace-owned transient state after the owner resets the workspace. */
   resetWorkspace(): void {
     clearWorkspaceProvision(this.workspaceName);
     this.github.resetWorkspace();
   }
 
-  /** Reconcile the editable harness checkout before a harness turn starts. */
   ensureHarnessProvisioned(
     harnessCommit: HarnessCommit,
     signal?: AbortSignal,
@@ -313,11 +283,7 @@ export class ProjectConnections {
     );
   }
 
-  /**
-   * Provision a project because it is about to be used. Every run performs every step, so this is
-   * also what repairs a workspace the platform recreated: the state that matters is in the
-   * workspace, and nothing here remembers having provisioned before.
-   */
+  /** Every run performs every step, which also repairs a workspace the platform recreated. */
   ensureProvisioned(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
     projectId: unknown,
@@ -332,14 +298,13 @@ export class ProjectConnections {
     return this.lifecycle.exclusive(parsed, this.provisionConnected(parsed, signal));
   }
 
-  /** The body of `ensureProvisioned`, for a caller already running in the project's queue. */
   private provisionConnected(
     projectId: ProjectId,
     signal?: AbortSignal,
   ): Effect.Effect<ProjectUseResult> {
     return Effect.gen({ self: this }, function* () {
-      // Only connected repositories reach this path: harness turns use the generation-bound
-      // reconciler above because the harness entry has no catalog repository URL.
+      // Harness turns use the generation-bound reconciler because the harness entry has no
+      // repository URL.
       const catalog: ProjectCatalog = this.projects.catalog();
       const resolved = resolveProject(projectId, catalog);
 
@@ -357,11 +322,8 @@ export class ProjectConnections {
 
       let provisioned = yield* Effect.result(provision);
 
-      // A workspace reset removes the credential along with the checkout, and a private repository
-      // then fails to clone. Re-establish the same unattended credential that connection uses and
-      // clone again once. A public repository clones without one, so a turn that succeeds never
-      // pays for the credential check. A credential this Supervisor last saw working is not the
-      // cause, so that failure is not retried.
+      // A reset removes the credential, so a private clone then fails. Re-establish it and clone
+      // once more. A credential last seen working is not the cause, so that failure is not retried.
       const credentialWasWorking = this.github.lastKnown(Date.now()).github?.state === "connected";
 
       if (

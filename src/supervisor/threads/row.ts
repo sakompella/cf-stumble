@@ -12,11 +12,7 @@ export type ThreadRow = {
   readonly turn_holder_id: string | null;
 };
 
-/**
- * Turn one row into a thread. The project comes from the caller rather than from `project_id`,
- * because the caller resolved it against the catalog and the column is only what that resolved
- * value was written as.
- */
+/** The project comes from the caller, which resolved it against the catalog. */
 export function threadFromRow(
   project: SelectableProject,
   row: ThreadRow,
