@@ -168,7 +168,9 @@ export function parseUsage(response: JsonValue, memoryBytes: number): readonly U
   const account = digArray(response, "data", "viewer", "accounts")?.[0];
   const rows = digArray(account, "containersUsageAdaptiveGroups");
 
-  if (dig(response, "errors") !== undefined || rows === null) {
+  const errors = digArray(response, "errors");
+
+  if ((errors !== null && errors.length > 0) || rows === null) {
     throw new ApiFailure("GraphQL response had errors or an unexpected shape");
   }
 

@@ -29,6 +29,15 @@ describe("parseUsage", () => {
     assert.equal(only?.runningMinutes, 5);
   });
 
+  it("reads a successful answer, which GraphQL sends with errors set to null", () => {
+    const answer = {
+      errors: null,
+      data: { viewer: { accounts: [{ containersUsageAdaptiveGroups: [] }] } },
+    };
+
+    assert.deepEqual(parseUsage(answer, MEMORY_BYTES), []);
+  });
+
   it("refuses a response at its row limit, which may be cut off", () => {
     const full = Array.from({ length: 5000 }, () => group("2026-10-01T00:00:00Z", 1));
 
