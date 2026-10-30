@@ -12,7 +12,7 @@ import { runResponseBody } from "../../run-entry-point.js";
 import { KEEPALIVE_LINE, keptAlive } from "../../stream-keepalive.js";
 import type { TurnBound } from "./turn-bound.js";
 import type { TurnWorkspace } from "./project-turn.js";
-import { logLeaseAbandoned, TurnStreamLog, type TurnTrace } from "./turn-log.js";
+import { logLeaseAbandoned, TurnStreamLog, type DroppedFrame, type TurnTrace } from "./turn-log.js";
 
 type ReadTurnStreamInput = TurnSettlement &
   Readonly<{
@@ -35,6 +35,8 @@ function encodeFrame(frame: ProjectTurnFrame): Uint8Array {
 }
 
 type Publish = (frame: ProjectTurnFrame) => void;
+
+type Drop = (reason: DroppedFrame) => void;
 
 const CANCELLED: StreamEnding = { kind: "cancelled" };
 
@@ -59,6 +61,7 @@ const NEWLINE = 0x0a;
 class TurnReader {
   readonly #reader: ReadableStreamDefaultReader<Uint8Array>;
   readonly #publish: Publish;
+  readonly #drop: Drop;
   readonly #decoder = new TextDecoder();
   /**
    * The bytes of the line not yet ended. Lines are split on the newline byte, which never occurs
@@ -67,9 +70,10 @@ class TurnReader {
   #pending: Uint8Array[] = [];
   #pendingBytes = 0;
 
-  constructor(frames: ReadableStream<Uint8Array>, publish: Publish) {
+  constructor(frames: ReadableStream<Uint8Array>, publish: Publish, drop: Drop) {
     this.#reader = frames.getReader();
     this.#publish = publish;
+    this.#drop = drop;
   }
 
   /**
@@ -139,7 +143,8 @@ class TurnReader {
 
   /**
    * Keep part of the line being read. No line may pass the terminal bound, because its kind is not
-   * known until it is whole; {@link #accept} applies the smaller progress bound once it is.
+   * known until it is whole; {@link #accept} drops a progress frame past the smaller progress bound
+   * once it is.
    */
   #hold(bytes: Uint8Array): StreamEnding | undefined {
     this.#pendingBytes += bytes.byteLength;
@@ -183,8 +188,12 @@ class TurnReader {
       return { kind: "terminal", frame: parsed.frame };
     }
 
+    // Progress only shows the turn; it is never saved. A frame too large to show is left out
+    // rather than costing the conversation the terminal frame will carry.
     if (line.byteLength > TURN_PROGRESS_FRAME_MAX_BYTES) {
-      return OVERSIZED;
+      this.#drop("oversized-frame");
+
+      return undefined;
     }
 
     this.#publish(parsed.frame);
@@ -245,7 +254,9 @@ function settledTurn(input: ReadTurnStreamInput, output: TurnOutput): Effect.Eff
   // The deadline races the read alone. Cancelling the reader, which also ends the work behind it,
   // follows whichever ending won, whether the read ended, timed out, or was interrupted.
   const reading = Effect.suspend(() => {
-    const reader = new TurnReader(input.frames, log.counting(output.publish));
+    const reader = new TurnReader(input.frames, log.counting(output.publish), (reason) => {
+      log.dropped(reason);
+    });
 
     return input.bound
       .within(keptAlive(reader.read(), output.keepAlive), TIMED_OUT)

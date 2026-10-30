@@ -13,12 +13,13 @@ import { isRecord } from "../../untrusted.js";
  */
 
 /**
- * The most one line of a generation's stream may occupy, in UTF-8 bytes. A generation that writes a
- * longer line has broken the protocol, so the turn ends as an invalid stream rather than growing a
- * buffer until the isolate dies.
+ * The most one line of a generation's stream may occupy, in UTF-8 bytes. A line past the terminal
+ * bound ends the turn as an invalid stream rather than growing a buffer until the isolate dies. A
+ * progress frame past the progress bound is dropped, because it only shows the turn.
  *
- * A progress frame carries at most one tool result or diff, which Generation 0 bounds to 50 KiB
- * (`facet/generation-0/turn-policy.ts`); the progress bound leaves room for JSON escaping on top.
+ * A progress frame carries at most one tool result, diff, or set of tool-call arguments, which
+ * Generation 0 bounds to 50 KiB per string (`facet/generation-0/turn-policy.ts`); the progress bound
+ * leaves room for JSON escaping on top.
  *
  * A terminal frame carries the whole conversation, so it has its own, larger bound. The model route
  * refuses a request over 1 MiB (`model-route.ts`), so the conversation a turn's last model call

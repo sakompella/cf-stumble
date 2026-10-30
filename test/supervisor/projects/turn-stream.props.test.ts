@@ -131,21 +131,21 @@ test("reassembles several Unicode turn frames at arbitrary byte offsets, past em
   });
 });
 
-test("rejects an oversized frame regardless of where its bytes are split", async () => {
+test("drops an oversized progress frame regardless of where its bytes are split", async () => {
   await hegel.testAsync(
     async (tc) => {
       // Fewer UTF-16 code units than the bound, but more UTF-8 bytes, which is what the bound counts.
       const wide = "日".repeat(Math.ceil(TURN_PROGRESS_FRAME_MAX_BYTES / 3));
-      const raw = `${JSON.stringify({ kind: "text", text: wide })}\n`;
+      const raw = `${JSON.stringify({ kind: "text", text: wide })}\n${JSON.stringify({ kind: "rejected", code: "invalid-turn-request" })}\n`;
       const bytes = new TextEncoder().encode(raw);
 
       const points = tc.draw(
         gs.arrays(gs.integers({ minValue: 0, maxValue: bytes.length }), { maxSize: 8 }),
       );
 
-      const [output] = await readTurn(splitBytes(bytes, points));
+      const output = await readTurn(splitBytes(bytes, points));
 
-      expect(output).toEqual({ kind: "stream-invalid", code: "oversized-frame" });
+      expect(output).toEqual([{ kind: "turn-rejected", code: "invalid-turn-request" }]);
     },
     { testCases: 20 },
   );

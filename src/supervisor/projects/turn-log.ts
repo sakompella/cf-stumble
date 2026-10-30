@@ -136,15 +136,19 @@ function settlement(frame: ProjectTurnFrame): Settlement {
   }
 }
 
+/** Why a progress frame was left out of the browser's stream instead of ending the turn. */
+export type DroppedFrame = "oversized-frame";
+
 /**
- * The log of one turn's stream: the first frame's arrival, and the settlement with frame counts.
- * It sees every frame but writes at most two events, so nothing is logged per frame.
+ * The log of one turn's stream: the first frame's arrival, the first frame dropped for each
+ * reason, and the settlement with frame counts. Nothing is logged per frame.
  */
 export class TurnStreamLog {
   readonly #trace: TurnTrace;
   readonly #now: () => number;
   #counts: ForwardedFrameCounts = NO_FRAMES;
   #sawFrame = false;
+  readonly #dropped = new Set<DroppedFrame>();
 
   constructor(trace: TurnTrace, now: () => number) {
     this.#trace = trace;
@@ -165,6 +169,13 @@ export class TurnStreamLog {
       this.#counts = countFrame(this.#counts, frame);
       publish(frame);
     };
+  }
+
+  dropped(reason: DroppedFrame): void {
+    if (this.#dropped.has(reason)) return;
+
+    this.#dropped.add(reason);
+    logEvent("warn", "turn.frame-dropped", { ...turnFields(this.#trace), reason });
   }
 
   /** Log the terminal frame the Supervisor wrote, and hand it back to be published. */
