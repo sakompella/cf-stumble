@@ -9,13 +9,9 @@ import { Message } from "./message.js";
 import type { Model } from "./model.js";
 
 /**
- * The streaming turn: `POST /api/projects/{id}/turn` and the newline-delimited frames it answers
- * with (ADR-0037).
- *
- * The turn is a Subscription because its lifetime belongs to the Model: the stream runs exactly
- * while `model.turn` is `Streaming`. Cancelling, or selecting another project, sets the turn back
- * to `Idle`; Foldkit then closes the stream's scope, which aborts the fetch and cancels the
- * response body. That cancellation is how the Supervisor learns the browser is gone.
+ * Cancelling or selecting another project sets the turn to `Idle`; Foldkit then closes the stream's
+ * scope, which aborts the fetch and cancels the response body. That is how the Supervisor learns the
+ * browser is gone.
  */
 
 const TurnRequest = Schema.Struct({
@@ -34,7 +30,6 @@ function lineMessages(turnId: number, line: string): readonly Message[] {
     return [Message.ReceivedUnreadableFrame({ turnId })];
   }
 
-  // A frame of a kind this page does not know is skipped, as it always was.
   return Option.toArray(
     Option.map(Schema.decodeUnknownOption(TurnFrame)(maybeParsed.value), (frame) =>
       Message.ReceivedTurnFrame({ turnId, frame }),
@@ -54,10 +49,6 @@ function frameMessages(turnId: number, body: ReadableStream<Uint8Array>): Stream
   );
 }
 
-/**
- * The request and its body share the stream's scope: when Foldkit closes it, the controller aborts
- * the fetch, and the body's reader is cancelled. Either one tells the Worker the browser left.
- */
 function turnStream(request: TurnRequest): Stream.Stream<Message> {
   const { turnId } = request;
 

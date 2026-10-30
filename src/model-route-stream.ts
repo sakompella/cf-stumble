@@ -1,9 +1,3 @@
-/**
- * The Workers AI model call, and the assembly of streamed chunks into one answer that the ChatGPT
- * call reuses. `./model-route-stream-parse.ts` does the untrusted per-chunk parsing of Workers AI's
- * events; `./model-route-turn.ts` reads the stream and emits the route's events.
- */
-
 import * as Effect from "effect/Effect";
 import {
   isProviderError,
@@ -26,11 +20,9 @@ import {
   type ModelTurnAnswer,
 } from "./model-route-turn.js";
 
-// The Workers AI model, used while no ChatGPT credential is connected (ADR-0047). Two deployed
-// facts pin it. Turns first saved an empty
-// assistant message, because this model answers in `reasoning_content` and the default output
-// budget was spent there, hence `MAX_OUTPUT_TOKENS`. `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
-// then failed every call: its schema takes `messages[].content` as a string, and Pi sends parts.
+// This model answers in `reasoning_content`, which spends the default output budget, hence
+// `MAX_OUTPUT_TOKENS`.
+// Llama 3.3 rejects Pi's content parts: its schema takes `messages[].content` as a string.
 const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
 
 const REASONING_EFFORT = "low" as const;
@@ -66,12 +58,8 @@ export function normalizeResponse(raw: ProviderResult): AssistantMessage {
 }
 
 /**
- * Call the Workers AI binding's overloaded `run` with a streaming payload. `model` here is a
- * plain string, not a literal key of the generated Workers AI model list, so TypeScript cannot
- * select `run`'s streaming overload (`Promise<ReadableStream>`) statically and instead types this
- * call through its untyped `Record<string, unknown>` fallback overload — even though
- * `input.stream: true` selects the real streaming behavior at runtime, which is what the real
- * binding returns for this input shape.
+ * `model` is a plain string, so TypeScript picks `run`'s untyped fallback overload; `stream: true`
+ * still selects streaming at runtime.
  */
 export function streamingBindingCall(
   ai: Ai,
@@ -85,19 +73,13 @@ export function streamingBindingCall(
   return raw as Promise<ReadableStream<Uint8Array>>;
 }
 
-/** Accumulated state for one tool call assembled across several `tool-call-delta` events. */
 type ToolCallAccumulator = { id: string; name: string; args: string[] };
 
-/**
- * Accumulates one turn's parsed provider chunks and emits the `ModelStreamEvent`s they imply.
- * Kept as a class so each step of the work stays a short, separately readable method.
- */
 export class ProviderStreamAccumulator {
   private readonly texts: string[] = [];
   private readonly toolCalls = new Map<number, ToolCallAccumulator>();
   private readonly emit: (event: ModelStreamEvent) => void;
   private reportedUsage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
-  /** Set when a Workers AI line reported an error, which ends the stream without an answer. */
   providerFailed = false;
 
   constructor(emit: (event: ModelStreamEvent) => void) {
@@ -116,10 +98,6 @@ export class ProviderStreamAccumulator {
     this.emit({ type: "tool-call-delta", delta });
   }
 
-  /**
-   * Parse and apply one decoded Workers AI line; returns `true` when it is the terminal `[DONE]` or
-   * an error, which sets {@link providerFailed}.
-   */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
 
@@ -148,7 +126,6 @@ export class ProviderStreamAccumulator {
     return false;
   }
 
-  /** Emit and remember one chunk's text, tool call fragments and usage, whichever provider sent it. */
   apply(chunk: ParsedProviderChunk): void {
     if (chunk.textDelta !== undefined) {
       this.texts.push(chunk.textDelta);
@@ -179,7 +156,6 @@ export class ProviderStreamAccumulator {
   }
 }
 
-/** The terminal answer of one provider call, built from what its stream delivered. */
 export function finishedTurn(
   accumulator: ProviderStreamAccumulator,
   request: ModelRouteRequest,
@@ -192,7 +168,6 @@ export function finishedTurn(
   };
 }
 
-/** One call to the fixed Workers AI model, the provider used while ChatGPT is not connected. */
 export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteRequest): ModelTurn {
   return (emit) => {
     const accumulator = new ProviderStreamAccumulator(emit);

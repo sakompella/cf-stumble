@@ -10,9 +10,8 @@ import {
 } from "./update-shared.js";
 
 /**
- * The generation drawer: submit a harness commit, activate a generation, and roll back.
- * Activation and rollback send the epoch the status read reported and the page rendered, so the
- * value a reader sees is the value the request carries.
+ * Activation and rollback send the epoch the page rendered, so the value a reader sees is the value
+ * the request carries.
  */
 
 function wholeNumber(value: number): Option.Option<number> {
@@ -38,7 +37,6 @@ function withPanel(model: Model, kind: ControlKind, change: Partial<ControlPanel
 function runControl(model: Model, kind: ControlKind): UpdateReturn {
   const cleared = clearError(model);
   const panel = kind === "activate" ? model.activate : model.rollback;
-  // The epoch comes from what the page rendered, never a guess.
   const maybeEpoch = controlLabel(model.generationEpoch);
 
   if (Option.isNone(maybeEpoch)) {

@@ -5,12 +5,6 @@ import { Message } from "./message.js";
 import type { ControlKind, Model } from "./model.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
-/**
- * The generation bar. The active label and the observed epoch stay visible beside the
- * conversation; submission, activation, and rollback live inside a `<details>` drawer that is
- * closed by default, so the controls are one click away without taking attention from the turn.
- */
-
 function submissionPanel(model: Model, h: HtmlBuilder<Message>): Html {
   return h.div(
     [h.Class("drawer-panel")],
@@ -124,7 +118,7 @@ export function generationBarView(model: Model, h: HtmlBuilder<Message>): Html {
       valueRow("last read", ID.statusStatus, model.statusStatus, h),
       h.details(
         [
-          // The reader opens and closes the drawer; the browser owns that state.
+          // The browser owns the drawer's open state.
           h.Id(ID.generationDrawer),
         ],
         [

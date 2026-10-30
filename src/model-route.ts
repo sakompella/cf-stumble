@@ -31,9 +31,6 @@ export type {
   ToolCallDelta,
 } from "./model-route-events.js";
 
-// -- Service binding entrypoint ---------------------------------------------
-
-/** The Supervisor methods this route uses, on the Supervisor that holds the owner's credential. */
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{
     chatgptAccess(rejected?: string): Promise<ChatGPTAccess>;
@@ -45,26 +42,21 @@ type CredentialHolders = Readonly<{
 type ModelRouteEnv = Readonly<{
   AI: Ai;
   SUPERVISOR: CredentialHolders;
-  /** The ChatGPT model, a declared plain variable (`cloudflare.config.ts`). */
   CHATGPT_MODEL: string;
 }>;
 
 /**
- * Set by the Supervisor that hands this route to its facets, and invisible to them: the facet holds
- * a stub, not these props. A route no Supervisor created has no credential to consult and answers
- * from Workers AI.
+ * Set by the Supervisor that hands this route to its facets and invisible to them. A route no
+ * Supervisor created has no credential and answers from Workers AI.
  */
 export type ModelRouteProps = Readonly<{ supervisor: string }> | undefined;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
-  /** Answers with incremental model events. Every failure after validation becomes an event on the
-   * returned stream, which is what lets this cross the RPC boundary as a plain byte stream
-   * (ADR-0045), like `MainFacetTarget.startTurn`.
-   *
+  /**
    * The owner's ChatGPT plan answers while a credential is connected; Workers AI answers while none
-   * is. A refused or revoked grant fails the call with `chatgpt-reconnect-required` rather than
-   * switching provider. A usage limit that refused the call before any output switches provider
-   * after a `provider-fallback` event, so the owner sees which model answered (ADR-0047). */
+   * is. A refused or revoked grant fails with `chatgpt-reconnect-required` rather than switching
+   * provider. A usage limit before any output switches provider after a `provider-fallback` event.
+   */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
   runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
     const parsed = parseRequest(request);

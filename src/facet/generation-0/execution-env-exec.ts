@@ -12,7 +12,6 @@ import type { ParsedExecEvent, StartExecValue } from "./execution-env-rpc.js";
 
 type ExecResult = Result<{ stdout: string; stderr: string; exitCode: number }, ExecutionError>;
 
-/** The narrow slice of the project RPC target `exec` needs: nothing here can read or write a file. */
 export type ExecTarget = Pick<ProjectRpcTargetContract, "startExec" | "kill">;
 
 type MutableExecState = { aborted: boolean; stdout: string; stderr: string };
@@ -31,7 +30,6 @@ function hasEnvOverride(options: ShellExecOptions | undefined): boolean {
   return options?.env !== undefined && Object.keys(options.env).length > 0;
 }
 
-/** Converts Pi's optional timeout in seconds to milliseconds, clamped to the target's own maximum. */
 function timeoutMsFrom(timeoutSeconds: number | undefined): number | undefined {
   if (timeoutSeconds === undefined) return undefined;
 
@@ -42,10 +40,7 @@ function timeoutMsFrom(timeoutSeconds: number | undefined): number | undefined {
   return Math.min(Math.max(ms, 1), MAX_EXEC_TIMEOUT_MS);
 }
 
-/**
- * Cap one command at the time left before the turn reserve. `undefined` means the command must
- * not start: spending the reserve on a tool would leave no time for the model to explain its result.
- */
+/** `undefined` means do not start: spending the turn reserve leaves no time for the model to explain. */
 export function boundedExecTimeout(
   requestedMs: number | undefined,
   nowMs: number,
@@ -79,11 +74,7 @@ function stopAbnormalStream(
   requestKill(target, operationId);
 }
 
-/**
- * Normalizes one channel's event payload to text, decoding bytes with a persistent streaming
- * decoder so a multi-byte UTF-8 sequence split across events still decodes correctly. Returns
- * `undefined` for a payload that is neither a string nor bytes: a malformed event.
- */
+/** A persistent streaming decoder handles a multi-byte UTF-8 sequence split across events. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: an exec event's payload is untrusted until this decodes it.
 function decodeChannel(decoder: TextDecoder, data: unknown): string | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: narrowing an untrusted exec event payload.
@@ -284,14 +275,7 @@ function turnBudgetError(): ExecResult {
   };
 }
 
-/**
- * Implements Pi's `Shell.exec` against the six-method project RPC target: starts the command,
- * decodes its `ReadableStream<Uint8Array>` of newline-delimited JSON frames back into events with
- * `NdjsonFrameReader`, invokes Pi's `onStdout`/`onStderr` callbacks before the terminal event
- * resolves this call, and never throws or rejects. An environment override this target cannot
- * honor, an already-aborted signal, a malformed target response, a truncated byte frame, or a
- * rejected RPC call all resolve to a typed `ExecutionError` instead.
- */
+/** Never throws or rejects; every failure resolves to a typed `ExecutionError`. */
 export async function execViaProjectTarget(
   cwd: string,
   target: ExecTarget,

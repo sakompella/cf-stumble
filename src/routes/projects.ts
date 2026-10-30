@@ -14,15 +14,9 @@ import type {
 } from "../supervisor/projects/index.js";
 
 /**
- * The project surface the page reads and writes: list the tenant's connected repositories, connect
- * another one, read or refresh the GitHub connection, and drive the GitHub authorization.
- *
- * A credential never arrives in a request here, because there is no field for one: the owner
- * authorizes at GitHub's page, and the token goes from GitHub to the workspace without passing
- * through a browser.
- *
- * Every response is built from named fields of a Supervisor result, so no internal error text
- * reaches a client and no status shape can gain a token by accident.
+ * A credential never arrives in a request here, there is no field for one; the token goes from GitHub
+ * to the workspace without passing through a browser. Responses are built from named fields so no
+ * internal error text or token can reach a client.
  */
 export type ProjectApiSupervisor = Readonly<{
   listProjects: () => Promise<SelectableCatalog>;
@@ -80,18 +74,10 @@ const AUTHORIZATION_STATUS = {
   "authorization-denied": 403,
 } as const satisfies Record<GitHubAuthorizationProblem, number>;
 
-/**
- * The recorded connection and when the workspace last answered for it. A read answers this from
- * the Supervisor's storage; a refresh answers it after asking the workspace.
- */
 function recordResponse(record: GitHubConnectionRecord): Response {
   return Response.json({ ok: true, github: record.github, checkedAt: record.checkedAt });
 }
 
-/**
- * A refresh asks the workspace. When that call fails, the owner sees the workspace as unavailable,
- * and the cause goes to the operator log redacted.
- */
 function refreshResponse(supervisor: ProjectApiSupervisor): Effect.Effect<Response> {
   return callSupervisor(() => supervisor.refreshGitHubConnection()).pipe(
     Effect.map((record) => recordResponse(record)),
@@ -105,7 +91,6 @@ function refreshResponse(supervisor: ProjectApiSupervisor): Effect.Effect<Respon
   );
 }
 
-/** The connect body: a repository URL, and optionally a name to show it under. Nothing else. */
 const ConnectBody = Schema.Struct({
   repositoryUrl: Schema.String,
   displayName: Schema.optionalKey(Schema.String),
@@ -158,10 +143,6 @@ function authorizationResponse(
   );
 }
 
-/**
- * Route one project or authorization request, or answer `undefined` so the owner API can try its
- * other routes.
- */
 export function routeProjectApiRequest(
   request: Request,
   supervisor: ProjectApiSupervisor,

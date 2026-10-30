@@ -21,26 +21,16 @@ import {
   type ProviderError,
 } from "./responses.js";
 
-/**
- * What the model route needs from the Supervisor that holds the owner's credential: the token to
- * send now, a way to report one the provider refused after a refresh, and a way to report the
- * usage limit a token met, with the time it ends when the provider named one. All are Supervisor
- * RPC calls; the token reaches this isolate and the provider, never a facet.
- */
+/** The token reaches this isolate and the provider, never a facet. */
 export type ChatGPTCredential = Readonly<{
   access(rejected?: string): Promise<ChatGPTAccess>;
   markRefused(accessToken: string): Promise<void>;
   markUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
 }>;
 
-/** No ChatGPT credential is connected, so the route answers from Workers AI instead. */
 export class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected") {}
 
-/**
- * The owner's plan refused this call for a usage limit before any of its output reached the
- * caller, so the route can still answer it from Workers AI (ADR-0047). `limitedUntil` is when the
- * limit ends, or `null` when the provider did not say.
- */
+/** Refused before any output reached the caller, so the route can still answer from Workers AI. */
 export class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
   readonly limitedUntil: number | null;
 }> {}
@@ -56,7 +46,7 @@ export type ChatGPTTurnInput = Readonly<{
 const reconnectRequired = (): ModelTurnFailed =>
   new ModelTurnFailed({ code: "chatgpt-reconnect-required" });
 
-/** A longer error body is not parsed, and only a parsed body's error type and code reach the log. */
+/** Only a parsed body's error type and code reach the log. */
 const MAX_ERROR_BODY_BYTES = 4096;
 
 function accessToken(
@@ -89,7 +79,7 @@ function accessToken(
   );
 }
 
-/** The error in a refusal's body, without its message. The rest of the body may echo the request. */
+/** The rest of the body may echo the request. */
 function errorOf(response: Response): Effect.Effect<ProviderError> {
   return Effect.promise(async () => {
     try {
@@ -103,10 +93,8 @@ function errorOf(response: Response): Effect.Effect<ProviderError> {
 }
 
 /**
- * End a call the provider refused, logging only the HTTP status and the error's type and code. A
- * usage limit is reported to the Supervisor either way, so later calls can skip ChatGPT; only one
- * that reached the caller with nothing yet fails with {@link ChatGPTUsageLimited}, because the
- * route must never splice a second provider's answer onto a first one's partial output.
+ * Logs only the HTTP status and the error type and code. The route must never splice a second
+ * provider's answer onto a partial one, so only a limit that reached the caller with nothing fails.
  */
 function refused(
   credential: ChatGPTCredential,
@@ -144,10 +132,7 @@ function refused(
   );
 }
 
-/**
- * One Responses call. A redirect is never followed, because it could carry the token elsewhere.
- * The access token goes in the `Authorization` header and nowhere else.
- */
+/** A redirect is never followed because it could carry the token elsewhere. */
 function send(
   input: ChatGPTTurnInput,
   body: string,
@@ -183,14 +168,9 @@ function refusedTwice(
   ).pipe(Effect.andThen(Effect.fail(reconnectRequired())));
 }
 
-/** A provider response and the token that was sent for it. */
 type Answer = Readonly<{ response: Response; token: string }>;
 
-/**
- * Send the request, retrying once after a 401: with the newer token if another call already
- * replaced the refused one, otherwise after one refresh. A second 401 marks the connection as
- * needing a reconnect. Nothing is retried once the provider's stream has started.
- */
+/** Retries once after a 401. Nothing is retried once the provider's stream has started. */
 function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Answer, ChatGPTRefusal> {
   return Effect.gen(function* () {
     const first = yield* accessToken(input.credential);
@@ -210,12 +190,6 @@ function answered(input: ChatGPTTurnInput, body: string): Effect.Effect<Answer, 
   });
 }
 
-/**
- * One model call on the owner's ChatGPT plan, translated into the route's events. The route
- * answers from Workers AI instead in two cases, both before anything was emitted: no credential is
- * connected ({@link ChatGPTNotConnected}), or the plan's usage limit refused the call
- * ({@link ChatGPTUsageLimited}).
- */
 export function chatgptTurn(
   input: ChatGPTTurnInput,
   request: ModelRouteRequest,

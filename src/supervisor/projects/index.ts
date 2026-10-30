@@ -1,7 +1,5 @@
 export { ConnectedProjects } from "./connected-projects.js";
 
-// The connection surface is written in terms of the workspace views it uses, so the group states
-// them here rather than making every consumer reach for `workspace` to name one argument.
 export type {
   CredentialWorkspaceNamespace,
   ProvisionWorkspaceNamespace,

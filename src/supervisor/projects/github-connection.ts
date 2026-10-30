@@ -26,13 +26,8 @@ import type {
 } from "./github-connection-store.js";
 
 /**
- * The workspace's GitHub authorization, as the rest of cf-stumble sees it.
- *
- * Every state is safe to show a browser: a verification URL and the short user code the owner types
- * at GitHub, a login name, or a reason to reconnect. No state carries a token, because a token
- * never becomes part of a status — it goes from GitHub's reply into the workspace's `gh`
- * configuration and nowhere else (ADR-0039). `reconnect-required` exists so a connection that
- * stopped working cannot be reported as working.
+ * No state carries a token. It goes from GitHub's reply into the workspace's `gh` configuration and
+ * nowhere else.
  */
 export type GitHubConnectionStatus =
   | Readonly<{ state: "disconnected" }>
@@ -50,7 +45,6 @@ export type GitHubConnectionStatus =
       reason: "credential-missing" | "credential-rejected" | "workspace-unavailable";
     }>;
 
-/** Why an authorization step produced no status. */
 export type GitHubAuthorizationProblem =
   | "not-configured"
   | "provider-unavailable"
@@ -58,12 +52,7 @@ export type GitHubAuthorizationProblem =
   | "authorization-expired"
   | "authorization-denied";
 
-/**
- * The connection as this Supervisor last saw it, read without asking the workspace. `checkedAt` is
- * when the workspace last answered a credential check, and `github` is what that check found. A
- * pending authorization is this object's own state, so it is current whatever `checkedAt` says.
- * Both are `null` before the first check, and again after a workspace reset.
- */
+/** `checkedAt` and `github` are `null` before the first check and after a workspace reset. */
 export type GitHubConnectionRecord = Readonly<{
   github: GitHubConnectionStatus | null;
   checkedAt: number | null;
@@ -74,10 +63,8 @@ export type GitHubAuthorizationOutcome =
   | Readonly<{ ok: false; problem: GitHubAuthorizationProblem }>;
 
 /**
- * The deployment's GitHub settings. `clientId` is the OAuth app the device flow belongs to and is
- * not a secret. `fallbackToken` is the documented `GH_TOKEN` path: a token from a Worker secret,
- * for automated tests and unsupervised runs where nobody can stand at a verification page. It is
- * recorded as `configured-token`, so a status never presents it as an owner authorization.
+ * `fallbackToken` is recorded as `configured-token`, so a status never presents it as an owner
+ * authorization.
  */
 export interface GitHubConnectionEnvironment {
   readonly clientId: string | undefined;
@@ -87,7 +74,6 @@ export interface GitHubConnectionEnvironment {
 
 interface GitHubConnectionInput {
   readonly store: GitHubConnectionStore;
-  /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
   readonly namespace: CredentialWorkspaceNamespace;
   readonly environment: GitHubConnectionEnvironment;
@@ -99,16 +85,11 @@ function reconnect(
   return { state: "reconnect-required", reason };
 }
 
-/**
- * How the workspace's GitHub credential appears in the operational log. A status becomes one
- * outcome word: its state, or the reason a reconnect is required. Nothing here reads a token, a
- * device code, a user code, or a login, so none of them can reach the log through these helpers.
- */
+/** Nothing here reads a token, device code, user code, or login, so none can reach the log. */
 function outcome(status: GitHubConnectionStatus): string {
   return status.state === "reconnect-required" ? status.reason : status.state;
 }
 
-/** A credential GitHub refused is the fault that went unnoticed for days, so it is an error. */
 function level(status: GitHubConnectionStatus): LogLevel {
   if (status.state === "connected" || status.state === "awaiting-authorization") return "info";
 
@@ -121,7 +102,6 @@ function logCredentialInstall(source: CredentialSource, status: GitHubConnection
   logEvent(level(status), "github-credential.install", { source, outcome: outcome(status) });
 }
 
-/** One unattended repair: what the credential was, whether a fallback exists, and what it became. */
 function logCredentialEnsure(
   before: GitHubConnectionStatus,
   fallbackConfigured: boolean,
@@ -134,7 +114,6 @@ function logCredentialEnsure(
   });
 }
 
-/** A redemption that returned no token. Retrying while GitHub waits is the ordinary `pending`. */
 function unredeemedOutcome(
   kind: Exclude<DeviceRedemption["kind"], "authorized">,
 ): "pending" | GitHubAuthorizationProblem {
@@ -156,18 +135,12 @@ function unredeemedOutcome(
   }
 }
 
-/** What one credential answer means: the status to report and the connection to keep, if any. */
 type Learned = Readonly<{ status: CheckedStatus; connection: RecordedConnection | undefined }>;
 
-/** Learning only a status leaves the stored connection as it is. */
 function statusOnly(status: CheckedStatus): (previous: RecordedConnection | undefined) => Learned {
   return (previous) => ({ status, connection: previous });
 }
 
-/**
- * Keep the stored connection honest about the workspace's answer. `installedBy` names the install
- * that just ran, if one did.
- */
 function learned(
   answer: GitHubCredentialStatus,
   installedBy: CredentialSource | undefined,
@@ -219,15 +192,13 @@ export class GitHubConnection {
     this.environment = input.environment;
   }
 
-  /** Forget the connection and the last check, because a workspace reset removed the credential. */
   resetWorkspace(): void {
     this.store.clear();
   }
 
   /**
-   * What the connection is doing, asked of the workspace and not repaired. A pending authorization
-   * outranks the workspace's own answer, because the owner is mid-flow and the credential
-   * legitimately is not there yet.
+   * A pending authorization outranks the workspace's answer, since the credential is legitimately
+   * absent mid-flow.
    */
   status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
     return Effect.suspend(() => {
@@ -239,7 +210,6 @@ export class GitHubConnection {
     });
   }
 
-  /** The connection from this object's own storage. It never reaches the workspace. */
   lastKnown(now: number): GitHubConnectionRecord {
     const lastCheck = this.store.lastCheck();
 
@@ -249,7 +219,6 @@ export class GitHubConnection {
     };
   }
 
-  /** When the last check was stored, or `null` before the first and after a reset. */
   checkedAt(): number | null {
     return this.store.lastCheck()?.checkedAt ?? null;
   }
@@ -272,14 +241,6 @@ export class GitHubConnection {
         };
   }
 
-  /**
-   * Make the workspace usable if it can be made usable without a human.
-   *
-   * A working credential is left alone. A missing or rejected one is replaced from the configured
-   * `GH_TOKEN` when this deployment has one, which is what keeps automated runs from needing
-   * somebody at a verification page. With no fallback the answer is a reconnect requirement, never
-   * an optimistic `connected`.
-   */
   ensureCredential(now: number, signal?: AbortSignal): Effect.Effect<GitHubConnectionStatus> {
     return Effect.gen({ self: this }, function* () {
       const current = yield* this.status(now, { signal });
@@ -303,10 +264,7 @@ export class GitHubConnection {
     });
   }
 
-  /**
-   * Start one device authorization. The device code stays in storage; what comes back is the
-   * verification URL and the user code.
-   */
+  /** The device code stays in storage; only the verification URL and user code come back. */
   startAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
@@ -337,15 +295,8 @@ export class GitHubConnection {
   }
 
   /**
-   * Redeem the pending authorization once.
-   *
-   * A code that has been redeemed, denied, or has expired is deleted, so the same request replayed
-   * finds nothing. A successful redemption installs the token into the workspace
-   * inside this call; the token is a local value that never reaches storage or a response.
-   *
-   * GitHub's answer arrives after a network wait, during which a newer authorization can replace
-   * the one this call redeemed, or a concurrent completion can consume it. Such an answer is
-   * discarded, token included, and the caller gets the current status.
+   * The token is a local value that never reaches storage or a response. An answer that a newer
+   * authorization or a concurrent completion overtook is discarded, token included.
    */
   completeAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
@@ -427,10 +378,6 @@ export class GitHubConnection {
     });
   }
 
-  /**
-   * Ask the workspace what its credential can do, and store the answer as the last check, with the
-   * connection it implies. `installedBy` names the install that just ran, if one did.
-   */
   private observed(
     now: number,
     installedBy?: CredentialSource,
@@ -461,11 +408,7 @@ export class GitHubConnection {
     });
   }
 
-  /**
-   * Store what a check or install that started at `revision` learned, judged against the connection
-   * stored now. A stopped one learned nothing, and one a workspace reset overtook learned about the
-   * workspace before the reset; the store keeps neither.
-   */
+  /** A stopped check learned nothing, and one a workspace reset overtook is discarded. */
   private record(
     revision: number,
     now: number,

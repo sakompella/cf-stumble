@@ -1,12 +1,6 @@
 import type { MainHarnessArtifact, MainHarnessArtifactInput } from "../../facet/index.js";
 
-/**
- * One canonical encoding of a module map: the harness commit, the entry module name, then every
- * module sorted by name. The store keeps these bytes and nothing else, so a build that reports its
- * modules in another order still produces the same rows, and a read reconstructs one shape rather
- * than guessing at module order or entry selection. The canonical form is not a second artifact
- * identity; ADR-0027 keeps the labeled harness commit as the only one.
- */
+/** Commit, entry module, then modules sorted by name, so a build that reports modules in another order yields the same rows. */
 export function canonicalModuleMap(artifact: MainHarnessArtifact): MainHarnessArtifactInput {
   return {
     harnessCommit: artifact.harnessCommit,
@@ -17,7 +11,6 @@ export function canonicalModuleMap(artifact: MainHarnessArtifact): MainHarnessAr
   };
 }
 
-/** The exact bytes a canonical module map occupies in the Supervisor's module-map store. */
 export function encodeModuleMap(moduleMap: MainHarnessArtifactInput): string {
   return JSON.stringify({
     harnessCommit: moduleMap.harnessCommit,

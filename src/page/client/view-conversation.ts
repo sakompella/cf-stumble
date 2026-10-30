@@ -6,12 +6,6 @@ import type { Model } from "./model.js";
 import { statusRow, valueRow } from "./view-parts.js";
 import { transcriptView } from "./view-transcript.js";
 
-/**
- * The conversation column, which is the page's main work: the thread facts a reader needs to
- * trust what they see, the transcript a turn appends to while it runs (ADR-0037), and the
- * composer. Control-Enter sends, so a keyboard reader never has to leave the prompt to run a turn.
- */
-
 function sendShortcut(key: string, modifiers: Readonly<{ ctrlKey: boolean; metaKey: boolean }>) {
   return key === "Enter" && (modifiers.ctrlKey || modifiers.metaKey)
     ? Option.some(Message.PressedSendShortcut())

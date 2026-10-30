@@ -12,10 +12,8 @@ import {
 } from "./transcript.js";
 
 /**
- * How the transcript renders. Two bounds keep a long turn readable and the page responsive: a tool
- * result is collapsed by default, and at most 20,000 characters and 400 lines of any output are
- * laid out. A result that looks like a unified diff renders line by line with its adds and removes
- * marked. Every value is a text child, never markup.
+ * Two bounds keep a long turn readable: tool results are collapsed by default, and at most 20,000
+ * characters and 400 lines of any output are laid out. Every value is a text child, never markup.
  */
 
 function note(text: string, h: HtmlBuilder<Message>): Html {
@@ -62,8 +60,7 @@ function toolView(tool: ToolEntry, h: HtmlBuilder<Message>): Html {
   return h.details(
     [
       h.Class(tool.isFailed ? `${CLASS.toolCall} failed` : CLASS.toolCall),
-      // The reader opens and closes a disclosure, so the browser owns its open state. A failure
-      // opens it once, through the attribute, and the reader may close it again.
+      // The browser owns the open state; a failure opens it once through the attribute.
       ...(tool.isFailed ? [h.Attribute("open", "")] : []),
     ],
     [h.summary([], [tool.summary]), h.pre([h.Class(CLASS.toolOutput)], output)],

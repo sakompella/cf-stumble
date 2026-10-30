@@ -19,23 +19,13 @@ function isNotFound(error: unknown): boolean {
   return error.code === "ENOENT";
 }
 
-/**
- * Whether a command counts only once Computer has copied its container changes into the durable
- * workspace store. Computer runs a command in the container and then pulls the changes; that pull
- * can fail and report `pending`, or skip entries it could not apply. The container shows the change
- * either way, but a replacement container starts from the store.
- */
+/** `require-complete` counts a command only once Computer has copied its container changes into the durable store, which a replacement container starts from. */
 type CommandSync = "require-complete" | "not-required";
 
 function syncIsComplete(sync: ExecSyncResult): boolean {
   return sync.status === "complete" && sync.skipped.length === 0;
 }
 
-/**
- * The command output from a Computer result, or `WorkspaceSyncIncomplete` when the policy needs a
- * durable result and the post-command sync is pending or skipped entries. Only the status and
- * counts go into the error: Computer's pull error text is not needed to act on it.
- */
 export function commandOutput(
   result: Pick<WorkspaceRuntimeResult<"utf8">, "stdout" | "stderr" | "exitCode" | "sync">,
   sync: CommandSync,
@@ -49,7 +39,6 @@ export function commandOutput(
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }
 
-/** Adapts the private Computer workspace to the host's narrower operation port. */
 export class ComputerWorkspaceOperations implements WorkspaceOperations {
   private readonly workspace: Workspace;
   private readonly sync: CommandSync;
@@ -93,8 +82,7 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
       timeoutMs,
     };
 
-    // Only set when there is one: `exactOptionalPropertyTypes` makes an explicit `undefined` a
-    // different thing from an absent option, and a command with no standard input wants absent.
+    // Absent stdin differs from `undefined` under `exactOptionalPropertyTypes`.
     if (stdin !== undefined) options.stdin = stdin;
     const execution = await this.workspace.runtime.exec(source, options);
 

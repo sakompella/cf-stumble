@@ -1,14 +1,8 @@
-/**
- * The model route's request: the closed message union a facet may send, and the parser that turns
- * untrusted service-binding input into it. `./model-route.ts` holds the entrypoint that uses it.
- */
-
 import * as Result from "effect/Result";
 import { asUntrusted, field, hasOwn, isRecord, type UntrustedObject } from "./untrusted.js";
 
 const MAX_REQUEST_BYTES = 1_048_576;
 
-/** Shared encoder for the byte-size checks below; UTF-8 byte length, not `string.length`. */
 const REQUEST_BYTES = new TextEncoder();
 
 const FORBIDDEN_FIELDS: readonly string[] = [
@@ -18,8 +12,6 @@ const FORBIDDEN_FIELDS: readonly string[] = [
   "endpoint",
   "provider",
 ];
-
-// -- Closed message union ---------------------------------------------------
 
 type SystemMessage = Readonly<{ role: "system"; content: string }>;
 
@@ -49,8 +41,6 @@ export type ToolDefinition = Readonly<{
   function: Readonly<{ name: string; description: string; parameters: object }>;
 }>;
 
-// -- Request ----------------------------------------------------------------
-
 export type ModelRouteRequest = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
   tools?: ReadonlyArray<ToolDefinition>;
@@ -61,9 +51,6 @@ export type ValidationFailure = Readonly<{
   error: Readonly<{ code: "invalid-request"; reason: string }>;
 }>;
 
-// -- Parsing (pure, plain values per ADR-0045) ------------------------------
-
-/** One parse step's value, or the reason the request is invalid. */
 type Parsed<T> = Result.Result<T, string>;
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted request value.
@@ -79,7 +66,6 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-/** Parse every entry of an untrusted array as an object, stopping at the first invalid one. */
 function parseEach<T>(
   entries: readonly unknown[],
   label: (index: number) => string,
@@ -117,7 +103,6 @@ function parseToolCall(call: UntrustedObject, at: string): Parsed<ToolCall> {
   return Result.succeed({ id, function: { name, arguments: args } });
 }
 
-/** An assistant message may omit `tool_calls`; it then has none. */
 function parseAssistant(msg: UntrustedObject, at: string): Parsed<AssistantMessage> {
   const content = field(msg, "content");
 
@@ -178,7 +163,6 @@ function parseMessage(msg: UntrustedObject, at: string): Parsed<RouteMessage> {
   return Result.fail(`unknown role ${JSON.stringify(role)} at ${at}`);
 }
 
-/** The fields a provider needs from a tool; `parameters` stays the caller's JSON Schema object. */
 function parseTool(tool: UntrustedObject, at: string): Parsed<ToolDefinition> {
   if (field(tool, "type") !== "function") return Result.fail(`${at} type must be "function"`);
   const fn = untrustedRecord(field(tool, "function"));
@@ -220,10 +204,8 @@ function parseFields(raw: unknown): Parsed<ModelRouteRequest> {
     return Result.fail("messages must be a non-empty array");
   }
 
-  // Bound the request by its actual wire size. `JSON.stringify(...).length` counts UTF-16 code
-  // units, which under-counts every non-ASCII character once it crosses the wire as UTF-8 (most
-  // are 2-3 bytes in UTF-8 but 1 code unit each here), so a payload that looked within budget by
-  // string length could still exceed it in bytes.
+  // Bound by UTF-8 wire size; `JSON.stringify(...).length` counts UTF-16 units and under-counts
+  // non-ASCII.
   if (REQUEST_BYTES.encode(JSON.stringify(raw)).length > MAX_REQUEST_BYTES) {
     return Result.fail("request exceeds 1 MiB size limit");
   }
@@ -238,10 +220,7 @@ function parseFields(raw: unknown): Parsed<ModelRouteRequest> {
   });
 }
 
-/**
- * The request as the providers receive it, rebuilt from the fields checked here, so a field this
- * route does not know never reaches a provider.
- */
+/** Rebuilt from the checked fields so an unknown field never reaches a provider. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this IS the parse boundary for untrusted service-binding input.
 export function parseRequest(raw: unknown): Result.Result<ModelRouteRequest, ValidationFailure> {
   return Result.mapError(parseFields(raw), (reason): ValidationFailure => ({

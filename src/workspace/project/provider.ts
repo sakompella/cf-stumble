@@ -1,7 +1,6 @@
 import { logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
 import type { ProjectErrorCode } from "./protocol.js";
 
-/** The metadata this target needs about one filesystem node. Mirrors `VirtualStatsLike`. */
 export interface ProjectStat {
   size: number;
   mtimeMs: number;
@@ -18,11 +17,9 @@ export interface ProjectDirent {
 }
 
 /**
- * The narrow slice of `@cloudflare/computer`'s `SQLiteWorkspaceProvider` this target needs.
- * `appendFile`/`appendFileSync` and `realpath`/`realpathSync` are deliberately absent: the first
- * throws `ENOSYS` on the real provider, and the second only normalizes the lexical path rather
- * than resolving symlinks, so neither is usable here. Byte-level writes go through
- * `openSync`/`writeSync`/`closeSync` inside a caller-supplied transaction instead.
+ * `appendFile` and `realpath` are absent on purpose: the first throws `ENOSYS` on the real
+ * provider, the second only normalizes lexically instead of resolving symlinks. Byte-level writes
+ * use `openSync`/`writeSync`/`closeSync` inside a transaction.
  */
 export interface ProjectFilesystemProvider {
   lstatSync(path: string): ProjectStat;
@@ -35,7 +32,6 @@ export interface ProjectFilesystemProvider {
   readFileSync(path: string): Uint8Array;
 }
 
-/** Runs one write inside the workspace's synchronous SQLite transaction. Mirrors `Database`. */
 export interface ProjectTransactions {
   transactionSync<T>(closure: () => T): T;
 }
@@ -51,7 +47,6 @@ const ERROR_CODE_MAP = new Map<string, ProjectErrorCode>([
   ["ELOOP", "symlink-loop"],
 ]);
 
-/** Narrows an unknown thrown value to the errno-style code the real provider attaches. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider threw this value; its documented shape is untrusted here.
 function errnoCode(error: unknown): string | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: narrowing an untrusted thrown value to check for a `code` field.
@@ -62,12 +57,6 @@ function errnoCode(error: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
-/**
- * Maps a provider error to one of this target's typed failure codes. Every code the provider is
- * documented to raise for these operations (ENOENT, ENOTDIR, EISDIR, EACCES/EPERM/EROFS, EEXIST,
- * ELOOP) gets a specific mapping; anything else — including a thrown non-error value — becomes
- * `backend-unavailable` so a caller never sees an unmapped error shape.
- */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider threw this value; its documented shape is untrusted here.
 export function mapProviderError(error: unknown): ProjectErrorCode {
   const code = errnoCode(error);

@@ -22,10 +22,8 @@ import type {
   ChatGPTUsageLimit,
 } from "./connection-view.js";
 
-/** How long a started sign-in can be finished. */
 export const LOGIN_TTL_MS = 10 * 60 * 1000;
 
-/** An access token with less than this left is refreshed before it is used. */
 export const REFRESH_WINDOW_MS = 8 * 60 * 1000;
 
 type ConnectedCredential = Extract<StoredConnection, { state: "connected" }>;
@@ -51,19 +49,13 @@ function loginFailure(failure: TokenFailure): ChatGPTLoginFailure {
 export type ChatGPTConnectionInput = Readonly<{
   store: ChatGPTCredentialStore;
   fetcher: ProviderFetch;
-  /** The configured ChatGPT model, shown in the view so the owner can see what turns use. */
   model: string;
   clock: () => number;
 }>;
 
 /**
- * The owner's ChatGPT connection, held by the Supervisor (ADR-0047).
- *
- * The Supervisor is one Durable Object instance, so every caller of {@link access} meets the same
- * `refreshing` slot: concurrent turns share one refresh, and a rotating refresh token is redeemed
- * once. Eviction drops the slot, and a refresh cut off by eviction may have rotated the refresh
- * token at the provider without this object storing it; the next refresh is then refused and the
- * owner reconnects.
+ * One Durable Object instance, so concurrent turns share one `refreshing` slot and a rotating
+ * refresh token is redeemed once. Eviction can lose a rotated token; the owner then reconnects.
  */
 export class ChatGPTConnection {
   private readonly store: ChatGPTCredentialStore;
@@ -71,7 +63,6 @@ export class ChatGPTConnection {
   private readonly model: string;
   private readonly clock: () => number;
   private refreshing: Deferred.Deferred<ChatGPTAccess> | undefined;
-  /** The sign-in whose code is being exchanged; a newer sign-in or a Disconnect clears it. */
   private exchanging: string | undefined;
 
   constructor(input: ChatGPTConnectionInput) {
@@ -110,7 +101,6 @@ export class ChatGPTConnection {
     };
   }
 
-  /** Start a sign-in, replacing any earlier one. The verifier and state stay in storage. */
   startLogin(): Effect.Effect<ChatGPTConnectionView> {
     const state = randomSecret();
     const verifier = randomSecret();
@@ -132,10 +122,8 @@ export class ChatGPTConnection {
   }
 
   /**
-   * Redeem the address the sign-in ended on. An address that does not parse leaves the attempt in
-   * place, so the owner can paste again; once the code is sent, the attempt is used up whatever
-   * the token endpoint answers. A grant that returns after a newer sign-in or a Disconnect is
-   * dropped.
+   * An address that does not parse leaves the attempt in place; once the code is sent the attempt
+   * is used up.
    */
   completeLogin(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {
     return Effect.gen({ self: this }, function* () {
@@ -156,13 +144,7 @@ export class ChatGPTConnection {
     return this.view();
   }
 
-  /**
-   * The access token to send now. `rejected` is a token the provider just refused with 401: while
-   * it is still the stored one, it is refreshed; when a newer one replaced it, that one is used.
-   *
-   * A usage limit with a named end skips ChatGPT until then. Any other recorded limit is forgotten
-   * once a call is about to ask ChatGPT again; that call records it anew if the limit still holds.
-   */
+  /** `rejected` is a token the provider refused with 401; it is refreshed only while still stored. */
   access(rejected?: string): Effect.Effect<ChatGPTAccess> {
     return Effect.suspend(() => {
       if (this.refreshing !== undefined) return Deferred.await(this.refreshing);
@@ -193,18 +175,15 @@ export class ChatGPTConnection {
     });
   }
 
-  /** The provider refused this token even after a refresh. */
   markRefused(accessToken: string): void {
     this.store.markNeedsReconnect(accessToken, "provider-refused", this.clock());
     logEvent("error", "chatgpt.provider-refused");
   }
 
-  /** The plan's usage limit refused a call sent with this token. The connection stays connected. */
   markUsageLimited(accessToken: string, limitedUntil: number | null): void {
     this.store.markUsageLimited(accessToken, { reachedAt: this.clock(), limitedUntil });
   }
 
-  /** The recorded usage limit, unless the end OpenAI named has passed. */
   private currentUsageLimit(): ChatGPTUsageLimit | undefined {
     const limit = this.store.usageLimit();
 
@@ -261,8 +240,8 @@ export class ChatGPTConnection {
   }
 
   /**
-   * One refresh that every concurrent caller shares. It runs uninterruptibly, so a cancelled turn
-   * cannot stop it between the provider rotating the refresh token and this object storing it.
+   * Runs uninterruptibly so a cancelled turn cannot stop it between the provider rotating the
+   * refresh token and this object storing it.
    */
   private refreshOnce(stored: ConnectedCredential, forced: boolean): Effect.Effect<ChatGPTAccess> {
     const shared = Deferred.makeUnsafe<ChatGPTAccess>();
@@ -303,7 +282,6 @@ export class ChatGPTConnection {
             return this.storedAccess();
           }
 
-          // The token server was busy, but a token it did not refuse still works until it expires.
           return !forced && stored.expiresAt > this.clock()
             ? { kind: "ready", accessToken: stored.accessToken }
             : { kind: "unavailable" };
@@ -327,7 +305,6 @@ export class ChatGPTConnection {
     );
   }
 
-  /** What the stored row allows now, after a refresh found it changed or refused. */
   private storedAccess(): ChatGPTAccess {
     const stored = this.store.connection();
 

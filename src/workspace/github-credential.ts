@@ -26,17 +26,8 @@ import {
 import { asUntrusted, field, hasExactKeys } from "../untrusted.js";
 
 /**
- * The Workspace Host's credential surface: install the workspace's GitHub credential, report what
- * it can do, and ask GitHub whether one repository is reachable.
- *
- * It is a surface of its own for the reason provisioning is: each Workspace Host surface parses
- * only its own request and plans its own commands, and a credential install is neither a build
- * step nor a provisioning step. Keeping it separate also keeps the token out of every other
- * path — this is the only place in cf-stumble where a token value exists inside the workspace
- * boundary, and it exists there for one call.
- *
- * No result carries a token. The install answers with a word, the status with a state and at most
- * a login name, and a failure with text this module redacts before returning it.
+ * The only place a token value exists inside the workspace boundary, and only for one call. No
+ * result carries a token; failure text is redacted before it is returned.
  */
 export type GitHubCredentialRequest =
   | Readonly<{ kind: "github-credential"; step: "install"; token: string }>
@@ -80,11 +71,6 @@ function failed(
   } as const;
 }
 
-/**
- * Parse the credential surface's whole RPC input. The token has to look like a token and the
- * repository URL has to canonicalize, so nothing that reaches a command is request text the
- * caller invented.
- */
 function parseGitHubCredentialRequest(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the credential surface's RPC boundary.
   value: unknown,
@@ -123,13 +109,7 @@ function parseGitHubCredentialRequest(
   }
 }
 
-/**
- * Hand the token to `gh` on standard input, which is what `--with-token` reads.
- *
- * The token is an argument of this one call and of nothing else. It is not in the command text, so
- * no process list or shell history can hold it. `gh` writes it to its own configuration, which is
- * the credential itself. Only a failed durable sync needs a cleanup, which `runInstall` does.
- */
+/** The token goes on standard input, not in the command text, so no process list or shell history can hold it. */
 function installCredential(
   operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
@@ -151,12 +131,8 @@ function installCredential(
 }
 
 /**
- * Run the install command, and undo it when its durable copy is not confirmed.
- *
- * The command has already written `hosts.yml` in the container when the sync check fails. Left
- * there, the next status read would report `connected` for a credential the install reported as
- * failed, and a container replacement would then lose it. A best-effort logout makes the
- * container match the failure. The original failure still propagates.
+ * When the sync check fails, `hosts.yml` is already written in the container. A best-effort logout
+ * keeps a later status read from reporting `connected` for a failed install.
  */
 function runInstall(
   operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
@@ -237,10 +213,7 @@ function failureLabel(thrown: unknown): string {
 
 type CredentialSurfaceInput = Readonly<{
   operations: WorkspaceOperations;
-  /**
-   * Operations that fail unless the workspace's durable copy is complete. The install uses them,
-   * so a credential that only the container's disk holds is never reported as installed.
-   */
+  /** Fail unless the durable copy is complete, so a credential only the container disk holds is never reported as installed. */
   installOperations: WorkspaceOperations;
   request: unknown;
 }>;
@@ -270,7 +243,6 @@ function credentialWork(
   }
 }
 
-/** The credential surface's effect shell. Every failure leaves as a redacted plain value. */
 export function executeGitHubCredentialRequest(
   input: CredentialSurfaceInput,
 ): Effect.Effect<GitHubCredentialResult> {

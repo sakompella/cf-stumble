@@ -6,28 +6,17 @@ import { projectIdFromPath } from "./route-pattern.js";
 import type { ProjectTurnRun, ProjectTurnRunProblemCode } from "../supervisor/projects/index.js";
 
 /**
- * The one entry a browser has to the coding half of cf-stumble: `POST /api/projects/{id}/turn`.
- *
- * The body carries a prompt and nothing else. A tenant, a conversation, a model, a lease, and a
- * generation are all things the Supervisor holds; there is no field here through which one could
- * arrive, so this route cannot be talked into running a turn on someone else's thread. The
- * response is the turn as it happens: newline-delimited frames the Supervisor proved, ending in
- * the one terminal frame it wrote after deciding what was saved.
+ * The body carries a prompt and nothing else. A tenant, conversation, model, lease, and generation are
+ * all held by the Supervisor, so this route cannot be talked into running a turn on someone else's
+ * thread.
  */
 export type TurnApiSupervisor = Readonly<{
   runProjectTurn: (projectId: unknown, prompt: unknown) => Promise<ProjectTurnRun>;
 }>;
 
 /**
- * What each refusal is, as an HTTP fact. A conflict is the project already running a turn or its
- * thread having moved on; unavailable is the Supervisor having nothing to run the turn with, which
- * is not the client's fault and not a permanent answer. `unreadable-thread` is the Supervisor's
- * own damaged row, so it is the only one that is a fault of this service.
- *
- * The table is total over every code the thread surface and the turn path can produce, including
- * the lease codes only a running turn reaches today. That is deliberate: the compiler fails this
- * file when a new code appears, which is safer than a default status that would answer a fault
- * nobody chose an answer for.
+ * The table is total over every code the thread surface and turn path can produce, so the compiler
+ * fails when a new code appears rather than a default status answering a fault nobody chose.
  */
 const TURN_STATUS = {
   "invalid-project-id": 400,
@@ -51,11 +40,8 @@ const TURN_STATUS = {
 const TurnBody = Schema.Struct({ prompt: Schema.String });
 
 /**
- * The frames, as a response the browser can read while the turn runs.
- *
- * `no-store` because a turn is not a document, and `nosniff` because a stream of JSON lines must
- * not be sampled into some other content type. Cancelling this body is what tells the Supervisor
- * the browser is gone, so nothing here buffers it.
+ * `nosniff` because a stream of JSON lines must not be sampled into another content type. Cancelling
+ * this body tells the Supervisor the browser is gone, so nothing here buffers it.
  */
 function turnStreamResponse(frames: ReadableStream<Uint8Array>): Response {
   return new Response(frames, {
@@ -85,7 +71,6 @@ const turnResponse = Effect.fnUntraced(
   ),
 );
 
-/** Route one project turn, or answer `undefined` so the owner API can try its other routes. */
 export function routeProjectTurnRequest(
   request: Request,
   supervisor: TurnApiSupervisor,

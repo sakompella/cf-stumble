@@ -28,10 +28,7 @@ function withIgnoredFetchChanges(handle: BackendHandle): BackendHandle {
   };
 }
 
-/**
- * Decorate one backend without changing its transport or any RPC except sync.fetchChanges, and
- * report the runtime each connect reached.
- */
+/** Changes only sync.fetchChanges, and reports the runtime each connect reached. */
 export function withWorkspaceSyncIgnore(
   backend: WorkspaceBackend,
   connected?: (runtimeId: string | undefined) => void,

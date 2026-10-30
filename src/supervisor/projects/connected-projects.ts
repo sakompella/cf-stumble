@@ -10,19 +10,6 @@ import {
 } from "../../project-catalog.js";
 import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 
-/**
- * The repositories this tenant has connected, and the only place that list is decided.
- *
- * It is a table rather than a constant because connecting a repository is something the owner does
- * at runtime: the catalog starts empty, grows by one row per connection, and every consumer
- * resolves ids against whatever it holds now. Identity comes from the repository URL
- * (`projectIdForRepository`), so connecting the same repository twice converges on the row that is
- * already there instead of adding a second project for the same clone, and renaming a project or
- * connecting a third one moves nothing.
- *
- * Nothing here is credential-bearing. A row is an id, a name a person chose, a public repository
- * URL, and when it was connected.
- */
 type ConnectedProject = Readonly<{
   id: ProjectId;
   displayName: string;
@@ -37,10 +24,7 @@ type ConnectedProjectRow = {
   readonly connected_at: number;
 };
 
-/**
- * Why a repository did not become a project. Ids are injective, so two different repositories never
- * reduce to one id; a conflict means the URL derives the harness entry's id.
- */
+/** A conflict means the URL derives the harness entry's id. */
 type ConnectProjectProblem = Readonly<{
   code: "invalid-repository-url" | "project-id-conflict";
 }>;
@@ -49,7 +33,6 @@ type ConnectProjectResult =
   | Readonly<{ ok: true; project: Project; alreadyConnected: boolean }>
   | Readonly<{ ok: false; problem: ConnectProjectProblem }>;
 
-/** What a caller asks for. Both fields are client text; neither becomes a path or a command. */
 interface ConnectProjectInput {
   readonly repositoryUrl: unknown;
   readonly displayName?: unknown;
@@ -102,7 +85,6 @@ export class ConnectedProjects {
     `);
   }
 
-  /** Every connected project, oldest first. The order is presentation; nothing resolves by it. */
   list(): readonly ConnectedProject[] {
     return this.sql
       .exec<ConnectedProjectRow>(
@@ -113,7 +95,6 @@ export class ConnectedProjects {
       .map((row) => projectFromRow(row));
   }
 
-  /** The tenant's catalog, as every consumer of `resolveProject` needs it. */
   catalog(): ProjectCatalog {
     return Object.freeze(
       this.list().map(({ id, displayName, repositoryUrl }) => ({
@@ -124,14 +105,6 @@ export class ConnectedProjects {
     );
   }
 
-  /**
-   * Connect one repository, or converge on the project that already holds it.
-   *
-   * A repeat of the same repository, in any spelling or case, returns the existing project with
-   * `alreadyConnected`, so a caller that retries after a lost response gets the same project
-   * rather than a second one. Ids are injective and ignore case, as GitHub does, so a row with
-   * this id holds this repository.
-   */
   connect(input: ConnectProjectInput, now: number): ConnectProjectResult {
     const repositoryUrl = canonicalRepositoryUrl(input.repositoryUrl);
     const id = repositoryUrl === undefined ? undefined : projectIdForRepository(repositoryUrl);
@@ -141,9 +114,7 @@ export class ConnectedProjects {
     }
 
     if (id === HARNESS_PROJECT_ID) {
-      // The harness entry owns that id and is always in the selectable catalog, so a row holding
-      // it could never be selected. Refusing here is the same answer as any other id collision:
-      // cf-stumble will not store a project nobody can reach.
+      // The harness entry owns that id, so a row holding it could never be selected.
       return { ok: false, problem: { code: "project-id-conflict" } };
     }
 
@@ -177,11 +148,6 @@ export class ConnectedProjects {
     });
   }
 
-  /**
-   * Remove one project's row. This is the undo half of a connection whose clone never landed: the
-   * catalog is what the page lists and what `resolveProject` answers from, so a project that has
-   * no repository in the workspace must not stay in it.
-   */
   disconnect(id: ProjectId): void {
     this.sql.exec(`DELETE FROM connected_projects WHERE project_id = ?`, id);
   }

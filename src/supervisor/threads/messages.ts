@@ -10,11 +10,7 @@ import {
   type ThreadMessageRole,
 } from "./message-fields.js";
 
-/**
- * A stored thread that cannot be read back as Pi messages. The Supervisor wrote the row itself, so
- * this means the row was corrupted rather than that a caller sent something bad, and `reason`
- * describes the entry that failed rather than restating the caller's request.
- */
+/** The Supervisor wrote the row, so this means corruption rather than a bad caller. */
 export class ThreadMessagesUnreadable extends Data.TaggedError("ThreadMessagesUnreadable")<{
   readonly reason: string;
   readonly message: string;
@@ -28,12 +24,7 @@ function isThreadMessageRole(value: unknown): value is ThreadMessageRole {
   return typeof value === "string" && Object.hasOwn(THREAD_MESSAGE_FIELDS, value);
 }
 
-/**
- * Encode the thread for its SQLite column. Each message keeps exactly the fields its role declares
- * in {@link THREAD_MESSAGE_FIELDS}, so a field Pi adds without a rule is not silently stored as
- * something the parser would then reject. Fields holding `undefined` are left out, which is what
- * JSON does with them anyway and what the parser expects for an absent optional field.
- */
+/** Fields holding `undefined` are left out, as the parser expects for an absent optional field. */
 export function serializeThreadMessages(messages: readonly AgentMessage[]): string {
   return JSON.stringify(messages.map((message) => storedMessage(message)));
 }
@@ -79,11 +70,7 @@ interface RestoredMessage {
   readonly role: ThreadMessageRole;
 }
 
-/**
- * Rebuild one message from its stored fields. This is the only place that claims a decoded value
- * is an `AgentMessage`, and it claims it after checking the role and every field the role
- * declares, so nothing reaches the rest of the Supervisor as a message until it is one.
- */
+/** The only place that claims a decoded value is an `AgentMessage`, after checking the role and every declared field. */
 function restoredMessage(
   role: ThreadMessageRole,
   fields: readonly (readonly [string, unknown])[],
@@ -137,10 +124,6 @@ function parseThreadMessage(value: unknown): Result.Result<AgentMessage, ThreadM
   return Result.succeed(restoredMessage(role, fields));
 }
 
-/**
- * Recognize a decoded list of Pi messages. Both a stored row and a conversation arriving over RPC
- * come through here, so a thread is proved the same way whichever side produced it.
- */
 export function parseAgentMessages(
   value: unknown,
 ): Result.Result<readonly AgentMessage[], ThreadMessagesUnreadable> {
@@ -164,11 +147,7 @@ export function parseAgentMessages(
   return Result.succeed(messages);
 }
 
-/**
- * Decode a stored thread. An absent or empty column is a thread nobody has written to yet, which
- * is an empty conversation rather than a fault: every catalog project has a thread from the moment
- * it exists.
- */
+/** An absent or empty column is an empty conversation, not a fault. */
 export function parseThreadMessages(
   stored: string | null,
 ): Result.Result<readonly AgentMessage[], ThreadMessagesUnreadable> {

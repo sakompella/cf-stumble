@@ -8,15 +8,8 @@ import type {
 } from "./generation.js";
 
 /**
- * A plain-value snapshot of the generation_state singleton. The deciders below take one of these
- * instead of reading SQLite, so the activation and preparation-check rules are pure: they can be
- * unit-tested with literals, no Durable Object and no storage. The imperative shell in index.ts
- * reads this, calls a decider, and applies the effects the decision names.
- *
- * The deciders compute the next epoch as an absolute value (current + 1). That is
- * safe only because the shell runs them inside a single Durable Object transaction, which is
- * single-threaded, so nothing interleaves between the read and the write. In a concurrent store
- * this would be a lost update and the epoch would have to be incremented atomically in SQL.
+ * Plain snapshot of generation_state so the deciders are pure. Their current + 1 epoch is safe only
+ * because the shell runs them in one single-threaded Durable Object transaction.
  */
 export type GenerationState = {
   readonly activeLabel: GenerationLabel | undefined;
@@ -57,8 +50,6 @@ type PreparationCheckDecision =
   | {
       readonly kind: "record";
       readonly generation: Generation;
-      // A resulting status to write, or undefined when the recorded outcome only confirms the
-      // current one and the effect is a no-op.
       readonly statusUpdate: GenerationStatus | undefined;
       readonly nextEpoch: number;
       readonly effect: "recorded" | "no-op";

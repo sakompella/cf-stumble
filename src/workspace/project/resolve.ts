@@ -9,25 +9,14 @@ import {
 } from "./protocol.js";
 
 /**
- * Every addressed path lives beneath the tenant's workspace root. `workspace-layout.ts` owns that
- * root and the facet's path-escape guard reads the same constant, so address translation here and
- * the guard there cannot come to disagree about what is inside it.
- *
- * The root is the whole workspace rather than one repository. The harness checkout, every project
- * clone, and the managed instructions are directories inside it (ADR-0038), so an agent can read a
- * sibling repository when the work needs it, exactly as it could on a development machine: project
- * selection chooses a working directory, not a boundary.
+ * `workspace-layout.ts` owns the root and the facet's path-escape guard reads the same constant, so
+ * address translation and the guard cannot disagree. The root is the whole workspace, so an agent
+ * can read a sibling repository; project selection chooses a working directory, not a boundary.
  */
 
-/** Linux's own symlink-follow cap (`MAXSYMLINKS`). Applies across one whole resolve call. */
+/** Linux's own symlink-follow cap (`MAXSYMLINKS`), across one whole resolve call. */
 const MAX_SYMLINK_FOLLOWS = 40;
 
-/**
- * Parses an `unknown` RPC argument into path components addressed beneath the workspace root, e.g.
- * `"/src/index.ts"` -> `["src", "index.ts"]` and `"/"` -> `[]`. Rejects anything that is not a
- * clean, already-normalized absolute address: a non-string, a backslash, a NUL byte, a missing
- * leading slash, or any `.`/`..`/empty segment (which would otherwise hide a lexical escape).
- */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC path-parsing boundary.
 export function parseAddressedPath(input: unknown): ProjectResult<readonly string[]> {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC path argument is untrusted.
@@ -64,7 +53,6 @@ function isWithinRoot(path: string): boolean {
   return path === WORKSPACE_ROOT || path.startsWith(`${WORKSPACE_ROOT}/`);
 }
 
-/** Splits a symlink target into components, dropping empty parts but keeping `.`/`..`. */
 function splitTarget(target: string): string[] {
   return target.split("/").filter((part) => part.length > 0);
 }
@@ -74,13 +62,10 @@ type ResolveOutcome =
   | { kind: "missing"; parentPath: string; name: string };
 
 interface ResolveOptions {
-  /** Follow the addressed path's own final component if it is a symlink. */
   followFinalSymlink: boolean;
-  /** Create missing intermediate directories (never the final component) as plain directories. */
   createMissingDirs: boolean;
 }
 
-/** One step of the walk: either keep going from a new position, or the whole resolve is done. */
 type SegmentStep =
   | { kind: "continue"; resolved: string }
   | { kind: "settle"; result: ProjectResult<ResolveOutcome> };
@@ -116,12 +101,10 @@ function stepPastSymlink(
   const target = provider.readlinkSync(place.candidate);
   queue.unshift(...splitTarget(target));
 
-  // An absolute target restarts from the filesystem root; a relative one resolves against the
-  // symlink's own containing directory, which is `place.resolved` (the position before this step).
+  // An absolute target restarts from the root; a relative one resolves against the symlink's containing directory.
   return { kind: "continue", resolved: target.startsWith("/") ? "/" : place.resolved };
 }
 
-/** Processes one addressed component once its lstat is known, deciding continue vs. settle. */
 function stepPastNode(
   provider: ProjectFilesystemProvider,
   options: ResolveOptions,
@@ -146,7 +129,6 @@ function stepPastNode(
   return { kind: "continue", resolved: place.candidate };
 }
 
-/** Steps over one ordinary (non-`.`/`..`) segment: an existing node, or a missing one. */
 function stepOneSegment(
   provider: ProjectFilesystemProvider,
   options: ResolveOptions,
@@ -169,13 +151,9 @@ function stepOneSegment(
 }
 
 /**
- * Resolves an addressed path to a real, in-root, symlink-free provider path, walking one
- * component at a time with `lstatSync`/`readlinkSync` exactly as directed: `provider.realpath()`
- * only normalizes lexically and is never called here. Intermediate directory symlinks are always
- * followed; the final component follows `options.followFinalSymlink`. The root boundary is
- * checked immediately after every step that changes the current position, including every
- * symlink substitution, so an escape is caught at the moment it happens rather than only once
- * resolution finishes.
+ * `provider.realpath()` only normalizes lexically, so each component is walked with
+ * `lstatSync`/`readlinkSync`. The root boundary is checked after every step that changes position,
+ * so an escape is caught when it happens.
  */
 export function resolveAddressedPath(
   provider: ProjectFilesystemProvider,
@@ -273,7 +251,6 @@ export function fileInfoOf(
   };
 }
 
-/** Resolves the same segments fully (following every symlink) to build a `canonicalPath` result. */
 export function resolveCanonicalPath(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],

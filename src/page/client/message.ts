@@ -3,11 +3,6 @@ import { defineMessageUnion } from "foldkit/message";
 import { ChatGPTConnection, ControlKind, GitHubReport, Project, ThreadFacts } from "./model.js";
 import { TurnFrame } from "./frames.js";
 
-/**
- * Every fact the page can learn. A request's result arrives as one of three Messages: it
- * succeeded, the Worker refused it (`Rejected*`, carrying the wording the page shows), or it never
- * reached the Worker (`Failed*`, carrying the transport detail for the page error banner).
- */
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
   ClickedProject: { projectId: Schema.String },

@@ -1,10 +1,7 @@
 import { createAssistantMessageEventStream } from "@cf-stumble/pi";
 import type { AssistantMessageEventStream, StreamFn } from "@cf-stumble/pi";
 
-/**
- * `@cf-stumble/pi` exports `StreamFn` but not the `Context` it receives, so derive both that and
- * its message type from the function it belongs to rather than restating either shape here.
- */
+/** `@cf-stumble/pi` does not export `Context`, so it is derived from `StreamFn`. */
 type Context = Parameters<StreamFn>[1];
 
 type Message = Context["messages"][number];
@@ -21,12 +18,8 @@ export { ROUTE_MODEL } from "./stream-assembler.js";
 type ContentBlock = Extract<Message, { role: "toolResult" }>["content"][number];
 
 /**
- * One content block as text the model route can carry. An image becomes a note that says it was
- * left out, so the model knows a picture exists that it cannot see and does not answer about it.
- *
- * Generation 0's read tool declines images, so its own turns produce none. A thread saved by an
- * earlier build can still hold one, and rejecting it here would fail every later turn on that
- * thread, because the Supervisor saves the failed turn's conversation with the image still in it.
+ * An older saved thread can hold an image the read tool now declines, and rejecting it would fail every
+ * later turn on that thread.
  */
 function textBlock(block: ContentBlock): PiTextContent {
   return block.type === "text"
@@ -37,7 +30,6 @@ function textBlock(block: ContentBlock): PiTextContent {
       };
 }
 
-/** Narrows one Pi message to the text-only shape the model route's closed message union carries. */
 function routableMessage(message: Message): PiMessage {
   if (message.role === "assistant") return message;
 
@@ -77,12 +69,7 @@ function isAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
 
-/**
- * Read one line of NDJSON the model route emits and narrow it to {@link ModelStreamEvent}. This
- * hop is internal (both ends live in this generation's own code, one Worker RPC apart), so this is
- * a shape check against a closed union rather than the untrusted-provider parsing `model-route.ts`
- * already did; an unrecognized `type` still degrades to a terminal error instead of throwing.
- */
+/** Both ends are this generation's own code, so this checks a closed union; an unrecognized `type` degrades to a terminal error. */
 function parseStreamEventLine(line: string): ModelStreamEvent | undefined {
   let parsed: unknown;
 
@@ -155,11 +142,6 @@ function applyModelStreamEvent(
   }
 }
 
-/**
- * Read one decoded NDJSON line at a time from the model route's stream, translate each into
- * `assembler`'s Pi events, and stop at the first `done`/`error` event or when `signal` aborts.
- */
-// oxlint-disable-next-line max-lines-per-function -- The reader owns one stream's cancellation and terminal event.
 async function pumpModelStream(
   modelStream: ReadableStream<Uint8Array>,
   assembler: TurnAssembler,
@@ -215,7 +197,6 @@ async function pumpModelStream(
       }
     }
 
-    // The provider stream closed without a terminal event: nothing more will arrive.
     assembler.fail(stream, "error", "the model route ended its stream without a result");
 
     return "failed";
@@ -275,20 +256,8 @@ function streamOnce(
 }
 
 /**
- * Drives Pi's `Agent` from the host model route. `model.runStream` answers with incremental
- * events as the provider produces them; this pushes each into Pi's own `AssistantMessageEvent`
- * protocol as it arrives instead of buffering the whole reply first.
- *
- * Every failure — a route that rejects, reports a model problem, or answers with content this
- * generation cannot represent — becomes an `error` event. Pi records that on the agent's state,
- * which is what turns it into one reported turn problem rather than a thrown turn.
- *
- * An aborted `signal` stops the route being called at all when the abort happens before the model
- * call starts, and stops this route from reading any further chunks when the abort happens
- * mid-stream: the reader is cancelled and no further model calls are made. It does not prove the
- * provider itself stops producing tokens for an already-issued inference — Workers AI's binding
- * exposes no cancellation signal for a call already in flight — so cancellation here bounds what
- * this route spends afterward, not what the provider does upstream.
+ * Every failure becomes an `error` event, which Pi records as one reported turn problem. Abort bounds
+ * what this route spends afterward; Workers AI's binding has no cancellation for a call in flight.
  */
 export function createRouteStreamFn(model: ModelCapability, signal?: AbortSignal): StreamFn {
   return (_model, context) =>

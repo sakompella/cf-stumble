@@ -23,7 +23,6 @@ export type ExecSettlement = Readonly<{
 
 export interface ExecOperation {
   readonly events: ReadableStream<Uint8Array>;
-  /** Requests a kill. A no-op once the operation has reached a terminal outcome. */
   requestKill(reason?: ExecKillReason): void;
 }
 
@@ -31,7 +30,6 @@ interface SettleState {
   settled: boolean;
   seq: number;
   timer: ReturnType<typeof setTimeout> | undefined;
-  /** Set once `execBackend.exec()` resolves and this operation is still unsettled. */
   handle: ExecBackendHandle | undefined;
   readonly startedAt: number;
   killReason: ExecKillReason | null;
@@ -122,11 +120,9 @@ function resumePump(state: SettleState): void {
 }
 
 /**
- * Publishes exactly one terminal event and closes the stream. Every later call, from any trigger,
- * is a no-op: whichever cause settles first wins the race. If the backend handle has arrived by
- * the time this runs, `killBackend` fires a fire-and-forget `handle.kill()` so a hanging or
- * rejecting backend kill can never block or reject this operation. If the handle has not arrived
- * yet, there is nothing to kill here; `disposeLateHandle` kills it once it shows up instead.
+ * Publishes exactly one terminal event; whichever cause settles first wins. `killBackend` is
+ * fire-and-forget so a hanging or rejecting backend kill can never block or reject this operation.
+ * A handle that has not arrived yet is killed by `disposeLateHandle`.
  */
 function settle(
   state: SettleState,
@@ -176,12 +172,7 @@ function failed(
   };
 }
 
-/**
- * Kills and disposes a backend handle that resolved after this operation already settled (by
- * timeout, manual kill, or a start rejection). Nothing was ever enqueued for it and nothing is
- * enqueued here; the handle is only ever killed once, whether that happens inline in `settle` or,
- * for a handle that arrives late, here.
- */
+/** The handle is only ever killed once, whether inline in `settle` or here for a late arrival. */
 function disposeLateHandle(handle: ExecBackendHandle): void {
   void handle.reader.cancel().catch(() => {});
   void handle.kill().catch(() => {});
@@ -193,9 +184,8 @@ interface Decoders {
 }
 
 /**
- * Emits whatever each decoder still holds, so a truncated trailing sequence reaches the consumer
- * as U+FFFD before the terminal event. Run only when the backend itself ends the stream (exit, or
- * a close without an exit); a kill, timeout, or failed read settles at once and drops pending bytes.
+ * Run only when the backend itself ends the stream; a kill, timeout, or failed read settles at
+ * once and drops pending bytes.
  */
 function flushDecoders(
   state: SettleState,
@@ -209,7 +199,6 @@ function flushDecoders(
   }
 }
 
-/** Applies one backend read result. Returns `true` once the operation has reached a terminal outcome. */
 function applyBackendRead(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -270,7 +259,6 @@ function waitForDemand(
   });
 }
 
-/** Pumps backend events onto the stream until a terminal outcome settles it or it is cancelled. */
 async function pumpBackendEvents(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -305,10 +293,7 @@ async function pumpBackendEvents(
   }
 }
 
-/**
- * Invokes `execBackend.exec()`, converting a synchronous throw into a rejected promise so a
- * misbehaving backend is handled identically whether it throws or rejects.
- */
+/** A synchronous throw becomes a rejection, so a backend that throws is handled like one that rejects. */
 function startBackendExec(
   execBackend: ExecBackend,
   input: ExecBackendInput,
@@ -321,11 +306,7 @@ function startBackendExec(
   }
 }
 
-/**
- * Arms the host timeout: whichever of timeout, manual kill, or backend settlement fires first wins.
- * A timeout that stands for the turn's deadline is the turn ending, so it settles as `killed` by
- * `turn-end`, exactly as the capability's own turn timer would have settled it.
- */
+/** A timeout that stands for the turn's deadline is the turn ending, so it settles as `killed` by `turn-end`. */
 function armTimeout(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -345,11 +326,6 @@ function armTimeout(
   }, timeoutMs);
 }
 
-/**
- * Starts `execBackend.exec()` without awaiting it and wires its eventual settlement: a handle
- * that arrives before this operation has settled starts the pump loop; one that arrives after is
- * disposed without emitting anything; a rejection before settlement is one failed terminal event.
- */
 function watchBackendExec(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -384,27 +360,11 @@ function watchBackendExec(
 }
 
 /**
- * Runs one command's lifecycle to exactly one terminal event: exit wins with its code; a manual
- * kill or timeout emits `killed`/`timed-out`; a closed stream that never produced an exit event,
- * a failed read, or a rejected `execBackend.exec()` call emits `failed`. Whichever of these
- * settles first wins the race and every later trigger — including a late event still in flight
- * from the backend reader, or a backend handle that resolves after the operation already settled
- * — becomes a no-op that never emits a second event.
- *
- * The operation identity (this function's return value, including its event stream) is produced
- * synchronously and its host timeout timer is armed before `execBackend.exec()` is ever awaited,
- * so a backend that never resolves its handle still leaves the operation bounded by `timeoutMs`.
- * If the timeout or a manual kill wins that race, the eventual handle — if `exec()` ever settles
- * — is killed and disposed the moment it arrives, without emitting anything else.
- *
- * A timeout or manual kill emits its terminal event and cancels the backend reader before ever
- * awaiting `handle.kill()`; the kill call itself is fire-and-forget so a hanging or rejecting
- * backend kill can never block or reject this operation. `onSettle` runs synchronously with the
- * terminal event so the caller can drop its own references (map entry, timer) the instant the
- * operation ends.
- *
- * `timeoutEndsTurn` marks a `timeoutMs` that was capped at the turn's deadline: reaching it is the
- * turn ending, so it settles as `killed` by `turn-end` rather than `timed-out`.
+ * One terminal event per command; every later trigger is a no-op. The host timeout is armed before
+ * `execBackend.exec()` is awaited, so a backend that never resolves its handle is still bounded by
+ * `timeoutMs`. A timeout or kill cancels the backend reader before awaiting `handle.kill()`.
+ * `onSettle` runs synchronously with the terminal event so the caller can drop its references.
+ * `timeoutEndsTurn` marks a `timeoutMs` capped at the turn's deadline.
  */
 export function startExecOperation(
   execBackend: ExecBackend,

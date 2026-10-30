@@ -5,11 +5,6 @@ import type { HarnessCommit } from "../../harness-commit.js";
 import type { HarnessBuildStepName } from "../../harness-build.js";
 import { canonicalModuleMap } from "./module-map.js";
 
-/**
- * The build plan itself belongs to the workspace that runs it, so the Supervisor and the Workspace
- * Host plan one labeled commit the same way. This module keeps only what the Supervisor adds:
- * the build's output shape, its failures, and validation of what a build produced.
- */
 export {
   HARNESS_BUILD_CONFIGURATION,
   planHarnessBuild,
@@ -25,11 +20,7 @@ export type BuiltModuleMapFile = Readonly<{
   modules: readonly Readonly<{ name: string; source: string }>[];
 }>;
 
-/**
- * What a failed build step printed: the end of each stream, with credentials redacted before the
- * cut. It travels only in the owner's submission response, never in a log. `truncated` is true when
- * either stream was longer than its tail.
- */
+/** Redacted stream tails. They go only to the owner's submission response, never to a log. */
 export type BuildStepDiagnostics = Readonly<{
   stdoutTail: string;
   stderrTail: string;
@@ -52,17 +43,12 @@ export type HarnessBuildProblem =
       readonly reason: MainHarnessArtifactProblem["code"];
     };
 
-/**
- * Validate the build's own output and give it the commit identity the Supervisor asked to build.
- * A build cannot claim to be another generation, because the commit comes from the caller.
- */
+/** A build cannot claim to be another generation: the commit comes from the caller. */
 export function moduleMapFromBuildOutput(
   harnessCommit: HarnessCommit,
   output: BuiltModuleMapFile,
 ): Result.Result<MainHarnessArtifactInput, HarnessBuildProblem> {
-  // The build wrote this file, so the declared type describes what JSON decoding produced, not a
-  // checked value. This guard keeps a non-object from throwing, and `MainHarnessArtifact.parse`
-  // checks every field that can reach a module map.
+  // The declared type is what JSON decoding produced, not a checked value; this keeps a non-object from throwing.
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: decoded build output is untrusted.
   if (output === null || typeof output !== "object") {
     return Result.fail({ code: "build-output-invalid", harnessCommit, reason: "invalid-artifact" });

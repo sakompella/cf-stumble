@@ -43,18 +43,12 @@ type StartedExec = { operationId: string; events: ReadableStream<Uint8Array> };
 type ProjectContainerState = Readonly<{ generation: number }>;
 
 type ProjectRpcTargetOptions = Readonly<{
-  /** The turn's remaining budget, already parsed by WorkspaceHost. */
   remainingMs?: number;
-  /** Changes whenever the Workspace Host observes a container replacement. */
   containerState?: ProjectContainerState;
-  /** Told when the capability does work, so the Host knows the workspace is not idle. */
   activity?: ProjectActivity;
 }>;
 
-/**
- * A timeout capped at the turn's budget is the turn deadline: the turn timer and the exec timer
- * both mean "the turn ended", so whichever fires first must report the same outcome.
- */
+/** A timeout capped at the turn's budget means the turn ended, so the turn timer and exec timer must report the same outcome. */
 function capAtBudget(requestedMs: number, remainingMs: number | undefined) {
   if (remainingMs === undefined) return { timeoutMs: requestedMs, timeoutEndsTurn: false };
 
@@ -73,11 +67,9 @@ function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectRes
 }
 
 /**
- * The narrow, project-only RPC surface for one Computer workspace: exactly `lstat`, `readFile`,
- * `writeFile`, `listFiles`, `startExec`, `kill`, and `endTurn`. It never exposes a build, fetch, raw
- * Computer, container, or other generic capability. Its four filesystem methods confine addressed
- * paths beneath the fixed workspace root, and `startExec` confines its working directory there
- * while accepting an arbitrary shell command.
+ * Never exposes a build, fetch, raw Computer, container, or other generic capability. Filesystem
+ * methods confine paths beneath the workspace root; `startExec` confines its working directory
+ * there while accepting an arbitrary shell command.
  */
 export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContract {
   readonly #provider: ProjectFilesystemProvider;
@@ -164,8 +156,8 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
     if (this.#containerWasReplaced()) {
-      // Filesystem state is durable across a replacement. Refuse only this first exec so callers
-      // receive an explicit restart outcome, then permit a retry against the new container.
+      // Files are durable across a replacement. Refuse only this first exec so callers get an
+      // explicit restart outcome, then permit a retry against the new container.
       this.#containerGeneration = this.#containerState?.generation;
 
       return fail("container-restarted");
@@ -201,10 +193,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
     const { timeoutMs, timeoutEndsTurn } = capAtBudget(input.timeoutMs, remainingMs);
 
-    // The operation identity, its event stream, and its host timeout timer are all produced
-    // synchronously here, before `execBackend.exec()` is ever awaited: see `startExecOperation`
-    // for why a slow or never-settling backend handle must not leave this call, or the operation
-    // it starts, unbounded.
     const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
 
     // The operation holds the workspace until it settles, even past the turn's deadline.
@@ -330,11 +318,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     return undefined;
   }
 
-  /**
-   * Run one file operation, or refuse it once the turn is over. A refused call is not workspace
-   * activity. A container replacement does not refuse file access: the files are durable, so only
-   * a command needs to hear that its container changed.
-   */
+  /** A container replacement does not refuse file access: the files are durable, so only a command needs to hear that its container changed. */
   #whileTurnLasts<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
     const ended = this.#turnEnded();
 

@@ -1,15 +1,6 @@
-/**
- * What the owner's ChatGPT connection tells its callers: the owner API and page see a
- * {@link ChatGPTConnectionView}, and the model route gets a {@link ChatGPTAccess}.
- */
-
 import type { ReconnectReason, StoredUsageLimit } from "./credential-store.js";
 import type { CallbackProblem } from "./oauth.js";
 
-/**
- * The plan's usage limit refused a model call at `reachedAt`, and calls are answered from Workers
- * AI until `limitedUntil`. `null` means OpenAI named no end, and the next call asks ChatGPT again.
- */
 export type ChatGPTUsageLimit = StoredUsageLimit;
 
 export type ChatGPTConnectionStatus =
@@ -23,7 +14,7 @@ export type ChatGPTLoginView = Readonly<{
   expiresAt: number;
 }>;
 
-/** What the owner API and the page see. It never carries a token, a verifier, or a code. */
+/** It never carries a token, a verifier, or a code. */
 export type ChatGPTConnectionView = Readonly<{
   connection: ChatGPTConnectionStatus;
   login: ChatGPTLoginView | null;
@@ -47,9 +38,7 @@ export type ChatGPTLoginOutcome =
     }>;
 
 /**
- * The credential the model route may use now. `unavailable` means the token server was busy or
- * unreachable while the stored token could not be used; the stored tokens are unchanged.
- * `usage-limited` means a usage limit whose end OpenAI named has not ended yet.
+ * `unavailable` means the token server was busy or unreachable; the stored tokens are unchanged.
  */
 export type ChatGPTAccess =
   | Readonly<{ kind: "ready"; accessToken: string }>

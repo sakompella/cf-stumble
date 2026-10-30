@@ -1,11 +1,8 @@
 /**
- * The route a request reached, as the operational log names it. A path is request data: it can
- * carry a project id, and a path this Worker does not route can be anything a client typed. The
- * log therefore names the pattern, never the path, and a path outside the owner API is `relay`,
- * because the generation that serves decides what it means.
+ * A path is request data and can be anything a client typed, so the log names the pattern, never the
+ * path; a path outside the owner API is `relay`.
  */
 
-/** Owner API routes whose path is fixed, so the path is its own pattern. */
 const FIXED_ROUTES: ReadonlySet<string> = new Set([
   "/",
   "/health",
@@ -38,11 +35,7 @@ export function routePattern(pathname: string): string {
   return pathname.startsWith("/api/") ? "/api/unknown" : "relay";
 }
 
-/**
- * The project id a client named in `/api/projects/{id}{suffix}`, decoded but still a plain string.
- * The Supervisor resolves it against the catalog, so an id the catalog does not know comes back as
- * `unknown-project-id` rather than being guessed at here. An empty or undecodable id is no id.
- */
+/** The Supervisor resolves it against the catalog, so an unknown id is not guessed at here. */
 export function projectIdFromPath(
   pathname: string,
   suffix: "/thread" | "/thread/fresh" | "/turn" | "/disconnect",

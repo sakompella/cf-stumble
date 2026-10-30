@@ -6,12 +6,8 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 
 /**
- * The transcript as data. Both readers build it: the saved conversation a project selection loads,
- * and the frames a running turn appends (ADR-0037).
- *
- * Every value here came from a repository, a command, or a model, and the view renders each one as
- * a text child. Foldkit builds text children with text nodes, so repository content and model
- * output stay text and cannot become markup this page executes.
+ * Foldkit builds text children with text nodes, so repository content and model output stay text and
+ * cannot become markup this page executes.
  */
 
 const ToolOutput = Schema.Struct({
@@ -42,7 +38,6 @@ const DISPLAY_MAX_CHARACTERS = 20_000;
 
 const DISPLAY_MAX_LINES = 400;
 
-/** What the page will lay out, whatever the server allowed itself to send. */
 export type BoundedLines = Readonly<{ lines: readonly string[]; isShortened: boolean }>;
 
 export function boundedLines(value: string): BoundedLines {
@@ -72,7 +67,6 @@ export function diffLineKind(line: string): "hunk" | "added" | "removed" | "plai
   return line.startsWith("-") ? "removed" : "plain";
 }
 
-/** A tool call's one-line summary: its name, then at most 160 characters of its arguments. */
 export function toolSummaryText(toolName: string, argumentsJson: string): string {
   return argumentsJson === "" || argumentsJson === "{}"
     ? toolName
@@ -109,10 +103,7 @@ function finishedTool(tool: ToolEntry, result: ToolResult): ToolEntry {
   });
 }
 
-/**
- * A result lands in the block its start frame opened. A result whose start frame never arrived
- * still has to be readable, so it gets a block of its own at the end.
- */
+/** A result whose start frame never arrived gets a block of its own at the end. */
 export function withToolResult(
   transcript: readonly TranscriptEntry[],
   result: ToolResult,
@@ -134,7 +125,6 @@ export function withToolResult(
   );
 }
 
-/** Text a turn streams joins the assistant block it is writing, or opens a new one. */
 export function withAssistantText(
   transcript: readonly TranscriptEntry[],
   isAssistantOpen: boolean,
@@ -152,9 +142,8 @@ export function withAssistantText(
 }
 
 /**
- * The stored messages are Pi's, so this reader takes only what it understands: the text blocks of
- * a message and a tool result's name and output. Anything else is shown as its role and nothing
- * more, because a page that guessed at Pi's schema would break on the next Pi version.
+ * Anything the reader does not understand shows as its role only, since a page that guessed at Pi's
+ * schema would break on the next Pi version.
  */
 const SavedTextBlock = Schema.Struct({ type: Schema.Literal("text"), text: Schema.String });
 
@@ -199,7 +188,6 @@ function savedToolResult(message: SavedMessage): ToolResult {
   };
 }
 
-/** An assistant message that holds only tool calls has no text, and its tool results show it. */
 function savedTextEntry(message: SavedMessage): Option.Option<TranscriptEntry> {
   const body = contentText(message.content);
 
@@ -216,10 +204,7 @@ function savedTextEntry(message: SavedMessage): Option.Option<TranscriptEntry> {
 
 const ProviderFallback = Schema.Struct({ type: Schema.Literal("provider-fallback") });
 
-/**
- * The model route answered this message from Workers AI because the owner's ChatGPT plan had
- * reached its usage limit; generation 0 records that as a diagnostic on the message (ADR-0047).
- */
+/** The model route records a Workers AI fallback as a diagnostic on the message. */
 function isFallbackAnswer(message: SavedMessage): boolean {
   const diagnostics: unknown = message.diagnostics;
 
@@ -230,10 +215,7 @@ function isFallbackAnswer(message: SavedMessage): boolean {
   );
 }
 
-/**
- * The same rule as {@link withToolResult}, in one pass: a result replaces the latest block with
- * its id, which `toolBlocks` remembers, so a long conversation is not copied once per message.
- */
+/** One pass; `toolBlocks` remembers each block by id, so a long conversation is not copied per message. */
 function savedEntries(messages: readonly unknown[]): readonly TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   const toolBlocks = new Map<string, number>();
@@ -264,7 +246,6 @@ function savedEntries(messages: readonly unknown[]): readonly TranscriptEntry[] 
   return entries;
 }
 
-/** The saved conversation as a transcript, or `None` when the stored text is not a message list. */
 export function savedTranscript(conversation: string): Option.Option<readonly TranscriptEntry[]> {
   return Option.flatMap(
     Option.liftThrowable((raw: string): unknown => JSON.parse(raw))(conversation),

@@ -40,7 +40,6 @@ function unavailable(): WorkspaceFailure {
   return { ok: false, error: { code: "workspace-unavailable" } };
 }
 
-/** A command the server planned: its text, where it runs, and how long it may take. */
 type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
 
 export function runPlannedCommand(
@@ -67,7 +66,6 @@ function cloneCommandOutput(output: CommandOutput): CommandOutput {
   return { stdout: output.stdout, stderr: output.stderr, exitCode: output.exitCode };
 }
 
-/** A surface's work, answered `workspace-sync-incomplete` or `workspace-unavailable` on failure. */
 function answerDurableFailures(
   context: string,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything; it only picks a log label.
@@ -91,11 +89,7 @@ function timeoutOrUnavailable(thrown: unknown): string {
   return isTimeoutFailure(thrown) ? "timeout" : "workspace-unavailable";
 }
 
-/**
- * The build surface's effect shell. It redacts Computer failures, preserves command exit codes,
- * and returns only plain structured-cloneable values. It plans from the build configuration
- * alone, so it can neither run a project command nor reach a project file.
- */
+/** Plans from the build configuration alone, so it can neither run a project command nor reach a project file. */
 export function executeHarnessBuildRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
@@ -124,12 +118,6 @@ export function executeHarnessBuildRequest(
   );
 }
 
-/**
- * The provisioning surface's effect shell. It is separate from the build shell above because it
- * plans from a catalog project rather than from a harness commit: a provision clones the
- * repository the catalog names, and a build cannot reach it. Everything a turn does afterwards
- * goes through the project capability instead.
- */
 export function executeProjectProvisionRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
@@ -158,7 +146,6 @@ export function executeProjectProvisionRequest(
   );
 }
 
-/** The removal shell accepts only a parsed project id and derives every path server-side. */
 export function executeProjectRemovalRequest(
   input: Readonly<{
     operations: WorkspaceOperations;

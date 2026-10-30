@@ -1,12 +1,6 @@
 /**
- * Every element the owner acts on, and every element that shows a recorded result, carries one
- * stable identifier. The page renders what a reader must observe rather than keeping it in a
- * script variable, so a browser test reads the same values the owner reads.
- *
- * This map is the single source. The page's views and the tests both use it, so an identifier
- * cannot drift between what the page renders and what a test looks for. Elements a turn
- * creates while it streams — one block per message, one collapsible per tool call — carry classes
- * rather than identifiers, because there is no fixed number of them to name.
+ * The single source for the page views and the tests. Elements a turn creates while it streams carry
+ * classes rather than identifiers, because there is no fixed number of them to name.
  */
 export const OWNER_PAGE_IDS = {
   root: "owner-page",
@@ -81,13 +75,8 @@ export const OWNER_PAGE_IDS = {
 
 type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];
 
-/** Every identifier the page renders. */
 export const OWNER_PAGE_ELEMENT_IDS: readonly OwnerPageId[] = Object.values(OWNER_PAGE_IDS);
 
-/**
- * The classes the streaming conversation writes. A frame arriving during a turn creates elements,
- * so these are how a reader — and a browser test — names something that has no fixed identifier.
- */
 export const OWNER_PAGE_CLASSES = {
   message: "message",
   toolCall: "tool-call",

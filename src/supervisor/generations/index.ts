@@ -35,11 +35,8 @@ type StateRow = {
 };
 
 /**
- * Owns the generation registry and the singleton control state. Every mutating method is an
- * imperative shell: it reads the plain values it needs, calls a pure decider in ./decisions.ts,
- * and applies the effects that decision names. All three run inside one Durable Object transaction
- * (labelInTransaction and activateInTransaction under the caller's; recordPreparationCheck opens
- * its own), which is what makes the deciders' current-plus-one arithmetic safe.
+ * Mutating methods read plain values, call a pure decider in ./decisions.ts and apply its effects,
+ * all in one Durable Object transaction, which makes the deciders' current + 1 epoch safe.
  */
 export class Generations {
   private readonly storage: DurableObjectStorage;

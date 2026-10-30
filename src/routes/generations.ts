@@ -13,23 +13,13 @@ export type GenerationControlSupervisor = {
   readonly controlGeneration: (command: GenerationCommand) => Promise<GenerationControlResult>;
 };
 
-/**
- * Submission needs the directly-applied control operation and the preparation the
- * Supervisor runs for the label that operation returns. `prepareGeneration` resolves the module map
- * for the labeled harness commit and runs the bounded startup check; it never changes
- * the active generation.
- */
+/** `prepareGeneration` never changes the active generation. */
 export type GenerationSubmissionSupervisor = GenerationControlSupervisor & {
   readonly prepareGeneration: (label: number) => Promise<StartupCheckResult>;
 };
 
 type SubmissionOutcome = Extract<GenerationControlResult, { readonly ok: true }>["outcome"];
 
-/**
- * What the owner reads back from one submission: the generation the Supervisor labeled, and the
- * preparation result recorded against that label. A rejected submission carries the control problem
- * instead and no preparation ran.
- */
 export type GenerationSubmissionResult =
   | {
       readonly ok: true;
@@ -39,11 +29,9 @@ export type GenerationSubmissionResult =
   | Extract<GenerationControlResult, { readonly ok: false }>;
 
 /**
- * What each control refusal is, as an HTTP fact. A request the Supervisor can never accept is 400;
- * a label it does not know is 404; a request that current generation state refuses, such as a stale
- * epoch, is 409. The body keeps
- * `ok: false` and the code, so a client reads the refusal the same way at any status. The table is
- * total over the codes, so a new code fails the compiler here until someone picks its status.
+ * 400 is a request the Supervisor can never accept, 404 an unknown label, 409 a request current
+ * state refuses, such as a stale epoch. The table is total over the codes, so a new code fails the
+ * compiler until someone picks its status.
  */
 const CONTROL_REFUSAL_STATUS = {
   "invalid-harness-commit": 400,
@@ -60,15 +48,13 @@ function refusalResponse(
   return Response.json(refusal, { status: CONTROL_REFUSAL_STATUS[refusal.problem.code] });
 }
 
-/** Activation and rollback take the same request. Only the command differs. */
 const GenerationControlBody = Schema.Struct({ observedEpoch: Count, label: Count });
 
 type ControlCommandKind = "activate" | "rollback";
 
 /**
- * A submission carries only a harness commit. Only activation and rollback carry the observed
- * epoch, because labeling a commit and checking it decide nothing about what serves, so a body
- * that carries one is malformed rather than stale.
+ * A submission carries no observed epoch, since labeling and checking decide nothing about what
+ * serves; a body with one is malformed rather than stale.
  */
 const GenerationSubmissionBody = Schema.Struct({ harnessCommit: Schema.String });
 
@@ -81,11 +67,7 @@ function command(
     : { kind: "rollback", label: body.label, observedEpoch: body.observedEpoch };
 }
 
-/**
- * The Supervisor applies activation and rollback directly to the generation tables and returns the
- * outcome: there is no request journal, so a rejected request is a fresh decision from
- * current state rather than a replayed one. The caller never names a Durable Object.
- */
+/** There is no request journal, so a rejected request is a fresh decision from current state. */
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
     const body = yield* decodeRequestBody(request, GenerationControlBody);
@@ -108,22 +90,12 @@ export const handleGenerationControl = Effect.fnUntraced(
 );
 
 /**
- * Submit a harness commit as a generation candidate. The Supervisor labels the commit directly
- * (labeling a commit that already has a generation returns the existing generation rather
- * than labeling it twice), then prepares that label: it reads the stored module map or
- * builds and stores the commit, then runs the bounded startup check. Both steps record evidence
- * against the candidate and neither touches the active generation, so the owner learns whether the
- * candidate passed while the generation that serves keeps serving.
+ * A build failure or failed startup check is a recorded outcome, so it keeps HTTP 200 and arrives as
+ * the preparation result. A 4xx means a malformed request or a refused label, a 5xx means no
+ * decision; neither carries Supervisor error text.
  *
- * A build failure and a failed startup check are recorded outcomes, so they keep HTTP 200 and
- * arrive as the preparation result. A 4xx here means the request was malformed or the Supervisor
- * refused to label the commit, and a 5xx means the route could not reach a decision at all. Neither
- * carries Supervisor error text.
- *
- * Resubmitting an already-labeled commit runs the same preparation step again rather than
- * replaying an earlier response. Recording an outcome that agrees with the recorded status is a
- * no-op, and a different outcome replaces it, so a check that failed on a slow cold start does not
- * mark the commit failed forever.
+ * Resubmitting runs the preparation again, and a differing outcome replaces the recorded one, so a
+ * check that failed on a slow cold start does not mark the commit failed forever.
  */
 export const handleGenerationSubmission = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationSubmissionSupervisor) {

@@ -1,10 +1,6 @@
 /**
- * The owner's ChatGPT credential and the sign-in that obtains it, in the Supervisor's SQLite.
- *
- * One Supervisor is one owner, so each table holds at most one row. The tokens are plain columns:
- * Durable Object storage is encrypted at rest, and only the Supervisor and the model route it
- * serves ever read them. No method here logs, and no status built from these rows carries a token,
- * a verifier, or a code.
+ * One Supervisor is one owner, so each table holds at most one row. Tokens are plain columns because
+ * Durable Object storage is encrypted at rest; nothing here logs them.
  */
 
 export type ReconnectReason = "refresh-refused" | "provider-refused" | "missing-scope";
@@ -115,10 +111,7 @@ export class ChatGPTCredentialStore {
       : { state: "needs-reconnect", reason: reconnectReason(row.reconnect_reason) };
   }
 
-  /**
-   * A completed sign-in replaces whatever connection there was, whichever account it is, and
-   * forgets the old one's usage limit.
-   */
+  /** Also forgets the old connection's usage limit. */
   connect(grant: StoredGrant, now: number): void {
     this.clearUsageLimit();
     this.sql.exec(
@@ -134,9 +127,8 @@ export class ChatGPTCredentialStore {
   }
 
   /**
-   * Store a refreshed pair, in one statement, only while `redeemed` is still the stored refresh
-   * token. A rotated refresh token is therefore never half written, and a sign-in or disconnect
-   * that happened during the refresh wins. Returns whether the pair was stored.
+   * One statement, only while `redeemed` is still stored, so a rotated token is never half written
+   * and a sign-in or disconnect during the refresh wins.
    */
   replaceRefreshed(redeemed: string, grant: Omit<StoredGrant, "clientId">, now: number): boolean {
     return (
@@ -156,7 +148,7 @@ export class ChatGPTCredentialStore {
     );
   }
 
-  /** Only while `accessToken` is still the stored one, so a refusal cannot break a newer sign-in. */
+  /** Only while `accessToken` is still stored, so a refusal cannot break a newer sign-in. */
   markNeedsReconnect(accessToken: string, reason: ReconnectReason, now: number): void {
     this.sql.exec(
       `UPDATE chatgpt_connection SET status = 'needs-reconnect', reconnect_reason = ?, updated_at = ?
@@ -185,10 +177,7 @@ export class ChatGPTCredentialStore {
       : { reachedAt: row.reached_at, limitedUntil: row.limited_until };
   }
 
-  /**
-   * Replaces any earlier usage limit, only while `accessToken` is still the stored, connected one,
-   * so a late report from a replaced credential cannot pause a newer sign-in.
-   */
+  /** Only while `accessToken` is still stored, so a late report cannot pause a newer sign-in. */
   markUsageLimited(accessToken: string, limit: StoredUsageLimit): void {
     this.sql.exec(
       `INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until)
@@ -222,7 +211,6 @@ export class ChatGPTCredentialStore {
         };
   }
 
-  /** Replaces any earlier sign-in attempt. */
   startLogin(login: StoredLogin): void {
     this.sql.exec(
       `INSERT OR REPLACE INTO chatgpt_login (id, attempt_id, state, verifier, authorize_url, expires_at)
@@ -239,10 +227,7 @@ export class ChatGPTCredentialStore {
     this.sql.exec("DELETE FROM chatgpt_login");
   }
 
-  /**
-   * The stable `ext_agent_host_id` this Supervisor sends with every sign-in. It names the host, not
-   * the owner, and is not a secret. It outlives a disconnect.
-   */
+  /** Names the host, not the owner; not a secret, and it survives a disconnect. */
   agentHostId(): string {
     this.sql.exec(
       "INSERT OR IGNORE INTO chatgpt_host (id, agent_host_id) VALUES (1, ?)",

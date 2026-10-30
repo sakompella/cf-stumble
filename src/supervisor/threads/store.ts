@@ -29,17 +29,8 @@ const RELEASED_TURN = {
 } satisfies Partial<ProjectThread>;
 
 /**
- * The one thread each selectable project has, and the lease that decides who may write to it.
- *
- * Every method takes a `SelectableProject`, never a project id string. A `SelectableProject` only
- * exists by resolving a client's string against the catalog, so a caller cannot reach a row this
- * store does not own, and cannot invent a thread for a project the tenant does not have. The
- * harness entry is one of those values, so it holds a row of its own and nothing here has to know
- * which kind it is.
- *
- * Admission is the only way to obtain a lease id, and finishing or abandoning a turn requires the
- * id that admitted it. The store mints that id itself, so no caller can name the turn it wants to
- * complete: it can only return what it was given.
+ * Methods take a `SelectableProject`, never a string, so a caller cannot reach a row this store does not
+ * own. The store mints the lease id, so no caller can name the turn it wants to complete.
  */
 export class ThreadStore {
   private readonly storage: DurableObjectStorage;
@@ -68,17 +59,9 @@ export class ThreadStore {
   }
 
   /**
-   * Replace the project's conversation with an empty one (ADR-0038). Nothing here reaches the
-   * project's Computer workspace, so the files a turn produced are untouched and only what was
-   * said is gone.
-   *
-   * The row stays and its revision advances, which is what fences the turn that was running. A
-   * deleted row would restart the count, and a delayed caller holding the replaced thread's
-   * revision zero would be admitted into the replacement as if nothing had happened. Clearing the
-   * lease stops that turn from committing, and advancing the revision stops it from starting
-   * again; both hold without reading the conversation, so a damaged row is replaced rather than
-   * reported. A live lease refuses it instead: the running turn would lose its save but keep
-   * editing files, and a replacement turn could start beside it.
+   * The row stays and its revision advances: a deleted row would restart the count, and a delayed caller
+   * holding revision zero would be admitted into the replacement. A live lease refuses it, since the
+   * running turn would lose its save but keep editing files.
    */
   startFreshThread(
     project: SelectableProject,
@@ -106,10 +89,6 @@ export class ThreadStore {
     });
   }
 
-  /**
-   * Admit one turn and hand back the lease that may complete it. The lease id is the store's, not
-   * the caller's: it is minted here and returned once.
-   */
   startTurn(
     project: SelectableProject,
     expectedRevision: number,
@@ -186,11 +165,7 @@ export class ThreadStore {
     return Result.succeed({ thread, leaseId, reclaimed });
   }
 
-  /**
-   * Commit the conversation a turn ended with. The lease decides whether this caller is still the
-   * turn the thread admitted; the revision it was admitted at needs no restating, because every
-   * commit and every fresh thread replaces the lease it would have to match.
-   */
+  /** Needs no revision: every commit and fresh thread replaces the lease it would have to match. */
   finishTurn(
     project: SelectableProject,
     messages: readonly AgentMessage[],
@@ -225,12 +200,10 @@ export class ThreadStore {
     });
   }
 
-  /** The live turn lease that ends last, on `project` or, without it, on any project. */
   liveTurn(now: number, project?: SelectableProject): LiveTurn | undefined {
     return findLiveTurn(this.sql, now, this.holderId, project?.id);
   }
 
-  /** Delete the project's thread after confirming that no live turn owns it. */
   remove(project: SelectableProject, now: number): Result.Result<void, ThreadProblem> {
     return this.storage.transactionSync(() => {
       const current = this.readThread(project);
@@ -247,7 +220,6 @@ export class ThreadStore {
     });
   }
 
-  /** Give the turn slot back without writing a conversation, for the lease that holds it. */
   abandonTurn(
     project: SelectableProject,
     leaseId: string,
@@ -271,7 +243,6 @@ export class ThreadStore {
     });
   }
 
-  /** Read the thread and the lease claim, then let `decide` judge and write, in one transaction. */
   private withLeaseClaim(
     project: SelectableProject,
     leaseId: string,

@@ -6,33 +6,25 @@ import type { PublicRepositoryUrl } from "../project-catalog.js";
 import { isRecord } from "../untrusted.js";
 import type { GitHubFetch, GitHubToken } from "./device-flow.js";
 
-/** Each API request has a short bound so a connection is not held by GitHub. */
 export const REPOSITORY_SIZE_TIMEOUT_MS = 5_000;
 
 const GITHUB_API_ROOT = "https://api.github.com";
 
 /**
- * A full-tree file ceiling protects the per-file durable workspace index and sync walk. Hono's
- * measured 1,800-file tree stayed healthy, while workers-sdk wedged at 5,649 files, so 3,000
- * leaves useful margin above the largest healthy repository and refuses the observed failure class.
+ * Protects the per-file durable workspace index and sync walk. Hono's 1,800-file tree was healthy
+ * and workers-sdk wedged at 5,649 files.
  */
 export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
 
 /**
- * The working tree byte ceiling keeps durable sync below the observed wedge. Hono's working tree
- * was about 6 MB and workers-sdk's was about 48 MB locally (162 MB of Git data); 150 MB leaves
- * margin for a larger healthy tree without admitting a repository that can overwhelm the workspace.
- * GitHub reports a tree entry's `size` in bytes.
+ * Hono's working tree was about 6 MB and workers-sdk's about 48 MB; 150 MB leaves margin without
+ * admitting a repository that overwhelms the workspace.
  */
 export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
 
-/**
- * The history-size ceiling remains separate from the current working-tree byte ceiling. GitHub
- * reports a repository's `size` in kilobytes.
- */
+/** Separate from the working-tree byte ceiling; GitHub reports `size` in kilobytes. */
 export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
 
-/** A truncated tree cannot prove the file count, so it is not safe to connect. */
 export const REPOSITORY_TREE_MUST_BE_COMPLETE = true;
 
 export type RepositorySizeReason =
@@ -49,7 +41,6 @@ type RepositorySizeLookup = Readonly<{
   truncated: boolean;
 }>;
 
-/** Apply the workspace size ceilings to one measurement, in the order the reasons are reported. */
 export function repositorySizeReason(measured: RepositorySizeLookup): RepositorySizeReason {
   if (REPOSITORY_TREE_MUST_BE_COMPLETE && measured.truncated) return "tree-truncated";
 
@@ -62,7 +53,6 @@ export function repositorySizeReason(measured: RepositorySizeLookup): Repository
   return "within-limits";
 }
 
-/** The REST path of one repository, such as `repos/owner/name`, as both `fetch` and `gh api` use it. */
 export function repositoryApiPath(repositoryUrl: PublicRepositoryUrl): string | undefined {
   const url = new URL(repositoryUrl);
   const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
@@ -90,7 +80,6 @@ function apiHeaders(token: GitHubToken | undefined): Record<string, string> {
   return headers;
 }
 
-/** A size could not be measured: a request failed, was refused, or GitHub's reply was malformed. */
 export class RepositorySizeUnknown extends Data.TaggedError("RepositorySizeUnknown") {}
 
 function getJson(
@@ -117,11 +106,7 @@ function getJson(
   });
 }
 
-/**
- * Read GitHub's repository size and working-tree blob count. Any failed, rate-limited, or
- * malformed response is `RepositorySizeUnknown`, not a connection refusal: cloning remains the
- * final check.
- */
+/** An unknown size is not a connection refusal, since cloning remains the final check. */
 export function lookupRepositorySize(
   repositoryUrl: PublicRepositoryUrl,
   token: GitHubToken | undefined,

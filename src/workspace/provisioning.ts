@@ -20,28 +20,21 @@ import {
 } from "../workspace-command-timeout.js";
 import { workspaceRpc, type WorkspaceRpcFailed } from "./workspace-rpc.js";
 
-/** The Workspace Host's one writer of `/workspace/AGENTS.md`, which both plans end with. */
 type ManagedInstructionsWorkspaceHost = Readonly<{
   ensureManagedInstructions(): Promise<WorkspaceResult>;
 }>;
 
-/** A project's two operations use the provision surface's clone and the managed file writer. */
 export type ProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
   Readonly<{
     provision(request: ProjectProvisionRequest): Promise<WorkspaceResult>;
   }>;
 
-/** The harness's two operations use the build-side clone reconciler and the managed file writer. */
 export type HarnessProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
   Readonly<{
     build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
   }>;
 
-/**
- * Just enough of the Workspace Host binding to reach the tenant's workspace by name. The caller
- * holds that name, which the Supervisor derives from its own tenant key, so no request can name a
- * workspace.
- */
+/** The caller holds the name, which the Supervisor derives from its own tenant key, so no request can name a workspace. */
 export type ProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): ProvisionWorkspaceHost;
 }>;
@@ -54,7 +47,6 @@ export type HarnessProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): HarnessProvisionWorkspaceHost;
 }>;
 
-/** The catalog does not name this project, so nothing was provisioned. */
 class ProjectNotInCatalog extends Data.TaggedError("ProjectNotInCatalog")<{
   readonly reason: "invalid-project-id" | "unknown-project-id";
 }> {
@@ -63,7 +55,6 @@ class ProjectNotInCatalog extends Data.TaggedError("ProjectNotInCatalog")<{
   }
 }
 
-/** A provisioning command ran and exited with a nonzero code. */
 export class ProvisionStepFailed extends Data.TaggedError("ProvisionStepFailed")<{
   readonly projectId: ProjectId;
   readonly step: ProjectProvisionStepName;
@@ -74,7 +65,6 @@ export class ProvisionStepFailed extends Data.TaggedError("ProvisionStepFailed")
   }
 }
 
-/** The workspace could not run a step, refused it, answered wrongly, or the turn ended first. */
 export class ProvisionWorkspaceUnavailable extends Data.TaggedError(
   "ProvisionWorkspaceUnavailable",
 )<{
@@ -86,7 +76,6 @@ export class ProvisionWorkspaceUnavailable extends Data.TaggedError(
   }
 }
 
-/** Why project provisioning stopped. */
 export type ProjectProvisionProblem =
   | ProjectNotInCatalog
   | ProvisionStepFailed
@@ -97,7 +86,6 @@ type ProvisionedProjectWorkspace = Readonly<{
   workspaceName: string;
 }>;
 
-/** A project plan clones through the provision surface, then rewrites the managed instructions. */
 type ProjectPlanStepName = ProjectProvisionStepName | "instructions";
 
 const PROJECT_PLAN_STEP_NAMES: readonly ProjectPlanStepName[] = ["clone", "instructions"];
@@ -109,7 +97,6 @@ const HARNESS_PROVISION_STEP_NAMES: readonly HarnessProvisionStepName[] = [
   "instructions",
 ];
 
-/** The harness checkout's reconcile command exited with a nonzero code. */
 class HarnessProvisionStepFailed extends Data.TaggedError("HarnessProvisionStepFailed")<{
   readonly step: HarnessProvisionStepName;
   readonly exitCode: number;
@@ -119,7 +106,6 @@ class HarnessProvisionStepFailed extends Data.TaggedError("HarnessProvisionStepF
   }
 }
 
-/** The workspace could not run a harness step, answered wrongly, or the turn ended first. */
 class HarnessProvisionWorkspaceUnavailable extends Data.TaggedError(
   "HarnessProvisionWorkspaceUnavailable",
 )<{ readonly step: HarnessProvisionStepName }> {
@@ -133,19 +119,16 @@ type HarnessProvisionProblem = HarnessProvisionStepFailed | HarnessProvisionWork
 type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
 
 interface ProvisionProjectWorkspaceInput {
-  /** The tenant's one workspace, named server-side. See `workspace-names.ts`. */
   readonly workspaceName: string;
-  /** The client-supplied project id. The catalog resolves it before anything is provisioned. */
+  /** Client-supplied; the catalog resolves it before anything is provisioned. */
   readonly projectId: unknown;
   readonly catalog?: ProjectCatalog;
   readonly namespace: ProvisionWorkspaceNamespace;
-  /** Stops the plan before another workspace RPC when the owning turn has ended. */
   readonly signal?: AbortSignal | undefined;
 }
 
 interface ProvisionHarnessWorkspaceInput {
   readonly workspaceName: string;
-  /** The active generation's validated commit, which the build provisioner obtains if needed. */
   readonly harnessCommit: HarnessCommit;
   readonly namespace: HarnessProvisionWorkspaceNamespace;
   readonly signal?: AbortSignal | undefined;
@@ -286,16 +269,13 @@ export const PROVISION_STALE_AFTER_MS =
   PROVISION_PLAN_STEP_COUNT * WORKSPACE_RPC_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 /**
- * Active plans are keyed by the whole tenant workspace, not a project directory. A project turn
- * can reach sibling repositories and the managed instructions, and a harness turn has the same
- * capability, so neither may enter while another project's orphaned provision can still write.
- *
- * This is an isolate-local exclusion. The Workspace Host remains the real filesystem owner; after
- * this Supervisor is evicted, only a Workspace Host-side protocol can prove that an old RPC stopped.
+ * Keyed by the whole tenant workspace, not a project directory: a project or harness turn can reach
+ * sibling repositories, so neither may enter while another project's orphaned provision can still
+ * write. Isolate-local; after this Supervisor is evicted only a Workspace Host-side protocol can
+ * prove an old RPC stopped.
  */
 const activeProvisions = new Map<string, ActiveProvision>();
 
-/** Forget a tenant's in-flight plan after its Workspace Host has been reset. */
 export function clearWorkspaceProvision(workspaceName: string): void {
   activeProvisions.delete(workspaceName);
 }
@@ -305,12 +285,8 @@ function provisionIsStale(active: ActiveProvision, now: number): boolean {
 }
 
 /**
- * Run one operation while sharing the workspace exclusion with project and harness provisioning.
- * A caller waits for an older operation, then starts its own complete convergence plan.
- *
- * The plan is uninterruptible. Its Workspace Host RPCs cannot be recalled once sent, so the
- * exclusion is held until the plan has actually settled, never only until its caller stopped
- * waiting.
+ * The plan is uninterruptible: its Host RPCs cannot be recalled once sent, so the exclusion is held
+ * until the plan settles, not until its caller stops waiting.
  */
 function provisionInWorkspace<A, E>(
   input: Readonly<{
@@ -364,10 +340,7 @@ function removeActiveProvision(workspaceName: string, active: ActiveProvision): 
   if (activeProvisions.get(workspaceName) === active) activeProvisions.delete(workspaceName);
 }
 
-/**
- * A plan older than its whole command budget is presumed lost and forgotten. The Workspace Host
- * may still be running it.
- */
+/** Presumed lost after its whole command budget; the Host may still be running it. */
 function clearStaleProvision(workspaceName: string): void {
   activeProvisions.delete(workspaceName);
 }
@@ -415,10 +388,6 @@ function settleActiveProvision(
   });
 }
 
-/**
- * Wait for the current workspace provision, without joining it or starting a replacement. It
- * answers whether the caller may go on: `false` when the signal aborted the wait.
- */
 export function waitForWorkspaceProvision(
   workspaceName: string,
   signal?: AbortSignal,
@@ -444,7 +413,6 @@ export function waitForWorkspaceProvision(
   });
 }
 
-/** Provision one project inside the tenant's workspace, then rewrite its managed instructions. */
 export function provisionProjectWorkspace(
   input: ProvisionProjectWorkspaceInput,
 ): Effect.Effect<ProvisionedProjectWorkspace, ProjectProvisionProblem> {
@@ -460,7 +428,6 @@ export function provisionProjectWorkspace(
   });
 }
 
-/** Reconcile the editable harness checkout before a harness turn uses its working directory. */
 export function provisionHarnessWorkspace(
   input: ProvisionHarnessWorkspaceInput,
 ): Effect.Effect<ProvisionedHarnessWorkspace, HarnessProvisionProblem> {

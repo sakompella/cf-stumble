@@ -10,10 +10,8 @@ export const MAX_CONCURRENT_EXECS = 8;
 
 export const MAX_EXEC_FRAME_BYTES = 65_536;
 
-/** The most entries one `listFiles` call returns. */
 export const MAX_LIST_ENTRIES = 1_000;
 
-/** The most UTF-8 bytes of entry paths one `listFiles` call returns. */
 export const MAX_LIST_BYTES = 65_536;
 
 export type ProjectErrorCode =
@@ -45,7 +43,6 @@ export type ProjectFileInfo = {
   mtimeMs: number;
 };
 
-/** `truncated` is true when the directory held more than the listing bounds allow. */
 export type ProjectListing = { entries: readonly ProjectFileInfo[]; truncated: boolean };
 
 export type ProjectLstatInfo = ProjectFileInfo & { canonicalPath: ProjectResult<string> };

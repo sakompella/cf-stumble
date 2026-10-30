@@ -15,11 +15,7 @@ function unavailable<T>(): Promise<T> {
   return Promise.reject(new Error(NO_REGISTRY));
 }
 
-/**
- * The one-event stream Pi's streaming contract requires of a call that cannot be made: a terminal
- * error rather than a throw, because `Models.stream` and `Models.streamSimple` return a stream and
- * a caller of either reads its result instead of catching.
- */
+/** A terminal error event rather than a throw: callers of `stream` read its result instead of catching. */
 function unavailableStream(model: Model<Api>): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
   stream.push({
@@ -42,20 +38,9 @@ function unavailableStream(model: Model<Api>): AssistantMessageEventStream {
 }
 
 /**
- * Presents the host model route as the `Models` value Pi's compaction functions take.
- *
- * Pi's `compact` summarizes through `Models.completeSimple` and uses nothing else on this
- * interface. Generation 0 has no provider registry and no credential to build one from — the model,
- * the endpoint, and the key all live behind the immutable `src/model-route.ts` — so every member
- * that would select a provider, resolve authentication, log in, or fetch a deferred result reports
- * that instead of pretending to have one. The members that do mean "call the model" all mean the
- * same single call here, and go to the same route stream function the turn itself runs on. The
- * two provider-API members, `stream` and `complete`, carry options a specific provider's API
- * defines; one fixed route cannot honor those, so they report unavailable as well.
- *
- * This is the shape `createFacetExecutionEnv` already takes with Pi's `ExecutionEnv`: implement
- * what the capability supports and report the rest as unsupported, rather than inventing a second,
- * weaker version of the missing part.
+ * Pi's `compact` uses only `completeSimple`. There is no provider registry or credential here, so members
+ * that would select a provider or authenticate report unavailable, and so do `stream` and `complete`,
+ * whose provider-specific options one fixed route cannot honor.
  */
 export function createRouteModels(streamFn: StreamFn): Models {
   const call = async (...request: Parameters<StreamFn>): Promise<AssistantMessage> => {

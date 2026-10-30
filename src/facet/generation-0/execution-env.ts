@@ -14,12 +14,7 @@ import {
 } from "./execution-env-filesystem.js";
 
 interface FacetExecutionEnvLocal {
-  /**
-   * Where the turn starts. It is the selected project's directory in the shared workspace, so
-   * relative paths land in that repository, and it is only a starting point: every path this
-   * environment resolves is checked against the workspace root itself, so a `cwd` outside the root
-   * yields rejected operations rather than an escape.
-   */
+  /** A starting point only: every path is checked against the workspace root, so a `cwd` outside it yields rejected operations. */
   readonly cwd: string;
   readonly projectTarget: ProjectRpcTargetContract;
   readonly turnDeadlineAt?: number;
@@ -27,14 +22,8 @@ interface FacetExecutionEnvLocal {
 }
 
 /**
- * Builds a Pi `ExecutionEnv` local to one turn: every filesystem and shell operation Pi's stock
- * tools need, translated onto the six-method `ProjectRpcTarget` surface. `cwd` and `projectTarget`
- * are captured by closure only, so the returned object carries no `projectTarget` property —
- * enumerable or otherwise — and reaches no build, fetch, raw Computer, or container capability.
- * Every method resolves a `Result` rather than throwing or rejecting, including the seven methods
- * this environment does not implement and every already-aborted call. The actual translation and
- * error-mapping logic lives in `execution-env-filesystem.ts` and `execution-env-exec.ts`: this
- * function only binds that logic to one `{ cwd, projectTarget }` pair.
+ * `cwd` and `projectTarget` are captured by closure only, so the returned object exposes no project
+ * target. Every method resolves a `Result` rather than throwing.
  */
 export function createFacetExecutionEnv(local: FacetExecutionEnvLocal): ExecutionEnv {
   const { cwd, projectTarget, turnDeadlineAt, now = Date.now } = local;

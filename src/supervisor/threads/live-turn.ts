@@ -1,15 +1,10 @@
 import type { ProjectId } from "../../project-catalog.js";
 
-/** A turn lease that its turn has not released and whose deadline has not passed. */
 export type LiveTurn = Readonly<{ projectId: ProjectId; deadlineAt: number }>;
 
 /**
- * The live lease that ends last, on one project or, without `projectId`, on any project or the
- * harness. It reads only the lease columns, so a damaged conversation cannot hide a lease.
- *
- * A lease taken by another Supervisor instance is not live: that instance is gone, and so is the
- * turn that read its stream. Admission already takes such a lease over, so reset, fresh thread and
- * disconnect must not refuse while a new turn is let in.
+ * Reads only the lease columns, so a damaged conversation cannot hide a lease. A lease taken by another
+ * Supervisor instance is not live: that instance and its turn are gone, and admission takes it over.
  */
 export function findLiveTurn(
   sql: SqlStorage,

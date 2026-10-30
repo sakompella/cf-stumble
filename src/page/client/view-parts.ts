@@ -1,10 +1,7 @@
 import type { Html, HtmlBuilder } from "foldkit/html";
 import type { Message } from "./message.js";
 
-/**
- * The two shapes every panel on this page is built from: a labelled value a reader observes, and a
- * labelled control row. The element with `id` holds only the value a test must read.
- */
+/** The element with `id` holds only the value a test must read. */
 export function valueRow(label: string, id: string, value: string, h: HtmlBuilder<Message>): Html {
   return h.div(
     [h.Class("row")],
@@ -12,10 +9,7 @@ export function valueRow(label: string, id: string, value: string, h: HtmlBuilde
   );
 }
 
-/**
- * A value row whose value a screen reader announces when it changes, once the reader is idle. Use
- * it only for a short sentence that changes a few times, never for a stream.
- */
+/** Use it only for a short sentence that changes a few times, never for a stream. */
 export function statusRow(label: string, id: string, value: string, h: HtmlBuilder<Message>): Html {
   return h.div(
     [h.Class("row")],
@@ -37,7 +31,6 @@ export type ControlRow = Readonly<{
   onClick: Message;
 }>;
 
-/** A labelled single-line input followed by the button that acts on it. */
 export function controlRow(row: ControlRow, h: HtmlBuilder<Message>): Html {
   const inputAttributes = row.isNumber
     ? [h.Type("number"), h.Min("0"), h.Step("1")]

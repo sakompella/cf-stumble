@@ -1,17 +1,8 @@
-/**
- * Plain, JSON-serializable types for one streamed model call: the payload shape that selects
- * Workers AI's streaming behavior, the capability a streaming call needs from the binding, and the
- * events this route emits while it drives one. Kept separate from `model-route.ts` so that file's
- * request/response/validation types stay the ones most readers come here for.
- */
-
 import type { AssistantMessage, RouteMessage, ToolDefinition } from "./model-route.js";
 
 /**
- * The fixed-reasoning payload for one call to the fixed model. `stream: true` is the field the
- * Workers AI binding's TypeScript overloads key their streaming return type on: passing it on the
- * input is what turns `Ai.run`'s return type from a buffered object into a
- * `Promise<ReadableStream>` of provider-native Server-Sent Events.
+ * `stream: true` selects the Workers AI binding's streaming overload, which returns a
+ * `Promise<ReadableStream>` of provider-native SSE.
  */
 export type StreamingProviderPayload = Readonly<{
   messages: ReadonlyArray<RouteMessage>;
@@ -21,12 +12,7 @@ export type StreamingProviderPayload = Readonly<{
   stream: true;
 }>;
 
-/**
- * The capability a streaming call needs from the Workers AI binding: pass the fixed model and a
- * streaming payload, get back the raw provider byte stream. This mirrors `Ai.run(model, { ...,
- * stream: true })`'s real return type so a fake in tests and the real `env.AI` binding satisfy the
- * same shape. `signal` aborts once nobody reads the route's stream any more.
- */
+/** `signal` aborts once nobody reads the route's stream any more. */
 export type ModelStreamInference = {
   run(
     model: string,
@@ -36,10 +22,8 @@ export type ModelStreamInference = {
 };
 
 /**
- * One fragment of a tool call assembled across several provider stream chunks. `index` is the
- * provider's own slot number for a tool call within one assistant turn (parallel tool calls stream
- * interleaved by index); `id` and `name` typically arrive once on the first chunk for that index,
- * while `argumentsDelta` is a fragment of the arguments JSON text to append, not a replacement.
+ * `index` is the provider's slot for a tool call within a turn (parallel calls interleave);
+ * `argumentsDelta` is a fragment to append.
  */
 export type ToolCallDelta = Readonly<{
   index: number;
@@ -49,8 +33,7 @@ export type ToolCallDelta = Readonly<{
 }>;
 
 /**
- * Token counts for one turn. `estimated: true` marks a conservative byte-derived guess this route
- * made because the provider reported none — never a claim that zero tokens were used.
+ * `estimated: true` marks a byte-derived guess because the provider reported none, not zero tokens.
  */
 export type ModelUsage = Readonly<{
   inputTokens: number;
@@ -58,12 +41,7 @@ export type ModelUsage = Readonly<{
   estimated: boolean;
 }>;
 
-/**
- * The plain, JSON-serializable events this route emits for one streamed turn. Every event is one
- * NDJSON line inside the `ReadableStream<Uint8Array>` `ModelRoute.runStream` returns, which is what
- * keeps the RPC envelope plain across the Worker boundary (ADR-0045): nothing here is a class
- * instance, only data the caller's own isolate parses.
- */
+/** Plain data only, so the RPC envelope stays plain across the Worker boundary. */
 export type ModelStreamEvent =
   | Readonly<{ type: "text-delta"; delta: string }>
   | Readonly<{ type: "tool-call-delta"; delta: ToolCallDelta }>
@@ -71,11 +49,7 @@ export type ModelStreamEvent =
   | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode }> }>
   | ProviderFallback;
 
-/**
- * Sent once, before any other event, when the owner's ChatGPT plan refused the call for its usage
- * limit and Workers AI answers instead (ADR-0047). `limitedUntil` is when the route asks ChatGPT
- * again, or `null` when OpenAI named no end.
- */
+/** `limitedUntil` is when the route asks ChatGPT again, or `null` when OpenAI named no end. */
 export type ProviderFallback = Readonly<{
   type: "provider-fallback";
   reason: "chatgpt-usage-limit";
@@ -83,8 +57,7 @@ export type ProviderFallback = Readonly<{
 }>;
 
 /**
- * Why a turn got no answer. `chatgpt-reconnect-required` means the owner's ChatGPT grant was
- * refused or revoked: the route says so instead of answering from another provider mid-turn, and
- * every turn fails this way until the owner reconnects or disconnects ChatGPT (ADR-0047).
+ * `chatgpt-reconnect-required`: the grant was refused or revoked. Every turn fails this way, with
+ * no answer from another provider, until reconnect or disconnect.
  */
 export type ModelRouteErrorCode = "model-unavailable" | "chatgpt-reconnect-required";

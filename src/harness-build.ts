@@ -13,47 +13,23 @@ import type { HarnessCommit } from "./harness-commit.js";
 
 type HarnessBuildPhaseName = "install" | "build-pi" | "build-module-map";
 
-/** One phase of a build: a name a failure can report, and the command that phase runs. */
 type HarnessBuildPhase = Readonly<{ name: HarnessBuildPhaseName; command: string }>;
 
-/**
- * Where and how one labeled harness commit becomes a module map. Version 0 has one build path, so
- * these values are fixed here rather than chosen per request.
- *
- * Every path comes from `workspace-layout.ts`, which owns the layout of the tenant's one shared
- * workspace (ADR-0038). The harness repository is an ordinary editable checkout beside the project
- * clones, and `buildRoot` is a separate scratch subtree that holds no repository, so a build
- * extracts and compiles without ever writing inside the harness checkout or a project.
- *
- * This module is shared by the workspace that runs a build and the Supervisor that asks for one,
- * so both plan a commit the same way. It holds plain values only, and imports no platform API.
- */
 export type HarnessBuildConfiguration = Readonly<{
   buildRoot: string;
   harnessRepositoryRoot: string;
   harnessGitDir: string;
   harnessGitRemote: string;
   /**
-   * The phases that turn an extracted commit into a module map, in the order they run. They are
-   * separate so a failure names the phase that was running: a phase is its own step, so it is its
-   * own RPC, its own exit code and its own bounded tail.
-   *
-   * Order is a dependency, not a preference. An extracted commit contains neither `node_modules`
-   * nor Pi's generated `dist/`, so the install comes first and esbuild cannot resolve
-   * `@cf-stumble/pi` until Pi is built.
-   *
-   * Each command names a script `package.json` defines, or is a flag-only `pnpm install`, so the
-   * deployed build and the local gate cannot drift apart.
-   * `test/supervisor/artifacts/build-command.test.ts` holds that rule and checks these phases
-   * against `build:artifact`, which is what a developer and the clean-build probe run locally.
+   * Order is a dependency: an extracted commit has neither `node_modules` nor Pi's generated
+   * `dist/`,
+   * so install comes first and esbuild cannot resolve `@cf-stumble/pi` until Pi is built.
    */
   buildPhases: readonly [HarnessBuildPhase, ...HarnessBuildPhase[]];
   moduleMapPath: string;
-  /** How long one build step may run (`workspace-command-timeout.ts`). */
   stepTimeoutMs: number;
 }>;
 
-/** The one build configuration the Workspace Host offers and the Supervisor plans against. */
 export const HARNESS_BUILD_CONFIGURATION = {
   buildRoot: BUILD_SCRATCH_ROOT,
   harnessRepositoryRoot: HARNESS_DIRECTORY,
@@ -72,13 +48,8 @@ export const HARNESS_BUILD_CONFIGURATION = {
 } as const satisfies HarnessBuildConfiguration;
 
 /**
- * The build configuration a deployment runs with.
- *
- * `HARNESS_REPOSITORY_URL` is the one setting a fork has to change. The default is the project's
- * own repository, which is right for the owner's instance and wrong for everybody else: a deploy
- * button user's instance would clone and build this repository instead of their fork, and their
- * own harness commits would never be reachable. A deployment sets that secret to its own
- * repository and changes nothing else.
+ * A fork must set `HARNESS_REPOSITORY_URL`; the default is this project's repository, so a fork's
+ * own commits would never be reachable.
  */
 export function harnessBuildConfiguration(
   repositoryUrl: string | undefined,
@@ -104,19 +75,10 @@ export type HarnessBuildPlan = Readonly<{
   moduleMapPath: string;
 }>;
 
-/**
- * What a caller may ask a build workspace to do. It names a labeled commit and one planned step,
- * so command text has no field to arrive in.
- */
 export type HarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: string; step: HarnessBuildStepName }>
   | Readonly<{ kind: "build-output"; harnessCommit: string }>;
 
-/**
- * Every step a caller may name. It is derived from the one configuration's phases, so a phase
- * added there is accepted by the RPC parser and a name that is not planned stays an
- * `unknown-command`.
- */
 export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   "provision",
   "isolate",
@@ -124,15 +86,11 @@ export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
   ...HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name),
 ];
 
-/** The file the harness provision step locks with `holdProvisionLock`. */
 export const HARNESS_PROVISION_LOCK = "/tmp/cf-stumble-harness-provision.lock";
 
 /**
- * Obtain the requested commit. A commit submitted after this checkout was provisioned is not here
- * yet, so ask the remote for that commit, then fall back to the remote's branches for a server
- * that refuses a request for a bare object, and then stop. Two attempts bound the work, and the
- * message names the commit and the repository the build looked in, which is what the owner needs
- * in order to correct the request.
+ * Fetches the commit directly, then falls back to the remote's branches for a server that refuses a
+ * request for a bare object.
  */
 function obtainHarnessCommit(): readonly string[] {
   return [
@@ -149,10 +107,8 @@ function obtainHarnessCommit(): readonly string[] {
 }
 
 /**
- * Make the harness repository exist and point at the configured remote, then obtain the requested
- * commit. The harness directory is the owner's editable checkout in the shared workspace
- * (ADR-0038), not scratch a build owns, so the shared clone block only checks an existing checkout
- * and never replaces it.
+ * The harness directory is an editable checkout, so the shared clone block only checks an existing
+ * one and never replaces it.
  */
 export function provisionHarnessRepository(
   configuration: HarnessBuildConfiguration,
@@ -174,14 +130,9 @@ export function provisionHarnessRepository(
 }
 
 /**
- * `git archive | tar -x` reports tar's exit code, so a failed archive used to reach the build step
- * as an empty directory and a confusing compilation error. Writing the archive first makes an
- * archive failure the step's own failure.
- *
- * The metadata flags are not tidiness. The deployed workspace filesystem is Computer's userspace
- * shim, because a Cloudflare container cannot grant the privileges a kernel FUSE mount needs. That
- * filesystem refuses `utime`, `chown` and `chmod` on a directory tar has just created, and tar
- * exits 2 on those errors, which failed every deployed checkout.
+ * The archive is written first so an archive failure fails this step instead of reaching the build
+ * as an empty directory. Computer's userspace filesystem refuses `utime`, `chown` and `chmod` on
+ * directories tar creates, and tar exits 2, hence the metadata flags.
  */
 function checkoutSource(
   configuration: HarnessBuildConfiguration,
@@ -198,16 +149,9 @@ function checkoutSource(
 }
 
 /**
- * One compile phase as a step of its own.
- *
- * Two things this command does beyond running the phase. It changes into the scratch directory
- * itself, because Computer resolves a working directory against the workspace and refuses one
- * outside it (`workspace-layout.ts`). And it keeps only the tail of the phase's own output:
- * Computer holds a command's output in memory, and an unbounded `pnpm install` log was enough to
- * make the deployed container exit 1 part way through every build. The output is read only when a
- * step fails, so a bounded tail loses nothing, and a tail per phase is a tail of the phase that
- * failed rather than of whatever the last eleven minutes ended on. `pipefail` keeps the phase's
- * exit code rather than `tail`'s.
+ * Changes into the scratch directory itself because Computer refuses a working directory outside
+ * the workspace. Keeps only the output tail because Computer holds output in memory and an
+ * unbounded `pnpm install` log made the container exit. `pipefail` keeps the phase's exit code.
  */
 function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildStep {
   return {
@@ -222,31 +166,10 @@ function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildSte
 }
 
 /**
- * Plan the whole build as plain command strings. Provisioning reconciles the harness repository
- * and obtains the named commit, then `git archive` extracts that commit into a scratch directory
- * of its own, so no step mutates the editable harness checkout and a repeated build of one commit
- * starts from the same files. Interpolating the commit is safe because `HarnessCommit` accepts
- * only lower-case hexadecimal object IDs.
- *
- * Install location: every compile phase runs in the extracted directory, so `pnpm install` writes
- * `node_modules` inside that per-commit directory and the phases after it find it there, and
- * nothing is borrowed from a parent checkout. Only the content-addressed pnpm store is shared
- * between builds, because the store is keyed by package content and concurrent writes to it are
- * the package manager's problem, not this plan's.
- *
- * Same-commit concurrency. The isolate step deletes and recreates a directory keyed only by the
- * commit, because both sides of the build plan the same steps from the commit alone and a
- * per-build directory name would have to travel in the request to stay agreeable. Two things make
- * that safe instead. The scratch directory belongs to the tenant's own container rather than a
- * globally named build container, so two tenants building one commit share no filesystem at all;
- * and `WorkspaceHostModuleMapBuilder` admits one build per commit at a time, so a second request
- * for a commit already building joins that build instead of starting a rival one that would delete
- * its tree. Nothing here schedules or queues: a build either is the one in flight or waits for its
- * result.
- *
- * Blast radius: `buildRoot` holds no repository, so the delete can only ever remove a previous
- * extraction of the same commit. The invariant below refuses a configuration in which the harness
- * checkout would sit inside the directory a build deletes.
+ * Interpolating the commit is safe because `HarnessCommit` accepts only lower-case hexadecimal.
+ * Deleting and recreating the commit-keyed scratch directory cannot race: it belongs to the
+ * tenant's own container and `WorkspaceHostModuleMapBuilder` admits one build per commit.
+ * `buildRoot` holds no repository, so the delete only removes an earlier extraction of that commit.
  */
 export function planHarnessBuild(
   configuration: HarnessBuildConfiguration,
@@ -282,7 +205,6 @@ export function planHarnessBuild(
   };
 }
 
-/** The step of a commit's build plan, named rather than described by its command text. */
 export function harnessBuildStep(
   plan: HarnessBuildPlan,
   name: HarnessBuildStepName,

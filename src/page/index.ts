@@ -4,22 +4,15 @@ import { OWNER_PAGE_STYLES } from "./styles.js";
 
 export { OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS } from "./element-ids.js";
 
-/**
- * The page's script, as `tools/build-owner-page.mts` built it. The path names a hash of the
- * source, so one path always means the same bytes and the Worker may let the browser keep them.
- */
+/** The path names a hash of the source, so one path always means the same bytes. */
 export const OWNER_PAGE_SCRIPT_FILE = {
   path: OWNER_PAGE_SCRIPT_PATH,
   source: OWNER_PAGE_SCRIPT_SOURCE,
 } as const;
 
 /**
- * The whole owner page: one HTML document with an inline stylesheet and one same-origin script,
- * so the Content Security Policy the route sends can refuse every other origin and all inline
- * code. The nonce comes from the route, which makes one per response, and admits the stylesheet.
- *
- * The script is the Foldkit program in `client/`. The body holds only its container, and the
- * program renders the page into it.
+ * One inline stylesheet and one same-origin script, so the Content Security Policy can refuse every
+ * other origin and all inline code. The nonce comes from the route, one per response.
  */
 export function ownerPageHtml(nonce: string): string {
   return `<!doctype html>

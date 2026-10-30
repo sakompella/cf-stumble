@@ -5,23 +5,10 @@ import type { AgentEvent, AgentMessage } from "@cf-stumble/pi";
 import type { PiAgentTurnState } from "./pi-agent-turn.js";
 
 /**
- * One frame of a turn's byte stream.
- *
- * `text` is incremental: one frame per delta the route produced, so a reader renders a reply as it
- * arrives. `tool-start` carries the arguments the model chose, and `tool-result` carries the
- * bounded text the tool answered with, which is what shows a command's output.
- *
- * `diff` is the turn's own statement about what it changed. It is not a tool
- * result: the harness runs the diff itself after the model has stopped, so a turn that touched
- * files shows its work whether or not the model asked for it. `diff-unavailable` carries the
- * reason the repository could not answer, because "the diff is missing" and "the diff is empty"
- * are different facts.
- *
- * Exactly one terminal frame ends a stream, and the three kinds are different facts. `rejected`
- * means no turn ran, so there is no conversation to keep. `completed` and `failed` both carry the
- * Pi state the next turn continues from, because a turn that hit its model-call limit or a model
- * error still produced conversation the thread must keep. `completed` is this facet's terminal
- * success and stays provisional until the Supervisor saves the thread (ADR-0037).
+ * `diff` is the turn's own statement, not a tool result. `diff-unavailable` carries a reason because a
+ * missing diff and an empty diff are different facts. Exactly one terminal frame ends a stream:
+ * `rejected` carries no conversation, `completed` and `failed` carry the Pi state the next turn
+ * continues from.
  */
 export type FacetTurnFrame =
   | Readonly<{ kind: "text"; text: string }>
@@ -83,10 +70,7 @@ function boundedArgument(value: unknown): unknown {
   return value;
 }
 
-/**
- * The arguments as a frame shows them, with each string bounded like a tool result, so a `write`
- * of a large file cannot outgrow the Supervisor's progress frame bound.
- */
+/** Strings are bounded like tool results so a `write` of a large file cannot outgrow the Supervisor's progress frame bound. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- Boundary: Pi types a tool call's arguments as an open value, so the shape is proven here.
 function toolArguments(args: unknown): Record<string, unknown> {
   return isRecord(args)
@@ -95,12 +79,8 @@ function toolArguments(args: unknown): Record<string, unknown> {
 }
 
 /**
- * Turns Pi's lifecycle events into frames, remembering how much of the assistant's reply it has
- * already published.
- *
- * A route that streams deltas and a route that answers in one piece both have to produce the same
- * text exactly once. Deltas are published as they arrive; the end of the message publishes only
- * what the deltas did not already cover, which is everything when the reply arrived whole.
+ * Deltas are published as they arrive; the end of the message publishes only what deltas did not cover,
+ * so a route that streams and a route that answers whole both produce the text exactly once.
  */
 export class TurnFrames {
   #publishedTextLength = 0;

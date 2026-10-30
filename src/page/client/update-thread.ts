@@ -5,12 +5,8 @@ import { savedTranscript } from "./transcript.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 /**
- * The selected project's saved conversation, and the fresh thread that replaces it.
- *
- * A thread read renders the whole saved conversation, so a second browser — or this one after a
- * reload — sees what the Supervisor committed rather than what one client happened to receive
- * while a turn ran (ADR-0037, ADR-0038). A fresh thread needs two clicks: the first arms it and
- * says what it does, the second sends it.
+ * A thread read renders the whole saved conversation, so a second browser, or this one after a reload,
+ * sees what the Supervisor committed. A fresh thread needs two clicks; the first arms it.
  */
 
 export function quietThreadRead(model: Model): NonNullable<UpdateReturn["commands"]> {
@@ -85,8 +81,6 @@ export function threadHandlers(
   | "RejectedFreshThread"
   | "FailedFreshThread"
 > {
-  // An answer for a selection the reader has left belongs to another project, so it changes
-  // nothing, whatever it says.
   const forSelection = (selection: number, next: () => Model): UpdateReturn => ({
     model: selection === model.selection ? next() : model,
   });
@@ -108,7 +102,6 @@ export function threadHandlers(
         freshThreadStatus: "fresh thread started; repository files are untouched",
         turnState: "",
       })),
-    // The conversation is unchanged, so only the fresh thread's own status says why.
     RejectedFreshThread: ({ selection, wording }) =>
       forSelection(selection, () => ({
         ...model,

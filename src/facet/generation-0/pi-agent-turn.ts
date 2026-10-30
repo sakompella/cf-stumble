@@ -44,11 +44,9 @@ type PiAgentTurnRequest = Readonly<{
   state: PiAgentTurnState;
   env: ExecutionEnv;
   streamFn: StreamFn;
-  /** Called for every Pi lifecycle event, so a caller can publish the turn while it runs. */
   onEvent?: (event: AgentEvent) => void;
   /** Aborts the run in progress. A turn already past its last model call ignores it. */
   signal?: AbortSignal;
-  /** Overrides this generation's compaction budget. A test uses it to force compaction. */
   compaction?: CompactionPolicy;
 }>;
 
@@ -79,12 +77,8 @@ const TEXT_ONLY_READ_IMAGE_NOTE =
   "Supports text files. An image file returns only its type, because this model route carries text only.";
 
 /**
- * Pi's read tool with every image declined, so reading an image answers with its type as text.
- *
- * The model route carries text only (`route-stream.ts`), so an image block in a tool result would
- * fail the next model call. The Supervisor saves that failed turn's conversation, so every later
- * turn on the thread would meet the same image and fail the same way. A processor that declines
- * is the hook Pi provides for this: the tool then returns its own text result instead.
+ * The model route carries text only, so an image block in a tool result would fail the next model call,
+ * and the saved failed turn would repeat that on every later turn.
  */
 function textOnlyReadTool(): AgentHarnessTool<ExecutionToolContext> {
   const tool = createReadTool({
@@ -120,15 +114,7 @@ function handoffState(agent: Agent): PiAgentTurnState {
   };
 }
 
-/**
- * The prompt this turn sends: this generation's own instructions plus whatever the workspace and
- * the selected repository currently say.
- *
- * It is rebuilt from {@link GENERATION_0_SYSTEM_PROMPT} on every turn rather than continued from
- * the saved state, because the saved prompt is last turn's answer to this same question. Rebuilding
- * is what lets a re-provisioned workspace, an edited `AGENTS.md`, or a replaced generation change
- * the instructions of a conversation that is already running.
- */
+/** Rebuilt every turn, not continued from saved state, so a re-provisioned workspace or edited `AGENTS.md` reaches a running conversation. */
 async function turnSystemPrompt(request: PiAgentTurnRequest): Promise<string> {
   const instructions = await loadTurnInstructions(request.env, request.signal);
 
@@ -142,10 +128,8 @@ async function turnSystemPrompt(request: PiAgentTurnRequest): Promise<string> {
 }
 
 /**
- * The conversation this turn starts from, compacted first when it has outgrown this generation's
- * declared budget. Compaction happens before the turn rather than between its model calls because
- * Pi's `Agent` transforms the context it sends without changing the messages it hands back, and a
- * compaction the thread does not keep would be paid for again on every later turn.
+ * Compacted before the turn, not between model calls: Pi's `Agent` transforms the context it sends
+ * without changing the messages it returns, so an unkept compaction would be paid for every turn.
  */
 async function startingMessages(request: PiAgentTurnRequest): Promise<readonly AgentMessage[]> {
   const messages = request.state.messages;
@@ -176,9 +160,7 @@ export async function runPiAgentTurn(request: PiAgentTurnRequest): Promise<PiAge
       messages: [...(await startingMessages(request))],
       tools: executionTools(context),
     },
-    // Pi's own message conversion, so a compaction summary reaches the model as the summary block
-    // Pi defines. The agent's default conversion drops every role it does not send verbatim, which
-    // would silently discard exactly the message compaction just produced.
+    // The default conversion drops roles it does not send verbatim, which would discard the compaction summary.
     convertToLlm,
     streamFn: request.streamFn,
     shouldStopAfterTurn: ({ toolResults }) => {

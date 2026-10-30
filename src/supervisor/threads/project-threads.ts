@@ -17,14 +17,7 @@ import {
   type SelectableProject,
 } from "../../selectable-projects.js";
 
-/**
- * Where the tenant's catalog comes from, read at each call rather than captured once.
- *
- * A Supervisor outlives the list of connected projects: the owner connects a repository while the
- * object is already running, and the thread surface has to resolve that project on the next
- * request. A catalog captured in the constructor would answer `unknown-project-id` for it until
- * the object was evicted.
- */
+/** Read at each call: a repository connected while the object runs must resolve on the next request. */
 type ProjectCatalogSource = () => SelectableCatalog;
 
 type CatalogProblem = Readonly<{ code: "invalid-project-id" | "unknown-project-id" }>;
@@ -39,16 +32,7 @@ export type DisconnectProjectResult =
       }>;
     }>;
 
-/**
- * The thread surface a client reaches, and the only place a client-supplied project id turns into
- * a selectable project.
- *
- * The catalog resolves the id first, and everything past that point works in `SelectableProject`
- * values, so the row a request touches is named by the server. A client can select one of the
- * tenant's repositories or the harness entry; it cannot name a thread. The harness gets its own
- * row for the same reason every repository does: one current conversation per thing you can be
- * working in, and a fresh thread on one leaves the others alone.
- */
+/** The only place a client-supplied project id becomes a selectable project, so the server names the row a request touches. */
 export class ProjectThreads {
   private readonly store: ThreadStore;
   private readonly catalog: ProjectCatalogSource;
@@ -72,15 +56,10 @@ export class ProjectThreads {
     );
   }
 
-  /** The live turn lease that ends last, on any project or the harness, if one is held. */
   liveTurn(now: number): LiveTurn | undefined {
     return this.store.liveTurn(now);
   }
 
-  /**
-   * Admit one turn on the project's thread. The caller presents the revision it read; the store
-   * mints the lease id and this is where it reaches the caller.
-   */
   startTurn(
     projectId: unknown,
     expectedRevision: number,
@@ -151,8 +130,7 @@ export class ProjectThreads {
   }
 }
 
-// The thread surface composes Results and converts once, here, because these plain unions are what
-// getProjectThread and startFreshProjectThread return over Supervisor RPC (ADR-0045).
+// Composes Results and converts once: these plain unions cross Supervisor RPC.
 function plainThread(
   result: Result.Result<ProjectThread, ProjectThreadProblem>,
 ): ProjectThreadResult {

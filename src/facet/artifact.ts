@@ -48,11 +48,6 @@ export class MainHarnessArtifact {
     this.modules = modules;
   }
 
-  /**
-   * A module map reaches this class as decoded JSON: a build wrote it, or a stored artifact
-   * decoded to it. Nothing before this point proved its shape, so the parameter says so and
-   * `isMainHarnessArtifactInput` is what turns it into the declared input type.
-   */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a built or stored module map is decoded JSON, so its shape is proven here.
   static parse(input: unknown): Result.Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
     if (!isMainHarnessArtifactInput(input)) {
@@ -91,7 +86,6 @@ function isHarnessModuleInput(
   );
 }
 
-/** The one place a decoded module map becomes a `MainHarnessArtifactInput`. */
 function isMainHarnessArtifactInput(value: unknown): value is MainHarnessArtifactInput {
   if (typeof value !== "object" || value === null) {
     return false;

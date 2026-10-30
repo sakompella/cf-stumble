@@ -1,7 +1,5 @@
 // oxlint-disable import/max-dependencies -- Workspace Host owns the platform and all workspace surfaces.
 
-// oxlint-disable max-lines -- The Workspace Host class exposes one narrow method per workspace capability.
-
 import {
   Workspace,
   type DurableObjectStorageLike,
@@ -57,7 +55,6 @@ const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as con
 
 const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
 
-/** The credential surface's callers treat every failure but a failed command as unavailable. */
 const CREDENTIAL_REFUSED = {
   ok: false,
   error: { code: "workspace-unavailable", detail: "the workspace is resetting" },
@@ -71,22 +68,18 @@ type WorkspaceContainerReset = Readonly<{
   restart(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo>;
 }>;
 
-/** The same launch settings the container backend uses for a fresh workspace connection. */
+/** Must match the launch settings the container backend uses. */
 const WORKSPACE_CONTAINER_RESET_SPEC = {
   env: { PORT: "8080", MOUNT_POINT: "/workspace" },
   enableInternet: true,
 } as const satisfies ContainerLaunchSpec;
 
-/**
- * Clear the authoritative workspace rows before replacing the container that mirrors them. The
- * storage belongs to this Workspace Host, and the restart destroys the old container replica so it
- * cannot push the deleted files back on a later workspace operation.
- */
+/** Restarting destroys the old container replica, so it cannot push the deleted files back. */
 export function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
   container: WorkspaceContainerReset,
 ): Effect.Effect<WorkspaceResetResult> {
-  // A step that rejects is a defect: the reset RPC rejects with what it threw, as it always has.
+  // A rejecting step is a defect: the reset RPC rejects with what it threw.
   return Effect.promise(async () => {
     await storage.deleteAll();
     const restarted = await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
@@ -97,7 +90,6 @@ export function resetWorkspaceStorage(
 }
 
 interface WorkspaceHostEnv {
-  /** The harness repository this deployment builds from. See `harness-build.ts`. */
   readonly HARNESS_REPOSITORY_URL?: string;
 }
 
@@ -115,12 +107,7 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
   return storage as DurableObjectStorageLike;
 }
 
-/**
- * Write the current managed instructions, replacing whatever file holds that path. The file is
- * cf-stumble's, so an older release's text or an agent's edit gives way. A symbolic link or a
- * directory at that path is not the managed file, and the write refuses rather than follow or
- * replace it.
- */
+/** A symbolic link or directory at the path is not the managed file; the write refuses rather than follow or replace it. */
 type ManagedInstructionOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   writeFile(path: string, content: string): Promise<void>;
@@ -157,12 +144,8 @@ export function ensureManagedInstructions(
 }
 
 /**
- * The one durable Computer workspace a tenant owns (ADR-0038). It holds the harness repository,
- * every connected project repository, and the build scratch subtree as separate directories, and
- * the Supervisor names it from its own server-derived tenant key.
- *
- * Its RPC surface returns plain values and one narrow project capability; it never returns the
- * workspace, its container API, or a credential-bearing binding.
+ * The one durable Computer workspace a tenant owns. Its RPC surface returns plain values and one
+ * narrow project capability, never the workspace, its container API, or a credential-bearing binding.
  */
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
@@ -171,7 +154,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   readonly #container: WorkspaceContainerAPI;
   readonly #idle: WorkspaceIdleController;
   readonly #containerLifecycle = new ContainerLifecycle();
-  /** Set from the moment a reset arrives until it ends. Host RPCs and project capabilities refuse. */
   #resetting = false;
 
   constructor(ctx: DurableObjectState, env: WorkspaceHostEnv) {
@@ -201,12 +183,10 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  /** Run one Host RPC as work in flight, so the idle check never counts it as quiet time. */
   #tracked<A>(work: () => Effect.Effect<A>): Promise<A> {
     return runAtEntryPoint(trackedWork(this.#idle, Effect.suspend(work)));
   }
 
-  /** Run one Host RPC as tracked work, or answer `refused` without running it while a reset runs. */
   #unlessResetting<A>(refused: A, work: () => Effect.Effect<A>): Promise<A> {
     return this.#resetting ? Promise.resolve(refused) : this.#tracked(work);
   }
@@ -220,12 +200,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  /**
-   * Build one labeled harness commit. This surface carries only the planned build steps, so a
-   * caller names a commit and a step and never supplies command text. A build extracts into the
-   * scratch subtree `workspace-layout.ts` reserves for it, which holds no repository, so a build
-   * writes inside no project clone and never inside the editable harness checkout.
-   */
+  /** A caller names a commit and a step, never command text. A build writes inside no project clone and never inside the editable harness checkout. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
@@ -237,17 +212,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /**
-   * Reconcile this workspace against the repository the catalog names for a project.
-   *
-   * This is a surface of its own rather than a step of the build surface. Each surface parses
-   * only its own request and plans from its own configuration, so a build can never reach a
-   * project clone and a provision can never reach the harness build root.
-   *
-   * A caller names a project and a planned step. The repository URL and the directory are both
-   * resolved from the catalog on this side, so no caller can point a clone at a URL or a place of
-   * its own.
-   */
+  /** The repository URL and directory come from the catalog, so no caller can point a clone at a URL or place of its own. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
@@ -258,7 +223,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /** Remove one connected project's clone and provisioning remnants, never the harness. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The RPC parser validates this boundary.
   removeProject(request: unknown): Promise<WorkspaceResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
@@ -269,7 +233,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /** Write the current managed instructions; both provisioning plans call this before a turn. */
   ensureManagedInstructions(): Promise<WorkspaceResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
       ensureManagedInstructions(new ComputerWorkspaceOperations(this.#workspace, "not-required")),
@@ -277,23 +240,9 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /**
-   * Install, inspect, or exercise this workspace's GitHub credential.
-   *
-   * This is where a token enters the workspace and stops. The install hands it to `gh` on standard
-   * input, so it is in no command line and on no filesystem; from then on the credential lives in
-   * the ordinary local `gh` configuration and Git's helper reads it (ADR-0039). Nothing this
-   * surface returns carries a token: an install answers with a word, a status with a state and at
-   * most a login name, and a failure with redacted text.
-   *
-   * It is a surface of its own for the same reason provisioning is: a credential install is
-   * neither a build step nor a provisioning step, and each surface parses only its own request,
-   * so neither of the others can be asked to install, read, or exercise a token.
-   *
-   * The install requires a complete sync of the workspace's durable copy: `hosts.yml` now lives
-   * under the workspace root, and a copy that is still pending would be lost with the container.
-   * Status and the repository check change no workspace file, so they do not wait for a sync. They
-   * still run a command through the container, which syncs the workspace before and after it, so
-   * a reset refuses while they run and they refuse while a reset runs.
+   * A token enters the workspace here and stops. The install hands it to `gh` on standard input, so
+   * it is in no command line. Install requires a complete sync, because a pending `hosts.yml` would
+   * be lost with the container.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown): Promise<GitHubCredentialResult> {
@@ -308,11 +257,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /**
-   * Owner reset: wipe this workspace's durable rows, then replace the container that mirrors them.
-   * Any tracked work still running (a change, a credential read, a project exec) would be cut off
-   * halfway, and could write into the wiped store afterwards, so the reset refuses while one runs.
-   * For the same reason it excludes new ones, a project capability, and a second reset until it
-   * ends.
+   * Tracked work still running would be cut off halfway and could write into the wiped store, so
+   * reset refuses while any runs and excludes new work, project capabilities, and a second reset.
    */
   reset(): Promise<WorkspaceResetResult> {
     if (this.#resetting || this.#idle.snapshot().inFlight > 0)
@@ -324,12 +270,11 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       resetWorkspaceStorage(this.ctx.storage, this.#container).pipe(
         Effect.ensuring(
           Effect.sync(() => {
-            // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
-            // deployment); rebuild it so the next operation recreates them instead of failing.
+            // deleteAll dropped the Workspace's own tables; rebuild so the next operation recreates them.
             this.#workspace = this.#newWorkspace();
 
-            // It may also have dropped the idle alarm (the `delete_all_deletes_alarm` compatibility
-            // flag), so forget the one this instance armed; the end of this call arms a new one.
+            // It may also have dropped the idle alarm (the `delete_all_deletes_alarm` flag), so forget
+            // the one this instance armed; the end of this call arms a new one.
             this.#idle.forgetAlarm();
           }),
         ),
@@ -339,10 +284,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  /**
-   * Hand out a project capability bounded to one turn and this container generation. During a
-   * reset it throws instead: the Workspace it would wrap is being deleted.
-   */
+  /** During a reset it throws: the Workspace it would wrap is being deleted. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   project(budget?: unknown): ProjectRpcTarget {
     if (this.#resetting) throw new Error("workspace-busy: the workspace is resetting");
@@ -350,7 +292,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     const remainingMs = parseProjectBudget(budget);
     const options = remainingMs === undefined ? {} : { remainingMs };
 
-    // Work can arrive until the turn's deadline, and the quiet period starts after it.
     this.#idle.leaseUntil(Date.now() + (remainingMs ?? PROJECT_TURN_LEASE_MS));
 
     return new ProjectRpcTarget(
@@ -368,7 +309,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#containerBackend.handleFetch(request);
   }
 
-  /** The idle check. The RPC WebSocket from computerd is not work, so it never delays a stop. */
+  /** The RPC WebSocket from computerd is not work, so it never delays a stop. */
   override alarm(): Promise<void> {
     return this.#idle.onAlarm();
   }

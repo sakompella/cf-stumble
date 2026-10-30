@@ -12,7 +12,6 @@ import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import { WORKSPACE_ROOT } from "../workspace-layout.js";
 import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
-/** A build request whose commit passed `parseHarnessCommit`. Only this form reaches a command. */
 type ParsedHarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: HarnessCommit; step: HarnessBuildStepName }>
   | Readonly<{ kind: "build-output"; harnessCommit: HarnessCommit }>;
@@ -34,10 +33,6 @@ function parsedStep(value: UntrustedObject): HarnessBuildStepName | undefined {
   return HARNESS_BUILD_STEP_NAMES.find((name) => name === step);
 }
 
-/**
- * Parse the build surface's whole RPC input. A caller names a commit and one planned step; command
- * text has no field to arrive in, and an unplanned step is an unknown command.
- */
 export function parseHarnessBuildRequest(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the build surface's RPC boundary.
   value: unknown,
@@ -73,14 +68,9 @@ export function parseHarnessBuildRequest(
 }
 
 /**
- * Read the module map a build wrote, as a command rather than as a filesystem read.
- *
- * A build writes its output to the container's filesystem, which the workspace filesystem API
- * cannot read. The shell that wrote it can.
- *
- * The path is derived from the configuration and a validated commit, never from a request. The
- * symbolic-link refusal keeps the property the filesystem read had: `git archive` can carry a
- * symbolic link, so a harness commit could otherwise name a file outside its own build directory.
+ * Read through a command because a build writes to the container filesystem, which the workspace
+ * filesystem API cannot read. The symbolic-link refusal matters because `git archive` can carry a
+ * link that names a file outside the build directory.
  */
 function readModuleMapSource(plan: HarnessBuildPlan): string {
   return [
@@ -94,10 +84,7 @@ function readModuleMapSource(plan: HarnessBuildPlan): string {
   ].join("\n");
 }
 
-/**
- * Decide the one operation a parsed build request performs. Every path it names is derived from
- * the fixed configuration and a validated commit, so no request can reach outside the build root.
- */
+/** Every path is derived from the fixed configuration and a validated commit, never the request. */
 export function planHarnessBuildRequest(
   configuration: HarnessBuildConfiguration,
   request: ParsedHarnessBuildRequest,

@@ -22,7 +22,6 @@ function loginStatus(code: ChatGPTLoginFailure): number {
   return code === "exchange-unavailable" ? 503 : 400;
 }
 
-/** The sign-in attempt and the address the browser ended on, which carries the one-time code. */
 const CompleteBody = Schema.Struct({ attemptId: Schema.String, callbackUrl: Schema.String });
 
 const completeResponse = Effect.fnUntraced(
@@ -49,9 +48,8 @@ function viewResponse(
 }
 
 /**
- * The owner's ChatGPT connection (ADR-0047): read it, start a sign-in, finish it with the address
- * the sign-in ended on, or disconnect. No answer carries a token, a verifier, or a code. Answers
- * `undefined` for any other request, so the owner API can try its other routes.
+ * Answers `undefined` for any other request, so the owner API can try its other routes. No answer
+ * carries a token, a verifier, or a code.
  */
 export function routeChatGPTApiRequest(
   request: Request,

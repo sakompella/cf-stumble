@@ -16,7 +16,6 @@ import { projectIdFromPath, routePattern } from "./route-pattern.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
 
-/** A refused reset names why: a turn holds a lease, or the Workspace Host is changing files. */
 type WorkspaceResetResult =
   | Readonly<{ ok: true; reset: "workspace" }>
   | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" | "workspace-busy" }> }>;
@@ -41,12 +40,8 @@ function workspaceResetResponse(
 }
 
 /**
- * The active generation and the epoch a control request must observe.
- *
- * `generation` is written out as `null` when there is none, rather than left
- * off. `Response.json` drops an undefined field, so an instance with nothing active answered
- * `{"activeGeneration":{"epoch":0}}`, which reads like an active generation at epoch 0 to anyone
- * who has not read this file. The epoch is the control epoch and legitimately starts at 0.
+ * `generation` is written as `null` when there is none because `Response.json` drops undefined, and
+ * `{"activeGeneration":{"epoch":0}}` reads like an active generation at epoch 0.
  */
 function statusResponse(
   supervisor: OwnerApiSupervisor,
@@ -63,10 +58,6 @@ function statusResponse(
   );
 }
 
-/**
- * Naming a project the catalog does not have is a 404, because the client asked for something that
- * does not exist. A live turn refusing a fresh thread is a 409. An unreadable thread is a fault.
- */
 function threadResponse(
   read: () => Promise<ProjectThreadResult>,
 ): Effect.Effect<Response, SupervisorCallFailed> {
@@ -93,12 +84,8 @@ function threadProblemStatus(code: ProjectThreadProblem["code"]): number {
 }
 
 /**
- * Request data selects only one of the projects, a generation label, and an epoch within the one
- * Supervisor. It never names a Durable Object.
- *
- * A rejected Supervisor call, or a defect anywhere in a route, is logged redacted and answered with
- * a bare 500, because its text can come from a generation's code or a workspace command and is not
- * this boundary's to hand out.
+ * A rejected Supervisor call or a defect in a route is logged redacted and answered with a bare 500,
+ * because its text can come from a generation's code or a workspace command.
  */
 export function routeOwnerApiRequest(
   request: Request,
