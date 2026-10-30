@@ -1,13 +1,8 @@
 /// <reference types="@cloudflare/vitest-plugin/types" />
 
 import { expect, test } from "vitest";
-import {
-  activeSupervisor,
-  artifact,
-  expectFailedCandidate,
-  labelCandidate,
-  prepareWithModuleMap,
-} from "../helpers.js";
+import { activeSupervisor, artifact, labelCandidate, prepareWithModuleMap } from "../helpers.js";
+import { expectFailedCandidate } from "../generation-reads.js";
 
 /**
  * A candidate whose successful headers arrive in time can still fail the startup check while its

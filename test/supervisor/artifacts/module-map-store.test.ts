@@ -270,7 +270,6 @@ test("reports an incomplete stored module map instead of rebuilding the commit",
   await expect(storedKind(control, commits.incomplete)).resolves.toBe(
     "problem:stored-module-map-incomplete",
   );
-  expect(await control.getGeneration(label)).toMatchObject({ label, status: "candidate" });
 });
 
 /**

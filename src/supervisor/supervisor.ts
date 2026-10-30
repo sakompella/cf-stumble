@@ -42,12 +42,7 @@ import {
   timedTurnMount,
   timedTurnProvision,
 } from "./projects/index.js";
-import {
-  Generations,
-  parseGenerationLabel,
-  type ActiveGeneration,
-  type Generation,
-} from "./generations/index.js";
+import { Generations, type ActiveGeneration } from "./generations/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
   ChatGPTConnection,
@@ -222,16 +217,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   getActiveGeneration(): ActiveGeneration {
     return this.generations.active();
-  }
-
-  getGeneration(label: number): Generation | undefined {
-    const generationLabel = parseGenerationLabel(label);
-
-    return generationLabel === undefined ? undefined : this.generations.byLabel(generationLabel);
-  }
-
-  getGenerations(): readonly Generation[] {
-    return this.generations.all();
   }
 
   controlGeneration(command: GenerationCommand): GenerationControlResult {

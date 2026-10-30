@@ -208,21 +208,3 @@ export async function activateGeneration(
 
   return result.outcome.epoch;
 }
-
-export async function expectFailedCandidate(
-  control: DurableObjectStub<Supervisor>,
-  label: number,
-): Promise<void> {
-  const generation = await control.getGeneration(label);
-  expect(generation, "a failed candidate must retain its labeled generation").toMatchObject({
-    label,
-    status: "failed",
-  });
-  const active = await control.getActiveGeneration();
-  expect(active.generation, "a candidate check must not replace active traffic").toEqual({
-    label: 0,
-    harnessCommit: fixtureMainHarnessCommit,
-    status: "ready",
-  });
-  expect(active.epoch).toBeTypeOf("number");
-}

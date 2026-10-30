@@ -5,6 +5,7 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateFixtureGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
+import { readGeneration } from "./generation-reads.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -22,7 +23,7 @@ async function readyReplacement(name: string): Promise<DurableObjectStub<Supervi
 }
 
 async function activateReplacement(control: DurableObjectStub<Supervisor>, observedEpoch: number) {
-  const generation = await control.getGeneration(1);
+  const generation = await readGeneration(control, 1);
 
   if (generation === undefined) {
     throw new Error("the replacement generation must be labeled");

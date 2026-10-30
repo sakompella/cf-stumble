@@ -11,6 +11,7 @@ import {
   prepareGeneration,
   submitCandidate,
 } from "../helpers.js";
+import { readGenerations } from "../generation-reads.js";
 
 const commits = {
   first: "0123456789abcdef0123456789abcdef01234567",
@@ -45,7 +46,7 @@ test("resubmitting the same harness commit returns the existing generation", asy
 
   expect(resubmitted).toEqual(first);
   expect(
-    await control.getGenerations(),
+    await readGenerations(control),
     "labeling an already-labeled commit again must not add a second row (ADR-0030)",
   ).toHaveLength(1);
 });
@@ -210,7 +211,7 @@ test("resubmitting the same harness commit still returns the existing generation
 
   expect(resubmitted).toEqual(first);
   expect(
-    await control.getGenerations(),
+    await readGenerations(control),
     "the generation table, not a request journal, is what survives eviction (ADR-0030)",
   ).toHaveLength(1);
 });

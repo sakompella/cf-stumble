@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { artifact, prepareGeneration, storeModuleMap, submitCandidate } from "../helpers.js";
+import { readGeneration, readGenerations } from "../generation-reads.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -78,7 +79,7 @@ test("submits the fixture harness commit as Generation 0 and the next commit as 
       },
     },
   });
-  expect(await control.getGenerations()).toHaveLength(2);
+  expect(await readGenerations(control)).toHaveLength(2);
 });
 
 test("a later preparation outcome replaces the recorded status", async () => {
@@ -106,7 +107,7 @@ test("a later preparation outcome replaces the recorded status", async () => {
       generation: { label, status: "failed" },
     },
   });
-  expect(await control.getGeneration(label)).toMatchObject({ status: "failed" });
+  expect(await readGeneration(control, label)).toMatchObject({ status: "failed" });
 });
 
 test("refuses a candidate submission that does not name a harness commit", async () => {
@@ -116,7 +117,7 @@ test("refuses a candidate submission that does not name a harness commit", async
     ok: false,
     problem: { code: "invalid-harness-commit" },
   });
-  expect(await control.getGenerations(), "a refused submission labels nothing").toHaveLength(0);
+  expect(await readGenerations(control), "a refused submission labels nothing").toHaveLength(0);
 });
 
 test("activates a ready generation once and preserves its epoch on a repeated request", async () => {
@@ -124,7 +125,7 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   const label = await submitCandidate(control, secondHarnessCommit);
   await prepareGeneration(control, label, secondHarnessCommit);
 
-  const prepared = await control.getGeneration(label);
+  const prepared = await readGeneration(control, label);
   const activated = await activate(control, label);
   const repeated = await activate(control, label);
 
@@ -158,7 +159,7 @@ test("preserves generation state across eviction and labels nothing itself", asy
 
   await evictDurableObject(control);
 
-  expect(await control.getGenerations()).toEqual([
+  expect(await readGenerations(control)).toEqual([
     { label: 0, harnessCommit: thirdHarnessCommit, status: "ready" },
   ]);
   expect(await control.getActiveGeneration()).toEqual({
