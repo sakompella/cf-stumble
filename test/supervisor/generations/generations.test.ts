@@ -87,14 +87,14 @@ test("submits the fixture harness commit as Generation 0 and the next commit as 
   expect(await control.getGenerations()).toHaveLength(2);
 });
 
-test("keeps the first preparation outcome and refuses a later contradicting one", async () => {
-  const control = supervisor("records-one-preparation-outcome");
+test("a later preparation outcome replaces the recorded status", async () => {
+  const control = supervisor("records-latest-preparation-outcome");
   const label = await submitCandidate(control, secondHarnessCommit);
 
   await storeModuleMap(control, stagedPreparationArtifact(secondHarnessCommit));
   const recorded = await control.prepareGeneration(label);
   const repeated = await control.prepareGeneration(label);
-  const contradicted = await control.prepareGeneration(label);
+  const failed = await control.prepareGeneration(label);
 
   if (!recorded.ok || !repeated.ok) {
     throw new Error("a labeled generation must accept its first preparation check");
@@ -104,24 +104,15 @@ test("keeps the first preparation outcome and refuses a later contradicting one"
     ...recorded,
     report: { ...recorded.report, effect: "no-op" },
   });
-  expect(
-    contradicted,
-    "a second, different outcome is a real event and must not be swallowed",
-  ).toEqual({
-    ok: false,
-    problem: {
-      code: "contradicts-recorded-outcome",
-      label,
-      recorded: "ready",
+  expect(failed).toMatchObject({
+    ok: true,
+    report: {
+      stage: "response-rejected",
+      effect: "recorded",
+      generation: { label, status: "failed" },
     },
   });
-  expect(await control.getGeneration(label)).toEqual(recorded.report.generation);
-  const history = await control.getPreparationCheckHistory(label);
-
-  expect(
-    history.map((check) => check.outcome),
-    "a refused check is not evidence and must leave no record behind",
-  ).toEqual(["passed", "passed"]);
+  expect(await control.getGeneration(label)).toMatchObject({ status: "failed" });
 });
 
 test("refuses a candidate submission that does not name a harness commit", async () => {

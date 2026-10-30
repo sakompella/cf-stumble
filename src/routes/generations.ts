@@ -125,10 +125,9 @@ export const handleGenerationControl = Effect.fnUntraced(
  * carries Supervisor error text.
  *
  * Resubmitting an already-labeled commit runs the same preparation step again rather than
- * replaying an earlier response. That check is itself idempotent: recording a preparation outcome
- * that agrees with what is already recorded is a no-op, and a genuinely different outcome for the
- * same commit is refused as a contradiction (`contradicts-recorded-outcome`) instead of silently
- * overwriting the first result.
+ * replaying an earlier response. Recording an outcome that agrees with the recorded status is a
+ * no-op, and a different outcome replaces it, so a check that failed on a slow cold start does not
+ * mark the commit failed forever.
  */
 export const handleGenerationSubmission = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationSubmissionSupervisor) {

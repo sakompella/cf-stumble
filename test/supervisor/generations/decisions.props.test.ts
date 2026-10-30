@@ -95,7 +95,7 @@ test("a preparation check with an invalid outcome is rejected for any generation
   });
 });
 
-test("a check on a candidate records the matching status and advances the epoch by one", () => {
+test("a check that changes the status records it and advances the epoch by one", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
@@ -103,8 +103,12 @@ test("a check on a candidate records the matching status and advances the epoch 
     const state = { activeLabel: undefined, epoch, activationId: tc.draw(count) };
     const expectedStatus: GenerationStatus = outcome === "passed" ? "ready" : "failed";
 
+    const previous: GenerationStatus = tc.draw(
+      gs.sampledFrom(["candidate", outcome === "passed" ? "failed" : "ready"] as const),
+    );
+
     expect(
-      decidePreparationCheck(label(target), outcome, generation(target, "candidate"), state),
+      decidePreparationCheck(label(target), outcome, generation(target, previous), state),
     ).toEqual({
       kind: "record",
       outcome,
@@ -132,22 +136,6 @@ test("a check that confirms the recorded status is a no-op that still advances t
       statusUpdate: undefined,
       nextEpoch: epoch + 1,
       effect: "no-op",
-    });
-  });
-});
-
-test("a check that contradicts the recorded status is rejected and reports it", () => {
-  hegel.test((tc) => {
-    const target = tc.draw(labelValue);
-    const outcome = tc.draw(gs.sampledFrom(["passed", "failed"] as const));
-    const recorded: GenerationStatus = outcome === "passed" ? "failed" : "ready";
-    const state = { activeLabel: undefined, epoch: tc.draw(count), activationId: tc.draw(count) };
-
-    expect(
-      decidePreparationCheck(label(target), outcome, generation(target, recorded), state),
-    ).toEqual({
-      kind: "rejected",
-      problem: { code: "contradicts-recorded-outcome", label: target, recorded },
     });
   });
 });

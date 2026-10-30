@@ -91,14 +91,7 @@ export function decidePreparationCheck(
   const status: GenerationStatus = outcome === "passed" ? "ready" : "failed";
   const nextEpoch = state.epoch + 1;
 
-  if (generation.status !== "candidate") {
-    if (generation.status !== status) {
-      return {
-        kind: "rejected",
-        problem: { code: "contradicts-recorded-outcome", label, recorded: generation.status },
-      };
-    }
-
+  if (generation.status === status) {
     return {
       kind: "record",
       outcome,

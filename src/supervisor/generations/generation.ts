@@ -34,12 +34,7 @@ export type PreparationCheckOutcome = "passed" | "failed";
 
 export type PreparationCheckProblem =
   | { readonly code: "unknown-generation"; readonly label: number }
-  | { readonly code: "invalid-preparation-check-outcome" }
-  | {
-      readonly code: "contradicts-recorded-outcome";
-      readonly label: number;
-      readonly recorded: GenerationStatus;
-    };
+  | { readonly code: "invalid-preparation-check-outcome" };
 
 export type PreparationCheckResult = Result.Result<
   {

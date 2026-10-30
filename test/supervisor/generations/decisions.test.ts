@@ -92,11 +92,15 @@ test("a check confirming the recorded status is a no-op that still advances the 
   );
 });
 
-test("a check contradicting the recorded status is rejected and reports it", () => {
+test("a check contradicting the recorded status replaces it", () => {
   expect(decidePreparationCheck(label(1), "failed", generation(1, "ready"), stateAt(5, 2))).toEqual(
     {
-      kind: "rejected",
-      problem: { code: "contradicts-recorded-outcome", label: 1, recorded: "ready" },
+      kind: "record",
+      outcome: "failed",
+      generation: generation(1, "failed"),
+      statusUpdate: "failed",
+      nextEpoch: 6,
+      effect: "recorded",
     },
   );
 });
