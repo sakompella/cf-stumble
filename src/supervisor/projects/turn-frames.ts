@@ -90,9 +90,13 @@ export type ProjectTurnFrame =
   | Readonly<{ kind: "cancelled" }>
   | Readonly<{ kind: "timed-out" }>;
 
-/** One proven frame of a generation's stream: something to forward, or the turn's ending. */
+/**
+ * One proven frame of a generation's stream: something to forward, a progress kind this
+ * Supervisor does not know, or the turn's ending.
+ */
 type ParsedFacetFrame =
   | Readonly<{ kind: "forwarded"; frame: ProjectTurnFrame }>
+  | Readonly<{ kind: "unknown-kind" }>
   | Readonly<{ kind: "terminal"; frame: FacetTerminalFrame }>
   | Readonly<{ kind: "invalid"; problem: TurnStreamProblem }>;
 
@@ -214,8 +218,9 @@ function parseRejected(frame: Record<string, unknown>): ParsedFacetFrame {
  * Prove one line of a generation's turn stream.
  *
  * Every accepted frame is rebuilt from the fields its kind declares, so a field a generation added
- * is dropped here rather than forwarded to a browser, and an unknown kind is a malformed stream
- * rather than something to pass through.
+ * is dropped here rather than forwarded to a browser. A kind this Supervisor does not know is
+ * dropped too rather than ending the turn, so a generation that adds a progress frame keeps its
+ * turns; a known kind with bad fields is still a malformed stream.
  */
 export function parseFacetFrameLine(line: string): ParsedFacetFrame {
   let decoded: unknown;
@@ -248,6 +253,6 @@ export function parseFacetFrameLine(line: string): ParsedFacetFrame {
     case "rejected":
       return parseRejected(decoded);
     default:
-      return malformed;
+      return { kind: "unknown-kind" };
   }
 }

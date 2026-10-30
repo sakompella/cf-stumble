@@ -6,7 +6,6 @@ const malformed = { kind: "invalid", problem: "malformed-frame" } as const;
 
 test.each([
   ["a malformed line", "{not json"],
-  ["a frame of a kind the Supervisor does not know", JSON.stringify({ kind: "invented" })],
   [
     "a frame missing a field its kind declares",
     JSON.stringify({ kind: "tool-result", toolCallId: "call-1", toolName: "bash" }),

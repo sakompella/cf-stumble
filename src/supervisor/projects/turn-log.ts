@@ -137,7 +137,7 @@ function settlement(frame: ProjectTurnFrame): Settlement {
 }
 
 /** Why a progress frame was left out of the browser's stream instead of ending the turn. */
-export type DroppedFrame = "oversized-frame";
+export type DroppedFrame = "oversized-frame" | "unknown-kind";
 
 /**
  * The log of one turn's stream: the first frame's arrival, the first frame dropped for each

@@ -188,6 +188,12 @@ class TurnReader {
       return { kind: "terminal", frame: parsed.frame };
     }
 
+    if (parsed.kind === "unknown-kind") {
+      this.#drop("unknown-kind");
+
+      return undefined;
+    }
+
     // Progress only shows the turn; it is never saved. A frame too large to show is left out
     // rather than costing the conversation the terminal frame will carry.
     if (line.byteLength > TURN_PROGRESS_FRAME_MAX_BYTES) {
