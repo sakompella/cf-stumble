@@ -32,10 +32,7 @@ function loginRows(model: Model, h: HtmlBuilder<Message>): readonly Html[] {
           ),
         ],
       ),
-      h.p(
-        [h.Class("note")],
-        ["sign in, then paste the address the browser ends on (http://127.0.0.1:1455/…)"],
-      ),
+      h.p([h.Class("note")], ["Sign in, then paste the final address (http://127.0.0.1:1455/…)."]),
       controlRow(
         {
           label: "address",

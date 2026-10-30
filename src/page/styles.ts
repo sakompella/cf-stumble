@@ -47,17 +47,23 @@ export const OWNER_PAGE_STYLES = `
     padding: 0.6rem 0.8rem 0.8rem;
   }
   #conversation { flex: 1 1 auto; margin-bottom: 0; min-width: 0; }
-  .generation-bar { margin-top: 0.5rem; }
+  .generation-bar { margin-top: 0.5rem; padding-bottom: 0.4rem; }
+  .status-line { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.3rem; }
+  .status-line button { margin-left: auto; }
+  .generation-bar summary, .details summary { color: rgba(90, 90, 90, 1); cursor: pointer; font-size: 0.85rem; }
+  .generation-bar > details { margin-top: 0.3rem; }
+  .conversation-head { align-items: baseline; display: flex; gap: 0.6rem; }
   .drawer-panel { border-top: 1px solid rgba(128, 128, 128, 0.3); }
   .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
   .field-label {
     color: rgba(90, 90, 90, 1);
     display: inline-block;
     font-size: 0.75rem;
-    min-width: 9rem;
+    min-width: 6.5rem;
     text-transform: uppercase;
   }
-  .value { font-family: ui-monospace, monospace; word-break: break-all; }
+  .value { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+  .row:has(> .value:empty) { display: none; }
   input, textarea, button { font: inherit; }
   input, textarea { padding: 0.3rem 0.4rem; }
   input[type="text"] { min-width: 14rem; }
@@ -97,7 +103,17 @@ export const OWNER_PAGE_STYLES = `
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .message .text { background: none; padding: 0; }
+  .message .text { background: none; font: inherit; padding: 0; }
+  .markdown { overflow-wrap: anywhere; }
+  .markdown > * { margin: 0.35rem 0; }
+  .markdown p { white-space: pre-wrap; }
+  .markdown h3, .markdown h4, .markdown h5, .markdown h6 { font-size: 1rem; text-transform: none; }
+  .markdown ul, .markdown ol { padding-left: 1.4rem; }
+  .markdown ul { list-style: disc; }
+  .markdown ol { list-style: decimal; }
+  .markdown code { font-family: ui-monospace, monospace; background: rgba(128, 128, 128, 0.18); border-radius: 3px; font-size: 0.9em; padding: 0 0.2rem; }
+  .markdown pre { background: rgba(128, 128, 128, 0.12); border-radius: 4px; font-size: 0.85rem; overflow: auto; padding: 0.4rem; white-space: pre; }
+  .markdown pre code { background: none; padding: 0; }
   .tool-call { margin: 0.4rem 0; }
   .tool-call summary { cursor: pointer; font-family: ui-monospace, monospace; font-size: 0.85rem; }
   .tool-call.failed summary { color: rgba(200, 60, 60, 1); }
@@ -108,6 +124,8 @@ export const OWNER_PAGE_STYLES = `
   .diff-line.hunk { color: rgba(90, 120, 200, 1); }
   .composer { margin-top: 0.5rem; }
   .note { color: rgba(90, 90, 90, 1); font-size: 0.8rem; margin: 0.3rem 0; }
+  .note:empty { display: none; }
+  .status { font-family: ui-monospace, monospace; font-size: 0.85rem; }
   #page-error:empty { display: none; }
   #page-error {
     background: rgba(200, 60, 60, 0.15);

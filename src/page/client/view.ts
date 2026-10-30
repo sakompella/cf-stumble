@@ -75,12 +75,6 @@ function gitHubPanel(model: Model, h: HtmlBuilder<Message>): Html {
           button(ID.refreshGitHubButton, Message.ClickedRefreshGitHub(), "Check again", h),
         ],
       ),
-      h.p(
-        [h.Class("note")],
-        [
-          "cf-stumble never asks for a token here. Open the verification link, enter the code at GitHub, then use the second button.",
-        ],
-      ),
     ],
   );
 }
@@ -150,10 +144,6 @@ export function view(model: Model, h: HtmlBuilder<Message>): Html {
         [],
         [
           h.h1([], ["cf-stumble"]),
-          h.p(
-            [h.Class("note")],
-            ["This page asks for no credential, stores none, and calls only this origin."],
-          ),
           h.p([h.Id(ID.pageError)], model.pageError === "" ? [] : [model.pageError]),
         ],
       ),
