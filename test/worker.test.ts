@@ -8,6 +8,6 @@ test("a request with no credential reaches the Supervisor and reads the status",
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   await expect(response.json()).resolves.toEqual({
-    activeGeneration: { generation: null, epoch: 0, activationId: null },
+    activeGeneration: { generation: null, epoch: 0 },
   });
 });
