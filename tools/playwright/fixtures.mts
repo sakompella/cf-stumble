@@ -6,10 +6,10 @@ import { startHarnessServer, type HarnessServer } from "../browser-harness/serve
 /**
  * One harness stub per test, and the owner page opened against it with its first reads answered.
  *
- * A test names the world with `test.use({ scenario })`. The stub is the same one
- * `pnpm harness:browser` uses, so the page, its Content Security Policy, and the API shapes are
- * identical; only the driver differs. Any console error the page reports fails the test, because
- * an owner who sees the right words beside a broken script is still looking at a broken page.
+ * A test names the world with `test.use({ scenario })`. The stub serves the real page, so its
+ * Content Security Policy and the API shapes are the real ones. Any console error the page reports
+ * fails the test, because an owner who sees the right words beside a broken script is still
+ * looking at a broken page.
  */
 
 type OwnerPageFixtures = {
@@ -54,9 +54,17 @@ export function threadRevision(page: Page) {
   return page.locator(`#${ID.threadRevision}`);
 }
 
+export function projectButton(page: Page, projectId: string) {
+  return page.locator(`.project-button[data-project-id="${projectId}"]`);
+}
+
 /** The transcript entries of one role, each read as the text a reader sees under its label. */
 export function transcriptTexts(page: Page, role: "user" | "assistant") {
   return page.locator(`#${ID.messageList} > li.${role} > pre.text`);
+}
+
+export function requestsTo(server: HarnessServer, method: "GET" | "POST", path: string) {
+  return server.requests().filter((request) => request.method === method && request.path === path);
 }
 
 /** Every request the page sent to start a turn, as the stub received it. */
