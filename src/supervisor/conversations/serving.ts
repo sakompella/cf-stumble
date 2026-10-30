@@ -75,6 +75,8 @@ export class ServingConversations {
 
         if (message === undefined) return yield* fail("invalid-message");
 
+        if (this.#ports.resetting()) return yield* fail("workspace-busy");
+
         const facet = yield* this.#facet();
         const conversationId = yield* this.#conversation(facet, project);
 
@@ -139,9 +141,16 @@ export class ServingConversations {
     );
   }
 
-  /** A disconnected project's conversation is left unreferenced, like a fresh thread's predecessor. */
-  forget(projectId: string): void {
+  /**
+   * A disconnected project's conversation is left unreferenced, like a fresh thread's predecessor.
+   * Refused while a run is active.
+   */
+  release(projectId: string): boolean {
+    if (this.running()) return false;
+
     this.#projects.forget(projectId);
+
+    return true;
   }
 
   /** Attaching resumes the session; past the run's deadline every current conversation is aborted. */

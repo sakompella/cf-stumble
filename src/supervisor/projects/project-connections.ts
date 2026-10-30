@@ -42,7 +42,6 @@ import {
 } from "../../workspace/index.js";
 import { logRedactedCause } from "../../diagnostics.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
-import type { DisconnectProjectResult } from "../threads/index.js";
 
 function repositorySizeAllowed(
   repositoryUrl: PublicRepositoryUrl,
@@ -61,14 +60,18 @@ function repositorySizeAllowed(
 
 export type DisconnectRepositoryResult =
   | Readonly<{ ok: true; projectId: ProjectId; workspace: "removed" | "failed" }>
-  | Extract<DisconnectProjectResult, { ok: false }>
-  | Readonly<{ ok: false; problem: Readonly<{ code: "workspace-busy" }> }>;
+  | Readonly<{
+      ok: false;
+      problem: Readonly<{
+        code: "invalid-project-id" | "unknown-project-id" | "run-active" | "workspace-busy";
+      }>;
+    }>;
 
 /**
- * Runs inside the disconnect's ordered operation, so no turn can be admitted between it and the row
- * removal.
+ * Runs inside the disconnect's ordered operation. False while a run is active: removing the
+ * directories would pull them from under its commands.
  */
-type ReleaseProjectThread = () => DisconnectProjectResult;
+type ReleaseProject = (projectId: ProjectId) => boolean;
 
 type ConnectRepositoryProblem = Readonly<{
   code:
@@ -232,7 +235,7 @@ export class ProjectConnections {
   disconnect(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
     projectId: unknown,
-    releaseThread: ReleaseProjectThread,
+    release: ReleaseProject,
   ): Effect.Effect<DisconnectRepositoryResult> {
     const parsed = parseProjectId(projectId);
 
@@ -243,14 +246,14 @@ export class ProjectConnections {
     return this.lifecycle.exclusive(
       parsed,
       Effect.gen({ self: this }, function* () {
-        const thread = releaseThread();
-
-        if (!thread.ok) return thread;
-
         const resolved = resolveProject(parsed, this.projects.catalog());
 
         if (!resolved.ok) {
           return { ok: false, problem: { code: resolved.reason } } as const;
+        }
+
+        if (!release(resolved.project.id)) {
+          return { ok: false, problem: { code: "run-active" } } as const;
         }
 
         this.projects.disconnect(resolved.project.id);

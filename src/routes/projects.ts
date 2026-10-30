@@ -45,10 +45,12 @@ const CONNECT_STATUS = {
 const DISCONNECT_STATUS = {
   "invalid-project-id": 400,
   "unknown-project-id": 404,
-  "harness-project": 400,
-  "turn-active": 409,
+  "run-active": 409,
   "workspace-busy": 409,
-} as const;
+} as const satisfies Record<
+  Extract<DisconnectRepositoryResult, { ok: false }>["problem"]["code"],
+  number
+>;
 
 function disconnectResponse(
   projectId: string,

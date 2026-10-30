@@ -59,31 +59,27 @@ async function firstChunkThenCancel(response: Response): Promise<string> {
   return new TextDecoder().decode(first.value);
 }
 
-test("a turn's frames reach the client while the turn runs, and a cancel reaches the turn", async () => {
+test("a conversation's events reach the client while they commit, and a cancel reaches the watch", async () => {
   const supervisor = ownersSupervisor();
-  const frames = heldStream('{"kind":"text","text":"working"}\n');
+  const events = heldStream('{"type":"snapshot"}\n');
 
   // An RPC result is disposable; a result made in this isolate has nothing to release.
-  vi.spyOn(supervisor, "runProjectTurn").mockResolvedValue({
+  vi.spyOn(supervisor, "projectEvents").mockResolvedValue({
     ok: true,
-    frames: frames.stream,
+    events: events.stream,
     [Symbol.dispose]: () => {},
   });
 
   const response = await worker.fetch(
-    new Request(`${ORIGIN}/api/projects/${sampleProjectOne.id}/turn`, {
-      method: "POST",
-
-      body: JSON.stringify({ prompt: "hello" }),
-    }),
+    new Request(`${ORIGIN}/api/projects/${sampleProjectOne.id}/events`),
     env,
   );
 
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(response.headers.get("content-type")).toBe("application/x-ndjson; charset=utf-8");
-  await expect(firstChunkThenCancel(response)).resolves.toBe('{"kind":"text","text":"working"}\n');
-  await expect(frames.cancelled).resolves.toBeUndefined();
+  await expect(firstChunkThenCancel(response)).resolves.toBe('{"type":"snapshot"}\n');
+  await expect(events.cancelled).resolves.toBeUndefined();
 });
 
 test("a relayed generation response streams through, and a cancel reaches the generation", async () => {

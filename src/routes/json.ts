@@ -11,7 +11,7 @@ type ApiErrorCode =
   | "invalid-activation-request"
   | "invalid-rollback-request"
   | "invalid-connect-request"
-  | "invalid-turn-request"
+  | "invalid-message-request"
   | "invalid-chatgpt-request"
   | "cross-origin-request"
   | "not-found"

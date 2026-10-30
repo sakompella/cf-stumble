@@ -27,7 +27,7 @@ const REMOVAL = "rm -rf --";
 
 const CLONE = "git clone";
 
-const threadReleased = () => ({ ok: true }) as const;
+const noRunActive = () => true;
 
 /** One `ProjectConnections`, as one Supervisor instance holds it, over the fake workspace. */
 function withConnections<T>(
@@ -77,7 +77,7 @@ test("a reconnect waits until the earlier disconnect has removed the clone", asy
   await withConnections("reconnect-during-removal", workspace, async (connections) => {
     await Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     const removal = workspace.holdNext(REMOVAL);
-    const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, threadReleased));
+    const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive));
     await removal.reached;
     const clonesBeforeReconnect = indexOfLast(workspace.commands, CLONE);
 
@@ -135,7 +135,7 @@ test("a disconnect during a connection's clone removes the clone after it lands"
     const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     await clone.reached;
 
-    const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, threadReleased));
+    const disconnecting = Effect.runPromise(connections.disconnect(PROJECT_ID, noRunActive));
     await letOtherWorkRun();
 
     expect(
@@ -154,33 +154,33 @@ test("a disconnect during a connection's clone removes the clone after it lands"
   });
 });
 
-test("a disconnect waits for the thread check until an earlier connection has settled", async () => {
+test("a disconnect waits for the run check until an earlier connection has settled", async () => {
   const workspace = new FakeTenantWorkspace();
 
   await withConnections("disconnect-thread-order", workspace, async (connections) => {
     const clone = workspace.holdNext(CLONE);
     const connecting = Effect.runPromise(connections.connect(REPOSITORY, undefined, NOW));
     await clone.reached;
-    let threadChecked = false;
+    let runChecked = false;
 
     const disconnecting = Effect.runPromise(
       connections.disconnect(PROJECT_ID, () => {
-        threadChecked = true;
+        runChecked = true;
 
-        return { ok: false, problem: { code: "turn-active", deadlineAt: NOW } };
+        return false;
       }),
     );
 
     await letOtherWorkRun();
 
-    expect(threadChecked, "the thread is released inside the same ordered operation").toBe(false);
+    expect(runChecked, "the project is released inside the same ordered operation").toBe(false);
 
     clone.release(0);
     await connecting;
 
     await expect(disconnecting).resolves.toEqual({
       ok: false,
-      problem: { code: "turn-active", deadlineAt: NOW },
+      problem: { code: "run-active" },
     });
     expect(isConnected(connections)).toBe(true);
   });

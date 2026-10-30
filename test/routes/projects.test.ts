@@ -267,8 +267,7 @@ test("disconnects the project id in the path", async () => {
 test.each([
   ["invalid-project-id", 400],
   ["unknown-project-id", 404],
-  ["harness-project", 400],
-  ["turn-active", 409],
+  ["run-active", 409],
 ] as const)("answers a %s disconnect refusal with %i", async (code, status) => {
   const response = await ownerApiResponse(
     post(`/api/projects/${connectedProject.id}/disconnect`, {}),

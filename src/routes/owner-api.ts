@@ -1,9 +1,7 @@
-// oxlint-disable import/max-dependencies -- The owner API is where every route group meets, so it imports each of them.
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
-import type { ProjectThreadProblem, ProjectThreadResult } from "../supervisor/threads/index.js";
 import {
   handleGenerationControl,
   handleGenerationSubmission,
@@ -12,25 +10,23 @@ import {
 } from "./generations.js";
 import { routeChatGPTApiRequest, type ChatGPTApiSupervisor } from "./chatgpt.js";
 import { callSupervisor, jsonError, SupervisorCallFailed } from "./json.js";
-import { projectIdFromPath, routePattern } from "./route-pattern.js";
+import { routePattern } from "./route-pattern.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
-import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
+import { routeConversationRequest, type ConversationApiSupervisor } from "./conversations.js";
 
 type WorkspaceResetResult =
   | Readonly<{ ok: true; reset: "workspace" }>
   | Readonly<{
       ok: false;
-      problem: Readonly<{ code: "turn-active" | "run-active" | "workspace-busy" }>;
+      problem: Readonly<{ code: "run-active" | "workspace-busy" }>;
     }>;
 
 export type OwnerApiSupervisor = ChatGPTApiSupervisor &
   GenerationControlSupervisor &
   GenerationSubmissionSupervisor &
   ProjectApiSupervisor &
-  TurnApiSupervisor & {
+  ConversationApiSupervisor & {
     readonly getActiveGeneration: () => Promise<ActiveGeneration>;
-    readonly getProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
-    readonly startFreshProjectThread: (projectId: string) => Promise<ProjectThreadResult>;
     readonly resetWorkspace: () => Promise<WorkspaceResetResult>;
   };
 
@@ -59,31 +55,6 @@ function statusResponse(
       }),
     ),
   );
-}
-
-function threadResponse(
-  read: () => Promise<ProjectThreadResult>,
-): Effect.Effect<Response, SupervisorCallFailed> {
-  return callSupervisor(read).pipe(
-    Effect.map((result) => {
-      if (result.ok) {
-        return Response.json({ ok: true, thread: result.thread });
-      }
-
-      return Response.json(
-        { ok: false, problem: result.problem },
-        { status: threadProblemStatus(result.problem.code) },
-      );
-    }),
-  );
-}
-
-function threadProblemStatus(code: ProjectThreadProblem["code"]): number {
-  if (code === "unreadable-thread") return 500;
-
-  if (code === "turn-active") return 409;
-
-  return 404;
 }
 
 /**
@@ -121,10 +92,10 @@ function ownerApiRoute(
     return projectRoute;
   }
 
-  const turnRoute = routeProjectTurnRequest(request, supervisor);
+  const conversationRoute = routeConversationRequest(request, supervisor);
 
-  if (turnRoute !== undefined) {
-    return turnRoute;
+  if (conversationRoute !== undefined) {
+    return conversationRoute;
   }
 
   const chatgptRoute = routeChatGPTApiRequest(request, supervisor);
@@ -154,18 +125,6 @@ function ownerApiRoute(
 
   if (isPost && pathname === "/api/workspace/reset") {
     return workspaceResetResponse(supervisor);
-  }
-
-  const threadProjectId = projectIdFromPath(pathname, "/thread");
-
-  if (isGet && threadProjectId !== undefined) {
-    return threadResponse(() => supervisor.getProjectThread(threadProjectId));
-  }
-
-  const freshProjectId = projectIdFromPath(pathname, "/thread/fresh");
-
-  if (isPost && freshProjectId !== undefined) {
-    return threadResponse(() => supervisor.startFreshProjectThread(freshProjectId));
   }
 
   return Effect.succeed(jsonError(404, "not-found"));

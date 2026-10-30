@@ -5,17 +5,8 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { GenerationControl } from "../../src/supervisor/control/index.js";
 import { Generations } from "../../src/supervisor/generations/index.js";
-import { ProjectThreads } from "../../src/supervisor/threads/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
-import { sampleSelectableCatalog } from "../project-fixtures.js";
-import { connectedSupervisor } from "./helpers.js";
-
-const NOW = 1_700_000_000_000;
-
-const LEASE_MS = 30_000;
-
-const PROJECT_ID = "sample-project-one";
 
 const commit = "7200000000000000000000000000000000000001";
 
@@ -105,53 +96,4 @@ test("a preparation check whose status write fails raises and changes nothing", 
   });
 
   expect(outcome).toEqual({ raised: true, status: "candidate", epoch: 1 });
-});
-
-test("a save whose write fails raises and leaves the lease and the conversation", async () => {
-  const control = await connectedSupervisor("save-rolls-back");
-
-  const outcome = await runInDurableObject(control, (_instance, state) => {
-    const threads = new ProjectThreads(state.storage, () => sampleSelectableCatalog);
-    const admitted = threads.startTurn(PROJECT_ID, 0, NOW, LEASE_MS);
-
-    if (!admitted.ok) throw new Error("the first turn must be admitted");
-
-    refuseStatements(state.storage, "UPDATE project_threads SET messages");
-
-    const raised = raises(() => {
-      threads.finishTurn(PROJECT_ID, admitted.leaseId, [], NOW + 1);
-    });
-
-    vi.restoreAllMocks();
-
-    return { raised, after: threads.read(PROJECT_ID) };
-  });
-
-  expect(outcome).toMatchObject({
-    raised: true,
-    after: { ok: true, thread: { conversation: "[]", revision: 0, turnActive: true } },
-  });
-});
-
-test("an admission whose lease write fails raises and admits nothing", async () => {
-  const control = await connectedSupervisor("admission-rolls-back");
-
-  const outcome = await runInDurableObject(control, (_instance, state) => {
-    const threads = new ProjectThreads(state.storage, () => sampleSelectableCatalog);
-
-    refuseStatements(state.storage, "INSERT INTO project_threads");
-
-    const raised = raises(() => {
-      threads.startTurn(PROJECT_ID, 0, NOW, LEASE_MS);
-    });
-
-    vi.restoreAllMocks();
-
-    return { raised, after: threads.read(PROJECT_ID) };
-  });
-
-  expect(outcome).toMatchObject({
-    raised: true,
-    after: { ok: true, thread: { turnActive: false } },
-  });
 });

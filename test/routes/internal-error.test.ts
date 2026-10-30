@@ -8,7 +8,7 @@ const ORIGIN = "https://cf-stumble.test";
 
 const SECRET = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-const THREAD_PATH = `/api/projects/${sampleProjectOne.id}/thread`;
+const PROJECT_PATH = `/api/projects/${sampleProjectOne.id}`;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,14 +27,24 @@ const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSuper
     { getGitHubConnection: thrown },
   ],
   [
-    "GET /api/projects/:projectId/thread",
-    new Request(`${ORIGIN}${THREAD_PATH}`),
-    { getProjectThread: thrown },
+    "POST /api/projects/:projectId/messages",
+    controlRequest(`${PROJECT_PATH}/messages`, '{"content":"hi","requestId":"r"}'),
+    { submitProjectMessage: thrown },
+  ],
+  [
+    "GET /api/projects/:projectId/events",
+    new Request(`${ORIGIN}${PROJECT_PATH}/events`),
+    { projectEvents: thrown },
+  ],
+  [
+    "POST /api/projects/:projectId/abort",
+    controlRequest(`${PROJECT_PATH}/abort`, "{}"),
+    { abortProjectRun: thrown },
   ],
   [
     "POST /api/projects/:projectId/thread/fresh",
-    controlRequest(`${THREAD_PATH}/fresh`, "{}"),
-    { startFreshProjectThread: thrown },
+    controlRequest(`${PROJECT_PATH}/thread/fresh`, "{}"),
+    { freshProjectConversation: thrown },
   ],
   [
     "POST /api/generations/activate",

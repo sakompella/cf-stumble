@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { routeProjectTurnRequest } from "../../src/routes/turns.js";
+import { routeConversationRequest } from "../../src/routes/conversations.js";
+import { messageRefusingSupervisor } from "./helpers.js";
 
 /**
  * The workerd half of `request-bodies.props.test.ts`: the edges of the exact-body rule, decoded by
@@ -9,32 +10,28 @@ import { routeProjectTurnRequest } from "../../src/routes/turns.js";
 
 const ORIGIN = "https://cf-stumble.test";
 
-async function turnStatus(body: string): Promise<number> {
-  const route = routeProjectTurnRequest(
-    new Request(`${ORIGIN}/api/projects/p/turn`, {
-      method: "POST",
-      body,
-    }),
-    {
-      runProjectTurn: () => Promise.resolve({ ok: false, problem: { code: "turn-conflict" } }),
-    },
+async function messageStatus(body: string): Promise<number> {
+  const route = routeConversationRequest(
+    new Request(`${ORIGIN}/api/projects/p/messages`, { method: "POST", body }),
+    messageRefusingSupervisor(),
   );
 
-  if (route === undefined) throw new Error("the turn path must route");
+  if (route === undefined) throw new Error("the message path must route");
 
   return (await Effect.runPromise(route)).status;
 }
 
 test.each([
-  ['{"prompt":"hi"}', 409],
-  ['{"prompt":""}', 409],
-  ['{"prompt":"hi","prompt":"again"}', 409],
-  ['{"prompt":"hi","extra":1}', 400],
-  ['{"prompt":"hi","__proto__":{}}', 400],
-  ['{"__proto__":{"prompt":"hi"}}', 400],
-  ['{"prompt":null}', 400],
-  ['["prompt"]', 400],
+  ['{"content":"hi","requestId":"r"}', 409],
+  ['{"content":"","requestId":""}', 409],
+  ['{"content":"hi","content":"again","requestId":"r"}', 409],
+  ['{"content":"hi","requestId":"r","extra":1}', 400],
+  ['{"content":"hi","requestId":"r","__proto__":{}}', 400],
+  ['{"__proto__":{"content":"hi","requestId":"r"}}', 400],
+  ['{"content":null,"requestId":"r"}', 400],
+  ['{"content":"hi"}', 400],
+  ['["content"]', 400],
   ["", 400],
-] as const)("the turn body %s is answered %i", async (body, status) => {
-  await expect(turnStatus(body)).resolves.toBe(status);
+] as const)("the message body %s is answered %i", async (body, status) => {
+  await expect(messageStatus(body)).resolves.toBe(status);
 });

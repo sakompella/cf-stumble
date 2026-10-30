@@ -4,7 +4,8 @@ import * as gs from "@hegeldev/hegel/generators";
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { handleGenerationControl } from "../../src/routes/generations.js";
-import { routeProjectTurnRequest } from "../../src/routes/turns.js";
+import { routeConversationRequest } from "../../src/routes/conversations.js";
+import { messageRefusingSupervisor } from "./helpers.js";
 
 /**
  * A request body must be a JSON object with exactly the fields its route names, each of the right
@@ -78,23 +79,23 @@ function post(path: string, body: string): Request {
   return new Request(`${ORIGIN}${path}`, { method: "POST", body });
 }
 
-test("a turn reaches the Supervisor exactly when its body is one string prompt", async () => {
+test("a message reaches the Supervisor exactly when its body is a string content and request id", async () => {
   await hegel.testAsync(async (tc) => {
-    const body = drawBody(tc, ["prompt"]);
+    const names = ["content", "requestId"];
+    const body = drawBody(tc, names);
     let reached = false;
 
-    const route = routeProjectTurnRequest(post("/api/projects/p/turn", body), {
-      runProjectTurn: () => {
+    const route = routeConversationRequest(
+      post("/api/projects/p/messages", body),
+      messageRefusingSupervisor(() => {
         reached = true;
+      }),
+    );
 
-        return Promise.resolve({ ok: false, problem: { code: "turn-conflict" } });
-      },
-    });
-
-    if (route === undefined) throw new Error("the turn path must route");
+    if (route === undefined) throw new Error("the message path must route");
 
     const response = await Effect.runPromise(route);
-    const expected = admits(body, ["prompt"], (_name, value) => typeof value === "string");
+    const expected = admits(body, names, (_name, value) => typeof value === "string");
 
     expect(reached).toBe(expected);
     expect(response.status).toBe(expected ? 409 : 400);

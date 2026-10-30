@@ -23,14 +23,23 @@ const FIXED_ROUTES: ReadonlySet<string> = new Set([
   "/api/workspace/reset",
 ]);
 
-const PROJECT_ROUTE = /^\/api\/projects\/[^/]+(\/thread|\/thread\/fresh|\/turn|\/disconnect)$/u;
+const PROJECT_ROUTE_SUFFIXES = [
+  "/messages",
+  "/events",
+  "/abort",
+  "/thread/fresh",
+  "/disconnect",
+] as const;
+
+export type ProjectRouteSuffix = (typeof PROJECT_ROUTE_SUFFIXES)[number];
 
 export function routePattern(pathname: string): string {
   if (FIXED_ROUTES.has(pathname)) return pathname;
 
-  const projectRoute = PROJECT_ROUTE.exec(pathname)?.[1];
+  const projectRoute = /^\/api\/projects\/[^/]+(\/.+)$/u.exec(pathname)?.[1];
+  const suffix = PROJECT_ROUTE_SUFFIXES.find((known) => known === projectRoute);
 
-  if (projectRoute !== undefined) return `/api/projects/:projectId${projectRoute}`;
+  if (suffix !== undefined) return `/api/projects/:projectId${suffix}`;
 
   return pathname.startsWith("/api/") ? "/api/unknown" : "relay";
 }
@@ -38,7 +47,7 @@ export function routePattern(pathname: string): string {
 /** The Supervisor resolves it against the catalog, so an unknown id is not guessed at here. */
 export function projectIdFromPath(
   pathname: string,
-  suffix: "/thread" | "/thread/fresh" | "/turn" | "/disconnect",
+  suffix: ProjectRouteSuffix,
 ): string | undefined {
   const [, encodedProjectId, rest] = /^\/api\/projects\/([^/]+)(\/.+)$/u.exec(pathname) ?? [];
 

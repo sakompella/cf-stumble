@@ -101,12 +101,12 @@ test("the failure arms of startup checking return plain RPC values", async () =>
   expect(failures).toStrictEqual(structuredClone(failures));
 });
 
-test("the failure arms of control, threads, and relay return plain values", async () => {
+test("the failure arms of control, conversations, and relay return plain values", async () => {
   const control = supervisor("plain-control-failures");
 
   const failures = [
     await control.controlGeneration({ kind: "activate", label: 0, observedEpoch: 1 }),
-    await control.getProjectThread("not-a-project"),
+    await control.submitProjectMessage("not-a-project", "hello", "r1"),
   ];
 
   expect(failures).toStrictEqual([

@@ -8,11 +8,8 @@ import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
 import { readGenerations } from "./generation-reads.js";
-import { startProjectTurn } from "./threads/turn-slot.js";
 
 const NOW = 1_700_000_000_000;
-
-const LEASE_MS = 30_000;
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -55,13 +52,12 @@ function fakeWorkspace(resetResult: WorkspaceResetResult) {
   return { resetWorkspace, workspace };
 }
 
-test("resets the named workspace while preserving thread and generation state", async () => {
+test("resets the named workspace while preserving the projects and generations", async () => {
   const control = env.SUPERVISOR.getByName("workspace-reset-preserves-supervisor-state");
   await connectSampleProjects(control);
-  await control.startFreshProjectThread("sample-project-one");
   await submitCandidate(control, "0123456789abcdef0123456789abcdef01234567");
 
-  const threadBeforeReset = await control.getProjectThread("sample-project-one");
+  const projectsBeforeReset = await control.listProjects();
   const generationsBeforeReset = await readGenerations(control);
   await runInDurableObject(control, (_instance, state) => {
     new GitHubConnectionStore(state.storage).recordConnection({
@@ -85,33 +81,8 @@ test("resets the named workspace while preserving thread and generation state", 
   expect(getByName).toHaveBeenCalledWith("tenant:workspace-reset-preserves-supervisor-state");
   expect(fake.resetWorkspace).toHaveBeenCalledOnce();
   await expect(control.getGitHubConnection()).resolves.toEqual({ github: null, checkedAt: null });
-  expect(await control.getProjectThread("sample-project-one")).toEqual(threadBeforeReset);
+  expect(await control.listProjects()).toEqual(projectsBeforeReset);
   expect(await readGenerations(control)).toEqual(generationsBeforeReset);
-});
-
-test("a live turn on any project or the harness refuses the reset before the workspace is asked", async () => {
-  for (const projectId of ["sample-project-one", "harness"]) {
-    const control = env.SUPERVISOR.getByName(`workspace-reset-live-turn-${projectId}`);
-    await connectSampleProjects(control);
-    const turn = await startProjectTurn(control, projectId, 0, NOW, LEASE_MS);
-
-    if (!turn.ok) throw new Error(`the ${projectId} turn must be admitted`);
-
-    const fake = fakeWorkspace({ ok: true, reset: "workspace" });
-    vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
-
-    await expect(control.resetWorkspace(NOW + 1)).resolves.toEqual({
-      ok: false,
-      problem: { code: "turn-active", projectId, deadlineAt: NOW + LEASE_MS },
-    });
-    expect(fake.resetWorkspace).not.toHaveBeenCalled();
-
-    await expect(control.resetWorkspace(NOW + LEASE_MS)).resolves.toEqual({
-      ok: true,
-      reset: "workspace",
-    });
-    vi.restoreAllMocks();
-  }
 });
 
 test("a reset the Workspace Host refuses keeps the GitHub connection record", async () => {
@@ -164,7 +135,7 @@ function heldWorkspace() {
   return { started, finish: held.finish, resetWorkspace, workspace };
 }
 
-test("while a reset runs, turns, connects, disconnects, and a second reset are refused", async () => {
+test("while a reset runs, messages, connects, disconnects, and a second reset are refused", async () => {
   const control = env.SUPERVISOR.getByName("workspace-reset-exclusion");
   await connectSampleProjects(control);
   const fake = heldWorkspace();
@@ -179,7 +150,7 @@ test("while a reset runs, turns, connects, disconnects, and a second reset are r
     await fake.started;
 
     await expect(
-      supervisor.runProjectTurn("sample-project-one", "a turn during the reset"),
+      supervisor.submitProjectMessage("sample-project-one", "a message during the reset", "r1"),
     ).resolves.toEqual(busy);
     await expect(supervisor.resetWorkspace()).resolves.toEqual(busy);
     await expect(supervisor.connectProject(sampleProjectTwo.repositoryUrl, "")).resolves.toEqual({
@@ -193,9 +164,11 @@ test("while a reset runs, turns, connects, disconnects, and a second reset are r
     await expect(resetting).resolves.toEqual({ ok: true, reset: "workspace" });
   });
 
-  // The refused turn took no lease, and the exclusion ended with the reset.
+  // The exclusion ended with the reset, and the refused disconnect removed nothing.
   await expect(control.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
-  expect((await control.getProjectThread("sample-project-one")).ok, "still connected").toBe(true);
+  expect((await control.listProjects()).map((project) => project.id)).toContain(
+    "sample-project-one",
+  );
 });
 
 test("the reset exclusion ends when the Workspace Host call throws", async () => {

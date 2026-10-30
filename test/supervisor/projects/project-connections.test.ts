@@ -369,7 +369,7 @@ test("disconnects a project row and removes its clone through the narrow workspa
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1", () => ({ ok: true })),
+    connections.disconnect("sample-repo-1", () => true),
   );
 
   const listed = await subject.connections((connections) =>
@@ -394,7 +394,7 @@ test("removes the project row when workspace cleanup fails", async () => {
   subject.workspace.unavailable = true;
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1", () => ({ ok: true })),
+    connections.disconnect("sample-repo-1", () => true),
   );
 
   const listed = await subject.connections((connections) =>
@@ -416,7 +416,7 @@ test("reports a removal that the durable store does not show as failed, not remo
   subject.workspace.commandSync = "incomplete";
 
   const disconnected = await subject.connections((connections) =>
-    connections.disconnect("sample-repo-1", () => ({ ok: true })),
+    connections.disconnect("sample-repo-1", () => true),
   );
 
   const listed = await subject.connections((connections) =>
