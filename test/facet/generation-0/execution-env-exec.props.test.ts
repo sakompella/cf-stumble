@@ -1,7 +1,6 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-import { resolveTurnDeadlineAt } from "../../../src/facet/generation-0/facet-turn.js";
 import { boundedExecTimeout } from "../../../src/facet/generation-0/execution-env-exec.js";
 import { TURN_TOOL_TIMEOUT_RESERVE_MS } from "../../../src/facet/generation-0/turn-policy.js";
 import { MAX_EXEC_TIMEOUT_MS } from "../../../src/workspace/project/protocol.js";
@@ -44,15 +43,4 @@ test("refuses a command once only the reserve remains", () => {
     undefined,
   );
   expect(boundedExecTimeout(undefined, deadlineAt, deadlineAt)).toBeUndefined();
-});
-
-test("accepts a future admission deadline and falls back for invalid values", () => {
-  const startedAt = 10_000;
-  const fallback = startedAt + 480_000;
-
-  expect(resolveTurnDeadlineAt(startedAt + 1, startedAt)).toBe(startedAt + 1);
-
-  for (const invalid of [undefined, null, NaN, Infinity, startedAt - 1, startedAt]) {
-    expect(resolveTurnDeadlineAt(invalid, startedAt)).toBe(fallback);
-  }
 });

@@ -82,14 +82,6 @@ async function pumpTurn(
   publish(outcomeFrame(outcome));
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this parses an optional RPC deadline.
-export function resolveTurnDeadlineAt(value: unknown, startedAt: number): number {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC deadline is untrusted.
-  if (typeof value === "number" && Number.isFinite(value) && value > startedAt) return value;
-
-  return startedAt + PROJECT_TURN_DEADLINE_MS;
-}
-
 /**
  * Runs one turn against a workspace capability received as an RPC method argument, starting in the
  * working directory the host selected, and returns the newline-delimited JSON frames it produces.
@@ -111,11 +103,9 @@ export function startFacetTurn(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the turn request arrives over RPC, so it has no proven shape here.
   request: unknown,
   workingDirectory: string,
-  deadline?: number,
   now: () => number = Date.now,
 ): ReadableStream<Uint8Array> {
-  const startedAt = now();
-  const deadlineAt = resolveTurnDeadlineAt(deadline, startedAt);
+  const deadlineAt = now() + PROJECT_TURN_DEADLINE_MS;
   const cancellation = new AbortController();
   let lease: ProjectCapabilityLease | undefined;
 
