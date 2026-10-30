@@ -203,3 +203,53 @@ test("keepalives do not hold a quiet turn past its deadline", async () => {
   expect(chunks).toEqual(["\n", `${JSON.stringify({ kind: "timed-out" })}\n`]);
   expect(closedAfterMs).toBeLessThan(3_500);
 });
+
+test("a cancellation the generation never acknowledges does not hold the turn's settlement", async () => {
+  const projectId = parseProjectId("project-one");
+
+  if (projectId === undefined) throw new Error("expected a valid project id");
+
+  const completed = new TextEncoder().encode(
+    `${JSON.stringify({ kind: "completed", state: { messages: [] } })}\n`,
+  );
+
+  const frames = new ReadableStream<Uint8Array>();
+  Object.defineProperty(frames, "getReader", {
+    value: () => ({
+      read: () => Promise.resolve({ done: false, value: completed }),
+      cancel: () => new Promise<void>(() => {}),
+    }),
+  });
+
+  const finishTurn = vi.fn((): ProjectThreadResult => ({
+    ok: true,
+    thread: {
+      projectId,
+      revision: 1,
+      messageCount: 0,
+      turnActive: false,
+      turnDeadlineAt: undefined,
+      conversation: "[]",
+    },
+  }));
+
+  const end = vi.fn<() => void>();
+  const bound = new TurnBound(Date.now() + 1_000, now);
+
+  const stream = readTurnStream({
+    projectId,
+    leaseId: "lease-one",
+    threads: { finishTurn, abandonTurn: vi.fn() },
+    now,
+    bound,
+    workspace: { end },
+    trace: turnTrace(projectId, "lease-one", undefined, Date.now()),
+    frames,
+  });
+
+  const result = await stream.getReader().read();
+
+  expect(JSON.parse(decoder.decode(result.value))).toMatchObject({ kind: "saved", revision: 1 });
+  expect(finishTurn).toHaveBeenCalledOnce();
+  expect(end).toHaveBeenCalledOnce();
+});

@@ -106,17 +106,14 @@ class TurnReader {
   }
 
   /**
-   * Stop the generation's work. Cancelling its stream is what ends the Pi turn behind it. It runs
-   * after the ending is decided, so a slow acknowledgement cannot turn a terminal frame that
-   * already arrived into a timeout.
+   * Stop the generation's work. Cancelling its stream is what ends the Pi turn behind it. The
+   * acknowledgement comes from mutable code and may never arrive, so it is not awaited: the turn
+   * settles and ends its capability without it.
    */
   stop(): Effect.Effect<void> {
-    return Effect.promise(() =>
-      this.#reader.cancel().then(
-        () => {},
-        () => {},
-      ),
-    );
+    return Effect.sync(() => {
+      this.#reader.cancel().catch(() => {});
+    });
   }
 
   /** Publish every whole frame this chunk completed, or end the stream. */
