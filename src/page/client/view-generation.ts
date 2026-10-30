@@ -94,16 +94,35 @@ function controlPanel(model: Model, kind: ControlKind, h: HtmlBuilder<Message>):
   );
 }
 
+function detailsView(model: Model, h: HtmlBuilder<Message>): Html {
+  return h.details(
+    [h.Class("details")],
+    [
+      h.summary([], ["Details"]),
+      valueRow("epoch", ID.generationEpoch, model.generationEpoch, h),
+      valueRow("harness commit", ID.activeGenerationCommit, model.activeGenerationCommit, h),
+      valueRow("last read", ID.statusStatus, model.statusStatus, h),
+      valueRow("thread revision", ID.threadRevision, model.threadRevision, h),
+      valueRow("thread turn active", ID.threadTurnActive, model.threadTurnActive, h),
+      valueRow("messages", ID.threadMessageCount, model.threadMessageCount, h),
+    ],
+  );
+}
+
 export function generationBarView(model: Model, h: HtmlBuilder<Message>): Html {
   return h.section(
     [h.Class("generation-bar"), h.AriaLabel("Active generation")],
     [
-      h.div(
-        [h.Class("row")],
+      h.p(
+        [h.Class("status-line")],
         [
-          valueRow("generation", ID.activeGenerationLabel, model.activeGenerationLabel, h),
-          valueRow("epoch", ID.generationEpoch, model.generationEpoch, h),
-          valueRow("status", ID.activeGenerationStatus, model.activeGenerationStatus, h),
+          "generation ",
+          h.span([h.Class("value"), h.Id(ID.activeGenerationLabel)], [model.activeGenerationLabel]),
+          " · ",
+          h.span(
+            [h.Class("value"), h.Id(ID.activeGenerationStatus)],
+            [model.activeGenerationStatus],
+          ),
           h.button(
             [
               h.Id(ID.refreshStatusButton),
@@ -114,8 +133,7 @@ export function generationBarView(model: Model, h: HtmlBuilder<Message>): Html {
           ),
         ],
       ),
-      valueRow("harness commit", ID.activeGenerationCommit, model.activeGenerationCommit, h),
-      valueRow("last read", ID.statusStatus, model.statusStatus, h),
+      detailsView(model, h),
       h.details(
         [
           // The browser owns the drawer's open state.
