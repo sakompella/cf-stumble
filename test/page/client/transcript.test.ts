@@ -1,151 +1,122 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
+import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
+import type { Entry, PiMessage } from "../../../src/page/client/events.js";
 import {
   boundedLines,
   diffLineKind,
   looksLikeDiff,
-  savedTranscript,
-  textEntry,
-  TranscriptEntry,
+  transcriptOf,
 } from "../../../src/page/client/transcript.js";
 
-test("a saved conversation shows text blocks and tool results, and nothing it cannot read", () => {
-  const saved = JSON.stringify([
+function conversationOf(...messages: readonly PiMessage[]): Conversation {
+  const entries: Entry[] = messages.map((message, index) => ({
+    id: index + 1,
+    kind: "pi.test",
+    model: [message],
+  }));
+
+  return { ...EMPTY_CONVERSATION, entries };
+}
+
+function answer(
+  content: Extract<PiMessage, { stopReason: string }>["content"],
+  stopReason = "stop",
+) {
+  return { role: "assistant", content, stopReason } as const;
+}
+
+const toolCall = { type: "toolCall", id: "t", name: "read", arguments: { path: "a" } } as const;
+
+const toolResult = {
+  role: "toolResult",
+  toolCallId: "t",
+  toolName: "read",
+  content: [{ type: "text", text: "out" }],
+  isError: false,
+} as const;
+
+test("a conversation shows its text, fills each tool call's block with its result, and skips the rest", () => {
+  const conversation = conversationOf(
     { role: "user", content: "hi" },
-    {
-      role: "assistant",
-      content: [{ type: "text", text: "a" }, { type: "thinking" }, { type: "text", text: "b" }],
-    },
-    { role: "toolResult", toolCallId: "t", toolName: "read", content: "out", isError: false },
-    { role: "custom", content: 5 },
-    "not a message",
-  ]);
+    { role: "system" },
+    answer([
+      { type: "text", text: "a" },
+      { type: "thinking" },
+      { type: "text", text: "b" },
+      toolCall,
+    ]),
+    toolResult,
+  );
 
-  const transcript = Option.getOrThrow(savedTranscript(saved));
-
-  expect(transcript).toMatchObject([
+  expect(transcriptOf(conversation, [])).toMatchObject([
     { _tag: "Text", role: "user", who: "you", text: "hi" },
     { _tag: "Text", role: "assistant", text: "ab" },
-    { _tag: "Tool", summary: "read — done", isFailed: false },
-    { _tag: "Text", role: "system", who: "custom", text: "" },
+    { _tag: "Tool", toolCallId: "t", summary: "read — done", isFailed: false },
   ]);
-  expect(Option.isNone(savedTranscript("{"))).toBe(true);
-  expect(Option.isNone(savedTranscript("{}"))).toBe(true);
 });
 
-test("a saved assistant message that holds only tool calls adds no empty entry", () => {
-  const saved = JSON.stringify([
-    { role: "user", content: "hi" },
-    { role: "assistant", content: [{ type: "toolCall", id: "t", name: "read", arguments: {} }] },
-    { role: "toolResult", toolCallId: "t", toolName: "read", content: "out", isError: false },
-  ]);
+test("an answer that holds only tool calls adds no empty entry, and a running call shows its live output", () => {
+  const conversation: Conversation = {
+    ...conversationOf({ role: "user", content: "hi" }, answer([toolCall], "toolUse")),
+    tools: [{ callId: "t", name: "read", status: "running", output: "so far" }],
+  };
 
-  expect(Option.getOrThrow(savedTranscript(saved))).toMatchObject([
+  expect(transcriptOf(conversation, [])).toMatchObject([
     { _tag: "Text", role: "user" },
-    { _tag: "Tool", summary: "read — done" },
+    {
+      _tag: "Tool",
+      summary: 'read {"path":"a"}',
+      maybeOutput: Option.some({ content: "so far", isServerTruncated: false }),
+    },
   ]);
 });
 
-test("a saved answer Workers AI gave after ChatGPT's usage limit is preceded by a notice", () => {
-  const fallback = { type: "provider-fallback", timestamp: 1, details: { limitedUntil: null } };
+test("an answer Workers AI gave after ChatGPT's usage limit is preceded by a notice", () => {
+  const conversation = conversationOf({
+    ...answer([{ type: "text", text: "from Workers AI" }]),
+    diagnostics: [{ type: "provider-fallback" }],
+  });
 
-  const saved = JSON.stringify([
-    { role: "user", content: "hi" },
-    { role: "assistant", content: "from Workers AI", diagnostics: [fallback] },
-    { role: "assistant", content: "from ChatGPT", diagnostics: [{ type: "other" }] },
-  ]);
-
-  expect(Option.getOrThrow(savedTranscript(saved))).toMatchObject([
-    { role: "user", text: "hi" },
+  expect(transcriptOf(conversation, [])).toMatchObject([
     {
       role: "system",
       who: "notice",
       text: "ChatGPT usage limit reached; answered with Workers AI",
     },
     { role: "assistant", text: "from Workers AI" },
-    { role: "assistant", text: "from ChatGPT" },
   ]);
 });
 
-/**
- * One saved message of each kind the reader handles, as stored JSON, with each tool call id passed
- * through `id`. Tool `a` gets two results with other messages between them, so the later result
- * replaces the earlier block; `orphan` has no earlier block, and `b` follows the second `a`.
- */
-function mixedMessages(id: (toolCallId: string) => string): readonly string[] {
-  return [
-    { role: "user", content: "hi" },
-    {
-      role: "assistant",
-      content: [{ type: "text", text: "a" }, { type: "thinking" }, { type: "text", text: "b" }],
-    },
-    { role: "toolResult", toolCallId: id("a"), toolName: "read", content: "one", isError: false },
-    { role: "custom", content: 5 },
-    "not a message",
-    null,
-    7,
-    {},
-    { role: 3, content: "a role that is not text" },
-    {
-      role: "toolResult",
-      toolCallId: id("orphan"),
-      toolName: "bash",
-      content: [{ type: "text", text: "x" }],
-      isError: true,
-    },
-    { role: "assistant", content: "between" },
-    { role: "toolResult", toolCallId: id("a"), toolName: "write", content: "two", isError: true },
-    { role: "toolResult", toolCallId: id("b"), toolName: "ls", content: "three" },
-    { role: "system" },
-  ].map((message) => JSON.stringify(message));
-}
-
-function finishedTool(
-  toolCallId: string,
-  summary: string,
-  content: string,
-  isFailed: boolean,
-): TranscriptEntry {
-  return TranscriptEntry.Tool({
-    toolCallId,
-    summary,
-    maybeOutput: Option.some({ content, isServerTruncated: false }),
-    isFailed,
+test("an aborted or failed answer ends with what stopped it", () => {
+  const conversation = conversationOf(answer([], "aborted"), {
+    ...answer([], "error"),
+    errorMessage: "model-call-limit",
   });
-}
 
-function mixedTranscript(id: (toolCallId: string) => string): readonly TranscriptEntry[] {
-  return [
-    textEntry("user", "you", "hi"),
-    textEntry("assistant", "assistant", "ab"),
-    finishedTool(id("a"), "write — failed", "two", true),
-    textEntry("system", "custom", ""),
-    finishedTool(id("orphan"), "bash — failed", "x", true),
-    textEntry("assistant", "assistant", "between"),
-    finishedTool(id("b"), "ls — done", "three", false),
-    textEntry("system", "system", ""),
-  ];
-}
-
-function sameId(toolCallId: string): string {
-  return toolCallId;
-}
-
-test("a saved conversation keeps its exact entries, and a repeated tool id keeps one block", () => {
-  const saved = `[${mixedMessages(sameId).join(",")}]`;
-
-  expect(Option.getOrThrow(savedTranscript(saved))).toStrictEqual(mixedTranscript(sameId));
+  expect(transcriptOf(conversation, [])).toMatchObject([
+    { _tag: "Terminal", wording: "cancelled", isProblem: true },
+    { _tag: "Terminal", wording: "failed: model-call-limit", isProblem: true },
+  ]);
 });
 
-test("a long saved conversation reads as its parts read alone", () => {
-  const copies = Array.from(
-    { length: 4_000 },
-    (_, copy) => (toolCallId: string) => `${toolCallId}-${copy}`,
-  );
+test("the streaming answer and the messages this page has not seen placed follow the entries", () => {
+  const conversation: Conversation = {
+    ...conversationOf({ role: "user", content: "first" }),
+    maybePartial: Option.some(answer([{ type: "text", text: "Hel" }], "pending")),
+  };
 
-  const saved = `[${copies.flatMap(mixedMessages).join(",")}]`;
+  const outbox = [
+    { requestId: "a", text: "queued one", maybeSubmissionId: Option.some(9) },
+    { requestId: "b", text: "sending one", maybeSubmissionId: Option.none() },
+  ];
 
-  expect(Option.getOrThrow(savedTranscript(saved))).toStrictEqual(copies.flatMap(mixedTranscript));
+  expect(transcriptOf(conversation, outbox)).toMatchObject([
+    { who: "you", text: "first" },
+    { who: "assistant", text: "Hel" },
+    { who: "you · queued", text: "queued one" },
+    { who: "you · sending", text: "sending one" },
+  ]);
 });
 
 test("output is bounded to what the page lays out", () => {

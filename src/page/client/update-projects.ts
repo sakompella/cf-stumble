@@ -5,18 +5,17 @@ import {
   ConnectRepository,
   DisconnectChatGPT,
   FetchProjects,
-  FetchThread,
   FinishChatGPTLogin,
   RefreshGitHub,
   StartChatGPTLogin,
 } from "./commands.js";
 import type { GitHubReport, Model, Project } from "./model.js";
-import { Turn } from "./model.js";
+import { EMPTY_CONVERSATION } from "./conversation.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
 /**
- * Selecting a project bumps `selection`, so a thread read for the project a reader left is dropped,
- * and it stops any turn still streaming.
+ * Selecting a project opens a new events stream, so whatever arrives for the project a reader left
+ * is dropped.
  */
 
 function withGitHub(model: Model, report: GitHubReport): Model {
@@ -34,26 +33,19 @@ function withGitHub(model: Model, report: GitHubReport): Model {
 }
 
 function selectProject(model: Model, project: Project): UpdateReturn {
-  const selection = model.selection + 1;
-
   return {
     model: {
       ...model,
-      selection,
-      turn: Turn.Idle(),
+      eventsStreamId: model.eventsStreamId + 1,
       maybeProjectId: Option.some(project.id),
       conversationProject: project.displayName,
       isFreshArmed: false,
-      turnState: "",
+      runNote: "",
       freshThreadStatus: "",
-      transcript: [],
-      isAssistantOpen: false,
+      conversation: EMPTY_CONVERSATION,
+      outbox: [],
       conversationState: "reading",
-      threadRevision: "",
-      threadTurnActive: "",
-      threadMessageCount: "",
     },
-    commands: [FetchThread({ projectId: project.id, selection, isQuiet: false })],
   };
 }
 

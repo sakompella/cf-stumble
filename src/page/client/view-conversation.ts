@@ -4,6 +4,7 @@ import { OWNER_PAGE_IDS as ID } from "../element-ids.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import { statusText } from "./view-parts.js";
+import { transcriptOf } from "./transcript.js";
 import { transcriptView } from "./view-transcript.js";
 
 function sendShortcut(key: string, modifiers: Readonly<{ ctrlKey: boolean; metaKey: boolean }>) {
@@ -12,26 +13,32 @@ function sendShortcut(key: string, modifiers: Readonly<{ ctrlKey: boolean; metaK
     : Option.none();
 }
 
+/** A run is the conversation's, so its state shows here whichever browser started it. */
+function runState(model: Model): string {
+  const { isRunning, inbox } = model.conversation;
+
+  if (!isRunning) {
+    return model.runNote;
+  }
+
+  return inbox.length === 0 ? "running" : `running · ${inbox.length} queued`;
+}
+
 function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
-  const isRunning = model.turn._tag === "Streaming";
+  const isCancellable = model.conversation.isRunning || model.conversation.inbox.length > 0;
 
   return h.div(
     [h.Class("row")],
     [
       h.button(
-        [
-          h.Id(ID.sendTurnButton),
-          h.Type("button"),
-          h.Disabled(isRunning),
-          h.OnClick(Message.ClickedSendTurn()),
-        ],
+        [h.Id(ID.sendTurnButton), h.Type("button"), h.OnClick(Message.ClickedSendTurn())],
         ["Send turn"],
       ),
       h.button(
         [
           h.Id(ID.cancelTurnButton),
           h.Type("button"),
-          h.Disabled(!isRunning),
+          h.Disabled(!isCancellable),
           h.OnClick(Message.ClickedCancelTurn()),
         ],
         ["Cancel turn"],
@@ -40,7 +47,7 @@ function turnButtons(model: Model, h: HtmlBuilder<Message>): Html {
         [h.Id(ID.freshThreadButton), h.Type("button"), h.OnClick(Message.ClickedFreshThread())],
         ["Start fresh thread"],
       ),
-      statusText(ID.turnState, model.turnState, h),
+      statusText(ID.turnState, runState(model), h),
     ],
   );
 }
@@ -75,7 +82,7 @@ export function conversationView(model: Model, h: HtmlBuilder<Message>): Html {
           h.span([h.Class("note"), h.Id(ID.conversationState)], [model.conversationState]),
         ],
       ),
-      transcriptView(model.transcript, ID.messageList, h),
+      transcriptView(transcriptOf(model.conversation, model.outbox), ID.messageList, h),
       composerView(model, h),
     ],
   );

@@ -2,16 +2,16 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import type { TurnFrame } from "../../../src/page/client/frames.js";
+import type { AgentEvent } from "../../../src/page/client/events.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 
 /**
- * Foldkit runs `update` once per queued Message, and a request's answer or a turn's frame can wait
- * in that queue while the reader moves on. Whatever the reader did in between, an answer for a
- * project they left or a frame for a turn the page no longer streams must leave the page exactly as
- * it was and send nothing.
+ * Foldkit runs `update` once per queued Message, and a request's answer or a stream's event can
+ * wait in that queue while the reader moves on. Whatever the reader did in between, an answer or an
+ * event for a stream the page has since replaced must leave the page exactly as it was and send
+ * nothing.
  */
 
 const PROJECT_IDS = ["repo", "harness"] as const;
@@ -21,33 +21,19 @@ const PROJECTS = [
   { id: "harness", displayName: "harness", isHarness: true, location: "/workspace/harness" },
 ];
 
-const THREAD = { revision: "3", turnActive: "no", messageCount: "0", conversation: "[]" };
-
-const PROGRESS_FRAMES: readonly TurnFrame[] = [
-  { kind: "text", text: "partial" },
-  { kind: "tool-start", toolCallId: "t1", toolName: "read", arguments: { path: "a" } },
+const EVENTS: readonly AgentEvent[] = [
+  { type: "snapshot", entries: [], tools: [], inbox: [] },
+  { type: "run_start", inputs: [1] },
   {
-    kind: "tool-result",
-    toolCallId: "t1",
-    toolName: "read",
-    isError: false,
-    content: "out",
-    truncated: false,
+    type: "message_end",
+    entry: { id: 7, kind: "pi.user", model: [{ role: "user", content: "OLD" }] },
   },
-  { kind: "diff", content: "@@ -1 +1 @@\n-a\n+b", truncated: false },
-];
-
-const TERMINAL_FRAMES: readonly TurnFrame[] = [
-  { kind: "saved", revision: 4, messageCount: 2 },
-  { kind: "turn-failed", code: "model-error", saved: false },
-  { kind: "cancelled" },
+  { type: "inbox_update", items: [{ id: 2 }] },
+  { type: "submission", record: { id: 2, requestId: "r", status: "done" } },
+  { type: "run_end", inputs: [1] },
 ];
 
 type Step = (model: Model, tc: hegel.TestCase) => Message;
-
-function activeTurnId(model: Model): number {
-  return model.turn._tag === "Streaming" ? model.turn.turnId : 0;
-}
 
 /** What a reader and the Worker can do to a page, each as the Message it would queue. */
 const STEPS: readonly Step[] = [
@@ -57,51 +43,31 @@ const STEPS: readonly Step[] = [
   () => Message.ClickedCancelTurn(),
   () => Message.ClickedFreshThread(),
   (model, tc) =>
-    Message.ReceivedTurnFrame({
-      turnId: activeTurnId(model),
-      frame: tc.draw(gs.sampledFrom([...PROGRESS_FRAMES, ...TERMINAL_FRAMES])),
+    Message.ReceivedEvent({
+      streamId: model.eventsStreamId,
+      event: tc.draw(gs.sampledFrom(EVENTS)),
     }),
-  (model) => Message.EndedTurnStream({ turnId: activeTurnId(model) }),
-  (model) =>
-    Message.SucceededFetchThread({ selection: model.selection, isQuiet: false, thread: THREAD }),
+  (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
 ];
 
-/** An answer or a frame that belongs to an earlier selection or an earlier turn. */
+/** An answer or an event that belongs to a stream the page has since replaced. */
 const STALE: readonly Step[] = [
   (model, tc) =>
-    Message.ReceivedTurnFrame({
-      turnId: staleTurnId(model, tc),
-      frame: tc.draw(gs.sampledFrom([...PROGRESS_FRAMES, ...TERMINAL_FRAMES])),
+    Message.ReceivedEvent({
+      streamId: staleStream(model, tc),
+      event: tc.draw(gs.sampledFrom(EVENTS)),
     }),
-  (model, tc) => Message.ReceivedUnreadableFrame({ turnId: staleTurnId(model, tc) }),
-  (model, tc) => Message.RefusedTurn({ turnId: staleTurnId(model, tc), wording: "busy" }),
-  (model, tc) => Message.EndedTurnStream({ turnId: staleTurnId(model, tc) }),
-  (model, tc) => Message.DisconnectedTurnStream({ turnId: staleTurnId(model, tc), detail: "x" }),
+  (model, tc) => Message.ReceivedUnreadableEvent({ streamId: staleStream(model, tc) }),
+  (model, tc) => Message.RefusedEvents({ streamId: staleStream(model, tc), wording: "busy" }),
+  (model, tc) => Message.DisconnectedEvents({ streamId: staleStream(model, tc), detail: "x" }),
+  (model, tc) => Message.SucceededFreshThread({ streamId: staleStream(model, tc) }),
   (model, tc) =>
-    Message.SucceededFetchThread({
-      selection: staleSelection(model, tc),
-      isQuiet: tc.draw(gs.booleans()),
-      thread: { ...THREAD, revision: "99", conversation: '[{"role":"user","content":"OLD"}]' },
-    }),
-  (model, tc) =>
-    Message.RejectedFetchThread({ selection: staleSelection(model, tc), wording: "rejected: x" }),
-  (model, tc) => Message.FailedFetchThread({ selection: staleSelection(model, tc), detail: "x" }),
-  (model, tc) =>
-    Message.SucceededFreshThread({ selection: staleSelection(model, tc), thread: THREAD }),
-  (model, tc) =>
-    Message.RejectedFreshThread({ selection: staleSelection(model, tc), wording: "rejected: x" }),
-  (model, tc) => Message.FailedFreshThread({ selection: staleSelection(model, tc), detail: "x" }),
+    Message.RejectedFreshThread({ streamId: staleStream(model, tc), wording: "rejected: x" }),
+  (model, tc) => Message.FailedFreshThread({ streamId: staleStream(model, tc), detail: "x" }),
 ];
 
-/** A turn id the page issued or never issued, but not the one it is streaming. */
-function staleTurnId(model: Model, tc: hegel.TestCase): number {
-  const turnId = tc.draw(gs.integers({ minValue: 0, maxValue: model.turnCount + 2 }));
-
-  return turnId === activeTurnId(model) ? turnId + model.turnCount + 3 : turnId;
-}
-
-function staleSelection(model: Model, tc: hegel.TestCase): number {
-  return tc.draw(gs.integers({ minValue: 0, maxValue: Math.max(0, model.selection - 1) }));
+function staleStream(model: Model, tc: hegel.TestCase): number {
+  return tc.draw(gs.integers({ minValue: 0, maxValue: model.eventsStreamId - 1 }));
 }
 
 /** The GitHub and ChatGPT answers a page can receive, in any order with the steps above. */
@@ -120,7 +86,7 @@ function listedPage(): Model {
   return update(init().model, Message.SucceededFetchProjects({ projects: PROJECTS })).model;
 }
 
-test("a queued answer for a left project or an ended turn changes nothing", () => {
+test("a queued answer or event for a stream the page replaced changes nothing", () => {
   hegel.test(
     (tc) => {
       const steps = tc.draw(gs.integers({ minValue: 0, maxValue: 12 }));
@@ -131,9 +97,7 @@ test("a queued answer for a left project or an ended turn changes nothing", () =
         model = update(model, step(model, tc)).model;
       }
 
-      // A stale selection exists only after the reader selected a second time.
-      const candidates = model.selection > 1 ? STALE : STALE.slice(0, 5);
-      const stale = tc.draw(gs.sampledFrom(candidates))(model, tc);
+      const stale = tc.draw(gs.sampledFrom(STALE))(model, tc);
       const after = update(model, stale);
 
       expect(after.model, stale._tag).toEqual(model);

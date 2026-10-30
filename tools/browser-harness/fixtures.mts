@@ -11,28 +11,18 @@ import type { JsonValue } from "../json.mjs";
  * (`ProjectId`, `HarnessCommit`, `GenerationLabel`) that only a parser can mint; a fixture that
  * asserted its way into a brand would prove nothing about the wire shape.
  *
- * A scenario names what cannot be reached by driving the page: which turn the Supervisor streams,
- * which GitHub state the workspace is in, whether the catalog is empty, and whether the status
- * route answers at all. Everything else — the thread, the generation ledger, the connected
- * repositories — is state the server keeps and a case changes by acting on the page.
+ * A scenario names what cannot be reached by driving the page: whether a run holds or fails,
+ * whether the workspace or the generation refuses, which GitHub state the workspace is in, whether
+ * the catalog is empty, and whether the status route answers at all. Everything else — the
+ * conversations, the generation ledger, the connected repositories — is state the server keeps
+ * and a case changes by acting on the page.
  */
 
 export const HARNESS_SCENARIOS = [
   "ready",
   "ready-paused",
-  "no-terminal-frame",
-  "no-diff",
-  "diff-unavailable",
-  "markup-output",
-  "long-line",
-  "tool-failed",
-  "project-switch",
-  "turn-failed",
-  "save-failed",
-  "stream-invalid",
-  "cancelled",
-  "timed-out",
-  "turn-conflict",
+  "model-error",
+  "workspace-busy",
   "no-active-generation",
   "no-projects",
   "github-disconnected",

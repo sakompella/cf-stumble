@@ -1,12 +1,12 @@
 /**
- * What a screen reader hears when a turn ends. The page keeps one polite live region, the turn's
- * own state line, so a reader is told how the turn ended once and is not read each streamed token.
+ * What a screen reader hears when a run ends. The page keeps one polite live region, the run's
+ * own state line, so a reader is told how the run ended once and is not read each streamed token.
  */
 
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import type { TurnFrame } from "../../../src/page/client/frames.js";
+import type { AgentEvent } from "../../../src/page/client/events.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
@@ -17,23 +17,22 @@ type Rendered = NonNullable<ReturnType<typeof view>>;
 
 const PROJECT = { id: "repo", displayName: "hello-world", isHarness: false, location: "o/r" };
 
-const THREAD = { revision: "3", turnActive: "no", messageCount: "0", conversation: "[]" };
-
 function after(start: Model, messages: readonly Message[]): Model {
   return messages.reduce((model, message) => update(model, message).model, start);
 }
 
-function turnWithFrames(frames: readonly TurnFrame[]): Model {
-  const sent = after(init().model, [
-    Message.SucceededFetchProjects({ projects: [PROJECT] }),
-    Message.SucceededFetchThread({ selection: 1, isQuiet: false, thread: THREAD }),
-    Message.UpdatedPrompt({ value: "do it" }),
-    Message.ClickedSendTurn(),
-  ]);
+function runWithEvents(events: readonly AgentEvent[]): Model {
+  const listed = after(init().model, [Message.SucceededFetchProjects({ projects: [PROJECT] })]);
+  const streamId = listed.eventsStreamId;
+
+  const opening: readonly AgentEvent[] = [
+    { type: "snapshot", entries: [], tools: [], inbox: [] },
+    { type: "run_start", inputs: [1] },
+  ];
 
   return after(
-    sent,
-    frames.map((frame) => Message.ReceivedTurnFrame({ turnId: sent.turnCount, frame })),
+    listed,
+    [...opening, ...events].map((event) => Message.ReceivedEvent({ streamId, event })),
   );
 }
 
@@ -71,21 +70,36 @@ function announced(model: Model): readonly Readonly<{ politeness: unknown; text:
   }));
 }
 
-test("the turn's terminal status is the one polite announcement", () => {
-  const ended = turnWithFrames([{ kind: "saved", revision: 4, messageCount: 2 }]);
-
-  expect(announced(ended)).toEqual([
-    { politeness: "polite", text: "saved · revision 4 · 2 messages" },
+test("the run's ending is the one polite announcement", () => {
+  const ended = runWithEvents([
+    { type: "run_end", inputs: [1] },
+    { type: "submission", record: { id: 1, status: "done" } },
   ]);
+
+  expect(announced(ended)).toEqual([{ politeness: "polite", text: "answered" }]);
 });
 
 test("streamed text does not change what the live region holds", () => {
-  const running = announced(turnWithFrames([]));
+  const running = announced(runWithEvents([]));
 
   const streaming = announced(
-    turnWithFrames([
-      { kind: "text", text: "first" },
-      { kind: "text", text: " second" },
+    runWithEvents([
+      {
+        type: "message_start",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "" }],
+          stopReason: "pending",
+        },
+      },
+      {
+        type: "message_update",
+        changes: [{ type: "text_delta", contentIndex: 0, delta: "first" }],
+      },
+      {
+        type: "message_update",
+        changes: [{ type: "text_delta", contentIndex: 0, delta: " second" }],
+      },
     ]),
   );
 

@@ -1,51 +1,69 @@
+import { ANSWER_TEXT, MODEL_ERROR, TOOL_OUTPUT } from "../browser-harness/conversations.mjs";
 import {
   expect,
-  sendTurn,
+  messagePosts,
+  sendMessage,
   test,
-  threadRevision,
+  toolCalls,
   transcriptTexts,
-  turnPosts,
   turnState,
 } from "./fixtures.mjs";
 
 /**
- * What a turn leaves behind once the page is reloaded.
+ * What a run leaves behind once the page is reloaded.
  *
- * The streamed transcript is what one browser happened to receive; the saved thread is what the
- * Supervisor committed. Reloading throws the first away, so the only way the owner's words and
- * the agent's reply can still be on screen is that the page sent the prompt, the stub stored the
- * turn, and the page rendered the stored conversation it read back.
+ * Reloading throws away everything the page folded from the events stream, so the owner's words
+ * and the agent's reply can only still be on screen because the conversation stored them and the
+ * new stream's snapshot carried them back.
  */
 
 const PROMPT = "Rename the sidebar heading to Projects (persistence check)";
 
-test.describe("a saved turn", () => {
-  test("keeps the exact prompt and the reply after a reload", async ({ owner, server }) => {
-    await sendTurn(owner, PROMPT);
-    await expect(turnState(owner)).toHaveText(/^saved · revision 4 · \d+ messages$/u);
+test("an answered run keeps the exact prompt and the reply after a reload", async ({
+  owner,
+  server,
+}) => {
+  await sendMessage(owner, PROMPT);
+  await expect(turnState(owner)).toHaveText("answered");
+
+  await owner.reload();
+
+  await expect(transcriptTexts(owner, "user").last()).toHaveText(PROMPT);
+  await expect(transcriptTexts(owner, "assistant").last()).toHaveText(ANSWER_TEXT);
+  expect(messagePosts(server).map((request) => request.body)).toMatchObject([{ content: PROMPT }]);
+});
+
+test.describe("a run that is still going", () => {
+  test.use({ scenario: "ready-paused" });
+
+  test("outlives a reload and is still shown running, then answers", async ({ owner, server }) => {
+    await sendMessage(owner, PROMPT);
+    await server.waitForBarrier();
 
     await owner.reload();
-    await expect(threadRevision(owner)).toHaveText("4");
+
+    await expect(turnState(owner)).toHaveText("running");
     await expect(transcriptTexts(owner, "user").last()).toHaveText(PROMPT);
-    await expect(transcriptTexts(owner, "assistant").last()).toHaveText(
-      "Verification passed, and EARLIER-EDIT-KEPT is still in the workspace.",
-    );
-    expect(turnPosts(server).map((request) => request.body)).toEqual([{ prompt: PROMPT }]);
+    await expect(toolCalls(owner).last().locator(".tool-output")).toHaveText(TOOL_OUTPUT[0]);
+
+    server.release();
+
+    await expect(turnState(owner)).toHaveText("answered");
+    await expect(transcriptTexts(owner, "assistant").last()).toHaveText(ANSWER_TEXT);
   });
 });
 
-test.describe("a failed turn the Supervisor saved", () => {
-  test.use({ scenario: "turn-failed" });
+test.describe("a run whose model fails", () => {
+  test.use({ scenario: "model-error" });
 
-  test("keeps the prompt at the revision it reported", async ({ owner }) => {
-    await sendTurn(owner, PROMPT);
-    await expect(turnState(owner)).toHaveText("failed: model-error · saved at revision 4");
+  test("says so, and still shows the prompt and the failure after a reload", async ({ owner }) => {
+    await sendMessage(owner, PROMPT);
+    await expect(turnState(owner)).toHaveText("stopped: model_error");
+    await expect(transcriptTexts(owner, "terminal").last()).toHaveText(`failed: ${MODEL_ERROR}`);
 
     await owner.reload();
-    await expect(threadRevision(owner)).toHaveText("4");
+
     await expect(transcriptTexts(owner, "user").last()).toHaveText(PROMPT);
-    await expect(transcriptTexts(owner, "assistant").last()).toHaveText(
-      "Verification passed, and EARLIER-EDIT-KEPT is still in the workspace.",
-    );
+    await expect(transcriptTexts(owner, "terminal").last()).toHaveText(`failed: ${MODEL_ERROR}`);
   });
 });

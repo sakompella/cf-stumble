@@ -1,8 +1,16 @@
 import { OWNER_PAGE_IDS as ID } from "../../src/page/element-ids.js";
-import { CHECKED_WORDING, CONNECTED_PROJECT_URL } from "../browser-harness/fixtures.mjs";
+import { HARNESS_THREAD_MARKER } from "../browser-harness/conversations.mjs";
+import {
+  CHECKED_WORDING,
+  CONNECTED_PROJECT_URL,
+  HARNESS_PROJECT_ID,
+} from "../browser-harness/fixtures.mjs";
 import { expect, projectButton, requestsTo, test } from "./fixtures.mjs";
 
-test("selecting the harness project loads its own thread", async ({ owner, server }) => {
+test("selecting the harness project reads its own conversation and stops reading the other", async ({
+  owner,
+  server,
+}) => {
   await projectButton(owner, "harness").click();
 
   await expect(owner.locator(`#${ID.conversationProject}`)).toHaveText("harness");
@@ -11,7 +19,9 @@ test("selecting the harness project loads its own thread", async ({ owner, serve
     "aria-current",
     "true",
   );
-  expect(requestsTo(server, "GET", "/api/projects/harness/thread")).toHaveLength(1);
+  await expect(owner.locator(`#${ID.messageList}`)).toContainText(HARNESS_THREAD_MARKER);
+  expect(requestsTo(server, "GET", "/api/projects/harness/events")).toHaveLength(1);
+  await expect.poll(() => server.openEventStreams(HARNESS_PROJECT_ID)).toBe(0);
 });
 
 test("connecting a repository adds it and keeps the current project", async ({ owner, server }) => {

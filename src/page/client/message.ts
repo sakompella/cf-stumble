@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
-import { ChatGPTConnection, ControlKind, GitHubReport, Project, ThreadFacts } from "./model.js";
-import { TurnFrame } from "./frames.js";
+import { AgentEvent } from "./events.js";
+import { ChatGPTConnection, ControlKind, GitHubReport, Project } from "./model.js";
 
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
@@ -55,13 +55,18 @@ export const Message = defineMessageUnion({
   RejectedChatGPT: { wording: Schema.String, maybeChatGPT: Schema.Option(ChatGPTConnection) },
   FailedChatGPT: { detail: Schema.String },
 
-  SucceededFetchThread: { selection: Schema.Number, isQuiet: Schema.Boolean, thread: ThreadFacts },
-  RejectedFetchThread: { selection: Schema.Number, wording: Schema.String },
-  FailedFetchThread: { selection: Schema.Number, detail: Schema.String },
+  MintedRequestId: { projectId: Schema.String, requestId: Schema.String, content: Schema.String },
+  SucceededSend: { requestId: Schema.String, submissionId: Schema.Number },
+  RejectedSend: { requestId: Schema.String, wording: Schema.String },
+  FailedSend: { requestId: Schema.String, detail: Schema.String },
 
-  SucceededFreshThread: { selection: Schema.Number, thread: ThreadFacts },
-  RejectedFreshThread: { selection: Schema.Number, wording: Schema.String },
-  FailedFreshThread: { selection: Schema.Number, detail: Schema.String },
+  SucceededAbort: {},
+  RejectedAbort: { wording: Schema.String },
+  FailedAbort: { detail: Schema.String },
+
+  SucceededFreshThread: { streamId: Schema.Number },
+  RejectedFreshThread: { streamId: Schema.Number, wording: Schema.String },
+  FailedFreshThread: { streamId: Schema.Number, detail: Schema.String },
 
   SucceededSubmit: {
     label: Schema.String,
@@ -76,11 +81,10 @@ export const Message = defineMessageUnion({
   RejectedControl: { kind: ControlKind, wording: Schema.String },
   FailedControl: { kind: ControlKind, detail: Schema.String },
 
-  ReceivedTurnFrame: { turnId: Schema.Number, frame: TurnFrame },
-  ReceivedUnreadableFrame: { turnId: Schema.Number },
-  RefusedTurn: { turnId: Schema.Number, wording: Schema.String },
-  EndedTurnStream: { turnId: Schema.Number },
-  DisconnectedTurnStream: { turnId: Schema.Number, detail: Schema.String },
+  ReceivedEvent: { streamId: Schema.Number, event: AgentEvent },
+  ReceivedUnreadableEvent: { streamId: Schema.Number },
+  RefusedEvents: { streamId: Schema.Number, wording: Schema.String },
+  DisconnectedEvents: { streamId: Schema.Number, detail: Schema.String },
 
   CompletedFollowTranscript: {},
 });

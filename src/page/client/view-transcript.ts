@@ -86,22 +86,8 @@ function entryView(item: TranscriptEntry, index: number, h: HtmlBuilder<Message>
         h,
       ),
     Tool: (tool) => entry("tool", "tool call", [toolView(tool, h)], key, h),
-    Diff: ({ content, isTruncated }) =>
-      entry(
-        "diff",
-        "diff",
-        [
-          pre([
-            ...outputChildren(content, h),
-            ...(isTruncated ? [note("\n… the harness truncated this diff", h)] : []),
-          ]),
-        ],
-        key,
-        h,
-      ),
-    DiffUnavailable: ({ detail }) => entry("diff unavailable", "diff", [pre([detail])], key, h),
     Terminal: ({ wording, isProblem }) =>
-      entry(isProblem ? "terminal problem" : "terminal", "turn", [pre([wording])], key, h),
+      entry(isProblem ? "terminal problem" : "terminal", "run", [pre([wording])], key, h),
   });
 }
 

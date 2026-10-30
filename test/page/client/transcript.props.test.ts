@@ -1,100 +1,63 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
-import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import {
-  savedTranscript,
-  textEntry,
-  withToolResult,
-  type TranscriptEntry,
-} from "../../../src/page/client/transcript.js";
+import { EMPTY_CONVERSATION } from "../../../src/page/client/conversation.js";
+import type { PiMessage } from "../../../src/page/client/events.js";
+import { transcriptOf } from "../../../src/page/client/transcript.js";
 
 /**
- * The saved reader against the rule a running turn applies one frame at a time: a tool result
- * finishes the latest block with its id, or opens one at the end. Ids come from a small pool, so
- * repeats, orphans, and interleaving happen often.
+ * Tool results against the rule a reader expects: a result finishes the latest block its call
+ * opened, or opens one at the end. Ids come from a small pool, so repeats, orphans, and
+ * interleaving happen often.
  */
 
-type Drawn =
-  | Readonly<{ kind: "text"; role: string; content: string }>
-  | Readonly<{ kind: "tool"; toolCallId: string; toolName: string; isError: boolean }>
-  | Readonly<{ kind: "invalid"; json: string }>;
+type Drawn = Readonly<{ isCall: boolean; id: string; isError: boolean }>;
 
-const ROLES = ["user", "assistant", "custom", "system"] as const;
-
-const INVALID = ["null", "7", "{}", '"text"', '{"role":3}'] as const;
-
-function drawMessage(tc: hegel.TestCase): Drawn {
-  const kind = tc.draw(gs.sampledFrom(["text", "tool", "invalid"] as const));
-
-  if (kind === "text") {
-    return {
-      kind,
-      role: tc.draw(gs.sampledFrom(ROLES)),
-      content: tc.draw(gs.text({ maxSize: 4 })),
-    };
-  }
-
-  if (kind === "tool") {
-    return {
-      kind,
-      toolCallId: tc.draw(gs.sampledFrom(["a", "b", "c", ""])),
-      toolName: tc.draw(gs.sampledFrom(["read", "write"])),
-      isError: tc.draw(gs.booleans()),
-    };
-  }
-
-  return { kind, json: tc.draw(gs.sampledFrom(INVALID)) };
+function message({ isCall, id, isError }: Drawn): PiMessage {
+  return isCall
+    ? {
+        role: "assistant",
+        stopReason: "toolUse",
+        content: [{ type: "toolCall", id, name: "read", arguments: {} }],
+      }
+    : { role: "toolResult", toolCallId: id, toolName: "read", content: [], isError };
 }
 
-function stored(message: Drawn): string {
-  if (message.kind === "invalid") return message.json;
+function expected(drawn: readonly Drawn[]): readonly string[] {
+  const blocks: string[] = [];
+  const latest = new Map<string, number>();
 
-  if (message.kind === "text")
-    return JSON.stringify({ role: message.role, content: message.content });
-
-  const { toolCallId, toolName, isError } = message;
-
-  return JSON.stringify({ role: "toolResult", toolCallId, toolName, isError, content: "out" });
-}
-
-const WHO: Readonly<Record<(typeof ROLES)[number], readonly [string, string]>> = {
-  user: ["user", "you"],
-  assistant: ["assistant", "assistant"],
-  custom: ["system", "custom"],
-  system: ["system", "system"],
-};
-
-function oneAtATime(messages: readonly Drawn[]): readonly TranscriptEntry[] {
-  let transcript: readonly TranscriptEntry[] = [];
-
-  for (const message of messages) {
-    if (message.kind === "text" && message.role === "assistant" && message.content === "") {
-      continue;
-    }
-
-    if (message.kind === "text") {
-      const role = ROLES.find((known) => known === message.role) ?? "system";
-      const [entryRole, who] = WHO[role];
-      transcript = [...transcript, textEntry(entryRole, who, message.content)];
-    } else if (message.kind === "tool") {
-      const { toolCallId, toolName, isError } = message;
-      const result = { toolCallId, toolName, isError, content: "out", isTruncated: false };
-      transcript = withToolResult(transcript, result);
-    }
+  for (const { isCall, id, isError } of drawn) {
+    const index = isCall ? blocks.length : (latest.get(id) ?? blocks.length);
+    blocks[index] = isCall ? `${id}: read` : `${id}: read — ${isError ? "failed" : "done"}`;
+    latest.set(id, index);
   }
 
-  return transcript;
+  return blocks;
 }
 
-test("a saved conversation reads as its results applied one at a time", () => {
+test("each tool result finishes the latest block of its call, or opens one at the end", () => {
   hegel.test(
     (tc) => {
       const count = tc.draw(gs.integers({ minValue: 0, maxValue: 24 }));
-      const messages = Array.from({ length: count }, () => drawMessage(tc));
-      const saved = `[${messages.map(stored).join(",")}]`;
 
-      expect(Option.getOrThrow(savedTranscript(saved))).toStrictEqual(oneAtATime(messages));
+      const drawn = Array.from({ length: count }, () => ({
+        isCall: tc.draw(gs.booleans()),
+        id: tc.draw(gs.sampledFrom(["a", "b", "c"])),
+        isError: tc.draw(gs.booleans()),
+      }));
+
+      const entries = drawn.map((item, index) => ({
+        id: index + 1,
+        kind: "pi.test",
+        model: [message(item)],
+      }));
+
+      const shown = transcriptOf({ ...EMPTY_CONVERSATION, entries }, []).map((entry) =>
+        entry._tag === "Tool" ? `${entry.toolCallId}: ${entry.summary}` : entry._tag,
+      );
+
+      expect(shown).toStrictEqual(expected(drawn));
     },
     { testCases: 300 },
   );
