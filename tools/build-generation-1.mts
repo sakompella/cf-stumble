@@ -1,7 +1,7 @@
 import { writeModuleMap } from "./module-map-build.mts";
 
 /**
- * Build the Generation 0 main facet into a module map (ADR-0028).
+ * Build the Generation 1 main facet into a module map (ADR-0028).
  *
  * The output is the file a harness build writes: an entry module name and the modules, with no
  * commit of its own. The Supervisor gives the map the labeled harness commit it asked to build,
@@ -14,7 +14,7 @@ import { writeModuleMap } from "./module-map-build.mts";
  */
 
 await writeModuleMap({
-  entryPoint: "src/facet/generation-0/main-facet.ts",
+  entryPoint: "src/facet/generation-1/main-facet.ts",
   // The module name inside the map, and the entry module the Worker Loader starts.
   entryModule: "main-facet.js",
   // The Supervisor's build plan runs `pnpm run build:module-map` in the extracted commit directory
