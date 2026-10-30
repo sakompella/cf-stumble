@@ -138,6 +138,11 @@ export default defineConfig({
         },
       },
       {
+        resolve: {
+          alias: {
+            "cloudflare:workers": resolve(import.meta.dirname, "test/node/cloudflare-workers.ts"),
+          },
+        },
         test: {
           name: "node",
           include: [
