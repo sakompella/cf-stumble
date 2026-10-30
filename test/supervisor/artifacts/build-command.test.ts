@@ -80,10 +80,7 @@ test("the configured phases are, in order, what build:artifact runs locally", ()
   expect(phases[0], "a freshly extracted commit has no node_modules").toContain(
     "pnpm install --frozen-lockfile",
   );
-  expect(phases[1], "a freshly extracted commit has no vendor/pi-v0.84.4/dist").toBe(
-    "pnpm run build:pi",
-  );
-  expect(phases[2], "esbuild cannot resolve @cf-stumble/pi before Pi is built").toBe(
+  expect(phases[1], "esbuild cannot resolve Pi Durable before the install").toBe(
     "pnpm run build:module-map",
   );
 });

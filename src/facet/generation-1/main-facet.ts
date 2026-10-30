@@ -22,7 +22,7 @@ import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
 
 const context = BACKGROUND_CONTEXT;
 
-/** Generation 0's policy: compact above 64k tokens less Pi's 16k answer reserve, keeping the newest 8k. */
+/** The policy generation 0 used: compact above 64k tokens less Pi's 16k answer reserve, keeping the newest 8k. */
 const CONTEXT_BUDGET_TOKENS = 64_000;
 
 const ANSWER_RESERVE_TOKENS = 16_384;

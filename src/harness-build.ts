@@ -11,7 +11,7 @@ import {
 } from "./workspace-layout.js";
 import type { HarnessCommit } from "./harness-commit.js";
 
-type HarnessBuildPhaseName = "install" | "build-pi" | "build-module-map";
+type HarnessBuildPhaseName = "install" | "build-module-map";
 
 type HarnessBuildPhase = Readonly<{ name: HarnessBuildPhaseName; command: string }>;
 
@@ -20,11 +20,7 @@ export type HarnessBuildConfiguration = Readonly<{
   harnessRepositoryRoot: string;
   harnessGitDir: string;
   harnessGitRemote: string;
-  /**
-   * Order is a dependency: an extracted commit has neither `node_modules` nor Pi's generated
-   * `dist/`,
-   * so install comes first and esbuild cannot resolve `@cf-stumble/pi` until Pi is built.
-   */
+  /** Order is a dependency: an extracted commit has no `node_modules`, so install comes first. */
   buildPhases: readonly [HarnessBuildPhase, ...HarnessBuildPhase[]];
   moduleMapPath: string;
   stepTimeoutMs: number;
@@ -40,7 +36,6 @@ export const HARNESS_BUILD_CONFIGURATION = {
       name: "install",
       command: "pnpm install --frozen-lockfile --reporter=silent --ignore-scripts",
     },
-    { name: "build-pi", command: "pnpm run build:pi" },
     { name: "build-module-map", command: "pnpm run build:module-map" },
   ],
   moduleMapPath: "build/module-map.json",

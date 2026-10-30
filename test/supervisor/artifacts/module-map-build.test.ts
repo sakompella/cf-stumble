@@ -26,7 +26,6 @@ const configuration: HarnessBuildConfiguration = {
       name: "install",
       command: "pnpm install --frozen-lockfile --reporter=silent --ignore-scripts",
     },
-    { name: "build-pi", command: "pnpm run build:pi" },
     { name: "build-module-map", command: "pnpm run build:module-map" },
   ],
   moduleMapPath: "build/module-map.json",
@@ -112,7 +111,6 @@ test("plans an isolated build directory outside the project workspace", () => {
     "isolate",
     "checkout",
     "install",
-    "build-pi",
     "build-module-map",
   ]);
 

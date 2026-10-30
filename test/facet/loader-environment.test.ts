@@ -10,19 +10,20 @@ import {
   FakeProjectTransactions,
 } from "../workspace/project/fakes.js";
 import type { MainFacetCapabilities } from "../../src/facet/index.js";
-import type { Generation0Capabilities } from "../../src/facet/generation-0/index.js";
-import type { MainFacetTarget } from "../../src/facet/index.js";
+import type { ConversationHost } from "../../src/facet/index.js";
+import type { MainFacet } from "../../src/facet/generation-1/main-facet.js";
+import type { ProjectRpcTargetContract } from "../../src/workspace/project/protocol.js";
 
 /**
- * A project capability must reach a turn as an argument and never through loader environment.
+ * A project capability must reach a run through the attached host and never through loader environment.
  * `test/facet/loader.test.ts` shows why: the Worker Loader caches its entry under the harness
  * commit, so a capability installed there outlives the request that installed it and serves every
  * later request for that generation. For a capability scoped to one project that means the first
  * project to warm the cache would answer for all of them.
  *
  * The checks below hold that line from two directions: the platform refuses the serialization, and
- * the loader-environment type has no slot to put it in while the surface that does accept it takes
- * it per call. That a mounted facet's environment holds only `MODEL` is already checked by
+ * the loader-environment type has no slot to put it in while the host hands one out per
+ * conversation. That a mounted facet's environment holds only `MODEL` is already checked by
  * `test/facet/mounted-facet.test.ts`, against a facet the Supervisor really mounted.
  */
 
@@ -69,21 +70,17 @@ describe("platform assumptions", () => {
   });
 });
 
-test("the loader environment type has no project slot and the turn surface takes one per call", () => {
+test("the loader environment type has no project slot and the host hands one out per conversation", () => {
   expectTypeOf<MainFacetCapabilities>().toEqualTypeOf<{
     readonly MODEL: MainFacetCapabilities["MODEL"];
   }>();
   expectTypeOf<keyof MainFacetCapabilities>().toEqualTypeOf<"MODEL">();
   // The generation declares its own environment separately from what the host installs. Holding
   // the two to the same keys is what stops a project-scoped slot being declared on one side only.
-  expectTypeOf<keyof Generation0Capabilities>().toEqualTypeOf<keyof MainFacetCapabilities>();
-  expectTypeOf<MainFacetTarget["startTurn"]>().toBeCallableWith(
-    new ProjectRpcTarget(
-      new FakeProjectFilesystemProvider(),
-      new FakeProjectTransactions(),
-      new FakeExecBackend(),
-    ),
-    undefined,
-    "/workspace",
-  );
+  expectTypeOf<keyof ConstructorParameters<typeof MainFacet>[1]>().toEqualTypeOf<
+    keyof MainFacetCapabilities
+  >();
+  expectTypeOf<ConversationHost["workspace"]>().returns.toEqualTypeOf<
+    Promise<ProjectRpcTargetContract>
+  >();
 });

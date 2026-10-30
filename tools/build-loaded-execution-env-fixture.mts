@@ -12,21 +12,6 @@ import { writeModuleMap, type ModuleMapBuild } from "./module-map-build.mts";
 
 const FIXTURES: readonly ModuleMapBuild[] = [
   {
-    entryPoint: "test/facet/generation-0/loaded-execution-env-entry.ts",
-    entryModule: "loaded-execution-env-entry.js",
-    outputPath: "build/loaded-execution-env-fixture.json",
-  },
-  {
-    entryPoint: "test/facet/generation-0/loaded-facet-turn-entry.ts",
-    entryModule: "loaded-facet-turn-entry.js",
-    outputPath: "build/loaded-facet-turn-fixture.json",
-  },
-  {
-    entryPoint: "test/supervisor/projects/loaded-project-workspaces-entry.ts",
-    entryModule: "loaded-project-workspaces-entry.js",
-    outputPath: "build/loaded-project-workspaces-fixture.json",
-  },
-  {
     entryPoint: "test/supervisor/projects/loaded-stream-relay-entry.ts",
     entryModule: "loaded-stream-relay-entry.js",
     outputPath: "build/loaded-stream-relay-fixture.json",

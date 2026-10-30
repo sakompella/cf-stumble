@@ -88,7 +88,7 @@ function preparation(record: GenerationRecord): JsonValue {
       problem: {
         code: "build-step-failed",
         harnessCommit: record.harnessCommit,
-        step: "build-pi",
+        step: "build-module-map",
         exitCode: 2,
         diagnostics: {
           stdoutTail: "compiling 12 files",

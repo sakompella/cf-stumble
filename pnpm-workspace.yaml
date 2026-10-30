@@ -1,9 +1,7 @@
 # `cf` refuses to run at a workspace root that is not itself a workspace package, so the root is
-# listed. `build:pi` uses `--filter` and `pnpm verify` passes, but recursive `pnpm -r` commands now
-# include the root.
+# listed, and recursive `pnpm -r` commands include it.
 packages:
   - "."
-  - vendor/pi-v0.84.4
 # esbuild and workerd ship prebuilt native binaries fetched by their postinstall.
 # koffi loads Hegel's native generation engine for the Node-only property project.
 allowBuilds:

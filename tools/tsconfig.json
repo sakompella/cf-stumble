@@ -13,7 +13,7 @@
     "foldkit-lint.test.ts",
     "json.mts",
     "module-map-build.mts",
-    "vendor-pi.mts",
+    "verify-computer-tarball.mts",
     "verify-project-protocol.mts",
     "browser-harness/**/*.mts",
     "playwright/**/*.mts",

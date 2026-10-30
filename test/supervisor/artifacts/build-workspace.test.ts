@@ -112,7 +112,6 @@ test("offline fake workspace schedules missing repository provisioning before a 
     { kind: "build-step", harnessCommit: commit, step: "isolate" },
     { kind: "build-step", harnessCommit: commit, step: "checkout" },
     { kind: "build-step", harnessCommit: commit, step: "install" },
-    { kind: "build-step", harnessCommit: commit, step: "build-pi" },
     { kind: "build-step", harnessCommit: commit, step: "build-module-map" },
     { kind: "build-output", harnessCommit: commit },
   ]);

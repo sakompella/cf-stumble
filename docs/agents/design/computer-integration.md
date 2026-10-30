@@ -54,7 +54,7 @@ A build extracts its commit into `/tmp/cf-stumble-builds/<commit>` and clears th
 
 ### Build phases
 
-The Supervisor's build runs `HARNESS_BUILD_CONFIGURATION.buildPhases` (`src/harness-build.ts`) in a directory `git archive` just wrote, which has tracked files only: an install from `pnpm-lock.yaml`, a build of the vendored Pi package, and a build of the module map, in that order. Each phase is its own Durable Object RPC with its own exit code, output tail, and `WORKSPACE_COMMAND_TIMEOUT_MS` timeout, because one long command died three times with no sign of which phase had been running. `pnpm run build:artifact` runs the same phases locally, and `test/supervisor/artifacts/build-command.test.ts` checks that they match.
+The Supervisor's build runs `HARNESS_BUILD_CONFIGURATION.buildPhases` (`src/harness-build.ts`) in a directory `git archive` just wrote, which has tracked files only: an install from `pnpm-lock.yaml`, then a build of the module map. Each phase is its own Durable Object RPC with its own exit code, output tail, and `WORKSPACE_COMMAND_TIMEOUT_MS` timeout, because one long command died three times with no sign of which phase had been running. `pnpm run build:artifact` runs the same phases locally, and `test/supervisor/artifacts/build-command.test.ts` checks that they match.
 
 A fresh build container needs pnpm, which downloads the version `package.json` pins on first run; Node 22; `registry.npmjs.org`; and `git`, `tar`, and outbound HTTPS to `github.com` for the clone and fetch. A developer machine hides most of these.
 
