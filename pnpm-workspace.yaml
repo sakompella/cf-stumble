@@ -7,10 +7,12 @@ packages:
 # esbuild and workerd ship prebuilt native binaries fetched by their postinstall.
 # koffi loads Hegel's native generation engine for the Node-only property project.
 allowBuilds:
+  "@google/genai": false
   "@mongodb-js/zstd": false
   esbuild: true
   koffi: true
   node-liblzma: false
+  protobufjs: false
   workerd: true
 # Cloudflare ships the Workers toolchain on a near-daily cadence pinned to a
 # compatibility date, so the release-age gate would block every routine update.
