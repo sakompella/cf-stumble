@@ -37,6 +37,23 @@ describe("parseUsage", () => {
 });
 
 describe("parseInvocations", () => {
+  it("skips log lines, which share the query but carry no wall time", () => {
+    const invocation: JsonRecord = {
+      timestamp: 2,
+      $workers: { wallTimeMs: 5, event: { request: { url: "https://x.test/api/status" } } },
+    };
+
+    const logLine: JsonRecord = {
+      timestamp: 1,
+      source: { event: "workspace.backend.connected" },
+      $workers: { event: { request: { url: "http://computer.internal/api" } } },
+    };
+
+    const parsed = parseInvocations({ result: { events: { events: [logLine, invocation] } } });
+
+    assert.deepEqual(parsed, [{ endMs: 2, wallTimeMs: 5, route: "/api/status" }]);
+  });
+
   it("refuses a response at its row limit, which may be cut off", () => {
     const row: JsonRecord = {
       timestamp: 1,

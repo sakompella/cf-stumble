@@ -118,16 +118,20 @@ export function parseInvocations(response: JsonValue): readonly Invocation[] {
     );
   }
 
-  return rows.map((row) => {
-    const endMs = digNumber(row, "timestamp");
+  // Log lines come back from the same query; only an invocation's own row has a wall time.
+  return rows.flatMap((row) => {
     const wallTimeMs = digNumber(row, "$workers", "wallTimeMs");
+
+    if (wallTimeMs === null) return [];
+
+    const endMs = digNumber(row, "timestamp");
     const url = digString(row, "$workers", "event", "request", "url");
 
-    if (endMs === null || wallTimeMs === null || url === null) {
+    if (endMs === null || url === null) {
       throw new ApiFailure("telemetry row had an unexpected shape");
     }
 
-    return { endMs, wallTimeMs, route: routePattern(URL.parse(url)?.pathname ?? url) };
+    return [{ endMs, wallTimeMs, route: routePattern(URL.parse(url)?.pathname ?? url) }];
   });
 }
 
