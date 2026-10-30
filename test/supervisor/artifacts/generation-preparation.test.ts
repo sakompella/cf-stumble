@@ -34,8 +34,9 @@ async function activate(control: DurableObjectStub<Supervisor>, label: number): 
   const active = await control.getActiveGeneration();
 
   const activation = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label, observedEpoch: active.epoch },
+    kind: "activate",
+    label,
+    observedEpoch: active.epoch,
   });
 
   if (!activation.ok) {

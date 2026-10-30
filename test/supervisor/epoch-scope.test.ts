@@ -28,10 +28,7 @@ async function activateReplacement(control: DurableObjectStub<Supervisor>, obser
     throw new Error("the replacement generation must be labeled");
   }
 
-  return control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: generation.label, observedEpoch },
-  });
+  return control.controlGeneration({ kind: "activate", label: generation.label, observedEpoch });
 }
 
 async function completedTurn(control: DurableObjectStub<Supervisor>): Promise<void> {
@@ -65,8 +62,9 @@ test("keeps the activation epoch stable when an activation is rejected", async (
   const beforeRejection = await control.getActiveGeneration();
 
   const rejected = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: 99, observedEpoch: beforeRejection.epoch },
+    kind: "activate",
+    label: 99,
+    observedEpoch: beforeRejection.epoch,
   });
 
   expect(rejected).toEqual({ ok: false, problem: { code: "unknown-generation" } });
@@ -94,12 +92,9 @@ test("a repeated passing check advances the epoch and rejects an activation from
   const afterRecheck = await control.getActiveGeneration();
 
   const result = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: {
-      kind: "activate",
-      label: targetLabel,
-      observedEpoch: beforeRecheck.epoch,
-    },
+    kind: "activate",
+    label: targetLabel,
+    observedEpoch: beforeRecheck.epoch,
   });
 
   if (!rechecked.ok) {

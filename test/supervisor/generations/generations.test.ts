@@ -36,19 +36,13 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string) {
-  return control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit },
-  });
+  return control.controlGeneration({ kind: "submit-candidate", harnessCommit });
 }
 
 async function activate(control: DurableObjectStub<Supervisor>, label: number) {
   const active = await control.getActiveGeneration();
 
-  return control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label, observedEpoch: active.epoch },
-  });
+  return control.controlGeneration({ kind: "activate", label, observedEpoch: active.epoch });
 }
 
 afterEach(async () => {

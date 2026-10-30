@@ -68,10 +68,7 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
     refuseStatements(state.storage, "UPDATE generation_state SET epoch");
 
     const raised = raises(() => {
-      control.execute({
-        principal: { kind: "user" },
-        command: { kind: "submit-candidate", harnessCommit: commit },
-      });
+      control.execute({ kind: "submit-candidate", harnessCommit: commit });
     });
 
     vi.restoreAllMocks();

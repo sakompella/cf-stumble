@@ -147,10 +147,7 @@ export async function submitCandidate(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
 ): Promise<number> {
-  const result = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit },
-  });
+  const result = await control.controlGeneration({ kind: "submit-candidate", harnessCommit });
 
   if (!result.ok || result.outcome.kind !== "candidate-submitted") {
     throw new Error("a valid harness commit must receive a generation label");
@@ -200,8 +197,9 @@ export async function activateGeneration(
   const active = await control.getActiveGeneration();
 
   const result = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label, observedEpoch: active.epoch },
+    kind: "activate",
+    label,
+    observedEpoch: active.epoch,
   });
 
   if (!result.ok || result.outcome.kind !== "activated") {

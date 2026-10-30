@@ -4,13 +4,13 @@ import { parseHarnessCommit } from "../harness-commit.js";
 import type {
   ControlProblemCode,
   GenerationControlResult,
-  GenerationRequest,
+  GenerationCommand,
 } from "../supervisor/control/index.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
 import { callSupervisor, Count, decodeRequestBody, InvalidRequestBody, jsonError } from "./json.js";
 
 export type GenerationControlSupervisor = {
-  readonly controlGeneration: (request: GenerationRequest) => Promise<GenerationControlResult>;
+  readonly controlGeneration: (command: GenerationCommand) => Promise<GenerationControlResult>;
 };
 
 /**
@@ -41,7 +41,7 @@ export type GenerationSubmissionResult =
 /**
  * What each control refusal is, as an HTTP fact. A request the Supervisor can never accept is 400;
  * a label it does not know is 404; a request that current generation state refuses, such as a stale
- * epoch, is 409; and a harness principal whose generation no longer serves is 403. The body keeps
+ * epoch, is 409. The body keeps
  * `ok: false` and the code, so a client reads the refusal the same way at any status. The table is
  * total over the codes, so a new code fails the compiler here until someone picks its status.
  */
@@ -52,7 +52,6 @@ const CONTROL_REFUSAL_STATUS = {
   "stale-epoch": 409,
   "not-ready": 409,
   "not-previously-active": 409,
-  "revoked-capability": 403,
 } as const satisfies Record<ControlProblemCode, number>;
 
 function refusalResponse(
@@ -76,7 +75,7 @@ const GenerationSubmissionBody = Schema.Struct({ harnessCommit: Schema.String })
 function command(
   kind: ControlCommandKind,
   body: typeof GenerationControlBody.Type,
-): GenerationRequest["command"] {
+): GenerationCommand {
   return kind === "activate"
     ? { kind: "activate", label: body.label, observedEpoch: body.observedEpoch }
     : { kind: "rollback", label: body.label, observedEpoch: body.observedEpoch };
@@ -85,16 +84,14 @@ function command(
 /**
  * The Supervisor applies activation and rollback directly to the generation tables and returns the
  * outcome (ADR-0030): there is no request journal, so a rejected request is a fresh decision from
- * current state rather than a replayed one. The principal is fixed here. Cloudflare Access already
- * proved the owner, and the caller never names a tenant, an identity, or a Durable Object.
+ * current state rather than a replayed one. Cloudflare Access already proved the owner, and the
+ * caller never names a tenant, an identity, or a Durable Object.
  */
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
     const body = yield* decodeRequestBody(request, GenerationControlBody);
 
-    const result = yield* callSupervisor(() =>
-      supervisor.controlGeneration({ principal: { kind: "user" }, command: command(kind, body) }),
-    );
+    const result = yield* callSupervisor(() => supervisor.controlGeneration(command(kind, body)));
 
     return result.ok ? Response.json(result) : refusalResponse(result);
   },
@@ -139,10 +136,7 @@ export const handleGenerationSubmission = Effect.fnUntraced(
     }
 
     const submitted = yield* callSupervisor(() =>
-      supervisor.controlGeneration({
-        principal: { kind: "user" },
-        command: { kind: "submit-candidate", harnessCommit },
-      }),
+      supervisor.controlGeneration({ kind: "submit-candidate", harnessCommit }),
     );
 
     if (!submitted.ok) {

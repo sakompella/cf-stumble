@@ -17,7 +17,7 @@ import {
 import {
   GenerationControl,
   type GenerationControlResult,
-  type GenerationRequest,
+  type GenerationCommand,
 } from "./control/index.js";
 import {
   GitHubConnection,
@@ -234,8 +234,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.generations.all();
   }
 
-  controlGeneration(request: GenerationRequest): GenerationControlResult {
-    return this.control.execute(request);
+  controlGeneration(command: GenerationCommand): GenerationControlResult {
+    return this.control.execute(command);
   }
 
   /**

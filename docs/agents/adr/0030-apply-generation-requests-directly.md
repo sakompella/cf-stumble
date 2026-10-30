@@ -2,7 +2,7 @@
 
 > **Review:** Human-approved
 
-A generation request carries a principal and a command. The Supervisor checks the request and
+A generation request is a command. The Supervisor checks the request and
 applies an accepted change directly to the generation tables in one SQLite transaction. A request
 does not carry a request ID, and the Supervisor does not store command fingerprints or a control
 request journal.

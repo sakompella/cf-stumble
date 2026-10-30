@@ -305,8 +305,9 @@ export class MainFacet extends DurableObject {
   const active = await control.getActiveGeneration();
 
   const rolledBack = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "rollback", label: 0, observedEpoch: active.epoch },
+    kind: "rollback",
+    label: 0,
+    observedEpoch: active.epoch,
   });
 
   const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));

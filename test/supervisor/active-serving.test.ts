@@ -123,8 +123,9 @@ test("keeps the active retained artifact when a failed candidate cannot activate
   const active = await control.getActiveGeneration();
 
   const activation = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: failedCandidate, observedEpoch: active.epoch },
+    kind: "activate",
+    label: failedCandidate,
+    observedEpoch: active.epoch,
   });
 
   const response = await control.fetch(new Request("https://cf-stumble.test/"));

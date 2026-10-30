@@ -207,8 +207,9 @@ test("activating a generation mid-turn does not disturb the running turn", async
     whileRunning: (state, generation) => {
       const generations = new Generations(state.storage);
       new GenerationControl(generations).execute({
-        principal: { kind: "user" },
-        command: { kind: "activate", label: second, observedEpoch: generations.active().epoch },
+        kind: "activate",
+        label: second,
+        observedEpoch: generations.active().epoch,
       });
       generation.frame(completed);
       generation.close();

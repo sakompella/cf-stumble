@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { ControlProblemCode, GenerationRequest } from "../../src/supervisor/control/index.js";
+import type { ControlProblemCode, GenerationCommand } from "../../src/supervisor/control/index.js";
 import {
   controlRequest,
   ownerApiResponse,
@@ -7,8 +7,8 @@ import {
   ownerScope,
 } from "./helpers.js";
 
-test("activates directly with a server-derived principal", async () => {
-  let received: GenerationRequest | undefined;
+test("activates directly", async () => {
+  let received: GenerationCommand | undefined;
 
   const response = await ownerApiResponse(
     controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
@@ -22,10 +22,7 @@ test("activates directly with a server-derived principal", async () => {
     ownerScope,
   );
 
-  expect(received).toEqual({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: 2, observedEpoch: 3 },
-  });
+  expect(received).toEqual({ kind: "activate", label: 2, observedEpoch: 3 });
   expect(response.status).toBe(404);
   await expect(response.json()).resolves.toEqual({
     ok: false,
@@ -34,7 +31,7 @@ test("activates directly with a server-derived principal", async () => {
 });
 
 test("rolls back through the same direct control operation", async () => {
-  let received: GenerationRequest | undefined;
+  let received: GenerationCommand | undefined;
 
   const response = await ownerApiResponse(
     controlRequest("/api/generations/rollback", JSON.stringify({ observedEpoch: 4, label: 0 })),
@@ -48,8 +45,7 @@ test("rolls back through the same direct control operation", async () => {
     ownerScope,
   );
 
-  expect(received?.command).toEqual({ kind: "rollback", label: 0, observedEpoch: 4 });
-  expect(received?.principal).toEqual({ kind: "user" });
+  expect(received).toEqual({ kind: "rollback", label: 0, observedEpoch: 4 });
   expect(response.status).toBe(409);
 });
 
@@ -60,7 +56,6 @@ const refusalStatuses: readonly (readonly [ControlProblemCode, number])[] = [
   ["stale-epoch", 409],
   ["not-ready", 409],
   ["not-previously-active", 409],
-  ["revoked-capability", 403],
 ];
 
 test.each(refusalStatuses)(

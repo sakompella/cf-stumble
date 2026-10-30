@@ -1,18 +1,9 @@
 import type { Generation } from "../generations/index.js";
 
-export type Principal =
-  | { readonly kind: "user" }
-  | { readonly kind: "harness"; readonly generationLabel: number };
-
 export type GenerationCommand =
   | { readonly kind: "submit-candidate"; readonly harnessCommit: string }
   | { readonly kind: "activate"; readonly label: number; readonly observedEpoch: number }
   | { readonly kind: "rollback"; readonly label: number; readonly observedEpoch: number };
-
-export type GenerationRequest = {
-  readonly principal: Principal;
-  readonly command: GenerationCommand;
-};
 
 export type ControlProblemCode =
   | "invalid-harness-commit"
@@ -20,7 +11,6 @@ export type ControlProblemCode =
   | "unknown-generation"
   | "not-ready"
   | "not-previously-active"
-  | "revoked-capability"
   | "stale-epoch";
 
 type CommandEffect = "activated" | "no-op";

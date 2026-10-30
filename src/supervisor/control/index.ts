@@ -3,15 +3,9 @@ import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
 import { logCommit, logEvent, type LogFields } from "../../diagnostics.js";
 import type { GenerationLabel, Generations } from "../generations/index.js";
-import type { ControlProblemCode, GenerationControlResult, GenerationRequest } from "./request.js";
+import type { ControlProblemCode, GenerationCommand, GenerationControlResult } from "./request.js";
 
-export type {
-  ControlProblemCode,
-  GenerationCommand,
-  GenerationControlResult,
-  GenerationRequest,
-  Principal,
-} from "./request.js";
+export type { ControlProblemCode, GenerationCommand, GenerationControlResult } from "./request.js";
 
 type ControlOutcome = Extract<GenerationControlResult, { readonly ok: true }>["outcome"];
 
@@ -38,44 +32,34 @@ export class GenerationControl {
     this.generations = generations;
   }
 
-  execute(request: GenerationRequest): GenerationControlResult {
+  execute(command: GenerationCommand): GenerationControlResult {
     const epochBefore = this.generations.active().epoch;
-    const result = this.generations.transaction(() => decisionToResult(this.decide(request)));
+    const result = this.generations.transaction(() => decisionToResult(this.decide(command)));
 
     logEvent(
       result.ok ? "info" : "warn",
       "generation.control",
-      controlLogFields(request, epochBefore, result),
+      controlLogFields(command, epochBefore, result),
     );
 
     return result;
   }
 
-  private decide(request: GenerationRequest): ControlDecision {
-    const active = this.generations.active();
-
-    if (request.principal.kind === "harness") {
-      const generationLabel = parseGenerationLabel(request.principal.generationLabel);
-
-      if (generationLabel === undefined || generationLabel !== active.generation?.label) {
-        return rejected("revoked-capability");
-      }
-    }
-
-    switch (request.command.kind) {
+  private decide(command: GenerationCommand): ControlDecision {
+    switch (command.kind) {
       case "submit-candidate":
-        return this.submit(request.command.harnessCommit);
+        return this.submit(command.harnessCommit);
       case "activate":
-        return this.activate("activated", request.command.label, request.command.observedEpoch);
+        return this.activate("activated", command.label, command.observedEpoch);
       case "rollback":
         return this.activate(
           "rolled-back",
-          request.command.label,
-          request.command.observedEpoch,
+          command.label,
+          command.observedEpoch,
           (generationLabel) => this.rollbackProblem(generationLabel),
         );
       default:
-        return impossible(request.command);
+        return impossible(command);
     }
   }
 
@@ -148,12 +132,10 @@ export class GenerationControl {
 
 /** What one control request asked for and what it did to the epoch, as log fields. */
 function controlLogFields(
-  request: GenerationRequest,
+  command: GenerationCommand,
   epochBefore: number,
   result: GenerationControlResult,
 ): LogFields {
-  const { command } = request;
-
   const asked: LogFields =
     command.kind === "submit-candidate"
       ? { commit: logCommit(command.harnessCommit) }
@@ -171,7 +153,6 @@ function controlLogFields(
 
   return {
     command: command.kind,
-    principal: request.principal.kind,
     epochBefore,
     ...asked,
     ...decided,

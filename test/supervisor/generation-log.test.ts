@@ -42,8 +42,9 @@ test("submission, activation, and rollback each log the label, the commit, and t
   const secondEpoch = await activateGeneration(control, label);
 
   const rolledBack = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "rollback", label: 0, observedEpoch: secondEpoch },
+    kind: "rollback",
+    label: 0,
+    observedEpoch: secondEpoch,
   });
 
   expect(rolledBack.ok).toBe(true);
@@ -51,7 +52,6 @@ test("submission, activation, and rollback each log the label, the commit, and t
   expect(controls).toContainEqual(
     expect.objectContaining({
       command: "submit-candidate",
-      principal: "user",
       label,
       commit: commits.ordinary.slice(0, 12),
       outcome: "candidate-submitted",
@@ -83,10 +83,7 @@ test("a rejected control request logs its problem code as degraded", async () =>
   const control = env.SUPERVISOR.getByName("generation-log-stale");
   const epoch = await activateFixtureGeneration(control);
 
-  await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: 0, observedEpoch: epoch + 5 },
-  });
+  await control.controlGeneration({ kind: "activate", label: 0, observedEpoch: epoch + 5 });
 
   expect(named(events(), "generation.control").at(-1)).toMatchObject({
     level: "warn",
