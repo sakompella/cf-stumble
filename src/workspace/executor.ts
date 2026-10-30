@@ -1,11 +1,5 @@
 import * as Effect from "effect/Effect";
-import {
-  isTimeoutFailure,
-  logEvent,
-  logRedactedCause,
-  requestIdFields,
-  type RequestId,
-} from "../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {
@@ -49,42 +43,19 @@ function unavailable(): WorkspaceFailure {
 /** A command the server planned: its text, where it runs, and how long it may take. */
 type PlannedCommand = Readonly<{ source: string; cwd: string; timeoutMs: number }>;
 
-/**
- * Run one planned command and log it by `command`, the planned step's name, with its exit code and
- * duration. The command text and its output stay out of the log: the text names a repository and
- * the output is whatever a tool printed.
- */
-export function runLoggedCommand(
+export function runPlannedCommand(
   operations: WorkspaceEffects,
-  command: string,
   plan: PlannedCommand,
-  options: Readonly<{ stdin?: string; requestId?: RequestId | undefined }> = {},
+  stdin?: string,
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
-  return Effect.suspend(() => {
-    const startedAt = Date.now();
-
-    return operations.runCommand(plan.source, plan.cwd, plan.timeoutMs, options.stdin).pipe(
-      Effect.tap((output) =>
-        Effect.sync(() => {
-          logEvent(output.exitCode === 0 ? "info" : "warn", "workspace.command", {
-            ...requestIdFields(options.requestId),
-            command,
-            timeoutMs: plan.timeoutMs,
-            exitCode: output.exitCode,
-            durationMs: Date.now() - startedAt,
-          });
-        }),
-      ),
-    );
-  });
+  return operations.runCommand(plan.source, plan.cwd, plan.timeoutMs, stdin);
 }
 
 function executePlan(
   operations: WorkspaceEffects,
   plan: WorkspacePlan,
-  command: string,
 ): Effect.Effect<WorkspaceResult, WorkspaceFault> {
-  return runLoggedCommand(operations, command, plan).pipe(
+  return runPlannedCommand(operations, plan).pipe(
     Effect.map((output): WorkspaceResult => ({
       ok: true,
       result: { kind: "command", ...cloneCommandOutput(output) },
@@ -140,7 +111,6 @@ export function executeHarnessBuildRequest(
     executePlan(
       workspaceEffects(input.operations),
       planHarnessBuildRequest(input.configuration, parsed),
-      `harness-build.${parsed.kind === "build-step" ? parsed.step : "output"}`,
     ),
   ).pipe(
     answerFailures((thrown): WorkspaceResult => {
@@ -173,11 +143,7 @@ export function executeProjectProvisionRequest(
   return Effect.gen(function* () {
     const operations = workspaceEffects(input.operations);
 
-    const result = yield* executePlan(
-      operations,
-      planProjectProvisionRequest(parsed),
-      `provision-project.${parsed.step}`,
-    );
+    const result = yield* executePlan(operations, planProjectProvisionRequest(parsed));
 
     const cloned =
       parsed.step === "clone" && result.ok && result.result.kind === "command"
@@ -206,7 +172,7 @@ export function executeProjectRemovalRequest(
   return Effect.gen(function* () {
     const operations = workspaceEffects(input.operations);
     const plan = planProjectRemovalRequest(parsed);
-    const output = yield* runLoggedCommand(operations, "project-removal", plan);
+    const output = yield* runPlannedCommand(operations, plan);
 
     if (output.exitCode === 0 && !(yield* removalIsDurable(operations, parsed.projectId))) {
       return syncIncomplete();

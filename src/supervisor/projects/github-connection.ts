@@ -134,20 +134,6 @@ function logCredentialEnsure(
   });
 }
 
-/** One step of the device authorization, as the kind of answer it reached. */
-function logAuthorization(
-  step: "start" | "complete",
-  result: GitHubAuthorizationProblem | "started" | "authorized" | "pending" | "superseded",
-): void {
-  const refused =
-    result !== "started" &&
-    result !== "authorized" &&
-    result !== "pending" &&
-    result !== "superseded";
-
-  logEvent(refused ? "warn" : "info", `github-authorization.${step}`, { outcome: result });
-}
-
 /** A redemption that returned no token. Retrying while GitHub waits is the ordinary `pending`. */
 function unredeemedOutcome(
   kind: Exclude<DeviceRedemption["kind"], "authorized">,
@@ -218,8 +204,7 @@ function learned(
   }
 }
 
-/** A status read stops at `signal` and logs under `requestId`; neither changes the answer. */
-type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal" | "requestId">;
+type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal">;
 
 export class GitHubConnection {
   private readonly store: GitHubConnectionStore;
@@ -334,8 +319,6 @@ export class GitHubConnection {
         requestDeviceAuthorization(clientId, this.environment.fetcher),
       );
 
-      logAuthorization("start", Result.isSuccess(started) ? "started" : "provider-unavailable");
-
       if (Result.isFailure(started)) {
         return { ok: false, problem: "provider-unavailable" } as const;
       }
@@ -386,19 +369,14 @@ export class GitHubConnection {
         redeemed.kind === "authorized" || redeemed.kind === "expired" || redeemed.kind === "denied";
 
       if (settled && !this.store.consumeAuthorization(pending.deviceCode)) {
-        logAuthorization("complete", "superseded");
-
         return this.answered(yield* this.status(now));
       }
 
       if (redeemed.kind === "authorized") {
-        logAuthorization("complete", "authorized");
-
         return this.answered(yield* this.install(redeemed.token, "device-authorization", now));
       }
 
       const unredeemed = unredeemedOutcome(redeemed.kind);
-      logAuthorization("complete", unredeemed);
 
       if (unredeemed === "pending") {
         return this.answered(yield* this.status(now));

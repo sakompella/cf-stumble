@@ -1,7 +1,6 @@
 import * as Result from "effect/Result";
 import { parseHarnessCommit } from "../../harness-commit.js";
 import { parseGenerationLabel } from "../generations/index.js";
-import { logCommit, logEvent, type LogFields } from "../../diagnostics.js";
 import type { GenerationLabel, Generations } from "../generations/index.js";
 import type { ControlProblemCode, GenerationCommand, GenerationControlResult } from "./request.js";
 
@@ -33,16 +32,7 @@ export class GenerationControl {
   }
 
   execute(command: GenerationCommand): GenerationControlResult {
-    const epochBefore = this.generations.active().epoch;
-    const result = this.generations.transaction(() => decisionToResult(this.decide(command)));
-
-    logEvent(
-      result.ok ? "info" : "warn",
-      "generation.control",
-      controlLogFields(command, epochBefore, result),
-    );
-
-    return result;
+    return this.generations.transaction(() => decisionToResult(this.decide(command)));
   }
 
   private decide(command: GenerationCommand): ControlDecision {
@@ -128,35 +118,6 @@ export class GenerationControl {
 
     return this.generations.hasBeenActive(label) ? undefined : "not-previously-active";
   }
-}
-
-/** What one control request asked for and what it did to the epoch, as log fields. */
-function controlLogFields(
-  command: GenerationCommand,
-  epochBefore: number,
-  result: GenerationControlResult,
-): LogFields {
-  const asked: LogFields =
-    command.kind === "submit-candidate"
-      ? { commit: logCommit(command.harnessCommit) }
-      : { label: command.label };
-
-  const decided: LogFields = result.ok
-    ? {
-        label: result.outcome.generation.label,
-        commit: logCommit(result.outcome.generation.harnessCommit),
-        epochAfter: result.outcome.epoch,
-        outcome: result.outcome.kind,
-        effect: result.outcome.kind === "candidate-submitted" ? null : result.outcome.effect,
-      }
-    : { epochAfter: epochBefore, outcome: result.problem.code };
-
-  return {
-    command: command.kind,
-    epochBefore,
-    ...asked,
-    ...decided,
-  };
 }
 
 function rejected(code: ControlProblemCode): ControlDecision {

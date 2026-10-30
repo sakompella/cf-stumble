@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import type { Project } from "../../project-catalog.js";
-import { timedWorkspaceRpc } from "../../diagnostics.js";
 import { waitForWorkspaceProvision } from "../../workspace/index.js";
 import {
   resolveSelectableProject,
@@ -272,11 +271,8 @@ function obtainCapability(input: ProjectTurnInput): Effect.Effect<ProjectCapabil
   return Effect.promise(() => {
     const remainingMs = input.remainingMs();
 
-    return timedWorkspaceRpc(
-      // The Host holds the container until this instant plus its idle limit (`ops:check` reads it).
-      { method: "project", leaseEndsAtMs: Date.now() + remainingMs },
-      () => input.namespace.getByName(input.workspaceName).project({ remainingMs }),
-      () => ({ outcome: "ok" }),
+    return Promise.resolve(
+      input.namespace.getByName(input.workspaceName).project({ remainingMs }),
     ).then(
       (capability) => capability,
       () => null,

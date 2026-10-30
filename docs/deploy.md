@@ -69,7 +69,7 @@ Before you deploy:
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
 2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
 3. Check that the instance secrets you rely on exist: `npx wrangler secret list --name <worker>`. A deploy keeps secrets, so a missing one stays missing.
-4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Query recipes", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
+4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
 5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
 
 Then run `pnpm exec cf deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
@@ -82,7 +82,7 @@ After the deploy, compare against what you had before:
 - The container application keeps its id, and its version goes up. A new application id means the deploy created a second application instead of updating the first. Check that the `name` in `cloudflare.config.ts` still equals `<worker>-workspacehost`.
 - The Durable Object namespace ids for `Supervisor` and `WorkspaceHost` are unchanged, and the secret names are the same as before.
 - The Worker's Observability settings still show logs, traces, and Issues on. A configuration without `observability.issues` turns Issues off.
-- `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain. A cold start can write two to four `placement-unavailable` rows. The idle stop fires ten minutes after the last work (`workspace.container.idle-stop`).
+- `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain. The idle stop fires ten minutes after the last work (`workspace.container.idle-stop`).
 
 For a risky change, stage it first on a separate Worker with its own name and container, then delete everything you created. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
 
@@ -197,6 +197,6 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 ## Cost and cleanup
 
-Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running; `pnpm ops:check` reports it (`docs/agents/incident-2026-09-container-cost.md`).
+Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running, and `pnpm ops:check` counts each call as work, so it does not report it (`docs/agents/incident-2026-09-container-cost.md`).
 
 Delete the Worker, the Container application, and the old images in the account's registry when you no longer need the instance. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `npx wrangler containers images list` and remove the ones you will not roll back to with `npx wrangler containers images delete <repository>:<tag>`.

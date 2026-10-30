@@ -125,7 +125,6 @@ export class ChatGPTConnection {
           authorizeUrl: url,
           expiresAt: this.clock() + LOGIN_TTL_MS,
         });
-        logEvent("info", "chatgpt.login.start");
 
         return this.view();
       }),
@@ -153,7 +152,6 @@ export class ChatGPTConnection {
   disconnect(): ChatGPTConnectionView {
     this.exchanging = undefined;
     this.store.disconnect();
-    logEvent("info", "chatgpt.disconnect");
 
     return this.view();
   }
@@ -322,8 +320,6 @@ export class ChatGPTConnection {
             },
             now,
           );
-
-          logEvent("info", "chatgpt.refresh", { outcome: replaced ? "refreshed" : "superseded" });
 
           return replaced ? { kind: "ready", accessToken: grant.accessToken } : this.storedAccess();
         },

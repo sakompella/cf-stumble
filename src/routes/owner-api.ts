@@ -1,7 +1,7 @@
 // oxlint-disable import/max-dependencies -- The owner API is where every route group meets, so it imports each of them.
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { logRedactedCause, timed, type RequestId } from "../diagnostics.js";
+import { logRedactedCause } from "../diagnostics.js";
 import type { ActiveGeneration } from "../supervisor/generations/index.js";
 import type { ProjectThreadProblem, ProjectThreadResult } from "../supervisor/threads/index.js";
 import {
@@ -13,7 +13,6 @@ import {
 import { routeChatGPTApiRequest, type ChatGPTApiSupervisor } from "./chatgpt.js";
 import { callSupervisor, jsonError, SupervisorCallFailed } from "./json.js";
 import { projectIdFromPath, routePattern } from "./route-pattern.js";
-import { settleRoute } from "./route-settled.js";
 import { routeProjectApiRequest, type ProjectApiSupervisor } from "./projects.js";
 import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
 
@@ -36,14 +35,9 @@ export type OwnerApiSupervisor = ChatGPTApiSupervisor &
 function workspaceResetResponse(
   supervisor: OwnerApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
-  return callSupervisor(() =>
-    timed(
-      "workspace.reset",
-      {},
-      () => supervisor.resetWorkspace(),
-      (reset) => (reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" }),
-    ),
-  ).pipe(Effect.map((reset) => Response.json(reset, { status: reset.ok ? 200 : 409 })));
+  return callSupervisor(() => supervisor.resetWorkspace()).pipe(
+    Effect.map((reset) => Response.json(reset, { status: reset.ok ? 200 : 409 })),
+  );
 }
 
 /**
@@ -101,27 +95,16 @@ function threadProblemStatus(code: ProjectThreadProblem["code"]): number {
 /**
  * Request data selects only one of the projects, a generation label, and an epoch within the one
  * Supervisor. It never names a Durable Object.
+ *
+ * A rejected Supervisor call, or a defect anywhere in a route, is logged redacted and answered with
+ * a bare 500, because its text can come from a generation's code or a workspace command and is not
+ * this boundary's to hand out.
  */
 export function routeOwnerApiRequest(
   request: Request,
   supervisor: OwnerApiSupervisor,
 ): Effect.Effect<Response> {
-  return settleRoute(request, (requestId) =>
-    dispatchOwnerApiRequest(request, supervisor, requestId),
-  );
-}
-
-/**
- * A rejected Supervisor call, or a defect anywhere in a route, is logged redacted and answered with
- * a bare 500, because its text can come from a generation's code or a workspace command and is not
- * this boundary's to hand out.
- */
-function dispatchOwnerApiRequest(
-  request: Request,
-  supervisor: OwnerApiSupervisor,
-  requestId: RequestId | undefined,
-): Effect.Effect<Response> {
-  return Effect.suspend(() => ownerApiRoute(request, supervisor, requestId)).pipe(
+  return Effect.suspend(() => ownerApiRoute(request, supervisor)).pipe(
     Effect.catchCause((cause) =>
       Cause.hasInterruptsOnly(cause)
         ? Effect.interrupt
@@ -140,10 +123,9 @@ function dispatchOwnerApiRequest(
 function ownerApiRoute(
   request: Request,
   supervisor: OwnerApiSupervisor,
-  requestId: RequestId | undefined,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   const pathname = new URL(request.url).pathname;
-  const projectRoute = routeProjectApiRequest(request, supervisor, requestId);
+  const projectRoute = routeProjectApiRequest(request, supervisor);
 
   if (projectRoute !== undefined) {
     return projectRoute;

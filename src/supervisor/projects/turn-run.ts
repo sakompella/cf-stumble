@@ -10,8 +10,7 @@ import { parseThreadMessages } from "../threads/index.js";
 import { TurnBound } from "./turn-bound.js";
 import { readTurnStream } from "./turn-stream.js";
 import { releaseLease, type TurnThreadWrites } from "./turn-settle.js";
-import { logEvent, timedEffect, type TimedOutcome } from "../../diagnostics.js";
-import { logLeaseAbandoned, turnFields, turnTrace, type TurnTrace } from "./turn-log.js";
+import { logLeaseAbandoned, turnTrace, type TurnTrace } from "./turn-log.js";
 import type { ActiveGeneration } from "../generations/index.js";
 import type {
   ProjectThreadProblem,
@@ -123,44 +122,6 @@ type AdmittedTurn = Readonly<{
   trace: TurnTrace;
 }>;
 
-/**
- * One authenticated project turn, from admission to the stream the browser reads.
- *
- * The order is what makes the turn the server's. The prompt is validated first, because a request
- * that is not a turn should not take a lease. The thread is read next and its revision is the one
- * the admission presents, so a client cannot choose which revision it is admitted at. The lease
- * follows, and the id it mints stays here: no response carries it, so nothing outside this
- * Supervisor can finish or abandon this turn. Admission also fixes the two things the rest of the
- * turn is measured against: the instant the turn ends ({@link TurnBound}) and the generation it
- * runs on, both read once here and never read again. Only then does the work start, and the saved
- * conversation reaches the generation as history the server holds rather than as trusted history
- * a request supplied.
- *
- * The program ends when the browser has its answer. A started turn's answer carries a stream that
- * owns the rest of the turn, including its lease (`turn-stream.ts`).
- */
-export function runProjectTurn(input: RunProjectTurnInput): Effect.Effect<ProjectTurnRun> {
-  return admitAndStart(input).pipe(
-    Effect.tap((run) =>
-      Effect.sync(() => {
-        if (!run.ok) {
-          logEvent(INPUT_REFUSALS.has(run.problem.code) ? "info" : "warn", "turn.refused", {
-            projectId: typeof input.projectId === "string" ? input.projectId : null,
-            code: run.problem.code,
-          });
-        }
-      }),
-    ),
-  );
-}
-
-/** Refusals that describe the request rather than the Supervisor, so they are not degraded. */
-const INPUT_REFUSALS: ReadonlySet<ProjectTurnRunProblemCode> = new Set([
-  "invalid-prompt",
-  "invalid-project-id",
-  "unknown-project-id",
-]);
-
 /** A turn the store admitted, or the refusal that stopped it first. */
 type Admission =
   | Readonly<{ admitted: true; turn: AdmittedTurn; request: FacetTurnHandoff }>
@@ -214,11 +175,25 @@ function admit(input: RunProjectTurnInput): Admission {
 }
 
 /**
- * Admit the turn, start it, and hand its lease to the stream or give it back. Only the wait for
- * the start can be interrupted: once the start has answered, the hand-off runs whole, so the lease
- * always ends up owned by exactly one of the stream or the abandonment.
+ * One authenticated project turn, from admission to the stream the browser reads.
+ *
+ * The order is what makes the turn the server's. The prompt is validated first, because a request
+ * that is not a turn should not take a lease. The thread is read next and its revision is the one
+ * the admission presents, so a client cannot choose which revision it is admitted at. The lease
+ * follows, and the id it mints stays here: no response carries it, so nothing outside this
+ * Supervisor can finish or abandon this turn. Admission also fixes the two things the rest of the
+ * turn is measured against: the instant the turn ends ({@link TurnBound}) and the generation it
+ * runs on, both read once here and never read again. Only then does the work start, and the saved
+ * conversation reaches the generation as history the server holds rather than as trusted history
+ * a request supplied.
+ *
+ * The program ends when the browser has its answer. A started turn's answer carries a stream that
+ * owns the rest of the turn, including its lease (`turn-stream.ts`).
+ *
+ * Only the wait for the start can be interrupted: once the start has answered, the hand-off runs
+ * whole, so the lease always ends up owned by exactly one of the stream or the abandonment.
  */
-function admitAndStart(input: RunProjectTurnInput): Effect.Effect<ProjectTurnRun> {
+export function runProjectTurn(input: RunProjectTurnInput): Effect.Effect<ProjectTurnRun> {
   return Effect.gen(function* () {
     const admission = yield* Effect.sync(() => admit(input));
 
@@ -267,7 +242,7 @@ function handOff(
   return { ok: true, frames: streamOrAbandon(input, turn, started) };
 }
 
-/** Fix everything the rest of the turn is measured against, and log that it was admitted. */
+/** Fix everything the rest of the turn is measured against. */
 function admittedTurn(
   input: RunProjectTurnInput,
   admitted: Extract<ProjectTurnLeaseResult, { ok: true }>,
@@ -277,15 +252,6 @@ function admittedTurn(
   const projectId = admitted.thread.projectId;
   const generation = attribution.active.generation?.label;
   const trace = turnTrace(projectId, admitted.leaseId, generation, admittedAt);
-
-  logEvent("info", "turn.admitted", turnFields(trace));
-
-  if (admitted.reclaimed === true) {
-    logEvent("warn", "turn.lease-reclaimed", {
-      ...turnFields(trace),
-      why: "previous-instance",
-    });
-  }
 
   return {
     projectId,
@@ -358,7 +324,6 @@ function boundedStart(
     return yield* turn.bound
       .within(Fiber.join(starting).pipe(Effect.flatten), "timed-out" as const)
       .pipe(
-        timedEffect("turn.started", turnFields(turn.trace), startOutcome),
         // Nobody takes the start's stream if the turn stopped waiting for it: at the bound, or
         // because this program was interrupted.
         Effect.onExit((waited) =>
@@ -370,16 +335,6 @@ function boundedStart(
         ),
       );
   });
-}
-
-function startOutcome(started: Result.Result<ProjectTurnStart | "timed-out">): TimedOutcome {
-  if (Result.isFailure(started)) return started.failure;
-
-  const outcome = started.success;
-
-  if (outcome === "timed-out") return { outcome, level: "error" };
-
-  return outcome.ok ? { outcome: "started" } : { outcome: outcome.reason, level: "warn" };
 }
 
 /** Ends the work behind a start nobody is waiting for any more. */

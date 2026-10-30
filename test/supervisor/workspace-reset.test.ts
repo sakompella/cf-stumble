@@ -75,7 +75,7 @@ test("resets the named workspace while preserving thread and generation state", 
   const fake = fakeWorkspace(resetResult);
   const getByName = vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
 
-  await expect(control.refreshGitHubConnection(undefined, NOW)).resolves.toEqual({
+  await expect(control.refreshGitHubConnection(NOW)).resolves.toEqual({
     github: { state: "connected", login: "reset-user", source: "configured-token" },
     checkedAt: NOW,
   });

@@ -16,13 +16,11 @@ import {
 } from "@cloudflare/computer/backends/container";
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import type { WorkspaceResult } from "./decisions.js";
 import type { WorkspacePathKind } from "./executor.js";
-import { logEvent, logRedactedCause, parseRequestId, timedEffect } from "../diagnostics.js";
+import { logEvent, logRedactedCause } from "../diagnostics.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../workspace-layout.js";
-import { ObservedWorkspaceContainer } from "./container-observer.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
 import {
   executeHarnessBuildRequest,
@@ -48,7 +46,6 @@ import { answerFailures, attemptWorkspace } from "./operations.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { WORKSPACE_IDLE_STOP_MS } from "./idle-stop.js";
 import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
-import { observeBackendClose, type BackendCloseTrigger } from "./container-exit.js";
 
 export { parseProjectBudget };
 
@@ -90,22 +87,13 @@ export function resetWorkspaceStorage(
   container: WorkspaceContainerReset,
 ): Effect.Effect<WorkspaceResetResult> {
   // A step that rejects is a defect: the reset RPC rejects with what it threw, as it always has.
-  return Effect.promise(() => storage.deleteAll()).pipe(
-    timedEffect("workspace.reset-step", { step: "delete-all" }, () => ({ outcome: "ok" })),
-    Effect.andThen(
-      Effect.sync(() => {
-        logEvent("info", "workspace.container.stop-requested", { reasonCode: "workspace-reset" });
-      }),
-    ),
-    Effect.andThen(
-      Effect.promise(() => container.restart(WORKSPACE_CONTAINER_RESET_SPEC)).pipe(
-        timedEffect("workspace.reset-step", { step: "restart-container" }, (restarted) => ({
-          outcome: Result.isSuccess(restarted) ? restarted.success.outcome : "threw",
-        })),
-      ),
-    ),
-    Effect.as({ ok: true, reset: "workspace" } as const),
-  );
+  return Effect.promise(async () => {
+    await storage.deleteAll();
+    const restarted = await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
+    logEvent("info", "workspace.reset", { runtimeId: restarted.runtimeId });
+
+    return { ok: true, reset: "workspace" } as const;
+  });
 }
 
 interface WorkspaceHostEnv {
@@ -180,7 +168,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
-  readonly #container: ObservedWorkspaceContainer;
+  readonly #container: WorkspaceContainerAPI;
   readonly #idle: WorkspaceIdleController;
   readonly #containerLifecycle = new ContainerLifecycle();
   /** Set from the moment a reset arrives until it ends. Host RPCs and project capabilities refuse. */
@@ -190,27 +178,14 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     super(ctx, env);
     const platformContainer = ctx.container;
 
-    this.#container = new ObservedWorkspaceContainer(new WorkspaceContainerAPI(ctx), {
-      monitor: platformContainer === undefined ? undefined : () => platformContainer.monitor(),
-      destroy:
-        platformContainer === undefined ? undefined : (reason) => platformContainer.destroy(reason),
-    });
+    this.#container = new WorkspaceContainerAPI(ctx);
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(ctx.id.toString()),
     });
-    this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, {
-      connected: (runtimeId) => {
-        this.#containerLifecycle.connected(runtimeId);
-        logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
-      },
-      closed: () => {
-        // The close an idle stop causes is its own doing, and is named so.
-        void this.#observeContainerClose(this.#idle.stopping() ? "idle-stop" : "transport-closed");
-      },
-      failed: () => {
-        void this.#observeContainerClose("connect-failed");
-      },
+    this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, (runtimeId) => {
+      this.#containerLifecycle.connected(runtimeId);
+      logEvent("info", "workspace.backend.connected", { runtimeId: runtimeId ?? null });
     });
     this.#workspace = this.#newWorkspace();
     this.#idle = new WorkspaceIdleController({
@@ -220,7 +195,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       containerRunning: () => platformContainer?.running ?? false,
       closeWorkspace: () => this.#workspace.close(),
       stopContainer: async () => {
-        await this.#container.stopFor("idle");
+        await platformContainer?.destroy("idle");
         this.#containerLifecycle.stoppedByHost();
       },
     });
@@ -234,12 +209,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   /** Run one Host RPC as tracked work, or answer `refused` without running it while a reset runs. */
   #unlessResetting<A>(refused: A, work: () => Effect.Effect<A>): Promise<A> {
     return this.#resetting ? Promise.resolve(refused) : this.#tracked(work);
-  }
-
-  #observeContainerClose(trigger: BackendCloseTrigger): Promise<void> {
-    return observeBackendClose(this.#container, trigger, () => {
-      this.#containerLifecycle.replaced();
-    });
   }
 
   /** A Workspace creates its SQLite tables when constructed, so a wiped store needs a new one. */
@@ -327,13 +296,12 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
    * a reset refuses while they run and they refuse while a reset runs.
    */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
-  credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
+  credential(request: unknown): Promise<GitHubCredentialResult> {
     const work = () =>
       executeGitHubCredentialRequest({
         operations: new ComputerWorkspaceOperations(this.#workspace, "not-required"),
         installOperations: new ComputerWorkspaceOperations(this.#workspace, "require-complete"),
         request,
-        requestId: parseRequestId(requestId),
       });
 
     return this.#unlessResetting(CREDENTIAL_REFUSED, work);
@@ -353,9 +321,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     this.#resetting = true;
 
     return this.#tracked(() =>
-      resetWorkspaceStorage(this.ctx.storage, {
-        restart: (spec) => this.#container.restartFor("workspace-reset", spec),
-      }).pipe(
+      resetWorkspaceStorage(this.ctx.storage, this.#container).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             // deleteAll dropped the Workspace's own tables ("no such table: _vfs_watermark" on the
@@ -403,7 +369,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   }
 
   /** The idle check. The RPC WebSocket from computerd is not work, so it never delays a stop. */
-  override alarm(alarmInfo?: { retryCount?: number }): Promise<void> {
-    return runAtEntryPoint(this.#idle.onAlarm(alarmInfo?.retryCount ?? 0));
+  override alarm(): Promise<void> {
+    return this.#idle.onAlarm();
   }
 }

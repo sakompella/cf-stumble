@@ -8,12 +8,7 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import {
-  isTimeoutFailure,
-  logRedactedCause,
-  parseRequestId,
-  timedWorkspaceRpc,
-} from "../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
 import {
   GenerationControl,
   type GenerationControlResult,
@@ -38,8 +33,6 @@ import {
   type ProjectTurnStart,
   type ProjectWorkspaceNamespace,
   type TurnStartContext,
-  timedTurnMount,
-  timedTurnProvision,
 } from "./projects/index.js";
 import { Generations, type ActiveGeneration } from "./generations/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
@@ -237,15 +230,9 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
    * Ask the workspace what its GitHub credential can do now, store the answer, and answer the
    * record. This is the one status read that reaches the Workspace Host.
    */
-  refreshGitHubConnection(
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted; parseRequestId drops anything but a UUID.
-    requestId?: unknown,
-    now: number = Date.now(),
-  ): Promise<GitHubConnectionRecord> {
+  refreshGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionRecord> {
     return runAtEntryPoint(
-      this.github
-        .status(now, { requestId: parseRequestId(requestId) })
-        .pipe(Effect.map(() => this.github.lastKnown(now))),
+      this.github.status(now).pipe(Effect.map(() => this.github.lastKnown(now))),
     );
   }
 
@@ -274,12 +261,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
       const namespace: ResetWorkspaceNamespace = this.env.WORKSPACE_HOST;
 
-      const result = await timedWorkspaceRpc(
-        { method: "reset" },
-        () => namespace.getByName(this.workspaceName).reset(),
-        (reset) =>
-          reset.ok ? { outcome: "reset" } : { outcome: reset.problem.code, level: "warn" },
-      );
+      const result = await namespace.getByName(this.workspaceName).reset();
 
       if (result.ok) this.connections.resetWorkspace();
 
@@ -480,31 +462,17 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       // The generation admission snapshotted, not the one that is active now: the turn is mounted
       // on the same generation it was admitted against (`turn-run.ts`).
       mount: () =>
-        Effect.suspend(() =>
-          Effect.fromResult(this.#mountServing(context.attribution.active)),
-        ).pipe(timedTurnMount(context.trace)),
+        Effect.suspend(() => Effect.fromResult(this.#mountServing(context.attribution.active))),
       // The harness checkout is owned by the active generation's repository. Reconcile it before
       // mounting so a reset cannot leave Computer with a missing working directory.
       provisionHarness:
         generation === undefined
           ? undefined
-          : (signal) =>
-              this.connections
-                .ensureHarnessProvisioned(generation.harnessCommit, signal)
-                .pipe(
-                  timedTurnProvision(context.trace, "harness", (ready) =>
-                    ready ? undefined : "unavailable",
-                  ),
-                ),
+          : (signal) => this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal),
       // Provisioning runs on use as well as on connection: the workspace can be recreated between
       // two turns, and every step converges rather than remembering a previous run.
       provision: (project, signal) =>
-        this.connections.ensureProvisioned(project.id, signal).pipe(
-          timedTurnProvision(context.trace, "repository", (used) =>
-            used.ok ? undefined : used.problem.code,
-          ),
-          Effect.map((used) => used.ok),
-        ),
+        this.connections.ensureProvisioned(project.id, signal).pipe(Effect.map((used) => used.ok)),
     });
   }
 

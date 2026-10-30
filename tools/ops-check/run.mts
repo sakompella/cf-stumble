@@ -1,90 +1,143 @@
-import { parseOptions, USAGE } from "./args.mts";
-import { endsNow } from "./horizon.mts";
-import { formatReport, runChecks } from "./check.mts";
+import { parseArgs } from "node:util";
+import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.ts";
 import {
-  fetchApplications,
-  fetchInstances,
-  fetchLogs,
-  fetchMetrics,
-  readToken,
-  resolveAccount,
-} from "./fetch.mts";
-import type { Options } from "./args.mts";
-import type { CheckInput, Source } from "./model.mts";
+  formatReport,
+  MINUTE_MS,
+  runChecks,
+  type Activity,
+  type CheckInput,
+  type TimeWindow,
+} from "./check.mts";
+import { fetchInvocations, fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
 
 /**
- * `pnpm ops:check`: read Workers Logs, traces' invocation records and container metrics for a
- * window, then print one line if all is well, or one line per rule violation and exit 1.
- *
- * This is a thin wrapper. The rules are pure (`check.mts`) and tested in `pnpm verify`; this file
- * and `fetch.mts` need a live account and stay outside the gate, like `test:browser`.
+ * `pnpm ops:check`: print one line if no container ran past the Host's idle stop in the window,
+ * or one line per finding and exit 1. The rule is pure (`check.mts`) and tested in
+ * `pnpm verify`; this file and `fetch.mts` need a live account and stay outside the gate.
  */
 
-const parsed = parseOptions(process.argv.slice(2), Date.now());
+const USAGE =
+  "usage: ops-check --worker <name> (--since <90m|2h|1d> | --from <ISO> [--to <ISO>]) " +
+  "[--idle-minutes 10] [--account <id>] [--token-file <path>] [--json]";
 
-if (parsed.kind === "invalid") {
-  console.error(`${parsed.reason}\n${USAGE}`);
+interface Options {
+  readonly worker: string;
+  readonly window: TimeWindow;
+  readonly idleLimitMs: number;
+  readonly json: boolean;
+  readonly account: string | null;
+  readonly tokenFile: string | null;
+}
+
+const UNIT_MS = new Map([
+  ["m", MINUTE_MS],
+  ["h", 60 * MINUTE_MS],
+  ["d", 24 * 60 * MINUTE_MS],
+]);
+
+/** Throws with the reason when the command line is wrong. */
+function parseOptions(argv: readonly string[], nowMs: number): Options {
+  const { values } = parseArgs({
+    args: [...argv],
+    options: {
+      worker: { type: "string" },
+      since: { type: "string" },
+      from: { type: "string" },
+      to: { type: "string" },
+      "idle-minutes": { type: "string", default: String(WORKSPACE_IDLE_STOP_MS / MINUTE_MS) },
+      account: { type: "string" },
+      "token-file": { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+
+  if (values.worker === undefined) throw new Error("--worker is required");
+
+  const toMs = values.to === undefined ? nowMs : Date.parse(values.to);
+
+  if (Number.isNaN(toMs)) throw new Error("--to is not a date");
+
+  if (toMs > nowMs) throw new Error("--to is in the future");
+
+  const since = /^(\d+)([mhd])$/u.exec(values.since ?? "");
+  const unitMs = UNIT_MS.get(since?.[2] ?? "");
+
+  const fromMs =
+    values.from === undefined
+      ? since?.[1] === undefined || unitMs === undefined
+        ? Number.NaN
+        : toMs - Number(since[1]) * unitMs
+      : Date.parse(values.from);
+
+  if (values.from === undefined && values.since === undefined)
+    throw new Error("give --since or --from");
+
+  if (Number.isNaN(fromMs))
+    throw new Error("--since must look like 90m, 2h or 1d, and --from must be a date");
+
+  if (fromMs >= toMs) throw new Error("the window is empty");
+
+  const idleMinutes = Number(values["idle-minutes"]);
+
+  if (!(idleMinutes > 0)) throw new Error("--idle-minutes must be a positive number");
+
+  return {
+    worker: values.worker,
+    window: { fromMs, toMs },
+    idleLimitMs: idleMinutes * MINUTE_MS,
+    json: values.json,
+    account: values.account ?? null,
+    tokenFile: values["token-file"] ?? null,
+  };
+}
+
+async function readActivity(options: Options): Promise<Activity> {
+  const { worker, window, idleLimitMs } = options;
+  const token = readToken(options.tokenFile, process.env);
+  const account = await resolveAccount(token, options.account, process.env);
+
+  // A request just before the window can still hold the container into it.
+  const requestWindow = { ...window, fromMs: window.fromMs - idleLimitMs };
+
+  const [invocations, usage] = await Promise.all([
+    fetchInvocations(token, account, worker, requestWindow),
+    fetchUsage(token, account, worker, window),
+  ]);
+
+  return { invocations, usage };
+}
+
+async function gather(options: Options, nowMs: number): Promise<CheckInput> {
+  const { worker, window, idleLimitMs } = options;
+
+  try {
+    return {
+      worker,
+      nowMs,
+      window,
+      idleLimitMs,
+      activity: { status: "ok", data: await readActivity(options) },
+    };
+  } catch (cause) {
+    const reason =
+      cause instanceof ApiFailure ? cause.message : `unexpected failure: ${String(cause)}`;
+
+    return { worker, nowMs, window, idleLimitMs, activity: { status: "unavailable", reason } };
+  }
+}
+
+const nowMs = Date.now();
+
+let options: Options;
+
+try {
+  options = parseOptions(process.argv.slice(2), nowMs);
+} catch (cause) {
+  console.error(`${cause instanceof Error ? cause.message : String(cause)}\n${USAGE}`);
   process.exit(2);
 }
 
-/** Every source failed for one reason: the check can say nothing, and says so for each. */
-function allUnavailable(
-  base: Omit<CheckInput, "logs" | "metrics" | "instances">,
-  reason: string,
-): CheckInput {
-  const failed: Source<never> = { status: "unavailable", reason };
-
-  return { ...base, logs: failed, metrics: failed, instances: failed };
-}
-
-async function gather(options: Options): Promise<CheckInput> {
-  const base = {
-    worker: options.worker,
-    nowMs: Date.now(),
-    window: options.window,
-    idleLimitMs: options.idleLimitMs,
-  };
-
-  const token = readToken(options.tokenFile, process.env);
-
-  if (token.status === "unavailable") {
-    return allUnavailable(base, token.reason);
-  }
-
-  const account = await resolveAccount(token.data, options.account, process.env);
-
-  if (account.status === "unavailable") {
-    return allUnavailable(base, account.reason);
-  }
-
-  // Container work that started before the window can still be owned by a request just before it.
-  const logWindow = { ...options.window, fromMs: options.window.fromMs - options.idleLimitMs };
-
-  const [logs, applications] = await Promise.all([
-    fetchLogs(token.data, account.data, options.worker, logWindow),
-    fetchApplications(token.data, account.data, options.worker),
-  ]);
-
-  if (applications.status === "unavailable") {
-    return { ...base, logs, metrics: applications, instances: applications };
-  }
-
-  // What runs now says nothing about a past window, so the instances are fetched only for one that ends now.
-  const noInstances: CheckInput["instances"] = { status: "ok", data: [] };
-
-  const [metrics, instances] = await Promise.all([
-    fetchMetrics(token.data, account.data, applications.data, options.window),
-    endsNow(options.window, base.nowMs)
-      ? fetchInstances(token.data, account.data, applications.data)
-      : noInstances,
-  ]);
-
-  return { ...base, logs, metrics, instances };
-}
-
-const options = parsed.options;
-
-const input = await gather(options);
+const input = await gather(options, nowMs);
 
 const findings = runChecks(input);
 

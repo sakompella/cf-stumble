@@ -1,16 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import type { CommandOutput } from "../../workspace/index.js";
-import {
-  isTimeoutFailure,
-  logCommit,
-  logRedactedCause,
-  redactLogText,
-  timedEffect,
-  type TimedOutcome,
-} from "../../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause, redactLogText } from "../../diagnostics.js";
 import {
   moduleMapFromBuildOutput,
   planHarnessBuild,
@@ -52,22 +44,12 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
   /** The planned steps one after another, then the module map they wrote. */
   build(harnessCommit: HarnessCommit): HarnessBuild {
     const plan = planHarnessBuild(this.configuration, harnessCommit);
-    const commit = logCommit(harnessCommit);
 
-    const steps = Effect.forEach(
-      plan.steps,
-      (step) =>
-        this.runStep(step, harnessCommit).pipe(
-          timedEffect("harness-build.step", { commit, step: step.name }, buildOutcome),
-        ),
-      { discard: true },
-    );
+    const steps = Effect.forEach(plan.steps, (step) => this.runStep(step, harnessCommit), {
+      discard: true,
+    });
 
-    const output = this.readModuleMap(plan.moduleMapPath, harnessCommit).pipe(
-      timedEffect("harness-build.output", { commit }, buildOutcome),
-    );
-
-    return steps.pipe(Effect.andThen(output));
+    return steps.pipe(Effect.andThen(this.readModuleMap(plan.moduleMapPath, harnessCommit)));
   }
 
   private runStep(
@@ -91,8 +73,7 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
 
     // The tail of a failed step's own output is the only account of why the build failed, and it
     // exists nowhere else once the build directory is cleared. It goes to the owner in the
-    // submission response and is not logged: command output can hold file contents. The log keeps
-    // the step, the exit code, and the duration (`buildOutcome`).
+    // submission response and is not logged: command output can hold file contents.
     return ran.pipe(
       Effect.flatMap((output) =>
         output.exitCode === 0
@@ -159,18 +140,5 @@ function stepDiagnostics(output: CommandOutput): BuildStepDiagnostics {
     stdoutTail: lastUnits(stdout),
     stderrTail: lastUnits(stderr),
     truncated: stdout.length > DIAGNOSTIC_TAIL_LIMIT || stderr.length > DIAGNOSTIC_TAIL_LIMIT,
-  };
-}
-
-/** A build step's log outcome: `ok`, or the problem code and, for a failed command, its exit code. */
-function buildOutcome<Value>(ran: Result.Result<Value, HarnessBuildProblem>): TimedOutcome {
-  if (Result.isSuccess(ran)) return { outcome: "ok" };
-
-  const problem = ran.failure;
-
-  return {
-    outcome: problem.code,
-    level: "warn",
-    fields: problem.code === "build-step-failed" ? { exitCode: problem.exitCode } : {},
   };
 }

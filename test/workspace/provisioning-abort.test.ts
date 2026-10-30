@@ -1,7 +1,5 @@
-// oxlint-disable import/max-dependencies -- The abort cases need the provisioner, its fake host, the log capture, and the outcome helpers.
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
-import { capturedEvents, named } from "../log-capture.js";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
@@ -56,7 +54,6 @@ test("does not start the next provisioning step after the turn aborts", async ()
 
 test("bounds a running provisioning RPC after the turn aborts", async () => {
   vi.useFakeTimers();
-  const events = capturedEvents();
 
   const host: ProvisionWorkspaceHost = {
     provision: (request) => {
@@ -86,9 +83,5 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
 
   const result = await provisioning;
   expect(Result.isFailure(result)).toBe(true);
-  expect(named(events(), "workspace.rpc").at(-1)).toMatchObject({
-    outcome: "threw",
-    durationMs: WORKSPACE_RPC_TIMEOUT_MS,
-  });
   vi.useRealTimers();
 });

@@ -12,7 +12,6 @@ import {
   executeGitHubCredentialRequest,
   type GitHubCredentialResult,
 } from "../../../src/workspace/github-credential.js";
-import { parseRequestId } from "../../../src/diagnostics.js";
 import type { GitHubCredentialState } from "../../../src/github/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
 import { ensureManagedInstructions } from "../../../src/workspace/host.js";
@@ -64,8 +63,6 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
   readonly stdins: (readonly [string, string])[] = [];
   /** Each credential request as JSON, so a test can search everything that was sent. */
   readonly credentialRequests: string[] = [];
-  /** The request id each credential call was sent, as the Workspace Host receives it. */
-  readonly credentialRequestIds: unknown[] = [];
   readonly names: string[] = [];
 
   /** What `gh auth status` reports. Installing a token moves it to `connected`. */
@@ -204,20 +201,18 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
   }
 
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
-  credential(request: unknown, requestId?: unknown): Promise<GitHubCredentialResult> {
+  credential(request: unknown): Promise<GitHubCredentialResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
 
     this.credentialRequests.push(JSON.stringify(request));
-    this.credentialRequestIds.push(requestId);
 
     return Effect.runPromise(
       executeGitHubCredentialRequest({
         operations: this,
         installOperations: this,
         request,
-        requestId: parseRequestId(requestId),
       }),
     );
   }

@@ -40,12 +40,11 @@ import {
   type ProvisionWorkspaceNamespace,
   type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
-import { logEvent, logRedactedCause, timedWorkspaceRpc } from "../../diagnostics.js";
-import { WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
+import { logRedactedCause } from "../../diagnostics.js";
+import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
 import type { DisconnectProjectResult } from "../threads/index.js";
 
 function repositorySizeAllowed(
-  project: ProjectId,
   repositoryUrl: PublicRepositoryUrl,
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
@@ -55,19 +54,6 @@ function repositorySizeAllowed(
 
     const measured = Result.isSuccess(lookup) ? lookup.success : undefined;
     const reason = measured === undefined ? undefined : repositorySizeReason(measured);
-
-    const outcome =
-      measured === undefined ? "skipped" : reason === "within-limits" ? "allowed" : "refused";
-
-    logEvent(outcome === "allowed" ? "info" : "warn", "project.size-check", {
-      project,
-      sizeKb: measured?.sizeKb ?? null,
-      blobCount: measured?.blobCount ?? null,
-      blobBytes: measured?.blobBytes ?? null,
-      truncated: measured?.truncated ?? null,
-      outcome,
-      reason: reason ?? "lookup-failed",
-    });
 
     return reason === undefined || reason === "within-limits";
   });
@@ -218,7 +204,6 @@ export class ProjectConnections {
       }
 
       const sizeAllowed = yield* repositorySizeAllowed(
-        projectId,
         canonical,
         this.repositorySizeToken,
         this.githubFetcher,
@@ -298,11 +283,6 @@ export class ProjectConnections {
 
         this.projects.disconnect(resolved.project.id);
         const workspace = yield* this.removeProjectDirectories(resolved.project.id);
-
-        logEvent(workspace === "removed" ? "info" : "error", "project.disconnected", {
-          project: resolved.project.id,
-          workspace,
-        });
 
         return { ok: true, projectId: resolved.project.id, workspace } as const;
       }),
@@ -459,23 +439,14 @@ export class ProjectConnections {
     const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
 
     return Effect.promise(() =>
-      timedWorkspaceRpc(
-        { method: "project", step: "remove" },
+      // `workspace-sync-incomplete` means the container deleted the clone but the durable store
+      // may still hold it, so it can return with a replacement container. It is not a removal.
+      boundedRpc(
         () =>
           removalNamespace.getByName(this.workspaceName).removeProject({
             kind: "remove-project",
             projectId,
           }),
-        (answered) => {
-          if (answered.ok && answered.result.kind === "command" && answered.result.exitCode === 0) {
-            return { outcome: "removed" };
-          }
-
-          // `workspace-sync-incomplete` means the container deleted the clone but the durable
-          // store may still hold it, so it can return with a replacement container. It is not a
-          // removal.
-          return { outcome: answered.ok ? "failed" : answered.error.code, level: "error" };
-        },
         WORKSPACE_RPC_TIMEOUT_MS,
       ).then(
         (result) =>

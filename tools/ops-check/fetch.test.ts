@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { JsonRecord, JsonValue } from "../json.mts";
+import { parseInvocations, parseUsage } from "./fetch.mts";
+
+const MEMORY_BYTES = 8 * 1024 ** 3;
+
+const usageResponse = (groups: readonly JsonRecord[]): JsonValue => ({
+  data: { viewer: { accounts: [{ containersUsageAdaptiveGroups: groups }] } },
+});
+
+const group = (bucket: string, allocatedMemory: number): JsonRecord => ({
+  dimensions: { datetimeFiveMinutes: bucket },
+  sum: { allocatedMemory },
+});
+
+describe("parseUsage", () => {
+  it("turns byte-seconds into running minutes and sums instances in one bucket", () => {
+    const bucket = "2026-10-01T00:00:00Z";
+    const fiveMinutes = MEMORY_BYTES * 5 * 60;
+
+    const [only, ...rest] = parseUsage(
+      usageResponse([group(bucket, fiveMinutes / 2), group(bucket, fiveMinutes / 2)]),
+      MEMORY_BYTES,
+    );
+
+    assert.equal(rest.length, 0);
+    assert.equal(only?.startMs, Date.parse(bucket));
+    assert.equal(only?.runningMinutes, 5);
+  });
+
+  it("refuses a response at its row limit, which may be cut off", () => {
+    const full = Array.from({ length: 5000 }, () => group("2026-10-01T00:00:00Z", 1));
+
+    assert.throws(() => parseUsage(usageResponse(full), MEMORY_BYTES), /row limit/u);
+  });
+});
+
+describe("parseInvocations", () => {
+  it("refuses a response at its row limit, which may be cut off", () => {
+    const row: JsonRecord = {
+      timestamp: 1,
+      $workers: { wallTimeMs: 1, event: { request: { url: "https://x.test/health" } } },
+    };
+
+    const events = Array.from({ length: 2000 }, () => row);
+
+    assert.throws(() => parseInvocations({ result: { events: { events } } }), /most it gives/u);
+  });
+});

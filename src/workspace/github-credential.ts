@@ -1,13 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import {
-  isTimeoutFailure,
-  logRedactedCause,
-  redactedExcerpt,
-  timedEffect,
-  requestIdFields,
-  type RequestId,
-} from "../diagnostics.js";
+import { isTimeoutFailure, logRedactedCause, redactedExcerpt } from "../diagnostics.js";
 import {
   credentialStatusSource,
   installCredentialSource,
@@ -21,10 +13,9 @@ import {
 } from "../github/index.js";
 import { canonicalRepositoryUrl } from "../project-catalog.js";
 import { WORKSPACE_SHORT_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import { runLoggedCommand } from "./executor.js";
+import { runPlannedCommand } from "./executor.js";
 import {
   answerFailures,
-  thrownBy,
   workspaceEffects,
   WorkspaceSyncIncomplete,
   type CommandOutput,
@@ -171,14 +162,13 @@ function runInstall(
   operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
 ): Effect.Effect<CommandOutput, WorkspaceFault> {
-  return runLoggedCommand(
+  return runPlannedCommand(
     operations.durable,
-    "github-credential.install",
     { source: installCredentialSource(), cwd: "/", timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
-    { stdin: `${token}\n` },
+    `${token}\n`,
   ).pipe(
     Effect.catchTag("WorkspaceSyncIncomplete", (incomplete) =>
-      runLoggedCommand(operations.lenient, "github-credential.logout", {
+      runPlannedCommand(operations.lenient, {
         source: logoutCredentialSource(),
         cwd: "/",
         timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
@@ -195,41 +185,18 @@ function runInstall(
 
 function credentialStatus(
   operations: WorkspaceEffects,
-  requestId: RequestId | undefined,
 ): Effect.Effect<GitHubCredentialStatus, WorkspaceFault> {
-  return runLoggedCommand(
-    operations,
-    "github-credential.status",
-    { source: credentialStatusSource(), cwd: "/", timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
-    { requestId },
-  ).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
+  return runPlannedCommand(operations, {
+    source: credentialStatusSource(),
+    cwd: "/",
+    timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
+  }).pipe(Effect.map((output) => parseCredentialStatus(output.stdout)));
 }
 
-/**
- * Time the status read. `outcome` is the credential state; a command that fails is logged as
- * `threw`. The login stays out of the event.
- */
-function timedCredentialStatus(
+function credentialStatusResult(
   operations: WorkspaceEffects,
-  requestId: RequestId | undefined,
 ): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
-  return credentialStatus(operations, requestId).pipe(
-    timedEffect(
-      "github-credential.status",
-      { ...requestIdFields(requestId), timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS },
-      (read) =>
-        Result.isSuccess(read)
-          ? {
-              outcome: read.success.state,
-              level: read.success.state === "connected" ? "info" : "warn",
-              fields: { timeout: false },
-            }
-          : {
-              outcome: "threw",
-              level: "error",
-              fields: { timeout: isTimeoutFailure(thrownBy(read.failure)) },
-            },
-    ),
+  return credentialStatus(operations).pipe(
     Effect.map((status): GitHubCredentialResult => ({
       ok: true,
       result: { kind: "credential-status", state: status.state, login: status.login },
@@ -241,7 +208,7 @@ function repositoryAccess(
   operations: WorkspaceEffects,
   repositoryUrl: string,
 ): Effect.Effect<GitHubCredentialResult, WorkspaceFault> {
-  return runLoggedCommand(operations, "github-credential.verify-repository", {
+  return runPlannedCommand(operations, {
     source: repositoryAccessSource(repositoryUrl),
     cwd: "/",
     timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
@@ -276,8 +243,6 @@ type CredentialSurfaceInput = Readonly<{
    */
   installOperations: WorkspaceOperations;
   request: unknown;
-  /** Names the owner request this call serves, for the log only. It changes no behavior. */
-  requestId?: RequestId | undefined;
 }>;
 
 function credentialWork(
@@ -294,7 +259,7 @@ function credentialWork(
         parsed.token,
       );
     case "status":
-      return timedCredentialStatus(workspaceEffects(input.operations), input.requestId);
+      return credentialStatusResult(workspaceEffects(input.operations));
     case "verify-repository":
       return repositoryAccess(workspaceEffects(input.operations), parsed.repositoryUrl);
     default: {

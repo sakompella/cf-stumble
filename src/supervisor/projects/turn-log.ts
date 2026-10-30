@@ -1,6 +1,4 @@
-import type * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { logEvent, timedEffect, type LogFields, type LogLevel } from "../../diagnostics.js";
+import { logEvent, type LogFields, type LogLevel } from "../../diagnostics.js";
 import type { ProjectTurnFrame } from "./turn-frames.js";
 
 /**
@@ -140,14 +138,13 @@ function settlement(frame: ProjectTurnFrame): Settlement {
 export type DroppedFrame = "oversized-frame" | "unknown-kind";
 
 /**
- * The log of one turn's stream: the first frame's arrival, the first frame dropped for each
- * reason, and the settlement with frame counts. Nothing is logged per frame.
+ * The log of one turn's stream: the first frame dropped for each reason, and the settlement with
+ * frame counts. Nothing is logged per frame.
  */
 export class TurnStreamLog {
   readonly #trace: TurnTrace;
   readonly #now: () => number;
   #counts: ForwardedFrameCounts = NO_FRAMES;
-  #sawFrame = false;
   readonly #dropped = new Set<DroppedFrame>();
 
   constructor(trace: TurnTrace, now: () => number) {
@@ -158,14 +155,6 @@ export class TurnStreamLog {
   /** Wrap the publisher of forwarded frames so each one is counted on its way to the browser. */
   counting(publish: (frame: ProjectTurnFrame) => void): (frame: ProjectTurnFrame) => void {
     return (frame) => {
-      if (!this.#sawFrame) {
-        this.#sawFrame = true;
-        logEvent("info", "turn.first-frame", {
-          ...turnFields(this.#trace),
-          sinceAdmitMs: this.#now() - this.#trace.admittedAt,
-        });
-      }
-
       this.#counts = countFrame(this.#counts, frame);
       publish(frame);
     };
@@ -197,31 +186,4 @@ export class TurnStreamLog {
 /** The turn gave its lease back before it settled, and why. */
 export function logLeaseAbandoned(trace: TurnTrace, why: string, level: LogLevel): void {
   logEvent(level, "turn.lease-abandoned", { ...turnFields(trace), why });
-}
-
-/** Log how long mounting the admitted generation took and whether it mounted. */
-export function timedTurnMount<T, E extends Readonly<{ code: string }>>(
-  trace: TurnTrace,
-): <R>(mount: Effect.Effect<T, E, R>) => Effect.Effect<T, E, R> {
-  return timedEffect("turn.mounted", turnFields(trace), (mounted) =>
-    Result.isSuccess(mounted)
-      ? { outcome: "mounted" }
-      : { outcome: mounted.failure.code, level: "warn" },
-  );
-}
-
-/**
- * Log how long reconciling the selected checkout took before the turn uses it. `failure` names
- * the problem code of a provision that did not leave the checkout ready.
- */
-export function timedTurnProvision<T>(
-  trace: TurnTrace,
-  target: "harness" | "repository",
-  failure: (value: T) => string | undefined,
-): <R>(provision: Effect.Effect<T, never, R>) => Effect.Effect<T, never, R> {
-  return timedEffect("turn.provisioned", { ...turnFields(trace), target }, (provisioned) => {
-    const code = Result.isSuccess(provisioned) ? failure(provisioned.success) : undefined;
-
-    return code === undefined ? { outcome: "ready" } : { outcome: code, level: "warn" };
-  });
 }

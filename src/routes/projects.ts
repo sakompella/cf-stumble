@@ -2,9 +2,8 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
-import { logRedactedCause, type RequestId } from "../diagnostics.js";
+import { logRedactedCause } from "../diagnostics.js";
 import { projectIdFromPath } from "./route-pattern.js";
-import { markDegraded } from "./route-settled.js";
 import type { SelectableCatalog } from "../selectable-projects.js";
 import type {
   ConnectRepositoryResult,
@@ -12,7 +11,6 @@ import type {
   GitHubAuthorizationOutcome,
   GitHubAuthorizationProblem,
   GitHubConnectionRecord,
-  GitHubConnectionStatus,
 } from "../supervisor/projects/index.js";
 
 /**
@@ -33,7 +31,7 @@ export type ProjectApiSupervisor = Readonly<{
     displayName: unknown,
   ) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
-  refreshGitHubConnection: (requestId?: RequestId) => Promise<GitHubConnectionRecord>;
+  refreshGitHubConnection: () => Promise<GitHubConnectionRecord>;
   startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
@@ -90,21 +88,13 @@ function recordResponse(record: GitHubConnectionRecord): Response {
   return Response.json({ ok: true, github: record.github, checkedAt: record.checkedAt });
 }
 
-/** A connection that needs the owner's attention is still a 200, so the log marks it. */
-function reportingGitHub(response: Response, github: GitHubConnectionStatus | null): Response {
-  return github?.state === "reconnect-required" ? markDegraded(response) : response;
-}
-
 /**
  * A refresh asks the workspace. When that call fails, the owner sees the workspace as unavailable,
  * and the cause goes to the operator log redacted.
  */
-function refreshResponse(
-  supervisor: ProjectApiSupervisor,
-  requestId: RequestId | undefined,
-): Effect.Effect<Response> {
-  return callSupervisor(() => supervisor.refreshGitHubConnection(requestId)).pipe(
-    Effect.map((record) => reportingGitHub(recordResponse(record), record.github)),
+function refreshResponse(supervisor: ProjectApiSupervisor): Effect.Effect<Response> {
+  return callSupervisor(() => supervisor.refreshGitHubConnection()).pipe(
+    Effect.map((record) => recordResponse(record)),
     Effect.catchTag("SupervisorCallFailed", (failure) =>
       Effect.sync(() => {
         logRedactedCause("routes.projects.connection: workspace-unavailable", failure.cause);
@@ -175,7 +165,6 @@ function authorizationResponse(
 export function routeProjectApiRequest(
   request: Request,
   supervisor: ProjectApiSupervisor,
-  requestId?: RequestId,
 ): Effect.Effect<Response, SupervisorCallFailed> | undefined {
   const pathname = new URL(request.url).pathname;
   const isGet = request.method === "GET";
@@ -211,7 +200,7 @@ export function routeProjectApiRequest(
   }
 
   if (pathname === "/api/github/connection/refresh") {
-    return refreshResponse(supervisor, requestId);
+    return refreshResponse(supervisor);
   }
 
   if (disconnectedProjectId !== undefined) {

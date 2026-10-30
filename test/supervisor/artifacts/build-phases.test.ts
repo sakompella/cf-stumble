@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { resultOf } from "../../effect-result.js";
 import * as Result from "effect/Result";
-import { capturedEvents, everythingLogged, named } from "../../log-capture.js";
+import { everythingLogged } from "../../log-capture.js";
 import { namespaceFor } from "../../workspace-namespace-fixture.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
@@ -144,8 +144,6 @@ afterEach(() => {
 });
 
 test("a failed phase gives the owner its output tail with every credential redacted, and logs none of it", async () => {
-  const events = capturedEvents();
-
   const built = await resultOf(
     new WorkspaceHostModuleMapBuilder(
       namespaceFor(new TokenEchoingHost(phaseNames[0] ?? "")),
@@ -170,11 +168,6 @@ test("a failed phase gives the owner its output tail with every credential redac
   expect(logged, "command output is not written to a log").not.toContain("authentication failed");
   expect(logged).not.toContain("x-access-token");
   expect(logged).not.toContain(FAKE_TOKEN);
-  expect(named(events(), "harness-build.step").at(-1)).toMatchObject({
-    step: phaseNames[0],
-    outcome: "build-step-failed",
-    exitCode: 7,
-  });
 });
 
 test("the tail keeps the end of a long stream and says it was cut", async () => {

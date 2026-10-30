@@ -1,471 +1,118 @@
 # Operational log
 
-cf-stumble writes structured events for steps an operator may need to explain later: a turn
-that was admitted and how it ended, a provisioning step, a Workspace Host RPC, a generation control
-request, a refusal at the boundary, a credential install, and a workspace reset. Each event is one
-plain object passed to one `console` call, so Workers Logs indexes every field and a query can
-filter on `event`, `outcome`, or a field present on that event instead of matching text. Use
-`projectId` for turn and provisioning events, and `project` for clone, size-check, and disconnect
-events. The Supervisor and the Workspace Host run in the `cf-stumble` Worker, so their events are in
-its logs too.
+cf-stumble writes a few structured events: one per turn end, one per idle stop, one per container
+start and reset, and the ChatGPT and GitHub credential faults. Each event is one plain object passed
+to one `console` call, so Workers Logs indexes every field and a query filters on `event` or
+`outcome` instead of matching text. The Supervisor and the Workspace Host run in the `cf-stumble`
+Worker, so their events are in its logs. Everything else is in the platform's invocation records,
+Workers traces, and Issues.
 
 ## Writing an event
 
 `src/diagnostics.ts` owns the logger:
 
 - `logEvent(level, event, fields)` writes `{ event, level, ts, ...fields }`. `info` goes to
-  `console.log`, `warn` to `console.warn`, and `error` to `console.error`.
-- `timed(event, fields, run, classify)` runs one promise and logs its `outcome` and `durationMs`.
-  A rejection is logged at `error` as `outcome: "threw"` with a `timeout` flag, then rethrown.
-- `logRedactedCause(context, cause, knownToken?)` still writes the redacted text of a thrown cause.
-  It applies the field patterns, including the JWT pattern, to the whole cause before it
-  cuts the cause to 400 characters. `timed` logs no cause, because only the caller knows which secret the cause might echo. A catch
-  block may call `logRedactedCause`; not every exception log uses it.
+  `console.log`, `warn` to `console.warn`, and `error` to `console.error`. A field value is a
+  string, a number, a boolean, or `null`. Every string field is redacted with `redactCredentials`
+  and a JWT pattern, then cut to 200 characters.
+- `logRedactedCause(context, cause, knownToken?)` writes the redacted text of a thrown cause, cut
+  to 400 characters. A catch block that may see a secret in the cause uses it.
 
-A field value is a string, a number, a boolean, or `null`. Fields carry ids, names, codes,
-counts, byte sizes, and durations. The logger redacts every string field with `redactCredentials`
-and a JWT pattern, then cuts it to 200 characters. This covers recognized patterns, not
-all secrets or plain-text exception logs. A caller passes a code, never a prompt, a frame's
-text, file contents, command text, command output, a header value, a cookie, a token, a device or
-user code, or a GitHub login. A caller that must name a lease uses `turnTrace`, which keeps the
-last 8 characters of the lease id; the whole id never leaves the Supervisor.
+The redaction covers recognized patterns, not all secrets. A caller passes ids, codes, counts, and
+durations, never a prompt, a frame's text, file contents, command text or output, a header, a
+cookie, a token, a device or user code, or a GitHub login. A turn names its lease by `turnTrace`,
+the last 8 characters of the lease id.
 
-Choose the level by what the event means. Use `info` for the ordinary lifecycle, `warn` for a
-degraded path that the system survived (a refusal, a stale exclusion, a nonzero exit), and `error`
-for a fault the system caused or could not recover from. Events describe steps, not every frame,
-chunk, or byte. `turn.first-frame` marks the first frame once. `workspace.rpc-waiting` can repeat
-while one call is pending.
+Use `info` for the ordinary lifecycle, `warn` for a degraded path the system survived, and `error`
+for a fault it caused or could not recover from. Add an event only when an operator could not answer
+the question from the platform's records; name it `area.thing` and add it to the table below.
 
-To add an event, name it `area.thing`, add it to the tables below, and test it with
-`capturedEvents` and `named` from `test/log-capture.ts`.
+## Events
+
+| Event                           | Level                                                                | Fields                                                                                                                                                                        | Written when                                                                                                                                                                                                                           |
+| ------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `turn.settled`                  | info, warn, or error                                                 | `projectId`, `lease`, `generation`, `ending` (the terminal frame kind), `code`, `saved`, `revision`, `messageCount` when the ending has them, frame counts by kind, `totalMs` | The Supervisor wrote the terminal frame. `saved` and `cancelled` are info, `turn-failed` and `turn-rejected` warn, and `save-failed`, `stream-invalid`, and `timed-out` error (`src/supervisor/projects/turn-log.ts`).                 |
+| `turn.frame-dropped`            | warn                                                                 | `projectId`, `lease`, `generation`, `reason` (`oversized-frame` or `unknown-kind`)                                                                                            | A progress frame was left out of the browser's stream. Once per reason per turn.                                                                                                                                                       |
+| `turn.lease-abandoned`          | warn or error                                                        | `projectId`, `lease`, `generation`, `why` (a start refusal or failure, or `stream-failed`)                                                                                    | A lease was given back before the turn settled.                                                                                                                                                                                        |
+| `workspace.backend.connected`   | info                                                                 | `runtimeId` (string or `null`)                                                                                                                                                | The Workspace Host connected to a container, launched or adopted. A new `runtimeId` is a new container run.                                                                                                                            |
+| `workspace.container.idle-stop` | info, or warn when `outcome` is `threw`                              | `idleForMs`, `outcome` (`stopped`, `not-running`, `skipped-busy`, or `threw`)                                                                                                 | The idle alarm found nothing in flight for `WORKSPACE_IDLE_STOP_MS` (ADR-0043), closed the Workspace, and tried to destroy the container. `skipped-busy` and `threw` check again one limit later (`src/workspace/idle-controller.ts`). |
+| `workspace.reset`               | info                                                                 | `runtimeId`                                                                                                                                                                   | The owner's reset deleted the workspace storage and restarted the container.                                                                                                                                                           |
+| `github-credential.install`     | info when connected, error for `credential-rejected`, otherwise warn | `source` (`configured-token` or `device-authorization`), `outcome`                                                                                                            | A token was installed into the workspace.                                                                                                                                                                                              |
+| `github-credential.ensure`      | info when connected, otherwise warn or error                         | `before`, `fallbackConfigured`, `outcome`                                                                                                                                     | The Supervisor found the credential missing or rejected and tried the configured token. A working credential writes nothing.                                                                                                           |
+| `chatgpt.model-call`            | warn or error                                                        | `outcome` (`retrying`, `refused`, `http-error`, or `stream-failed`), `status`, `type`, `code`, and for a usage limit `fallback` and `limitedUntil`                            | OpenAI refused or failed a model call. `fallback: true` (Workers AI answers instead) is warn. The error message is never logged, because it can name the owner's account.                                                              |
+| `chatgpt.refresh`               | error for `rejected`, otherwise warn                                 | `outcome` (`rejected`, `missing-scope`, `temporary`, `rate-limited`, or `ambiguous`)                                                                                          | A token refresh failed. `rejected` and `missing-scope` mean the owner must sign in again; the others kept the stored pair.                                                                                                             |
+| `chatgpt.login.complete`        | info, or warn for a refusal                                          | `outcome` (`connected` or a refusal code)                                                                                                                                     | The owner's ChatGPT sign-in finished.                                                                                                                                                                                                  |
+| `chatgpt.provider-refused`      | error                                                                | none                                                                                                                                                                          | OpenAI refused a token twice; the connection now needs a reconnect.                                                                                                                                                                    |
+
+Plain `logRedactedCause` lines cover the rest, for example `workspace.idle-alarm: not armed`,
+`workspace.idle-stop: container not stopped`, and `<surface>: sync-incomplete` when a clone or
+removal did not reach the durable store (`src/workspace/executor.ts`). Container exits and restarts
+appear only in Computer's own log lines and in the container metrics.
 
 ## Querying
 
-Stream live events with Wrangler. Each tail record has a `logs` array, and the first element of
-each log's `message` is the event object:
+Stream live events with Wrangler. The first element of each log's `message` is the event object:
 
 ```sh
 pnpm exec wrangler tail cf-stumble --format json \
   | jq -c '.logs[]?.message[0] | objects | select(.event? // "" | startswith("turn."))'
 ```
 
-For past events, open the Cloudflare dashboard, go to Workers & Pages, select `cf-stumble`, and
-open Observability. In the query builder, filter on the `event` field (for example
-`event = turn.settled`) and group by a field such as `ending` or `outcome`. Workers Logs keeps
-events for a limited retention period, so export what an incident needs while it is still there.
+For past events, open the Cloudflare dashboard, Workers & Pages, `cf-stumble`, Observability, and
+filter on `event` (for example `event = turn.settled`). Workers Logs keeps events for 7 days.
 
-Common questions and the events that answer them:
-
-| Question                          | Events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Why did a turn fail?              | `turn.refused`, `turn.started`, and `turn.settled` for the project; then the `workspace.*` events in between.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Is a lease stuck or replaced?     | A `turn.admitted` whose `lease` has no later `turn.settled` or `turn.lease-abandoned`; `turn.lease-reclaimed` signals admission after a previous instance's lease.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Is the workspace wedged?          | `workspace.exclusion-wait` with `result: "stale"`, `workspace.exclusion-stale`, repeated `workspace.rpc-waiting`, slow or `threw` `workspace.rpc` and `workspace.provision-step`, and `workspace.backend.closed` (check `running`), `workspace.container.wake-requested`, `workspace.container.started`, `workspace.container.adopted`, `workspace.container.stop-requested`, `workspace.container.stopped` (check `reasonSource`), or Computer's own log line with `message = workspace.container.exited`.                                                                                                                                                                                                  |
-| Which request held the workspace? | `route.settled` with a long `durationMs` or an `applicationOutcome` other than `ok`; then filter all events on its `requestId` (`requestId = <id>` in Observability, or `select(.requestId? == "<id>")` in `jq`): `workspace.rpc`, `workspace.rpc-waiting`, `workspace.command`, and `github-credential.status`. To find suspects, filter `event = route.settled` and group by `route` and `applicationOutcome`. Only the GitHub connection refresh carries a `requestId` to these events; other routes write only `route.settled` (see "Route events and request ids").                                                                                                                                     |
-| Does the GitHub credential work?  | `github-credential.install` and `github-credential.ensure`, especially `outcome: "credential-rejected"`. A `github-credential.status` with `outcome: "missing"` after `workspace.container.started` means the credential did not persist across the container replacement. It is expected after a workspace reset, on a workspace that never connected, and on the first start after the deployment that moved the credential under `/workspace`. An install that fails with `github-credential.install: sync-incomplete` in the log never reported `connected`. A logout command is attempted before this failure is logged; its `workspace.command` is named `github-credential.logout`.                   |
-| Does the ChatGPT model answer?    | `chatgpt.model-call` with `outcome: "retrying"` (OpenAI refused a token once), `"refused"` (refused twice; the connection now needs a reconnect), `"http-error"` with the `status` and OpenAI's `code`, or `"stream-failed"` with its `code`. `chatgpt.refresh` with `outcome: "rejected"` or `"missing-scope"` means the owner must sign in again; `"temporary"`, `"rate-limited"` and `"ambiguous"` mean the token server did not answer usefully and the stored pair was kept. `chatgpt.provider-refused`, `chatgpt.login.start`, `chatgpt.login.complete` (its `outcome` is `connected` or a refusal code) and `chatgpt.disconnect` record the connection's changes. No event carries a token or a code. |
-| Why was a request refused?        | `turn.refused` and `project.size-check`. Credential authorization and disconnect can also refuse a request; `project.disconnected` is not written for a refusal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-
-### ChatGPT model-call fields
-
-`chatgpt.model-call` with `outcome: "http-error"` or `"stream-failed"` carries the provider's HTTP
-`status`, and its error `type` and `code`, each `"unknown"` when the provider sent none. A stream
-that fails after the headers has a 2xx `status`. The event never carries the error's message,
-because it can name the owner's account, and never a token.
-
-A usage limit (ADR-0047) adds two fields. `fallback` is `true` when the call had sent no output
-and Workers AI answers it, and `false` when output was already sent and the call failed.
-`limitedUntil`, in epoch milliseconds, is present when a `retry-after` header named the limit's
-end. A `fallback: true` event is logged at warn level; every other refusal at error level.
-
-## Issues and traces
-
-Cloudflare Issues and Workers traces are on for this Worker (`observability.issues` and `observability.traces` in `cloudflare.config.ts` and `wrangler.jsonc`). Both configurations must keep them on: a deployment from a configuration without `issues` turns Issues off.
-
-**Find a request's trace.** Every request that writes `route.settled` runs inside a span named `owner-api.route`. The span has two attributes: `request.id`, the same value as `requestId` in the log events, and `http.route`, the route pattern. To follow one request, copy `requestId` from its `route.settled` event. In the Observability query builder, add the filter `request.id = <id>` (checked on production on 2026-10-02). It returns the `owner-api.route` span. That span's `traceId` returns the whole trace, including the Durable Object RPC and SQL spans. The span is a child of the platform's handler span, because the pinned `@cloudflare/workers-types` and the local workerd have no `tracing.getActiveSpan`, although current Cloudflare docs and the workerd main branch do. When a pinned version has it, move the attributes onto the handler span and drop the extra span. The fetch, binding, and Worker-to-Durable-Object spans for that request appear below it. A turn's span ends when the stream starts, like `phase: "headers"`, so later turn work can appear as children that outlive it. Requests that write no `route.settled` event have no such span.
-
-**What Issues catches.** Issues records uncaught exceptions, failed invocations, 5xx responses, `console.error` output, and stack traces, and it groups them. `logEvent` writes events at level `error` with `console.error`, so a `route.settled` event at `error` appears in Issues. Only two things reach Issues from `route.settled`: a fault, and a request that ran for at least 901 seconds.
-
-**What Issues misses.**
-
-- It ignores `warn`. Degraded and refused responses are warnings by design.
-- It misses cost that is not an error: work that is expensive and finishes normally, and requests that are slow but finish in under 901 seconds. Use `durationMs` in `route.settled` and the trace for those.
-- A canceled invocation often never reaches the code that writes `route.settled`, so a client that left may produce no event at all. The platform's own invocation record still exists.
-
-**Sampling and cost.** Every sampling rate is 1, so no request is dropped and the start and end events of a request stay together. Traces bill one event per span. A span is one event in the same quota as logs: 20 million events a month are included on Workers Paid, then $0.60 per million, with 7 days of retention. One cold start of the workspace produced about 12,600 spans, mostly `durable_object_storage_exec` from the workspace filesystem start, which costs about $0.008 at the over-quota rate. If the bill grows, lower `traces.headSamplingRate` first.
-
-**Not configured.** Issues automations, such as alerts or webhooks, are account resources in the dashboard. This repository creates none.
+Cloudflare Issues and Workers traces are on (`observability.issues` and `observability.traces` in
+`cloudflare.config.ts` and `wrangler.jsonc`); a deployment from a configuration without `issues`
+turns Issues off. Issues groups uncaught exceptions, failed invocations, 5xx responses, and
+`console.error` output, so an `error` event appears there; it ignores `warn`, and it misses work
+that is slow or expensive but succeeds. Every sampling rate is 1. A span is one event in the logs
+quota (20 million a month on Workers Paid, then $0.60 per million); one cold start of the workspace
+wrote about 12,600 spans. If the bill grows, lower `traces.headSamplingRate` first.
 
 ## Checking a running deployment
 
-`pnpm ops:check` reads one time window from the live account and applies nine rules. It prints one line when everything is fine:
+Run `pnpm ops:check` after a staging deploy or an e2e run, and when the bill looks wrong. It needs a
+live account, so it is not part of `pnpm verify`. It checks one thing: a workspace container that
+kept running past the Host's idle stop. It prints one check mark when all is well and one line per
+finding otherwise, and exits 1 on any finding or `unknown`. `--json` prints the same as JSON.
 
-```
-✓ ops-check cf-stumble 2026-10-02T14:00Z..16:00Z
-```
+**Sources.** For the window (`--since 90m|2h|1d`, or `--from <ISO> [--to <ISO>]`), it reads:
 
-Otherwise it prints one line per violation and exits 1:
+- Workers Logs (`workers/observability/telemetry/query`): every fetch invocation of the Worker, with
+  its end time, `$workers.wallTimeMs`, and URL, from one idle limit before the window starts. Only
+  owner API requests (routes under `/api/`) count; the page and Durable Object fetches never reach
+  the workspace.
+- GraphQL `containersUsageAdaptiveGroups`: `allocatedMemory` byte-seconds per five-minute bucket,
+  divided by the provisioned memory of the `<worker>-workspacehost` application and by 60, gives
+  running minutes. A bucket counts at most five minutes.
 
-```
-✗ poller 38/h >= 20/h on /api/github/connection, 0 touch the workspace, 38 canceled 2026-09-26T18:00Z..21:00Z [inv:poll-0 inv:poll-1 inv:poll-2]
-```
+**Rule `ran-past-idle`.** Each request allows the container to run from its start until its end
+plus the idle limit (`--idle-minutes`, default `WORKSPACE_IDLE_STOP_MS`). A run of consecutive
+running buckets that exceeds that allowance by more than 10 minutes is a finding. Buckets newer
+than 10 minutes are still filling and do not count. The finding lists the routes and end times of
+the last three requests before the run ended, which shows what kept the container awake.
 
-Each line names the rule, the measured value against its threshold, the window, and up to three evidence ids. An id is a `requestId`, an `inv:` platform request id, or the start of a metrics bucket. `--json` prints the same findings as JSON.
+**Limits.** A turn that holds the container after its request ended (a turn lease, or a client that
+left a streamed turn) is covered only by the 10-minute slack. A stuck container shows up about 30
+minutes after the last request with the defaults.
 
-```sh
-pnpm ops:check                                        # last 2 hours, Worker cf-stumble
-pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --from 2026-10-02T15:00:00Z
-pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 1d --idle-minutes 30 --json
-```
+**Credentials.** `CLOUDFLARE_API_TOKEN`, or `--token-file` with a bare token or the `cf` login JSON
+(`~/.config/cloudflare/config/default.json`, after `pnpm exec cf auth whoami` refreshed it). GraphQL
+needs Account Analytics Read; an API token with it is better for repeated runs. The account is
+`--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. The token goes in
+the `Authorization` header only and is never printed. Use `--worker <name>` for another Worker.
 
-Run it after a staging deploy or an e2e run, and when you want to know whether something is running that nobody asked for. It is not part of `pnpm verify`, because it needs a live account.
+**Unknown.** Missing data never reads as fine. A missing token or account, a failed call, a missing
+application, an unexpected response, or a query that hit its row limit (2,000 requests or 5,000
+usage rows) prints one `unknown` line with the reason. Use a shorter `--since` after a row limit.
 
-**Credentials.** The command reads `CLOUDFLARE_API_TOKEN`, or the file named by `--token-file`. The file holds a bare token or the `cf` login JSON (`~/.config/cloudflare/config/default.json`). GraphQL needs an API token with Account Analytics Read. On 2026-10-02 the `cf` OAuth token also worked for the telemetry query, the Containers API, and GraphQL, but do not rely on that. The command sends a token only in the `Authorization` header and never prints it. If the token is missing, the token file cannot be read, or the account lookup fails, the command prints an `unknown` line for each of its three sources (logs, metrics, instances) instead of failing. A bad flag prints the usage line and exits 2. The account is `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. `--to` may not be in the future.
-
-**Sources.**
-
-- Telemetry query (`workers/observability/telemetry/query`, `view: "events"`): every event with an `event` field, and every canceled fetch invocation (`$workers.outcome = canceled`), both filtered to `$metadata.service = <worker>`. A staging or e2e Worker on the same account writes to the same dataset, so the parser drops any row from another Worker as well; no rule sees it. The platform record has `$workers.wallTimeMs` and the request URL, because a canceled call often writes no `route.settled`. Each query returns at most 2000 rows; a full answer is reported as `unknown`. A canceled invocation has no logged route pattern, so the command turns its URL path into the same pattern the Worker logs (`src/routes/route-pattern.ts`, for example `/api/projects/:projectId/thread`). A streamed turn writes `route.settled` with `phase: "headers"` when its stream starts; if the client then leaves, the matching canceled invocation is not counted a second time.
-- GraphQL `containersMetricsAdaptiveGroups` for CPU, in five-minute buckets, summed over instances. The command finds the application named `<worker>-workspacehost` in the Containers API, which also gives the provisioned memory. It does not match other applications that share the prefix.
-- GraphQL `containersUsageAdaptiveGroups` for running time: `allocatedMemory` byte-seconds divided by provisioned memory and by 60 gives running minutes per bucket. `containerUptime` returned 0 in every bucket on 2026-10-02, so the command does not use it. A bucket can report more than five minutes while a restart overlaps two instances, so the command counts at most five minutes per bucket. The usage dataset also has its own `cpuTimeSec`, which was larger than the metrics dataset for the same bucket; the command uses the metrics dataset.
-
-**Rules.** All thresholds are named constants in `tools/ops-check/thresholds.mts`. They are reporting thresholds, not runtime limits.
-
-| Rule                    | Fires when                                                                                                                                                                                                                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slow-requests`         | One owner route has at least 10 requests in a rolling hour that are slow (`route.settled` with `durationMs` of 30 s or more) or canceled by the platform.                                                                                                                                 |
-| `poller`                | One route has at least 20 calls in a rolling hour, and at least 10 touch the workspace (their `requestId` appears on workspace or credential events) or over 10% are canceled.                                                                                                            |
-| `unowned-cpu`           | At least 30 minutes of consecutive five-minute buckets above 30 CPU-seconds (about 0.1 vCPU), none overlapping owner work in the logs.                                                                                                                                                    |
-| `ran-past-idle`         | A run of running buckets holds more than 10 minutes of allocated time beyond the idle limit (default 10 minutes, the Host's `WORKSPACE_IDLE_STOP_MS`; `--idle-minutes` overrides it) after the last owner activity or the end of the last turn lease the logs record, whichever is later. |
-| `running-close`         | Any `workspace.backend.closed` with `running: true`, except the Host's own idle-stop close (`trigger` `idle-stop`) and a close within 10 seconds of the Host's own `stop-requested` or `wake-requested`.                                                                                  |
-| `unexplained-stop`      | Any `workspace.container.stopped` with `reasonSource` `unknown` at warn or error, other than `placement-unavailable`. An idle stop has `reasonSource` `application-intent` and is a normal stop.                                                                                          |
-| `placement-unavailable` | Any `workspace.container.stopped` with `reasonCode` `placement-unavailable` at warn or error. The platform had no machine to start on; a cold start can write two to four before one launch works. The line gives the count for the window.                                               |
-| `error-events`          | Any event at error level, one finding per event name.                                                                                                                                                                                                                                     |
-| `unknown`               | A source failed, hit its row limit, or returned nothing while another source shows activity.                                                                                                                                                                                              |
-
-`poller` counts calls from `route.settled` events and canceled invocations. The project list and
-the GitHub connection read write no `route.settled`, because they answer from the Supervisor's
-storage and cannot keep the container running, so a client that repeats them counts only when the
-platform cancels its calls. A client that repeats `POST /api/github/connection/refresh` is counted
-like any other route that touches the workspace.
-
-Owner work is a `turn.*`, `workspace.rpc`, `workspace.exec`, `workspace.command`, `workspace.provision*`, `workspace.clone`, `workspace.reset*`, `harness-build.*` or `github-credential.*` event. A `workspace.container.started` event owns the next 10 minutes (the startup grace), because the first status read and provisioning run before they log. No other lifecycle event owns time; that includes `workspace.idle-check` and `workspace.container.idle-stop`, which report the idle alarm and are written when nothing is running work. Most events are written when the work ends, so the command places each one on the timeline from `timestamp - durationMs` (or `totalMs`, `elapsedMs`) to `timestamp`. A long exec owns the buckets it ran through. For `ran-past-idle`, every owner activity (including `route.settled` and canceled invocations) also keeps the container allowed to run for the idle limit after it. A `route.settled` with `applicationOutcome` `refused`, and any `route.settled` for activation or rollback, which the Supervisor decides without the Host, is not owner activity: it cannot reset the Host's idle clock. The Host's idle clock starts at the later of its last work and the end of its turn lease, so a `workspace.rpc` event with `leaseEndsAtMs` also keeps the container allowed until that instant plus the idle limit: on staging a short turn kept the container up about 19 minutes. The command reads the logs from one idle limit before the window starts, so a request just before the window still counts. An invocation's timestamp is its end: on production, a `/api/projects` invocation stamped 15:08:38.555 had `wallTimeMs` 17523, the same as the `durationMs` of the `route.settled` event written at 15:08:38. The startup grace owns up to three five-minute buckets, because a bucket counts as touched when a span ends exactly at its start.
-
-**Metrics lag.** The newest metrics buckets are incomplete: on 2026-10-02 the container looked stopped while the Containers API still showed it running. Rules c and d read only buckets that end by `min(window end, time of the check - 10 minutes)`. This is separate from whether the window "ends now". A window is read as ending now only when its end is within one minute of the time of the check, which is the case when `--to` is omitted. Only then does rule d read the Containers API instances endpoint (`status.state`, `status.updated_at`), and only then is a failing instances call reported as `unknown`. An explicit `--to`, even five minutes ago, is a history query: what runs now says nothing about it, so the instances are not read. An instance that began running after the window end can never produce a finding. The run start is `status.updated_at` for a running instance, not `started_at`: an instance created hours ago can have entered the running state minutes ago. A running instance whose time in the window is not covered by owner activity plus the idle limit for more than 10 minutes is a `ran-past-idle` finding, and a running instance with no `updated_at` makes the source `unknown`. A window with less than 30 minutes of complete metrics cannot show `unowned-cpu` and is reported as `unknown`.
-
-**Missing data is never zero.** A rule runs only when every source it reads is usable. If the metrics are missing, empty, full to their limit (5000 rows), or in error, `unowned-cpu` and `ran-past-idle` do not run, and the command prints an `unknown` line for each failing source instead. The same holds for empty logs, because "no owner events" could mean "no data". A source that returns nothing is `unknown` whenever another source (or a running instance, for a window that ends now) shows activity. If every source is empty and no instance runs, nothing is known to have happened and the check passes. An `unknown` line also exits 1: the command cannot say that all is well.
-
-**Tests.** `tools/ops-check/*.test.ts` run in `pnpm test:tools`. `fixtures.mts` builds hand-made API responses for four days: the 09-26 poller (95 s polls, 90 s cancellations), the 09-27 run (19 hours of 0.6 to 1.0 vCPU and four log events), a healthy day, and a day with no metrics. Each response goes through the same parser the command uses. The tests check that each rule fires at its threshold and not one step below. Fetching and the command line (`fetch.mts`, `run.mts`) have no tests and stay outside the gate, like `pnpm test:browser`.
-
-## Query recipes
-
-These are the queries behind `pnpm ops:check` (`tools/ops-check/fetch.mts`), so you can run them by
-hand. Replace `<account-id>` with the id from `pnpm exec cf accounts list` (or set
-`CLOUDFLARE_ACCOUNT_ID`) and `<worker>` with the Worker name from `cloudflare.config.ts`. Send the
-token in the `Authorization: Bearer` header only, never in a URL or a command line you log, and set
-a `User-Agent` header (the API refuses the default of some HTTP libraries).
-
-**Events from Workers Logs.** `POST https://api.cloudflare.com/client/v4/accounts/<account-id>/workers/observability/telemetry/query`
-with a body like this. `timeframe` is in milliseconds since the epoch.
-
-```json
-{
-  "queryId": "adhoc",
-  "view": "events",
-  "dry": true,
-  "limit": 2000,
-  "timeframe": { "from": 1790000000000, "to": 1790003600000 },
-  "parameters": {
-    "filters": [
-      { "key": "$metadata.service", "operation": "eq", "type": "string", "value": "<worker>" },
-      { "key": "event", "operation": "exists", "type": "string" }
-    ]
-  }
-}
-```
-
-- Add `{ "key": "event", "operation": "eq", "type": "string", "value": "route.settled" }` to read one
-  event. Any field an event carries works as a key, for example `requestId` or `reasonCode`.
-- Canceled invocations that wrote no event: filter `$workers.outcome = canceled` and
-  `$workers.eventType = fetch`. The row has `$workers.wallTimeMs` and the request URL.
-- One request's trace: the filter `request.id = <id>` returns its `owner-api.route` span, and that
-  span's `traceId` returns the whole trace (see "Issues and traces").
-- A query returns at most 2,000 rows. A full answer may be missing rows, so split the window.
-- Container output (computerd and Computer's own lines) is in the same dataset with
-  `$metadata.service` set to the container application id instead of the Worker name.
-- Workers Logs keeps events for 7 days. Copy out what an incident needs while it is still there.
-
-**Container usage and CPU.** `POST https://api.cloudflare.com/client/v4/graphql` with
-`{ "query": ..., "variables": ... }`. Variables: `a` (the account id), `f` and `t` (ISO times, half
-open), and `apps` (a list of container application ids). The token needs Account Analytics Read.
-
-```graphql
-query ($a: String!, $f: Time!, $t: Time!, $apps: [string!]) {
-  viewer {
-    accounts(filter: { accountTag: $a }) {
-      containersUsageAdaptiveGroups(
-        limit: 5000
-        filter: { datetime_geq: $f, datetime_lt: $t, applicationId_in: $apps }
-        orderBy: [datetimeFiveMinutes_ASC]
-      ) {
-        dimensions {
-          datetimeFiveMinutes
-          applicationId
-          instanceId
-        }
-        sum {
-          allocatedMemory
-        }
-      }
-    }
-  }
-}
-```
-
-- **Running minutes** in a bucket are `allocatedMemory / provisioned memory in bytes / 60`.
-  Provisioned memory is 8 GiB for `standard-3` and is in the Containers API response. Sum the
-  buckets over the day before you compare with billing. A bucket can read more than five minutes
-  while a restart overlaps two instances, and adaptive buckets are not exact start and stop times.
-  `containerUptime` returned 0 in every bucket, so do not use it.
-- **CPU** comes from `containersMetricsAdaptiveGroups` with `sum{cpuTimeSec}` and the same
-  filter and dimensions. Divide CPU-seconds by 300 for the average vCPU in a five-minute bucket.
-  The usage dataset also has `cpuTimeSec`, and it differs from the metrics dataset; prefer metrics.
-  For a long window use `datetimeHour` or `datetimeSixHours` in the dimensions and the order.
-- The newest buckets are incomplete. Do not read the last ten minutes as "stopped".
-
-**What runs now.** `GET /accounts/<account-id>/containers/applications` lists applications (the
-Worker's is named `<worker>-workspacehost`; its `id` is `<container-app-id>`).
-`GET /accounts/<account-id>/containers/applications/<container-app-id>/instances` lists instances
-with `status.state` (`running` or `inactive`) and `status.updated_at`. This answer does not lag
-the metrics, so use it to check whether a stop happened.
-
-**Tokens.** The `cf` OAuth login works for the telemetry query, the Containers API, and GraphQL on
-the current beta, but its token expires. Refresh it with `pnpm exec cf auth whoami` before a run and pass the file to `ops:check` with `--token-file` (`ops:check` does not read the `cf` config unless you name it),
-and prefer an API token with Account Analytics Read for anything repeated. **Billing** data needs
-an API token with Billing Read; the OAuth login cannot get that scope.
-
-**Cost check.** When the bill looks wrong:
-
-1. Run `pnpm ops:check --since 2d` and read every line, including `unknown`.
-2. Sum running minutes per day from the usage dataset (above) and compare them with the day's
-   container charge. They matched the invoice in the 2026-09 incident
-   (`docs/agents/incident-2026-09-container-cost.md`).
-3. For a day with too many minutes, find who owned the time: `route.settled` and canceled
-   invocations name a caller; `workspace.container.idle-stop` and `workspace.container.stopped`
-   show how each run ended; `workspace.idle-check` rows show what the idle alarm saw.
-4. If CPU is high with no owner work, count the entries under `/workspace` before you suspect
-   anything else: the shim's disk walk costs about 0.1 vCPU per 1,000 entries at 250 ms and a
-   twentieth of that at 5 s (ADR-0044).
-
-## Route events and request ids
-
-Every owner API request that reaches the workspace or activates or rolls back a generation gets a
-`requestId`, a fresh UUID that the Worker makes with `crypto.randomUUID()` in
-`routeOwnerApiRequest`. No header, query, or body field can supply it, so a client cannot forge or
-reuse one. Filter on it to find the events one request caused. For the GitHub connection refresh,
-it is sent to the Supervisor and the Workspace Host as an explicit argument of each call, not
-stored as shared state, so overlapping requests keep separate ids. Other routes do not pass it on.
-
-| Event           | Level                                                                                                                           | Fields                                                                                                                                                                                                                                                       | Written when                                                                                                                                                                                                                                                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `route.settled` | info when `ok`; warn when `degraded` or `refused`; error when `fault` or when `durationMs` reached the workspace budget (901 s) | `requestId`, `route` (a pattern), `method`, `status` (`null` only if the route wrapper itself threw), `applicationOutcome` (`ok`, `degraded`, `refused`, or `fault`), `durationMs`, `phase` (`headers`, `body`, or `null` if the route wrapper itself threw) | The route's response was ready. It covers the GitHub connection refresh, authorization start and complete, connect, disconnect, generation submission, activation, rollback, workspace reset, and project turns. Other routes write nothing; the project list and the connection read answer from the Supervisor's storage. |
-
-- `applicationOutcome` follows the status (`refused` for 4xx, `fault` for 5xx). `degraded` is a 200
-  that still reports a problem: today, a GitHub connection in `reconnect-required`. A handler that
-  throws settles as a 500 `fault`, and the owner API writes a `logRedactedCause` line
-  `owner-api <METHOD> <pattern>: internal-error` for it.
-- The level decides what Cloudflare Issues shows, because Issues records `error` events and ignores
-  `warn`. A request is an `error` when it faulted, or when `durationMs` reached the workspace
-  command budget plus its margin (901 seconds): it ran at least as long as one workspace call's
-  budget, so it held the workspace. A `degraded` or `refused` response that returned in time stays
-  a warning: it tells the owner something, and it did not hold the workspace.
-- `phase: "body"` means the response was complete. A turn's response is a stream, so its event has
-  `phase: "headers"`. It says the stream started, not that the turn ended. `turn.settled` is the end
-  of a turn.
-- Only the connection refresh and the credential calls under it carry the id to the Supervisor and
-  the Workspace Host. The other routes write `route.settled` with an id that appears on no other
-  event.
-- The Workers platform records a canceled invocation with its own `outcome` and wall time, and that
-  record exists even when this code never reaches its log line. Treat `route.settled` as evidence
-  that a request finished, not as a count of requests: a canceled invocation can leave no
-  `route.settled` event. For the connection refresh, the events the Supervisor and the Workspace
-  Host write for that request still carry its `requestId`.
-
-## Turn events
-
-The Supervisor writes these. Every one except `turn.refused` carries `projectId`, `lease` (the
-lease id's last 8 characters), and `generation` (the label the turn was admitted against, or
-`null`), so one filter on `lease` returns a single turn's history.
-
-| Event                  | Level                                  | Fields                                                                                                                                                                                                                            | Written when                                                                                                                                                                   |
-| ---------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `turn.refused`         | info for a bad request, otherwise warn | `projectId` (the client's string, or `null`), `code`                                                                                                                                                                              | `runProjectTurn` returns a refusal, before or after admission.                                                                                                                 |
-| `turn.admitted`        | info                                   | common fields                                                                                                                                                                                                                     | The lease is taken.                                                                                                                                                            |
-| `turn.provisioned`     | info, warn, or error                   | common, `target` (`harness` or `repository`), `outcome` (`ready`, a problem code, or `threw`), `durationMs`                                                                                                                       | The selected checkout was reconciled.                                                                                                                                          |
-| `turn.mounted`         | info or warn                           | common, `outcome` (`mounted` or a mount problem code), `durationMs`                                                                                                                                                               | The admitted generation was mounted.                                                                                                                                           |
-| `turn.started`         | info, warn, or error                   | common, `outcome` (`started`, a refusal reason, `timed-out`, or `threw`), `durationMs`                                                                                                                                            | The whole start finished or lost its race with the turn's bound.                                                                                                               |
-| `turn.first-frame`     | info                                   | common, `sinceAdmitMs`                                                                                                                                                                                                            | The first frame reached the browser.                                                                                                                                           |
-| `turn.frame-dropped`   | warn                                   | common, `reason` (`oversized-frame` or `unknown-kind`)                                                                                                                                                                            | A progress frame was left out of the browser's stream. Logged once per reason per turn.                                                                                        |
-| `turn.settled`         | info, warn, or error                   | common, `ending` (the terminal frame kind), `code`, `saved`, `revision`, `messageCount` when the ending has them, `frames`, `textFrames`, `toolStartFrames`, `toolResultFrames`, `diffFrames`, `diffUnavailableFrames`, `totalMs` | The Supervisor wrote the terminal frame. `saved` and `cancelled` are info, `turn-failed` and `turn-rejected` warn, and `save-failed`, `stream-invalid`, and `timed-out` error. |
-| `turn.lease-abandoned` | warn or error                          | common, `why` (`start-threw`, `start-interrupted`, `start-timed-out`, a refusal reason, or `stream-failed`)                                                                                                                       | A lease was given back before the turn settled.                                                                                                                                |
-| `turn.lease-reclaimed` | warn                                   | common, `why: "previous-instance"`                                                                                                                                                                                                | A new admission reclaimed a previous instance's lease, rather than abandoning this turn (`admittedTurn` in `src/supervisor/projects/turn-run.ts`).                             |
-
-## Workspace events
-
-| Event                                | Level                                                                                                              | Fields                                                                                                                                                                                                                           | Written by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspace.rpc`                      | info, warn, or error                                                                                               | `method` (`project`, `credential`, `reset`, `provision`, `build`, or `ensureManagedInstructions`), optional `step`, `outcome`, `durationMs`, optional `requestId`, optional `timeoutMs`, `leaseEndsAtMs` for `project`           | The Supervisor, around a Workspace Host call, including calls within provisioning. `step` can name project removal, credential actions, provisioning, or build steps; reset has no step. For `project`, `leaseEndsAtMs` is when the capability's turn lease ends, in epoch milliseconds; the Host's idle clock starts at the later of that instant and its last work. For project removal, `outcome` is `removed`, `failed`, or the Workspace Host's failure code, such as `workspace-sync-incomplete` (`timedWorkspaceRpc` in `src/diagnostics.ts`, called from `src/workspace/provisioning.ts` and `ProjectConnections.removeProjectDirectories` in `src/supervisor/projects/project-connections.ts`).                                                                                                                                                                                                                                  |
-| `workspace.provision-step`           | info, warn, or error                                                                                               | `plan` (`project` or `harness`), `projectId` (project plans), `step`, `method` (`provision`, `build`, or `ensureManagedInstructions`), `outcome` (`ok`, a problem code, or `threw`), `exitCode` (a failed command), `durationMs` | The Supervisor, for each provisioning step. Each step is one Workspace Host RPC: `clone` calls `provision`, the harness `provision` step calls `build`, and the `instructions` step of either plan calls `ensureManagedInstructions`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `workspace.exclusion-wait`           | info, or warn when stale                                                                                           | `waiter` (`provision` or `turn`), `result` (`settled`, `aborted`, or `stale`), `waitedMs`                                                                                                                                        | The Supervisor, after waiting on another provisioning plan in the same workspace.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `workspace.exclusion-stale`          | warn                                                                                                               | `heldForMs`                                                                                                                                                                                                                      | The Supervisor forgot a plan older than its whole command budget. The Workspace Host may still be running it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `workspace.command`                  | info, or warn on a nonzero exit                                                                                    | `command` (the planned step, for example `provision-project.clone`, `harness-build.install`, or `github-credential.install`), `exitCode`, `durationMs`, `requestId` (credential status only so far), `timeoutMs`                 | The Workspace Host, for each planned command that returns. A clone or removal whose durable copy is incomplete throws first and writes no event (see below).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `workspace.reset`                    | info, warn, or error                                                                                               | `outcome` (`reset`, `turn-active`, `workspace-busy`, or `threw`), `durationMs`                                                                                                                                                   | The Worker, around the owner's reset request.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `workspace.reset-step`               | info or error                                                                                                      | `step` (`delete-all` or `restart-container`), `outcome` (`ok`, the container's launch outcome, or `threw`), `durationMs`                                                                                                         | The Workspace Host, for each reset step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `workspace.rpc-waiting`              | warn                                                                                                               | `method`, optional `step`, `elapsedMs`, optional `requestId`, optional `timeoutMs`                                                                                                                                               | Every 30 seconds while one Workspace Host RPC remains pending; settlement clears its timer (`timedWorkspaceRpc` in `src/diagnostics.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `workspace.clone`                    | info on `ok`, otherwise warn                                                                                       | `project`, `durationMs`, `outcome` (`ok`, `failed`, or `unavailable`; `unavailable` includes `workspace-sync-incomplete`)                                                                                                        | The Workspace Host's project clone step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `workspace.exec`                     | info                                                                                                               | `outcome`, `exitCode`, `durationMs`, `timeoutMs`, `endedBy`, `errorCode` (nullable where applicable)                                                                                                                             | A project command settled or was refused. A refusal has `exitCode: null`, `durationMs: 0`, and an `errorCode`; this is not per output chunk (`ProjectRpcTarget.#logSettlement` and `#logRefusal` in `src/workspace/project/target.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `workspace.container.started`        | info                                                                                                               | `trigger`, `runningBefore` (`true`, `false`, or `null`), `launchSequence`, `outcome` (`launched` or `relaunched`, from Computer's return value), `runtimeId`, `startedAtMs`, `durationMs`                                        | Computer's `start` or `restart` returned after launching. A start was issued; boot is not observed. `startedAtMs` is when the call returned, and `durationMs` is how long the call took, not how long the container took to boot (`src/workspace/container-observer.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `workspace.container.adopted`        | info                                                                                                               | `trigger`, `runningBefore`, `launchSequence`, `outcome: "adopted"`, `runtimeId`, `startedAtMs: null`, `durationMs`                                                                                                               | A connect found a running container with the requested launch record and kept it. Its start time is not known.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `workspace.container.wake-requested` | info                                                                                                               | `trigger` (`backend-connect`, `backend-recovery`, or `workspace-reset`), `runningBefore` (`true`, `false`, or `null`), `launchSequence`                                                                                          | Just before a launch request: a backend connect that finds the container not running (or unreadable), or any restart. A backend connect over a running container waits for the result: if Computer relaunches it, the wake is written after the call with `runningBefore: true`, and if it adopts, no wake is written. `launchSequence` counts launch requests in this Workspace Host instance and restarts at 1 for a new instance.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `workspace.container.stop-requested` | info                                                                                                               | `reasonCode` (`workspace-reset` or `idle-stop`)                                                                                                                                                                                  | A reset asked for a container restart (`workspace-reset`), or the idle alarm decided to stop the container (`idle-stop`, the same code the later `stopped` row carries). This is intent; it does not show that a stop happened. The result of an idle stop is `workspace.container.idle-stop`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `workspace.container.stopped`        | info when the Host replaced the container or the exit was clean; error for an unexpected exit code; otherwise warn | `runtimeId`, `stoppedAtMs`, `runDurationMs` (`null` if the launch was adopted or not seen by this instance), `reasonCode`, `reasonSource` (`application-intent` or `unknown`), `exitCode`, `expected` (`true` or `null`)         | The platform's container `monitor()` settled, once per runtime that this Workspace Host instance saw launch or adopt. The Host arms it after a launch returns, so it cannot start a container. `application-intent` means a Host launch was replacing the container; any other exit is `unknown`, and the log never names inactivity as a cause except for a stop the Host asked for: the idle stop has `reasonCode: "idle-stop"` and `reasonSource: "application-intent"`, whichever way `monitor()` settled. `reasonCode` is `placement-unavailable` when the platform had no machine for the container ("There is no container instance that can be provided to this Durable Object"). That is a failed placement, not a stop of a running container, and a cold start on a new application can write two to four of them before one launch works. An instance that is evicted writes no stop (`src/workspace/container-observer.ts`). |
-| `workspace.idle-check`               | info                                                                                                               | `inFlight`, `idleForMs`, `idleLimitMs`, `running`, `decision` (`stop` or `check-at`)                                                                                                                                             | The Workspace Host's idle alarm fired. It is armed once per quiet period after work settles while a container runs, so it writes about one row per ten minutes of activity. `idleForMs` counts from the later of the last settled work and the end of the last turn lease. The WebSocket from computerd and the heartbeat are not work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `workspace.container.idle-stop`      | info, or warn when `outcome` is `threw`                                                                            | `idleForMs`, `idleLimitMs`, `runningBefore`, `outcome` (`stopped`, `not-running`, `skipped-busy`, or `threw`), `durationMs`                                                                                                      | The idle alarm found the container running, nothing in flight, and the limit passed, so it closed the Workspace and destroyed the container (ADR-0043). `skipped-busy` means work began or a turn lease was taken during the close, so the container was kept; `not-running` means it exited during the close; `threw` means the destroy failed. `skipped-busy` and `threw` check again one limit later; `not-running` arms nothing. A close that fails is logged as text and does not stop the destroy.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `workspace.backend.connected`        | info                                                                                                               | `runtimeId` (string or `null`)                                                                                                                                                                                                   | A backend connection completed. It does not show that a container launched (`connected` in `src/workspace/host.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `workspace.backend.closed`           | warn, or info for `idle-stop`                                                                                      | `trigger` (`transport-closed`, `connect-failed`, or `idle-stop`), `running` (`true`, `false`, or `null` when the status read failed), `reasonCode`, `exitCode`, `statusReadOutcome` (`ok` or `failed`)                           | A backend transport closed, or a connect attempt failed. The Workspace Host reads status once, and both the generation bump and these fields come from that read. `running: true` means the container was still up; an exit status shows an observed exit. Nothing here claims a stop. It logs `warn`, including the close that a reset's restart causes, except `trigger: "idle-stop"`, the close the Host makes to stop an idle container, which logs `info` and pairs with `workspace.container.idle-stop`. Read `workspace.container.stop-requested` and `workspace.container.stopped` to tell an intended stop from a fault (`closed` and `failed` in `src/workspace/host.ts`; `recordWorkspaceBackendClosed` in `src/workspace/container-exit.ts`).                                                                                                                                                                                 |
-
-### What the container events do not show
-
-- **Backend retries.** Computer's connect loop probes health, restarts the container once, and
-  gives up with one error. It has no callback for these steps. A `wake-requested` event with
-  `trigger: "backend-recovery"` marks the one restart, and `workspace.backend.closed` with
-  `trigger: "connect-failed"` marks a connect that gave up. The probe count, delays, and
-  remaining time are not logged.
-- **The stop before a backend recovery restart.** A restart that the backend asks for writes
-  `wake-requested` with `trigger: "backend-recovery"` but no `stop-requested`, because only a
-  reset writes one. The old container's exit that follows is marked `application-intent` by
-  `stopped`.
-- **Stops the Host cannot see.** A stop is written only while the Workspace Host instance that
-  saw the launch is alive. If that instance is evicted, its stop is lost, and a later connect
-  that adopts the container writes `adopted` with no start time.
-- **Extra Durable Object residency from the stop observer.** The platform documents that a
-  pending `monitor()` call keeps the Durable Object from being evicted until the container exits
-  or for up to 15 minutes, and that a later operation can extend its time in memory. The stop
-  observer adds one such call per runtime. Computer keeps its own pending `monitor()` on the same
-  container, armed just before a launch returns and again on every adopting connect, so the
-  observer's call can extend residency only by the time between the two arming points. The
-  residency the extra call adds has not been measured. The owner decided on 2026-10-02 to keep the
-  call and accept that small cost: the stop events are worth it, and the idle stop (ADR-0043) now
-  bounds how long the container runs.
-- **Why the observer does not read Computer's stored exit.** Computer 0.3.0 keeps the last exit in
-  a module-level `WeakMap` keyed by the Durable Object's `ctx`, so it lives in memory only. It holds
-  only `{ reason, exitedAt }`, and every launch and every adopting connect clears it. Reading it
-  before the next start, instead of calling `monitor()`, was examined and rejected. It would miss
-  idle stops, because nothing keeps the Workspace Host in memory after one, and an evicted instance
-  loses the record. It would log a stop only at the next launch, possibly hours late and outside
-  the window `ops:check` reads. It would also lose the structured exit code, which only the
-  `monitor()` rejection carries. Accounting from billing data outside the Worker was also
-  considered and set aside.
-- **Why the platform stopped a container.** The monitor reports an exit, not a cause. The log
-  writes `reasonSource: "unknown"` for any exit the Host did not cause.
-- **Computer's view of an idle stop.** An idle stop calls the platform's `destroy` directly, because
-  Computer's own `destroyContainerExpectingExit` is not exported. Computer therefore logs
-  `workspace.container.exited` with `expected: false` and `reason: "idle"` for it. The Host's
-  `idle-stop` and `stopped` events (`reasonCode: "idle-stop"`) are the record of intent.
-
-### Container lifecycle names changed
-
-Earlier logs used `workspace.container.stopped`, `workspace.container.exited`, and
-`workspace.container.started` for other facts. The app wrote `stopped` on every backend transport
-close, even with `running: true`, and on a failed status read with a guessed `running: false`. It
-wrote `exited` on a close with an exit status. It wrote `started` when a backend connected. The
-meaning of each name changed in three steps, so a query for an old name needs the date of the first
-deploy that contains the matching commit:
-
-1. Commit `71f03be` (the first deploy containing it) removed the app's close-derived
-   `workspace.container.stopped` and `workspace.container.exited` events and moved a backend
-   connection to `workspace.backend.connected`.
-   - Use `workspace.backend.closed` for a transport close, and read `running` and `exitCode`.
-   - Use `workspace.container.stop-requested` for a reset's intent to stop.
-   - Computer still writes its own `message: workspace.container.exited`, which is a separate
-     producer.
-2. Commit `130f353` (the first deploy containing it) made `workspace.container.started` follow a
-   launch that Computer reports, whether from a backend connect, a backend recovery restart, or a
-   reset. It added `workspace.container.adopted` and `workspace.container.wake-requested`. Between
-   `71f03be` and `130f353`, `started` was written only after a reset restart.
-3. Commit `68f76f7` (the first deploy containing it) brought `workspace.container.stopped` back
-   with a new meaning: the platform monitor saw the container exit. It is never written for a
-   backend close. Between `71f03be` and `68f76f7`, no event claimed a stop.
-
-### When a clone or removal does not reach the durable store
-
-The Workspace Host runs the project clone step and project removal with `require-complete`
-(`src/workspace/computer-operations.ts`, `src/workspace/host.ts`). The Workspace Host answers
-`workspace-sync-incomplete` in two cases. In the first, Computer's post-command copy reports
-`pending` or skipped entries. In the second, the command exited 0 but the durable store does not
-show the result (`src/workspace/executor.ts`). The events differ by case and by caller:
-
-- When the copy is pending or skipped entries, `runCommand` throws before `runLoggedCommand` logs,
-  so no `workspace.command` event is written for that command. The Workspace Host writes a plain
-  `logRedactedCause` line instead: `workspace.project-removal: sync-incomplete: ...` or
-  `workspace.provision-project.clone: sync-incomplete: ...`. The text gives the copy status, the
-  exit code, and the number of skipped entries, and not Computer's pull error.
-- When the store check fails after exit 0, `workspace.command` shows `exitCode: 0`, and the Workspace
-  Host writes no further line. Only the Supervisor's events below show the refusal.
-- For removal, the Supervisor writes `workspace.rpc` with `method: "project"`, `step: "remove"`,
-  `outcome: "workspace-sync-incomplete"` at `error`. It then writes `project.disconnected` with
-  `workspace: "failed"` at `error`. The thread and catalog row are already gone.
-- For a clone, the Supervisor writes `workspace.rpc` with `method: "provision"`, `step: "clone"`,
-  `outcome: "workspace-sync-incomplete"` at `warn`. `workspace.clone` reports
-  `outcome: "unavailable"`, and `workspace.provision-step` reports
-  `provision-workspace-unavailable`. Connection then refuses with `provisioning-failed`, or the
-  turn is refused before it starts.
-
-To find these cases, query `workspace.rpc` for `outcome = "workspace-sync-incomplete"`.
-
-A `failed` disconnect with this outcome means the container deleted the clone, but the durable
-store may still hold it. The store is read once, right after the command, and nothing retries a
-pending copy. Whether a clone that stays in the store comes back after the Workspace Host or its
-container is evicted and replaced is unproven: no test or deployment has observed it either way.
-A later connection of the same repository would reuse that clone. No test has run Computer, so
-how often a copy is pending in production is unknown.
-
-## Generation events
-
-| Event                    | Level                                      | Fields                                                                                                                                | Written when                                                                                                                                                        |
-| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `generation.control`     | info, or warn when rejected                | `command`, `label`, `commit` (12 characters), `epochBefore`, `epochAfter`, `outcome` (the outcome kind or the problem code), `effect` | A submission, activation, or rollback was decided. Preparation also moves the epoch, so `epochBefore` of an activation is not the epoch of the previous activation. |
-| `generation.preparation` | info when `ready`, otherwise warn or error | `label`, `outcome` (the startup check stage or a problem code), `effect`, `durationMs`                                                | A startup check finished. The check's reason text is not logged; it is whatever the harness threw.                                                                  |
-| `harness-build.step`     | info, warn, or error                       | `commit`, `step`, `outcome` (`ok`, a build problem code, or `threw`), `exitCode` (a failed step), `durationMs`                        | The Supervisor ran one build step in the workspace.                                                                                                                 |
-| `harness-build.output`   | info, warn, or error                       | `commit`, `outcome`, `durationMs`                                                                                                     | The Supervisor read and checked the build's module map.                                                                                                             |
-
-A failed build step logs only its name, exit code, and duration. It does not log what the command printed, because command output can contain file contents. The redacted tail of each stream (the last 2,000 UTF-16 code units, without splitting a surrogate pair, with credentials and JWTs removed before the cut) travels instead in the owner's submission response, at `preparation.problem.diagnostics` as `stdoutTail`, `stderrTail`, and `truncated`. Nothing stores it, so a submission that is interrupted before it responds loses the tail. A thrown workspace call in a build step or the module map read goes through `logRedactedCause` (`src/supervisor/artifacts/builder.ts`).
-
-## Boundary and credential events
-
-| Event                           | Level                                                                | Fields                                                                                                                                    | Written when                                                                                                                             |
-| ------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `github-credential.ensure`      | info when connected, otherwise warn or error                         | `before`, `fallbackConfigured`, `outcome`                                                                                                 | The Supervisor found the workspace's credential missing or rejected and tried the configured token. A working credential writes nothing. |
-| `github-credential.install`     | info when connected, error for `credential-rejected`, otherwise warn | `source` (`configured-token` or `device-authorization`), `outcome`                                                                        | A token was installed into the workspace.                                                                                                |
-| `github-credential.status`      | info when connected, otherwise warn; error when the read throws      | optional `requestId`, `outcome` (`connected`, `missing`, `unusable`, `tooling-missing`, or `threw`), `durationMs`, `timeoutMs`, `timeout` | The Workspace Host timed one credential status read, which runs a container command. It never logs the login.                            |
-| `github-authorization.start`    | info or warn                                                         | `outcome` (`started` or `provider-unavailable`)                                                                                           | The device authorization started.                                                                                                        |
-| `github-authorization.complete` | info or warn                                                         | `outcome` (`authorized`, `pending`, `superseded`, or a problem code)                                                                      | The owner's redemption was checked with GitHub.                                                                                          |
-
-## Project events
-
-| Event                  | Level                            | Fields                                                                                                                                                                                                                                                                      | Written when                                                                                                                                                                                                                                                                                                 |
-| ---------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `project.size-check`   | info if allowed, otherwise warn  | `project`, `sizeKb`, `blobCount`, `blobBytes`, `truncated` (each `null` when unknown), `outcome` (`allowed`, `refused`, or `skipped`), `reason` (`within-limits`, `tree-truncated`, `too-many-files`, `working-tree-too-large`, `repository-too-large`, or `lookup-failed`) | The connect preflight checks GitHub metadata after a valid URL and id, before checking workspace credentials. `skipped` proceeds, while `refused` maps to `repository-too-large` (`repositorySizeAllowed` and `ProjectConnections.connect` in `src/supervisor/projects/project-connections.ts`).             |
-| `project.disconnected` | info on removal, otherwise error | `project`, `workspace` (`removed` or `failed`)                                                                                                                                                                                                                              | The Supervisor removed the thread and catalog row and attempted workspace cleanup. A refusal writes no event; failed cleanup does not restore the row. `failed` includes a removal the durable store does not confirm (`ProjectConnections.disconnect` in `src/supervisor/projects/project-connections.ts`). |
-
-`route` is a pattern from `src/routes/route-pattern.ts`, never the request path: a project route
-reads `/api/projects/:projectId/turn`, an unknown API path reads `/api/unknown`, and a path the
-active generation serves reads `relay`. A GitHub credential `outcome` is the connection state, or
-the reconnect reason when the state is `reconnect-required`.
+The queries are in `tools/ops-check/fetch.mts`. To check whether a stop happened without the
+metrics lag, `GET /accounts/<account-id>/containers/applications/<container-app-id>/instances`
+lists instances with `status.state` (`running` or `inactive`); the applications list gives the id.
+Billing data needs an API token with Billing Read; the `cf` login cannot get that scope.
 
 ## Noise from the container
 
-Between 2026-09-24 and 2026-09-28 the container logs held base64 dumps of source text. Container output does not pass through the Worker's redaction, so such a dump would be unredacted. Logs since the image roll on 2026-10-02 show none.
-
-Nothing in this repository's own code prints file contents. The Worker code writes through `logEvent` and `logRedactedCause` (`src/diagnostics.ts`), including the unmapped project provider error in `src/workspace/project/provider.ts`. The one patch to Computer's daemon, `containers/computerd-walk.patch`, adds two log lines: the list of ignored path segments at start, and a failed symlink write with its path and error. Neither prints content. Computer's Worker-side package in `vendor/` writes a `console.debug` line (`[pullOnce]`), structured container-backend warnings and errors, and the logs of its bundled `isomorphic-git`; none prints file contents.
-
-The source of the dumps is unknown. The only process writing to the container's stdout is `computerd`, built by `containers/computerd.Dockerfile` from the pinned upstream commit (`COMPUTER_COMMIT`) with the patch. Upstream's `packages/computerd/src/exec/runner.ts` spawns commands with stdio `pipe`, so a command's output cannot reach container stdout by itself. A dump would have to come from `computerd` printing an error or a rejection that carried source text. The dumps stopped on 2026-09-28, before the image roll on 2026-10-02, and their start on 2026-09-24 may only reflect log retention, so the roll is not shown to be the cause. If they come back, find the container log line first, then read the upstream code at `COMPUTER_COMMIT`.
+Container output does not pass through the Worker's redaction. Base64 dumps of source text appeared
+in the container logs from 2026-09-24 to 2026-09-28, from an unknown source, and none since. If they
+come back, find the container log line, then read the upstream code at `COMPUTER_COMMIT`.
