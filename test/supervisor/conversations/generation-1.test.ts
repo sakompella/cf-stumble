@@ -120,3 +120,16 @@ test("an abort kills the command a tool is running and answers", async () => {
   await vi.waitUntil(() => workspace.execs.handles[0]?.killCalls === 1, { timeout: 5_000 });
   expect(await aborted).toEqual({ ok: true });
 });
+
+test("an abort answers while a command that ignores its kill still runs", async () => {
+  const workspace = new ProjectWorkspace();
+  workspace.killsCommands = false;
+  workspace.seedFile(`/workspace/projects/${project}/notes.txt`, "");
+  scriptModel(calls("bash", { command: "sleep 120" }));
+  const control = await servingGeneration1("generation-1-abort-unkillable", workspace);
+
+  await submitted(control, project, "run sleep 120", "r1");
+  await vi.waitUntil(() => workspace.execs.handles.length === 1, { timeout: 10_000 });
+
+  expect(await control.abortProjectRun(project)).toEqual({ ok: true });
+});

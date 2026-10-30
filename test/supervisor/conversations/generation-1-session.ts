@@ -28,14 +28,24 @@ import {
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 
+/** A capability whose kills never reach the command, as when the container does not answer. */
+class UnkillableProjectTarget extends ProjectRpcTarget {
+  override kill(): ReturnType<ProjectRpcTarget["kill"]> {
+    return Promise.resolve({ ok: true, value: null });
+  }
+}
+
 /** A Workspace Host whose project capability is a real target over an in-memory filesystem. */
 export class ProjectWorkspace extends FakeTenantWorkspace {
   readonly files = new FakeProjectFilesystemProvider();
   readonly execs = new FakeExecBackend();
+  killsCommands = true;
 
   project() {
+    const Target = this.killsCommands ? ProjectRpcTarget : UnkillableProjectTarget;
+
     return Promise.resolve(
-      new RpcStub(new ProjectRpcTarget(this.files, new FakeProjectTransactions(), this.execs)),
+      new RpcStub(new Target(this.files, new FakeProjectTransactions(), this.execs)),
     );
   }
 

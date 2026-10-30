@@ -150,10 +150,20 @@ export class MainFacet
     return readable;
   }
 
+  /**
+   * Answers once the abort is queued on the session's commit line, ahead of any later call. Pi
+   * Durable's abort then waits until the conversation is idle, which lasts as long as a running
+   * tool takes to stop, so nobody waits for it here.
+   */
   async abort(conversationId: string): Promise<void> {
     const conversation = await this.#conversation(conversationId);
+    const { harness, host } = await this.#opened();
 
-    await this.#startingWork(() => conversation.abort(context));
+    await host.arm({ ...harness.wake(), active: true });
+    void conversation
+      .abort(context)
+      .then(() => host.arm(harness.wake()))
+      .catch(() => {});
   }
 
   async #open(host: ConversationHost): Promise<Session> {
