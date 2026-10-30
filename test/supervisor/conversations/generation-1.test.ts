@@ -133,3 +133,26 @@ test("an abort answers while a command that ignores its kill still runs", async 
 
   expect(await control.abortProjectRun(project)).toEqual({ ok: true });
 });
+
+test("an idle events stream writes a line now and then, so a reader that left is noticed", async () => {
+  scriptModel();
+  const control = await servingGeneration1("generation-1-events-idle", new ProjectWorkspace());
+  const opened = await control.projectEvents(project);
+
+  if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
+  const reader = opened.events.pipeThrough(new TextDecoderStream()).getReader();
+  let read = "";
+
+  try {
+    while (!read.endsWith("\n\n")) {
+      const next = await reader.read();
+
+      if (next.done) throw new Error("the event stream ended");
+      read += next.value;
+    }
+  } finally {
+    await reader.cancel();
+  }
+
+  expect(read.split("\n")[0]).toContain('"type":"snapshot"');
+});

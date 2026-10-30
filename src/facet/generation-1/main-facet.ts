@@ -42,6 +42,10 @@ type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 
 const encoder = new TextEncoder();
 
+const KEEPALIVE_LINE = encoder.encode("\n");
+
+const KEEPALIVE_MS = 2_000;
+
 /**
  * The use's context ends when the use is aborted or done. The env kills its running commands
  * through the stub before the stub goes: a kill sent on a disposed stub fails, and the command
@@ -131,7 +135,11 @@ export class MainFacet
     return String(submission.id);
   }
 
-  /** One JSON line per agent event, the snapshot first; cancelling the stream stops the watch. */
+  /**
+   * One JSON line per agent event, the snapshot first; cancelling the stream stops the watch.
+   * Workers RPC tells a stream's source that its reader left only when the source next writes, so
+   * a quiet stream writes an empty line now and then.
+   */
   async events(conversationId: string): Promise<ReadableStream<Uint8Array>> {
     const { harness } = await this.#opened();
     const { id } = await this.#conversation(conversationId);
@@ -140,11 +148,19 @@ export class MainFacet
     const writer = writable.getWriter();
     const write = (event: AgentEvent) => writer.write(encoder.encode(`${JSON.stringify(event)}\n`));
 
+    const keepalive = setInterval(() => {
+      void writer.write(KEEPALIVE_LINE).catch(() => {});
+    }, KEEPALIVE_MS);
+
     void write(watch.snapshot).catch(() => {});
     watch.start(async (events) => {
       for (const event of events) await write(event);
     });
-    void writer.closed.catch(() => watch.stop());
+    void writer.closed
+      .catch(() => watch.stop())
+      .finally(() => {
+        clearInterval(keepalive);
+      });
     void watch.closed.then(() => writer.close()).catch(() => {});
 
     return readable;
