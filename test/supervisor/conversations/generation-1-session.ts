@@ -31,12 +31,11 @@ const RESPONSES_URL = "https://api.openai.com/v1/responses";
 /** A Workspace Host whose project capability is a real target over an in-memory filesystem. */
 export class ProjectWorkspace extends FakeTenantWorkspace {
   readonly files = new FakeProjectFilesystemProvider();
+  readonly execs = new FakeExecBackend();
 
   project() {
     return Promise.resolve(
-      new RpcStub(
-        new ProjectRpcTarget(this.files, new FakeProjectTransactions(), new FakeExecBackend()),
-      ),
+      new RpcStub(new ProjectRpcTarget(this.files, new FakeProjectTransactions(), this.execs)),
     );
   }
 

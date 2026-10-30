@@ -42,6 +42,11 @@ type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 
 const encoder = new TextEncoder();
 
+/**
+ * The use's context ends when the use is aborted or done. The env kills its running commands
+ * through the stub before the stub goes: a kill sent on a disposed stub fails, and the command
+ * would run to its end.
+ */
 async function computerEnv(
   host: ConversationHost,
   conversationId: string,
@@ -49,27 +54,18 @@ async function computerEnv(
   signal: AbortSignal | undefined,
 ): Promise<ExecutionEnv> {
   const target = await host.workspace(conversationId);
-  disposeOnAbort(signal, target);
+  const env = createComputerEnv({ cwd, target });
 
-  return createComputerEnv({ cwd, target });
-}
+  const end = () => {
+    void env.cleanup(context).finally(() => {
+      target[Symbol.dispose]();
+    });
+  };
 
-function disposeOnAbort(signal: AbortSignal | undefined, stub: Disposable): void {
-  if (signal === undefined) return;
+  if (signal?.aborted === true) end();
+  else signal?.addEventListener("abort", end, { once: true });
 
-  if (signal.aborted) {
-    stub[Symbol.dispose]();
-
-    return;
-  }
-
-  signal.addEventListener(
-    "abort",
-    () => {
-      stub[Symbol.dispose]();
-    },
-    { once: true },
-  );
+  return env;
 }
 
 /**

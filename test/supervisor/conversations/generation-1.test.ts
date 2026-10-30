@@ -106,3 +106,17 @@ test("a tool call reads the project's file through the project capability", asyn
     { role: "assistant", text: "read it" },
   ]);
 });
+
+test("an abort kills the command a tool is running and answers", async () => {
+  const workspace = new ProjectWorkspace();
+  workspace.seedFile(`/workspace/projects/${project}/notes.txt`, "");
+  scriptModel(calls("bash", { command: "sleep 120" }));
+  const control = await servingGeneration1("generation-1-abort-tool", workspace);
+
+  await submitted(control, project, "run sleep 120", "r1");
+  await vi.waitUntil(() => workspace.execs.handles.length === 1, { timeout: 10_000 });
+  const aborted = control.abortProjectRun(project);
+
+  await vi.waitUntil(() => workspace.execs.handles[0]?.killCalls === 1, { timeout: 5_000 });
+  expect(await aborted).toEqual({ ok: true });
+});
