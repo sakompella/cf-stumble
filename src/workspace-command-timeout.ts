@@ -10,9 +10,20 @@
  */
 export const WORKSPACE_COMMAND_TIMEOUT_MS = 900_000;
 
+/**
+ * How long a credential install, logout, status read, or repository check may run. They are one
+ * `gh` or `git` call each, so a hang is a network fault that should fail fast instead of holding
+ * the Workspace Host's tracked work, and with it the idle stop, for the full command ceiling.
+ */
+export const WORKSPACE_SHORT_COMMAND_TIMEOUT_MS = 60_000;
+
 /** Time reserved for an RPC to settle after its container command ceiling. */
 export const WORKSPACE_RPC_TIMEOUT_MARGIN_MS = 1_000;
 
 /** The longest one Workspace Host RPC may run: the command ceiling plus its settling margin. */
 export const WORKSPACE_RPC_TIMEOUT_MS =
   WORKSPACE_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
+
+/** The longest one short Workspace Host RPC may run. */
+export const WORKSPACE_SHORT_RPC_TIMEOUT_MS =
+  WORKSPACE_SHORT_COMMAND_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
