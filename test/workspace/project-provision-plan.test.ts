@@ -76,11 +76,6 @@ test("marks a clone that runs out of disk as a repository size failure", () => {
   expect(source).toContain("exit 122");
 });
 
-test("prints the resulting clone size for structured provisioning telemetry", () => {
-  expect(cloneSource(projectOne)).toContain('du -sk -- "$repository"');
-  expect(cloneSource(projectOne)).toContain("cf-stumble-clone-size-kb=%s");
-});
-
 test("quotes an interpolated repository URL the catalog would accept", () => {
   // The catalog's URL checks accept an embedded single quote, so the planner cannot be the place
   // that assumes a URL is shell-safe. A later configuration edit is all it would take.

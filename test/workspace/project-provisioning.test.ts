@@ -48,7 +48,6 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
   /** Every Host RPC in order: a provision request by its step, and each managed-file write. */
   readonly steps: string[] = [];
   failingStep: "clone" | "instructions" | undefined;
-  cloneStdout = "";
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
@@ -72,7 +71,7 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
               stderr: "fatal: could not read from remote repository",
               exitCode: 128,
             }
-          : { kind: "command", stdout: this.cloneStdout, stderr: "", exitCode: 0 },
+          : { kind: "command", stdout: "", stderr: "", exitCode: 0 },
     });
   }
 
@@ -113,9 +112,8 @@ test("namespace fixtures record names independently", () => {
   expect(second.names).toEqual(["second-workspace"]);
 });
 
-test("logs the clone duration and resulting durable size without a path", async () => {
+test("logs the clone duration without a path", async () => {
   const host = new FakeProvisionHost();
-  host.cloneStdout = "cf-stumble-clone-size-kb=123\n";
   const logged = vi.spyOn(console, "log").mockImplementation(() => {});
 
   await provisionerFor(host).provision();
@@ -123,7 +121,6 @@ test("logs the clone duration and resulting durable size without a path", async 
   const event = JSON.stringify(logged.mock.calls);
   expect(event).toContain("workspace.clone");
   expect(event).toContain(projectOne.id);
-  expect(event).toContain("123");
   expect(event).not.toContain("/workspace");
 });
 

@@ -3,7 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { logEvent, logRedactedCause, timedEffect, type TimedOutcome } from "../diagnostics.js";
-import { PROJECT_CLONE_SIZE_MARKER, type ProjectProvisionStepName } from "../project-provision.js";
+import type { ProjectProvisionStepName } from "../project-provision.js";
 import {
   resolveProject,
   type Project,
@@ -187,32 +187,12 @@ function runProjectHostStep(
       );
 }
 
-function cloneSizeKb(result: WorkspaceResult): number | null {
-  if (!result.ok || result.result.kind !== "command") return null;
-
-  const marker = result.result.stdout
-    .split(/\r?\n/u)
-    .find((line) => line.startsWith(PROJECT_CLONE_SIZE_MARKER));
-
-  if (marker === undefined) return null;
-
-  const size = Number(marker.slice(PROJECT_CLONE_SIZE_MARKER.length));
-
-  return Number.isSafeInteger(size) && size >= 0 ? size : null;
-}
-
 type CloneOutcome = "ok" | "failed" | "unavailable";
 
-function logClone(
-  projectId: ProjectId,
-  startedAt: number,
-  result: WorkspaceResult | undefined,
-  outcome: CloneOutcome,
-): void {
+function logClone(projectId: ProjectId, startedAt: number, outcome: CloneOutcome): void {
   logEvent(outcome === "ok" ? "info" : "warn", "workspace.clone", {
     project: projectId,
     durationMs: Date.now() - startedAt,
-    sizeKb: result === undefined ? null : cloneSizeKb(result),
     outcome,
   });
 }
@@ -233,7 +213,7 @@ function runProjectStep(
 
     const result = yield* runProjectHostStep(host, project, step).pipe(
       Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
-        if (step === "clone") logClone(projectId, startedAt, undefined, "unavailable");
+        if (step === "clone") logClone(projectId, startedAt, "unavailable");
         logRedactedCause(
           `project-provision.${step}: provision-workspace-unavailable (${projectId})`,
           cause,
@@ -251,7 +231,7 @@ function runProjectStep(
             ? "ok"
             : "failed";
 
-      logClone(projectId, startedAt, result, outcome);
+      logClone(projectId, startedAt, outcome);
     }
 
     if (

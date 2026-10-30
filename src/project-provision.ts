@@ -21,9 +21,6 @@ const PROJECT_CLONE_DEPTH = 50;
  */
 export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
 
-/** Prefix emitted only by the clone shell so its caller can record durable size without a path. */
-export const PROJECT_CLONE_SIZE_MARKER = "cf-stumble-clone-size-kb=";
-
 /**
  * The instructions cf-stumble manages for the shared workspace. The second paragraph is the
  * instruction ADR-0039 requires, because that ADR is what grants the workspace a shell, ordinary
@@ -203,8 +200,6 @@ function cloneProjectRepository(project: Project): string {
         "  fi",
       ],
     }),
-    'clone_size_kb="$(du -sk -- "$repository" | cut -f1)"',
-    `printf "${PROJECT_CLONE_SIZE_MARKER}%s\\n" "$clone_size_kb"`,
   ].join("\n");
 }
 
