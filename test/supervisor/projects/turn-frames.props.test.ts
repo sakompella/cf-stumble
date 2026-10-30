@@ -180,7 +180,7 @@ test("dropping any declared frame field makes the frame malformed", () => {
     const { kind, frame } = drawFrame(tc);
 
     const required = Object.keys(frame).filter(
-      (field) => !(kind === "tool-start" && field === "arguments"),
+      (field) => field !== "kind" && !(kind === "tool-start" && field === "arguments"),
     );
 
     const missing = tc.draw(gs.sampledFrom(required));

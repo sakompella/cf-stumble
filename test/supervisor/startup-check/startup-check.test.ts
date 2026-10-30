@@ -6,11 +6,11 @@ import {
   activeSupervisor,
   artifact,
   commits,
-  expectFailedCandidate,
   labelCandidate,
   prepareWithModuleMap,
   storeModuleMap,
 } from "../helpers.js";
+import { expectFailedCandidate } from "../generation-reads.js";
 
 afterEach(async () => {
   await reset();

@@ -3,7 +3,6 @@ import { isRecord } from "../../untrusted.js";
 import { TOOL_RESULT_DISPLAY_MAX_BYTES, TOOL_RESULT_DISPLAY_MAX_LINES } from "./turn-policy.js";
 import type { AgentEvent, AgentMessage } from "@cf-stumble/pi";
 import type { PiAgentTurnState } from "./pi-agent-turn.js";
-import type { ModelTurnAccounting } from "./model-accounting.js";
 
 /**
  * One frame of a turn's byte stream.
@@ -22,8 +21,7 @@ import type { ModelTurnAccounting } from "./model-accounting.js";
  * means no turn ran, so there is no conversation to keep. `completed` and `failed` both carry the
  * Pi state the next turn continues from, because a turn that hit its model-call limit or a model
  * error still produced conversation the thread must keep. `completed` is this facet's terminal
- * success and stays provisional until the Supervisor saves the thread (ADR-0037). Both terminal
- * frames carry numeric model accounting for the host's operational log.
+ * success and stays provisional until the Supervisor saves the thread (ADR-0037).
  */
 export type FacetTurnFrame =
   | Readonly<{ kind: "text"; text: string }>
@@ -44,13 +42,8 @@ export type FacetTurnFrame =
     }>
   | Readonly<{ kind: "diff"; content: string; truncated: boolean }>
   | Readonly<{ kind: "diff-unavailable"; detail: string }>
-  | Readonly<{ kind: "completed"; state: PiAgentTurnState; modelAccounting: ModelTurnAccounting }>
-  | Readonly<{
-      kind: "failed";
-      code: "model-call-limit" | "model-error";
-      state: PiAgentTurnState;
-      modelAccounting: ModelTurnAccounting;
-    }>
+  | Readonly<{ kind: "completed"; state: PiAgentTurnState }>
+  | Readonly<{ kind: "failed"; code: "model-call-limit" | "model-error"; state: PiAgentTurnState }>
   | Readonly<{ kind: "rejected"; code: "invalid-project-capability" | "invalid-turn-request" }>;
 
 function assistantText(message: AgentMessage): string {
@@ -69,9 +62,36 @@ function toolResultText(message: Extract<AgentMessage, { role: "toolResult" }>):
     .join("\n");
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- A tool call's arguments are whatever JSON the model wrote, and keep that shape with each string bounded.
+function boundedArgument(value: unknown): unknown {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Any string in the model's JSON may be the large one.
+  if (typeof value === "string") {
+    return truncateTail(value, {
+      maxLines: TOOL_RESULT_DISPLAY_MAX_LINES,
+      maxBytes: TOOL_RESULT_DISPLAY_MAX_BYTES,
+    }).content;
+  }
+
+  if (Array.isArray(value)) return value.map((item) => boundedArgument(item));
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, boundedArgument(item)]),
+    );
+  }
+
+  return value;
+}
+
+/**
+ * The arguments as a frame shows them, with each string bounded like a tool result, so a `write`
+ * of a large file cannot outgrow the Supervisor's progress frame bound.
+ */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type -- Boundary: Pi types a tool call's arguments as an open value, so the shape is proven here.
 function toolArguments(args: unknown): Record<string, unknown> {
-  return isRecord(args) ? args : {};
+  return isRecord(args)
+    ? Object.fromEntries(Object.entries(args).map(([key, item]) => [key, boundedArgument(item)]))
+    : {};
 }
 
 /**

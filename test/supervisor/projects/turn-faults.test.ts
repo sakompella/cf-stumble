@@ -91,7 +91,7 @@ test("a malformed line ends the turn instead of being passed on", async () => {
   expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "malformed-frame" }]);
 });
 
-test("an oversized progress frame ends the turn instead of reaching the browser", async () => {
+test("an oversized progress frame is dropped and the turn still saves", async () => {
   const control = await supervisor("turn-oversized");
   await activateFixtureGeneration(control);
 
@@ -102,8 +102,27 @@ test("an oversized progress frame ends the turn instead of reaching the browser"
     ],
   });
 
-  expect(observed.frames).toEqual([{ kind: "stream-invalid", code: "oversized-frame" }]);
-  expect(observed.thread).toMatchObject({ conversation: "[]", turnActive: false });
+  expect(observed.frames).toEqual([
+    { kind: "saved", revision: 1, messageCount: conversation.length },
+  ]);
+});
+
+test("a progress frame of a kind the Supervisor does not know is dropped", async () => {
+  const control = await supervisor("turn-unknown-kind");
+  await activateFixtureGeneration(control);
+
+  const observed = await runScriptedTurn(control, {
+    lines: [
+      JSON.stringify({ kind: "thinking", text: "hmm" }),
+      JSON.stringify({ kind: "text", text: "done" }),
+      JSON.stringify(completed),
+    ],
+  });
+
+  expect(observed.frames).toEqual([
+    { kind: "text", text: "done" },
+    { kind: "saved", revision: 1, messageCount: conversation.length },
+  ]);
 });
 
 test("a conversation past the terminal frame bound ends the turn rather than being buffered", async () => {
@@ -188,8 +207,9 @@ test("activating a generation mid-turn does not disturb the running turn", async
     whileRunning: (state, generation) => {
       const generations = new Generations(state.storage);
       new GenerationControl(generations).execute({
-        principal: { kind: "user" },
-        command: { kind: "activate", label: second, observedEpoch: generations.active().epoch },
+        kind: "activate",
+        label: second,
+        observedEpoch: generations.active().epoch,
       });
       generation.frame(completed);
       generation.close();

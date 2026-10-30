@@ -18,7 +18,6 @@ test("returns the active generation", async () => {
         return Promise.resolve({
           generation: { label, harnessCommit, status: "ready" },
           epoch: 2,
-          activationId: 1,
         });
       },
     }),
@@ -34,7 +33,6 @@ test("returns the active generation", async () => {
         status: "ready",
       },
       epoch: 2,
-      activationId: 1,
     },
   });
 });

@@ -6,6 +6,7 @@ import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { activeSupervisor, labelCandidate, storeModuleMap } from "../helpers.js";
+import { readGeneration } from "../generation-reads.js";
 
 const commits = {
   stored: "4000000000000000000000000000000000000001",
@@ -34,8 +35,9 @@ async function activate(control: DurableObjectStub<Supervisor>, label: number): 
   const active = await control.getActiveGeneration();
 
   const activation = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label, observedEpoch: active.epoch },
+    kind: "activate",
+    label,
+    observedEpoch: active.epoch,
   });
 
   if (!activation.ok) {
@@ -55,7 +57,7 @@ test("prepares and serves a generation from its stored module map", async () => 
   const prepared = await control.prepareGeneration(label);
 
   expect(prepared).toMatchObject({ ok: true, report: { stage: "ready" } });
-  expect(await control.getGeneration(label)).toMatchObject({ label, status: "ready" });
+  expect(await readGeneration(control, label)).toMatchObject({ label, status: "ready" });
 
   await activate(control, label);
   const response = await control.fetch(new Request("https://cf-stumble.test/"));
@@ -81,10 +83,9 @@ test("leaves the active generation serving when the module map cannot be built",
   });
   expect(Object.getPrototypeOf(prepared)).toBe(Object.prototype);
   expect(
-    await control.getGeneration(label),
+    await readGeneration(control, label),
     "an unbuildable commit is no evidence about the candidate",
   ).toMatchObject({ label, status: "candidate" });
-  expect(await control.getPreparationCheckHistory(label)).toEqual([]);
 
   const active = await control.getActiveGeneration();
   const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));

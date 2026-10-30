@@ -86,6 +86,5 @@ test("the loader environment type has no project slot and the turn surface takes
     ),
     undefined,
     "/workspace",
-    1,
   );
 });

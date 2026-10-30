@@ -27,19 +27,14 @@ export type Generation = {
 export type ActiveGeneration = {
   readonly generation: Generation | undefined;
   readonly epoch: number;
-  readonly activationId: number | undefined;
 };
 
 export type PreparationCheckOutcome = "passed" | "failed";
 
-export type PreparationCheckProblem =
-  | { readonly code: "unknown-generation"; readonly label: number }
-  | { readonly code: "invalid-preparation-check-outcome" }
-  | {
-      readonly code: "contradicts-recorded-outcome";
-      readonly label: number;
-      readonly recorded: GenerationStatus;
-    };
+export type PreparationCheckProblem = {
+  readonly code: "unknown-generation";
+  readonly label: number;
+};
 
 export type PreparationCheckResult = Result.Result<
   {

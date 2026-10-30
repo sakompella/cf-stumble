@@ -13,12 +13,13 @@ import { isRecord } from "../../untrusted.js";
  */
 
 /**
- * The most one line of a generation's stream may occupy, in UTF-8 bytes. A generation that writes a
- * longer line has broken the protocol, so the turn ends as an invalid stream rather than growing a
- * buffer until the isolate dies.
+ * The most one line of a generation's stream may occupy, in UTF-8 bytes. A line past the terminal
+ * bound ends the turn as an invalid stream rather than growing a buffer until the isolate dies. A
+ * progress frame past the progress bound is dropped, because it only shows the turn.
  *
- * A progress frame carries at most one tool result or diff, which Generation 0 bounds to 50 KiB
- * (`facet/generation-0/turn-policy.ts`); the progress bound leaves room for JSON escaping on top.
+ * A progress frame carries at most one tool result, diff, or set of tool-call arguments, which
+ * Generation 0 bounds to 50 KiB per string (`facet/generation-0/turn-policy.ts`); the progress bound
+ * leaves room for JSON escaping on top.
  *
  * A terminal frame carries the whole conversation, so it has its own, larger bound. The model route
  * refuses a request over 1 MiB (`model-route.ts`), so the conversation a turn's last model call
@@ -89,9 +90,13 @@ export type ProjectTurnFrame =
   | Readonly<{ kind: "cancelled" }>
   | Readonly<{ kind: "timed-out" }>;
 
-/** One proven frame of a generation's stream: something to forward, or the turn's ending. */
+/**
+ * One proven frame of a generation's stream: something to forward, a progress kind this
+ * Supervisor does not know, or the turn's ending.
+ */
 type ParsedFacetFrame =
   | Readonly<{ kind: "forwarded"; frame: ProjectTurnFrame }>
+  | Readonly<{ kind: "unknown-kind" }>
   | Readonly<{ kind: "terminal"; frame: FacetTerminalFrame }>
   | Readonly<{ kind: "invalid"; problem: TurnStreamProblem }>;
 
@@ -213,8 +218,9 @@ function parseRejected(frame: Record<string, unknown>): ParsedFacetFrame {
  * Prove one line of a generation's turn stream.
  *
  * Every accepted frame is rebuilt from the fields its kind declares, so a field a generation added
- * is dropped here rather than forwarded to a browser, and an unknown kind is a malformed stream
- * rather than something to pass through.
+ * is dropped here rather than forwarded to a browser. A kind this Supervisor does not know is
+ * dropped too rather than ending the turn, so a generation that adds a progress frame keeps its
+ * turns; a known kind with bad fields is still a malformed stream.
  */
 export function parseFacetFrameLine(line: string): ParsedFacetFrame {
   let decoded: unknown;
@@ -247,6 +253,6 @@ export function parseFacetFrameLine(line: string): ParsedFacetFrame {
     case "rejected":
       return parseRejected(decoded);
     default:
-      return malformed;
+      return { kind: "unknown-kind" };
   }
 }

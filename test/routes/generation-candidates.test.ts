@@ -7,6 +7,7 @@ import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { GenerationSubmissionResult } from "../../src/routes/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activeSupervisor, storeModuleMap } from "../supervisor/helpers.js";
+import { readGeneration, readGenerations } from "../supervisor/generation-reads.js";
 import { ownerApiResponse } from "./helpers.js";
 
 const commits = {
@@ -106,7 +107,7 @@ test("submits a passing candidate and leaves the active generation serving", asy
     },
     preparation: { ok: true, report: { stage: "ready", effect: "recorded" } },
   });
-  expect(await control.getGeneration(submittedLabel(result))).toMatchObject({
+  expect(await readGeneration(control, submittedLabel(result))).toMatchObject({
     harnessCommit: commits.passing,
     status: "ready",
   });
@@ -126,7 +127,7 @@ test("returns a recorded failing preparation when the candidate module map canno
     },
   });
   expect(
-    await control.getGeneration(submittedLabel(result)),
+    await readGeneration(control, submittedLabel(result)),
     "an unbuildable commit is no evidence about the candidate",
   ).toMatchObject({ harnessCommit: commits.unbuildable, status: "candidate" });
   await expectActiveFixtureStillServing(control);
@@ -143,8 +144,7 @@ test("records a candidate that fails its startup check and keeps the active gene
     ok: true,
     preparation: { ok: true, report: { stage: "response-rejected", status: 500 } },
   });
-  expect(await control.getGeneration(label)).toMatchObject({ label, status: "failed" });
-  expect(await control.getPreparationCheckHistory(label)).toMatchObject([{ outcome: "failed" }]);
+  expect(await readGeneration(control, label)).toMatchObject({ label, status: "failed" });
   await expectActiveFixtureStillServing(control);
 });
 
@@ -164,7 +164,7 @@ test("resubmitting the same passing commit returns the existing generation witho
     },
   });
   expect(
-    (await control.getGenerations()).filter(
+    (await readGenerations(control)).filter(
       (generation) => generation.harnessCommit === commits.resubmitted,
     ),
     "resubmitting an already-labeled commit must not label it twice (ADR-0030)",
@@ -188,7 +188,7 @@ test("resubmitting an unbuildable commit returns the same build failure, not a d
     first,
   );
   expect(
-    (await control.getGenerations()).filter((generation) => generation.harnessCommit === commit),
+    (await readGenerations(control)).filter((generation) => generation.harnessCommit === commit),
     "resubmitting an unbuildable commit must not label it twice",
   ).toHaveLength(1);
   await expectActiveFixtureStillServing(control);

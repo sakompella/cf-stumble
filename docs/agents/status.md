@@ -58,8 +58,7 @@ cancelled turn freed its lease within seconds, and the first turn after the stop
   `design/github-connection.md`, "Reading the connection status".
 - **A refused generation control answers HTTP 4xx** (owner, 2026-10-16). Submission, activation,
   and rollback refusals answer 400 for an invalid commit or label, 404 for an unknown generation,
-  409 for `stale-epoch`, `not-ready`, and `not-previously-active`, and 403 for
-  `revoked-capability`, instead of 200. The body still carries `ok: false` and the problem code,
+  and 409 for `stale-epoch`, `not-ready`, and `not-previously-active`, instead of 200. The body still carries `ok: false` and the problem code,
   and a successful no-op stays 200. Activation and rollback now write `route.settled`, so a refusal
   shows there as `refused`. See `src/routes/generations.ts`.
 - **The model route uses the owner's ChatGPT subscription once connected** (owner, 2026-10-13).

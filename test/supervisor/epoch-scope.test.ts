@@ -5,6 +5,7 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { activateFixtureGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
+import { readGeneration } from "./generation-reads.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -22,16 +23,13 @@ async function readyReplacement(name: string): Promise<DurableObjectStub<Supervi
 }
 
 async function activateReplacement(control: DurableObjectStub<Supervisor>, observedEpoch: number) {
-  const generation = await control.getGeneration(1);
+  const generation = await readGeneration(control, 1);
 
   if (generation === undefined) {
     throw new Error("the replacement generation must be labeled");
   }
 
-  return control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: generation.label, observedEpoch },
-  });
+  return control.controlGeneration({ kind: "activate", label: generation.label, observedEpoch });
 }
 
 async function completedTurn(control: DurableObjectStub<Supervisor>): Promise<void> {
@@ -65,8 +63,9 @@ test("keeps the activation epoch stable when an activation is rejected", async (
   const beforeRejection = await control.getActiveGeneration();
 
   const rejected = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: 99, observedEpoch: beforeRejection.epoch },
+    kind: "activate",
+    label: 99,
+    observedEpoch: beforeRejection.epoch,
   });
 
   expect(rejected).toEqual({ ok: false, problem: { code: "unknown-generation" } });
@@ -89,20 +88,14 @@ test("a repeated passing check advances the epoch and rejects an activation from
   await prepareGeneration(control, targetLabel, replacementCommit);
 
   const beforeRecheck = await control.getActiveGeneration();
-  const checksBefore = await control.getPreparationCheckHistory(0);
-
   const rechecked = await control.prepareGeneration(0);
 
-  const checksAfter = await control.getPreparationCheckHistory(0);
   const afterRecheck = await control.getActiveGeneration();
 
   const result = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: {
-      kind: "activate",
-      label: targetLabel,
-      observedEpoch: beforeRecheck.epoch,
-    },
+    kind: "activate",
+    label: targetLabel,
+    observedEpoch: beforeRecheck.epoch,
   });
 
   if (!rechecked.ok) {
@@ -110,8 +103,6 @@ test("a repeated passing check advances the epoch and rejects an activation from
   }
 
   expect(rechecked.report.effect).toBe("no-op");
-  expect(checksAfter).toHaveLength(checksBefore.length + 1);
-  expect(checksAfter.at(-1)?.id).not.toBe(checksBefore.at(-1)?.id);
   expect(afterRecheck).toEqual({ ...beforeRecheck, epoch: beforeRecheck.epoch + 1 });
   expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
 });

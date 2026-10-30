@@ -68,10 +68,7 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
     refuseStatements(state.storage, "UPDATE generation_state SET epoch");
 
     const raised = raises(() => {
-      control.execute({
-        principal: { kind: "user" },
-        command: { kind: "submit-candidate", harnessCommit: commit },
-      });
+      control.execute({ kind: "submit-candidate", harnessCommit: commit });
     });
 
     vi.restoreAllMocks();
@@ -82,7 +79,7 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
   expect(outcome).toEqual({ raised: true, labeled: 0, epoch: 0 });
 });
 
-test("a preparation check whose status write fails raises and records nothing", async () => {
+test("a preparation check whose status write fails raises and changes nothing", async () => {
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
     const generations = new Generations(state.storage);
 
@@ -102,13 +99,12 @@ test("a preparation check whose status write fails raises and records nothing", 
 
     return {
       raised,
-      checks: generations.preparationCheckHistory(label).length,
       status: generations.byLabel(label)?.status,
       epoch: generations.active().epoch,
     };
   });
 
-  expect(outcome).toEqual({ raised: true, checks: 0, status: "candidate", epoch: 1 });
+  expect(outcome).toEqual({ raised: true, status: "candidate", epoch: 1 });
 });
 
 test("a save whose write fails raises and leaves the lease and the conversation", async () => {

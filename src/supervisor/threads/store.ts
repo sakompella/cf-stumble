@@ -4,11 +4,10 @@ import {
   assertNever,
   decideAbandonTurn,
   decideFinishTurn,
-  decideRemoveThread,
   decideStartTurn,
   type TurnLeaseClaim,
 } from "./decisions.js";
-import { findLiveTurn } from "./live-turn.js";
+import { findLiveTurn, type LiveTurn } from "./live-turn.js";
 import { serializeThreadMessages } from "./messages.js";
 import { threadFromRow, type ThreadRow } from "./row.js";
 import { emptyThread, type ProjectThread, type ThreadProblem } from "./thread.js";
@@ -86,7 +85,7 @@ export class ThreadStore {
     now: number,
   ): Result.Result<ProjectThread, ThreadProblem> {
     return this.storage.transactionSync(() => {
-      const live = findLiveTurn(this.sql, now, project.id);
+      const live = this.liveTurn(now, project);
 
       if (live !== undefined) return Result.fail({ code: "turn-active", ...live });
 
@@ -226,6 +225,11 @@ export class ThreadStore {
     });
   }
 
+  /** The live turn lease that ends last, on `project` or, without it, on any project. */
+  liveTurn(now: number, project?: SelectableProject): LiveTurn | undefined {
+    return findLiveTurn(this.sql, now, this.holderId, project?.id);
+  }
+
   /** Delete the project's thread after confirming that no live turn owns it. */
   remove(project: SelectableProject, now: number): Result.Result<void, ThreadProblem> {
     return this.storage.transactionSync(() => {
@@ -233,9 +237,9 @@ export class ThreadStore {
 
       if (Result.isFailure(current)) return Result.fail(current.failure);
 
-      const decision = decideRemoveThread(project.id, current.success, now);
+      const live = this.liveTurn(now, project);
 
-      if (decision.kind === "rejected") return Result.fail(decision.problem);
+      if (live !== undefined) return Result.fail({ code: "turn-active", ...live });
 
       this.sql.exec(`DELETE FROM project_threads WHERE project_id = ?`, project.id);
 

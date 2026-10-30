@@ -9,7 +9,6 @@ import {
   readFrames,
   says,
   ScriptedRoute,
-  routeUnavailable,
   turnStream,
 } from "./facet-turn-helpers.js";
 import type { ModelStreamEvent } from "../../../src/model-route.js";
@@ -46,19 +45,7 @@ test("streams the turn's text, tool results, and terminal state as byte frames",
     truncated: false,
   });
   expect(frames[2]).toEqual({ kind: "text", text: "The file says: first line" });
-  const terminal = frames[3];
-
-  expect(terminal?.kind).toBe("completed");
-
-  if (terminal?.kind === "completed") {
-    expect(terminal.modelAccounting).toMatchObject({
-      calls: 2,
-      completed: 2,
-      failed: 0,
-      aborted: 0,
-    });
-    expect(Number.isFinite(terminal.modelAccounting.totalMs)).toBe(true);
-  }
+  expect(frames[3]?.kind).toBe("completed");
 });
 
 test("continues from the conversation the host sends back with the next prompt", async () => {
@@ -107,17 +94,6 @@ test("rejects a capability whose lifetime this generation cannot own", async () 
 
   expect(frames).toEqual([{ kind: "rejected", code: "invalid-project-capability" }]);
   expect(route.requests).toEqual([]);
-});
-
-test("carries a failed model-call count in the terminal frame", async () => {
-  const received = FakeProjectCapability.create();
-  const frames = await readFrames(turnStream(new ScriptedRoute([routeUnavailable]), received));
-
-  expect(frames.at(-1)).toMatchObject({
-    kind: "failed",
-    code: "model-error",
-    modelAccounting: { calls: 1, completed: 0, failed: 1, aborted: 0 },
-  });
 });
 
 test("an answer Workers AI gave after ChatGPT's usage limit is saved with that notice", async () => {

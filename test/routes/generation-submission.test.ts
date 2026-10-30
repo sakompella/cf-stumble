@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { parseHarnessCommit } from "../../src/harness-commit.js";
-import type { GenerationRequest } from "../../src/supervisor/control/index.js";
+import type { GenerationCommand } from "../../src/supervisor/control/index.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations/index.js";
 import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
@@ -69,16 +69,16 @@ const expectedLabeledAndPrepared = {
 
 type RecordedSubmission = {
   readonly steps: string[];
-  readonly received: GenerationRequest[];
+  readonly received: GenerationCommand[];
   readonly preparedLabels: number[];
   submissions: number;
 };
 
 function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
   return supervisor({
-    controlGeneration(request) {
+    controlGeneration(command) {
       record.steps.push("control");
-      record.received.push(request);
+      record.received.push(command);
       record.submissions += 1;
 
       return Promise.resolve(labeled);
@@ -105,12 +105,7 @@ test("labels the commit directly, then prepares that label", async () => {
     recordingSupervisor(record),
   );
 
-  expect(record.received, "the principal is derived here, never taken from the request").toEqual([
-    {
-      principal: { kind: "user" },
-      command: { kind: "submit-candidate", harnessCommit },
-    },
-  ]);
+  expect(record.received).toEqual([{ kind: "submit-candidate", harnessCommit }]);
   expect(record.steps, "the label must exist before the candidate is prepared").toEqual([
     "control",
     "prepare",

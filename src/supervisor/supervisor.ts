@@ -17,7 +17,7 @@ import {
 import {
   GenerationControl,
   type GenerationControlResult,
-  type GenerationRequest,
+  type GenerationCommand,
 } from "./control/index.js";
 import {
   GitHubConnection,
@@ -41,13 +41,7 @@ import {
   timedTurnMount,
   timedTurnProvision,
 } from "./projects/index.js";
-import {
-  Generations,
-  parseGenerationLabel,
-  type ActiveGeneration,
-  type Generation,
-  type PreparationCheck,
-} from "./generations/index.js";
+import { Generations, type ActiveGeneration } from "./generations/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import {
   ChatGPTConnection,
@@ -219,26 +213,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.generations.active();
   }
 
-  getGeneration(label: number): Generation | undefined {
-    const generationLabel = parseGenerationLabel(label);
-
-    return generationLabel === undefined ? undefined : this.generations.byLabel(generationLabel);
-  }
-
-  getGenerations(): readonly Generation[] {
-    return this.generations.all();
-  }
-
-  controlGeneration(request: GenerationRequest): GenerationControlResult {
-    return this.control.execute(request);
-  }
-
-  getPreparationCheckHistory(label: number): readonly PreparationCheck[] {
-    const generationLabel = parseGenerationLabel(label);
-
-    return generationLabel === undefined
-      ? []
-      : this.generations.preparationCheckHistory(generationLabel);
+  controlGeneration(command: GenerationCommand): GenerationControlResult {
+    return this.control.execute(command);
   }
 
   /**

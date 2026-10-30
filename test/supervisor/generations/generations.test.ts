@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { artifact, prepareGeneration, storeModuleMap, submitCandidate } from "../helpers.js";
+import { readGeneration, readGenerations } from "../generation-reads.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -36,19 +37,13 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string) {
-  return control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit },
-  });
+  return control.controlGeneration({ kind: "submit-candidate", harnessCommit });
 }
 
 async function activate(control: DurableObjectStub<Supervisor>, label: number) {
   const active = await control.getActiveGeneration();
 
-  return control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label, observedEpoch: active.epoch },
-  });
+  return control.controlGeneration({ kind: "activate", label, observedEpoch: active.epoch });
 }
 
 afterEach(async () => {
@@ -84,17 +79,17 @@ test("submits the fixture harness commit as Generation 0 and the next commit as 
       },
     },
   });
-  expect(await control.getGenerations()).toHaveLength(2);
+  expect(await readGenerations(control)).toHaveLength(2);
 });
 
-test("keeps the first preparation outcome and refuses a later contradicting one", async () => {
-  const control = supervisor("records-one-preparation-outcome");
+test("a later preparation outcome replaces the recorded status", async () => {
+  const control = supervisor("records-latest-preparation-outcome");
   const label = await submitCandidate(control, secondHarnessCommit);
 
   await storeModuleMap(control, stagedPreparationArtifact(secondHarnessCommit));
   const recorded = await control.prepareGeneration(label);
   const repeated = await control.prepareGeneration(label);
-  const contradicted = await control.prepareGeneration(label);
+  const failed = await control.prepareGeneration(label);
 
   if (!recorded.ok || !repeated.ok) {
     throw new Error("a labeled generation must accept its first preparation check");
@@ -104,24 +99,15 @@ test("keeps the first preparation outcome and refuses a later contradicting one"
     ...recorded,
     report: { ...recorded.report, effect: "no-op" },
   });
-  expect(
-    contradicted,
-    "a second, different outcome is a real event and must not be swallowed",
-  ).toEqual({
-    ok: false,
-    problem: {
-      code: "contradicts-recorded-outcome",
-      label,
-      recorded: "ready",
+  expect(failed).toMatchObject({
+    ok: true,
+    report: {
+      stage: "response-rejected",
+      effect: "recorded",
+      generation: { label, status: "failed" },
     },
   });
-  expect(await control.getGeneration(label)).toEqual(recorded.report.generation);
-  const history = await control.getPreparationCheckHistory(label);
-
-  expect(
-    history.map((check) => check.outcome),
-    "a refused check is not evidence and must leave no record behind",
-  ).toEqual(["passed", "passed"]);
+  expect(await readGeneration(control, label)).toMatchObject({ status: "failed" });
 });
 
 test("refuses a candidate submission that does not name a harness commit", async () => {
@@ -131,7 +117,7 @@ test("refuses a candidate submission that does not name a harness commit", async
     ok: false,
     problem: { code: "invalid-harness-commit" },
   });
-  expect(await control.getGenerations(), "a refused submission labels nothing").toHaveLength(0);
+  expect(await readGenerations(control), "a refused submission labels nothing").toHaveLength(0);
 });
 
 test("activates a ready generation once and preserves its epoch on a repeated request", async () => {
@@ -139,7 +125,7 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   const label = await submitCandidate(control, secondHarnessCommit);
   await prepareGeneration(control, label, secondHarnessCommit);
 
-  const prepared = await control.getGeneration(label);
+  const prepared = await readGeneration(control, label);
   const activated = await activate(control, label);
   const repeated = await activate(control, label);
 
@@ -158,7 +144,6 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   expect(await control.getActiveGeneration()).toEqual({
     generation: prepared,
     epoch: activated.outcome.epoch,
-    activationId: 1,
   });
   expect(repeated).toEqual({
     ...activated,
@@ -174,7 +159,7 @@ test("preserves generation state across eviction and labels nothing itself", asy
 
   await evictDurableObject(control);
 
-  expect(await control.getGenerations()).toEqual([
+  expect(await readGenerations(control)).toEqual([
     { label: 0, harnessCommit: thirdHarnessCommit, status: "ready" },
   ]);
   expect(await control.getActiveGeneration()).toEqual({

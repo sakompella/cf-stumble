@@ -11,6 +11,8 @@ import {
 import type { ModelCapability } from "../../../src/facet/generation-0/index.js";
 import type { FacetTurnFrame } from "../../../src/facet/generation-0/index.js";
 import type { ModelRouteRequest, ModelStreamEvent } from "../../../src/model-route.js";
+import { TurnFrames } from "../../../src/facet/generation-0/turn-frames.js";
+import { TURN_PROGRESS_FRAME_MAX_BYTES } from "../../../src/supervisor/projects/index.js";
 
 const TERMINAL = new Set(["completed", "failed", "rejected"]);
 
@@ -132,4 +134,18 @@ test("a failed turn keeps the conversation, and a rejected one has none to keep"
   ).toEqual(["user", "assistant"]);
 
   expect(rejected).toEqual([{ kind: "rejected", code: "invalid-turn-request" }]);
+});
+
+test("a large tool call still fits in one progress frame", () => {
+  const [frame] = new TurnFrames().frames({
+    type: "tool_execution_start",
+    toolCallId: "call-1",
+    toolName: "write",
+    args: { path: "big.txt", content: "line\n".repeat(60_000) },
+  });
+
+  expect(new TextEncoder().encode(JSON.stringify(frame)).byteLength).toBeLessThan(
+    TURN_PROGRESS_FRAME_MAX_BYTES,
+  );
+  expect(frame).toMatchObject({ kind: "tool-start", arguments: { path: "big.txt" } });
 });

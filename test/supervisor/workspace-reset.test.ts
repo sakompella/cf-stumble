@@ -7,6 +7,7 @@ import { GitHubConnectionStore } from "../../src/supervisor/projects/github-conn
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
+import { readGenerations } from "./generation-reads.js";
 import { startProjectTurn } from "./threads/turn-slot.js";
 
 const NOW = 1_700_000_000_000;
@@ -61,7 +62,7 @@ test("resets the named workspace while preserving thread and generation state", 
   await submitCandidate(control, "0123456789abcdef0123456789abcdef01234567");
 
   const threadBeforeReset = await control.getProjectThread("sample-project-one");
-  const generationsBeforeReset = await control.getGenerations();
+  const generationsBeforeReset = await readGenerations(control);
   await runInDurableObject(control, (_instance, state) => {
     new GitHubConnectionStore(state.storage).recordConnection({
       login: "reset-user",
@@ -85,7 +86,7 @@ test("resets the named workspace while preserving thread and generation state", 
   expect(fake.resetWorkspace).toHaveBeenCalledOnce();
   await expect(control.getGitHubConnection()).resolves.toEqual({ github: null, checkedAt: null });
   expect(await control.getProjectThread("sample-project-one")).toEqual(threadBeforeReset);
-  expect(await control.getGenerations()).toEqual(generationsBeforeReset);
+  expect(await readGenerations(control)).toEqual(generationsBeforeReset);
 });
 
 test("a live turn on any project or the harness refuses the reset before the workspace is asked", async () => {

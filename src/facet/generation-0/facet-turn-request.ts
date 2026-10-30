@@ -3,7 +3,6 @@
 // shape is proven until these functions prove it.
 
 import { isRecord } from "../../untrusted.js";
-import { isString } from "./plain-values.js";
 import type { AgentMessage } from "@cf-stumble/pi";
 
 /**
@@ -39,7 +38,8 @@ export function parseFacetTurnRequest(value: unknown): FacetTurnRequest | undefi
   if (!isRecord(value)) return undefined;
   const { prompt, messages } = value;
 
-  if (!isString(prompt)) return undefined;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the prompt arrives over RPC.
+  if (typeof prompt !== "string") return undefined;
   const conversation = parseTurnMessages(messages);
 
   return conversation === undefined ? undefined : { prompt, messages: conversation };

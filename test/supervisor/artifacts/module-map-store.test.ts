@@ -270,7 +270,6 @@ test("reports an incomplete stored module map instead of rebuilding the commit",
   await expect(storedKind(control, commits.incomplete)).resolves.toBe(
     "problem:stored-module-map-incomplete",
   );
-  expect(await control.getGeneration(label)).toMatchObject({ label, status: "candidate" });
 });
 
 /**
@@ -305,8 +304,9 @@ export class MainFacet extends DurableObject {
   const active = await control.getActiveGeneration();
 
   const rolledBack = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "rollback", label: 0, observedEpoch: active.epoch },
+    kind: "rollback",
+    label: 0,
+    observedEpoch: active.epoch,
   });
 
   const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));

@@ -30,8 +30,8 @@ test("startup checking returns plain RPC values", async () => {
   const control = supervisor("plain-startup-check-result");
 
   const submission = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit: deadlineCommit },
+    kind: "submit-candidate",
+    harnessCommit: deadlineCommit,
   });
 
   if (!submission.ok || submission.outcome.kind !== "candidate-submitted") {
@@ -79,8 +79,8 @@ test("the failure arms of startup checking return plain RPC values", async () =>
   const unstoredCommit = "cafe456789abcdef0123456789abcdef01234568";
 
   const submission = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "submit-candidate", harnessCommit: unstoredCommit },
+    kind: "submit-candidate",
+    harnessCommit: unstoredCommit,
   });
 
   if (!submission.ok) {
@@ -105,10 +105,7 @@ test("the failure arms of control, threads, and relay return plain values", asyn
   const control = supervisor("plain-control-failures");
 
   const failures = [
-    await control.controlGeneration({
-      principal: { kind: "user" },
-      command: { kind: "activate", label: 0, observedEpoch: 1 },
-    }),
+    await control.controlGeneration({ kind: "activate", label: 0, observedEpoch: 1 }),
     await control.getProjectThread("not-a-project"),
   ];
 

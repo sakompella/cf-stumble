@@ -12,6 +12,7 @@ import {
   prepareWithModuleMap,
   submitCandidate,
 } from "./helpers.js";
+import { readGenerations } from "./generation-reads.js";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
@@ -79,7 +80,7 @@ test("reports a typed failure and serves nothing when no generation is active", 
     ok: false,
     problem: { code: "no-active-generation" },
   });
-  expect(await control.getGenerations(), "no submission means no labeled generation").toEqual([]);
+  expect(await readGenerations(control), "no submission means no labeled generation").toEqual([]);
 });
 
 test("serves the activated generation's retained artifact", async () => {
@@ -123,8 +124,9 @@ test("keeps the active retained artifact when a failed candidate cannot activate
   const active = await control.getActiveGeneration();
 
   const activation = await control.controlGeneration({
-    principal: { kind: "user" },
-    command: { kind: "activate", label: failedCandidate, observedEpoch: active.epoch },
+    kind: "activate",
+    label: failedCandidate,
+    observedEpoch: active.epoch,
   });
 
   const response = await control.fetch(new Request("https://cf-stumble.test/"));

@@ -21,57 +21,45 @@ function generation(labelValue: number, status: GenerationStatus): Generation {
   return { label: label(labelValue), harnessCommit: COMMIT, status };
 }
 
-function stateAt(epoch: number, activationId: number, activeLabel?: number): GenerationState {
-  return {
-    activeLabel: activeLabel === undefined ? undefined : label(activeLabel),
-    epoch,
-    activationId,
-  };
+function stateAt(epoch: number, activeLabel?: number): GenerationState {
+  return { activeLabel: activeLabel === undefined ? undefined : label(activeLabel), epoch };
 }
 
 test("activation rejects an unknown generation", () => {
-  expect(decideActivation(label(3), undefined, stateAt(5, 2))).toEqual({
+  expect(decideActivation(label(3), undefined, stateAt(5))).toEqual({
     kind: "rejected",
     problem: { code: "unknown-generation", label: 3 },
   });
 });
 
 test("activation rejects a generation that is not ready", () => {
-  expect(decideActivation(label(1), generation(1, "candidate"), stateAt(5, 2))).toEqual({
+  expect(decideActivation(label(1), generation(1, "candidate"), stateAt(5))).toEqual({
     kind: "rejected",
     problem: { code: "not-ready", label: 1 },
   });
 });
 
-test("activating the already-active generation is a no-op that leaves the clocks alone", () => {
-  expect(decideActivation(label(1), generation(1, "ready"), stateAt(5, 2, 1))).toEqual({
+test("activating the already-active generation is a no-op that leaves the epoch alone", () => {
+  expect(decideActivation(label(1), generation(1, "ready"), stateAt(5, 1))).toEqual({
     kind: "no-op",
     generation: generation(1, "ready"),
     epoch: 5,
   });
 });
 
-test("activating a ready generation advances epoch and activation id by one", () => {
-  expect(decideActivation(label(2), generation(2, "ready"), stateAt(5, 2, 1))).toEqual({
+test("activating a ready generation advances the epoch by one", () => {
+  expect(decideActivation(label(2), generation(2, "ready"), stateAt(5, 1))).toEqual({
     kind: "activate",
     generation: generation(2, "ready"),
     nextEpoch: 6,
-    nextActivationId: 3,
   });
-});
-
-test("a preparation check with an invalid outcome is rejected", () => {
-  expect(
-    decidePreparationCheck(label(1), "bogus", generation(1, "candidate"), stateAt(5, 2)),
-  ).toEqual({ kind: "rejected", problem: { code: "invalid-preparation-check-outcome" } });
 });
 
 test("a check on a candidate records the resulting status and advances the epoch", () => {
   expect(
-    decidePreparationCheck(label(1), "passed", generation(1, "candidate"), stateAt(5, 2)),
+    decidePreparationCheck(label(1), "passed", generation(1, "candidate"), stateAt(5)),
   ).toEqual({
     kind: "record",
-    outcome: "passed",
     generation: generation(1, "ready"),
     statusUpdate: "ready",
     nextEpoch: 6,
@@ -80,23 +68,21 @@ test("a check on a candidate records the resulting status and advances the epoch
 });
 
 test("a check confirming the recorded status is a no-op that still advances the epoch", () => {
-  expect(decidePreparationCheck(label(1), "passed", generation(1, "ready"), stateAt(5, 2))).toEqual(
-    {
-      kind: "record",
-      outcome: "passed",
-      generation: generation(1, "ready"),
-      statusUpdate: undefined,
-      nextEpoch: 6,
-      effect: "no-op",
-    },
-  );
+  expect(decidePreparationCheck(label(1), "passed", generation(1, "ready"), stateAt(5))).toEqual({
+    kind: "record",
+    generation: generation(1, "ready"),
+    statusUpdate: undefined,
+    nextEpoch: 6,
+    effect: "no-op",
+  });
 });
 
-test("a check contradicting the recorded status is rejected and reports it", () => {
-  expect(decidePreparationCheck(label(1), "failed", generation(1, "ready"), stateAt(5, 2))).toEqual(
-    {
-      kind: "rejected",
-      problem: { code: "contradicts-recorded-outcome", label: 1, recorded: "ready" },
-    },
-  );
+test("a check contradicting the recorded status replaces it", () => {
+  expect(decidePreparationCheck(label(1), "failed", generation(1, "ready"), stateAt(5))).toEqual({
+    kind: "record",
+    generation: generation(1, "failed"),
+    statusUpdate: "failed",
+    nextEpoch: 6,
+    effect: "recorded",
+  });
 });
