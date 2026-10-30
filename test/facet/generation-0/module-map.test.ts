@@ -75,7 +75,7 @@ test("the written file parses into a module map the Supervisor build path accept
   );
 });
 
-test("a cold facet from the built module map passes the GET / startup check", async () => {
+test("a generation from before Pi Durable is refused at preparation", async () => {
   const harnessCommit = parseHarnessCommit(GENERATION_0_COMMIT);
 
   if (harnessCommit === undefined) throw new Error("the test commit must be a Git object ID");
@@ -88,12 +88,10 @@ test("a cold facet from the built module map passes the GET / startup check", as
   const label = await submitCandidate(control, GENERATION_0_COMMIT);
   const checked = await prepareWithModuleMap(control, label, validated.success);
 
-  expect(checked.ok).toBe(true);
-
-  if (!checked.ok) return;
-  expect(checked.report.stage).toBe("ready");
-  expect(checked.report.stage === "ready" && checked.report.status).toBeLessThan(400);
-  expect(checked.report.generation).toMatchObject({ label, status: "ready" });
+  expect(checked).toMatchObject({
+    ok: true,
+    report: { stage: "version-mismatch", generation: { label, status: "failed" } },
+  });
 });
 
 test("the host model route satisfies the capability the facet declares", async () => {

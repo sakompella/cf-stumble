@@ -83,7 +83,7 @@ function startIn(
           recorded.events.push("mount");
           steps.mount?.();
 
-          return { fetcher: recorded.facet };
+          return recorded.facet;
         }),
       provision: () => {
         recorded.events.push("provision");
@@ -200,7 +200,7 @@ test("a start interrupted while the facet answers cancels the stream that arrive
   const starting = Effect.runFork(
     startFacetTurn({
       namespace: recorded.namespace,
-      mount: () => Effect.succeed({ fetcher: facet }),
+      mount: () => Effect.succeed(facet),
       provision: () => Effect.succeed(true),
       catalog: sampleSelectableCatalog,
       workspaceName,

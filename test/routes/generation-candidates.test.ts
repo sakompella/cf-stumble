@@ -6,7 +6,11 @@ import { fixtureMainHarnessCommit } from "../facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { GenerationSubmissionResult } from "../../src/routes/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activeSupervisor, storeModuleMap } from "../supervisor/helpers.js";
+import {
+  activeSupervisor,
+  storeModuleMap,
+  PI_DURABLE_VERSION_METHOD,
+} from "../supervisor/helpers.js";
 import { readGeneration, readGenerations } from "../supervisor/generation-reads.js";
 import { ownerApiResponse } from "./helpers.js";
 
@@ -28,6 +32,7 @@ function moduleMap(harnessCommit: string, body: string, status: number): MainHar
         source: `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response(${JSON.stringify(body)}, { status: ${String(status)} }); }
 }
 `,

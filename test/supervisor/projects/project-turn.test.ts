@@ -168,7 +168,7 @@ test("passes the turn cancellation signal into provisioning", async () => {
   const start = await Effect.runPromise(
     startFacetTurn({
       namespace: workspaces.namespace,
-      mount: () => Effect.succeed({ fetcher: facet }),
+      mount: () => Effect.succeed(facet),
       provision: (_project, signal) => {
         received = signal;
         controller.abort();

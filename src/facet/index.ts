@@ -1,6 +1,7 @@
 import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "./artifact.js";
 import type { ModelRoute } from "../model-route.js";
+import type { ConversationFacet } from "./conversation-protocol.js";
 import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
 import type {
   HarnessModule,
@@ -18,7 +19,7 @@ export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./art
  * `workingDirectory` is separate from `request` because the host decides it and a client must not
  * present one.
  */
-export interface MainFacetTarget extends Rpc.DurableObjectBranded {
+export interface MainFacetTarget extends Rpc.DurableObjectBranded, ConversationFacet {
   fetch(request: Request): Promise<Response>;
   startTurn(
     projectTarget: ProjectRpcTargetContract,
@@ -44,6 +45,8 @@ function loadArtifact(
 ): WorkerStub {
   return loader.get(artifact.harnessCommit, () => ({
     compatibilityDate: "2025-01-01",
+    // Chord, under Pi Durable, uses WeakRef, which this date does not enable by itself.
+    compatibilityFlags: ["enable_weak_ref"],
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),
     env: capabilities,
@@ -70,3 +73,5 @@ export function loadMainFacet(
     }),
   );
 }
+
+export type { ConversationHost } from "./conversation-protocol.js";

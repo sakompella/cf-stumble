@@ -21,6 +21,7 @@ import {
   artifact,
   storeModuleMap,
   submitCandidate,
+  PI_DURABLE_VERSION_METHOD,
 } from "../helpers.js";
 
 const commits = {
@@ -287,6 +288,7 @@ test("rolls back to a stored generation while every build fails", async () => {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("second generation serving"); }
 }
 `,

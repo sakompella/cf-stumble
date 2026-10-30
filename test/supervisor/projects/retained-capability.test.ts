@@ -77,7 +77,7 @@ async function startWithBudget(remainingMs: number) {
   const start: ProjectTurnStart = await Effect.runPromise(
     startFacetTurn({
       namespace: workspaces.namespace,
-      mount: () => Effect.succeed({ fetcher: retainingGeneration() }),
+      mount: () => Effect.succeed(retainingGeneration()),
       provision: () => Effect.succeed(true),
       catalog: sampleSelectableCatalog,
       workspaceName,

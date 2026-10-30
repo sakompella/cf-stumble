@@ -24,7 +24,7 @@ test("a harness turn reconciles before mounting the generation", async () => {
       mount: () => {
         events.push("mount");
 
-        return Effect.succeed({ fetcher: facet });
+        return Effect.succeed(facet);
       },
       provision: () => Effect.succeed(true),
       provisionHarness: () => {
@@ -57,7 +57,7 @@ test("a harness provision that observes cancellation never mounts", async () => 
       mount: () => {
         mounted = true;
 
-        return Effect.succeed({ fetcher: facet });
+        return Effect.succeed(facet);
       },
       provision: () => Effect.succeed(true),
       provisionHarness: () => {

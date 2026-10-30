@@ -56,6 +56,10 @@ import type {
   HarnessProvisionWorkspaceNamespace,
   WorkspaceResetResult,
 } from "../workspace/index.js";
+import { ServingConversations, type ConversationResult } from "./conversations/index.js";
+import type { SelectableProject } from "../selectable-projects.js";
+import type { ProjectCapabilityStub } from "./projects/index.js";
+import { waitForWorkspaceProvision } from "../workspace/index.js";
 import {
   checkGenerationStartup,
   type StartupCheckHost,
@@ -69,7 +73,8 @@ type ResetWorkspaceNamespace = Readonly<{
 
 export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
-  | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" } & LiveTurn> }>;
+  | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" } & LiveTurn> }>
+  | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
 
 const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as const;
 
@@ -105,6 +110,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly github: GitHubConnection;
   private readonly connections: ProjectConnections;
   private readonly chatgpt: ChatGPTConnection;
+  private readonly serving: ServingConversations;
   private readonly workspaceName: string;
   private readonly name: string;
   /** Fences leases held by an instance Durable Objects have since replaced. */
@@ -156,11 +162,23 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       () => this.connections.catalog(),
       this.instanceId,
     );
+    this.serving = this.#servingConversations();
     this.chatgpt = new ChatGPTConnection({
       store: new ChatGPTCredentialStore(ctx.storage),
       fetcher: (url, init) => fetch(url, init),
       model: env.CHATGPT_MODEL,
       clock: () => Date.now(),
+    });
+  }
+
+  #servingConversations(): ServingConversations {
+    return new ServingConversations({
+      ctx: this.ctx,
+      mount: () => this.#mountServing(this.generations.active()),
+      catalog: () => this.connections.catalog(),
+      resetting: () => this.#resetInProgress,
+      obtainWorkspace: (project, remainingMs, signal) =>
+        this.#obtainWorkspace(project, remainingMs, signal),
     });
   }
 
@@ -180,8 +198,14 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.generations.active();
   }
 
+  /** A change of active generation replaces the serving facet, which keeps its storage. */
   controlGeneration(command: GenerationCommand): GenerationControlResult {
-    return this.control.execute(command);
+    const before = this.generations.active().generation?.harnessCommit;
+    const result = this.control.execute(command);
+
+    if (this.generations.active().generation?.harnessCommit !== before) this.serving.replaceFacet();
+
+    return result;
   }
 
   /** The harness entry has no repository URL, which tells the sidebar it is not a connection. */
@@ -212,6 +236,8 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.#resetInProgress = true;
 
     try {
+      if (this.serving.running()) return { ok: false, problem: { code: "run-active" } };
+
       const liveTurn = this.threads.liveTurn(now);
 
       if (liveTurn !== undefined) {
@@ -222,7 +248,10 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
       const result = await namespace.getByName(this.workspaceName).reset();
 
-      if (result.ok) this.connections.resetWorkspace();
+      if (result.ok) {
+        this.connections.resetWorkspace();
+        this.serving.endWorkspaces();
+      }
 
       return result;
     } finally {
@@ -395,6 +424,72 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: every argument arrives from a client; `ServingConversations` parses them.
+  submitProjectMessage(projectId: unknown, content: unknown, requestId: unknown) {
+    return runAtEntryPoint(this.serving.submit(projectId, content, requestId));
+  }
+
+  /** NDJSON from the conversation's Pi Durable event stream: a snapshot, then one batch per commit. */
+  projectEvents(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `submitProjectMessage`.
+    projectId: unknown,
+  ): Promise<ConversationResult<{ events: ReadableStream<Uint8Array> }>> {
+    return runAtEntryPoint(this.serving.events(projectId));
+  }
+
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `submitProjectMessage`.
+  abortProjectRun(projectId: unknown) {
+    return runAtEntryPoint(this.serving.abort(projectId));
+  }
+
+  /** The previous conversation stays in the facet's storage; the project points at a new one. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `submitProjectMessage`.
+  freshProjectConversation(projectId: unknown) {
+    return runAtEntryPoint(this.serving.freshThread(projectId));
+  }
+
+  override alarm(): Promise<void> {
+    return runAtEntryPoint(this.serving.alarm(Date.now()));
+  }
+
+  #obtainWorkspace(
+    project: SelectableProject,
+    remainingMs: number,
+    signal: AbortSignal,
+  ): Effect.Effect<ProjectCapabilityStub | null> {
+    return Effect.gen({ self: this }, function* () {
+      if (!(yield* waitForWorkspaceProvision(this.workspaceName, signal))) return null;
+      const { generation } = this.generations.active();
+
+      if (
+        project.kind === "harness" &&
+        generation !== undefined &&
+        !(yield* this.connections.ensureHarnessProvisioned(generation.harnessCommit, signal))
+      ) {
+        return null;
+      }
+
+      if (
+        project.kind === "repository" &&
+        !(yield* this.connections.ensureProvisioned(project.id, signal)).ok
+      ) {
+        return null;
+      }
+
+      const namespace: ProjectWorkspaceNamespace = this.env.WORKSPACE_HOST;
+
+      return yield* Effect.promise(() =>
+        namespace
+          .getByName(this.workspaceName)
+          .project({ remainingMs })
+          .then(
+            (capability) => capability,
+            () => null,
+          ),
+      );
+    });
+  }
+
   /** No active generation answers 503, since there is nothing to serve until a harness commit is activated. Any other mount failure answers 500. */
   override fetch(request: Request): Promise<Response> {
     const mainFacet = this.#mountServing(this.generations.active());
@@ -409,7 +504,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
       );
     }
 
-    return forwardToFacet(request, mainFacet.success.fetcher);
+    return forwardToFacet(request, mainFacet.success);
   }
 }
 

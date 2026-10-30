@@ -5,7 +5,13 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { artifact, prepareGeneration, storeModuleMap, submitCandidate } from "../helpers.js";
+import {
+  artifact,
+  prepareGeneration,
+  storeModuleMap,
+  submitCandidate,
+  PI_DURABLE_VERSION_METHOD,
+} from "../helpers.js";
 import { readGeneration, readGenerations } from "../generation-reads.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -18,6 +24,7 @@ function stagedPreparationArtifact(harnessCommit: string) {
     `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   constructor(ctx, env) {
     super(ctx, env);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS checks (count INTEGER NOT NULL)");

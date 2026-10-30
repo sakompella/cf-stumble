@@ -8,7 +8,7 @@ import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
-import { connectSampleProjects } from "../supervisor/helpers.js";
+import { connectSampleProjects, PI_DURABLE_VERSION_METHOD } from "../supervisor/helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../supervisor/threads/message-samples.js";
 import {
   FakeExecBackend,
@@ -40,6 +40,7 @@ const user = ${JSON.stringify(THREAD_MESSAGE_SAMPLES.user)};
 const assistant = ${JSON.stringify(THREAD_MESSAGE_SAMPLES.assistant)};
 
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() {
     return new Response("ready");
   }

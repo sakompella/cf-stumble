@@ -6,7 +6,11 @@ import { expect } from "vitest";
 import * as Result from "effect/Result";
 import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
 import { sampleCatalog } from "../project-fixtures.js";
-import { fixtureMainHarnessArtifact, fixtureMainHarnessCommit } from "../facet/fixture.js";
+import {
+  fixtureMainHarnessArtifact,
+  fixtureMainHarnessCommit,
+  PI_DURABLE_VERSION_METHOD,
+} from "../facet/fixture.js";
 import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
@@ -24,6 +28,8 @@ export const commits = {
   oversized: "8123456789abcdef0123456789abcdef01234567",
   fresh: "b123456789abcdef0123456789abcdef01234567",
 } as const;
+
+export { PI_DURABLE_VERSION_METHOD } from "../facet/fixture.js";
 
 export function artifact(harnessCommit: string, source: string): MainHarnessArtifactInput {
   return {
@@ -44,6 +50,7 @@ export function readyArtifact(harnessCommit: string): MainHarnessArtifactInput {
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
   fetch() { return new Response("ready"); }
+  ${PI_DURABLE_VERSION_METHOD}
 }
 `,
   );

@@ -9,6 +9,7 @@ import {
   labelCandidate,
   prepareWithModuleMap,
   storeModuleMap,
+  PI_DURABLE_VERSION_METHOD,
 } from "../helpers.js";
 import { expectFailedCandidate } from "../generation-reads.js";
 
@@ -28,6 +29,7 @@ test("records a generation as ready when its candidate completes an ordinary req
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("ordinary response"); }
 }
 `,
@@ -39,6 +41,32 @@ export class MainFacet extends DurableObject {
     report: { stage: "ready", status: 200, generation: { label, status: "ready" } },
   });
   expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
+});
+
+/** The Worker Loader caches code by commit, so this candidate needs a commit of its own. */
+const PI_DURABLE_MISMATCH_COMMIT = "9123456789abcdef0123456789abcdef01234567";
+
+test("a generation built with another Pi Durable version fails its startup check", async () => {
+  const control = await activeSupervisor("startup-check-pi-durable-version");
+  const label = await labelCandidate(control, PI_DURABLE_MISMATCH_COMMIT);
+
+  const result = await prepareWithModuleMap(
+    control,
+    label,
+    artifact(
+      PI_DURABLE_MISMATCH_COMMIT,
+      `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  piDurableVersion() { return "0.0.1"; }
+  fetch() { return new Response("ordinary response"); }
+}
+`,
+    ),
+  );
+
+  expect(result).toMatchObject({ ok: true, report: { stage: "version-mismatch" } });
+  await expectFailedCandidate(control, label);
 });
 
 test("records a 400 response as failed at the response stage", async () => {
@@ -53,6 +81,7 @@ test("records a 400 response as failed at the response stage", async () => {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("invalid startup request", { status: 400 }); }
 }
 `,
@@ -114,6 +143,7 @@ test("records a constructor-throwing candidate as failed before headers", async 
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   constructor(ctx, env) {
     super(ctx, env);
     throw new Error("constructor exploded");
@@ -140,6 +170,7 @@ test("records a first-request throw as failed before headers", async () => {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { throw new Error("first request exploded"); }
 }
 `,
@@ -162,6 +193,7 @@ test("records a 500 response as failed at the response stage", async () => {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("failure", { status: 500 }); }
 }
 `,
@@ -184,6 +216,7 @@ test("records a candidate that never sends headers as failed at the deadline", a
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Promise(() => {}); }
 }
 `,
@@ -210,6 +243,7 @@ test("records a body above the byte bound as failed at the body stage", async ()
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("x".repeat(${1_024 + 1})); }
 }
 `,
@@ -229,6 +263,7 @@ test("remounts a checked generation instead of reusing its warm candidate instan
     `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   constructor(ctx, env) {
     super(ctx, env);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS constructions (count INTEGER NOT NULL)");

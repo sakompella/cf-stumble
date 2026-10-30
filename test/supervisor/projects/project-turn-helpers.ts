@@ -56,7 +56,7 @@ export async function turnRecordingProvisioning(
   const start = await Effect.runPromise(
     startFacetTurn({
       namespace: workspaces.namespace,
-      mount: () => Effect.succeed({ fetcher: facet }),
+      mount: () => Effect.succeed(facet),
       provision: (project) => {
         reconciled.push(project.id);
 
@@ -128,7 +128,7 @@ export function turnFor(
   return Effect.runPromise(
     startFacetTurn({
       namespace: workspaces.namespace,
-      mount: () => Effect.succeed({ fetcher: facet }),
+      mount: () => Effect.succeed(facet),
       provision: provisioned,
       catalog: sampleSelectableCatalog,
       workspaceName: tenantWorkspace,

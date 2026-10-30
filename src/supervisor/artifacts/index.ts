@@ -13,7 +13,7 @@ import type { ModuleMapStorage, StoredModuleMapProblem } from "./store.js";
 import { WorkspaceHostModuleMapBuilder, type BuildWorkspaceNamespace } from "./build-workspace.js";
 import type { HarnessBuildProblem } from "./build-plan.js";
 import type { HarnessModuleMapBuilder } from "./builder.js";
-import { mainFacetName } from "./facet-name.js";
+import { SERVING_FACET_NAME } from "./facet-name.js";
 import type { ActiveGeneration } from "../generations/index.js";
 
 export type ModuleMapProblem =
@@ -26,6 +26,8 @@ export type ModuleMapProblem =
  * generation's stored map, and none fall back to other code or a build.
  */
 export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;
+
+export type MountedFacet = Fetcher<MainFacetTarget>;
 
 /** Only `prepare` builds. Serving reads what is stored, so activation and rollback cannot depend on Computer being reachable. */
 export class HarnessArtifacts {
@@ -73,22 +75,24 @@ export class HarnessArtifacts {
     });
   }
 
-  /** Synchronous: the module map is already in the Durable Object's SQLite. */
+  /**
+   * Synchronous: the module map is already in the Durable Object's SQLite. A running serving facet
+   * keeps its class, so whoever changes the active generation aborts it first.
+   */
   mount(
     active: ActiveGeneration,
     loader: WorkerLoader,
     facets: DurableObjectState["facets"],
     modelRoute: MainFacetCapabilities["MODEL"],
-  ): Result.Result<{ readonly fetcher: Fetcher<MainFacetTarget> }, MainFacetMountProblem> {
+  ): Result.Result<MountedFacet, MainFacetMountProblem> {
     return this.load(active).pipe(
       Result.flatMap((artifact) =>
         loadMainFacet(loader, artifact, { MODEL: modelRoute }).pipe(
-          Result.map((loadedFacet) => ({
-            fetcher: facets.get<MainFacetTarget>(
-              mainFacetName(artifact.harnessCommit, "serving"),
-              () => ({ class: loadedFacet.facetClass }),
-            ),
-          })),
+          Result.map((loadedFacet) =>
+            facets.get<MainFacetTarget>(SERVING_FACET_NAME, () => ({
+              class: loadedFacet.facetClass,
+            })),
+          ),
         ),
       ),
     );
@@ -151,7 +155,7 @@ function validatedBuild(
 
 export type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
 
-export { mainFacetName } from "./facet-name.js";
+export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 
 export { MODULE_MAP_CHUNK_BYTES, ModuleMapStore } from "./store.js";
 

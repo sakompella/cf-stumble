@@ -87,7 +87,7 @@ function turnAcrossIsolates(
     start: (projectId, request, context) =>
       startFacetTurn({
         namespace: workspaces.namespace,
-        mount: () => Effect.succeed({ fetcher: facet }),
+        mount: () => Effect.succeed(facet),
         provision: () => Effect.succeed(true),
         catalog: sampleSelectableCatalog,
         workspaceName,

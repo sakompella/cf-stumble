@@ -1,0 +1,163 @@
+/// <reference types="@cloudflare/vitest-plugin/types" />
+
+import { reset, runInDurableObject } from "cloudflare:test";
+import { afterEach, expect, test } from "vitest";
+import {
+  activateGeneration,
+  artifact,
+  connectedSupervisor,
+  prepareWithModuleMap,
+  submitCandidate,
+  PI_DURABLE_VERSION_METHOD,
+} from "../helpers.js";
+import type { Supervisor } from "../../../src/supervisor/supervisor.js";
+
+/**
+ * The Supervisor's side of a Pi Durable generation, against a scripted facet that speaks the
+ * conversation protocol: it keeps its records in its own storage and relays its wake to `arm`.
+ */
+
+afterEach(async () => {
+  await reset();
+});
+
+const SCRIPTED_COMMITS = [
+  "d0d0000000000000000000000000000000000001",
+  "d0d0000000000000000000000000000000000002",
+] as const;
+
+/** Answers `generation` with its commit; a conversation id counts creations in the facet's own storage. */
+function scriptedFacet(harnessCommit: string): string {
+  return `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
+  fetch() { return new Response("ready"); }
+  async attach(host) { this.host ??= host.dup(); }
+  async createConversation(cwd) {
+    const created = (this.ctx.storage.kv.get("created") ?? 0) + 1;
+    this.ctx.storage.kv.put("created", created);
+    return "conversation:" + cwd + ":" + created;
+  }
+  async submit(conversationId, content) {
+    if (content === "generation") return "${harnessCommit}";
+    await this.host.arm({ active: true });
+    return conversationId + "/" + content;
+  }
+  async abort() { await this.host.arm({ active: false }); }
+  async events() { return new ReadableStream({ start(c) { c.close(); } }); }
+}
+`;
+}
+
+async function readyScripted(
+  control: DurableObjectStub<Supervisor>,
+  harnessCommit: string,
+): Promise<number> {
+  const label = await submitCandidate(control, harnessCommit);
+  await prepareWithModuleMap(control, label, artifact(harnessCommit, scriptedFacet(harnessCommit)));
+
+  return label;
+}
+
+async function servingScripted(name: string): Promise<DurableObjectStub<Supervisor>> {
+  const control = await connectedSupervisor(name);
+  await activateGeneration(control, await readyScripted(control, SCRIPTED_COMMITS[0]));
+
+  return control;
+}
+
+function alarm(control: DurableObjectStub<Supervisor>): Promise<number | null> {
+  return runInDurableObject(control, (_instance, state) => state.storage.getAlarm());
+}
+
+function conversationOf(result: Awaited<ReturnType<Supervisor["submitProjectMessage"]>>): string {
+  if (!result.ok) throw new Error(`the message must be admitted: ${result.problem.code}`);
+
+  return result.submissionId.slice(0, result.submissionId.lastIndexOf("/"));
+}
+
+test("a project's first message creates its conversation in the project directory, and later ones reuse it", async () => {
+  const control = await servingScripted("conversations-first-message");
+
+  const first = conversationOf(
+    await control.submitProjectMessage("sample-project-one", "hello", "r1"),
+  );
+
+  const second = conversationOf(
+    await control.submitProjectMessage("sample-project-one", "again", "r2"),
+  );
+
+  const harness = conversationOf(await control.submitProjectMessage("harness", "hi", "r3"));
+
+  expect(first.startsWith("conversation:/workspace/projects/sample-project-one:")).toBe(true);
+  expect(second).toBe(first);
+  expect(harness.startsWith("conversation:/workspace/harness:")).toBe(true);
+});
+
+test("a message that is not a message reaches no generation", async () => {
+  const control = await servingScripted("conversations-invalid-message");
+
+  expect(await control.submitProjectMessage("sample-project-one", "  ", "r1")).toEqual({
+    ok: false,
+    problem: { code: "invalid-message" },
+  });
+  expect(await control.submitProjectMessage("project-nine", "hello", "r1")).toEqual({
+    ok: false,
+    problem: { code: "unknown-project-id" },
+  });
+});
+
+test("a Supervisor with nothing serving refuses a message", async () => {
+  const control = await connectedSupervisor("conversations-no-generation");
+
+  expect(await control.submitProjectMessage("sample-project-one", "hello", "r1")).toEqual({
+    ok: false,
+    problem: { code: "no-active-generation" },
+  });
+});
+
+test("an active run keeps the recovery alarm armed and refuses a workspace reset until it settles", async () => {
+  const control = await servingScripted("conversations-alarm");
+  const before = Date.now();
+
+  await control.submitProjectMessage("sample-project-one", "hello", "r1");
+
+  const armed = await alarm(control);
+  expect(armed).toBeGreaterThan(before);
+  expect(armed).toBeLessThanOrEqual(Date.now() + 60_000);
+  expect(await control.resetWorkspace()).toEqual({ ok: false, problem: { code: "run-active" } });
+
+  await control.abortProjectRun("sample-project-one");
+
+  expect(await alarm(control)).toBeNull();
+});
+
+test("activation and rollback replace the serving facet, and its storage carries over", async () => {
+  const control = await servingScripted("conversations-generation-change");
+  const [first, second] = SCRIPTED_COMMITS;
+  const firstLabel = (await control.getActiveGeneration()).generation?.label ?? -1;
+
+  expect(await control.submitProjectMessage("harness", "generation", "r1")).toMatchObject({
+    submissionId: first,
+  });
+
+  const secondLabel = await readyScripted(control, second);
+  await activateGeneration(control, secondLabel);
+
+  expect(await control.submitProjectMessage("harness", "generation", "r2")).toMatchObject({
+    submissionId: second,
+  });
+
+  const fresh = await control.freshProjectConversation("sample-project-one");
+  expect(fresh.ok && fresh.conversationId.endsWith(":2")).toBe(true);
+
+  const { epoch } = await control.getActiveGeneration();
+  expect(
+    await control.controlGeneration({ kind: "rollback", label: firstLabel, observedEpoch: epoch }),
+  ).toMatchObject({ ok: true });
+
+  expect(await control.submitProjectMessage("harness", "generation", "r3")).toMatchObject({
+    submissionId: first,
+  });
+});

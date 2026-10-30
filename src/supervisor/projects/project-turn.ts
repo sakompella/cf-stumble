@@ -25,10 +25,7 @@ type ProvisionSelectedProject = (project: Project, signal: AbortSignal) => Effec
 
 type ProvisionHarness = (signal: AbortSignal) => Effect.Effect<boolean>;
 
-type MountServingGeneration = () => Effect.Effect<
-  { readonly fetcher: ProjectTurnFacet },
-  MainFacetMountProblem
->;
+type MountServingGeneration = () => Effect.Effect<ProjectTurnFacet, MainFacetMountProblem>;
 
 interface ProjectTurnRequest {
   readonly projectId: unknown;
@@ -175,7 +172,7 @@ export function startFacetTurn(input: ProjectTurnInput): Effect.Effect<ProjectTu
 
     if (!(yield* workspaceIsAvailable(input))) return NOT_STARTED;
 
-    return yield* beginOnFacet(input, mounted.success.fetcher, capability, selected);
+    return yield* beginOnFacet(input, mounted.success, capability, selected);
   });
 }
 

@@ -1,4 +1,8 @@
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
+
+/** The method a module map's `MainFacet` needs to pass the startup check's Pi Durable version check. */
+export const PI_DURABLE_VERSION_METHOD = `piDurableVersion() { return ${JSON.stringify(PI_DURABLE_VERSION)}; }`;
 
 /**
  * A hand-written main-facet module map for tests, and the invented harness commit that labels it.
@@ -22,6 +26,8 @@ export class MainFacet extends DurableObject {
     super(ctx, env);
     this.bindingNames = Object.keys(env).sort();
   }
+
+  ${PI_DURABLE_VERSION_METHOD}
 
   async fetch(request) {
     const path = new URL(request.url).pathname;

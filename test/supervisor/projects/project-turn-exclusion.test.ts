@@ -101,7 +101,7 @@ test("a harness turn waits for a project provision in the shared workspace", asy
       mount: () => {
         mounted = true;
 
-        return Effect.succeed({ fetcher: facet });
+        return Effect.succeed(facet);
       },
       provision: () => Effect.succeed(true),
       catalog: sampleSelectableCatalog,

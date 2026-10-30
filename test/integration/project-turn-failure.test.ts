@@ -11,7 +11,7 @@ import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
 import { unusedCapability } from "../supervisor/projects/turn-workspace-fakes.js";
 import type { ProjectCapabilityStub } from "../../src/supervisor/projects/index.js";
-import { connectSampleProjects } from "../supervisor/helpers.js";
+import { connectSampleProjects, PI_DURABLE_VERSION_METHOD } from "../supervisor/helpers.js";
 import { THREAD_MESSAGE_SAMPLES } from "../supervisor/threads/message-samples.js";
 import { TOOL_RESULT_DISPLAY_MAX_BYTES } from "../../src/facet/generation-0/turn-policy.js";
 import {
@@ -120,6 +120,7 @@ const replies = {
 };
 
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() {
     return new Response("ready");
   }

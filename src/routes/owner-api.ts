@@ -18,7 +18,10 @@ import { routeProjectTurnRequest, type TurnApiSupervisor } from "./turns.js";
 
 type WorkspaceResetResult =
   | Readonly<{ ok: true; reset: "workspace" }>
-  | Readonly<{ ok: false; problem: Readonly<{ code: "turn-active" | "workspace-busy" }> }>;
+  | Readonly<{
+      ok: false;
+      problem: Readonly<{ code: "turn-active" | "run-active" | "workspace-busy" }>;
+    }>;
 
 export type OwnerApiSupervisor = ChatGPTApiSupervisor &
   GenerationControlSupervisor &
