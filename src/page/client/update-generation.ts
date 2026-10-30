@@ -12,7 +12,7 @@ import {
 /**
  * The generation drawer: submit a harness commit, activate a generation, and roll back.
  * Activation and rollback send the epoch the status read reported and the page rendered, so the
- * value a reader sees is the value the request carries (ADR-0033).
+ * value a reader sees is the value the request carries.
  */
 
 function wholeNumber(value: number): Option.Option<number> {

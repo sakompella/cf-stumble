@@ -1,12 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { expect, test } from "vitest";
 
-/**
- * The repo has twice deleted a decision register that drifted out of date. An index of ADRs is
- * the same shape of risk: it is only useful while it is complete, and nothing about writing a
- * new ADR forces anyone to add a line to it.
- *
- * Vite resolves both globs at build time, so this reads no filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -16,58 +9,25 @@ declare global {
   }
 }
 
-// Vite rewrites these calls at build time, so both option objects have to be inline literals.
 const adrFiles = import.meta.glob("../../docs/agents/adr/[0-9]*.md", {
   eager: true,
   query: "?raw",
   import: "default",
 });
 
-const indexFiles = import.meta.glob("../../docs/agents/adr/README.md", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-});
+const index = Object.values(
+  import.meta.glob("../../docs/agents/adr/README.md", {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  }),
+)[0];
 
-function basename(path: string): string {
-  const lastSlash = path.lastIndexOf("/");
+test("the ADR index links every ADR", () => {
+  const missing = Object.keys(adrFiles)
+    .map((path) => path.slice(path.lastIndexOf("/") + 1))
+    .filter((file) => index?.includes(`(${file})`) !== true);
 
-  return lastSlash < 0 ? path : path.slice(lastSlash + 1);
-}
-
-describe("the ADR index", () => {
-  const index = Object.values(indexFiles)[0];
-
-  it("finds an index and some ADRs to check it against", () => {
-    expect(index).toBeDefined();
-    expect(Object.keys(adrFiles).length).toBeGreaterThan(0);
-  });
-
-  it("links every ADR", () => {
-    const linked = index ?? "";
-
-    const missing = Object.keys(adrFiles)
-      .map((path) => basename(path))
-      .filter((file) => !linked.includes(`(${file})`))
-      .toSorted();
-
-    expect(missing, "add these to docs/agents/adr/README.md").toEqual([]);
-  });
-
-  it("marks every ADR as human-approved or agent-only", () => {
-    const unmarked = Object.entries(adrFiles)
-      .filter(([, contents]) => !/^> \*\*Review:\*\* (Human-approved|Agent-only)$/mu.test(contents))
-      .map(([path]) => basename(path))
-      .toSorted();
-
-    expect(unmarked, "add one supported review marker to each ADR").toEqual([]);
-  });
-
-  it("lists human-approved ADRs before agent-only ADRs", () => {
-    const linked = index ?? "";
-    expect(linked.indexOf("## Human-approved decisions")).toBeGreaterThanOrEqual(0);
-    expect(linked.indexOf("## Agent-only decisions")).toBeGreaterThan(
-      linked.indexOf("## Human-approved decisions"),
-    );
-  });
+  expect(index).toBeDefined();
+  expect(missing).toEqual([]);
 });

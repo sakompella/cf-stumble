@@ -47,7 +47,7 @@ test("resubmitting the same harness commit returns the existing generation", asy
   expect(resubmitted).toEqual(first);
   expect(
     await readGenerations(control),
-    "labeling an already-labeled commit again must not add a second row (ADR-0030)",
+    "labeling an already-labeled commit again must not add a second row",
   ).toHaveLength(1);
 });
 
@@ -212,6 +212,6 @@ test("resubmitting the same harness commit still returns the existing generation
   expect(resubmitted).toEqual(first);
   expect(
     await readGenerations(control),
-    "the generation table, not a request journal, is what survives eviction (ADR-0030)",
+    "the generation table, not a request journal, is what survives eviction",
   ).toHaveLength(1);
 });

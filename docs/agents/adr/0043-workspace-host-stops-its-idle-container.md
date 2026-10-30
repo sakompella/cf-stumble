@@ -3,7 +3,7 @@
 > **Review:** Agent-only
 
 The Workspace Host stops the workspace container itself when the workspace has had no work for ten
-minutes (`WORKSPACE_IDLE_STOP_MS`). An alarm checks, `decideIdleStop` decides (ADR-0036), and the
+minutes (`WORKSPACE_IDLE_STOP_MS`). An alarm checks, `decideIdleStop` decides, and the
 Host closes the Computer `Workspace` and then destroys the container with the reason `idle`.
 
 The platform would not stop it. Computer's container backend accepts a WebSocket that computerd

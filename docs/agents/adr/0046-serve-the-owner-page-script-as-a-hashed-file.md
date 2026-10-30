@@ -5,14 +5,12 @@
 The owner page becomes a Foldkit application: a model and an update function own the page's
 state, views render it, and commands and subscriptions perform its requests and its streamed turn.
 esbuild bundles it into one script. The Worker serves that script as its own file from this
-origin, behind the same Access check as the page, and the browser keeps it until a release
-changes it. The owner chose Foldkit and this delivery on 2026-10-12. The program lives in
+origin, and the browser keeps it until a release changes it. The program lives in
 `src/page/client`, and the served HTML holds only its container.
 
-**Why a separate file.** The Foldkit spike's bundle was 662,883 bytes, or 208,914 bytes gzip. The
-page is `no-store`, because it is rendered for one Access session, so an inline script would be
-downloaded again on every load: twenty times the old page. As a separate file it is downloaded
-once per release.
+**Why a separate file.** The Foldkit bundle is about 635 KB, or 200 KB gzip. The
+page is `no-store`, so an inline script would be downloaded again on every load. As a separate
+file it is downloaded once per release.
 
 **How the Worker serves it.**
 
@@ -20,9 +18,8 @@ once per release.
   `src/page/owner-script.generated.ts`, which holds the script and its path. The path is
   `/assets/owner-<hash>.js`, where the hash is the first 16 hexadecimal digits of the script's
   SHA-256. One path therefore always means the same bytes.
-- The Worker answers `GET` for the current path only, and only after Cloudflare Access
-  verification succeeds, so a request without a valid token gets the same 401 as the page. Any
-  other path under `/assets/` goes to the active generation like every other request.
+- The Worker answers `GET` for the current path only. Any other path under `/assets/` goes to the
+  active generation like every other request.
 - The script's response carries `content-type: text/javascript; charset=utf-8`,
   `cache-control: public, max-age=31536000, immutable`, `x-content-type-options: nosniff`, and
   `content-security-policy: default-src 'none'; frame-ancestors 'none'`. `public` is safe because
@@ -45,22 +42,11 @@ run `pnpm build:page` before `pnpm typecheck` or `pnpm test` alone. The page is 
 code, not part of a generation's module map.
 
 **Budgets.** `tools/bundle-budgets.test.ts`, in `pnpm test:tools`, measures the Worker upload with
-`wrangler deploy --dry-run --containers-rollout=none` and gzips at the default level, which matches
-Wrangler's own figure. The Worker limit started at the spike's measured end state plus about 10 percent (400 KiB). After
-Waves 1 and 5 merged, the upload measured 394.54 KiB gzip with the Supervisor and Workspace Host
-waves still to come, so the limit is 600 KiB. That is far below the platform's upload limit; the
-real constraint is Worker startup time, which the release proof measures on staging.
-The page limit is the Foldkit page's measured size plus about 10 percent. The Wave 5 Worker figure
-holds the page script and Wave 0's Effect entry point, but none of the later host waves.
-
-| Measurement             | Before the port            | After Wave 0               | Spike end state                   | After Wave 5                | Limit      |
-| ----------------------- | -------------------------- | -------------------------- | --------------------------------- | --------------------------- | ---------- |
-| Worker upload           | 744.70 KiB / 164.95 KiB gz | 802.87 KiB / 177.70 KiB gz | 1350.84 KiB / 359.99 KiB gz       | 1386.13 KiB / 365.59 KiB gz | 600 KiB gz |
-| Owner page script       | inline                     | 30,189 B / 6,808 B gz      | 662,883 B / 208,914 B gz          | 635,592 B / 200,595 B gz    | 216 KiB gz |
-| Page HTML on every load | 44,073 B / 10,274 B gz     | 12,089 B / 2,927 B gz      | 667,286 B / 210,256 B gz (inline) | 4,765 B / 1,492 B gz        | -          |
+`wrangler deploy --dry-run --containers-rollout=none` and the page script, both gzipped, and fails
+above its limits. The limits sit about 10 percent above the measured sizes. The real constraint on
+the Worker is startup time, which only a staged deploy measures.
 
 **Alternatives.** An inline bundle under the page's nonce needs no new route, but repeats a large
-download on every load. Cloudflare static assets can answer before the Worker runs, so they could
-skip the Worker's own Access verification, and they would need routing configuration kept equal
+download on every load. Cloudflare static assets would need routing configuration kept equal
 across `cloudflare.config.ts` and both Wrangler files. Typed DOM modules without a framework need
 fewer dependencies, but the owner chose Foldkit.

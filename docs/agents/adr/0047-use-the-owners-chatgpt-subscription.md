@@ -3,8 +3,7 @@
 > **Review:** Agent-only
 
 The model route answers from OpenAI's Responses API with the owner's ChatGPT subscription once the
-owner connects it, and from the fixed Workers AI model until then. The owner asked for this on
-2026-10-13.
+owner connects it, and from the fixed Workers AI model until then.
 
 **The Supervisor holds the credential.** The owner signs in with ChatGPT (OpenAI's "Sign in with
 ChatGPT" token sharing for open-source agents). The Supervisor registers a new dynamic client for
@@ -25,8 +24,8 @@ token, a code, or the verifier.
 **Methods on RPC classes are public API.** Workers RPC exposes every method and accessor on the
 prototype of a class that extends `WorkerEntrypoint`, `DurableObject`, or `RpcTarget`. TypeScript's
 `private` and `protected` are erased, so a facet holding the route stub could call a `private`
-helper by name. Until 2026-10-13 the route's credential lookup was such a helper, and a loaded
-generation called it and read the access token through the returned `access()`. A helper on these
+helper by name. The route's credential lookup was once such a helper, and a loaded
+generation called it and read the access token. A helper on these
 classes is a `#private` method or a module function. The lint rule
 `cf-stumble/no-typescript-private-rpc-member` (`tools/oxlint/cf-stumble/`) rejects the TypeScript
 form, and `test/model-route-rpc-surface.test.ts` probes the route from a loaded generation.
@@ -40,10 +39,10 @@ that needs a reconnect fails every call with `chatgpt-reconnect-required` instea
 so the owner sees that the subscription stopped answering. A token server that is down fails the
 call with `model-unavailable`, unless the stored token is still valid.
 
-**A usage limit falls back, and says so.** On 2026-10-16 the first production turn after the owner
-connected a Plus account failed: OpenAI answered HTTP 200 and then streamed `response.failed` with
-`subscription_sharing_usage_limit_exceeded`. Every turn failed until ChatGPT was disconnected. A
-call is now treated as refused for a usage limit when the provider answers HTTP 429, or its error
+**A usage limit falls back, and says so.** OpenAI can answer HTTP 200 and then stream
+`response.failed` with `subscription_sharing_usage_limit_exceeded`, which once failed every turn
+until ChatGPT was disconnected. A
+call is treated as refused for a usage limit when the provider answers HTTP 429, or its error
 code or type is `subscription_sharing_usage_limit_exceeded`, `rate_limit_exceeded`,
 `rate_limit_error` or `insufficient_quota`, in the response body or in the stream
 (`src/chatgpt/responses.ts`). If nothing of that call reached the caller yet, the route sends one

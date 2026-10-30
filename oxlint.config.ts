@@ -33,7 +33,7 @@ export default defineConfig({
     // would add interfaces and imports without hiding complexity. The measured 275/48 alternative
     // would reproduce the snapshot's tightest content budget, but changing the maxima is a separate
     // decision and would leave almost no headroom. `skipComments` stays false because comments are
-    // content a reader must understand. See ADR-0041.
+    // content a reader must understand.
     "eslint/max-lines": ["warn", { max: 300, skipBlankLines: true, skipComments: false }],
     "eslint/max-lines-per-function": [
       "warn",
@@ -82,7 +82,7 @@ export default defineConfig({
     // independent readers reviewed every insertion and objected to 78, or 3.4 percent, all in
     // compact groups that the rule spread out. None is suppressed: the rule has no options, the
     // vendored plugin stays verbatim, and a disable comment with a reason is louder than the blank
-    // line it would remove. ADR-0041 records the measured cost and decision.
+    // line it would remove.
     "anti-slop/require-readable-spacing": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
 

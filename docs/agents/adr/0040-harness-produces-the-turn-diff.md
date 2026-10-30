@@ -6,11 +6,10 @@ A turn that changed a file ends by running the repository's own diff and publish
 turn's frame. Generation 0 does this itself, after the model has stopped and before the terminal
 frame, through the same project capability the turn's tools ran on.
 
-The alternative was the earlier arrangement: one sentence in the system prompt told the model to
-run `git diff` with the bash tool when the user asks what changed. That made the turn's
-diff a hope about the model. The route is a flash model at low reasoning effort, where skipping one
-clause of a five-clause prompt is an ordinary event, not a tail risk, and nothing else in the
-harness would notice. The round-2 review overturned the earlier decision that this was proved.
+The alternative was one sentence in the system prompt telling the model to run `git diff` when the
+user asks what changed. That made the diff a hope about the model: the route is a small model at low
+reasoning effort, which skips a clause of a long prompt as an ordinary event, and nothing else in
+the harness would notice.
 
 What the harness owns and what it does not:
 

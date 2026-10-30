@@ -3,17 +3,11 @@
 > **Review:** Agent-only
 
 The immutable host composes asynchronous work and recoverable failures with Effect 4. The host is
-the Worker, Cloudflare Access verification, the owner routes, the model route, the Supervisor, the
-Workspace Host, and the GitHub code. An operation that can fail in an expected way fails with a
+the Worker, the owner routes, the model route, the Supervisor, the Workspace Host, and the GitHub
+code. An operation that can fail in an expected way fails with a
 tagged error in its Effect error channel, and the code that knows what the failure means handles it
-by its tag. This replaced better-result and ADR-0035, which is deleted (Git keeps it). The owner
-asked for the port on 2026-10-12.
-
-The host moves to Effect in complete caller groups. Each group's callers move with it, and the
-better-result API it replaces is deleted in the same change. One call path uses one style from
-end to end: no path converts a better-result `Result` into an Effect and back, and no subsystem
-keeps a Promise API beside an Effect API for the same operation. Waves 1, 2 and 3 removed the last
-better-result import, and the package is gone.
+by its tag. One call path uses one style from end to end: no subsystem keeps a Promise API beside an
+Effect API for the same operation.
 
 **Boundaries stay plain.** Workers RPC copies a returned value and
 drops its behavior, and it refuses application-defined classes. SQLite rows, module maps, and
@@ -32,7 +26,7 @@ identity or a request's Durable Object stub, lives in a global layer.
 
 **What stays outside Effect.**
 
-- Pure decisions stay plain functions over plain values, as ADR-0036 requires.
+- Pure decisions stay plain functions over plain values, so decisions run in ordinary tests with no Durable Object.
 - A `transactionSync` callback stays synchronous. Where it runs an Effect at all, it uses
   `Effect.runSync`, which throws `AsyncFiberError` if a step would suspend, so the transaction
   rolls back instead of committing part of its writes. A typed refusal decided before the first
@@ -61,24 +55,15 @@ identity or a request's Durable Object stub, lives in a global layer.
 forbids the `effect` index. The index re-exports every module and keeps some unused ones in the
 Worker bundle. The Vitest workers pool loads each module again in every test file's isolate, so
 `vitest.config.ts` bundles each imported Effect module path once with esbuild and resolves imports
-to that bundle. Measured with the Worker's `fetch` running through `runAtEntryPoint`
-(`vitest run --maxWorkers=2 --testTimeout=20000` on a busy Mac):
-
-| Effect import               | Full suite | One isolate's import |
-| --------------------------- | ---------: | -------------------: |
-| none (before the port)      |     71.2 s |                    - |
-| the `effect` index          |    126.8 s |                1.3 s |
-| `effect/Effect`             |     87.1 s |               0.36 s |
-| `effect/Effect`, prebundled |     67.5 s |                23 ms |
+to that bundle. Importing the `effect` index in the Worker's `fetch` path nearly doubled the full
+suite's time; the prebundled module path costs about 23 ms per isolate.
 
 **Versions.** `effect` is pinned at exactly 4.0.0, because Foldkit 0.168.0 declares exact peers on
 `effect` 4.0.0 and `@effect/platform-browser` 4.0.0 (ADR-0046). The three move together.
 
-**Cost.** Running the Worker's `fetch` through `runAtEntryPoint` raised the upload from 744.70 KiB
-(gzip 164.95 KiB) to 805.53 KiB (gzip 178.56 KiB). The Effect spike measured about 30 KiB gzip for
-the runtime, errors, services, and layers, and about 45 KiB more for any use of `Schema`, so later
-groups use `Schema` only where it parses untrusted input. `tools/bundle-budgets.test.ts` holds the
-upload within 600 KiB gzip (ADR-0046, "Budgets").
+**Cost.** The Effect runtime, errors, services, and layers add about 30 KiB gzip to the Worker, and
+any use of `Schema` adds about 45 KiB more, so `Schema` appears only where it parses untrusted
+input. `tools/bundle-budgets.test.ts` holds the upload within its gzip limit.
 
 **Alternatives.** Keeping better-result for results and adding Effect only for concurrency would
 leave two systems for composing failures. Publishing Effect RPC or schema envelopes across Workers

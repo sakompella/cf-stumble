@@ -167,7 +167,7 @@ test("resubmitting the same passing commit returns the existing generation witho
     (await readGenerations(control)).filter(
       (generation) => generation.harnessCommit === commits.resubmitted,
     ),
-    "resubmitting an already-labeled commit must not label it twice (ADR-0030)",
+    "resubmitting an already-labeled commit must not label it twice",
   ).toHaveLength(1);
   // The already-ready candidate's second preparation check confirms the recorded outcome rather
   // than recording it again: decidePreparationCheck reports a no-op, not a fresh recording.

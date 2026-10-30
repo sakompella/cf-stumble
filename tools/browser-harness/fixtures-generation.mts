@@ -5,7 +5,7 @@ import type { JsonValue } from "../json.mjs";
  * The generation ledger the stub keeps, and what each generation command does to it.
  *
  * The drawer's whole point is concurrency: activation and rollback carry the epoch the page
- * rendered, and the Supervisor refuses a command that observed an older one (ADR-0033). A stub
+ * rendered, and the Supervisor refuses a command that observed an older one. A stub
  * with a frozen epoch could not tell a page that sends what it displays from one that sends
  * whatever the server last said, so the epoch lives here and every accepted command advances it.
  */

@@ -11,8 +11,7 @@ request. The agent may push directly or open a pull request according to the use
 repository permissions, and repository conventions. `git` and `gh` call GitHub directly; the
 Supervisor does not proxy each GitHub operation through its own API.
 
-The user signs in with GitHub through Cloudflare Access. That sign-in establishes cf-stumble
-identity; connecting a project uses a separate GitHub authorization to grant repository access. The
+Connecting a project uses a GitHub authorization that grants repository access. The
 workspace stores the resulting GitHub credential in the normal local `gh` configuration outside
 the connected repositories. The credential must not appear in a tracked file, browser response, or
 application log. Version 0 accepts the ordinary risk of giving a coding agent shell access,

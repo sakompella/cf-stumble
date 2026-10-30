@@ -81,9 +81,8 @@ async function effectPrebundle(): Promise<Plugin> {
 
 /**
  * Hegel loads a native generator through Koffi, which workerd cannot run. Properties therefore
- * run in Node, but each has a workerd sibling enforced by test/docs/props-siblings.test.ts.
- * Shell tests also run in Node, because workerd has no `node:child_process` to start `/bin/sh`.
- * tsconfig.json still typechecks both projects against the Worker globals.
+ * run in Node. Shell tests also run in Node, because workerd has no `node:child_process` to start
+ * `/bin/sh`. tsconfig.json still typechecks both projects against the Worker globals.
  *
  * The owner page's Foldkit program runs in a browser, so its tests run in Node too, and its own
  * tsconfig files typecheck it against the DOM. Foldkit imports the `effect` index, which the

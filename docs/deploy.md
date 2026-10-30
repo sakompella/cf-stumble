@@ -26,7 +26,7 @@ Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this proje
 
 ## Configuration files
 
-`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"), and no per-instance values or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build` reads it and passes. `cf deploy` passed on staging (see below). `cf dev` does not work yet.
+`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"), and no per-instance values or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build` and `cf deploy` read it. `cf dev` does not work yet.
 
 Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
 
@@ -34,8 +34,6 @@ Two Wrangler files repeat these settings, because the tools that read them do no
 - `wrangler.test.jsonc` is what the test runner reads. It leaves out the Workers AI binding.
 
 Both Wrangler files declare the Durable Objects with `exports`, not `migrations`, so a Wrangler deployment and a `cf` deployment state the same lifecycle. `test/docs/cloudflare-config-drift.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
-
-`cf deploy` was tested on a staging Worker on 2026-10-01 (cf 1.0.0-beta.9, Wrangler 4.145). `cf deploy --dry-run` passed twice, and a real `cf deploy` to an existing staging Worker succeeded with no `script_name` error. Afterward the Durable Object namespace IDs, the container application ID, the `v2` migration tag, and the Supervisor's SQLite state were unchanged. The staging WorkspaceHost data was not checked, because its new container never got an instance. A `wrangler deploy` of the `exports` configuration onto a Worker that was on `migrations` v1 and v2 also succeeded: it kept the namespace IDs and the container application, and it reported no export changes. The earlier suspicion that `cf deploy` fails like `cf dev` was wrong. The production instance of this project deploys with `cf deploy` (see "Deploy an update").
 
 `cf dev` still fails on the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object. `cf` has no `--config` flag, so a staging copy needs its own directory with `cloudflare.config.ts`, `wrangler.config.ts`, a `package.json` that declares `wrangler` and `cf`, and a `node_modules` link. Use Wrangler for the other commands `cf` lacks: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`.
 
@@ -59,8 +57,6 @@ Set them in one of two ways:
 - Run `npx wrangler secret put <NAME> --name <worker>` for each name.
 
 Every later deploy keeps them. An instance whose values are still plain-text variables must convert them with `--secrets-file`; that turns them into secrets. Running `wrangler secret put` for a name that is already a plain variable is untested.
-
-`cf deploy` stops with "Aborting the upload operation because of conflicts ... remove the --strict flag" when someone last changed the live Worker through the dashboard or the script API, and it still prints "Deploy complete". Check the exit code. `wrangler secret put` does not cause this. A Worker last deployed by Wrangler or `cf` does not hit it either. The one-path rule still applies: do not alternate `wrangler deploy` and `cf deploy` on one Worker.
 
 `scripts/deploy/check-config.sh` checks that `CF_STUMBLE_HARNESS_COMMIT` is in your shell.
 
@@ -88,8 +84,6 @@ After the deploy, compare against what you had before:
 - The Worker's Observability settings still show logs, traces, and Issues on. A configuration without `observability.issues` turns Issues off.
 - `pnpm ops:check --since 1h` prints a check mark, or only findings you can explain. A cold start can write two to four `placement-unavailable` rows. The idle stop fires ten minutes after the last work (`workspace.container.idle-stop`).
 
-If an instance first runs a version that moved the GitHub credential under `/workspace` (commits `3adf75c` to `fad987a`), the credential on that instance's old container is lost once. Authorize GitHub again from the page, or let `GH_TOKEN` reinstall it. Later deploys keep it.
-
 For a risky change, stage it first on a separate Worker with its own name and container, then delete everything you created. The procedure, with the cleanup list and the proof that only the production Worker remains, is in `.agents/skills/cf-operations/SKILL.md`, "Stage a risky change".
 
 Workers Logs keeps events for 7 days. After a deploy that changes lifecycle behavior, copy out the events you need as evidence before they expire.
@@ -108,9 +102,7 @@ The image also carries the packages your harness build needs, fetched from the l
 
 Your first submission is slow. Installing packages and bundling the harness takes most of that time. It is not stuck.
 
-The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). The times below are historical: they were measured on the smaller `standard-1` container (0.5 vCPU) before this project moved to `standard-3`, and have not been re-measured on the current size. A submission took between five and eight minutes end to end. Activating a generation took under a second, rolling back to an earlier one took a quarter of a second, and a coding turn with three tool calls took ten seconds.
-
-On the earlier `standard-1` container, a cold start added ten to sixty seconds to the first request after an idle period. That time has not been re-measured on `standard-3`.
+The workspace container is `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk). Activating or rolling back a generation takes under a second.
 
 The Workspace Host stops the container after ten minutes with no workspace work (ADR-0043), so the first request after that gap pays a cold start. An idle stop loses what a platform restart loses: files the sync does not copy into the durable store, such as `node_modules` and `/tmp`. The `workspace.container.idle-stop` event records it (`docs/agents/design/observability.md`).
 
@@ -155,7 +147,7 @@ The page checks the GitHub connection when it loads and when you press **Check a
 
 The sidebar also contains the harness project. It selects `/workspace/harness`, which is a Git clone of the harness repository. It is not a second connected repository or a separate workspace.
 
-A connection is refused when GitHub's complete tree reports more than 3,000 files or 150 MB of current-tree blobs. The existing truncated-tree and 5,000,000 KB repository-history limits still apply. This check queries GitHub's API with the `GH_TOKEN` secret. If you authorize only through the interactive device flow and never set `GH_TOKEN`, the query runs unauthenticated. GitHub answers an unauthenticated request for a private repository the same way it answers one that does not exist, so the check cannot read the repository and skips it. The clone step then measures the repository again with the workspace's own `gh` credential and refuses one over a ceiling. A repository it cannot measure is cloned anyway. See `docs/agents/design/github-connection.md`, "Connecting a repository".
+A connection is refused when the repository is over the size limits in `docs/agents/design/github-connection.md`, "Connecting a repository". Set `GH_TOKEN` so the preflight can read private repositories.
 
 To remove a connected project, send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or a project with a live turn. After the turn lease expires, it removes the project's thread, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The clone removal is best-effort: it can fail after the thread and catalog entry are already gone, leaving the project's files on disk with no project that owns them.
 
@@ -189,7 +181,7 @@ The first generation does not happen by itself. Submit it, then activate it:
 1. Send `POST /api/generations/submit` with `{"harnessCommit":"<full commit ID>"}`. Read `outcome.generation.label` from its response. The Supervisor creates the workspace as part of this submission and clones or reconciles the harness repository in `/workspace/harness`.
 2. Read the epoch from `GET /api/status`, then send `POST /api/generations/activate` with `{"observedEpoch":<epoch>,"label":<label>}`. Use the label from the submission response and the epoch from the status response. A refused activation answers with a 4xx status and `{"ok":false,"problem":{"code":...}}`: 409 `stale-epoch` means the epoch moved, so read it again and resend; 409 `not-ready` means that generation has not passed its startup check; 404 `unknown-generation` means no generation has that label.
 
-One submission extracts the requested commit, installs dependencies, builds the vendored Pi package, bundles the module map, and stores that map in the Supervisor's SQLite storage. It cold-starts the candidate and runs `GET /` against it before it reports the candidate ready. These are separate build steps, so a failure reports its phase. On the measured first cold run, submission took 321 seconds. Activation took 0.4 seconds, and the ready generation answered `GET /` in 0.3 seconds. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
+One submission extracts the requested commit, installs dependencies, builds the vendored Pi package, bundles the module map, and stores that map in the Supervisor's SQLite storage. It cold-starts the candidate and runs `GET /` against it before it reports the candidate ready. These are separate build steps, so a failure reports its phase. A failed candidate leaves the generation that was already serving in place. Repeating a submission for a commit the Supervisor already knows returns the existing generation, so retrying it is safe.
 
 ## Point the instance at your own fork
 
@@ -201,12 +193,7 @@ printf '%s' 'https://github.com/your-name/cf-stumble.git' | npx wrangler secret 
 
 An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
 
-A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving. This was checked against a deployment. A URL naming a repository that does not exist failed in about 17 seconds and left the active generation untouched.
-
-## Known untested areas
-
-- Compaction across a reload is tested locally (`test/facet/generation-0/compaction.test.ts`), not on a deployment. Pi owns compaction.
-- The Deploy to Cloudflare button flow has not been recorded against a clean account. The deployed instance has been tested after the button flow. On an empty instance, the owner submitted and activated a generation, then served it, ran a coding turn, failed a broken candidate without disturbing the active generation, and rolled back in a quarter of a second.
+A wrong URL fails safely. The first build step tries to clone it, fails, and reports a failed candidate; the generation that was serving keeps serving.
 
 ## Cost and cleanup
 

@@ -39,7 +39,7 @@ class ContainerNotStopped extends Data.TaggedError("ContainerNotStopped")<{
 type IdleStopOutcome = "stopped" | "not-running" | "skipped-busy" | "threw";
 
 /**
- * Tracks the Workspace Host's work and arms the alarm that later checks for idleness (ADR-0036: the
+ * Tracks the Workspace Host's work and arms the alarm that later checks for idleness (the
  * decision is `decideIdleStop`; this is the shell around it). It holds counters in memory only.
  *
  * When the alarm finds the container idle it stops it. The alarm is armed once per quiet period
