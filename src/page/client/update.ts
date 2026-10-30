@@ -2,7 +2,8 @@ import * as Option from "effect/Option";
 import type { Runtime } from "foldkit";
 import { FetchChatGPT, FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
 import { Message } from "./message.js";
-import { Turn, type Model } from "./model.js";
+import { EMPTY_CONVERSATION } from "./conversation.js";
+import type { Model } from "./model.js";
 import { controlHandlers, statusHandlers, submitHandlers } from "./update-generation.js";
 import {
   chatGPTHandlers,
@@ -11,8 +12,7 @@ import {
   projectHandlers,
 } from "./update-projects.js";
 import type { UpdateReturn } from "./update-shared.js";
-import { threadHandlers } from "./update-thread.js";
-import { turnHandlers } from "./update-turn.js";
+import { composerHandlers, streamHandlers } from "./update-conversation.js";
 
 const EMPTY_PANEL = { labelInput: "", status: "", sentEpoch: "", effect: "" };
 
@@ -28,19 +28,14 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     chatgpt: { connection: "", isConnected: false, maybeLogin: Option.none() },
     chatgptCallbackInput: "",
     chatgptResult: "",
-    selection: 0,
     maybeProjectId: Option.none(),
     conversationProject: "No project selected",
     conversationState: "",
-    threadRevision: "",
-    threadTurnActive: "",
-    threadMessageCount: "",
-    transcript: [],
-    isAssistantOpen: false,
+    eventsStreamId: 0,
+    conversation: EMPTY_CONVERSATION,
+    outbox: [],
     prompt: "",
-    turnCount: 0,
-    turn: Turn.Idle(),
-    turnState: "",
+    runNote: "",
     isFreshArmed: false,
     freshThreadStatus: "",
     activeGenerationLabel: "",
@@ -67,8 +62,8 @@ export function update(model: Model, message: Message): UpdateReturn {
     ...connectHandlers(model),
     ...gitHubHandlers(model),
     ...chatGPTHandlers(model),
-    ...threadHandlers(model),
-    ...turnHandlers(model),
+    ...composerHandlers(model),
+    ...streamHandlers(model),
     ...statusHandlers(model),
     ...submitHandlers(model),
     ...controlHandlers(model),

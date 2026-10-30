@@ -8,7 +8,6 @@ Used by the Stage branch of `../SKILL.md`. `<stage>` is a unique name such as `c
 git worktree add --detach /tmp/<stage> HEAD
 cd /tmp/<stage>
 pnpm install --offline --ignore-scripts
-pnpm build:pi
 mkdir -p .audit/stage        # `.audit/` is ignored by Git
 ```
 

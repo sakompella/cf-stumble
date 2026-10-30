@@ -16,17 +16,15 @@ import {
   type ChatGPTAnswer,
 } from "./fixtures-chatgpt.mjs";
 import { runGenerationCommand, statusPayload, submitGeneration } from "./fixtures-generation.mjs";
-import { threadPayload } from "./fixtures-thread.mjs";
 import { isJsonNumber, isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
-import { threadOf, type ScenarioState } from "./server-state.mjs";
+import type { ScenarioState } from "./server-state.mjs";
 
 /**
- * What the harness server answers, apart from the streaming turn.
+ * What the harness server answers, apart from the conversation routes.
  *
  * Every route reads the state the stub keeps rather than a frozen payload, because the page checks
- * its own work against it: a completed turn re-reads the thread, a submission is followed by a
- * status read, and a case that asserted on a ledger frozen at its starting epoch would pass a page
- * that never re-read anything.
+ * its own work against it: a submission is followed by a status read, and a case that asserted on
+ * a ledger frozen at its starting epoch would pass a page that never re-read anything.
  */
 
 export type RouteAnswer = Readonly<{ status: number; payload: JsonValue }>;
@@ -242,38 +240,4 @@ export function serveJsonRoute(
   );
 
   return route === undefined ? undefined : route.answer(state, body);
-}
-
-const THREAD_PATH = /^\/api\/projects\/([^/]+)\/thread$/u;
-
-const FRESH_THREAD_PATH = /^\/api\/projects\/([^/]+)\/thread\/fresh$/u;
-
-/**
- * Reading a thread, and replacing it. A fresh thread keeps the project, drops every message, and
- * moves to the next revision, which is what the Supervisor's own reset does (ADR-0038).
- */
-export function serveThreadRoutes(
-  req: IncomingMessage,
-  path: string,
-  state: ScenarioState,
-): RouteAnswer | undefined {
-  const read = THREAD_PATH.exec(path)?.[1];
-
-  if (req.method === "GET" && read !== undefined) {
-    const projectId = decodeURIComponent(read);
-
-    return { status: 200, payload: threadPayload(projectId, threadOf(state, projectId)) };
-  }
-
-  const fresh = FRESH_THREAD_PATH.exec(path)?.[1];
-
-  if (req.method === "POST" && fresh !== undefined) {
-    const projectId = decodeURIComponent(fresh);
-    const replaced = { revision: threadOf(state, projectId).revision + 1, messages: [] };
-    state.threads.set(projectId, replaced);
-
-    return { status: 200, payload: threadPayload(projectId, replaced) };
-  }
-
-  return undefined;
 }

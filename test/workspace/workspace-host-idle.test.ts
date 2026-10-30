@@ -106,6 +106,24 @@ test("a project capability leases the workspace until the end of its turn", asyn
   );
 });
 
+test("an ended project capability holds the workspace one idle limit from its end", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const result = await withHost("host-seam-lease-end", async (host, state, container) => {
+    const project = host.project({ remainingMs: PROJECT_TURN_LEASE_MS });
+    const endedAt = Date.now();
+    await project.endTurn();
+    const alarm = (await state.storage.getAlarm()) ?? 0;
+    vi.spyOn(Date, "now").mockReturnValue(alarm);
+    await host.alarm();
+
+    return { armedAfter: alarm - endedAt, destroyed: container.destroyed };
+  });
+
+  expect(result.armedAfter).toBeLessThan(WORKSPACE_IDLE_STOP_MS + 5_000);
+  expect(result.destroyed).toEqual(["idle"]);
+});
+
 test("a past-due alarm closes the Workspace and destroys the container for being idle", async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
 

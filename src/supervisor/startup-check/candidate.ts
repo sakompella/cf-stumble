@@ -1,7 +1,12 @@
 import * as Result from "effect/Result";
 import { loadMainFacet } from "../../facet/index.js";
-import type { MainFacetCapabilities, MainHarnessArtifactInput } from "../../facet/index.js";
-import { mainFacetName } from "../artifacts/index.js";
+import type {
+  MainFacetCapabilities,
+  MainFacetTarget,
+  MainHarnessArtifactInput,
+} from "../../facet/index.js";
+import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
+import { candidateFacetName } from "../artifacts/index.js";
 import { deadlineAfter, drainResponseBody, errorReason } from "./body.js";
 import type { Deadline, StartupCheckOutcome, ThrownValue } from "./body.js";
 import type { StartupCheckHost } from "./index.js";
@@ -12,7 +17,7 @@ type StartupRequestBounds = Readonly<{
 }>;
 
 type CandidateMount =
-  | Readonly<{ ok: true; fetcher: Fetcher }>
+  | Readonly<{ ok: true; fetcher: Fetcher<MainFacetTarget> }>
   | Readonly<{ ok: false; reason: string }>;
 
 /** Never touches the serving facet. */
@@ -32,7 +37,15 @@ export async function runStartupCheck(
       return { stage: "mount-failed", reason: candidate.reason };
     }
 
-    return await classifyCandidateResponse(candidate.fetcher, deadline, bounds.maxBodyBytes);
+    const response = await classifyCandidateResponse(
+      candidate.fetcher,
+      deadline,
+      bounds.maxBodyBytes,
+    );
+
+    return response.stage === "ready"
+      ? await checkPiDurableVersion(candidate.fetcher, deadline, response)
+      : response;
   } finally {
     deadline.cancel();
   }
@@ -60,6 +73,38 @@ async function classifyCandidateResponse(
   return drainResponseBody(response, deadline, maxBodyBytes);
 }
 
+/**
+ * The Supervisor's storage holds Pi Durable's schema and records, so a generation built against
+ * any other Pi Durable version is refused, including one from before Pi Durable that reports none.
+ */
+async function checkPiDurableVersion(
+  facet: Fetcher<MainFacetTarget>,
+  deadline: Deadline,
+  ready: StartupCheckOutcome,
+): Promise<StartupCheckOutcome> {
+  const reported = await Promise.race([
+    facet.piDurableVersion().then(
+      (version) => ({ kind: "reported" as const, version }),
+      () => ({ kind: "unreported" as const }),
+    ),
+    deadline.elapsed.then(() => ({ kind: "deadline" as const })),
+  ]);
+
+  if (reported.kind === "deadline") {
+    return { stage: "deadline-expired", reason: "the Pi Durable version exceeded the deadline" };
+  }
+
+  if (reported.kind === "reported" && reported.version === PI_DURABLE_VERSION) return ready;
+
+  return {
+    stage: "version-mismatch",
+    reason:
+      reported.kind === "reported"
+        ? `the generation runs Pi Durable ${reported.version}; this Supervisor stores ${PI_DURABLE_VERSION}`
+        : "the generation reports no Pi Durable version",
+  };
+}
+
 function mountCandidateFacet(
   host: StartupCheckHost,
   input: MainHarnessArtifactInput,
@@ -73,7 +118,7 @@ function mountCandidateFacet(
       return { ok: false, reason: loadedFacet.failure.code };
     }
 
-    const name = mainFacetName(harnessCommit, "candidate");
+    const name = candidateFacetName(harnessCommit);
     host.ctx.facets.abort(name, "discard prior startup-check candidate");
 
     return {

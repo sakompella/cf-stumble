@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
-import { TranscriptEntry } from "./transcript.js";
+import { Conversation } from "./conversation.js";
+import { OutboxItem } from "./transcript.js";
 
 export const Project = Schema.Struct({
   id: Schema.String,
@@ -41,31 +42,6 @@ export const ChatGPTConnection = Schema.Struct({
 
 export type ChatGPTConnection = typeof ChatGPTConnection.Type;
 
-export const ThreadFacts = Schema.Struct({
-  revision: Schema.String,
-  turnActive: Schema.String,
-  messageCount: Schema.String,
-  conversation: Schema.String,
-});
-
-export type ThreadFacts = typeof ThreadFacts.Type;
-
-/**
- * `turnId` keeps a turn's frames in their conversation: a Message for a turn the Model no longer
- * holds is dropped.
- */
-export const Turn = defineTaggedUnion({
-  Idle: {},
-  Streaming: {
-    turnId: Schema.Number,
-    projectId: Schema.String,
-    prompt: Schema.String,
-    hasTerminalFrame: Schema.Boolean,
-  },
-});
-
-export type Turn = typeof Turn.Type;
-
 export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
 export type ControlKind = typeof ControlKind.Type;
@@ -92,20 +68,20 @@ export const Model = Schema.Struct({
   chatgptCallbackInput: Schema.String,
   chatgptResult: Schema.String,
 
-  selection: Schema.Number,
   maybeProjectId: Schema.Option(Schema.String),
   conversationProject: Schema.String,
   conversationState: Schema.String,
-  threadRevision: Schema.String,
-  threadTurnActive: Schema.String,
-  threadMessageCount: Schema.String,
-  transcript: Schema.Array(TranscriptEntry),
-  isAssistantOpen: Schema.Boolean,
+  /**
+   * Names the open events stream. Selecting a project or starting a fresh thread opens a new one,
+   * and a Message from an older stream is dropped.
+   */
+  eventsStreamId: Schema.Number,
+  conversation: Conversation,
+  outbox: Schema.Array(OutboxItem),
 
   prompt: Schema.String,
-  turnCount: Schema.Number,
-  turn: Turn,
-  turnState: Schema.String,
+  /** What became of this page's last send, cancel or run, shown while no run is active. */
+  runNote: Schema.String,
   isFreshArmed: Schema.Boolean,
   freshThreadStatus: Schema.String,
 

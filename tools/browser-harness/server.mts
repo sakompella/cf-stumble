@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
 import { parseScenario, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import type { GenerationRecord, GenerationState } from "./fixtures-generation.mjs";
-import { threadSummary, type ThreadState } from "./fixtures-thread.mjs";
+import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
   acceptsHtml,
@@ -12,34 +12,29 @@ import {
   sendOwnerPage,
   sendOwnerPageScript,
   serveJsonRoute,
-  serveThreadRoutes,
 } from "./server-routes.mjs";
+import { conversationRoute, serveConversation } from "./server-conversation.mjs";
 import {
   initialState,
-  resetState,
-  threadOf,
   waitUntil,
   type RecordedRequest,
   type ScenarioState,
 } from "./server-state.mjs";
-import { serveTurn } from "./server-turn.mjs";
 
 /**
  * A local stand-in for the Worker, serving the real owner page.
  *
  * The page markup and its script file come from `src/page`, so the harness drives the code that
- * ships rather than a copy of it. Only the Supervisor is replaced, because a real turn would call
- * a paid model API. Everything the
- * page can observe about its own environment is kept identical: the same headers, the same policy
- * with a per-response nonce for the style, the script at its hashed path, and a turn that arrives
- * as newline-delimited frames over time.
+ * ships rather than a copy of it. Only the Supervisor is replaced, because a real run would call
+ * a paid model API: the conversations are real Pi Durable conversations on a faux model
+ * (`conversations.mts`). Everything the page can observe about its own environment is kept
+ * identical: the same headers, the same policy with a per-response nonce for the style, the
+ * script at its hashed path, and events that arrive as newline-delimited JSON over time.
  *
  * The controls a case uses are functions on {@link HarnessServer} rather than test-only HTTP
  * routes, because a case and this server share one Node process. The two routes under `/__harness`
  * exist for a developer driving this server by hand with curl.
  */
-
-const TURN_PATH = /^\/api\/projects\/([^/]+)\/turn$/u;
 
 export type GenerationPatch = Readonly<{
   activeLabel?: number;
@@ -53,17 +48,17 @@ export type HarnessServer = Readonly<{
   setScenario: (scenario: HarnessScenario) => void;
   requests: () => readonly RecordedRequest[];
   clearRequests: () => void;
-  barrierReached: () => boolean;
+  /** In `ready-paused`: the first tool call has written its first line and waits. */
   waitForBarrier: (timeoutMs?: number) => Promise<void>;
   release: () => void;
-  responseClosed: () => boolean;
-  waitForResponseClosed: (timeoutMs?: number) => Promise<void>;
-  thread: (projectId: string) => ThreadState;
+  /** How many events responses for the project the browser holds open. */
+  openEventStreams: (projectId: string) => number;
+  /** The project's conversation as Pi Durable stores it. */
+  entries: Conversations["entries"];
   projects: () => readonly ProjectEntry[];
   generation: () => GenerationState;
   chatgpt: () => ScenarioState["chatgpt"];
   setGeneration: (patch: GenerationPatch) => void;
-  reset: (scenario?: HarnessScenario) => void;
   close: () => Promise<void>;
 }>;
 
@@ -128,10 +123,10 @@ async function handle(
   const record = { method: req.method ?? "", path, body: parsed, status: 0 };
   state.requests.push(record);
 
-  const turn = TURN_PATH.exec(path)?.[1];
+  const conversation = conversationRoute(req.method ?? "", path);
 
-  if (req.method === "POST" && turn !== undefined) {
-    await serveTurn(res, state, { projectId: decodeURIComponent(turn), body: parsed }, record);
+  if (conversation !== undefined) {
+    await serveConversation(res, state, conversation, parsed, record);
 
     return;
   }
@@ -167,7 +162,7 @@ async function handle(
     return;
   }
 
-  const answer = serveJsonRoute(req, path, state, parsed) ?? serveThreadRoutes(req, path, state);
+  const answer = serveJsonRoute(req, path, state, parsed);
   record.status = answer?.status ?? 404;
   sendJson(res, record.status, answer?.payload ?? { ok: false, error: { code: "not-found" } });
 }
@@ -187,20 +182,17 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
     clearRequests: () => {
       state.requests = [];
     },
-    barrierReached: () => state.stream.barrierReached,
     waitForBarrier: (timeoutMs = 20_000) =>
-      waitUntil(() => state.stream.barrierReached, timeoutMs, "the turn stream to reach its hold"),
-    release: () => {
-      state.stream.released = true;
-    },
-    responseClosed: () => state.stream.responseClosed,
-    waitForResponseClosed: (timeoutMs = 20_000) =>
       waitUntil(
-        () => state.stream.responseClosed,
+        () => state.conversations.barrier.reached,
         timeoutMs,
-        "the browser to close the turn response",
+        "the tool call to reach its hold",
       ),
-    thread: (projectId) => threadSummary(threadOf(state, projectId)),
+    release: () => {
+      state.conversations.barrier.release();
+    },
+    openEventStreams: (projectId) => state.openEventStreams.get(projectId) ?? 0,
+    entries: (projectId) => state.conversations.entries(projectId),
     projects: () => [...state.projects],
     generation: () => state.generation,
     chatgpt: () => state.chatgpt,
@@ -211,17 +203,18 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
         epoch: patch.epoch ?? state.generation.epoch,
       };
     },
-    reset: (scenario) => {
-      resetState(state, scenario ?? state.scenario);
-    },
     close,
   };
 }
 
-export function startHarnessServer(initialScenario?: HarnessScenario): Promise<HarnessServer> {
-  const state = initialState(
-    initialScenario ?? parseScenario(process.env.CF_STUMBLE_HARNESS_SCENARIO) ?? "ready",
-  );
+export async function startHarnessServer(
+  initialScenario?: HarnessScenario,
+): Promise<HarnessServer> {
+  const scenario =
+    initialScenario ?? parseScenario(process.env.CF_STUMBLE_HARNESS_SCENARIO) ?? "ready";
+
+  const conversations = await openConversations(() => state.scenario);
+  const state = initialState(scenario, conversations);
 
   const server = createServer((req, res) => {
     void handle(req, res, state).catch((error: Error) => {
@@ -241,13 +234,15 @@ export function startHarnessServer(initialScenario?: HarnessScenario): Promise<H
         return;
       }
 
-      const close = (): Promise<void> =>
-        new Promise((closed) => {
+      const close = async (): Promise<void> => {
+        await new Promise<void>((closed) => {
           server.closeAllConnections();
           server.close(() => {
             closed();
           });
         });
+        await conversations.close();
+      };
 
       started(controls(state, `http://127.0.0.1:${address.port}`, close));
     });
@@ -260,5 +255,5 @@ const invokedDirectly =
 if (invokedDirectly) {
   const running = await startHarnessServer();
   console.log(`harness server on ${running.url} serving scenario "${running.scenario()}"`);
-  console.log(`switch it with: curl -X POST "${running.url}/__harness/scenario?name=timed-out"`);
+  console.log(`switch it with: curl -X POST "${running.url}/__harness/scenario?name=ready-paused"`);
 }

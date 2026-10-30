@@ -11,6 +11,7 @@ import {
   artifact,
   prepareWithModuleMap,
   submitCandidate,
+  PI_DURABLE_VERSION_METHOD,
 } from "./helpers.js";
 import { readGenerations } from "./generation-reads.js";
 
@@ -24,6 +25,7 @@ function servingArtifact(harnessCommit: string) {
     `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("candidate serving body"); }
 }
 `,
@@ -36,6 +38,7 @@ function failingArtifact(harnessCommit: string) {
     `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("candidate failed", { status: 500 }); }
 }
 `,

@@ -26,5 +26,5 @@ credential. Separate Git repositories still keep project and harness history dis
 accepts the risk that an agent with workspace access can read or change another repository; it does
 not build capability isolation between one owner's projects.
 
-The main facet reuses the vendored Pi core for streaming, tool execution, thread state, and
-compaction. The hand-written bounded turn loop is scaffolding, not the version 0 harness.
+The main facet runs Pi Durable for streaming, tool execution, thread state, and compaction
+(ADR-0048).

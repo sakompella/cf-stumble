@@ -2,7 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { initialChatGPT, type ChatGPTState } from "./fixtures-chatgpt.mjs";
 import { initialProjects, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import { INITIAL_GENERATION, type GenerationState } from "./fixtures-generation.mjs";
-import { initialThread, type StoredThread } from "./fixtures-thread.mjs";
+import type { Conversations } from "./conversations.mjs";
 import type { JsonValue } from "../json.mjs";
 
 /**
@@ -12,11 +12,8 @@ import type { JsonValue } from "../json.mjs";
  * not: a case that read `#activate-sent-epoch` would be asking the page to confirm its own claim.
  * {@link RecordedRequest} is that independent record, in arrival order and with the answer's
  * status, so a case can compare the value a reader sees against the value that left the browser.
- *
- * {@link StreamWatch} is the other half. A turn that has ended proves nothing about streaming, so
- * the server can stop mid-response and say so, hold the rest until a case releases it, and report
- * that the browser closed the response — which is how a cancelled turn is observed from outside
- * the page.
+ * `openEventStreams` counts the events responses the browser still holds open, per project, which
+ * is how a case sees from outside the page that it stopped reading one.
  */
 
 export type RecordedRequest = Readonly<{
@@ -28,52 +25,29 @@ export type RecordedRequest = Readonly<{
 
 export type RequestRecord = { method: string; path: string; body: JsonValue; status: number };
 
-export type StreamWatch = {
-  barrierReached: boolean;
-  released: boolean;
-  responseClosed: boolean;
-  framesWritten: number;
-};
-
 export type ScenarioState = {
   scenario: HarnessScenario;
   projects: ProjectEntry[];
-  readonly threads: Map<string, StoredThread>;
   generation: GenerationState;
   chatgpt: ChatGPTState;
   requests: RequestRecord[];
-  stream: StreamWatch;
+  conversations: Conversations;
+  readonly openEventStreams: Map<string, number>;
 };
 
-export function freshStreamWatch(): StreamWatch {
-  return { barrierReached: false, released: false, responseClosed: false, framesWritten: 0 };
-}
-
-export function initialState(scenario: HarnessScenario): ScenarioState {
+export function initialState(
+  scenario: HarnessScenario,
+  conversations: Conversations,
+): ScenarioState {
   return {
     scenario,
     projects: [...initialProjects(scenario)],
-    threads: new Map<string, StoredThread>(),
     generation: INITIAL_GENERATION,
     chatgpt: initialChatGPT(scenario),
     requests: [],
-    stream: freshStreamWatch(),
+    conversations,
+    openEventStreams: new Map(),
   };
-}
-
-/** Every project starts from the same saved thread; the map holds only the ones that moved. */
-export function threadOf(state: ScenarioState, projectId: string): StoredThread {
-  return state.threads.get(projectId) ?? initialThread(projectId);
-}
-
-export function resetState(state: ScenarioState, scenario: HarnessScenario): void {
-  state.scenario = scenario;
-  state.projects = [...initialProjects(scenario)];
-  state.threads.clear();
-  state.generation = INITIAL_GENERATION;
-  state.chatgpt = initialChatGPT(scenario);
-  state.requests = [];
-  state.stream = freshStreamWatch();
 }
 
 /** Poll one fact of the stub's state. A timeout names what did not happen, not a numeric code. */

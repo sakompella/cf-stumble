@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import * as Effect from "effect/Effect";
+import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import { namespaceFor } from "../../workspace-namespace-fixture.js";
@@ -97,8 +98,8 @@ test("admits one build per commit, so a concurrent request joins it instead of r
   expect(encodeModuleMap(left.success)).toBe(encodeModuleMap(right.success));
   expect(
     host.inner.requests.filter((request) => request.kind === "build-step"),
-    "one build ran its six steps once; the second caller ran none of its own",
-  ).toHaveLength(6);
+    "one build ran its steps once; the second caller ran none of its own",
+  ).toHaveLength(HARNESS_BUILD_STEP_NAMES.length);
   expect(namespace.names.every((name) => name === workspaceName)).toBe(true);
 });
 
@@ -113,7 +114,7 @@ test("builds again once the build in flight has settled", async () => {
   expect(
     host.requests.filter((request) => request.kind === "build-step"),
     "the conflict rule bounds concurrent builds; it does not cache a finished one",
-  ).toHaveLength(12);
+  ).toHaveLength(2 * HARNESS_BUILD_STEP_NAMES.length);
 });
 
 /**
@@ -139,5 +140,5 @@ test("a caller that stops waiting neither stops the build in flight nor drops it
   expect(
     host.inner.requests.filter((request) => request.kind === "build-step"),
     "the later caller joined the first build instead of starting another",
-  ).toHaveLength(6);
+  ).toHaveLength(HARNESS_BUILD_STEP_NAMES.length);
 });

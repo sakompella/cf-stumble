@@ -1,8 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  resolveAbsolute,
-  toAddressedPath,
-} from "../../src/facet/generation-0/execution-env-paths.js";
+import { resolveInWorkspace } from "../../src/facet/generation-1/execution-env-paths.js";
 import { parseAddressedPath } from "../../src/workspace/project/index.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { planProjectProvision, projectProvisionStep } from "../../src/project-provision.js";
@@ -91,15 +88,15 @@ test("the facet guard and the addressed-path space share one root", () => {
   ];
 
   for (const path of inside) {
-    const resolved = resolveAbsolute(projectDirectory(projectOne.id), path);
+    const resolved = resolveInWorkspace(projectDirectory(projectOne.id), path);
 
     if (!resolved.ok) {
       throw new Error(`${path} is inside the workspace and must resolve`);
     }
 
-    expect(resolved.value).toBe(path);
+    expect(resolved.value.absolute).toBe(path);
     expect(
-      parseAddressedPath(toAddressedPath(resolved.value)).ok,
+      parseAddressedPath(resolved.value.addressed).ok,
       "what the guard admits, the target must be able to address",
     ).toBe(true);
   }
@@ -108,17 +105,17 @@ test("the facet guard and the addressed-path space share one root", () => {
 test("a sibling repository is reachable and everything above the root is not", () => {
   const cwd = projectDirectory(projectOne.id);
 
-  expect(resolveAbsolute(cwd, `../${projectTwo.id}/README.md`)).toEqual({
+  expect(resolveInWorkspace(cwd, `../${projectTwo.id}/README.md`)).toMatchObject({
     ok: true,
-    value: `${projectDirectory(projectTwo.id)}/README.md`,
+    value: { absolute: `${projectDirectory(projectTwo.id)}/README.md` },
   });
-  expect(resolveAbsolute(cwd, "../../AGENTS.md")).toEqual({
+  expect(resolveInWorkspace(cwd, "../../AGENTS.md")).toMatchObject({
     ok: true,
-    value: MANAGED_AGENT_INSTRUCTIONS_PATH,
+    value: { absolute: MANAGED_AGENT_INSTRUCTIONS_PATH },
   });
 
   for (const escape of ["../../../etc/passwd", "/etc/passwd", `${WORKSPACE_ROOT}/../secrets`]) {
-    expect(resolveAbsolute(cwd, escape).ok, `${escape} must not resolve`).toBe(false);
+    expect(resolveInWorkspace(cwd, escape).ok, `${escape} must not resolve`).toBe(false);
   }
 });
 

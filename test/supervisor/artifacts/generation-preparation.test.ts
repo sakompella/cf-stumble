@@ -5,7 +5,12 @@ import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { activeSupervisor, labelCandidate, storeModuleMap } from "../helpers.js";
+import {
+  activeSupervisor,
+  labelCandidate,
+  storeModuleMap,
+  PI_DURABLE_VERSION_METHOD,
+} from "../helpers.js";
 import { readGeneration } from "../generation-reads.js";
 
 const commits = {
@@ -23,6 +28,7 @@ function storedModuleMap(harnessCommit: string): MainHarnessArtifactInput {
         source: `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
   fetch() { return new Response("stored candidate serving"); }
 }
 `,

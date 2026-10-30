@@ -37,19 +37,15 @@ identity or a request's Durable Object stub, lives in a global layer.
   Effect at all. An asynchronous caller lifts such a value with `Effect.fromResult`. A SQL
   exception is not a `Result`: it still escapes the callback, and the transaction rolls back.
 - A streamed response body outlives the program that returned its headers. The body owns its own
-  lifetime until the turn settles, fails, is cancelled, or reaches its deadline (ADR-0037). Its
-  `start` runs the body's program with `runResponseBody` in `src/run-entry-point.ts`, and its
-  `cancel` interrupts that program. The program's settlement runs uninterruptibly, so a cancel
-  cannot stop a turn between its thread write and the lease release. Workers RPC calls a
-  stream's `cancel` only when the stream next writes, so a turn body writes an empty line every
-  2 s while the generation is quiet, and once settled it ends the turn's capability, which kills
-  any command the generation still has running (`turn-cancel.test.ts`).
+  lifetime until its stream ends or is cancelled. Its `start` runs the body's program with
+  `runResponseBody` in `src/run-entry-point.ts`, and its `cancel` interrupts that program, as the
+  model route's stream does (`src/model-route-turn.ts`).
 - Durable state and platform alarms stay authoritative across Durable Object eviction. A fiber or
   a finalizer does not replace them, because eviction runs neither.
-- The mutable harness, vendored Pi, and vendored Computer do not use the host's Effect. A
+- The mutable harness, Pi Durable, and vendored Computer do not use the host's Effect. A
   generation may choose its own runtime under ADR-0024, and the host's use of Effect adds no
   requirement or authority for a generation under ADR-0003. The module map built from
-  `src/facet/generation-0` contains no Effect code.
+  `src/facet/generation-1` contains no Effect code.
 
 **Imports and tests.** Code imports Effect by module path, such as `effect/Effect`, and oxlint
 forbids the `effect` index. The index re-exports every module and keeps some unused ones in the

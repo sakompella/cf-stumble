@@ -4,7 +4,8 @@ type StartupCheckStage =
   | "headers-not-received"
   | "response-rejected"
   | "body-failed"
-  | "deadline-expired";
+  | "deadline-expired"
+  | "version-mismatch";
 
 export type StartupCheckOutcome =
   | { readonly stage: "ready"; readonly reason: string; readonly status: number }

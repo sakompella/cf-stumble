@@ -37,7 +37,7 @@ export const test = base.extend<OwnerPageFixtures>({
     });
 
     await page.goto(`${server.url}/`);
-    await expect(page.locator(`#${ID.conversationState}`)).toHaveText("ok");
+    await expect(page.locator(`#${ID.conversationState}`)).toHaveText("live");
     await use(page);
 
     expect(consoleErrors, "console errors the owner page reported").toEqual([]);
@@ -50,8 +50,8 @@ export function turnState(page: Page) {
   return page.locator(`#${ID.turnState}`);
 }
 
-export function threadRevision(page: Page) {
-  return page.locator(`#${ID.threadRevision}`);
+export function runActive(page: Page) {
+  return page.locator(`#${ID.threadRunActive}`);
 }
 
 export function projectButton(page: Page, projectId: string) {
@@ -59,22 +59,26 @@ export function projectButton(page: Page, projectId: string) {
 }
 
 /** The transcript entries of one role, each read as the text a reader sees under its label. */
-export function transcriptTexts(page: Page, role: "user" | "assistant") {
+export function transcriptTexts(page: Page, role: "user" | "assistant" | "terminal") {
   return page.locator(`#${ID.messageList} > li.${role} > .text`);
+}
+
+export function toolCalls(page: Page) {
+  return page.locator(`#${ID.messageList} details.tool-call`);
 }
 
 export function requestsTo(server: HarnessServer, method: "GET" | "POST", path: string) {
   return server.requests().filter((request) => request.method === method && request.path === path);
 }
 
-/** Every request the page sent to start a turn, as the stub received it. */
-export function turnPosts(server: HarnessServer) {
+/** Every message the page sent, as the stub received it. */
+export function messagePosts(server: HarnessServer) {
   return server
     .requests()
-    .filter((request) => request.method === "POST" && request.path.endsWith("/turn"));
+    .filter((request) => request.method === "POST" && request.path.endsWith("/messages"));
 }
 
-export async function sendTurn(page: Page, prompt: string): Promise<void> {
+export async function sendMessage(page: Page, prompt: string): Promise<void> {
   await page.getByLabel("prompt").fill(prompt);
   await page.getByRole("button", { name: "Send turn" }).click();
 }

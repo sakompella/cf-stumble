@@ -4,10 +4,9 @@ import { posix } from "node:path";
 import { expect, test } from "vitest";
 
 import {
-  fromAddressedPath,
-  resolveAbsolute,
-  toAddressedPath,
-} from "../../src/facet/generation-0/execution-env-paths.js";
+  fromAddressed,
+  resolveInWorkspace,
+} from "../../src/facet/generation-1/execution-env-paths.js";
 import { parseAddressedPath } from "../../src/workspace/project/resolve.js";
 
 const segment = gs.sampledFrom([
@@ -26,7 +25,7 @@ const segment = gs.sampledFrom([
 
 const cwdSegment = gs.sampledFrom(["a", "b", "workspace-x", "é", "日", "🙂"]);
 
-test("resolveAbsolute agrees with POSIX containment for generated paths", () => {
+test("resolveInWorkspace agrees with POSIX containment for generated paths", () => {
   hegel.test((tc) => {
     const cwdSuffix = tc.draw(gs.arrays(cwdSegment, { maxSize: 4 })).join("/");
     const cwd = posix.resolve("/workspace", cwdSuffix);
@@ -35,11 +34,11 @@ test("resolveAbsolute agrees with POSIX containment for generated paths", () => 
     const input = tc.draw(gs.booleans()) ? `/${path}` : path;
     const expected = posix.resolve(cwd, input);
     const inside = expected === "/workspace" || expected.startsWith("/workspace/");
-    const actual = resolveAbsolute(cwd, input);
+    const actual = resolveInWorkspace(cwd, input);
 
     expect(actual.ok).toBe(inside);
 
-    if (actual.ok) expect(actual.value).toBe(expected);
+    if (actual.ok) expect(actual.value.absolute).toBe(expected);
   });
 });
 
@@ -50,15 +49,15 @@ test("addressed paths round-trip and remain valid project addresses", () => {
       .join("/");
 
     const canonical = posix.resolve("/workspace", suffix);
-    const resolved = resolveAbsolute("/workspace", canonical);
+    const resolved = resolveInWorkspace("/workspace", canonical);
 
-    expect(resolved).toEqual({ ok: true, value: canonical });
+    expect(resolved).toMatchObject({ ok: true, value: { absolute: canonical } });
 
     if (!resolved.ok) return;
 
-    const addressed = toAddressedPath(resolved.value);
+    const { addressed } = resolved.value;
 
-    expect(fromAddressedPath(addressed)).toBe(resolved.value);
+    expect(fromAddressed(addressed)).toEqual(resolved.value);
     expect(parseAddressedPath(addressed).ok).toBe(true);
   });
 });

@@ -73,7 +73,7 @@ class RefusingBuilder implements HarnessModuleMapBuilder {
     return Effect.fail({
       code: "build-step-failed",
       harnessCommit,
-      step: "build-pi",
+      step: "build-module-map",
       exitCode: 2,
       diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
     });
@@ -198,7 +198,7 @@ test("reports a failed build and stores nothing", async () => {
   expect(outcome.problem).toEqual({
     code: "build-step-failed",
     harnessCommit: commits.failed,
-    step: "build-pi",
+    step: "build-module-map",
     exitCode: 2,
     diagnostics: { stdoutTail: "", stderrTail: "", truncated: false },
   });

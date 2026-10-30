@@ -10,6 +10,7 @@ type ProjectWorkspaceHost = Readonly<{
 
 /** A holder must duplicate the stub to keep it past the call that received it. */
 export type ProjectCapabilityStub = ProjectRpcTargetContract &
+  Disposable &
   Readonly<{ dup(): ProjectRpcTargetContract & Disposable }>;
 
 /**

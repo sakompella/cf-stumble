@@ -37,72 +37,72 @@ test("returns the active generation", async () => {
   });
 });
 
-test("returns a project's thread", async () => {
+const PROJECT = "https://cf-stumble.test/api/projects/sample-project-one";
+
+test("accepts a message with 202 and passes the project the client named", async () => {
+  let named: unknown;
+
   const response = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/projects/sample-project-one/thread"),
-    supervisor(),
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({
-    ok: true,
-    thread: {
-      projectId: "sample-project-one",
-      conversation: "[]",
-      messageCount: 0,
-      revision: 0,
-      turnActive: false,
-    },
-  });
-});
-
-test("reports a project the catalog does not have without inventing a thread", async () => {
-  const response = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/projects/project-nine/thread"),
-    supervisor(),
-  );
-
-  expect(response.status).toBe(404);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    problem: { code: "unknown-project-id" },
-  });
-});
-
-test("starts a fresh thread only on POST, and passes the id the client named", async () => {
-  let reset: string | undefined;
-
-  const fresh = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh", {
+    new Request(`${PROJECT}/messages`, {
       method: "POST",
+      body: JSON.stringify({ content: "hello", requestId: "r1" }),
     }),
     supervisor({
-      startFreshProjectThread(projectId) {
-        reset = projectId;
+      submitProjectMessage(projectId) {
+        named = projectId;
 
-        return Promise.resolve({
-          ok: true,
-          thread: {
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the route never inspects the branded id, and this stands in for the catalog's own value.
-            projectId: projectId as never,
-            conversation: "[]",
-            messageCount: 0,
-            revision: 0,
-            turnActive: false,
-            turnDeadlineAt: undefined,
-          },
-        });
+        return Promise.resolve({ ok: true, submissionId: "s1" });
       },
     }),
   );
 
-  const wrongMethod = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/projects/sample-project-one/thread/fresh"),
-    supervisor(),
+  expect(named).toBe("sample-project-one");
+  expect(response.status).toBe(202);
+  await expect(response.json()).resolves.toEqual({ ok: true, submissionId: "s1" });
+});
+
+test("streams a conversation's events as JSON lines", async () => {
+  const response = await ownerApiResponse(
+    new Request(`${PROJECT}/events`),
+    supervisor({
+      projectEvents: () =>
+        Promise.resolve({
+          ok: true,
+          events: new Response('{"type":"snapshot"}\n').body ?? new ReadableStream(),
+        }),
+    }),
   );
 
-  expect(reset).toBe("sample-project-one");
-  expect(fresh.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("application/x-ndjson");
+  await expect(response.text()).resolves.toBe('{"type":"snapshot"}\n');
+});
+
+test.each([
+  ["unknown-project-id", 404],
+  ["invalid-message", 400],
+  ["no-active-generation", 503],
+  ["generation-failed", 503],
+] as const)("answers a %s refusal with %i", async (code, status) => {
+  const response = await ownerApiResponse(
+    new Request(`${PROJECT}/abort`, { method: "POST" }),
+    supervisor({ abortProjectRun: () => Promise.resolve({ ok: false, problem: { code } }) }),
+  );
+
+  expect(response.status).toBe(status);
+  await expect(response.json()).resolves.toEqual({ ok: false, problem: { code } });
+});
+
+test("starts a fresh thread only on POST", async () => {
+  const fresh = await ownerApiResponse(
+    new Request(`${PROJECT}/thread/fresh`, { method: "POST" }),
+    supervisor({
+      freshProjectConversation: () => Promise.resolve({ ok: true, conversationId: "c2" }),
+    }),
+  );
+
+  const wrongMethod = await ownerApiResponse(new Request(`${PROJECT}/thread/fresh`), supervisor());
+
+  await expect(fresh.json()).resolves.toEqual({ ok: true, conversationId: "c2" });
   expect(wrongMethod.status).toBe(404);
 });
 

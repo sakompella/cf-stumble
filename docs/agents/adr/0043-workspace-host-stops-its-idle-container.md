@@ -17,12 +17,13 @@ Idle containers also burn CPU, because computerd's disk poll walks `/workspace` 
 **Rules.** Work counts as in flight from the start of a Host RPC (`build`, `provision`,
 `removeProject`, `ensureManagedInstructions`, `credential`, `reset`) and of each project `exec`
 until it settles, even past the turn deadline. `project()` leases the workspace until the turn
-deadline. The WebSocket and the heartbeat are not work. The alarm closes the Workspace, checks
+deadline, and the lease ends early when the capability's turn ends (`endTurn`), as when the
+Supervisor ends a run's capability at settle or abort. The WebSocket and the heartbeat are not work. The alarm closes the Workspace, checks
 again that nothing began meanwhile, and only then destroys the container. Work that begins during
 the close keeps the container, and the check repeats one limit later. A close that fails does not
 stop the destroy, because destroying the container ends the socket from the other side. The Host
-arms the alarm only while a container runs, once per quiet period, and the alarm sets no timer, so
-it cannot keep the object in memory. The container's stop is logged as the Host's own doing
+arms the alarm only while a container runs, once per quiet period or earlier when a lease ends
+early, and the alarm sets no timer, so it cannot keep the object in memory. The container's stop is logged as the Host's own doing
 (`reasonCode: "idle-stop"`), whichever way the platform's `monitor()` settles.
 
 **Cost of a stop.** The next request after a stop builds a fresh container, which takes a cold

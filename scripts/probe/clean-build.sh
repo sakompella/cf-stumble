@@ -2,8 +2,7 @@
 #
 # Clean-build probe for a labeled harness commit.
 #
-# The local `pnpm verify` gate builds Pi before anything reads it, so a developer machine always
-# has `vendor/pi-v0.84.4/dist/` and a populated `node_modules` in place. The Supervisor's build
+# A developer machine always has a populated `node_modules` in place. The Supervisor's build
 # runs `HARNESS_BUILD_CONFIGURATION.buildCommand` in a directory that `git archive` just wrote, so
 # it has neither. This script reproduces that starting state locally: it extracts a commit into a
 # temporary directory outside the repository, isolates HOME and the pnpm store, and runs the same
@@ -56,7 +55,7 @@ run_build() {
   mkdir -p "$directory" "$home"
   tar -x -C "$directory" -f "$ARCHIVE"
 
-  if [ -e "${directory}/node_modules" ] || [ -e "${directory}/vendor/pi-v0.84.4/dist" ]; then
+  if [ -e "${directory}/node_modules" ]; then
     printf 'The extracted commit already contains build output; the probe would prove nothing\n' >&2
     return 1
   fi

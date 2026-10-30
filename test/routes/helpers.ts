@@ -1,11 +1,6 @@
 import * as Effect from "effect/Effect";
 import { routeOwnerApiRequest, type OwnerApiSupervisor } from "../../src/routes/index.js";
-import {
-  emptyThread,
-  serializedThread,
-  type ProjectThreadResult,
-} from "../../src/supervisor/threads/index.js";
-import { sampleProjectOne } from "../project-fixtures.js";
+import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
 /** The owner API's answer to one request, run as the Worker's entry point runs it. */
@@ -42,15 +37,10 @@ export function ownerApiSupervisor(
     getActiveGeneration() {
       return Promise.resolve({ generation: undefined, epoch: 0 });
     },
-    getProjectThread(projectId) {
-      return Promise.resolve(unknownProjectOr(projectId));
-    },
-    startFreshProjectThread(projectId) {
-      return Promise.resolve(unknownProjectOr(projectId));
-    },
-    runProjectTurn() {
-      return Promise.reject(new Error("this test must not run a project turn"));
-    },
+    submitProjectMessage: notCalled("submit a message"),
+    projectEvents: notCalled("watch a conversation"),
+    abortProjectRun: notCalled("abort a run"),
+    freshProjectConversation: notCalled("start a fresh thread"),
     controlGeneration() {
       return Promise.reject(new Error("this test must not reach generation control"));
     },
@@ -84,13 +74,17 @@ export function ownerApiSupervisor(
   };
 }
 
-/** Stands in for the catalog: the first catalog project has a thread, and nothing else does. */
-function unknownProjectOr(projectId: string): ProjectThreadResult {
-  const firstProject = sampleProjectOne;
+/** Refuses every message as `workspace-busy` (409), so a test can tell a refusal from a bad body (400). */
+export function messageRefusingSupervisor(
+  onMessage: () => void = () => {},
+): ConversationApiSupervisor {
+  return ownerApiSupervisor({
+    submitProjectMessage: () => {
+      onMessage();
 
-  return projectId === firstProject.id
-    ? { ok: true, thread: serializedThread(emptyThread(firstProject.id)) }
-    : { ok: false, problem: { code: "unknown-project-id" } };
+      return Promise.resolve({ ok: false, problem: { code: "workspace-busy" } });
+    },
+  });
 }
 
 /** The body stays raw text so a malformed request reaches the route exactly as it was sent. */

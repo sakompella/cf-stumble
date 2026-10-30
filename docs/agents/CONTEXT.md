@@ -20,14 +20,15 @@ _Avoid_: supervisor
 A specific, labeled Git commit in the harness repository. The Supervisor records preparation checks and activation against it.
 _Avoid_: ordinary commit, revision, version
 
-**Generation 0**:
-The first labeled mutable main-harness commit, initially based closely on Pi. It is not a special rollback target.
-
 **Active generation**:
 The generation currently selected and running as the main harness.
 
 **Real turn**:
 A user interaction. A successful HTTP status alone does not prove that a streamed interaction completed.
+
+**Run**:
+The work Pi Durable does on a project's conversation from a submitted message until it settles. A run
+outlives the browser that sent the message; the Supervisor relays its wakes and ends it at a deadline.
 
 ## Repositories and files
 
@@ -43,7 +44,7 @@ A Git repository used for a piece of user work. In version 0, each project is a 
 that the user connected to cf-stumble.
 
 **Project thread**:
-The current Pi conversation for one project. Starting a fresh thread replaces its conversation and
+The current Pi Durable conversation for one project. Starting a fresh thread replaces its conversation and
 compacted context but preserves every repository in the Computer workspace. Version 0 presents one
 current thread per project.
 
@@ -53,7 +54,7 @@ workspace for the owner's harness repository and connected project repositories.
 has its own directory and Git history, but the directories are not security boundaries.
 
 **Accumulated context**:
-Pi thread history, compacted context, and other useful context that can survive a change of
+Conversation history, compacted context, and other useful context that can survive a change of
 main-harness generation.
 
 **Worker-shell**:

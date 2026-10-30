@@ -189,7 +189,7 @@ test("returns a failed build step's output tail to the owner and writes none of 
           problem: {
             code: "build-step-failed",
             harnessCommit,
-            step: "build-pi",
+            step: "build-module-map",
             exitCode: 2,
             diagnostics,
           },
