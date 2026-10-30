@@ -26,8 +26,8 @@ export class WorkspaceIdleController implements ProjectActivity {
   readonly #ports: IdleControllerPorts;
   #inFlight = 0;
   #lastActiveAtMs: number;
-  #leaseEndsAtMs: number | null = null;
-  #armed = false;
+  readonly #leases = new Set<Readonly<{ endsAtMs: number }>>();
+  #alarmAtMs: number | null = null;
   #stopping: Promise<void> | undefined;
   #finishStop: () => void = () => {};
 
@@ -54,44 +54,58 @@ export class WorkspaceIdleController implements ProjectActivity {
     this.#armForQuietPeriod();
   }
 
-  leaseUntil(endsAtMs: number): void {
-    this.#leaseEndsAtMs = Math.max(this.#leaseEndsAtMs ?? 0, endsAtMs);
+  /** Holds the workspace until `endsAtMs`; ending the lease earlier counts as activity then. */
+  lease(endsAtMs: number): () => void {
+    const lease = { endsAtMs };
+    this.#leases.add(lease);
     this.#armForQuietPeriod();
+
+    return () => {
+      if (this.#leases.delete(lease)) this.touch();
+    };
   }
 
   snapshot(): WorkspaceActivity {
+    const leaseEnds = [...this.#leases].map((lease) => lease.endsAtMs);
+
     return {
       inFlight: this.#inFlight,
       lastActiveAtMs: this.#lastActiveAtMs,
-      leaseEndsAtMs: this.#leaseEndsAtMs,
+      leaseEndsAtMs: leaseEnds.length === 0 ? null : Math.max(...leaseEnds),
     };
   }
 
   forgetAlarm(): void {
-    this.#armed = false;
+    this.#alarmAtMs = null;
   }
 
   settled(): Promise<void> {
     return this.#stopping ?? Promise.resolve();
   }
 
-  /** Activity must not fail because the alarm could not be written; the next activity retries. */
+  /**
+   * An armed alarm that fires early re-arms itself, so only an earlier due time, as an ended lease
+   * makes, writes it again. Activity must not fail because the alarm could not be written; the next
+   * activity retries.
+   */
   #armForQuietPeriod(): void {
-    if (this.#armed || !this.#ports.containerRunning()) return;
+    if (!this.#ports.containerRunning()) return;
 
     const { lastActiveAtMs, leaseEndsAtMs } = this.snapshot();
-    this.#arm(Math.max(lastActiveAtMs, leaseEndsAtMs ?? 0) + this.#ports.idleLimitMs).catch(
-      () => {},
-    );
+    const dueAtMs = Math.max(lastActiveAtMs, leaseEndsAtMs ?? 0) + this.#ports.idleLimitMs;
+
+    if (this.#alarmAtMs !== null && this.#alarmAtMs <= dueAtMs) return;
+
+    this.#arm(dueAtMs).catch(() => {});
   }
 
   async #arm(atMs: number): Promise<void> {
-    this.#armed = true;
+    this.#alarmAtMs = atMs;
 
     try {
       await this.#ports.setAlarm(atMs);
     } catch (cause) {
-      this.#armed = false;
+      this.#alarmAtMs = null;
       logRedactedCause("workspace.idle-alarm: not armed", cause);
 
       throw cause;
@@ -99,7 +113,7 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 
   async onAlarm(): Promise<void> {
-    this.#armed = false;
+    this.#alarmAtMs = null;
 
     if (!this.#ports.containerRunning() || this.#stopping !== undefined) return;
 

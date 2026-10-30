@@ -46,6 +46,8 @@ type ProjectRpcTargetOptions = Readonly<{
   remainingMs?: number;
   containerState?: ProjectContainerState;
   activity?: ProjectActivity;
+  /** Called once when the turn ends, so the workspace is not held for the rest of the budget. */
+  endLease?: () => void;
 }>;
 
 /** A timeout capped at the turn's budget means the turn ended, so the turn timer and exec timer must report the same outcome. */
@@ -80,6 +82,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   readonly #turnEndsAt: number | undefined;
   readonly #containerState: ProjectContainerState | undefined;
   readonly #activity: ProjectActivity | undefined;
+  readonly #endLease: (() => void) | undefined;
   #containerGeneration: number | undefined;
   #turnTimer: ReturnType<typeof setTimeout> | undefined;
   #ended = false;
@@ -99,6 +102,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#nonce = crypto.randomUUID();
     this.#containerState = options.containerState;
     this.#activity = options.activity;
+    this.#endLease = options.endLease;
     this.#containerGeneration = options.containerState?.generation;
     this.#turnEndsAt =
       options.remainingMs === undefined ? undefined : Date.now() + options.remainingMs;
@@ -276,6 +280,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     }
 
     this.#endResult = { killed };
+    this.#endLease?.();
 
     return ok(this.#endResult);
   }

@@ -292,7 +292,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     const remainingMs = parseProjectBudget(budget);
     const options = remainingMs === undefined ? {} : { remainingMs };
 
-    this.#idle.leaseUntil(Date.now() + (remainingMs ?? PROJECT_TURN_LEASE_MS));
+    const endLease = this.#idle.lease(Date.now() + (remainingMs ?? PROJECT_TURN_LEASE_MS));
 
     return new ProjectRpcTarget(
       computerFilesystemProvider(this.#workspace),
@@ -301,7 +301,7 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
         this.#idle,
         computerExecBackend(this.#workspace, "container-shell", this.#containerLifecycle),
       ),
-      { ...options, containerState: this.#containerLifecycle, activity: this.#idle },
+      { ...options, containerState: this.#containerLifecycle, activity: this.#idle, endLease },
     );
   }
 

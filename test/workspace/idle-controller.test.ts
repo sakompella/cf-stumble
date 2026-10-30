@@ -108,18 +108,28 @@ test("nothing is armed while no container runs", () => {
 
   idle.begin()();
   idle.touch();
-  idle.leaseUntil(50_000);
+  idle.lease(50_000);
 
   expect(alarms).toEqual([]);
 });
 
 test("a lease moves the alarm to one limit after it ends, and an earlier lease does not shorten it", () => {
   const { idle, alarms } = controller();
-  idle.leaseUntil(500_000);
-  idle.leaseUntil(300_000);
+  idle.lease(500_000);
+  idle.lease(300_000);
 
   expect(alarms).toEqual([510_000]);
   expect(idle.snapshot().leaseEndsAtMs).toBe(500_000);
+});
+
+test("an ended lease counts the idle limit from its end and moves the alarm earlier", () => {
+  const { idle, clock, alarms } = controller();
+  const end = idle.lease(500_000);
+  clock.now = 20_000;
+  end();
+
+  expect(alarms).toEqual([510_000, 30_000]);
+  expect(idle.snapshot().leaseEndsAtMs).toBeNull();
 });
 
 test("an alarm that could not be written is tried again on the next activity", async () => {
@@ -201,7 +211,7 @@ test.each([
   [
     "a turn lease taken",
     (idle: WorkspaceIdleController) => {
-      idle.leaseUntil(60_000);
+      idle.lease(60_000);
     },
   ],
 ])("%s during the close keeps the container, and the check is repeated later", async (_, busy) => {
