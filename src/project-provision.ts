@@ -135,7 +135,10 @@ export function reconcileClone(
     '  mv "$staging" "$repository"',
     "fi",
     'actual_remote="$(git --git-dir="$git_dir" config --get-all remote.origin.url || true)"',
-    'test "$actual_remote" = "$expected_remote"',
+    'if test "$actual_remote" != "$expected_remote"; then',
+    '  printf "%s has a different origin than %s\\n" "$repository" "$expected_remote" >&2',
+    "  exit 1",
+    "fi",
   ];
 }
 

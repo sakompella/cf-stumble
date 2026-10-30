@@ -133,7 +133,7 @@ test("reconciles an existing clone instead of replacing its working tree", () =>
     "nothing here may delete a directory this step did not create",
   ).toBe(false);
   expect(source, "an unexpected origin fails the step rather than being repaired").toContain(
-    'test "$actual_remote" = "$expected_remote"',
+    'if test "$actual_remote" != "$expected_remote"; then',
   );
   expect(
     source.includes("git fetch") || source.includes("git reset") || source.includes("git checkout"),
