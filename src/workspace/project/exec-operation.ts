@@ -1,5 +1,3 @@
-// oxlint-disable max-lines -- One exec operation owns framing, backend settlement, timeout,
-
 import {
   isContainerRestartedError,
   type BackendExecEvent,
@@ -7,7 +5,8 @@ import {
   type ExecBackendHandle,
   type ExecBackendInput,
 } from "./exec-backend.js";
-import { MAX_EXEC_FRAME_BYTES, type ExecEvent } from "./protocol.js";
+import { enqueueEvent, enqueueOutput } from "./exec-framing.js";
+import type { ExecEvent } from "./protocol.js";
 
 type ExecKillReason = "manual" | "end-turn" | "turn-end";
 
@@ -32,83 +31,6 @@ interface SettleState {
   readonly startedAt: number;
   killReason: ExecKillReason | null;
   resumePump: (() => void) | undefined;
-}
-
-const encoder = new TextEncoder();
-
-function encodeEvent(event: ExecEvent): Uint8Array {
-  return encoder.encode(`${JSON.stringify(event)}\n`);
-}
-
-function enqueueEvent(
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  event: ExecEvent,
-): void {
-  const frame = encodeEvent(event);
-
-  if (frame.byteLength > MAX_EXEC_FRAME_BYTES) {
-    throw new Error("exec event exceeds the protocol frame limit");
-  }
-
-  controller.enqueue(frame);
-}
-
-function largestFrameEnd(
-  kind: "stdout" | "stderr",
-  data: string,
-  start: number,
-  seq: number,
-): number {
-  let low = start + 1;
-  let high = data.length;
-  let result = start;
-
-  while (low <= high) {
-    let middle = Math.floor((low + high) / 2);
-
-    if (middle > start && isHighSurrogate(data.codePointAt(middle - 1) ?? 0)) middle -= 1;
-
-    if (middle <= start) {
-      low = start + 1;
-      continue;
-    }
-
-    const frame = encodeEvent({ kind, seq, data: data.slice(start, middle) });
-
-    if (frame.byteLength <= MAX_EXEC_FRAME_BYTES) {
-      result = middle;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-
-  if (result === start) throw new Error("exec frame limit cannot encode one character");
-
-  return result;
-}
-
-function isHighSurrogate(code: number): boolean {
-  return code >= 0xd800 && code <= 0xdbff;
-}
-
-function enqueueOutput(
-  state: SettleState,
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  kind: "stdout" | "stderr",
-  data: string,
-): void {
-  if (data === "") {
-    enqueueEvent(controller, { kind, seq: state.seq++, data });
-
-    return;
-  }
-
-  for (let start = 0; start < data.length;) {
-    const end = largestFrameEnd(kind, data, start, state.seq);
-    enqueueEvent(controller, { kind, seq: state.seq++, data: data.slice(start, end) });
-    start = end;
-  }
 }
 
 function resumePump(state: SettleState): void {
@@ -268,11 +190,11 @@ async function pumpBackendEvents(
 
       if (applyBackendRead(state, controller, settleWith, decoders, read)) return;
     }
-  } catch (error) {
+  } catch (cause) {
     settleWith(
       failed(
         state,
-        isContainerRestartedError(error) ? "container-restarted" : "backend-unavailable",
+        isContainerRestartedError(cause) ? "container-restarted" : "backend-unavailable",
       ),
       true,
     );
@@ -283,12 +205,9 @@ function startBackendExec(
   execBackend: ExecBackend,
   input: ExecBackendInput,
 ): Promise<ExecBackendHandle> {
-  try {
-    return Promise.resolve(execBackend.exec(input));
-  } catch (error) {
-    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Forwards whatever `execBackend.exec()` threw, the same shape a native rejection from it would carry.
-    return Promise.reject(error);
-  }
+  return new Promise((resolve) => {
+    resolve(execBackend.exec(input));
+  });
 }
 
 function armTimeout(
@@ -328,14 +247,14 @@ function watchBackendExec(
       state.handle = handle;
       void pumpBackendEvents(state, controller, handle, onSettle);
     },
-    (error) => {
+    (cause) => {
       settle(
         state,
         controller,
         onSettle,
         failed(
           state,
-          isContainerRestartedError(error) ? "container-restarted" : "backend-unavailable",
+          isContainerRestartedError(cause) ? "container-restarted" : "backend-unavailable",
         ),
         false,
       );

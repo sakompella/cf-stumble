@@ -5,15 +5,13 @@ export interface DeferredExec {
   readonly handle: ManualExecHandle;
   readonly promise: Promise<ExecBackendHandle>;
   resolve(): void;
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a real backend's `exec()` rejection would carry.
-  reject(error: unknown): void;
+  reject(error: Error): void;
 }
 
 export function deferredExec(): DeferredExec {
   const handle = new ManualExecHandle();
   let resolveImpl!: (handle: ManualExecHandle) => void;
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a real backend's `exec()` rejection would carry.
-  let rejectImpl!: (error: unknown) => void;
+  let rejectImpl!: (error: Error) => void;
 
   const promise = new Promise<ExecBackendHandle>((resolve, reject) => {
     resolveImpl = resolve;
@@ -26,8 +24,7 @@ export function deferredExec(): DeferredExec {
     resolve: () => {
       resolveImpl(handle);
     },
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a real backend's `exec()` rejection would carry.
-    reject: (error: unknown) => {
+    reject: (error: Error) => {
       rejectImpl(error);
     },
   };

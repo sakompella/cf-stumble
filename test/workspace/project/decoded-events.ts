@@ -1,30 +1,33 @@
-// oxlint-disable anti-slop/no-object-parameters, anti-slop/no-unknown-returns -- Test-side decoder for one exec frame: a frame is decoded JSON, so reading a property off it and returning it is an untrusted read the caller narrows.
-
+import * as Schema from "effect/Schema";
 import type { ExecEvent, ProjectFailure } from "../../../src/workspace/project/protocol.js";
 import type { ProjectRpcTarget } from "../../../src/workspace/project/target.js";
 
-function property(value: object, key: string): unknown {
-  return Object.getOwnPropertyDescriptor(value, key)?.value;
-}
+const ExecFrame = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literals(["stdout", "stderr"]),
+    seq: Schema.Number,
+    data: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("terminal"),
+    seq: Schema.Number,
+    outcome: Schema.Literal("exited"),
+    exitCode: Schema.Number,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("terminal"),
+    seq: Schema.Number,
+    outcome: Schema.Literals(["killed", "timed-out"]),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("terminal"),
+    seq: Schema.Number,
+    outcome: Schema.Literal("failed"),
+    error: Schema.Struct({ code: Schema.Literals(["backend-unavailable", "container-restarted"]) }),
+  }),
+]);
 
-function isExecEvent(value: unknown): value is ExecEvent {
-  if (typeof value !== "object" || value === null) return false;
-  const kind = property(value, "kind");
-  const outcome = property(value, "outcome");
-
-  if (typeof kind !== "string" || typeof property(value, "seq") !== "number") return false;
-
-  if (kind === "stdout" || kind === "stderr") return typeof property(value, "data") === "string";
-
-  if (kind !== "terminal" || typeof outcome !== "string") return false;
-
-  return (
-    outcome === "killed" ||
-    outcome === "timed-out" ||
-    (outcome === "exited" && typeof property(value, "exitCode") === "number") ||
-    (outcome === "failed" && typeof property(value, "error") === "object")
-  );
-}
+const decodeFrame = Schema.decodeSync(Schema.fromJsonString(ExecFrame));
 
 function decodeEvents(events: ReadableStream<Uint8Array>): ReadableStream<ExecEvent> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -42,10 +45,7 @@ function decodeEvents(events: ReadableStream<Uint8Array>): ReadableStream<ExecEv
           if (newline >= 0) {
             const frame = buffer.slice(0, newline);
             buffer = buffer.slice(newline + 1);
-            const event: unknown = JSON.parse(frame);
-
-            if (!isExecEvent(event)) throw new Error("invalid exec frame");
-            controller.enqueue(event);
+            controller.enqueue(decodeFrame(frame));
 
             return;
           }

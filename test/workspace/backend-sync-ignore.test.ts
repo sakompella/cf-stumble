@@ -1,6 +1,9 @@
-import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
+import type { BackendHandle } from "@cloudflare/computer";
 import { expect, test } from "vitest";
-import { withWorkspaceSyncIgnore } from "../../src/workspace/backend-sync-ignore.js";
+import {
+  withWorkspaceSyncIgnore,
+  type HostedBackend,
+} from "../../src/workspace/backend-sync-ignore.js";
 
 type SyncRPC = BackendHandle["rpc"]["sync"];
 
@@ -45,7 +48,7 @@ function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
     close: () => delegated(calls, "close"),
   };
 
-  const backend: WorkspaceBackend = {
+  const backend: HostedBackend<number> = {
     id: "backend",
     type: "test",
     callable: true,
@@ -59,9 +62,8 @@ function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
   return { backend, calls, handle };
 }
 
-function connect(backend: WorkspaceBackend): Promise<BackendHandle> {
-  // oxlint-disable-next-line anti-slop/no-reflect-apply, typescript/no-unsafe-return, typescript/unbound-method -- SAFETY: the fake backend ignores its host.
-  return Reflect.apply(backend.connect, backend, []);
+function connect(backend: HostedBackend<number>): Promise<BackendHandle> {
+  return backend.connect(0);
 }
 
 test("adds node_modules to a fetchChanges call with no caller ignore", async () => {

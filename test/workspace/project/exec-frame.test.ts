@@ -1,5 +1,5 @@
-// oxlint-disable anti-slop/no-runtime-typeof -- The frames under test come back across the RPC boundary, so this file narrows them before it asserts on them.
-
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
@@ -20,13 +20,12 @@ function makeTarget() {
   return { execBackend, target };
 }
 
+const decodeOutputFrame = Schema.decodeOption(
+  Schema.fromJsonString(Schema.Struct({ data: Schema.String })),
+);
+
 function outputData(frame: Uint8Array): string | undefined {
-  const value: unknown = JSON.parse(new TextDecoder().decode(frame));
-
-  if (typeof value !== "object" || value === null) return undefined;
-  const data: unknown = Object.getOwnPropertyDescriptor(value, "data")?.value;
-
-  return typeof data === "string" ? data : undefined;
+  return Option.getOrUndefined(decodeOutputFrame(new TextDecoder().decode(frame)))?.data;
 }
 
 async function frames(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array[]> {
@@ -52,9 +51,10 @@ test("a frame at the shared byte limit is accepted exactly", async () => {
 
   const data = "x".repeat(65_536 - emptyFrame.byteLength);
   const handle = execBackend.handles[0]!;
-  handle.push({ name: "stdout", data: new TextEncoder().encode(data) });
-  // oxlint-disable-next-line unicorn/prefer-single-call
-  handle.push({ name: "exit", exitCode: 0 });
+  handle.push(
+    { name: "stdout", data: new TextEncoder().encode(data) },
+    { name: "exit", exitCode: 0 },
+  );
 
   const output = await frames(started.value.events.getReader());
   expect(output[0]?.byteLength).toBe(65_536);
@@ -70,9 +70,10 @@ test("an output chunk over the frame limit splits into valid frames without losi
   if (!started.ok) throw new Error("expected startExec to succeed");
   const data = "x".repeat(65_536);
   const handle = execBackend.handles[0]!;
-  handle.push({ name: "stdout", data: new TextEncoder().encode(data) });
-  // oxlint-disable-next-line unicorn/prefer-single-call
-  handle.push({ name: "exit", exitCode: 0 });
+  handle.push(
+    { name: "stdout", data: new TextEncoder().encode(data) },
+    { name: "exit", exitCode: 0 },
+  );
 
   const output = await frames(started.value.events.getReader());
   expect(output.every((frame) => frame.byteLength <= 65_536)).toBe(true);

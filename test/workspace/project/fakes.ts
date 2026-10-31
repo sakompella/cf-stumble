@@ -195,12 +195,11 @@ type ReadResult = { done: false; value: BackendExecEvent } | { done: true };
 type QueueItem =
   | { kind: "event"; event: BackendExecEvent }
   | { kind: "end" }
-  | { kind: "error"; error: unknown };
+  | { kind: "error"; error: Error };
 
 interface Waiter {
   resolve: (result: ReadResult) => void;
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a broken backend stream would throw.
-  reject: (error: unknown) => void;
+  reject: (error: Error) => void;
 }
 
 export class ManualExecHandle implements ExecBackendHandle {
@@ -231,8 +230,8 @@ export class ManualExecHandle implements ExecBackendHandle {
     },
   };
 
-  push(event: BackendExecEvent): void {
-    this.#deliver({ kind: "event", event });
+  push(...events: BackendExecEvent[]): void {
+    for (const event of events) this.#deliver({ kind: "event", event });
   }
 
   end(): void {
@@ -240,8 +239,7 @@ export class ManualExecHandle implements ExecBackendHandle {
     this.#deliver({ kind: "end" });
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a broken backend stream would throw.
-  fail(error: unknown): void {
+  fail(error: Error): void {
     this.#ended = true;
     this.#deliver({ kind: "error", error });
   }
@@ -267,7 +265,6 @@ export class ManualExecHandle implements ExecBackendHandle {
   }
 
   #settle(item: QueueItem): Promise<ReadResult> {
-    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Test fake: `item.error` is deliberately whatever value `fail()` was given.
     if (item.kind === "error") return Promise.reject(item.error);
 
     if (item.kind === "end") return Promise.resolve({ done: true });

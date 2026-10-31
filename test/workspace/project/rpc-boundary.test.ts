@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
+import type {
+  ProjectListing,
+  ProjectLstatInfo,
+  ProjectResult,
+} from "../../../src/workspace/project/protocol.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -14,12 +19,15 @@ function makeTarget() {
   return { provider, execBackend, target };
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test helper: asserts an RPC return value is a plain clonable object, whatever its shape.
-function assertPlainlyCloneable(value: unknown): void {
+type CloneCandidate =
+  | ProjectResult<ProjectLstatInfo | ProjectListing | Uint8Array | null>
+  | Uint8Array
+  | Readonly<{ operationId: string }>;
+
+function assertPlainlyCloneable(value: CloneCandidate): void {
   expect(structuredClone(value)).toStrictEqual(value);
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Test helper: checking whether an already-untyped value is an object before inspecting its prototype.
-  if (value !== null && typeof value === "object" && !(value instanceof Uint8Array)) {
+  if (!(value instanceof Uint8Array)) {
     expect(Object.getPrototypeOf(value)).toBe(Object.prototype);
   }
 }
@@ -48,9 +56,7 @@ test("every startExec stream event is a structured-clone-safe byte frame", async
 
   const handle = execBackend.handles[0]!;
   const encoded = new TextEncoder().encode("hi\n");
-  handle.push({ name: "stdout", data: encoded });
-  // oxlint-disable-next-line unicorn/prefer-single-call -- `push` here queues one exec event per call, not array elements to merge.
-  handle.push({ name: "exit", exitCode: 0 });
+  handle.push({ name: "stdout", data: encoded }, { name: "exit", exitCode: 0 });
 
   const reader = started.value.events.getReader();
 
