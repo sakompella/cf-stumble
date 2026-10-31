@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { resolveInWorkspace } from "../../src/facet/generation-1/execution-env-paths.js";
 import { parseAddressedPath } from "../../src/workspace/project/resolve.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
-import { planProjectProvision, projectProvisionStep } from "../../src/project-provision.js";
+import { projectCloneSource } from "../../src/project-provision.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import {
@@ -60,10 +60,7 @@ test("the build configuration and project provisioning read this layout", () => 
   expect(HARNESS_BUILD_CONFIGURATION.harnessRepositoryRoot).toBe(HARNESS_DIRECTORY);
   expect(HARNESS_BUILD_CONFIGURATION.harnessGitDir).toBe(HARNESS_GIT_DIRECTORY);
 
-  const plan = planProjectProvision(projectOne);
-  const clone = projectProvisionStep(plan, "clone");
-
-  expect(clone.source).toContain(
+  expect(projectCloneSource(projectOne)).toContain(
     [
       `repository=${shellQuote(projectDirectory(projectOne.id))}`,
       `git_dir=${shellQuote(projectGitDirectory(projectOne.id))}`,

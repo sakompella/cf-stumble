@@ -8,10 +8,6 @@ export const MAX_CONCURRENT_EXECS = 8;
 
 export const MAX_EXEC_FRAME_BYTES = 65_536;
 
-export const MAX_LIST_ENTRIES = 1_000;
-
-export const MAX_LIST_BYTES = 65_536;
-
 export type ProjectErrorCode =
   | "not-found"
   | "not-directory"
@@ -41,8 +37,6 @@ export type ProjectFileInfo = {
   mtimeMs: number;
 };
 
-export type ProjectListing = { entries: readonly ProjectFileInfo[]; truncated: boolean };
-
 export type ProjectLstatInfo = ProjectFileInfo & { canonicalPath: ProjectResult<string> };
 
 export type WriteMode = "overwrite" | "append" | "create-exclusive";
@@ -71,7 +65,6 @@ export interface ProjectRpcTargetContract {
   lstat(path: string): Promise<ProjectResult<ProjectLstatInfo>>;
   readFile(path: string): Promise<ProjectResult<Uint8Array>>;
   writeFile(path: string, bytes: Uint8Array, mode: WriteMode): Promise<ProjectResult<null>>;
-  listFiles(path: string): Promise<ProjectResult<ProjectListing>>;
   startExec(
     input: StartExecWire,
   ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<Uint8Array> }>>;

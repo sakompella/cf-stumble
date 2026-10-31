@@ -1,10 +1,6 @@
 import { expect, test } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
-import type {
-  ProjectListing,
-  ProjectLstatInfo,
-  ProjectResult,
-} from "../../../src/workspace/project/protocol.js";
+import type { ProjectLstatInfo, ProjectResult } from "../../../src/workspace/project/protocol.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -20,7 +16,7 @@ function makeTarget() {
 }
 
 type CloneCandidate =
-  | ProjectResult<ProjectLstatInfo | ProjectListing | Uint8Array | null>
+  | ProjectResult<ProjectLstatInfo | Uint8Array | null>
   | Uint8Array
   | Readonly<{ operationId: string }>;
 
@@ -43,7 +39,6 @@ test("every ProjectResult is a plain, structured-clone-safe value", async () => 
   assertPlainlyCloneable(
     await target.writeFile("/f.txt", new TextEncoder().encode("y"), "overwrite"),
   );
-  assertPlainlyCloneable(await target.listFiles("/"));
   assertPlainlyCloneable(await target.kill("not-well-formed"));
 });
 

@@ -21,7 +21,10 @@ import {
 import type { ProjectProvisionRequest } from "../../../src/workspace/project-provision.js";
 import type { ProjectRemovalRequest } from "../../../src/workspace/project-removal.js";
 import { ensureManagedInstructions } from "../../../src/workspace/managed-instructions.js";
-import type { WorkspaceResult } from "../../../src/workspace/decisions.js";
+import type {
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
+} from "../../../src/workspace/decisions.js";
 
 export class HeldCommand {
   readonly fragment: string;
@@ -194,7 +197,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     );
   }
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -202,7 +205,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Effect.runPromise(executeProjectProvisionRequest({ operations: this, request }));
   }
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -216,7 +219,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     );
   }
 
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceResult> {
+  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -224,7 +227,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Effect.runPromise(executeProjectRemovalRequest({ operations: this, request }));
   }
 
-  ensureManagedInstructions(): Promise<WorkspaceResult> {
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }

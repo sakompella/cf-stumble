@@ -18,8 +18,7 @@ export type WorkspaceFailure = Readonly<{
   }>;
 }>;
 
-export type WorkspaceResult =
-  | Readonly<{ ok: true; result: Readonly<{ kind: "written" }> }>
+export type WorkspaceCommandResult =
   | Readonly<{
       ok: true;
       result: Readonly<{
@@ -29,4 +28,8 @@ export type WorkspaceResult =
         exitCode: number;
       }>;
     }>
+  | WorkspaceFailure;
+
+export type InstructionsWriteResult =
+  | Readonly<{ ok: true; result: Readonly<{ kind: "written" }> }>
   | WorkspaceFailure;

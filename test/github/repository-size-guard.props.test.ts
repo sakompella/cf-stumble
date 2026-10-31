@@ -9,14 +9,12 @@ import {
   MAX_REPOSITORY_BLOB_COUNT,
   MAX_REPOSITORY_SIZE_KB,
   REPOSITORY_SIZE_VERDICT_FUNCTION,
-  repositorySizeReason,
   repositorySizeVerdictSource,
 } from "../../src/github/index.js";
 import { parseProjectCatalog, type Project } from "../../src/project-catalog.js";
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
-  planProjectProvision,
-  projectProvisionStep,
+  projectCloneSource,
 } from "../../src/project-provision.js";
 import {
   FLOCK_STAND_IN,
@@ -161,9 +159,7 @@ function verdict(scenario: Scenario): string {
 function clone(scenario: Scenario) {
   const prepared = prepare(scenario);
 
-  const step = projectProvisionStep(planProjectProvision(project), "clone");
-
-  const ran = run(prepared, underScratch(step.source, prepared.directory));
+  const ran = run(prepared, underScratch(projectCloneSource(project), prepared.directory));
 
   const log = (name: string) =>
     existsSync(join(prepared.directory, name))
@@ -180,7 +176,21 @@ function blobs(count: number, total: number): readonly Readonly<{ type: string; 
   }));
 }
 
-test("the in-workspace verdict agrees with the Supervisor's size policy", () => {
+function expectedVerdict(
+  measured: Readonly<{ sizeKb: number; blobCount: number; blobBytes: number; truncated: boolean }>,
+): string {
+  if (measured.truncated) return "tree-truncated";
+
+  if (measured.blobCount > MAX_REPOSITORY_BLOB_COUNT) return "too-many-files";
+
+  if (measured.blobBytes > MAX_REPOSITORY_BLOB_BYTES) return "working-tree-too-large";
+
+  if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
+
+  return "within-limits";
+}
+
+test("the in-workspace verdict follows the size policy", () => {
   hegel.test(
     (tc) => {
       const sizeKb = tc.draw(
@@ -211,7 +221,7 @@ test("the in-workspace verdict agrees with the Supervisor's size policy", () => 
         tree: answered({ truncated, tree: [{ type: "tree" }, ...blobs(blobCount, blobBytes)] }),
       });
 
-      expect(shell).toBe(repositorySizeReason({ sizeKb, blobCount, blobBytes, truncated }));
+      expect(shell).toBe(expectedVerdict({ sizeKb, blobCount, blobBytes, truncated }));
     },
     { testCases: 12 },
   );

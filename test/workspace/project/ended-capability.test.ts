@@ -14,7 +14,6 @@ const CAPABILITY_CALLS = {
   lstat: (target) => target.lstat("/kept.txt"),
   readFile: (target) => target.readFile("/kept.txt"),
   writeFile: (target) => target.writeFile("/after-the-turn.txt", encode("late"), "overwrite"),
-  listFiles: (target) => target.listFiles("/"),
   startExec: (target) => target.startExec({ command: "echo late" }),
 } satisfies Record<string, Call>;
 
@@ -25,7 +24,7 @@ const LATE_CALLS = {
 
 const CLEANUP_METHODS = ["kill", "endTurn"];
 
-const FILE_METHODS = ["lstat", "readFile", "writeFile", "listFiles"] as const;
+const FILE_METHODS = ["lstat", "readFile", "writeFile"] as const;
 
 function liveTarget(remainingMs: number) {
   const provider = new FakeProjectFilesystemProvider();

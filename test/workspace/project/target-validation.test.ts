@@ -7,16 +7,7 @@ test("reflection exposes exactly six methods and no forbidden backing capability
   const { target } = makeTarget();
 
   expect(Object.getOwnPropertyNames(ProjectRpcTarget.prototype).toSorted()).toEqual(
-    [
-      "constructor",
-      "endTurn",
-      "kill",
-      "listFiles",
-      "lstat",
-      "readFile",
-      "startExec",
-      "writeFile",
-    ].toSorted(),
+    ["constructor", "endTurn", "kill", "lstat", "readFile", "startExec", "writeFile"].toSorted(),
   );
   expect(Object.keys(target)).toEqual([]);
 
@@ -36,10 +27,10 @@ test("reflection exposes exactly six methods and no forbidden backing capability
 test.each<readonly [string, string]>([
   ["a backslash", "a\\b"],
   ["a path that needs normalization", "/a/../b"],
-])("lstat/readFile/listFiles reject a malformed path: %s", async (_label, path) => {
+])("lstat/readFile reject a malformed path: %s", async (_label, path) => {
   const { provider, target } = makeTarget();
 
-  for (const call of [target.lstat(path), target.readFile(path), target.listFiles(path)]) {
+  for (const call of [target.lstat(path), target.readFile(path)]) {
     await expect(call).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
   }
 

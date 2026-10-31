@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
 import type { HarnessBuildRequest } from "../../src/harness-build.js";
-import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   provisionHarnessWorkspace,
@@ -11,7 +11,10 @@ import {
   type HarnessProvisionWorkspaceHost,
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
-import type { WorkspaceResult } from "../../src/workspace/decisions.js";
+import type {
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
+} from "../../src/workspace/decisions.js";
 import { runToResult } from "./workspace-results.js";
 
 const parsedHarnessCommit = parseHarnessCommit("5000000000000000000000000000000000000003");
@@ -30,7 +33,7 @@ class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
   started: Promise<void> | undefined;
   private resolveStarted: (() => void) | undefined;
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     this.builds.push(request);
 
     if (!this.delayedBuild) {
@@ -56,7 +59,7 @@ class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
     });
   }
 
-  ensureManagedInstructions(): Promise<WorkspaceResult> {
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     this.instructions += 1;
 
     return Promise.resolve({ ok: true, result: { kind: "written" } });
@@ -70,7 +73,7 @@ class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
 class DelayedProjectHost {
   readonly started: Promise<void>;
   private resolveStarted = () => {};
-  private resolveClone: ((result: WorkspaceResult) => void) | undefined;
+  private resolveClone: ((result: WorkspaceCommandResult) => void) | undefined;
 
   constructor() {
     this.started = new Promise((resolve) => {
@@ -78,7 +81,7 @@ class DelayedProjectHost {
     });
   }
 
-  provision(): Promise<WorkspaceResult> {
+  provision(): Promise<WorkspaceCommandResult> {
     this.resolveStarted();
 
     return new Promise((resolve) => {
@@ -168,8 +171,7 @@ test("excludes a harness provision while a project provision is in flight", asyn
   const project = runToResult(
     provisionProjectWorkspace({
       workspaceName,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: projectNamespace,
     }),
   );

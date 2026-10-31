@@ -33,7 +33,6 @@ export function tenantConnections(
       storage,
       workspaceName,
       namespace: workspace.namespace,
-      environment,
       github,
     }),
   };

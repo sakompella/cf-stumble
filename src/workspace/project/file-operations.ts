@@ -14,11 +14,7 @@ import {
 import {
   fail,
   MAX_FILE_BYTES,
-  MAX_LIST_BYTES,
-  MAX_LIST_ENTRIES,
   ok,
-  type ProjectFileInfo,
-  type ProjectListing,
   type ProjectLstatInfo,
   type ProjectResult,
   type WriteFileWire,
@@ -165,56 +161,5 @@ export function writeProjectFile(
     return ok(null);
   } catch (cause) {
     return fail(mapProviderError(cause), addressed);
-  }
-}
-
-export function listProjectDirectory(
-  provider: ProjectFilesystemProvider,
-  path: string,
-): ProjectResult<ProjectListing> {
-  const segments = parseAddressedPath(path);
-
-  if (!segments.ok) return segments;
-
-  const outcome = resolveAddressedPath(provider, segments.value, {
-    followFinalSymlink: true,
-    createMissingDirs: false,
-  });
-
-  if (!outcome.ok) return outcome;
-
-  if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments.value));
-
-  if (!outcome.value.stat.isDirectory()) {
-    return fail("not-directory", addressedPathOf(segments.value));
-  }
-
-  const directoryPath = outcome.value.path;
-
-  try {
-    const names = provider
-      .readdirSync(directoryPath, { withFileTypes: true })
-      .map((entry) => entry.name)
-      .toSorted((a, b) => a.localeCompare(b));
-
-    const entries: ProjectFileInfo[] = [];
-    let bytes = 0;
-
-    for (const name of names) {
-      const childAddressed = joinOne(addressedPathOf(segments.value), name);
-      bytes += new TextEncoder().encode(childAddressed).length;
-
-      if (entries.length >= MAX_LIST_ENTRIES || bytes > MAX_LIST_BYTES) {
-        return ok({ entries, truncated: true });
-      }
-
-      const childProviderPath = joinOne(directoryPath, name);
-      const stat = provider.lstatSync(childProviderPath);
-      entries.push(fileInfoOf(provider, name, childAddressed, childProviderPath, stat));
-    }
-
-    return ok({ entries, truncated: false });
-  } catch (cause) {
-    return fail(mapProviderError(cause), addressedPathOf(segments.value));
   }
 }

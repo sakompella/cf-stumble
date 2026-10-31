@@ -10,18 +10,10 @@ export interface ProjectStat {
   isSymbolicLink(): boolean;
 }
 
-export interface ProjectDirent {
-  name: string;
-  isFile(): boolean;
-  isDirectory(): boolean;
-  isSymbolicLink(): boolean;
-}
-
 export interface ProjectFilesystemProvider {
   lstatSync(path: string): ProjectStat;
   readlinkSync(path: string): string;
   mkdirSync(path: string): void;
-  readdirSync(path: string, options: { withFileTypes: true }): ProjectDirent[];
   openSync(path: string, flags: "w" | "a" | "wx"): number;
   writeSync(fd: number, buffer: Uint8Array): number;
   closeSync(fd: number): void;

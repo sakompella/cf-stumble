@@ -9,7 +9,7 @@ import {
 } from "../../project-catalog.js";
 import {
   provisionProjectWorkspace,
-  ProvisionStepFailed,
+  ProvisionFailed,
   type ProvisionWorkspaceNamespace,
 } from "../../workspace/index.js";
 import type { GitHubConnection } from "./github-connection.js";
@@ -34,7 +34,7 @@ export type ProvisionSources = Readonly<{
 }>;
 
 function failedStepExitCode<A, E>(result: Result.Result<A, E>): number | undefined {
-  return Result.isFailure(result) && result.failure instanceof ProvisionStepFailed
+  return Result.isFailure(result) && result.failure instanceof ProvisionFailed
     ? result.failure.exitCode
     : undefined;
 }
@@ -47,8 +47,7 @@ export function provisionOnUse(
   const { workspaceName, namespace, github } = sources;
 
   return Effect.gen(function* () {
-    const catalog = sources.catalog();
-    const resolved = resolveProject(projectId, catalog);
+    const resolved = resolveProject(projectId, sources.catalog());
 
     if (!resolved.ok) {
       return { ok: false, problem: { code: resolved.reason } } as const;
@@ -56,8 +55,7 @@ export function provisionOnUse(
 
     const provision = provisionProjectWorkspace({
       workspaceName,
-      projectId: resolved.project.id,
-      catalog,
+      project: resolved.project,
       namespace,
       signal,
     });

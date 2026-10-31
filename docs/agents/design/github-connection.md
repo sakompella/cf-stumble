@@ -12,15 +12,13 @@ The id comes from the canonical repository URL, never from a counter, so connect
 
 `Supervisor.connectProject` runs these steps in order (`src/supervisor/projects/project-connections.ts`):
 
-1. Canonicalize the URL and derive the id. Ask GitHub for the repository size and the default branch's recursive tree, and refuse a known oversized repository or truncated tree with `repository-too-large` before the workspace is asked for anything. If the lookup fails, skip this preflight.
+1. Canonicalize the URL and derive the id.
 2. Make the workspace credential usable, without a person if possible.
 3. Check that the repository is readable with `git ls-remote` through the credential helper `gh auth setup-git` configured. A clone takes the same path.
 4. Record the project in `connected_projects`.
 5. Provision the project: reconcile its clone in the workspace and rewrite the managed instructions file.
 
-The limits are 3,000 blobs, 150,000,000 total blob bytes, 5,000,000 KB repository size, and a complete tree (`src/github/repository-size.ts`). The preflight uses `GH_TOKEN` when set, not the device-flow credential, which lives inside the workspace. Without `GH_TOKEN` it is unauthenticated, GitHub allows 60 requests an hour per source address, and Workers share addresses, so the lookup can fail with `project.size-check` logging `outcome: skipped`. The connection then continues. Set `GH_TOKEN` when the preflight must run reliably.
-
-Before it makes a new clone, the clone step measures the repository again with `gh api` inside the workspace, so it reads a private repository the device flow authorized. A repository over a limit makes the step exit with code 122 before `git clone` runs, and connection and provisioning report `repository-too-large` (`src/github/repository-size-guard.ts`, `cloneProjectRepository` in `src/project-provision.ts`). Exit code 122 also means a full disk, so the code alone does not say which check refused. This check fails open: a missing `gh`, a failed or timed-out request (5 s with `timeout`), or unexpected output lets the clone continue. It never measures or removes an existing clone.
+Before it makes a new clone, the clone step measures the repository with `gh api` inside the workspace, so it reads a private repository the device flow authorized. The limits are 3,000 blobs, 150,000,000 total blob bytes, 5,000,000 KB repository size, and a complete tree. A repository over a limit makes the step exit with code 122 before `git clone` runs, and connection and provisioning report `repository-too-large` (`src/github/repository-size-guard.ts`, `cloneProjectRepository` in `src/project-provision.ts`). Exit code 122 also means a full disk, so the code alone does not say which check refused. This check fails open: a missing `gh`, a failed or timed-out request (5 s with `timeout`), or unexpected output lets the clone continue. It never measures or removes an existing clone.
 
 If provisioning fails, cf-stumble removes a project it has just recorded. Provisioning also runs when a project is used, so a workspace the platform recreated is repaired on the next turn.
 
@@ -69,7 +67,7 @@ The page sends the refresh when it loads and when the owner presses **Check agai
 | Name                     | Kind          | Purpose                                                                                                                         |
 | ------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `GITHUB_OAUTH_CLIENT_ID` | Worker secret | The GitHub OAuth app the device flow belongs to. Not sensitive. Without it, starting an authorization answers `not-configured`. |
-| `GH_TOKEN`               | Worker secret | The credential source for automated tests and unsupervised runs, and for the size preflight.                                    |
+| `GH_TOKEN`               | Worker secret | The credential source for automated tests and unsupervised runs.                                                                |
 
 Set both with `wrangler secret put`. See `docs/deploy.md`, "Instance secrets".
 

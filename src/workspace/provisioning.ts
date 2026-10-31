@@ -1,270 +1,144 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
-import type { ProjectProvisionStepName } from "../project-provision.js";
-import {
-  resolveProject,
-  type Project,
-  type ProjectCatalog,
-  type ProjectId,
-} from "../project-catalog.js";
+import type { HarnessBuildRequest } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
+import type { Project } from "../project-catalog.js";
+import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
+import type {
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
+  WorkspaceFailure,
+} from "./decisions.js";
+import type { ProjectProvisionRequest } from "./project-provision.js";
 import { provisionInWorkspace } from "./provision-exclusion.js";
 
-export { PROVISION_STALE_AFTER_MS } from "./provision-exclusion.js";
-
-export type { HarnessProvisionWorkspaceHost, ProvisionWorkspaceHost } from "./provision-plan.js";
-
-import {
-  HARNESS_PROVISION_STEP_NAMES,
-  PROJECT_PLAN_STEP_NAMES,
-  provisionRpc,
-  writeManagedInstructions,
-  type HarnessProvisionStepName,
-  type HarnessProvisionWorkspaceHost,
-  type HarnessProvisionWorkspaceNamespace,
-  type ProjectPlanStepName,
-  type ProvisionRpc,
-  type ProvisionWorkspaceHost,
-  type ProvisionWorkspaceNamespace,
-} from "./provision-plan.js";
-
-class ProjectNotInCatalog extends Data.TaggedError("ProjectNotInCatalog")<{
-  readonly reason: "invalid-project-id" | "unknown-project-id";
-}> {
-  get code(): "project-not-in-catalog" {
-    return "project-not-in-catalog";
-  }
-}
-
-export class ProvisionStepFailed extends Data.TaggedError("ProvisionStepFailed")<{
-  readonly projectId: ProjectId;
-  readonly step: ProjectProvisionStepName;
+export class ProvisionFailed extends Data.TaggedError("ProvisionFailed")<{
   readonly exitCode: number;
-}> {
-  get code(): "provision-step-failed" {
-    return "provision-step-failed";
-  }
-}
+}> {}
 
-export class ProvisionWorkspaceUnavailable extends Data.TaggedError(
-  "ProvisionWorkspaceUnavailable",
-)<{
-  readonly projectId: ProjectId;
-  readonly step: ProjectPlanStepName;
-}> {
-  get code(): "provision-workspace-unavailable" {
-    return "provision-workspace-unavailable";
-  }
-}
+export class ProvisionUnavailable extends Data.TaggedError("ProvisionUnavailable") {}
 
-export type ProjectProvisionProblem =
-  | ProjectNotInCatalog
-  | ProvisionStepFailed
-  | ProvisionWorkspaceUnavailable;
+type ProvisionProblem = ProvisionFailed | ProvisionUnavailable;
 
-type ProvisionedProjectWorkspace = Readonly<{
-  projectId: ProjectId;
-  workspaceName: string;
+type ManagedInstructionsWorkspaceHost = Readonly<{
+  ensureManagedInstructions(): Promise<InstructionsWriteResult>;
 }>;
 
-class HarnessProvisionStepFailed extends Data.TaggedError("HarnessProvisionStepFailed")<{
-  readonly step: HarnessProvisionStepName;
-  readonly exitCode: number;
-}> {
-  get code(): "harness-provision-step-failed" {
-    return "harness-provision-step-failed";
-  }
+export type ProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
+  Readonly<{
+    provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult>;
+  }>;
+
+export type HarnessProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
+  Readonly<{
+    build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult>;
+  }>;
+
+export type ProvisionWorkspaceNamespace = Readonly<{
+  getByName(name: string): ProvisionWorkspaceHost;
+}>;
+
+export type HarnessProvisionWorkspaceNamespace = Readonly<{
+  getByName(name: string): HarnessProvisionWorkspaceHost;
+}>;
+
+function hostStep<R>(
+  context: string,
+  signal: AbortSignal | undefined,
+  call: () => Promise<Readonly<{ ok: true; result: R }> | WorkspaceFailure>,
+): Effect.Effect<R, ProvisionUnavailable> {
+  return Effect.gen(function* () {
+    if (signal !== undefined && signal.aborted) return yield* new ProvisionUnavailable();
+
+    const result = yield* Effect.tryPromise({
+      try: () => boundedRpc(call, WORKSPACE_RPC_TIMEOUT_MS),
+      catch: (cause) => {
+        logRedactedCause(`${context}: workspace-unavailable`, cause);
+
+        return new ProvisionUnavailable();
+      },
+    });
+
+    if ((signal !== undefined && signal.aborted) || !result.ok)
+      return yield* new ProvisionUnavailable();
+
+    return result.result;
+  });
 }
 
-class HarnessProvisionWorkspaceUnavailable extends Data.TaggedError(
-  "HarnessProvisionWorkspaceUnavailable",
-)<{ readonly step: HarnessProvisionStepName }> {
-  get code(): "harness-provision-workspace-unavailable" {
-    return "harness-provision-workspace-unavailable";
-  }
+function commandStep(
+  context: string,
+  signal: AbortSignal | undefined,
+  call: () => Promise<WorkspaceCommandResult>,
+): Effect.Effect<void, ProvisionProblem> {
+  return hostStep(context, signal, call).pipe(
+    Effect.flatMap(({ exitCode }) =>
+      exitCode === 0 ? Effect.void : Effect.fail(new ProvisionFailed({ exitCode })),
+    ),
+  );
 }
 
-type HarnessProvisionProblem = HarnessProvisionStepFailed | HarnessProvisionWorkspaceUnavailable;
-
-type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
-
-interface ProvisionProjectWorkspaceInput {
-  readonly workspaceName: string;
-  readonly projectId: string;
-  readonly catalog?: ProjectCatalog;
-  readonly namespace: ProvisionWorkspaceNamespace;
-  readonly signal?: AbortSignal | undefined;
+function instructionsStep(
+  context: string,
+  host: ManagedInstructionsWorkspaceHost,
+  signal: AbortSignal | undefined,
+): Effect.Effect<void, ProvisionUnavailable> {
+  return Effect.asVoid(hostStep(context, signal, () => host.ensureManagedInstructions()));
 }
 
-interface ProvisionHarnessWorkspaceInput {
-  readonly workspaceName: string;
-  readonly harnessCommit: HarnessCommit;
-  readonly namespace: HarnessProvisionWorkspaceNamespace;
-  readonly signal?: AbortSignal | undefined;
-}
+export function provisionProjectWorkspace(
+  input: Readonly<{
+    workspaceName: string;
+    project: Project;
+    namespace: ProvisionWorkspaceNamespace;
+    signal?: AbortSignal | undefined;
+  }>,
+): Effect.Effect<void, ProvisionProblem> {
+  const { project, signal } = input;
 
-const STEP_RESULT_KIND = {
-  clone: "command",
-  instructions: "written",
-} as const satisfies Record<ProjectPlanStepName, "command" | "written">;
+  return provisionInWorkspace({
+    workspaceName: input.workspaceName,
+    signal,
+    aborted: new ProvisionUnavailable(),
+    run: Effect.gen(function* () {
+      const host = input.namespace.getByName(input.workspaceName);
 
-function runProjectHostStep(
-  host: ProvisionWorkspaceHost,
-  project: Project,
-  step: ProjectPlanStepName,
-): ProvisionRpc {
-  return step === "instructions"
-    ? writeManagedInstructions(host)
-    : provisionRpc(() =>
+      yield* commandStep(`project-provision.clone (${project.id})`, signal, () =>
         host.provision({
           kind: "provision-project",
           projectId: project.id,
           repositoryUrl: project.repositoryUrl,
-          step,
         }),
       );
-}
 
-function runProjectStep(
-  host: ProvisionWorkspaceHost,
-  project: Project,
-  step: ProjectPlanStepName,
-  signal: AbortSignal | undefined,
-): Effect.Effect<ProjectPlanStepName, ProjectProvisionProblem> {
-  const projectId = project.id;
-  const unavailable = new ProvisionWorkspaceUnavailable({ projectId, step });
-
-  return Effect.gen(function* () {
-    if (signal !== undefined && signal.aborted) return yield* unavailable;
-
-    const result = yield* runProjectHostStep(host, project, step).pipe(
-      Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
-        logRedactedCause(
-          `project-provision.${step}: provision-workspace-unavailable (${projectId})`,
-          cause,
-        );
-
-        return Effect.fail(unavailable);
-      }),
-    );
-
-    if (
-      (signal !== undefined && signal.aborted) ||
-      !result.ok ||
-      result.result.kind !== STEP_RESULT_KIND[step]
-    ) {
-      return yield* unavailable;
-    }
-
-    if (step === "clone" && result.result.kind === "command" && result.result.exitCode !== 0) {
-      return yield* new ProvisionStepFailed({
-        projectId,
-        step,
-        exitCode: result.result.exitCode,
-      });
-    }
-
-    return step;
-  });
-}
-
-function runHarnessHostStep(
-  host: HarnessProvisionWorkspaceHost,
-  harnessCommit: HarnessCommit,
-  step: HarnessProvisionStepName,
-): ProvisionRpc {
-  return step === "provision"
-    ? provisionRpc(() => host.build({ kind: "build-step", harnessCommit, step }))
-    : writeManagedInstructions(host);
-}
-
-function runHarnessStep(
-  host: HarnessProvisionWorkspaceHost,
-  harnessCommit: HarnessCommit,
-  step: HarnessProvisionStepName,
-  signal: AbortSignal | undefined,
-): Effect.Effect<HarnessProvisionStepName, HarnessProvisionProblem> {
-  const unavailable = new HarnessProvisionWorkspaceUnavailable({ step });
-
-  return Effect.gen(function* () {
-    if (signal !== undefined && signal.aborted) return yield* unavailable;
-
-    const result = yield* runHarnessHostStep(host, harnessCommit, step).pipe(
-      Effect.catchTag("WorkspaceRpcFailed", ({ cause }) => {
-        logRedactedCause(`harness-provision.${step}: workspace-unavailable`, cause);
-
-        return Effect.fail(unavailable);
-      }),
-    );
-
-    if ((signal !== undefined && signal.aborted) || !result.ok) return yield* unavailable;
-
-    if (step === "provision") {
-      if (result.result.kind !== "command") return yield* unavailable;
-
-      if (result.result.exitCode !== 0) {
-        return yield* new HarnessProvisionStepFailed({ step, exitCode: result.result.exitCode });
-      }
-    } else if (result.result.kind !== "written") {
-      return yield* unavailable;
-    }
-
-    return step;
-  });
-}
-
-export function provisionProjectWorkspace(
-  input: ProvisionProjectWorkspaceInput,
-): Effect.Effect<ProvisionedProjectWorkspace, ProjectProvisionProblem> {
-  const resolved = resolveProject(input.projectId, input.catalog);
-
-  if (!resolved.ok) return Effect.fail(new ProjectNotInCatalog({ reason: resolved.reason }));
-
-  return provisionInWorkspace({
-    workspaceName: input.workspaceName,
-    signal: input.signal,
-    aborted: new ProvisionWorkspaceUnavailable({ projectId: resolved.project.id, step: "clone" }),
-    run: provisionResolvedProject(input, resolved.project),
+      yield* instructionsStep(`project-provision.instructions (${project.id})`, host, signal);
+    }),
   });
 }
 
 export function provisionHarnessWorkspace(
-  input: ProvisionHarnessWorkspaceInput,
-): Effect.Effect<ProvisionedHarnessWorkspace, HarnessProvisionProblem> {
+  input: Readonly<{
+    workspaceName: string;
+    harnessCommit: HarnessCommit;
+    namespace: HarnessProvisionWorkspaceNamespace;
+    signal?: AbortSignal | undefined;
+  }>,
+): Effect.Effect<void, ProvisionProblem> {
+  const { harnessCommit, signal } = input;
+
   return provisionInWorkspace({
     workspaceName: input.workspaceName,
-    signal: input.signal,
-    aborted: new HarnessProvisionWorkspaceUnavailable({ step: "provision" }),
-    run: provisionResolvedHarness(input),
-  });
-}
+    signal,
+    aborted: new ProvisionUnavailable(),
+    run: Effect.gen(function* () {
+      const host = input.namespace.getByName(input.workspaceName);
 
-function provisionResolvedProject(
-  input: ProvisionProjectWorkspaceInput,
-  project: Project,
-): Effect.Effect<ProvisionedProjectWorkspace, ProjectProvisionProblem> {
-  return Effect.gen(function* () {
-    const host = input.namespace.getByName(input.workspaceName);
+      yield* commandStep("harness-provision.provision", signal, () =>
+        host.build({ kind: "build-step", harnessCommit, step: "provision" }),
+      );
 
-    for (const step of PROJECT_PLAN_STEP_NAMES) {
-      yield* runProjectStep(host, project, step, input.signal);
-    }
-
-    return { projectId: project.id, workspaceName: input.workspaceName };
-  });
-}
-
-function provisionResolvedHarness(
-  input: ProvisionHarnessWorkspaceInput,
-): Effect.Effect<ProvisionedHarnessWorkspace, HarnessProvisionProblem> {
-  return Effect.gen(function* () {
-    const host = input.namespace.getByName(input.workspaceName);
-
-    for (const step of HARNESS_PROVISION_STEP_NAMES) {
-      yield* runHarnessStep(host, input.harnessCommit, step, input.signal);
-    }
-
-    return { workspaceName: input.workspaceName };
+      yield* instructionsStep("harness-provision.instructions", host, signal);
+    }),
   });
 }

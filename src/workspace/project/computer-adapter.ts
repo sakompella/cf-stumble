@@ -7,7 +7,7 @@ import type {
   ExecBackendHandle,
   ExecBackendInput,
 } from "./exec-backend.js";
-import type { ProjectDirent, ProjectFilesystemProvider, ProjectTransactions } from "./provider.js";
+import type { ProjectFilesystemProvider, ProjectTransactions } from "./provider.js";
 
 type RuntimeReader = Readonly<{
   read(): Promise<
@@ -34,12 +34,6 @@ export type ExecWorkspace = Readonly<{
   }>;
 }>;
 
-function isDirent<Entry extends string | ProjectDirent>(
-  entry: Entry,
-): entry is Exclude<Entry, string> {
-  return typeof entry !== "string";
-}
-
 export function computerFilesystemProvider(workspace: Workspace): ProjectFilesystemProvider {
   const provider = workspace.provider();
 
@@ -49,8 +43,6 @@ export function computerFilesystemProvider(workspace: Workspace): ProjectFilesys
     mkdirSync: (path) => {
       provider.mkdirSync(path);
     },
-    readdirSync: (path, options) =>
-      provider.readdirSync(path, options).filter((entry) => isDirent(entry)),
     openSync: (path, flags) => provider.openSync(path, flags),
     writeSync: (fd, buffer) => provider.writeSync(fd, buffer),
     closeSync: (fd) => {

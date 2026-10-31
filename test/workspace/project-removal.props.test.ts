@@ -2,11 +2,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
-import {
-  planProjectProvision,
-  projectProvisionLockPath,
-  projectProvisionStep,
-} from "../../src/project-provision.js";
+import { projectCloneSource, projectProvisionLockPath } from "../../src/project-provision.js";
 import { planProjectRemovalRequest } from "../../src/workspace/project-removal.js";
 import { projectDirectory } from "../../src/workspace-layout.js";
 import { sampleProjectOne } from "../project-fixtures.js";
@@ -101,12 +97,6 @@ function removalSource(): string {
     .source;
 }
 
-function cloneSource(): string {
-  const step = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
-
-  return step.source;
-}
-
 test("a removal waits while another process holds the project's lock", async () => {
   const run = prepare();
   const held = join(run.root, "held");
@@ -141,7 +131,7 @@ test("a clone that starts during a removal waits and survives it", async () => {
   const removed = exited(start(run, removalSource(), true));
   await untilExists(join(run.root, "rm-started"));
 
-  const cloned = exited(start(run, cloneSource()));
+  const cloned = exited(start(run, projectCloneSource(sampleProjectOne)));
   await pause(500);
 
   expect(existsSync(join(run.root, "git.log")), "no clone starts while the removal runs").toBe(
@@ -164,7 +154,7 @@ test("a clone waits for a removal whose shell was killed while its rm still runs
   removal.kill("SIGKILL");
   await removalExited;
 
-  const cloned = exited(start(run, cloneSource()));
+  const cloned = exited(start(run, projectCloneSource(sampleProjectOne)));
   await pause(500);
 
   expect(

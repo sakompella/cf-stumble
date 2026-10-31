@@ -3,20 +3,16 @@ import {
   WORKSPACE_RPC_TIMEOUT_MARGIN_MS,
   WORKSPACE_RPC_TIMEOUT_MS,
 } from "../workspace-command-timeout.js";
-import { HARNESS_PROVISION_STEP_NAMES, PROJECT_PLAN_STEP_NAMES } from "./provision-plan.js";
 
 type ActiveProvision = Readonly<{
   operation: Promise<unknown>;
   startedAt: number;
 }>;
 
-const PROVISION_PLAN_STEP_COUNT = Math.max(
-  PROJECT_PLAN_STEP_NAMES.length,
-  HARNESS_PROVISION_STEP_NAMES.length,
-);
+const HOST_CALLS_PER_PROVISION = 2;
 
 export const PROVISION_STALE_AFTER_MS =
-  PROVISION_PLAN_STEP_COUNT * WORKSPACE_RPC_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
+  HOST_CALLS_PER_PROVISION * WORKSPACE_RPC_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
 const activeProvisions = new Map<string, ActiveProvision>();
 

@@ -1,10 +1,6 @@
 import * as Effect from "effect/Effect";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import {
-  planProjectProvision,
-  projectProvisionStep,
-  type ProjectProvisionStepName,
-} from "../project-provision.js";
+import { projectCloneSource } from "../project-provision.js";
 import {
   canonicalRepositoryUrl,
   parseProjectId,
@@ -19,20 +15,15 @@ export type ProjectProvisionRequest = Readonly<{
   kind: "provision-project";
   projectId: string;
   repositoryUrl: string;
-  step: ProjectProvisionStepName;
-}>;
-
-type ParsedProjectProvisionRequest = Readonly<{
-  kind: "provision-project";
-  project: Project;
-  step: ProjectProvisionStepName;
 }>;
 
 function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
 }
 
-function parsedProject(request: ProjectProvisionRequest): Project | undefined {
+export function parseProjectProvisionRequest(
+  request: ProjectProvisionRequest,
+): Project | WorkspaceFailure {
   const projectId = parseProjectId(request.projectId);
   const repositoryUrl = canonicalRepositoryUrl(request.repositoryUrl);
 
@@ -41,29 +32,17 @@ function parsedProject(request: ProjectProvisionRequest): Project | undefined {
     repositoryUrl === undefined ||
     projectIdForRepository(repositoryUrl) !== projectId
   ) {
-    return undefined;
+    return invalidRequest();
   }
 
   return { id: projectId, displayName: projectId, repositoryUrl };
 }
 
-export function parseProjectProvisionRequest(
-  request: ProjectProvisionRequest,
-): ParsedProjectProvisionRequest | WorkspaceFailure {
-  const project = parsedProject(request);
-
-  if (project === undefined) return invalidRequest();
-
-  return { kind: "provision-project", project, step: request.step };
-}
-
-export function planProjectProvisionRequest(request: ParsedProjectProvisionRequest): WorkspacePlan {
-  const step = projectProvisionStep(planProjectProvision(request.project), request.step);
-
+export function planProjectProvisionRequest(project: Project): WorkspacePlan {
   return {
     kind: "run-command",
-    source: step.source,
-    cwd: step.cwd,
+    source: projectCloneSource(project),
+    cwd: "/",
     timeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
   };
 }

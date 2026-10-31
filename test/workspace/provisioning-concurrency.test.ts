@@ -1,7 +1,7 @@
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
 import { delayedProvisionHost, NeverSettlingProvisionHost } from "./provisioning-fakes.js";
@@ -15,8 +15,7 @@ test("serializes different projects in one shared workspace", async () => {
   const first = runToResult(
     provisionProjectWorkspace({
       workspaceName: sharedWorkspace,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace,
     }),
   );
@@ -26,8 +25,7 @@ test("serializes different projects in one shared workspace", async () => {
   const second = runToResult(
     provisionProjectWorkspace({
       workspaceName: sharedWorkspace,
-      projectId: sampleProjectTwo.id,
-      catalog: sampleCatalog,
+      project: sampleProjectTwo,
       namespace,
     }),
   );
@@ -55,8 +53,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
   const first = runToResult(
     provisionProjectWorkspace({
       workspaceName,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
       signal: controller.signal,
     }),
@@ -68,8 +65,7 @@ test("serializes replacement provisioning until an aborted run has finished", as
   const replacement = runToResult(
     provisionProjectWorkspace({
       workspaceName,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: namespaceFor(delayed.host),
     }),
   );
@@ -95,8 +91,7 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
   const first = runToResult(
     provisionProjectWorkspace({
       workspaceName: tenantWorkspaceName("never-settling-original"),
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace,
     }),
   );
@@ -109,8 +104,7 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
     const retry = runToResult(
       provisionProjectWorkspace({
         workspaceName: tenantWorkspaceName("never-settling-original"),
-        projectId: sampleProjectOne.id,
-        catalog: sampleCatalog,
+        project: sampleProjectOne,
         namespace,
         signal: controller.signal,
       }),
@@ -129,9 +123,7 @@ test("does not queue retries behind a never-settling provision RPC", async () =>
     expect(outcome).not.toBe("timed-out");
 
     if (outcome !== "timed-out") {
-      expect(Result.isFailure(outcome) && outcome.failure.code).toBe(
-        "provision-workspace-unavailable",
-      );
+      expect(Result.isFailure(outcome) && outcome.failure._tag).toBe("ProvisionUnavailable");
     }
   }
 

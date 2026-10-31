@@ -2,10 +2,8 @@ import { expect, test } from "vitest";
 import {
   holdProvisionLock,
   MANAGED_AGENT_INSTRUCTIONS,
-  PROJECT_PROVISION_STEP_NAMES,
-  planProjectProvision,
+  projectCloneSource,
   projectProvisionLockPath,
-  projectProvisionStep,
 } from "../../src/project-provision.js";
 import {
   parseProjectId,
@@ -13,7 +11,6 @@ import {
   PROJECT_ID_LIMIT,
 } from "../../src/project-catalog.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
-import type { Project } from "../../src/project-catalog.js";
 import { shellQuote } from "../../src/shell-quote.js";
 import {
   HARNESS_DIRECTORY,
@@ -25,34 +22,18 @@ const projectOne = sampleProjectOne;
 
 const projectTwo = sampleProjectTwo;
 
-function planFor(project: Project) {
-  return planProjectProvision(project);
-}
-
-function cloneSource(project: Project): string {
-  return projectProvisionStep(planFor(project), "clone").source;
-}
-
-test("plans only the clone, with no dependency step", () => {
-  const plan = planFor(projectOne);
-
-  expect(plan.projectId).toBe(projectOne.id);
-  expect(plan.steps.map((step) => step.name)).toEqual(["clone"]);
-  expect(PROJECT_PROVISION_STEP_NAMES).toEqual(["clone"]);
-});
-
 test("clones the repository the catalog names for the project", () => {
-  expect(cloneSource(projectOne)).toContain(
+  expect(projectCloneSource(projectOne)).toContain(
     `expected_remote=${shellQuote(projectOne.repositoryUrl)}`,
   );
-  expect(cloneSource(projectTwo)).toContain(
+  expect(projectCloneSource(projectTwo)).toContain(
     `expected_remote=${shellQuote(projectTwo.repositoryUrl)}`,
   );
-  expect(cloneSource(projectOne)).not.toContain(projectTwo.repositoryUrl);
+  expect(projectCloneSource(projectOne)).not.toContain(projectTwo.repositoryUrl);
 });
 
 test("uses a shallow blobless single-branch clone", () => {
-  const source = cloneSource(projectOne);
+  const source = projectCloneSource(projectOne);
 
   expect(source).toContain(
     'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
@@ -60,7 +41,7 @@ test("uses a shallow blobless single-branch clone", () => {
 });
 
 test("marks a clone that runs out of disk as a repository size failure", () => {
-  const source = cloneSource(projectOne);
+  const source = projectCloneSource(projectOne);
 
   expect(source).toContain(
     "grep -Eiq 'no space left on device|disk quota exceeded|not enough space'",
@@ -75,7 +56,7 @@ test("quotes an interpolated repository URL the catalog would accept", () => {
     throw new Error("this test needs a URL the catalog accepts and the shell would misread");
   }
 
-  const source = cloneSource({ ...projectOne, repositoryUrl: hostile });
+  const source = projectCloneSource({ ...projectOne, repositoryUrl: hostile });
 
   expect(source).toContain(`expected_remote=${shellQuote(hostile)}`);
   expect(
@@ -86,7 +67,7 @@ test("quotes an interpolated repository URL the catalog would accept", () => {
 });
 
 test("reconciles an existing clone instead of replacing its working tree", () => {
-  const source = cloneSource(projectOne);
+  const source = projectCloneSource(projectOne);
 
   expect(source).toContain(`lock=${shellQuote(projectProvisionLockPath(projectOne.id))}\n`);
   expect(source.indexOf(holdProvisionLock().join("\n"))).toBeLessThan(
@@ -152,8 +133,8 @@ test("gives each project its own directory inside the one workspace", () => {
   const one = projectDirectory(projectOne.id);
   const two = projectDirectory(projectTwo.id);
 
-  expect(cloneSource(projectOne)).toContain(`repository=${shellQuote(one)}\n`);
-  expect(cloneSource(projectOne)).toContain(`git_dir=${shellQuote(`${one}/.git`)}\n`);
+  expect(projectCloneSource(projectOne)).toContain(`repository=${shellQuote(one)}\n`);
+  expect(projectCloneSource(projectOne)).toContain(`git_dir=${shellQuote(`${one}/.git`)}\n`);
   expect(one).not.toBe(two);
   expect(
     [one, two, HARNESS_DIRECTORY].some((directory, index, all) =>
@@ -161,8 +142,8 @@ test("gives each project its own directory inside the one workspace", () => {
     ),
     "no repository may sit inside another",
   ).toBe(false);
-  expect(cloneSource(projectOne)).not.toContain(projectDirectory(projectTwo.id));
-  expect(cloneSource(projectOne)).not.toContain(HARNESS_DIRECTORY);
+  expect(projectCloneSource(projectOne)).not.toContain(projectDirectory(projectTwo.id));
+  expect(projectCloneSource(projectOne)).not.toContain(HARNESS_DIRECTORY);
 });
 
 test("the longest project id still gives a lock file name the filesystem accepts", () => {

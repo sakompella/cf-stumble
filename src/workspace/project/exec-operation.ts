@@ -8,19 +8,11 @@ import {
 import { enqueueEvent, enqueueOutput } from "./exec-framing.js";
 import type { ExecEvent } from "./protocol.js";
 
-type ExecKillReason = "manual" | "end-turn" | "turn-end";
-
-export type ExecSettlement = Readonly<{
-  outcome: Extract<ExecEvent, { kind: "terminal" }>["outcome"];
-  exitCode: number | null;
-  errorCode: "backend-unavailable" | "container-restarted" | null;
-  durationMs: number;
-  endedBy: ExecKillReason | null;
-}>;
+type TerminalEvent = Extract<ExecEvent, { kind: "terminal" }>;
 
 export interface ExecOperation {
   readonly events: ReadableStream<Uint8Array>;
-  requestKill(reason?: ExecKillReason): void;
+  requestKill(): void;
 }
 
 interface SettleState {
@@ -28,8 +20,6 @@ interface SettleState {
   seq: number;
   timer: ReturnType<typeof setTimeout> | undefined;
   handle: ExecBackendHandle | undefined;
-  readonly startedAt: number;
-  killReason: ExecKillReason | null;
   resumePump: (() => void) | undefined;
 }
 
@@ -42,8 +32,8 @@ function resumePump(state: SettleState): void {
 function settle(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  onSettle: (settlement: ExecSettlement) => void,
-  outcome: ExecEvent,
+  onSettle: () => void,
+  outcome: TerminalEvent,
   killBackend: boolean,
 ): void {
   if (state.settled) return;
@@ -62,21 +52,13 @@ function settle(
     void state.handle.kill().catch(() => {});
   }
 
-  const terminal = outcome.kind === "terminal" ? outcome : undefined;
-  onSettle({
-    outcome: terminal?.outcome ?? "failed",
-    exitCode: terminal?.outcome === "exited" ? terminal.exitCode : null,
-    errorCode: terminal?.outcome === "failed" ? terminal.error.code : null,
-    durationMs: Math.max(0, Date.now() - state.startedAt),
-    endedBy:
-      terminal?.outcome === "killed" || terminal?.outcome === "timed-out" ? state.killReason : null,
-  });
+  onSettle();
 }
 
 function failed(
   state: SettleState,
   code: "backend-unavailable" | "container-restarted" = "backend-unavailable",
-): ExecEvent {
+): TerminalEvent {
   return {
     kind: "terminal",
     seq: state.seq++,
@@ -110,7 +92,7 @@ function flushDecoders(
 function applyBackendRead(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  settleWith: (outcome: ExecEvent, killBackend: boolean) => void,
+  settleWith: (outcome: TerminalEvent, killBackend: boolean) => void,
   decoders: Decoders,
   read: { done: false; value: BackendExecEvent } | { done: true },
 ): boolean {
@@ -171,11 +153,11 @@ async function pumpBackendEvents(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
   handle: ExecBackendHandle,
-  onSettle: (settlement: ExecSettlement) => void,
+  onSettle: () => void,
 ): Promise<void> {
   const decoders: Decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
 
-  const settleWith = (outcome: ExecEvent, killBackend: boolean): void => {
+  const settleWith = (outcome: TerminalEvent, killBackend: boolean): void => {
     settle(state, controller, onSettle, outcome, killBackend);
   };
 
@@ -213,12 +195,11 @@ function startBackendExec(
 function armTimeout(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
-  onSettle: (settlement: ExecSettlement) => void,
+  onSettle: () => void,
   timeoutMs: number,
   timeoutEndsTurn: boolean,
 ): void {
   state.timer = setTimeout(() => {
-    if (timeoutEndsTurn) state.killReason = "turn-end";
     settle(
       state,
       controller,
@@ -234,7 +215,7 @@ function watchBackendExec(
   controller: ReadableStreamDefaultController<Uint8Array>,
   execBackend: ExecBackend,
   input: ExecBackendInput,
-  onSettle: (settlement: ExecSettlement) => void,
+  onSettle: () => void,
 ): void {
   startBackendExec(execBackend, input).then(
     (handle) => {
@@ -265,7 +246,7 @@ function watchBackendExec(
 export function startExecOperation(
   execBackend: ExecBackend,
   input: ExecBackendInput,
-  onSettle: (settlement: ExecSettlement) => void,
+  onSettle: () => void,
   timeoutEndsTurn = false,
 ): ExecOperation {
   const state: SettleState = {
@@ -273,19 +254,16 @@ export function startExecOperation(
     seq: 0,
     timer: undefined,
     handle: undefined,
-    startedAt: Date.now(),
-    killReason: null,
     resumePump: undefined,
   };
 
-  let requestKillImpl: ((reason?: ExecKillReason) => void) | undefined;
+  let requestKillImpl: (() => void) | undefined;
 
   const events = new ReadableStream<Uint8Array>(
     {
       start(controller) {
         armTimeout(state, controller, onSettle, input.timeoutMs, timeoutEndsTurn);
-        requestKillImpl = (reason = "manual") => {
-          state.killReason = reason;
+        requestKillImpl = () => {
           settle(
             state,
             controller,
@@ -309,6 +287,6 @@ export function startExecOperation(
 
   return {
     events,
-    requestKill: (reason) => requestKillImpl?.(reason),
+    requestKill: () => requestKillImpl?.(),
   };
 }
