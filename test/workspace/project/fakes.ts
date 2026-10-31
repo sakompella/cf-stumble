@@ -3,7 +3,6 @@ import type {
   ExecBackend,
   ExecBackendHandle,
   ExecBackendInput,
-  ProjectDirent,
   ProjectFilesystemProvider,
   ProjectStat,
   ProjectTransactions,
@@ -59,27 +58,6 @@ export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider 
 
     if (this.nodes.has(path)) throw new FakeFsError("EEXIST", `path exists: ${path}`);
     this.nodes.set(path, { type: "dir", mtimeMs: this.now });
-  }
-
-  readdirSync(path: string, _options: { withFileTypes: true }): ProjectDirent[] {
-    this.calls.push(`readdir:${path}`);
-    const node = this.nodes.get(path);
-
-    if (node === undefined) throw new FakeFsError("ENOENT", `no such path: ${path}`);
-
-    if (node.type !== "dir") throw new FakeFsError("ENOTDIR", `not a directory: ${path}`);
-    const prefix = path === "/" ? "/" : `${path}/`;
-    const entries: ProjectDirent[] = [];
-
-    for (const [candidate, candidateNode] of this.nodes) {
-      if (!candidate.startsWith(prefix) || candidate === path) continue;
-      const relative = candidate.slice(prefix.length);
-
-      if (relative.includes("/")) continue;
-      entries.push(direntOf(relative, candidateNode));
-    }
-
-    return entries;
   }
 
   openSync(path: string, flags: "w" | "a" | "wx"): number {
@@ -162,15 +140,6 @@ export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider 
       isSymbolicLink: () => node.type === "symlink",
     };
   }
-}
-
-function direntOf(name: string, node: FakeNode): ProjectDirent {
-  return {
-    name,
-    isFile: () => node.type === "file",
-    isDirectory: () => node.type === "dir",
-    isSymbolicLink: () => node.type === "symlink",
-  };
 }
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {

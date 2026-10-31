@@ -2,12 +2,7 @@ import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
 import { startExecOperation, type ExecOperation } from "./exec-operation.js";
 import type { ProjectActivity } from "../idle-controller.js";
-import {
-  listProjectDirectory,
-  lstatProjectPath,
-  readProjectFile,
-  writeProjectFile,
-} from "./file-operations.js";
+import { lstatProjectPath, readProjectFile, writeProjectFile } from "./file-operations.js";
 import {
   mapProviderError,
   type ProjectFilesystemProvider,
@@ -19,7 +14,6 @@ import {
   MAX_CONCURRENT_EXECS,
   ok,
   type ProjectFailure,
-  type ProjectListing,
   type ProjectLstatInfo,
   type ProjectResult,
   type ProjectRpcTargetContract,
@@ -108,10 +102,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     return this.#whileTurnLasts(() =>
       writeProjectFile(this.#provider, this.#transactions, { path, bytes, mode }),
     );
-  }
-
-  listFiles(path: string): Promise<ProjectResult<ProjectListing>> {
-    return this.#whileTurnLasts(() => listProjectDirectory(this.#provider, path));
   }
 
   startExec(input: StartExecWire): Promise<ProjectResult<StartedExec>> {

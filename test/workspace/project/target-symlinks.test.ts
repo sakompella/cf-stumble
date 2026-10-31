@@ -41,14 +41,6 @@ test("writing through a symlink writes the real target, not the link", async () 
   if (real.ok) expect(new TextDecoder().decode(real.value)).toBe("changed");
 });
 
-test("listFiles through a symlinked directory lists the real directory", async () => {
-  const { target } = withSymlinks();
-  const listing = await target.listFiles("/dir-link");
-  expect(listing.ok).toBe(true);
-
-  if (listing.ok) expect(listing.value.entries.map((entry) => entry.name)).toEqual(["a.txt"]);
-});
-
 test("lstat's canonicalPath resolves the full symlink chain", async () => {
   const { target } = withSymlinks();
   const info = await target.lstat("/rel-link");

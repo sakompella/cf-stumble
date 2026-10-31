@@ -36,7 +36,6 @@ test("ProjectRpcTarget exposes exactly the allowlisted RPC members", () => {
   expect(rpcMemberNames(ProjectRpcTarget.prototype)).toStrictEqual([
     "endTurn",
     "kill",
-    "listFiles",
     "lstat",
     "readFile",
     "startExec",

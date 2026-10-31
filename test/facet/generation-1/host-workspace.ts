@@ -7,7 +7,6 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
-  readdirSync,
   readFileSync,
   readlinkSync,
   writeSync,
@@ -38,7 +37,6 @@ export function hostFilesystemProvider(root: string): ProjectFilesystemProvider 
     mkdirSync: (path) => {
       mkdirSync(hostPath(root, path));
     },
-    readdirSync: (path, options) => readdirSync(hostPath(root, path), options),
     openSync: (path, flags) => openSync(hostPath(root, path), flags),
     writeSync: (fd, buffer) => writeSync(fd, buffer),
     closeSync: (fd) => {

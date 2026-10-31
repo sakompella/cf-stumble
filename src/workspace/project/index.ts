@@ -11,12 +11,7 @@ export type {
   ExecBackendInput,
 } from "./exec-backend.js";
 
-export type {
-  ProjectDirent,
-  ProjectFilesystemProvider,
-  ProjectStat,
-  ProjectTransactions,
-} from "./provider.js";
+export type { ProjectFilesystemProvider, ProjectStat, ProjectTransactions } from "./provider.js";
 
 export { parseProjectBudget, type ProjectBudget } from "./budget.js";
 

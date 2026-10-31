@@ -82,9 +82,8 @@ test("filesystem calls and exec starts mark activity without holding the workspa
 
   await target.lstat("/");
   await target.readFile("/missing");
-  await target.listFiles("/");
   await target.writeFile("/a", new Uint8Array(), "overwrite");
 
-  expect(activity.touched).toBeGreaterThanOrEqual(4);
+  expect(activity.touched).toBeGreaterThanOrEqual(3);
   expect(activity.open).toBe(0);
 });
