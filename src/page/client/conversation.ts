@@ -10,14 +10,8 @@ import {
   type Block,
   type MessageChange,
   type ToolOutputChange,
-} from "./events.js";
+} from "./agent-event.js";
 
-/**
- * The page's copy of one Pi Durable conversation: the snapshot, with each later event applied the
- * way Pi applies it to its own live state. Entries are immutable and their ids grow in commit
- * order, so an entry that two events carry (a tool result's `tool_execution_end` and its
- * `message_end`) is kept once.
- */
 export const Conversation = Schema.Struct({
   entries: Schema.Array(Entry),
   maybePartial: Schema.Option(AssistantMessage),

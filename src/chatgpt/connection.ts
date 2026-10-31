@@ -53,10 +53,6 @@ export type ChatGPTConnectionInput = Readonly<{
   clock: () => number;
 }>;
 
-/**
- * One Durable Object instance, so concurrent turns share one `refreshing` slot and a rotating
- * refresh token is redeemed once. Eviction can lose a rotated token; the owner then reconnects.
- */
 export class ChatGPTConnection {
   private readonly store: ChatGPTCredentialStore;
   private readonly fetcher: ProviderFetch;
@@ -121,10 +117,6 @@ export class ChatGPTConnection {
     );
   }
 
-  /**
-   * An address that does not parse leaves the attempt in place; once the code is sent the attempt
-   * is used up.
-   */
   completeLogin(attemptId: string, callbackUrl: string): Effect.Effect<ChatGPTLoginOutcome> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* this.redeem(attemptId, callbackUrl);
@@ -144,7 +136,6 @@ export class ChatGPTConnection {
     return this.view();
   }
 
-  /** `rejected` is a token the provider refused with 401; it is refreshed only while still stored. */
   access(rejected?: string): Effect.Effect<ChatGPTAccess> {
     return Effect.suspend(() => {
       if (this.refreshing !== undefined) return Deferred.await(this.refreshing);
@@ -239,10 +230,6 @@ export class ChatGPTConnection {
     });
   }
 
-  /**
-   * Runs uninterruptibly so a cancelled turn cannot stop it between the provider rotating the
-   * refresh token and this object storing it.
-   */
   private refreshOnce(stored: ConnectedCredential, forced: boolean): Effect.Effect<ChatGPTAccess> {
     const shared = Deferred.makeUnsafe<ChatGPTAccess>();
     this.refreshing = shared;

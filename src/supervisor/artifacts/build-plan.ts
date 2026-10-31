@@ -1,4 +1,5 @@
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
@@ -14,13 +15,13 @@ export {
   type HarnessBuildStepName,
 } from "../../harness-build.js";
 
-/** What a build writes to `moduleMapPath`. The build never states its own commit. */
-export type BuiltModuleMapFile = Readonly<{
-  entryModule: string;
-  modules: readonly Readonly<{ name: string; source: string }>[];
-}>;
+export const BuiltModuleMapFile = Schema.Struct({
+  entryModule: Schema.String,
+  modules: Schema.Array(Schema.Struct({ name: Schema.String, source: Schema.String })),
+});
 
-/** Redacted stream tails. They go only to the owner's submission response, never to a log. */
+export type BuiltModuleMapFile = typeof BuiltModuleMapFile.Type;
+
 export type BuildStepDiagnostics = Readonly<{
   stdoutTail: string;
   stderrTail: string;
@@ -43,17 +44,10 @@ export type HarnessBuildProblem =
       readonly reason: MainHarnessArtifactProblem["code"];
     };
 
-/** A build cannot claim to be another generation: the commit comes from the caller. */
 export function moduleMapFromBuildOutput(
   harnessCommit: HarnessCommit,
   output: BuiltModuleMapFile,
 ): Result.Result<MainHarnessArtifactInput, HarnessBuildProblem> {
-  // The declared type is what JSON decoding produced, not a checked value; this keeps a non-object from throwing.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: decoded build output is untrusted.
-  if (output === null || typeof output !== "object") {
-    return Result.fail({ code: "build-output-invalid", harnessCommit, reason: "invalid-artifact" });
-  }
-
   const parsed = MainHarnessArtifact.parse({
     harnessCommit,
     entryModule: output.entryModule,

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
@@ -158,7 +156,6 @@ test("activates a ready generation once and preserves its epoch on a repeated re
   });
 });
 
-/** A restarted Supervisor labels nothing of its own: only submitted commits survive eviction. */
 test("preserves generation state across eviction and labels nothing itself", async () => {
   const control = supervisor("persists-across-eviction");
   const label = await submitCandidate(control, thirdHarnessCommit);

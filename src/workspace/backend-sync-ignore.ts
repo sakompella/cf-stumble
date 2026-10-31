@@ -1,9 +1,16 @@
-import type { BackendHandle, WorkspaceBackend } from "@cloudflare/computer";
+import type { BackendHandle } from "@cloudflare/computer";
 import { WORKSPACE_SYNC_IGNORES } from "../workspace-layout.js";
 
 type SyncRPC = BackendHandle["rpc"]["sync"];
 
 type FetchChangesInput = Parameters<SyncRPC["fetchChanges"]>[0];
+
+export type HostedBackend<Host> = Readonly<{
+  id: string;
+  type: string;
+  callable?: boolean;
+  connect(host: Host): Promise<BackendHandle>;
+}>;
 
 function withIgnoredFetchChanges(handle: BackendHandle): BackendHandle {
   const sync = handle.rpc.sync;
@@ -28,12 +35,11 @@ function withIgnoredFetchChanges(handle: BackendHandle): BackendHandle {
   };
 }
 
-/** Changes only sync.fetchChanges, and reports the runtime each connect reached. */
-export function withWorkspaceSyncIgnore(
-  backend: WorkspaceBackend,
+export function withWorkspaceSyncIgnore<Host>(
+  backend: HostedBackend<Host>,
   connected?: (runtimeId: string | undefined) => void,
-): WorkspaceBackend {
-  const connect: WorkspaceBackend["connect"] = (host) =>
+): HostedBackend<Host> {
+  const connect: HostedBackend<Host>["connect"] = (host) =>
     backend.connect(host).then((handle) => {
       connected?.(handle.runtimeId);
 

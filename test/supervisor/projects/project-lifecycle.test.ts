@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
@@ -7,13 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections } from "./tenant-connections.js";
-
-/**
- * Overlapping lifecycle operations on one project id. The fake workspace holds a chosen command
- * open, so each test decides the interleaving instead of hoping a scheduler produces it. These
- * tests show the order in which the Supervisor asks the Workspace Host for work; they cannot show
- * what Computer's filesystem does with overlapping commands.
- */
+import { projectIdOf } from "../../project-fixtures.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -21,7 +13,7 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const REPOSITORY = "https://github.com/sample/repo-1";
 
-const PROJECT_ID = "sample-repo-1";
+const PROJECT_ID = projectIdOf("sample-repo-1");
 
 const REMOVAL = "rm -rf --";
 
@@ -29,7 +21,6 @@ const CLONE = "git clone";
 
 const noRunActive = () => true;
 
-/** One `ProjectConnections`, as one Supervisor instance holds it, over the fake workspace. */
 function withConnections<T>(
   name: string,
   workspace: FakeTenantWorkspace,
@@ -40,17 +31,12 @@ function withConnections<T>(
       tenantConnections(state.storage, name, workspace, {
         clientId: undefined,
         fallbackToken: FAKE_TOKEN,
-        // No size metadata: the preflight is skipped, which keeps these tests about ordering.
         fetcher: () => Promise.resolve(Response.json({})),
       }).connections,
     ),
   );
 }
 
-/**
- * Let every operation that is not waiting on a held command run as far as it can. The fake
- * answers through promises and the RPC timers, so a few macrotask turns reach a steady state.
- */
 async function letOtherWorkRun(): Promise<void> {
   for (let turn = 0; turn < 20; turn += 1) {
     await new Promise((resolve) => {

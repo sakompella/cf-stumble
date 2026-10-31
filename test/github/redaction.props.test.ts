@@ -58,8 +58,6 @@ test("redacts arbitrary opaque known tokens", () => {
     const message = `command failed: ${token}`;
     const redacted = redactCredentials(message, token);
 
-    // Uppercase known-token generation keeps the token distinct from the lowercase replacement
-    // marker, so this checks that the exact opaque value is gone rather than the marker itself.
     expect(redacted).not.toContain(token);
     expect(redactCredentials(redacted, token)).toBe(redacted);
   });

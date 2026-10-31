@@ -2,10 +2,8 @@ export const MINUTE_MS = 60_000;
 
 export const BUCKET_MS = 5 * MINUTE_MS;
 
-/** Running time past the idle limit and past every request's allowance that is tolerated: the stop is not exact. */
 export const OVERRUN_SLACK_MS = 10 * MINUTE_MS;
 
-/** The newest metrics buckets are still filling: on 2026-10-02 the container looked stopped while it ran. */
 export const METRICS_LAG_MS = 10 * MINUTE_MS;
 
 const RECENT_REQUESTS = 3;
@@ -15,14 +13,12 @@ export interface TimeWindow {
   readonly toMs: number;
 }
 
-/** One fetch invocation. The platform stamps it at its end (`wallTimeMs` earlier it began). */
 export interface Invocation {
   readonly endMs: number;
   readonly wallTimeMs: number;
   readonly route: string;
 }
 
-/** Minutes the container was allocated in one five-minute bucket. */
 export interface UsageBucket {
   readonly startMs: number;
   readonly runningMinutes: number;
@@ -33,7 +29,6 @@ export interface Activity {
   readonly usage: readonly UsageBucket[];
 }
 
-/** A source that failed or was cut off is `unavailable`, never an empty list read as a quiet system. */
 export type Source<T> =
   | { readonly status: "ok"; readonly data: T }
   | { readonly status: "unavailable"; readonly reason: string };
@@ -88,13 +83,6 @@ export function isoMinute(ms: number): string {
   return new Date(ms).toISOString().slice(0, 16) + "Z";
 }
 
-/**
- * An owner API request keeps the container allowed to run until its end plus the idle limit. Other
- * invocations (the page, a relayed path, a Durable Object's own fetch) never reach the workspace,
- * and a long-lived one would otherwise hide a stuck container. A run of
- * consecutive running buckets that exceeds that allowance by more than `OVERRUN_SLACK_MS` is
- * a container the Host should have stopped.
- */
 function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] {
   const { window, nowMs, idleLimitMs } = input;
   const { usage } = activity;
@@ -130,7 +118,6 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
     const beginMs = run[0]?.startMs ?? 0;
     const endMs = (run.at(-1)?.startMs ?? 0) + BUCKET_MS;
 
-    // A restart overlaps two instances, so a bucket can report more minutes than it has.
     const overrunMinutes = run.reduce((sum, bucket) => {
       const bucketSpan = { beginMs: bucket.startMs, endMs: bucket.startMs + BUCKET_MS };
       const unallowed = Math.min(bucket.runningMinutes, BUCKET_MS / MINUTE_MS);
@@ -162,7 +149,6 @@ export function runChecks(input: CheckInput): readonly Finding[] {
     : [{ rule: "unknown", detail: input.activity.reason, evidence: [] }];
 }
 
-/** One line when all is well; otherwise one line per finding. */
 export function formatReport(input: CheckInput, findings: readonly Finding[]): readonly string[] {
   const { fromMs, toMs } = input.window;
   const label = `${isoMinute(fromMs)}..${isoMinute(toMs).slice(11)}`;

@@ -1,9 +1,5 @@
-// oxlint-disable import/max-dependencies -- The serving side is where the facet, the project catalog, the workspace and the run deadline meet.
 import * as Effect from "effect/Effect";
 import { answered, fail, parseMessage, type ConversationProblem } from "./conversation-result.js";
-import * as Result from "effect/Result";
-import type { Wake } from "@earendil-works/pi-durable";
-import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import {
   resolveSelectableProject,
   type SelectableCatalog,
@@ -11,7 +7,6 @@ import {
 } from "../../selectable-projects.js";
 import { selectedWorkingDirectory } from "../../workspace-layout.js";
 import { logEvent, logRedactedCause } from "../../diagnostics.js";
-import { PROJECT_RUN_DEADLINE_MS } from "../../turn-budget.js";
 import {
   SERVING_FACET_NAME,
   type MainFacetMountProblem,
@@ -20,56 +15,48 @@ import {
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
 import { ConversationHostTarget } from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
-import { alarmAt } from "./wake.js";
-
-const RUN_DEADLINE_KEY = "conversations.run-deadline";
+import { RunDeadline } from "./wake.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
-  mount: () => Result.Result<MountedFacet, MainFacetMountProblem>;
+  mount: () => Effect.Effect<MountedFacet, MainFacetMountProblem>;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
-  /** Provisions the project's checkout and obtains a capability that ends after `remainingMs`. */
   obtainWorkspace: ObtainWorkspace;
 }>;
 
-/**
- * The Supervisor's side of the agent loop (ADR-0048). Pi Durable's session lives in the serving
- * facet's own storage, under one name for every generation, so one instance writes it. Facets
- * cannot set alarms, so the facet relays its wake to `arm`, and the Supervisor's alarm attaches
- * the facet again, which resumes whatever work a lost instance left.
- */
 export class ServingConversations {
   readonly #ports: ServingPorts;
   readonly #projects: ProjectConversations;
   readonly #host: ConversationHostTarget;
   readonly #workspaces: HeldWorkspaces;
-  /** The events streams open on each conversation, so a fresh thread can end its predecessor's. */
+  readonly #deadline: RunDeadline;
   readonly #readers = new Map<string, Set<() => void>>();
 
   constructor(ports: ServingPorts) {
     this.#ports = ports;
     this.#projects = new ProjectConversations(ports.ctx.storage);
     this.#workspaces = new HeldWorkspaces(ports.obtainWorkspace);
+    this.#deadline = new RunDeadline(ports.ctx.storage);
     this.#host = new ConversationHostTarget({
-      arm: (wake) => this.#arm(wake),
+      arm: (wake) =>
+        this.#deadline.arm(wake, () => {
+          this.endWorkspaces();
+        }),
       workspace: (conversationId) => this.#workspace(conversationId),
     });
   }
 
-  /** The next call mounts the newly active generation's class; its work resumes from storage. */
   replaceFacet(): void {
     this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
     this.endWorkspaces();
   }
 
-  /** A run is active from the wake that started it until the wake that settled it. */
   running(): boolean {
-    return this.#runDeadline() !== undefined;
+    return this.#deadline.get() !== undefined;
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: every argument arrives from a client.
-  submit(projectId: unknown, content: unknown, requestId: unknown) {
+  submit(projectId: string, content: string, requestId: string) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const message = parseMessage(content, requestId);
@@ -91,8 +78,7 @@ export class ServingConversations {
     );
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
-  events(projectId: unknown) {
+  events(projectId: string) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
@@ -105,8 +91,7 @@ export class ServingConversations {
     );
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
-  abort(projectId: unknown) {
+  abort(projectId: string) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
@@ -121,9 +106,7 @@ export class ServingConversations {
     );
   }
 
-  /** The old conversation stays in storage; only the project's row moves. */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
-  freshThread(projectId: unknown) {
+  freshThread(projectId: string) {
     return answered(
       Effect.gen({ self: this }, function* () {
         const project = yield* this.#project(projectId);
@@ -145,10 +128,6 @@ export class ServingConversations {
     );
   }
 
-  /**
-   * A disconnected project's conversation is left unreferenced, like a fresh thread's predecessor.
-   * Refused while a run is active.
-   */
   release(projectId: string): boolean {
     if (this.running()) return false;
 
@@ -157,16 +136,11 @@ export class ServingConversations {
     return true;
   }
 
-  /**
-   * Attaching resumes the session; past the run's deadline every current conversation is aborted.
-   * A failure throws, so the platform retries the alarm instead of stranding the run.
-   */
   alarm(now: number): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const deadline = this.#runDeadline();
+      const deadline = this.#deadline.get();
       const expired = deadline !== undefined && now >= deadline;
 
-      // Commands stop at the deadline even when the facet cannot be reached to abort its work.
       if (expired) this.endWorkspaces();
 
       const facet = yield* this.#facet();
@@ -179,7 +153,7 @@ export class ServingConversations {
         yield* this.#call(() => facet.abort(conversationId));
       }
 
-      this.#ports.ctx.storage.kv.delete(RUN_DEADLINE_KEY);
+      this.#deadline.clear();
     }).pipe(
       Effect.tapError((problem) =>
         Effect.sync(() => {
@@ -190,13 +164,11 @@ export class ServingConversations {
     );
   }
 
-  /** Ends every capability handed out, which kills the commands still running through them. */
   endWorkspaces(): void {
     this.#workspaces.endAll();
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
-  #project(projectId: unknown): Effect.Effect<SelectableProject, ConversationProblem> {
+  #project(projectId: string): Effect.Effect<SelectableProject, ConversationProblem> {
     const resolved = resolveSelectableProject(projectId, this.#ports.catalog());
 
     return resolved.ok ? Effect.succeed(resolved.project) : fail(resolved.reason);
@@ -233,29 +205,15 @@ export class ServingConversations {
     );
   }
 
-  /** Attaching on every call costs one local RPC and covers a facet instance that was lost. */
   #facet(): Effect.Effect<MountedFacet, ConversationProblem> {
-    return Effect.gen({ self: this }, function* () {
-      const mounted = this.#ports.mount();
-
-      if (Result.isFailure(mounted)) {
-        return yield* fail(
-          mounted.failure.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
-        );
-      }
-
-      const facet = mounted.success;
-      yield* this.#call(() => facet.attach(this.#host));
-
-      return facet;
-    });
+    return this.#ports.mount().pipe(
+      Effect.mapError((problem): ConversationProblem => ({
+        code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
+      })),
+      Effect.tap((facet) => this.#call(() => facet.attach(this.#host))),
+    );
   }
 
-  /**
-   * A stream ends cleanly when its conversation is replaced, which tells the page to open the
-   * project's events again. A stream whose source failed, as when a generation activation replaces
-   * the facet, ends the same way. However the relay stops, the facet's stream is cancelled.
-   */
   #endedWhenReplaced(
     conversationId: string,
     events: ReadableStream<Uint8Array>,
@@ -306,34 +264,7 @@ export class ServingConversations {
     return readable;
   }
 
-  #runDeadline(): number | undefined {
-    return this.#ports.ctx.storage.kv.get<number>(RUN_DEADLINE_KEY);
-  }
-
-  async #arm(wake: Wake): Promise<void> {
-    const now = Date.now();
-    const { storage } = this.#ports.ctx;
-    let deadline = this.#runDeadline();
-
-    if (wake.active && deadline === undefined) {
-      deadline = now + PROJECT_RUN_DEADLINE_MS;
-      storage.kv.put(RUN_DEADLINE_KEY, deadline);
-      logEvent("info", "run.started");
-    }
-
-    if (!wake.active && deadline !== undefined) {
-      logEvent("info", "run.settled", { totalMs: now - (deadline - PROJECT_RUN_DEADLINE_MS) });
-      deadline = undefined;
-      storage.kv.delete(RUN_DEADLINE_KEY);
-      this.endWorkspaces();
-    }
-
-    const at = alarmAt(wake, now, deadline);
-
-    await (at === undefined ? storage.deleteAlarm() : storage.setAlarm(at));
-  }
-
-  #workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable> {
+  #workspace(conversationId: string) {
     const projectId = this.#projects.projectOf(conversationId);
     const project = this.#ports.catalog().find((candidate) => candidate.id === projectId);
 
@@ -341,9 +272,6 @@ export class ServingConversations {
       return Promise.reject(new Error("this conversation has no project workspace"));
     }
 
-    const now = Date.now();
-    const deadline = this.#runDeadline() ?? now + PROJECT_RUN_DEADLINE_MS;
-
-    return this.#workspaces.capability(project, Math.max(0, deadline - now));
+    return this.#workspaces.capability(project, this.#deadline.remainingMs(Date.now()));
   }
 }

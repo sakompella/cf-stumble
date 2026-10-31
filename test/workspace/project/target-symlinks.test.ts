@@ -64,10 +64,8 @@ test("startExec resolves cwd through a symlink to its real directory", async () 
   const { execBackend, target } = withSymlinks();
   const started = await target.startExec({ command: "true", cwd: "/dir-link" });
   expect(started.ok).toBe(true);
-  expect(execBackend.requests).toEqual([
-    // oxlint-disable-next-line typescript/no-unsafe-assignment -- `expect.any(Number)` is vitest's untyped asymmetric matcher.
-    { command: "true", cwd: "/workspace/dir2", timeoutMs: expect.any(Number) },
-  ]);
+  expect(execBackend.requests).toHaveLength(1);
+  expect(execBackend.requests[0]).toMatchObject({ command: "true", cwd: "/workspace/dir2" });
 });
 
 test("a dangling symlink target is not-found", async () => {

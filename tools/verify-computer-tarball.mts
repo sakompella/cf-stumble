@@ -2,11 +2,6 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-/**
- * A matching digest proves the vendored Computer tarball is the recorded blob.
- * `scripts/vendor/verify-computer-tarball.sh` rebuilds it from upstream to show where it came from.
- */
-
 const tarball = resolve(import.meta.dirname, "../vendor/cloudflare-computer-0.3.0.tgz");
 
 const recorded = await readFile(`${tarball}.sha256`, "utf8");

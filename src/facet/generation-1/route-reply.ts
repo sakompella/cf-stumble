@@ -26,10 +26,6 @@ function usageOf(usage: ModelUsage): Usage {
 
 const ZERO_USAGE = usageOf({ inputTokens: 0, outputTokens: 0, estimated: false });
 
-/**
- * Turns the host route's events into pi-ai events for one model call. Every event carries `partial`,
- * the one message this assembler keeps growing; the terminal event carries a message of its own.
- */
 export class ReplyAssembler {
   readonly #out: AssistantMessageEventStream;
   readonly #model: Model<Api>;

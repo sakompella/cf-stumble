@@ -1,8 +1,3 @@
-/**
- * The network edge of `ops:check`: Workers Logs, the Containers API and GraphQL, each read into
- * the types of `check.mts`. A failure or a cut-off answer throws `ApiFailure`, which the caller
- * reports as `unknown`. A token goes in the Authorization header only; no message includes one.
- */
 import { readFileSync } from "node:fs";
 import { routePattern } from "../../src/routes/route-pattern.ts";
 import {
@@ -11,6 +6,7 @@ import {
   isJsonRecord,
   isJsonString,
   parseJsonRecordText,
+  parseJsonText,
   type JsonRecord,
   type JsonValue,
 } from "../json.mts";
@@ -18,7 +14,6 @@ import { BUCKET_MS, type Invocation, type TimeWindow, type UsageBucket } from ".
 
 const API = "https://api.cloudflare.com/client/v4";
 
-/** An answer this long may be cut off. */
 const TELEMETRY_ROW_LIMIT = 2000;
 
 const METRICS_ROW_LIMIT = 5000;
@@ -50,7 +45,6 @@ function digArray(value: JsonValue | undefined, ...keys: readonly string[]) {
   return found !== undefined && isJsonArray(found) ? found : null;
 }
 
-/** The token from CLOUDFLARE_API_TOKEN, or from a file holding the bare token or `cf` login JSON. */
 export function readToken(tokenFile: string | null, env: NodeJS.ProcessEnv): string {
   let content: string;
 
@@ -83,11 +77,9 @@ async function send(token: string, url: string, body?: JsonRecord): Promise<Json
     throw new ApiFailure(`HTTP ${response.status} from ${new URL(url).pathname}`);
   }
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: a JSON response body is JSON; callers check its shape before reading it.
-  return (await response.json().catch(() => null)) as JsonValue;
+  return parseJsonText(await response.text().catch(() => "")) ?? null;
 }
 
-/** The account to query: `--account`, then CLOUDFLARE_ACCOUNT_ID, then the token's only account. */
 export async function resolveAccount(
   token: string,
   requested: string | null,
@@ -118,7 +110,6 @@ export function parseInvocations(response: JsonValue): readonly Invocation[] {
     );
   }
 
-  // Log lines come back from the same query; only an invocation's own row has a wall time.
   return rows.flatMap((row) => {
     const wallTimeMs = digNumber(row, "$workers", "wallTimeMs");
 
@@ -135,7 +126,6 @@ export function parseInvocations(response: JsonValue): readonly Invocation[] {
   });
 }
 
-/** Every fetch invocation `worker` ran over `window`. */
 export async function fetchInvocations(
   token: string,
   account: string,
@@ -163,7 +153,6 @@ export async function fetchInvocations(
   return parseInvocations(response);
 }
 
-/** Running minutes per five-minute bucket: `allocatedMemory` byte-seconds over provisioned memory. */
 export function parseUsage(response: JsonValue, memoryBytes: number): readonly UsageBucket[] {
   const account = digArray(response, "data", "viewer", "accounts")?.[0];
   const rows = digArray(account, "containersUsageAdaptiveGroups");
@@ -202,7 +191,6 @@ const USAGE_QUERY = `query($a:String!,$f:Time!,$t:Time!,$apps:[string!]){viewer{
   containersUsageAdaptiveGroups(limit:${METRICS_ROW_LIMIT},filter:{datetime_geq:$f,datetime_lt:$t,applicationId_in:$apps},orderBy:[datetimeFiveMinutes_ASC]){
     dimensions{datetimeFiveMinutes applicationId instanceId} sum{allocatedMemory}}}}}`;
 
-/** Running time of the Worker's Containers application, which is named after the Worker and its class. */
 export async function fetchUsage(
   token: string,
   account: string,

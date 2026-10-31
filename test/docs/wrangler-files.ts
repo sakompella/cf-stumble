@@ -1,9 +1,5 @@
-import { isRecord } from "../../src/untrusted.js";
+import * as Schema from "effect/Schema";
 
-/**
- * The two Wrangler files, read as text. Vite resolves the glob at build time, so this reads no
- * filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -19,14 +15,6 @@ const configs = import.meta.glob("../../wrangler*.jsonc", {
   import: "default",
 });
 
-export function withoutComments(source: string): string {
-  return source
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("//"))
-    .join("\n")
-    .trim();
-}
-
 export function config(name: string): string {
   const found = Object.entries(configs).find(([path]) => path.endsWith(name));
 
@@ -34,37 +22,27 @@ export function config(name: string): string {
     throw new Error(`missing ${name}`);
   }
 
-  return withoutComments(found[1]);
+  return found[1].trim();
 }
 
-type WranglerContainer = Readonly<{ instance_type?: unknown }>;
+const decodeJsonText = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 
-export type WranglerConfig = Readonly<{
-  cache?: Readonly<{ enabled?: boolean }>;
-  containers?: readonly WranglerContainer[];
-}>;
-
-function isWranglerConfig(value: unknown): value is WranglerConfig {
-  if (!isRecord(value)) return false;
-
-  const cache = value.cache;
-  const containers = value.containers;
-
-  return (
-    (cache === undefined ||
-      (isRecord(cache) && (cache.enabled === undefined || typeof cache.enabled === "boolean"))) &&
-    (containers === undefined ||
-      (Array.isArray(containers) && containers.every((container) => isRecord(container))))
-  );
+export function configJson(name: string): Schema.Json {
+  return decodeJsonText(config(name).replaceAll(/,\s*([}\]])/gu, "$1"));
 }
+
+const WranglerConfig = Schema.Struct({
+  build: Schema.optional(Schema.Struct({ command: Schema.String })),
+  cache: Schema.optional(Schema.Struct({ enabled: Schema.optional(Schema.Boolean) })),
+  containers: Schema.optional(
+    Schema.Array(Schema.Struct({ instance_type: Schema.optional(Schema.String) })),
+  ),
+});
+
+export type WranglerConfig = typeof WranglerConfig.Type;
+
+const decodeWranglerConfig = Schema.decodeUnknownSync(WranglerConfig);
 
 export function parsedConfig(name: string): WranglerConfig {
-  const json = config(name).replaceAll(/,\s*([}\]])/gu, "$1");
-  const parsed: unknown = JSON.parse(json);
-
-  if (!isWranglerConfig(parsed)) {
-    throw new Error(`invalid ${name}`);
-  }
-
-  return parsed;
+  return decodeWranglerConfig(configJson(name));
 }

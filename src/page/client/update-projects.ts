@@ -13,11 +13,6 @@ import type { GitHubReport, Model, Project } from "./model.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 
-/**
- * Selecting a project opens a new events stream, so whatever arrives for the project a reader left
- * is dropped.
- */
-
 function withGitHub(model: Model, report: GitHubReport): Model {
   const github =
     report._tag === "Known"
@@ -181,7 +176,6 @@ export function gitHubHandlers(
   };
 }
 
-/** Every ChatGPT answer carries the whole view of the connection, so the page replaces what it showed. */
 const ASKING = "asking ChatGPT";
 
 function asking(model: Model): Model {

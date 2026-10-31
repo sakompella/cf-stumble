@@ -143,9 +143,7 @@ test("abort mid-stream ends as aborted and drops what arrives afterwards", async
   for await (const event of reply) {
     if (event.type !== "text_delta") continue;
     controller.abort();
-    await route.push({ type: "text-delta", delta: "after" }).catch(() => {
-      /* the aborted reader already cancelled the stream */
-    });
+    await route.push({ type: "text-delta", delta: "after" }).catch(() => {});
   }
 
   expect(await reply.result()).toMatchObject({

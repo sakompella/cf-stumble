@@ -19,14 +19,6 @@ import { runGenerationCommand, statusPayload, submitGeneration } from "./fixture
 import { isJsonNumber, isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
 import type { ScenarioState } from "./server-state.mjs";
 
-/**
- * What the harness server answers, apart from the conversation routes.
- *
- * Every route reads the state the stub keeps rather than a frozen payload, because the page checks
- * its own work against it: a submission is followed by a status read, and a case that asserted on
- * a ledger frozen at its starting epoch would pass a page that never re-read anything.
- */
-
 export type RouteAnswer = Readonly<{ status: number; payload: JsonValue }>;
 
 export function sendJson(res: ServerResponse, status: number, payload: JsonValue): void {
@@ -38,14 +30,6 @@ export function sendJson(res: ServerResponse, status: number, payload: JsonValue
   res.end(JSON.stringify(payload));
 }
 
-/**
- * The owner page, behind the headers the Worker sends.
- *
- * The Content Security Policy is copied from `src/routes/page.ts` character for character. That
- * duplication is deliberate, and it is the reason this harness can catch a page that outgrows the
- * policy: a looser policy here would let an inline handler or an external asset work locally and
- * be refused in production.
- */
 export function sendOwnerPage(res: ServerResponse): void {
   const nonce = randomUUID();
   res.writeHead(200, {
@@ -65,7 +49,6 @@ export function isOwnerPageScriptPath(path: string): boolean {
   return path === OWNER_PAGE_SCRIPT_FILE.path;
 }
 
-/** The page's script file, with the headers the Worker sends. */
 export function sendOwnerPageScript(res: ServerResponse): void {
   res.writeHead(200, {
     "content-type": "text/javascript; charset=utf-8",
@@ -171,7 +154,6 @@ function finishChatGPT(state: ScenarioState, body: JsonValue): ChatGPTAnswer {
     : finishLogin(state.chatgpt, attemptId, callbackUrl);
 }
 
-/** Every fixed-path route, as data. The page's own paths are the only keys that matter. */
 const JSON_ROUTES: readonly Readonly<{
   method: string;
   path: string;

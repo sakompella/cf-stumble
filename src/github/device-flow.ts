@@ -1,14 +1,8 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-runtime-typeof -- GitHub's device-flow responses are parsed at this boundary.
-
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { isRecord } from "../untrusted.js";
-
-/**
- * The access token exists in one place, the reply to the redemption call, which the caller installs
- * into the workspace's `gh` configuration and then drops. Nothing here stores, logs, or returns a
- * value to a browser.
- */
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { lenient } from "../lenient-schema.js";
 
 declare const gitHubTokenBrand: unique symbol;
 
@@ -18,27 +12,24 @@ export type GitHubToken = string & {
 
 const TOKEN_PATTERN = /^[\u0021-\u007E]{8,255}$/u;
 
-export function parseGitHubToken(value: unknown): GitHubToken | undefined {
-  if (typeof value !== "string" || !TOKEN_PATTERN.test(value)) {
-    return undefined;
-  }
+function isGitHubToken(value: string): value is GitHubToken {
+  return TOKEN_PATTERN.test(value);
+}
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: TOKEN_PATTERN accepts exactly one line of non-blank printable ASCII.
-  return value as GitHubToken;
+export function parseGitHubToken(value: string | undefined): GitHubToken | undefined {
+  return value !== undefined && isGitHubToken(value) ? value : undefined;
 }
 
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
-/** `repo` is what an agent needs to clone, push, and open a pull request in a private repository. */
 const GITHUB_DEVICE_SCOPE = "repo";
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export type GitHubFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-/** `deviceCode` is a secret that redeems the authorization; it never reaches a browser or a log. */
 type DeviceAuthorization = Readonly<{
   deviceCode: string;
   userCode: string;
@@ -47,14 +38,12 @@ type DeviceAuthorization = Readonly<{
   intervalSeconds: number;
 }>;
 
-/** `not-configured` means this deployment has no GitHub OAuth client id. */
 type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
 
 export class DeviceAuthorizationNotStarted extends Data.TaggedError(
   "DeviceAuthorizationNotStarted",
 )<{ readonly problem: DeviceFlowProblem }> {}
 
-/** `pending` and `slow-down` are ordinary while the owner is still at GitHub's verification page. */
 export type DeviceRedemption =
   | Readonly<{ kind: "authorized"; token: GitHubToken }>
   | Readonly<{ kind: "pending" }>
@@ -63,56 +52,44 @@ export type DeviceRedemption =
   | Readonly<{ kind: "denied" }>
   | Readonly<{ kind: "unavailable" }>;
 
-function positiveSeconds(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : fallback;
-}
+const PositiveSeconds = Schema.Int.check(Schema.isGreaterThan(0));
 
-export function parseDeviceAuthorization(value: unknown): DeviceAuthorization | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
+const DeviceAuthorizationReply = Schema.Struct({
+  device_code: Schema.NonEmptyString,
+  user_code: Schema.NonEmptyString,
+  verification_uri: Schema.String.check(Schema.isStartingWith("https://")),
+  expires_in: lenient(PositiveSeconds),
+  interval: lenient(PositiveSeconds),
+});
 
-  const deviceCode = value.device_code;
-  const userCode = value.user_code;
-  const verificationUri = value.verification_uri;
+const DeviceRedemptionReply = Schema.Struct({
+  access_token: lenient(Schema.String),
+  error: lenient(Schema.String),
+  interval: lenient(PositiveSeconds),
+});
 
-  if (
-    typeof deviceCode !== "string" ||
-    deviceCode.length === 0 ||
-    typeof userCode !== "string" ||
-    userCode.length === 0 ||
-    typeof verificationUri !== "string" ||
-    !verificationUri.startsWith("https://")
-  ) {
-    return undefined;
-  }
-
+function authorizationOf(reply: typeof DeviceAuthorizationReply.Type): DeviceAuthorization {
   return {
-    deviceCode,
-    userCode,
-    verificationUri,
-    expiresInSeconds: positiveSeconds(value.expires_in, 900),
-    intervalSeconds: positiveSeconds(value.interval, 5),
+    deviceCode: reply.device_code,
+    userCode: reply.user_code,
+    verificationUri: reply.verification_uri,
+    expiresInSeconds: reply.expires_in ?? 900,
+    intervalSeconds: reply.interval ?? 5,
   };
 }
 
-/** An unrecognized error code is `unavailable`, never `authorized`. */
-export function parseDeviceRedemption(value: unknown): DeviceRedemption {
-  if (!isRecord(value)) {
-    return { kind: "unavailable" };
-  }
-
-  const token = parseGitHubToken(value.access_token);
+function redemptionOf(reply: typeof DeviceRedemptionReply.Type): DeviceRedemption {
+  const token = reply.access_token === undefined ? undefined : parseGitHubToken(reply.access_token);
 
   if (token !== undefined) {
     return { kind: "authorized", token };
   }
 
-  switch (value.error) {
+  switch (reply.error ?? "") {
     case "authorization_pending":
       return { kind: "pending" };
     case "slow_down":
-      return { kind: "slow-down", intervalSeconds: positiveSeconds(value.interval, 10) };
+      return { kind: "slow-down", intervalSeconds: reply.interval ?? 10 };
     case "expired_token":
       return { kind: "expired" };
     case "access_denied":
@@ -122,15 +99,16 @@ export function parseDeviceRedemption(value: unknown): DeviceRedemption {
   }
 }
 
-type GitHubDeviceReply = Readonly<Record<string, unknown>>;
-
 class DeviceEndpointUnavailable extends Data.TaggedError("DeviceEndpointUnavailable") {}
 
-function postForm(
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
+function postForm<S extends Schema.ConstraintDecoder<unknown>>(
   url: string,
   body: Record<string, string>,
   fetcher: GitHubFetch,
-): Effect.Effect<GitHubDeviceReply | undefined, DeviceEndpointUnavailable> {
+  reply: S,
+): Effect.Effect<S["Type"] | undefined, DeviceEndpointUnavailable> {
   return Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: () =>
@@ -147,16 +125,19 @@ function postForm(
 
     if (!response.ok) return yield* new DeviceEndpointUnavailable();
 
-    const payload: unknown = yield* Effect.tryPromise({
-      try: () => response.json(),
+    const text = yield* Effect.tryPromise({
+      try: () => response.text(),
       catch: () => new DeviceEndpointUnavailable(),
     });
 
-    return isRecord(payload) ? payload : undefined;
+    const payload = decodeJson(text);
+
+    if (Option.isNone(payload)) return yield* new DeviceEndpointUnavailable();
+
+    return Option.getOrUndefined(Schema.decodeUnknownOption(reply)(payload.value));
   });
 }
 
-/** The reply is the only place a device code exists, so the caller stores it beside its owner. */
 export function requestDeviceAuthorization(
   clientId: string,
   fetcher: GitHubFetch,
@@ -169,21 +150,19 @@ export function requestDeviceAuthorization(
     GITHUB_DEVICE_CODE_URL,
     { client_id: clientId, scope: GITHUB_DEVICE_SCOPE },
     fetcher,
+    DeviceAuthorizationReply,
   ).pipe(
     Effect.catchTag("DeviceEndpointUnavailable", () =>
       Effect.fail(new DeviceAuthorizationNotStarted({ problem: "provider-unavailable" })),
     ),
-    Effect.flatMap((payload) => {
-      const authorization = parseDeviceAuthorization(payload);
-
-      return authorization === undefined
+    Effect.flatMap((reply) =>
+      reply === undefined
         ? Effect.fail(new DeviceAuthorizationNotStarted({ problem: "provider-refused" }))
-        : Effect.succeed(authorization);
-    }),
+        : Effect.succeed(authorizationOf(reply)),
+    ),
   );
 }
 
-/** The single call that can yield a token, and it yields it to its caller only. */
 export function redeemDeviceAuthorization(
   input: Readonly<{ clientId: string; deviceCode: string }>,
   fetcher: GitHubFetch,
@@ -196,8 +175,11 @@ export function redeemDeviceAuthorization(
       grant_type: DEVICE_GRANT_TYPE,
     },
     fetcher,
+    DeviceRedemptionReply,
   ).pipe(
-    Effect.map((reply) => parseDeviceRedemption(reply)),
+    Effect.map((reply) =>
+      reply === undefined ? { kind: "unavailable" as const } : redemptionOf(reply),
+    ),
     Effect.catchTag("DeviceEndpointUnavailable", () =>
       Effect.succeed<DeviceRedemption>({ kind: "unavailable" }),
     ),

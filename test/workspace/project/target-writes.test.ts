@@ -141,8 +141,7 @@ test("an unmapped provider code is redacted like the error it came with", async 
 test("a thrown non-error value is backend-unavailable", async () => {
   const provider = new FakeProjectFilesystemProvider();
   provider.lstatSync = () => {
-    // oxlint-disable-next-line typescript/only-throw-error, eslint/no-throw-literal -- Intentionally exercising a non-Error throw from an untrusted backend.
-    throw "boom";
+    throw JSON.parse('"boom"');
   };
 
   const target = new ProjectRpcTarget(

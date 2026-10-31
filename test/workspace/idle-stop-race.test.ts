@@ -2,8 +2,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { afterIdleStop, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 import type { ExecBackend } from "../../src/workspace/project/exec-backend.js";
 
-/** Work that arrives while an idle stop is closing or destroying must wait for it. */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });

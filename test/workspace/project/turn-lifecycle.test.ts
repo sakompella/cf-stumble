@@ -27,8 +27,6 @@ function makeTarget(options: ConstructorParameters<typeof ProjectRpcTarget>[3] =
 const madeTargets: ProjectRpcTarget[] = [];
 
 afterEach(async () => {
-  // A target keeps its turn timer and its execs' timers until its turn ends. Ending each one here
-  // keeps them from firing, and logging, during a later test.
   await Promise.all(madeTargets.splice(0).map((target) => target.endTurn()));
   vi.useRealTimers();
   vi.restoreAllMocks();

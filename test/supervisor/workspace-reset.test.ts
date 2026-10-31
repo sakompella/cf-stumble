@@ -1,10 +1,14 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { GitHubConnectionStore } from "../../src/supervisor/projects/github-connection-store.js";
-import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
+import type {
+  CredentialWorkspaceHost,
+  GitHubCredentialResult,
+  WorkspaceResetResult,
+} from "../../src/workspace/index.js";
+import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
 import { readGenerations } from "./generation-reads.js";
@@ -19,22 +23,15 @@ afterEach(async () => {
 function fakeWorkspace(resetResult: WorkspaceResetResult) {
   let credentialState: "connected" | "missing" = "connected";
 
-  const credential = vi.fn(() =>
-    Promise.resolve(
-      credentialState === "connected"
-        ? {
-            ok: true as const,
-            result: {
-              kind: "credential-status" as const,
-              state: "connected" as const,
-              login: "reset-user",
-            },
-          }
-        : {
-            ok: true as const,
-            result: { kind: "credential-status" as const, state: "missing" as const },
-          },
-    ),
+  const credential = vi.fn((): Promise<GitHubCredentialResult> =>
+    Promise.resolve({
+      ok: true,
+      result: {
+        kind: "credential-status",
+        state: credentialState,
+        login: credentialState === "connected" ? "reset-user" : undefined,
+      },
+    }),
   );
 
   const resetWorkspace = vi.fn(() => {
@@ -43,11 +40,10 @@ function fakeWorkspace(resetResult: WorkspaceResetResult) {
     return Promise.resolve(resetResult);
   });
 
-  // SAFETY: the fake implements the credential and reset RPCs this test observes.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
-  const workspace = { credential, reset: resetWorkspace } as unknown as ReturnType<
-    typeof env.WORKSPACE_HOST.getByName
-  >;
+  const workspace: CredentialWorkspaceHost & ResetWorkspaceHost = {
+    credential,
+    reset: resetWorkspace,
+  };
 
   return { resetWorkspace, workspace };
 }
@@ -69,7 +65,7 @@ test("resets the named workspace while preserving the projects and generations",
 
   const resetResult = { ok: true, reset: "workspace" } as const satisfies WorkspaceResetResult;
   const fake = fakeWorkspace(resetResult);
-  const getByName = vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+  const getByName = replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
 
   await expect(control.refreshGitHubConnection(NOW)).resolves.toEqual({
     github: { state: "connected", login: "reset-user", source: "configured-token" },
@@ -97,7 +93,7 @@ test("a reset the Workspace Host refuses keeps the GitHub connection record", as
 
   const busy = { ok: false, problem: { code: "workspace-busy" } } as const;
   const fake = fakeWorkspace(busy);
-  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+  replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
   await control.refreshGitHubConnection();
 
   await expect(control.resetWorkspace()).resolves.toEqual(busy);
@@ -106,7 +102,6 @@ test("a reset the Workspace Host refuses keeps the GitHub connection record", as
   });
 });
 
-/** A Workspace Host whose first reset waits until the test finishes it; later resets succeed. */
 function heldWorkspace() {
   const held = { started: (): void => {}, finish: (_result: WorkspaceResetResult): void => {} };
 
@@ -126,11 +121,7 @@ function heldWorkspace() {
       return answer;
     });
 
-  // SAFETY: the fake implements the reset RPC this test observes; nothing else may be reached.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
-  const workspace = { reset: resetWorkspace } as unknown as ReturnType<
-    typeof env.WORKSPACE_HOST.getByName
-  >;
+  const workspace: ResetWorkspaceHost = { reset: resetWorkspace };
 
   return { started, finish: held.finish, resetWorkspace, workspace };
 }
@@ -139,12 +130,10 @@ test("while a reset runs, messages, connects, disconnects, and a second reset ar
   const control = env.SUPERVISOR.getByName("workspace-reset-exclusion");
   await connectSampleProjects(control);
   const fake = heldWorkspace();
-  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
-  // A connect that got past the exclusion would ask GitHub for the repository size first.
+  replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
   vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("this test reaches no network"));
   const busy = { ok: false, problem: { code: "workspace-busy" } };
 
-  // Inside the object, because the held reset resolves from this test's own request.
   await runInDurableObject(control, async (supervisor) => {
     const resetting = supervisor.resetWorkspace();
     await fake.started;
@@ -164,7 +153,6 @@ test("while a reset runs, messages, connects, disconnects, and a second reset ar
     await expect(resetting).resolves.toEqual({ ok: true, reset: "workspace" });
   });
 
-  // The exclusion ended with the reset, and the refused disconnect removed nothing.
   await expect(control.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
   expect((await control.listProjects()).map((project) => project.id)).toContain(
     "sample-project-one",
@@ -175,7 +163,7 @@ test("the reset exclusion ends when the Workspace Host call throws", async () =>
   const control = env.SUPERVISOR.getByName("workspace-reset-exclusion-throws");
   const fake = fakeWorkspace({ ok: true, reset: "workspace" });
   fake.resetWorkspace.mockRejectedValueOnce(new Error("the Workspace Host went away"));
-  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+  replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
 
   await runInDurableObject(control, async (supervisor) => {
     await expect(supervisor.resetWorkspace()).rejects.toThrow("the Workspace Host went away");

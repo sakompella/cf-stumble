@@ -12,7 +12,6 @@ export type TenantConnections = Readonly<{
   connections: ProjectConnections;
 }>;
 
-/** The GitHub connection and the project connections, wired as one Supervisor wires them. */
 export function tenantConnections(
   storage: DurableObjectStorage,
   name: string,

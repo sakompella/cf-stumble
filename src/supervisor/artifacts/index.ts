@@ -21,15 +21,10 @@ export type ModuleMapProblem =
   | StoredModuleMapProblem
   | HarnessBuildProblem;
 
-/**
- * `no-active-generation` is not a fault: there is no code to serve. Every other problem describes the active
- * generation's stored map, and none fall back to other code or a build.
- */
 export type MainFacetMountProblem = { readonly code: "no-active-generation" } | ModuleMapProblem;
 
 export type MountedFacet = Fetcher<MainFacetTarget>;
 
-/** Only `prepare` builds. Serving reads what is stored, so activation and rollback cannot depend on Computer being reachable. */
 export class HarnessArtifacts {
   private readonly store: ModuleMapStore;
   private readonly builder: HarnessModuleMapBuilder;
@@ -50,7 +45,6 @@ export class HarnessArtifacts {
     );
   }
 
-  /** The stored map or a build, validated and stored before this returns. A store failure fails preparation: a ready generation must have its code stored. */
   prepare(harnessCommit: string): Effect.Effect<MainHarnessArtifactInput, ModuleMapProblem> {
     return Effect.gen({ self: this }, function* () {
       const validatedCommit = parseHarnessCommit(harnessCommit);
@@ -75,10 +69,6 @@ export class HarnessArtifacts {
     });
   }
 
-  /**
-   * Synchronous: the module map is already in the Durable Object's SQLite. A running serving facet
-   * keeps its class, so whoever changes the active generation aborts it first.
-   */
   mount(
     active: ActiveGeneration,
     loader: WorkerLoader,
@@ -98,7 +88,6 @@ export class HarnessArtifacts {
     );
   }
 
-  /** Reads only, never builds. A generation becomes ready only after `prepare` stored its map. */
   private load(
     active: ActiveGeneration,
   ): Result.Result<MainHarnessArtifactInput, MainFacetMountProblem> {
@@ -127,7 +116,6 @@ export class HarnessArtifacts {
   }
 }
 
-/** A build cannot deliver an unloadable map or a map for another commit. */
 function validatedBuild(
   harnessCommit: HarnessCommit,
   built: MainHarnessArtifactInput,

@@ -8,8 +8,6 @@ import {
   FakeProjectTransactions,
 } from "./fakes.js";
 
-/** Whether a project capability tells the Host it is working: an exec counts until it settles. */
-
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -73,7 +71,7 @@ test("an exec holds the workspace until it settles, then releases it exactly onc
 test("a refused exec never holds the workspace", async () => {
   const { activity, target } = makeTarget();
 
-  const refused = await target.startExec({ nonsense: true });
+  const refused = await target.startExec({ command: "" });
 
   expect(refused.ok).toBe(false);
   expect(activity.begun).toBe(0);
@@ -85,7 +83,7 @@ test("filesystem calls and exec starts mark activity without holding the workspa
   await target.lstat("/");
   await target.readFile("/missing");
   await target.listFiles("/");
-  await target.writeFile("/a", new Uint8Array(), "create");
+  await target.writeFile("/a", new Uint8Array(), "overwrite");
 
   expect(activity.touched).toBeGreaterThanOrEqual(4);
   expect(activity.open).toBe(0);

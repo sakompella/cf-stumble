@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -34,11 +32,6 @@ const commits = {
   loggedFailure: "7100000000000000000000000000000000000007",
 } as const;
 
-/**
- * A module map whose canonical encoding needs several chunks, filled with a three-byte character
- * so a chunk boundary falls inside one character. Reading it back proves the store splits bytes
- * and not text.
- */
 function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
   const filler = "\u2603".repeat(200_000);
 
@@ -66,11 +59,6 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);
 }
 
-/**
- * Real Durable Object storage with one refusing statement. The store's write is one
- * `transactionSync`, so refusing the second chunk insert aborts a write that had already stored
- * the manifest and the first chunk.
- */
 function refusingSecondChunk(storage: DurableObjectStorage): ModuleMapStorage {
   let chunkWrites = 0;
 
@@ -218,11 +206,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * The write shell's catch used to discard the SQLite exception it caught and answer
- * `artifact-write-failed` with nothing logged. The public code is unchanged; an operator can now
- * read the cause that transaction raised.
- */
 test("logs a redacted cause instead of discarding it when the transaction throws", async () => {
   const control = supervisor("module-map-write-logs-its-cause");
   const input = largeModuleMap(commits.loggedFailure);
@@ -250,7 +233,6 @@ test("reports an incomplete stored module map instead of rebuilding the commit",
   const control = await activeSupervisor("incomplete-module-map-fails-closed");
   const input = largeModuleMap(commits.incomplete);
   await storeModuleMap(control, input);
-  // The manifest still counts two chunks, so this leaves the count right and the indexes wrong.
   await runInDurableObject(control, (_instance, state) => {
     state.storage.sql.exec(
       "UPDATE module_map_chunks SET chunk_index = 5 WHERE harness_commit = ? AND chunk_index = 1",
@@ -273,11 +255,6 @@ test("reports an incomplete stored module map instead of rebuilding the commit",
   );
 });
 
-/**
- * Demo step 7. The Supervisor's builder is the Workspace Host builder, and this runtime has no
- * container to start, so every build here fails. The rollback still serves, which is the property
- * the demo needs: a generation that is ready has its module map stored, and nothing rebuilds it.
- */
 test("rolls back to a stored generation while every build fails", async () => {
   const control = await activeSupervisor("rollback-loads-stored-module-map");
   const secondCommit = commits.rolledForward;

@@ -3,7 +3,6 @@ import { routeOwnerApiRequest, type OwnerApiSupervisor } from "../../src/routes/
 import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
 import type { ChatGPTConnectionView } from "../../src/chatgpt/index.js";
 
-/** The owner API's answer to one request, run as the Worker's entry point runs it. */
 export function ownerApiResponse(
   request: Request,
   supervisor: OwnerApiSupervisor,
@@ -29,7 +28,6 @@ const chatgptSupervisor: Pick<
   disconnectChatGPT: notCalled("disconnect ChatGPT"),
 };
 
-/** A stand-in Supervisor for boundary tests. Each test overrides only the call it exercises. */
 export function ownerApiSupervisor(
   overrides: Partial<OwnerApiSupervisor> = {},
 ): OwnerApiSupervisor {
@@ -74,7 +72,6 @@ export function ownerApiSupervisor(
   };
 }
 
-/** Refuses every message as `workspace-busy` (409), so a test can tell a refusal from a bad body (400). */
 export function messageRefusingSupervisor(
   onMessage: () => void = () => {},
 ): ConversationApiSupervisor {
@@ -87,7 +84,6 @@ export function messageRefusingSupervisor(
   });
 }
 
-/** The body stays raw text so a malformed request reaches the route exactly as it was sent. */
 export function controlRequest(path: string, body: string): Request {
   return new Request(`https://cf-stumble.test${path}`, {
     method: "POST",

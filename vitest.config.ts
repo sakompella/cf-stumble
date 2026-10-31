@@ -4,24 +4,12 @@ import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { build } from "esbuild";
 import { defaultExclude, defineConfig, type Plugin } from "vitest/config";
 
-/**
- * The workers pool evaluates every module again in each test file's isolate, and `effect` ships
- * its code as hundreds of small modules. Loading them one by one cost each isolate about 360 ms
- * for `effect/Effect` and 1.3 s for the `effect` index, which made the whole suite up to 80 percent
- * slower. So the workers project loads Effect from one minified esbuild bundle per module path
- * that `src` or `test` imports, built when Vitest starts. The Worker that ships is also an esbuild
- * bundle, so tests still run the same code.
- *
- * A path that nothing in `src` or `test` names cannot be served from the bundle, and this plugin
- * fails the import instead of loading a second copy of Effect from `node_modules`.
- */
 const EFFECT_PATH = /^effect(?:\/[\w-]+)*$/u;
 
 const EFFECT_IMPORT = /from\s+"(effect(?:\/[\w-]+)*)"/gu;
 
 const PREBUNDLE_DIRECTORY = resolve(import.meta.dirname, "node_modules/.cache/effect-prebundle");
 
-/** The owner page's browser program and its tests run in Node, not in the workers pool. */
 const OWNER_PAGE_CLIENT = ["src/page/client/**", "test/page/client/**"];
 
 function importedEffectPaths(): readonly string[] {
@@ -79,28 +67,6 @@ async function effectPrebundle(): Promise<Plugin> {
   };
 }
 
-/**
- * Hegel loads a native generator through Koffi, which workerd cannot run. Properties therefore
- * run in Node. Shell tests also run in Node, because workerd has no `node:child_process` to start
- * `/bin/sh`. tsconfig.json still typechecks both projects against the Worker globals.
- *
- * The owner page's Foldkit program runs in a browser, so its tests run in Node too, and its own
- * tsconfig files typecheck it against the DOM. Foldkit imports the `effect` index, which the
- * prebundle above deliberately refuses.
- */
-/**
- * workerd rejects a promise of its own, which no code can reach or handle, when a stream received
- * from another Worker or over Workers RPC is cancelled while a read is pending or fails while it
- * is read; the pending read itself rejects and is handled. The same happens with a bare Worker
- * Loader response and a reader that handles every promise it holds. Only these tests run a real
- * generation or candidate that far, so the error is ignored in those files alone, and only for the
- * message each one provokes.
- * - `conversations/generation-1.test.ts`: the serving facet is replaced while an events stream
- *   reads it.
- * - `turn-cancel.test.ts`: a turn ends while its generation is quiet.
- * - `startup-check/body.test.ts`: a candidate body fails mid-read, and a stalled body is cancelled
- *   at the deadline.
- */
 const PLATFORM_STREAM_REJECTIONS = [
   {
     file: "test/supervisor/conversations/generation-1.test.ts",
@@ -130,9 +96,6 @@ export default defineConfig({
         ],
         test: {
           name: "workers",
-          // A test that is the first in its file to call the Worker loads the whole Worker module
-          // (Effect and the Foldkit page included), which can pass Vitest's 5 s default on a busy
-          // machine. The tests assert behavior, not load time.
           testTimeout: 20_000,
           include: ["test/**/*.test.ts"],
           exclude: [

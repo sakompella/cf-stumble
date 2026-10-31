@@ -11,7 +11,6 @@ const SYSTEM_PROMPT = [
   "Finish by telling the user what you changed and what the commands reported.",
 ].join(" ");
 
-/** Read relative to the working directory, so a sibling project's file is unreachable even though clones share a workspace. */
 const REPOSITORY_INSTRUCTIONS_FILE = "AGENTS.md";
 
 const RUN_DEADLINE_MINUTES = PROJECT_RUN_DEADLINE_MS / 60_000;
@@ -26,11 +25,6 @@ async function readOptional(
   return read.ok && read.value.trim() !== "" ? read.value.trim() : undefined;
 }
 
-/**
- * Read at every request, so an edited `AGENTS.md` reaches a running conversation. A missing file is
- * absent: a run must not fail on an unprovisioned workspace. When the working directory is the
- * workspace root both names address one file, which is sent once.
- */
 async function instructions(env: ExecutionEnv, context: Context): Promise<string | undefined> {
   const managed = await readOptional(env, MANAGED_AGENT_INSTRUCTIONS_PATH, context);
   const repositoryPath = await env.absolutePath(REPOSITORY_INSTRUCTIONS_FILE, context);
@@ -52,7 +46,6 @@ async function instructions(env: ExecutionEnv, context: Context): Promise<string
   return parts.length === 0 ? undefined : parts.join("\n\n");
 }
 
-/** Generation 1's system prompt: its policy, the run's directory and budget, then the instruction files. */
 export const CfStumblePrompt = defineExtension({
   name: "cf-stumble",
   sections: [

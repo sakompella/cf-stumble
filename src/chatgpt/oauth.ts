@@ -1,14 +1,8 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- The token endpoint's replies are parsed at this boundary.
-
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
-import { isRecord } from "../untrusted.js";
-
-/**
- * Every destination is fixed here, so nothing a request carries can send a grant or a token
- * elsewhere. Nothing here stores, logs, or returns a token to a browser.
- */
+import * as Schema from "effect/Schema";
 
 const AUTH_ORIGIN = "https://auth.openai.com";
 
@@ -16,13 +10,8 @@ export const AUTHORIZE_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/authorize`;
 
 export const TOKEN_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/oauth/token`;
 
-/**
- * Nothing listens here. A hosted Worker cannot receive a loopback redirect, so the owner hands back
- * the address the browser ends on.
- */
 export const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 
-/** Every first sign-in registers a new client under this id; the callback carries the issued one. */
 const DYNAMIC_CLIENT_ID = "dynamic_agent_client";
 
 const AGENT_NAME = "cf-stumble";
@@ -37,7 +26,6 @@ const MAX_CALLBACK_BYTES = 4096;
 
 const TOKEN_TIMEOUT_MS = 20_000;
 
-/** Visible ASCII with no spaces, which also rules out header injection. */
 const BEARER_PATTERN = /^[\u0021-\u007E]{1,16384}$/u;
 
 function base64Url(bytes: Uint8Array): string {
@@ -74,7 +62,6 @@ export function authorizeUrl(input: AuthorizeInput): Effect.Effect<string> {
         state: input.state,
         code_challenge: challenge,
         code_challenge_method: "S256",
-        // Never checked; sent because the flow requires one.
         nonce: randomSecret(),
       }).toString();
 
@@ -83,7 +70,6 @@ export function authorizeUrl(input: AuthorizeInput): Effect.Effect<string> {
   );
 }
 
-/** None of these consumes the sign-in. */
 export type CallbackProblem =
   | "bad-address"
   | "provider-refused"
@@ -135,10 +121,6 @@ export function parseCallback(
   return Result.succeed({ code, clientId });
 }
 
-/**
- * `ambiguous` means the request may have reached the server and rotated a refresh token.
- * `rate-limited` and `temporary` consumed nothing.
- */
 export type TokenFailure =
   | "rate-limited"
   | "temporary"
@@ -158,32 +140,30 @@ export type TokenGrant = Readonly<{
 
 export type ProviderFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-function bearer(value: unknown): string | undefined {
-  return typeof value === "string" && BEARER_PATTERN.test(value) ? value : undefined;
-}
+const Bearer = Schema.String.check(Schema.isPattern(BEARER_PATTERN));
 
-export function parseTokenGrant(value: unknown): Result.Result<TokenGrant, TokenFailure> {
-  if (!isRecord(value)) return Result.fail("ambiguous");
+const TokenReply = Schema.Struct({
+  access_token: Bearer,
+  refresh_token: Bearer,
+  expires_in: Schema.Finite.check(Schema.isGreaterThan(0)),
+  scope: Schema.String,
+});
 
-  const accessToken = bearer(value.access_token);
-  const refreshToken = bearer(value.refresh_token);
-  const expiresIn = value.expires_in;
-  const scope = value.scope;
+const decodeTokenReply = Schema.decodeUnknownOption(Schema.fromJsonString(TokenReply));
 
-  if (
-    accessToken === undefined ||
-    refreshToken === undefined ||
-    typeof expiresIn !== "number" ||
-    !Number.isFinite(expiresIn) ||
-    expiresIn <= 0 ||
-    typeof scope !== "string"
-  ) {
-    return Result.fail("ambiguous");
-  }
+export function parseTokenGrant(body: string): Result.Result<TokenGrant, TokenFailure> {
+  const reply = decodeTokenReply(body);
+
+  if (Option.isNone(reply)) return Result.fail("ambiguous");
+  const { access_token, refresh_token, expires_in, scope } = reply.value;
 
   if (!scope.split(/\s+/u).includes(DIRECT_TOKEN_SCOPE)) return Result.fail("missing-scope");
 
-  return Result.succeed({ accessToken, refreshToken, expiresInMs: expiresIn * 1000 });
+  return Result.succeed({
+    accessToken: access_token,
+    refreshToken: refresh_token,
+    expiresInMs: expires_in * 1000,
+  });
 }
 
 function statusFailure(status: number): TokenFailure {
@@ -194,7 +174,6 @@ function statusFailure(status: number): TokenFailure {
   return status >= 400 ? "rejected" : "ambiguous";
 }
 
-/** A failed reply's body is never read; it may echo a token or a code. */
 export function requestTokens(
   fetcher: ProviderFetch,
   fields: Readonly<Record<string, string>>,
@@ -221,8 +200,8 @@ export function requestTokens(
       return yield* new TokenRequestFailed({ failure: statusFailure(response.status) });
     }
 
-    const body: unknown = yield* Effect.tryPromise({
-      try: () => response.json(),
+    const body = yield* Effect.tryPromise({
+      try: () => response.text(),
       catch: () => new TokenRequestFailed({ failure: "ambiguous" }),
     });
 
@@ -233,9 +212,7 @@ export function requestTokens(
 }
 
 export function discardBody(response: Response): Promise<void> {
-  return (response.body?.cancel() ?? Promise.resolve()).catch(() => {
-    /* the body was going to be thrown away */
-  });
+  return (response.body?.cancel() ?? Promise.resolve()).catch(() => {});
 }
 
 export function exchangeFields(callback: Callback, verifier: string) {

@@ -8,25 +8,6 @@ import { holdProvisionLock } from "../src/project-provision.js";
 import { shellQuote } from "../src/shell-quote.js";
 import { writeExecutable } from "./workspace/planned-shell-fixture.js";
 
-/**
- * These tests run the provision lock's real shell text in several real shell processes at once.
- * Each process stops at a chosen point, so every run sees the same interleaving.
- *
- * A stand-in for `flock` comes first on each process's `PATH`. It takes the kernel lock on the
- * same descriptor with the real `flock` when the machine has one, and with Perl's `flock` when it
- * does not (macOS ships no `flock` command). It first tries without waiting. When that fails it
- * records that the lock was held, then waits, so a test can tell "waiting" from "entered" without
- * a timing guess. With `PAUSE_AFTER_ACQUIRE` it pauses after taking the lock, which is the moment
- * the earlier directory lock existed without an owner.
- *
- * The section the lock guards records `enter` and `leave` and stays inside until the test
- * releases it. With `KEEP_CHILD` it first starts a background child that keeps running after its
- * shell is killed, the way a `git clone` outlives a step whose direct shell was signalled.
- *
- * These tests do not show how the workspace container behaves: it runs the step under Debian's
- * `dash` with util-linux `flock`, and neither may be present here.
- */
-
 const shells = ["/bin/sh", "/bin/dash"].filter((shell) => existsSync(shell));
 
 const realSleep = ["/bin/sleep", "/usr/bin/sleep"].find((path) => existsSync(path)) ?? "sleep";
@@ -90,7 +71,6 @@ let lock = "";
 
 let eventsPath = "";
 
-/** Written once, because macOS checks each new executable on its first run. */
 const standIns = mkdtempSync(join(tmpdir(), "provision-lock-bin-"));
 
 writeExecutable(join(standIns, "flock"), flockStandIn);
@@ -108,7 +88,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Every paused or waiting loop above also stops once its directory is gone.
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -133,7 +112,6 @@ function start(shell: string, name: string, options: Options = {}): Contender {
     KEEP_CHILD: options.keepChild === true ? marker("child-release") : "",
   };
 
-  // The stand-in finds the real `flock`, if any, on the PATH the test runner started with.
   const script = [
     "set -eu",
     'export REAL_PATH="$PATH"',
@@ -186,15 +164,10 @@ async function until(condition: () => boolean, what: string): Promise<void> {
   }
 }
 
-/** Wait until the contender has either found the lock held or entered the section. */
 async function settle(contender: Contender, name: string): Promise<void> {
   await until(() => contender.hasBlocked() || contender.hasEntered(), `${name} blocks or enters`);
 }
 
-/**
- * Enter and leave strictly alternate, so no two contenders were ever inside together. A holder
- * that was killed inside never records its leave, so its events are left out.
- */
 function expectOneHolderAtATime(killed: string): void {
   let inside: string | undefined;
 
@@ -278,7 +251,6 @@ async function childOfKilledHolderKeepsLock(shell: string): Promise<void> {
   expect(await next.exited).toEqual(exitedCleanly);
 }
 
-/** Contenders that entered the section and have not left it, leaving out a killed holder. */
 function occupants(killed: string): readonly string[] {
   const entered = events()
     .filter((line) => line.startsWith("enter "))
@@ -298,7 +270,6 @@ async function contendersForDeadHolderEnterOneAtATime(shell: string): Promise<vo
   await dead.exited;
   await until(() => occupants("dead").length === 1, "one contender takes the dead holder's lock");
 
-  // A newcomer that arrives now must find the lock held by the one contender inside.
   const newcomer = start(shell, "newcomer");
   await settle(newcomer, "newcomer");
   expect(occupants("dead")).toHaveLength(1);

@@ -6,13 +6,15 @@ import {
   cloneMarkersAreDurable,
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
+  type ProjectProvisionRequest,
 } from "./project-provision.js";
 import {
   parseProjectRemovalRequest,
   planProjectRemovalRequest,
   removalIsDurable,
+  type ProjectRemovalRequest,
 } from "./project-removal.js";
-import type { HarnessBuildConfiguration } from "../harness-build.js";
+import type { HarnessBuildConfiguration, HarnessBuildRequest } from "../harness-build.js";
 import {
   answerFailures,
   workspaceEffects,
@@ -68,33 +70,30 @@ function cloneCommandOutput(output: CommandOutput): CommandOutput {
 
 function answerDurableFailures(
   context: string,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything; it only picks a log label.
-  unavailableLabel: (thrown: unknown) => string,
+  unavailableLabel: (cause: unknown) => string,
 ): (work: Effect.Effect<WorkspaceResult, WorkspaceFault>) => Effect.Effect<WorkspaceResult> {
-  return answerFailures<WorkspaceResult>((thrown) => {
-    if (thrown instanceof WorkspaceSyncIncomplete) {
-      logRedactedCause(`${context}: sync-incomplete`, thrown);
+  return answerFailures<WorkspaceResult>((cause) => {
+    if (cause instanceof WorkspaceSyncIncomplete) {
+      logRedactedCause(`${context}: sync-incomplete`, cause);
 
       return syncIncomplete();
     }
 
-    logRedactedCause(`${context}: ${unavailableLabel(thrown)}`, thrown);
+    logRedactedCause(`${context}: ${unavailableLabel(cause)}`, cause);
 
     return unavailable();
   });
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything.
-function timeoutOrUnavailable(thrown: unknown): string {
-  return isTimeoutFailure(thrown) ? "timeout" : "workspace-unavailable";
+function timeoutOrUnavailable(cause: unknown): string {
+  return isTimeoutFailure(cause) ? "timeout" : "workspace-unavailable";
 }
 
-/** Plans from the build configuration alone, so it can neither run a project command nor reach a project file. */
 export function executeHarnessBuildRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
     configuration: HarnessBuildConfiguration;
-    request: unknown;
+    request: HarnessBuildRequest;
   }>,
 ): Effect.Effect<WorkspaceResult> {
   const parsed = parseHarnessBuildRequest(input.request);
@@ -107,10 +106,10 @@ export function executeHarnessBuildRequest(
       planHarnessBuildRequest(input.configuration, parsed),
     ),
   ).pipe(
-    answerFailures((thrown): WorkspaceResult => {
+    answerFailures((cause): WorkspaceResult => {
       logRedactedCause(
-        `workspace.harness-build.${parsed.kind}: ${timeoutOrUnavailable(thrown)}`,
-        thrown,
+        `workspace.harness-build.${parsed.kind}: ${timeoutOrUnavailable(cause)}`,
+        cause,
       );
 
       return unavailable();
@@ -121,7 +120,7 @@ export function executeHarnessBuildRequest(
 export function executeProjectProvisionRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
-    request: unknown;
+    request: ProjectProvisionRequest;
   }>,
 ): Effect.Effect<WorkspaceResult> {
   const parsed = parseProjectProvisionRequest(input.request);
@@ -149,7 +148,7 @@ export function executeProjectProvisionRequest(
 export function executeProjectRemovalRequest(
   input: Readonly<{
     operations: WorkspaceOperations;
-    request: unknown;
+    request: ProjectRemovalRequest;
   }>,
 ): Effect.Effect<WorkspaceResult> {
   const parsed = parseProjectRemovalRequest(input.request);

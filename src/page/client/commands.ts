@@ -23,11 +23,6 @@ import { Message } from "./message.js";
 import { ControlKind } from "./model.js";
 import { sentMessage } from "./sent-message.js";
 
-/**
- * Each Command turns its answer into exactly one declared Message, so a refused or unreachable
- * request is a fact update handles rather than an exception.
- */
-
 export const FetchStatus = Command.define("FetchStatus", {
   messages: [Message.SucceededFetchStatus, Message.RejectedFetchStatus, Message.FailedFetchStatus],
   execute: requestJson("GET", "/api/status", Option.none()).pipe(
@@ -121,13 +116,11 @@ export const AuthorizeGitHub = Command.define("AuthorizeGitHub", {
   execute: ({ path }) => gitHubRequest("POST", path),
 });
 
-/** This read never wakes the workspace. */
 export const FetchGitHub = Command.define("FetchGitHub", {
   messages: GITHUB_MESSAGES,
   execute: gitHubRequest("GET", "/api/github/connection"),
 });
 
-/** This wakes the workspace container. */
 export const RefreshGitHub = Command.define("RefreshGitHub", {
   messages: GITHUB_MESSAGES,
   execute: gitHubRequest("POST", "/api/github/connection/refresh"),
@@ -181,7 +174,6 @@ export const DisconnectChatGPT = Command.define("DisconnectChatGPT", {
   execute: chatGPTRequest("POST", "/api/chatgpt/disconnect", Option.some({})),
 });
 
-/** Pi Durable answers a repeated `requestId` with the first submission, so each send mints one. */
 export const MintRequestId = Command.define("MintRequestId", {
   args: { projectId: Schema.String, content: Schema.String },
   messages: [Message.MintedRequestId],

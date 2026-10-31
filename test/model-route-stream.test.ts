@@ -51,7 +51,6 @@ const MULTI_TURN_REQUEST: ModelRouteRequest = {
   ],
 };
 
-/** One SSE line carrying a fragment of one tool call's arguments for slot 0. */
 function toolCallChunk(argsFragment: string): string {
   return sseLine({
     tool_calls: [{ index: 0, id: "call_1", function: { name: "bash", arguments: argsFragment } }],
@@ -134,8 +133,6 @@ test("assembles a tool call whose arguments arrive split across several chunks",
 
 test("reassembles a multi-byte UTF-8 character split across two raw byte chunks", async () => {
   const full = encoder.encode(sseLine({ response: "café" }) + DONE_LINE);
-  // "café" ends with the two-byte UTF-8 sequence for "é" (0xC3 0xA9); split one byte into it so
-  // neither chunk holds a complete character on its own.
   const splitAt = full.indexOf(0xc3) + 1;
   expect(full[splitAt]).toBeGreaterThanOrEqual(0x80);
   expect(full[splitAt]).toBeLessThanOrEqual(0xbf);
@@ -204,7 +201,6 @@ type HeldProviderStream = Readonly<{
   cancelled: () => boolean;
 }>;
 
-/** A provider stream that sends `lines`, then stays open until the test releases it. */
 function heldProviderStream(lines: readonly string[]): HeldProviderStream {
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   let wasCancelled = false;
@@ -232,12 +228,10 @@ function heldProviderStream(lines: readonly string[]): HeldProviderStream {
   return held;
 }
 
-/** One event line exactly as the route writes it. */
 function eventLine(chunk: Uint8Array | undefined): string {
   return new TextDecoder().decode(chunk);
 }
 
-/** The rest of a stream whose reader has already been read from. */
 function remainingEvents(
   reader: ReadableStreamDefaultReader<Uint8Array>,
 ): ReturnType<typeof collectEvents> {

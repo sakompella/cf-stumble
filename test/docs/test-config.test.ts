@@ -1,13 +1,6 @@
 import { expect, test } from "vitest";
 import { config, parsedConfig } from "./wrangler-files.js";
 
-/**
- * Declaring Workers AI opens a remote connection for every Workers test, so one network failure
- * can fail unrelated tests. Tests therefore load a copy of the Worker configuration without that
- * binding, and this check keeps the copy from drifting in any other way.
- * `cloudflare-config-drift.test.ts` compares both Wrangler files with `cloudflare.config.ts`.
- */
-
 test("the test Worker configuration differs from production only by name and the AI binding", () => {
   const production = config("wrangler.jsonc");
   const testing = config("wrangler.test.jsonc");

@@ -1,25 +1,18 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- This module is the parse boundary for the owner API's answers. Nothing a response carries has a proven shape until these readers prove it.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { GitHubReport, type ChatGPTConnection, type Project } from "./model.js";
 
-/**
- * Every path is relative, so every call stays on this origin; the Content Security Policy refuses the
- * rest. The page asks for no credential and stores none.
- */
-
-export function transportDetail(error: unknown): string {
-  return Predicate.isError(error) ? error.message : String(error);
+export function transportDetail(cause: unknown): string {
+  return Predicate.isError(cause) ? cause.message : String(cause);
 }
+
+export type Wire = Schema.Json | undefined;
 
 export type JsonBody = Readonly<Record<string, string | number>>;
 
-/**
- * `fetch` is read when the request starts; the browser harness replaces it to hold a submission in
- * flight.
- */
 export function fetchEffect(
   path: string,
   init: Readonly<{ method: "GET" | "POST"; accept: string; maybeBody: Option.Option<JsonBody> }>,
@@ -40,16 +33,17 @@ export function fetchEffect(
   });
 }
 
-export type Answer = Readonly<{ status: number; payload: unknown }>;
+export type Answer = Readonly<{ status: number; payload: Schema.Json }>;
 
-/** A body that is not JSON reads as `null`, as the Worker's 5xx can be. */
+const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
+
 export function answerOf(response: Response): Effect.Effect<Answer> {
-  return Effect.promise(() =>
-    response.json().then(
-      (payload: unknown) => payload,
-      () => null,
-    ),
-  ).pipe(Effect.map((payload) => ({ status: response.status, payload })));
+  return Effect.promise(() => response.text().catch(() => "")).pipe(
+    Effect.map((body) => ({
+      status: response.status,
+      payload: Option.getOrNull(decodeJsonText(body)),
+    })),
+  );
 }
 
 export function requestJson(
@@ -66,20 +60,28 @@ export function projectPath(projectId: string, suffix: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}${suffix}`;
 }
 
-export function field(value: unknown, ...path: readonly string[]): unknown {
-  return path.reduce<unknown>(
-    (current, key) => (Predicate.hasProperty(current, key) ? current[key] : undefined),
+function isJsonObject(value: Wire): value is Schema.JsonObject {
+  return Predicate.isObject(value) && !Array.isArray(value);
+}
+
+function isJsonArray(value: Wire): value is Schema.JsonArray {
+  return Array.isArray(value);
+}
+
+export function field(value: Wire, ...path: readonly string[]): Wire {
+  return path.reduce<Wire>(
+    (current, key) => (isJsonObject(current) ? current[key] : undefined),
     value,
   );
 }
 
-export function text(value: unknown): string {
+export function text(value: Wire): string {
   return Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
     ? String(value)
     : "";
 }
 
-export function isOk(payload: unknown): boolean {
+export function isOk(payload: Wire): boolean {
   return field(payload, "ok") === true;
 }
 
@@ -97,7 +99,7 @@ export function problemText(answer: Answer): string {
   return truthy(errorCode) ? `error: ${text(errorCode)}` : `error: HTTP ${answer.status}`;
 }
 
-function connectionDetail(status: unknown, state: string): string {
+function connectionDetail(status: Wire, state: string): string {
   switch (state) {
     case "connected":
       return `${text(field(status, "login"))} (${text(field(status, "source"))})`;
@@ -114,8 +116,7 @@ function connectionDetail(status: unknown, state: string): string {
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-/** A pending authorization is the Worker's own live state, so it carries no check time. */
-export function checkedWording(checkedAt: unknown, now: number): string {
+export function checkedWording(checkedAt: Wire, now: number): string {
   if (!Predicate.isNumber(checkedAt) || !Number.isFinite(checkedAt)) {
     return "";
   }
@@ -128,7 +129,7 @@ export function checkedWording(checkedAt: unknown, now: number): string {
     : `${then.getFullYear()}-${pad2(then.getMonth() + 1)}-${pad2(then.getDate())} ${clock}`;
 }
 
-export function gitHubReport(status: unknown, checkedAt: unknown, now: number): GitHubReport {
+export function gitHubReport(status: Wire, checkedAt: Wire, now: number): GitHubReport {
   const state = field(status, "state");
 
   if (!truthy(status) || !Predicate.isString(state)) {
@@ -153,7 +154,7 @@ const UNKNOWN_CHATGPT: ChatGPTConnection = {
   maybeLogin: Option.none(),
 };
 
-function chatGPTLogin(login: unknown): ChatGPTConnection["maybeLogin"] {
+function chatGPTLogin(login: Wire): ChatGPTConnection["maybeLogin"] {
   const attemptId = text(field(login, "attemptId"));
   const authorizeUrl = text(field(login, "authorizeUrl"));
 
@@ -162,23 +163,23 @@ function chatGPTLogin(login: unknown): ChatGPTConnection["maybeLogin"] {
     : Option.some({ attemptId, authorizeUrl });
 }
 
-function usageLimitText(limit: unknown): string {
-  if (!Predicate.hasProperty(limit, "limitedUntil")) {
+function usageLimitText(limit: Wire): string {
+  const limitedUntil = field(limit, "limitedUntil");
+
+  if (limitedUntil === undefined) {
     return "";
   }
-
-  const { limitedUntil } = limit;
 
   return Predicate.isNumber(limitedUntil)
     ? `; usage limit reached until ${new Date(limitedUntil).toISOString().slice(0, 16).replace("T", " ")} UTC`
     : "; usage limit reached";
 }
 
-export function chatGPTConnection(view: unknown): ChatGPTConnection {
+export function chatGPTConnection(view: Wire): ChatGPTConnection {
   const connection = field(view, "connection");
   const maybeLogin = chatGPTLogin(field(view, "login"));
 
-  switch (field(connection, "state")) {
+  switch (text(field(connection, "state"))) {
     case "disconnected":
       return { connection: "not connected (Workers AI fallback)", isConnected: false, maybeLogin };
     case "connected":
@@ -198,7 +199,7 @@ export function chatGPTConnection(view: unknown): ChatGPTConnection {
   }
 }
 
-function project(entry: unknown): Project {
+function project(entry: Wire): Project {
   const isHarness = field(entry, "kind") === "harness";
 
   return {
@@ -209,15 +210,15 @@ function project(entry: unknown): Project {
   };
 }
 
-export function projects(payload: unknown): Option.Option<readonly Project[]> {
+export function projects(payload: Wire): Option.Option<readonly Project[]> {
   const entries = field(payload, "projects");
 
-  return isOk(payload) && Array.isArray(entries)
+  return isOk(payload) && isJsonArray(entries)
     ? Option.some(entries.map((entry) => project(entry)))
     : Option.none();
 }
 
-export function preparationText(preparation: unknown): string {
+export function preparationText(preparation: Wire): string {
   if (!truthy(preparation)) {
     return "";
   }
@@ -229,8 +230,7 @@ export function preparationText(preparation: unknown): string {
   return `rejected: ${text(field(preparation, "problem", "code"))}`;
 }
 
-/** Untrusted command output, so it is only ever text. */
-export function diagnosticsText(preparation: unknown): Option.Option<string> {
+export function diagnosticsText(preparation: Wire): Option.Option<string> {
   const diagnostics =
     truthy(preparation) && field(preparation, "ok") === false
       ? field(preparation, "problem", "diagnostics")
@@ -255,7 +255,7 @@ export function diagnosticsText(preparation: unknown): Option.Option<string> {
 }
 
 export function sendRefusalText(answer: Answer): string {
-  switch (field(answer.payload, "problem", "code")) {
+  switch (text(field(answer.payload, "problem", "code"))) {
     case "no-active-generation":
       return "no active generation: activate one in the generation controls";
     case "workspace-busy":

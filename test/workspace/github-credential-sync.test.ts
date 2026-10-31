@@ -1,36 +1,26 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import * as Effect from "effect/Effect";
-import { Workspace, type ExecSyncResult } from "@cloudflare/computer";
+import type { ExecSyncResult } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { WorkspaceHost } from "../../src/workspace/host.js";
+import { restoreWorkspaceMembers, stubWorkspaceMember } from "./host-fixtures.js";
 import {
   executeGitHubCredentialRequest,
   WorkspaceSyncIncomplete,
   type CommandOutput,
+  type GitHubCredentialRequest,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
 
-/**
- * The credential install must not report success while the workspace's durable copy of `hosts.yml`
- * is still pending, because a container replacement would then lose the credential. The Workspace
- * Host passes the install a strict operations object (`require-complete`); this file checks that
- * the Host does, that the surface uses it for the install only, and that the failure leaks nothing.
- */
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(restoreWorkspaceMembers);
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 class RecordingOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
-  /** Set to make every command run and then fail, as a pending post-command sync does. */
   failure: Error | undefined;
 
   lstat(): Promise<WorkspacePathKind | undefined> {
@@ -54,7 +44,11 @@ class RecordingOperations implements WorkspaceOperations {
   }
 }
 
-const installRequest = { kind: "github-credential", step: "install", token: FAKE_TOKEN };
+const installRequest: GitHubCredentialRequest = {
+  kind: "github-credential",
+  step: "install",
+  token: FAKE_TOKEN,
+};
 
 test("runs the install through operations that require a complete sync, and nothing else", async () => {
   const lenient = new RecordingOperations();
@@ -122,11 +116,6 @@ test("a failed logout does not hide the incomplete sync", async () => {
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
 });
 
-/**
- * A real Workspace Host whose Computer runtime runs every command with exit 0 and reports `sync`
- * for the copy back into the durable workspace. Everything between the Host and that runtime is
- * the production code.
- */
 function hostAnswering<T>(
   name: string,
   sync: ExecSyncResult,
@@ -145,11 +134,9 @@ function hostAnswering<T>(
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fake implements the runtime slice ComputerWorkspaceOperations uses.
-  vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(runtime as never);
+  stubWorkspaceMember("runtime", runtime);
 
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
-    // The Host needs a container-enabled object to construct; no command reaches this container.
     Object.defineProperty(state, "container", { value: {}, configurable: true });
 
     return run(new WorkspaceHost(state, {}), sources);

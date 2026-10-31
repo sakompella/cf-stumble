@@ -9,7 +9,6 @@ import {
   FakeProjectTransactions,
 } from "./fakes.js";
 
-// "€" is e2 82 ac; the first two bytes alone are a truncated sequence.
 const EURO = [0xe2, 0x82, 0xac];
 
 const TRUNCATED_EURO = EURO.slice(0, 2);
@@ -60,7 +59,6 @@ function outputOf(frames: ExecEvent[], kind: "stdout" | "stderr"): string {
   return frames.flatMap((frame) => (frame.kind === kind ? [frame.data] : [])).join("");
 }
 
-/** Asserts the single terminal event comes last, so all output arrived before it. */
 function terminalOf(frames: ExecEvent[]): ExecEvent {
   const terminal = frames.at(-1);
 

@@ -1,12 +1,9 @@
 {
-  // One program against the workerd globals. Tests that run in Node still import node: builtins;
-  // their types come from @types/node, which dependency declarations reference.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types"]
   },
   "include": ["src", "test", "*.config.ts"],
-  // The owner page's browser program has its own tsconfig with the DOM library.
   "exclude": ["src/page/client", "test/page/client"]
 }

@@ -4,11 +4,6 @@ import { expect, test } from "vitest";
 import { parseProjectId, type ProjectId } from "../../../src/project-catalog.js";
 import { ProjectLifecycleQueue } from "../../../src/supervisor/projects/project-lifecycle-queue.js";
 
-/**
- * The per-project queue on its own. `project-lifecycle.test.ts` holds what it protects; these hold
- * the queue's own rules, including what an interrupted caller does to the callers behind it.
- */
-
 function projectId(value: string): ProjectId {
   const parsed = parseProjectId(value);
 
@@ -23,7 +18,6 @@ const two = projectId("project-two");
 
 type Held = Readonly<{ work: Effect.Effect<void>; release(): void; started(): boolean }>;
 
-/** Work that runs until the test releases it, as a Workspace Host RPC in flight does. */
 function held(log: string[], name: string): Held {
   const finish = { release: (): void => {} };
   let started = false;

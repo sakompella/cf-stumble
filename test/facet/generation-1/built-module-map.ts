@@ -4,10 +4,6 @@ import { moduleMapFromBuildOutput } from "../../../src/supervisor/artifacts/inde
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import type { BuiltModuleMapFile } from "../../../src/supervisor/artifacts/index.js";
 
-/**
- * `pnpm build:module-map` writes this file, and `pnpm verify` runs that build before the tests.
- * Vite resolves the glob at build time, so this reads no filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -28,11 +24,9 @@ const builtFile = Object.values(
 export function builtModuleMap(): Promise<BuiltModuleMapFile> {
   if (builtFile === undefined) throw new Error("run pnpm build:module-map before the tests");
 
-  // `Response.json` decodes the build output without asserting a shape it has not proved yet.
   return new Response(builtFile).json<BuiltModuleMapFile>();
 }
 
-/** The built generation 1 as the Supervisor's build path would store it under `commit`. */
 export async function builtGeneration(commit: string): Promise<MainHarnessArtifactInput> {
   const harnessCommit = parseHarnessCommit(commit);
 

@@ -20,7 +20,6 @@ export type HarnessBuildConfiguration = Readonly<{
   harnessRepositoryRoot: string;
   harnessGitDir: string;
   harnessGitRemote: string;
-  /** Order is a dependency: an extracted commit has no `node_modules`, so install comes first. */
   buildPhases: readonly [HarnessBuildPhase, ...HarnessBuildPhase[]];
   moduleMapPath: string;
   stepTimeoutMs: number;
@@ -42,10 +41,6 @@ export const HARNESS_BUILD_CONFIGURATION = {
   stepTimeoutMs: WORKSPACE_COMMAND_TIMEOUT_MS,
 } as const satisfies HarnessBuildConfiguration;
 
-/**
- * A fork must set `HARNESS_REPOSITORY_URL`; the default is this project's repository, so a fork's
- * own commits would never be reachable.
- */
 export function harnessBuildConfiguration(
   repositoryUrl: string | undefined,
 ): HarnessBuildConfiguration {
@@ -83,10 +78,6 @@ export const HARNESS_BUILD_STEP_NAMES: readonly HarnessBuildStepName[] = [
 
 export const HARNESS_PROVISION_LOCK = "/tmp/cf-stumble-harness-provision.lock";
 
-/**
- * Fetches the commit directly, then falls back to the remote's branches for a server that refuses a
- * request for a bare object.
- */
 function obtainHarnessCommit(): readonly string[] {
   return [
     'if ! git --git-dir="$git_dir" cat-file -e "${commit}^{commit}" 2>/dev/null; then',
@@ -101,10 +92,6 @@ function obtainHarnessCommit(): readonly string[] {
   ];
 }
 
-/**
- * The harness directory is an editable checkout, so the shared clone block only checks an existing
- * one and never replaces it.
- */
 export function provisionHarnessRepository(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,
@@ -124,11 +111,6 @@ export function provisionHarnessRepository(
   ].join("\n");
 }
 
-/**
- * The archive is written first so an archive failure fails this step instead of reaching the build
- * as an empty directory. Computer's userspace filesystem refuses `utime`, `chown` and `chmod` on
- * directories tar creates, and tar exits 2, hence the metadata flags.
- */
 function checkoutSource(
   configuration: HarnessBuildConfiguration,
   directory: string,
@@ -143,11 +125,6 @@ function checkoutSource(
   ].join("\n");
 }
 
-/**
- * Changes into the scratch directory itself because Computer refuses a working directory outside
- * the workspace. Keeps only the output tail because Computer holds output in memory and an
- * unbounded `pnpm install` log made the container exit. `pipefail` keeps the phase's exit code.
- */
 function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildStep {
   return {
     name: phase.name,
@@ -160,12 +137,6 @@ function phaseStep(directory: string, phase: HarnessBuildPhase): HarnessBuildSte
   };
 }
 
-/**
- * Interpolating the commit is safe because `HarnessCommit` accepts only lower-case hexadecimal.
- * Deleting and recreating the commit-keyed scratch directory cannot race: it belongs to the
- * tenant's own container and `WorkspaceHostModuleMapBuilder` admits one build per commit.
- * `buildRoot` holds no repository, so the delete only removes an earlier extraction of that commit.
- */
 export function planHarnessBuild(
   configuration: HarnessBuildConfiguration,
   harnessCommit: HarnessCommit,

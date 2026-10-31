@@ -12,19 +12,10 @@ import { ACCESS_ONE, responsesEvent } from "./chatgpt/fixtures.js";
 import { sseLine } from "./model-route-provider-stream.js";
 import type LoadedStreamRelayEntry from "./supervisor/projects/loaded-stream-relay-entry.js";
 
-/**
- * A generation that stops reading its model stream, because its turn was cancelled, must stop the
- * provider call behind it. The provider is often quiet for a long time before its first token,
- * and Workers RPC tells a stream's source that its reader went away only when the source next
- * writes, so the route cannot wait for the provider's next chunk to find out.
- */
-
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-/** Long enough for two keepalives, and far shorter than a quiet provider. */
 const PROMPTLY_MS = 5_000;
 
-/** A provider that answers one text chunk and then goes quiet, as one thinking does. */
 function quietProvider() {
   const seen = { cancelled: false };
 
@@ -42,7 +33,6 @@ function quietProvider() {
   return { ai, seen };
 }
 
-/** How long `condition` took to hold, or infinity when it did not hold promptly. */
 async function until(condition: () => boolean): Promise<number> {
   const started = Date.now();
 
@@ -119,7 +109,6 @@ const CONNECTED: ChatGPTCredential = {
   markUsageLimited: () => Promise.resolve(),
 };
 
-/** The ChatGPT call alone; a test that reaches the Workers AI fallback has gone wrong. */
 function chatgptOnly(fetcher: ProviderFetch): ModelTurn {
   const turn = chatgptTurn({ credential: CONNECTED, fetcher, model: "gpt-test" }, REQUEST);
 

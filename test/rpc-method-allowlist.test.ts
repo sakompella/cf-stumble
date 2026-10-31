@@ -4,14 +4,6 @@ import { ModelRoute } from "../src/model-route.js";
 import { ProjectRpcTarget } from "../src/workspace/project/index.js";
 import { ConversationHostTarget } from "../src/supervisor/conversations/index.js";
 
-/**
- * Workers RPC exposes every method and accessor on the prototype chain of an RPC class, including
- * a TypeScript `private` one. A generation reaches `ModelRoute` through its `MODEL` binding and
- * `ProjectRpcTarget` through the project capability, and a serving facet holds a
- * `ConversationHostTarget`, so a new public member is a new capability
- * for mutable code. Adding one must also add its name here, on purpose. See ADR-0047.
- */
-
 type Prototype = NonNullable<ReturnType<typeof Reflect.getPrototypeOf>>;
 
 const BASE_PROTOTYPES: readonly Prototype[] = [

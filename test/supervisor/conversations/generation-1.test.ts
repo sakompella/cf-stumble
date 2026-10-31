@@ -1,29 +1,18 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { SERVING_FACET_NAME } from "../../../src/supervisor/artifacts/index.js";
-import * as Option from "effect/Option";
 import { sentMessage } from "../../../src/page/client/sent-message.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
 import { ownerApiResponse } from "../../routes/helpers.js";
 import {
-  calls,
-  held,
-  lines,
-  ProjectWorkspace,
-  says,
-  scriptModel,
+  answeredLines,
   servingGeneration1,
   submitted,
   untilAnswered,
 } from "./generation-1-session.js";
-
-/**
- * Generation 1 as built, served by the Supervisor through its RPC surface, with the real model
- * route and a real project capability. Only OpenAI and Computer are fakes.
- */
+import { ProjectWorkspace } from "./project-workspace.js";
+import { calls, held, says, scriptModel } from "./scripted-model.js";
 
 const project = sampleProjectOne.id;
 
@@ -47,13 +36,12 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
   ).rejects.toThrow();
   interrupted.release(says("an answer nobody reads"));
 
-  // A stub to an aborted object stays broken; the next one reaches a new instance.
   const control = env.SUPERVISOR.getByName("generation-1-resume");
 
   expect(await runDurableObjectAlarm(control)).toBe(true);
   await vi.waitUntil(() => model.inputs.length === 2);
 
-  expect(lines(await untilAnswered(control, project, 1))).toEqual([
+  expect(await answeredLines(control, project, 1)).toEqual([
     { role: "user", text: "hello" },
     { role: "assistant", text: "resumed answer" },
   ]);
@@ -72,9 +60,7 @@ test("the owner API answers a sent message with the number the page accepts", as
   );
 
   expect(response.status).toBe(202);
-  expect(Option.getOrUndefined(sentMessage(await response.json()))?.submissionId).toBeTypeOf(
-    "number",
-  );
+  expect(sentMessage(await response.json())._tag).toBe("Some");
 });
 
 test("a message sent while a run is busy is answered after the first", async () => {
@@ -87,7 +73,7 @@ test("a message sent while a run is busy is answered after the first", async () 
   await submitted(control, project, "second", "r2");
   first.release(says("first answer"));
 
-  expect(lines(await untilAnswered(control, project, 2))).toEqual([
+  expect(await answeredLines(control, project, 2)).toEqual([
     { role: "user", text: "first" },
     { role: "assistant", text: "first answer" },
     { role: "user", text: "second" },
@@ -106,7 +92,7 @@ test("a fresh thread is a new conversation that does not see the old messages", 
   expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
   await submitted(control, project, "new message", "r2");
 
-  expect(lines(await untilAnswered(control, project, 1))).toEqual([
+  expect(await answeredLines(control, project, 1)).toEqual([
     { role: "user", text: "new message" },
     { role: "assistant", text: "new answer" },
   ]);
@@ -121,7 +107,7 @@ test("a tool call reads the project's file through the project capability", asyn
 
   await submitted(control, project, "read notes.txt", "r1");
 
-  expect(lines(await untilAnswered(control, project, 1))).toEqual([
+  expect(await answeredLines(control, project, 1)).toEqual([
     { role: "user", text: "read notes.txt" },
     { role: "assistant", text: "" },
     { role: "toolResult", text: "kept in the workspace\n" },

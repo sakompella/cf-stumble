@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
@@ -41,7 +39,6 @@ export class MainFacet extends DurableObject {
   };
 }
 
-/** A stored module map stands in for a build, so no test here needs a build workspace. */
 function seedModuleMap(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
@@ -80,7 +77,6 @@ function submittedLabel(result: GenerationSubmissionResult): number {
   return result.outcome.generation.label;
 }
 
-/** Generation 0 keeps serving its fixture facet, which answers `/facet/ping` with `pong`. */
 async function expectActiveFixtureStillServing(
   control: DurableObjectStub<Supervisor>,
 ): Promise<void> {
@@ -163,8 +159,6 @@ test("resubmitting the same passing commit returns the existing generation witho
   expect(resubmitted).toMatchObject({
     ok: true,
     outcome: {
-      // The commit keeps its label from the first submission. Its status has since moved on to
-      // "ready", because the first submission's own preparation step already checked it.
       generation: first.ok ? { ...first.outcome.generation, status: "ready" } : undefined,
     },
   });
@@ -174,8 +168,6 @@ test("resubmitting the same passing commit returns the existing generation witho
     ),
     "resubmitting an already-labeled commit must not label it twice",
   ).toHaveLength(1);
-  // The already-ready candidate's second preparation check confirms the recorded outcome rather
-  // than recording it again: decidePreparationCheck reports a no-op, not a fresh recording.
   expect(resubmitted).toMatchObject({
     preparation: { ok: true, report: { stage: "ready", effect: "no-op" } },
   });

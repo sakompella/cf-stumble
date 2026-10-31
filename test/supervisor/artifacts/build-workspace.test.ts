@@ -25,10 +25,6 @@ function moduleMapFile(): string {
   return JSON.stringify({ entryModule: "main.js", modules: [helperModule, entryModule] });
 }
 
-/**
- * Stands in for the Workspace Host build surface. It answers only the requests the host accepts,
- * so a request the adapter should never send fails the test rather than silently succeeding.
- */
 class FakeBuildHost implements BuildWorkspaceHost {
   readonly requests: HarnessBuildRequest[] = [];
   output: string | undefined = moduleMapFile();

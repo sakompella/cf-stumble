@@ -5,13 +5,6 @@ import type { ConversationProblem } from "../../src/supervisor/conversations/con
 import { sendJson } from "./server-routes.mjs";
 import type { RequestRecord, ScenarioState } from "./server-state.mjs";
 
-/**
- * The conversation routes, served from the stub's Pi Durable conversations.
- *
- * The events response writes the snapshot and then each event as its own line, as the Supervisor
- * does, and stays open until the browser closes it.
- */
-
 type SupervisorAnswer<Call extends keyof ConversationApiSupervisor> = Awaited<
   ReturnType<ConversationApiSupervisor[Call]>
 >;

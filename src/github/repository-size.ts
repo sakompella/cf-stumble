@@ -1,28 +1,18 @@
-// oxlint-disable anti-slop/no-known-value-widening, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof -- GitHub's JSON response is parsed at this API boundary.
-
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { PublicRepositoryUrl } from "../project-catalog.js";
-import { isRecord } from "../untrusted.js";
 import type { GitHubFetch, GitHubToken } from "./device-flow.js";
 
 export const REPOSITORY_SIZE_TIMEOUT_MS = 5_000;
 
 const GITHUB_API_ROOT = "https://api.github.com";
 
-/**
- * Protects the per-file durable workspace index and sync walk. Hono's 1,800-file tree was healthy
- * and workers-sdk wedged at 5,649 files.
- */
 export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
 
-/**
- * Hono's working tree was about 6 MB and workers-sdk's about 48 MB; 150 MB leaves margin without
- * admitting a repository that overwhelms the workspace.
- */
 export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
 
-/** Separate from the working-tree byte ceiling; GitHub reports `size` in kilobytes. */
 export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
 
 export const REPOSITORY_TREE_MUST_BE_COMPLETE = true;
@@ -68,25 +58,34 @@ function repositoryApiUrl(repositoryUrl: PublicRepositoryUrl): string | undefine
   return path === undefined ? undefined : `${GITHUB_API_ROOT}/${path}`;
 }
 
-function apiHeaders(token: GitHubToken | undefined): Record<string, string> {
-  const headers: Record<string, string> = {
-    accept: "application/vnd.github+json",
-    "user-agent": "cf-stumble",
-    "x-github-api-version": "2022-11-28",
-  };
+const API_HEADERS = {
+  accept: "application/vnd.github+json",
+  "user-agent": "cf-stumble",
+  "x-github-api-version": "2022-11-28",
+};
 
-  if (token !== undefined) headers.authorization = `Bearer ${token}`;
-
-  return headers;
+function apiHeaders(token: GitHubToken | undefined) {
+  return token === undefined ? API_HEADERS : { ...API_HEADERS, authorization: `Bearer ${token}` };
 }
 
 export class RepositorySizeUnknown extends Data.TaggedError("RepositorySizeUnknown") {}
 
-function getJson(
+const ByteCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const Repository = Schema.Struct({ size: ByteCount, default_branch: Schema.NonEmptyString });
+
+const Tree = Schema.Struct({ tree: Schema.Array(Schema.Unknown), truncated: Schema.Boolean });
+
+const isBlob = Schema.is(Schema.Struct({ type: Schema.Literal("blob") }));
+
+const decodeBlobSize = Schema.decodeUnknownOption(Schema.Struct({ size: ByteCount }));
+
+function getJson<S extends Schema.ConstraintDecoder<unknown>>(
   url: string,
   token: GitHubToken | undefined,
   fetcher: GitHubFetch,
-): Effect.Effect<unknown, RepositorySizeUnknown> {
+  reply: S,
+): Effect.Effect<S["Type"], RepositorySizeUnknown> {
   return Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: () =>
@@ -99,14 +98,17 @@ function getJson(
 
     if (!response.ok) return yield* new RepositorySizeUnknown();
 
-    return yield* Effect.tryPromise({
-      try: (): Promise<unknown> => response.json(),
+    const text = yield* Effect.tryPromise({
+      try: () => response.text(),
       catch: () => new RepositorySizeUnknown(),
     });
+
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(reply))(text).pipe(
+      Effect.mapError(() => new RepositorySizeUnknown()),
+    );
   });
 }
 
-/** An unknown size is not a connection refusal, since cloning remains the final check. */
 export function lookupRepositorySize(
   repositoryUrl: PublicRepositoryUrl,
   token: GitHubToken | undefined,
@@ -117,51 +119,31 @@ export function lookupRepositorySize(
 
     if (apiUrl === undefined) return yield* new RepositorySizeUnknown();
 
-    const repository = yield* getJson(apiUrl, token, fetcher);
-    const size = isRecord(repository) ? repository.size : undefined;
-    const defaultBranch = isRecord(repository) ? repository.default_branch : undefined;
-
-    if (
-      typeof size !== "number" ||
-      !Number.isSafeInteger(size) ||
-      size < 0 ||
-      typeof defaultBranch !== "string" ||
-      defaultBranch.length === 0
-    ) {
-      return yield* new RepositorySizeUnknown();
-    }
+    const repository = yield* getJson(apiUrl, token, fetcher, Repository);
 
     const tree = yield* getJson(
-      `${apiUrl}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
+      `${apiUrl}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`,
       token,
       fetcher,
+      Tree,
     );
-
-    if (!isRecord(tree) || !Array.isArray(tree.tree) || typeof tree.truncated !== "boolean") {
-      return yield* new RepositorySizeUnknown();
-    }
 
     let blobCount = 0;
     let blobBytes = 0;
 
     for (const entry of tree.tree) {
-      if (!isRecord(entry) || entry.type !== "blob") continue;
+      if (!isBlob(entry)) continue;
 
-      const blobSize = entry.size;
+      const blobSize = decodeBlobSize(entry);
 
-      if (
-        typeof blobSize !== "number" ||
-        !Number.isSafeInteger(blobSize) ||
-        blobSize < 0 ||
-        !Number.isSafeInteger(blobBytes + blobSize)
-      ) {
+      if (Option.isNone(blobSize) || !Number.isSafeInteger(blobBytes + blobSize.value.size)) {
         return yield* new RepositorySizeUnknown();
       }
 
       blobCount += 1;
-      blobBytes += blobSize;
+      blobBytes += blobSize.value.size;
     }
 
-    return { sizeKb: size, blobCount, blobBytes, truncated: tree.truncated };
+    return { sizeKb: repository.size, blobCount, blobBytes, truncated: tree.truncated };
   });
 }

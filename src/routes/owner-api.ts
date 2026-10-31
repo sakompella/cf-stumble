@@ -38,10 +38,6 @@ function workspaceResetResponse(
   );
 }
 
-/**
- * `generation` is written as `null` when there is none because `Response.json` drops undefined, and
- * `{"activeGeneration":{"epoch":0}}` reads like an active generation at epoch 0.
- */
 function statusResponse(
   supervisor: OwnerApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
@@ -57,10 +53,6 @@ function statusResponse(
   );
 }
 
-/**
- * A rejected Supervisor call or a defect in a route is logged redacted and answered with a bare 500,
- * because its text can come from a generation's code or a workspace command.
- */
 export function routeOwnerApiRequest(
   request: Request,
   supervisor: OwnerApiSupervisor,

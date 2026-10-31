@@ -2,12 +2,6 @@ import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { runAtEntryPoint, runResponseBody } from "../src/run-entry-point.js";
 
-/**
- * The one place a native entry point interprets an Effect program. It has to behave like the
- * `async` function it replaces: the same value, the same thrown error, and a response body that
- * keeps streaming after the program has returned its headers (ADR-0037).
- */
-
 test("a program's value is the entry point's value", async () => {
   await expect(runAtEntryPoint(Effect.succeed(7))).resolves.toBe(7);
 });

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import {
@@ -43,7 +41,6 @@ export class MainFacet extends DurableObject {
   expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
 });
 
-/** The Worker Loader caches code by commit, so this candidate needs a commit of its own. */
 const PI_DURABLE_MISMATCH_COMMIT = "9123456789abcdef0123456789abcdef01234567";
 
 test("a generation built with another Pi Durable version fails its startup check", async () => {

@@ -11,17 +11,10 @@ import {
 } from "../src/project-catalog.js";
 import { sampleCatalog, sampleProjectOne } from "./project-fixtures.js";
 
-/**
- * The catalog is a variable-length collection of the repositories one tenant has connected. These
- * tests hold the three properties a connect flow needs from it: any number of projects resolves,
- * identity does not depend on position or display name, and connecting the same repository twice
- * names the same project.
- */
-
 function catalogOf(...urls: readonly string[]): ProjectCatalog {
   const parsed = parseProjectCatalog(
     urls.map((repositoryUrl, index) => ({
-      id: projectIdForRepository(repositoryUrl),
+      id: projectIdForRepository(repositoryUrl) ?? "",
       displayName: `project ${index}`,
       repositoryUrl,
     })),
@@ -70,7 +63,7 @@ test("gives one repository the same identity whatever its position or display na
   const reordered = catalogOf("https://github.com/sample/repo-2", url);
 
   const renamed = parseProjectCatalog([
-    { id: projectIdForRepository(url), displayName: "a new name", repositoryUrl: url },
+    { id: projectIdForRepository(url) ?? "", displayName: "a new name", repositoryUrl: url },
   ]);
 
   expect(projectIdForRepository(url)).toBe("sample-repo-1");
@@ -97,8 +90,6 @@ test("refuses a repository URL that no clone could use", () => {
 });
 
 test("keeps the id of every connected repository whose name has no dot or underscore", () => {
-  // The owner's live project. Its thread, its SQLite rows, and its directory under
-  // /workspace/projects are all keyed by this id, so the id may never change.
   expect(projectIdForRepository("https://github.com/sakompella/emaily-demo")).toBe(
     "sakompella-emaily-demo",
   );

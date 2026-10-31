@@ -1,10 +1,5 @@
 import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../page/index.js";
 
-/**
- * Every other `GET /` is relayed to the active main facet, and the startup check sends the same
- * request. A browser navigation always sends an explicit `text/html` Accept; a wildcard alone is not
- * enough, so a machine client still gets the relayed response.
- */
 function acceptsHtmlDocument(accept: string | null): boolean {
   if (accept === null) {
     return false;
@@ -23,10 +18,6 @@ export function isOwnerPageRequest(request: Request): boolean {
   );
 }
 
-/**
- * `script-src 'self'` refuses inline and evaluated code, and a fresh nonce admits only this
- * response's inline style. `no-store` keeps the page out of a shared cache.
- */
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
     status: 200,
@@ -43,10 +34,6 @@ function ownerPage(nonce: string): Response {
   });
 }
 
-/**
- * The path names a hash of the bytes, so a browser may keep it for a year; the `no-store` page always
- * names the current one. Any other path goes on to the active generation.
- */
 function ownerPageScript(): Response {
   return new Response(OWNER_PAGE_SCRIPT_FILE.source, {
     status: 200,

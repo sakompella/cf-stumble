@@ -1,7 +1,3 @@
-/**
- * Which Pi Durable conversation is each project's current thread. A fresh thread points the row at
- * a new conversation; the old one stays in the Supervisor's storage, unreferenced.
- */
 export class ProjectConversations {
   private readonly sql: SqlStorage;
 

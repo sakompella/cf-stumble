@@ -2,15 +2,9 @@ import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
 import { applyEvent, EMPTY_CONVERSATION } from "./conversation.js";
-import type { AgentEvent } from "./events.js";
+import type { AgentEvent } from "./agent-event.js";
 import type { Model } from "./model.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
-
-/**
- * The transcript and the run's state come from the conversation's events; this page only adds
- * the messages it sent that the conversation has not placed yet, and what became of its own
- * requests. A fresh thread needs two clicks; the first arms it.
- */
 
 function send(model: Model): UpdateReturn {
   const cleared = clearError(model);
@@ -45,7 +39,6 @@ function settledNote(status: string, reason: string | undefined): Option.Option<
   }
 }
 
-/** Facts an event tells this page beyond the conversation itself. */
 function withEventFacts(model: Model, event: AgentEvent): Model {
   return Match.value(event).pipe(
     Match.discriminators("type")({
@@ -76,7 +69,6 @@ function withEventFacts(model: Model, event: AgentEvent): Model {
   );
 }
 
-/** A connected ChatGPT is read again after a run, because a run can meet the plan's usage limit. */
 function receivedEvent(model: Model, event: AgentEvent): UpdateReturn {
   const next = withEventFacts(
     { ...model, conversation: applyEvent(model.conversation, event) },
@@ -210,7 +202,6 @@ function freshThread(model: Model): Model {
   };
 }
 
-/** An answer for a stream the page has since replaced is dropped. */
 export function streamHandlers(
   model: Model,
 ): Handlers<

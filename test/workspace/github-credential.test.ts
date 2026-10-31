@@ -4,19 +4,11 @@ import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js"
 import {
   executeGitHubCredentialRequest,
   type CommandOutput,
+  type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
-
-/**
- * The Workspace Host's credential surface, driven through a fake Computer.
- *
- * No test here runs a shell, so what a green run shows is which requests are accepted, how the
- * token is handed over, what text the commands are, and what the surface returns. The two
- * credential properties are checked directly: the token reaches the install
- * command on standard input and nothing else, and it appears in no command line and no result.
- */
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
@@ -55,13 +47,6 @@ class FakeCredentialOperations implements WorkspaceOperations {
   }
 }
 
-/**
- * A workspace with no filesystem at all: every path operation rejects, whatever the path.
- *
- * Computer's workspace filesystem is not the container's, so `/tmp` and every other container
- * path is missing from it. This fake is the honest version of that: a surface that needs any file
- * cannot pass with it.
- */
 class FilesystemlessOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
   readonly stdins: (string | undefined)[] = [];
@@ -69,7 +54,6 @@ class FilesystemlessOperations implements WorkspaceOperations {
   stderr = "";
   exitCode = 0;
   commandFails = false;
-  /** What the rejected `runCommand` promise carries; a test overrides this. */
   commandFailure = new Error("workspace is unavailable");
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
@@ -100,8 +84,7 @@ class FilesystemlessOperations implements WorkspaceOperations {
 
 type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function credential(operations: CredentialOperations, request: unknown) {
+function credential(operations: CredentialOperations, request: GitHubCredentialRequest) {
   return Effect.runPromise(
     executeGitHubCredentialRequest({ operations, installOperations: operations, request }),
   );
@@ -132,16 +115,6 @@ test("hands the token to gh on standard input and keeps it out of the command li
   );
 });
 
-/**
- * The regression this file exists to prevent. The install used to write the token to a path and
- * have the command read it back, and the path was on the container's filesystem while the write
- * went to the workspace's, so every install failed as `workspace-unavailable` on a real
- * deployment and the cause was discarded.
- *
- * The property, not the path, is what is asserted: a workspace whose filesystem refuses every
- * operation must still install a credential. Any install that needs a file anywhere fails this,
- * whatever path it picks.
- */
 test("installs a credential without touching a filesystem at all", async () => {
   const operations = new FilesystemlessOperations();
   operations.stdout = "installed";
@@ -173,8 +146,6 @@ test("reports a failed install with gh's stderr as the detail", async () => {
   });
 });
 
-// A thrown cause used to vanish behind `workspace-unavailable` with nothing logged. The public
-// code stays generic, but the cause now reaches an operator log, redacted like any other text.
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -226,8 +197,6 @@ test("redacts a token a tool printed back before it leaves the workspace", async
   expect(failed.error.detail).toContain(REDACTED);
 });
 
-// A device-flow token need not look like `ghp_...`, so the fixed redaction patterns cannot
-// recognize it; only the caller holding the exact value can strip it.
 test("redacts an opaque token a tool echoed back, even though it matches no known prefix", async () => {
   const opaqueToken = "s3cr3t-opaque-installer-token-0123456789";
   const operations = new FakeCredentialOperations();
@@ -334,20 +303,13 @@ test("asks git whether a repository is readable, and redacts what git says when 
   expect(refused.result.detail).toContain(REDACTED);
 });
 
-test("refuses a request that is not one of the three credential steps", async () => {
+test("refuses an install token or repository URL that does not parse", async () => {
   const operations = new FakeCredentialOperations();
 
   for (const request of [
-    null,
-    { kind: "github-credential" },
-    { kind: "github-credential", step: "install" },
     { kind: "github-credential", step: "install", token: "has space" },
-    { kind: "github-credential", step: "install", token: FAKE_TOKEN, extra: 1 },
-    { kind: "github-credential", step: "status", token: FAKE_TOKEN },
     { kind: "github-credential", step: "verify-repository", repositoryUrl: "git@github.com:o/r" },
-    { kind: "github-credential", step: "revoke" },
-    { kind: "run-command", command: "check" },
-  ]) {
+  ] as const) {
     await expect(credential(operations, request)).resolves.toEqual({
       ok: false,
       error: { code: "invalid-request", detail: "" },

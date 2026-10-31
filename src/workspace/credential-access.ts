@@ -6,7 +6,6 @@ import type { GitHubCredentialStatus, GitHubToken, RepositoryAccess } from "../g
 import { WORKSPACE_SHORT_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import { workspaceRpc } from "./workspace-rpc.js";
 
-/** The Supervisor holds the token for one call and keeps no copy. Results are states, login names, or redacted text, so forwarding one verbatim leaks no credential. */
 export type CredentialWorkspaceHost = Readonly<{
   credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult>;
 }>;
@@ -27,7 +26,6 @@ export class CredentialWorkspaceUnavailable extends Data.TaggedError(
   }
 }
 
-/** `detail` is gh's redacted standard error. */
 export class CredentialInstallFailed extends Data.TaggedError("CredentialInstallFailed")<{
   readonly detail: string;
 }> {
@@ -82,7 +80,6 @@ function ask(
   });
 }
 
-/** The token is never stored by the caller; afterwards the only copy is in the workspace's `gh` configuration. */
 export function installWorkspaceCredential(
   input: InstallWorkspaceCredentialInput,
 ): Effect.Effect<CredentialInstallation, CredentialWorkspaceUnavailable | CredentialInstallFailed> {

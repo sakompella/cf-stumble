@@ -1,7 +1,3 @@
-// oxlint-disable max-lines -- One exec operation owns framing, backend settlement, timeout,
-// cancellation, and one terminal event as one stream state machine. Splitting those transitions
-// would expose mutable settlement state and weaken the single-terminal-event invariant.
-
 import {
   isContainerRestartedError,
   type BackendExecEvent,
@@ -9,7 +5,8 @@ import {
   type ExecBackendHandle,
   type ExecBackendInput,
 } from "./exec-backend.js";
-import { MAX_EXEC_FRAME_BYTES, type ExecEvent } from "./protocol.js";
+import { enqueueEvent, enqueueOutput } from "./exec-framing.js";
+import type { ExecEvent } from "./protocol.js";
 
 type ExecKillReason = "manual" | "end-turn" | "turn-end";
 
@@ -36,94 +33,12 @@ interface SettleState {
   resumePump: (() => void) | undefined;
 }
 
-const encoder = new TextEncoder();
-
-function encodeEvent(event: ExecEvent): Uint8Array {
-  return encoder.encode(`${JSON.stringify(event)}\n`);
-}
-
-function enqueueEvent(
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  event: ExecEvent,
-): void {
-  const frame = encodeEvent(event);
-
-  if (frame.byteLength > MAX_EXEC_FRAME_BYTES) {
-    throw new Error("exec event exceeds the protocol frame limit");
-  }
-
-  controller.enqueue(frame);
-}
-
-function largestFrameEnd(
-  kind: "stdout" | "stderr",
-  data: string,
-  start: number,
-  seq: number,
-): number {
-  let low = start + 1;
-  let high = data.length;
-  let result = start;
-
-  while (low <= high) {
-    let middle = Math.floor((low + high) / 2);
-
-    if (middle > start && isHighSurrogate(data.codePointAt(middle - 1) ?? 0)) middle -= 1;
-
-    if (middle <= start) {
-      low = start + 1;
-      continue;
-    }
-
-    const frame = encodeEvent({ kind, seq, data: data.slice(start, middle) });
-
-    if (frame.byteLength <= MAX_EXEC_FRAME_BYTES) {
-      result = middle;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-
-  if (result === start) throw new Error("exec frame limit cannot encode one character");
-
-  return result;
-}
-
-function isHighSurrogate(code: number): boolean {
-  return code >= 0xd800 && code <= 0xdbff;
-}
-
-function enqueueOutput(
-  state: SettleState,
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  kind: "stdout" | "stderr",
-  data: string,
-): void {
-  if (data === "") {
-    enqueueEvent(controller, { kind, seq: state.seq++, data });
-
-    return;
-  }
-
-  for (let start = 0; start < data.length;) {
-    const end = largestFrameEnd(kind, data, start, state.seq);
-    enqueueEvent(controller, { kind, seq: state.seq++, data: data.slice(start, end) });
-    start = end;
-  }
-}
-
 function resumePump(state: SettleState): void {
   const resume = state.resumePump;
   state.resumePump = undefined;
   resume?.();
 }
 
-/**
- * Publishes exactly one terminal event; whichever cause settles first wins. `killBackend` is
- * fire-and-forget so a hanging or rejecting backend kill can never block or reject this operation.
- * A handle that has not arrived yet is killed by `disposeLateHandle`.
- */
 function settle(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -140,9 +55,7 @@ function settle(
   try {
     enqueueEvent(controller, outcome);
     controller.close();
-  } catch {
-    // The consumer already cancelled the stream; the terminal outcome still counts as sent.
-  }
+  } catch {}
 
   if (killBackend && state.handle !== undefined) {
     void state.handle.reader.cancel().catch(() => {});
@@ -172,7 +85,6 @@ function failed(
   };
 }
 
-/** The handle is only ever killed once, whether inline in `settle` or here for a late arrival. */
 function disposeLateHandle(handle: ExecBackendHandle): void {
   void handle.reader.cancel().catch(() => {});
   void handle.kill().catch(() => {});
@@ -183,10 +95,6 @@ interface Decoders {
   stderr: TextDecoder;
 }
 
-/**
- * Run only when the backend itself ends the stream; a kill, timeout, or failed read settles at
- * once and drops pending bytes.
- */
 function flushDecoders(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -282,31 +190,26 @@ async function pumpBackendEvents(
 
       if (applyBackendRead(state, controller, settleWith, decoders, read)) return;
     }
-  } catch (error) {
+  } catch (cause) {
     settleWith(
       failed(
         state,
-        isContainerRestartedError(error) ? "container-restarted" : "backend-unavailable",
+        isContainerRestartedError(cause) ? "container-restarted" : "backend-unavailable",
       ),
       true,
     );
   }
 }
 
-/** A synchronous throw becomes a rejection, so a backend that throws is handled like one that rejects. */
 function startBackendExec(
   execBackend: ExecBackend,
   input: ExecBackendInput,
 ): Promise<ExecBackendHandle> {
-  try {
-    return Promise.resolve(execBackend.exec(input));
-  } catch (error) {
-    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- Forwards whatever `execBackend.exec()` threw, the same shape a native rejection from it would carry.
-    return Promise.reject(error);
-  }
+  return new Promise((resolve) => {
+    resolve(execBackend.exec(input));
+  });
 }
 
-/** A timeout that stands for the turn's deadline is the turn ending, so it settles as `killed` by `turn-end`. */
 function armTimeout(
   state: SettleState,
   controller: ReadableStreamDefaultController<Uint8Array>,
@@ -344,14 +247,14 @@ function watchBackendExec(
       state.handle = handle;
       void pumpBackendEvents(state, controller, handle, onSettle);
     },
-    (error) => {
+    (cause) => {
       settle(
         state,
         controller,
         onSettle,
         failed(
           state,
-          isContainerRestartedError(error) ? "container-restarted" : "backend-unavailable",
+          isContainerRestartedError(cause) ? "container-restarted" : "backend-unavailable",
         ),
         false,
       );
@@ -359,13 +262,6 @@ function watchBackendExec(
   );
 }
 
-/**
- * One terminal event per command; every later trigger is a no-op. The host timeout is armed before
- * `execBackend.exec()` is awaited, so a backend that never resolves its handle is still bounded by
- * `timeoutMs`. A timeout or kill cancels the backend reader before awaiting `handle.kill()`.
- * `onSettle` runs synchronously with the terminal event so the caller can drop its references.
- * `timeoutEndsTurn` marks a `timeoutMs` capped at the turn's deadline.
- */
 export function startExecOperation(
   execBackend: ExecBackend,
   input: ExecBackendInput,

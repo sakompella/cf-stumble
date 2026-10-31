@@ -1,3 +1,5 @@
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { mapProviderError, type ProjectFilesystemProvider, type ProjectStat } from "./provider.js";
 import {
@@ -8,33 +10,26 @@ import {
   type ProjectResult,
 } from "./protocol.js";
 
-/**
- * `workspace-layout.ts` owns the root and the facet's path-escape guard reads the same constant, so
- * address translation and the guard cannot disagree. The root is the whole workspace, so an agent
- * can read a sibling repository; project selection chooses a working directory, not a boundary.
- */
-
-/** Linux's own symlink-follow cap (`MAXSYMLINKS`), across one whole resolve call. */
 const MAX_SYMLINK_FOLLOWS = 40;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC path-parsing boundary.
-export function parseAddressedPath(input: unknown): ProjectResult<readonly string[]> {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC path argument is untrusted.
-  if (typeof input !== "string") return fail("invalid-request");
+const PATH_SEGMENT = String.raw`(?![.]{1,2}(?:/|$))[^\\\u0000/]+`;
 
-  if (input.includes("\\") || input.includes("\0")) return fail("invalid-request");
+const ADDRESSED_PATH_PATTERN = new RegExp(`^(?:/|(?:/${PATH_SEGMENT})+)$`, "u");
 
-  if (!input.startsWith("/")) return fail("invalid-request");
+export const AddressedPathText = Schema.String.check(Schema.isPattern(ADDRESSED_PATH_PATTERN));
 
-  if (input === "/") return ok([]);
-  const segments: string[] = [];
+export const decodeAddressedPathText = Schema.decodeResult(AddressedPathText);
 
-  for (const segment of input.slice(1).split("/")) {
-    if (segment === "" || segment === "." || segment === "..") return fail("invalid-request");
-    segments.push(segment);
-  }
+export function segmentsOfAddressedPath(path: string): readonly string[] {
+  return path === "/" ? [] : path.slice(1).split("/");
+}
 
-  return ok(segments);
+export function parseAddressedPath(path: string): ProjectResult<readonly string[]> {
+  const decoded = decodeAddressedPathText(path);
+
+  return Result.isFailure(decoded)
+    ? fail("invalid-request")
+    : ok(segmentsOfAddressedPath(decoded.success));
 }
 
 export function addressedPathOf(segments: readonly string[]): string {
@@ -101,7 +96,6 @@ function stepPastSymlink(
   const target = provider.readlinkSync(place.candidate);
   queue.unshift(...splitTarget(target));
 
-  // An absolute target restarts from the root; a relative one resolves against the symlink's containing directory.
   return { kind: "continue", resolved: target.startsWith("/") ? "/" : place.resolved };
 }
 
@@ -141,8 +135,8 @@ function stepOneSegment(
     const stat = provider.lstatSync(place.candidate);
 
     return stepPastNode(provider, options, queue, { ...place, stat }, linkFollows + 1, addressed);
-  } catch (error) {
-    const code = mapProviderError(error);
+  } catch (cause) {
+    const code = mapProviderError(cause);
 
     if (code !== "not-found") return { kind: "settle", result: fail(code, addressed) };
 
@@ -150,11 +144,6 @@ function stepOneSegment(
   }
 }
 
-/**
- * `provider.realpath()` only normalizes lexically, so each component is walked with
- * `lstatSync`/`readlinkSync`. The root boundary is checked after every step that changes position,
- * so an escape is caught when it happens.
- */
 export function resolveAddressedPath(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],
@@ -199,8 +188,6 @@ export function resolveAddressedPath(
     resolved = step.resolved;
   }
 
-  // Only reachable via a symlink target that fully consumes the queue without leaving a final
-  // component to settle on, e.g. a target of "." or "/".
   if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
 
   return statAt(provider, resolved, addressed);
@@ -213,8 +200,8 @@ function statAt(
 ): ProjectResult<ResolveOutcome> {
   try {
     return ok({ kind: "resolved", path, stat: provider.lstatSync(path) });
-  } catch (error) {
-    return fail(mapProviderError(error), addressed);
+  } catch (cause) {
+    return fail(mapProviderError(cause), addressed);
   }
 }
 
@@ -224,7 +211,6 @@ function kindOf(stat: ProjectStat): ProjectFileKind {
   return stat.isDirectory() ? "directory" : "file";
 }
 
-/** Byte-accurate size: a symlink's stored size is a UTF-16 code-unit count, not a byte count. */
 function byteAccurateSize(
   provider: ProjectFilesystemProvider,
   path: string,

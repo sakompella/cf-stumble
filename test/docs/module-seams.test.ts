@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-/**
- * Each directory under src/ that has an index.ts states what the rest of the program may use.
- * Nothing enforced that, so an import could reach past an index into a group's internals and the
- * grouping would decay back into the flat layout it replaced.
- *
- * Vite resolves the glob at build time, so this reads no filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -61,9 +54,6 @@ const groupDirectories = Object.keys(sourceFiles)
   .filter((path) => path.endsWith("/index.ts"))
   .map((path) => directoryOf(path));
 
-// Wire contracts another program reads directly. The owner page's browser program types the turn
-// stream from `turn-frames.ts`, and the group's index would pull Worker-only modules into it. The
-// browser harness types its answers from `conversation-result.ts` for the same reason.
 const publicEntrypoints = new Set([
   "src/workspace/project/protocol.ts",
   "src/supervisor/conversations/conversation-result.ts",

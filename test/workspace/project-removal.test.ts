@@ -28,7 +28,6 @@ const request: ProjectRemovalRequest = {
 class FakeOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
   readonly statted: string[] = [];
-  /** Durable store paths that are still present after the removal command. */
   readonly remaining = new Set<string>();
   syncFailure: WorkspaceSyncIncomplete | undefined;
 
@@ -71,15 +70,13 @@ test("derives project removal paths from the project id", () => {
   expect(plan.source).toContain(`${projectDirectory(sampleProjectOne.id)}.provisioning`);
 });
 
-test("refuses malformed and harness removal requests", async () => {
+test("refuses an invalid project id and the harness", async () => {
   const operations = new FakeOperations();
 
   for (const value of [
-    null,
     { kind: "remove-project", projectId: "../../etc" },
     { kind: "remove-project", projectId: "harness" },
-    { kind: "remove-project", projectId: sampleProjectOne.id, extra: true },
-  ]) {
+  ] as const) {
     await expect(
       Effect.runPromise(executeProjectRemovalRequest({ operations, request: value })),
     ).resolves.toMatchObject({

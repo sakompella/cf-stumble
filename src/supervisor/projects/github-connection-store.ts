@@ -1,9 +1,5 @@
-import type { GitHubConnectionStatus } from "./github-connection.js";
+import type { GitHubConnectionStatus } from "./github-connection-status.js";
 
-/**
- * The access token is never stored. It is installed into the workspace's `gh` configuration and
- * dropped, so this table cannot leak one.
- */
 type PendingAuthorization = Readonly<{
   deviceCode: string;
   userCode: string;
@@ -142,7 +138,6 @@ export class GitHubConnectionStore {
     );
   }
 
-  /** Deletes an expired authorization as it is read, so a device code never outlives its window. */
   pendingAuthorization(now: number): PendingAuthorization | undefined {
     const row = this.sql
       .exec<PendingRow>(
@@ -170,7 +165,6 @@ export class GitHubConnectionStore {
     };
   }
 
-  /** A redemption that ends after a newer authorization started leaves the newer one in place. */
   consumeAuthorization(deviceCode: string): boolean {
     const consumed = this.sql
       .exec(
@@ -228,10 +222,6 @@ export class GitHubConnectionStore {
     return row?.revision ?? 0;
   }
 
-  /**
-   * Stores nothing when `revision` is stale: a check a workspace reset overtook saw the old
-   * workspace.
-   */
   recordCheck(
     revision: number,
     check: LastCheck,
@@ -270,7 +260,6 @@ export class GitHubConnectionStore {
       : { status: checkedStatus(row), checkedAt: row.checked_at };
   }
 
-  /** Advancing the revision stops checks already running from storing their answer. */
   clear(): void {
     this.storage.transactionSync(() => {
       this.clearConnection();

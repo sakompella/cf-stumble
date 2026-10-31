@@ -1,11 +1,5 @@
 import type { Html, HtmlBuilder } from "foldkit/html";
 
-/**
- * A subset of Markdown for assistant text: headings, emphasis, inline code, fenced code, flat lists
- * and links. Every piece of input becomes a text child of an element this file names, so nothing the
- * model writes can become markup. A link keeps its target only when it is an http(s) address.
- */
-
 type Child = Html | string;
 
 const INLINE =
@@ -47,7 +41,6 @@ function startsBlock(line: string): boolean {
   return line.trim() === "" || FENCE.test(line) || HEADING.test(line) || ITEM.test(line);
 }
 
-/** An unclosed fence runs to the end, because the text arrives while the model is still writing. */
 export function markdownBlocks<Message>(text: string, h: HtmlBuilder<Message>): readonly Html[] {
   const lines = text.split("\n");
   const blocks: Html[] = [];

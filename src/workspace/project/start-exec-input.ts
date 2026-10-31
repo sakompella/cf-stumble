@@ -1,31 +1,63 @@
-import { parseAddressedPath } from "./resolve.js";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import { AddressedPathText, decodeAddressedPathText, segmentsOfAddressedPath } from "./resolve.js";
 import {
   fail,
   MAX_EXEC_COMMAND_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   ok,
   type ProjectResult,
-  type WriteMode,
+  type StartExecWire,
+  type WriteFileWire,
 } from "./protocol.js";
 
 export const OPERATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9]+$/u;
 
-export function isWriteMode(value: unknown): value is WriteMode {
-  return value === "overwrite" || value === "append" || value === "create-exclusive";
+function isBytes(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array;
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the RPC `timeoutMs` field is untrusted; this parses it.
-function resolveTimeout(input: unknown): ProjectResult<number> {
-  if (input === undefined) return ok(MAX_EXEC_TIMEOUT_MS);
+const WriteModeText = Schema.Literals(["overwrite", "append", "create-exclusive"]);
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `timeoutMs` field is untrusted.
-  if (typeof input !== "number" || !Number.isFinite(input) || input <= 0) {
-    return fail("invalid-request");
-  }
+export const WriteFileInput = Schema.Struct({
+  path: AddressedPathText,
+  bytes: Schema.declare(isBytes),
+  mode: WriteModeText,
+});
 
-  return ok(Math.min(input, MAX_EXEC_TIMEOUT_MS));
+const decodeWriteFileInput = Schema.decodeResult(WriteFileInput);
+
+export function parseWriteFileInput(input: WriteFileWire): ProjectResult<WriteFileWire> {
+  const decoded = decodeWriteFileInput(input);
+
+  return Result.isFailure(decoded) ? fail("invalid-request") : ok(decoded.success);
 }
+
+export const OperationIdText = Schema.String.check(Schema.isPattern(OPERATION_ID_PATTERN));
+
+const decodeOperationId = Schema.decodeResult(OperationIdText);
+
+export function parseOperationId(operationId: string): ProjectResult<string> {
+  const decoded = decodeOperationId(operationId);
+
+  return Result.isFailure(decoded) ? fail("invalid-request") : ok(decoded.success);
+}
+
+const CommandText = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.makeFilter<string>(
+    (command) => new TextEncoder().encode(command).byteLength <= MAX_EXEC_COMMAND_BYTES,
+  ),
+);
+
+export const StartExecInput = Schema.Struct({
+  command: CommandText,
+  cwd: Schema.optional(Schema.String),
+  timeoutMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+});
+
+const decodeStartExecInput = Schema.decodeResult(StartExecInput, { onExcessProperty: "error" });
 
 export interface ParsedStartExecInput {
   command: string;
@@ -33,44 +65,18 @@ export interface ParsedStartExecInput {
   timeoutMs: number;
 }
 
-const START_EXEC_KEYS = new Set(["command", "cwd", "timeoutMs"]);
+export function parseStartExecInput(input: StartExecWire): ProjectResult<ParsedStartExecInput> {
+  const decoded = decodeStartExecInput(input);
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary for `startExec`; every field is parsed below.
-export function parseStartExecInput(input: unknown): ProjectResult<ParsedStartExecInput> {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC input shape is untrusted.
-  if (input === null || typeof input !== "object" || Array.isArray(input)) {
-    return fail("invalid-request");
-  }
+  if (Result.isFailure(decoded)) return fail("invalid-request");
 
-  for (const key of Object.keys(input))
-    if (!START_EXEC_KEYS.has(key)) return fail("invalid-request");
+  const cwd = decodeAddressedPathText(decoded.success.cwd ?? "/");
 
-  if (!("command" in input)) return fail("invalid-request");
+  if (Result.isFailure(cwd)) return fail("invalid-request");
 
-  const { command } = input;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `command` field is untrusted.
-  if (typeof command !== "string") return fail("invalid-request");
-
-  if (
-    command.length === 0 ||
-    new TextEncoder().encode(command).byteLength > MAX_EXEC_COMMAND_BYTES
-  ) {
-    return fail("invalid-request");
-  }
-
-  const cwd = "cwd" in input ? input.cwd : undefined;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC `cwd` field is untrusted.
-  if (cwd !== undefined && typeof cwd !== "string") return fail("invalid-request");
-
-  const cwdSegments = parseAddressedPath(cwd ?? "/");
-
-  if (!cwdSegments.ok) return cwdSegments;
-
-  const timeoutMs = resolveTimeout("timeoutMs" in input ? input.timeoutMs : undefined);
-
-  if (!timeoutMs.ok) return timeoutMs;
-
-  return ok({ command, cwdSegments: cwdSegments.value, timeoutMs: timeoutMs.value });
+  return ok({
+    command: decoded.success.command,
+    cwdSegments: segmentsOfAddressedPath(cwd.success),
+    timeoutMs: Math.min(decoded.success.timeoutMs ?? MAX_EXEC_TIMEOUT_MS, MAX_EXEC_TIMEOUT_MS),
+  });
 }

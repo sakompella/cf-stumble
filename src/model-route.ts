@@ -2,8 +2,9 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { chatgptTurn, type ChatGPTAccess, type ChatGPTCredential } from "./chatgpt/index.js";
-import { parseRequest, type ValidationFailure } from "./model-route-request.js";
-import { streamingBindingCall, workersAiTurn } from "./model-route-stream.js";
+import { parseRequest, type RouteWire, type ValidationFailure } from "./model-route-request.js";
+import { workersAiTurn } from "./model-route-stream.js";
+import type { WorkersAiBinding } from "./model-route-events.js";
 import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
 
 export { parseRequest } from "./model-route-request.js";
@@ -40,32 +41,22 @@ type CredentialHolders = Readonly<{
 }>;
 
 type ModelRouteEnv = Readonly<{
-  AI: Ai;
+  AI: WorkersAiBinding;
   SUPERVISOR: CredentialHolders;
   CHATGPT_MODEL: string;
 }>;
 
-/**
- * Set by the Supervisor that hands this route to its facets and invisible to them. A route no
- * Supervisor created has no credential and answers from Workers AI.
- */
 export type ModelRouteProps = Readonly<{ supervisor: string }> | undefined;
 
 export class ModelRoute extends WorkerEntrypoint<ModelRouteEnv, ModelRouteProps> {
-  /**
-   * The owner's ChatGPT plan answers while a credential is connected; Workers AI answers while none
-   * is. A refused or revoked grant fails with `chatgpt-reconnect-required` rather than switching
-   * provider. A usage limit before any output switches provider after a `provider-fallback` event.
-   */
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: service-binding input is untrusted.
-  runStream(request: unknown): ReadableStream<Uint8Array> | ValidationFailure {
+  runStream(request: RouteWire): ReadableStream<Uint8Array> | ValidationFailure {
     const parsed = parseRequest(request);
 
     if (Result.isFailure(parsed)) return parsed.failure;
     const validated = parsed.success;
 
     const workersAi = workersAiTurn(
-      { run: (model, input, signal) => streamingBindingCall(this.env.AI, model, input, signal) },
+      { run: (model, input, signal) => this.env.AI.run(model, input, { signal }) },
       validated,
     );
 

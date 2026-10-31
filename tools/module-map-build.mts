@@ -2,10 +2,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { build } from "esbuild";
 
-/**
- * One Worker Loader entrypoint to bundle into a module map (ADR-0028). Paths are relative to the
- * repository root.
- */
 export type ModuleMapBuild = {
   readonly entryPoint: string;
   readonly entryModule: string;
@@ -19,10 +15,6 @@ type BuiltModuleMapFile = {
 
 const repoRoot = resolve(import.meta.dirname, "..");
 
-/**
- * Bundles the entrypoint into one module and writes the `{ entryModule, modules }` map that
- * `moduleMapFromBuildOutput` in `src/supervisor/artifacts` validates.
- */
 export async function writeModuleMap(target: ModuleMapBuild): Promise<void> {
   const bundled = await build({
     entryPoints: [resolve(repoRoot, target.entryPoint)],
@@ -33,7 +25,6 @@ export async function writeModuleMap(target: ModuleMapBuild): Promise<void> {
     platform: "browser",
     target: "es2023",
     conditions: ["workerd", "worker", "browser"],
-    // The Worker runtime provides this module; bundling it would break the exported class.
     external: ["cloudflare:workers"],
     legalComments: "none",
     sourcemap: false,

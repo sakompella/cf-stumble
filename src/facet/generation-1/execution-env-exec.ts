@@ -6,7 +6,6 @@ import {
   type ShellExecResult,
 } from "@earendil-works/pi-durable/env";
 import { shellQuote } from "../../shell-quote.js";
-import { isRecord } from "../../untrusted.js";
 import { MAX_EXEC_TIMEOUT_MS, type ExecEvent } from "../../workspace/project/protocol.js";
 import { NdjsonFrameReader } from "./execution-env-frame-reader.js";
 import { resolveInWorkspace, type ComputerWorkspace } from "./execution-env-paths.js";
@@ -18,14 +17,12 @@ type Terminal = Extract<ExecEvent, { kind: "terminal" }>;
 
 type Output = Extract<ExecEvent, { kind: "stdout" | "stderr" }>;
 
-/** Operation ids of the commands still running, so `cleanup` can kill them. */
 export type RunningCommands = Set<string>;
 
 function failure(code: ExecutionError["code"], message: string): ExecResult {
   return { ok: false, error: new ExecutionError(code, message) };
 }
 
-/** A function, so TypeScript does not keep a check made before an `await` narrowed after it. */
 function isAborted(context: Context): boolean {
   return context.abortSignal?.aborted === true;
 }
@@ -34,10 +31,6 @@ function isArgv(command: string | readonly string[]): command is readonly string
   return typeof command !== "string";
 }
 
-/**
- * The capability runs a string through `/bin/sh -c`. An argv runs through `exec`, quoted, so the
- * shell parses nothing; `env` carries variables, because the capability takes none.
- */
 function scriptOf(command: string | readonly string[], options: ShellExecOptions | undefined) {
   const variables = Object.entries(options?.env ?? {}).map(([key, value]) => `${key}=${value}`);
   const clearsEnv = options?.inheritEnv === false;
@@ -52,13 +45,17 @@ function scriptOf(command: string | readonly string[], options: ShellExecOptions
 }
 
 function isExecEvent(value: unknown): value is ExecEvent {
-  if (!isRecord(value) || typeof value.seq !== "number") return false;
+  if (typeof value !== "object" || value === null) return false;
 
-  if (value.kind === "stdout" || value.kind === "stderr") return typeof value.data === "string";
+  if (!("seq" in value) || typeof value.seq !== "number" || !("kind" in value)) return false;
 
-  if (value.kind !== "terminal") return false;
+  if (value.kind === "stdout" || value.kind === "stderr") {
+    return "data" in value && typeof value.data === "string";
+  }
 
-  if (value.outcome === "exited") return typeof value.exitCode === "number";
+  if (value.kind !== "terminal" || !("outcome" in value)) return false;
+
+  if (value.outcome === "exited") return "exitCode" in value && typeof value.exitCode === "number";
 
   return value.outcome === "killed" || value.outcome === "timed-out" || value.outcome === "failed";
 }
@@ -77,7 +74,6 @@ async function nextEvent(frames: NdjsonFrameReader): Promise<ExecEvent | Executi
     : new ExecutionError("unknown", "the capability sent a malformed exec event");
 }
 
-/** A shell that cannot find or run an argv's program exits 127 or 126; Node reports a spawn error. */
 function settledResult(
   terminal: Terminal,
   argv: boolean,
@@ -174,7 +170,6 @@ async function settle(command: RunningCommand): Promise<ExecResult> {
   }
 }
 
-/** Never throws: every failure is an `ExecutionError`. Aborting the context kills the command. */
 export async function execInWorkspace(
   workspace: ComputerWorkspace,
   running: RunningCommands,
@@ -238,7 +233,6 @@ export async function execInWorkspace(
   }
 }
 
-/** Kills every command still running, as Pi asks of an env's owner at shutdown. */
 export async function killAll(workspace: ComputerWorkspace, running: RunningCommands) {
   const kills = [...running].map((operationId) => workspace.target.kill(operationId));
 

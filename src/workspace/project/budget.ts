@@ -1,22 +1,7 @@
-import { asUntrusted, field, hasExactKeys } from "../../untrusted.js";
+export type ProjectBudget = Readonly<{ remainingMs: number }>;
 
-export function parseProjectBudget(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
-  value: unknown,
-): number | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: budget input is untrusted.
-  if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const request = asUntrusted(value);
-
-  if (!hasExactKeys(request, ["remainingMs"])) return undefined;
-
-  const remainingMs = field(request, "remainingMs");
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: remainingMs is untrusted.
-  return typeof remainingMs === "number" && Number.isFinite(remainingMs) && remainingMs > 0
-    ? remainingMs
+export function parseProjectBudget(budget: ProjectBudget | undefined): number | undefined {
+  return budget !== undefined && Number.isFinite(budget.remainingMs) && budget.remainingMs > 0
+    ? budget.remainingMs
     : undefined;
 }

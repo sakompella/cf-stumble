@@ -2,7 +2,6 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, Scope, SourceCode } from "@oxlint/plugins";
 
-/** The `cloudflare:workers` classes whose subclasses Workers RPC exposes by prototype. */
 const RPC_BASE_CLASSES = new Set(["DurableObject", "RpcTarget", "WorkerEntrypoint"]);
 
 function importedName(specifier: ESTree.Node): string | undefined {
@@ -13,7 +12,6 @@ function importedName(specifier: ESTree.Node): string | undefined {
     : specifier.imported.value;
 }
 
-/** Whether `superClass` names an RPC base class imported from `cloudflare:workers`. */
 function extendsRpcBase(sourceCode: SourceCode, superClass: ESTree.Expression | null): boolean {
   if (superClass?.type !== "Identifier") return false;
 
@@ -38,7 +36,6 @@ function extendsRpcBase(sourceCode: SourceCode, superClass: ESTree.Expression | 
   return false;
 }
 
-/** Whether Workers RPC would expose `element` while TypeScript says only the class may call it. */
 function isHiddenPrototypeMember(element: ESTree.ClassElement): boolean {
   if (element.type !== "MethodDefinition" && element.type !== "AccessorProperty") return false;
 
@@ -49,12 +46,6 @@ function isHiddenPrototypeMember(element: ESTree.ClassElement): boolean {
   return element.accessibility === "private" || element.accessibility === "protected";
 }
 
-/**
- * Workers RPC exposes every method and accessor on the prototype of a class that extends
- * `WorkerEntrypoint`, `DurableObject`, or `RpcTarget`. TypeScript's `private` and `protected` are
- * erased, so a caller holding a stub can still call such a helper. A JavaScript `#private` method
- * is not on the prototype. Only a direct `extends` of an imported base class is recognised.
- */
 export const noTypeScriptPrivateRpcMemberRule = defineRule({
   meta: {
     type: "problem",

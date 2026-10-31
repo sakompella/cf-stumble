@@ -19,7 +19,6 @@ const request = (afterMinutes: number, route = "/api/projects"): Invocation => (
   route,
 });
 
-/** Full running buckets from `fromMinutes` to `toMinutes` after START. */
 function runningBetween(fromMinutes: number, toMinutes: number): readonly UsageBucket[] {
   const count = (toMinutes - fromMinutes) / (BUCKET_MS / MINUTE_MS);
 

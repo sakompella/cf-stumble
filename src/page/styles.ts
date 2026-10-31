@@ -1,8 +1,3 @@
-/**
- * The transcript scrolls inside its own box so a long turn cannot push the composer off screen. Below
- * 52rem the sidebar leaves the flow; the toggle sits outside the collapsing panel so hiding the
- * projects never hides the control that shows them.
- */
 export const OWNER_PAGE_STYLES = `
   :root { color-scheme: light dark; }
   body {

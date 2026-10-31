@@ -5,18 +5,10 @@ import type { ModelRouteErrorCode, ModelStreamEvent, ModelUsage } from "./model-
 import { runResponseBody } from "./run-entry-point.js";
 import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
 
-/**
- * Defense in depth against a runaway stream, not a measured provider limit. Counts raw wire bytes,
- * not string length.
- */
 const MAX_STREAM_EVENT_BYTES = 8_388_608;
 
-/**
- * Returns whether `onLine` saw the terminal event. A well-formed provider owes one even in its
- * last chunk, hence one more pass after the final decoder flush.
- */
-async function readSseLines(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+async function readSseLines<Chunk extends Uint8Array>(
+  reader: ReadableStreamDefaultReader<Chunk>,
   onLine: (line: string) => boolean,
 ): Promise<boolean> {
   const decoder = new TextDecoder();
@@ -51,7 +43,6 @@ async function readSseLines(
   return false;
 }
 
-/** Nothing of the provider's own error reaches the caller; `code` is all it learns. */
 export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
   readonly code: ModelRouteErrorCode;
 }> {}
@@ -59,12 +50,8 @@ export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
 export const modelUnavailable = (): ModelTurnFailed =>
   new ModelTurnFailed({ code: "model-unavailable" });
 
-/**
- * The reader is cancelled however the read ends, so a stream this route stopped reading is
- * released.
- */
-export function pumpSseStream(
-  providerStream: ReadableStream<Uint8Array>,
+export function pumpSseStream<Chunk extends Uint8Array>(
+  providerStream: ReadableStream<Chunk>,
   onLine: (line: string) => boolean,
 ): Effect.Effect<void, ModelTurnFailed> {
   return Effect.acquireUseRelease(
@@ -77,12 +64,7 @@ export function pumpSseStream(
         try: () => readSseLines(reader, onLine),
         catch: modelUnavailable,
       }),
-    (reader) =>
-      Effect.promise(() =>
-        reader.cancel().catch(() => {
-          /* the stream already ended or failed; nothing more to release */
-        }),
-      ),
+    (reader) => Effect.promise(() => reader.cancel().catch(() => {})),
   ).pipe(
     Effect.flatMap((terminated) => (terminated ? Effect.void : Effect.fail(modelUnavailable()))),
   );
@@ -94,11 +76,6 @@ export type ModelTurn = (
   emit: (event: ModelStreamEvent) => void,
 ) => Effect.Effect<ModelTurnAnswer, ModelTurnFailed>;
 
-/**
- * The call runs in the stream's own `start`, so its lifetime is the body's, not the RPC call's.
- * While the provider is quiet the stream writes empty lines, so a generation that stops reading
- * across Workers RPC is noticed within seconds.
- */
 export function modelEventStream(turn: ModelTurn): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const cancelled = new AbortController();

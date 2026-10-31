@@ -3,11 +3,6 @@ import { expect, test } from "vitest";
 import { routeConversationRequest } from "../../src/routes/conversations.js";
 import { messageRefusingSupervisor } from "./helpers.js";
 
-/**
- * The workerd half of `request-bodies.props.test.ts`: the edges of the exact-body rule, decoded by
- * the same runtime that serves requests.
- */
-
 const ORIGIN = "https://cf-stumble.test";
 
 async function messageStatus(body: string): Promise<number> {

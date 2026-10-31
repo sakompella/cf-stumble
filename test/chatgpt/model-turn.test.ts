@@ -8,6 +8,7 @@ import { collectEvents } from "../model-route-provider-stream.js";
 import {
   ACCESS_ONE,
   ACCESS_TWO,
+  bodyOf,
   COMPLETED,
   fakeCredential,
   ready,
@@ -16,11 +17,6 @@ import {
   sseResponse,
   type RecordedCall,
 } from "./fixtures.js";
-
-/**
- * One ChatGPT model call, driven by a fake credential holder and a fake Responses endpoint, and
- * read back as the model route's own event stream.
- */
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -122,8 +118,7 @@ test("the request carries the conversation as Responses input, with the token on
   expect(call?.url).toBe("https://api.openai.com/v1/responses");
   expect(call?.init.redirect).toBe("manual");
   expect(new Headers(call?.init.headers).get("authorization")).toBe(`Bearer ${ACCESS_ONE}`);
-  // oxlint-disable-next-line typescript/no-base-to-string -- The request body is a JSON string.
-  const body = String(call?.init.body);
+  const body = bodyOf(call);
   expect(body).not.toContain(ACCESS_ONE);
   expect(JSON.parse(body)).toEqual({
     model: "gpt-test",

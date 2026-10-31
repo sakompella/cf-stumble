@@ -1,4 +1,5 @@
 import { logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
+import { hasErrnoCode } from "../errno-code.js";
 import type { ProjectErrorCode } from "./protocol.js";
 
 export interface ProjectStat {
@@ -16,11 +17,6 @@ export interface ProjectDirent {
   isSymbolicLink(): boolean;
 }
 
-/**
- * `appendFile` and `realpath` are absent on purpose: the first throws `ENOSYS` on the real
- * provider, the second only normalizes lexically instead of resolving symlinks. Byte-level writes
- * use `openSync`/`writeSync`/`closeSync` inside a transaction.
- */
 export interface ProjectFilesystemProvider {
   lstatSync(path: string): ProjectStat;
   readlinkSync(path: string): string;
@@ -47,27 +43,14 @@ const ERROR_CODE_MAP = new Map<string, ProjectErrorCode>([
   ["ELOOP", "symlink-loop"],
 ]);
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider threw this value; its documented shape is untrusted here.
-function errnoCode(error: unknown): string | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: narrowing an untrusted thrown value to check for a `code` field.
-  if (error === null || typeof error !== "object" || !("code" in error)) return undefined;
-  const { code } = error;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the narrowed `code` field is still untrusted until its type is checked.
-  return typeof code === "string" ? code : undefined;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider threw this value; its documented shape is untrusted here.
-export function mapProviderError(error: unknown): ProjectErrorCode {
-  const code = errnoCode(error);
+export function mapProviderError(cause: unknown): ProjectErrorCode {
+  const code = hasErrnoCode(cause) ? cause.code : undefined;
   const mapped = code === undefined ? undefined : ERROR_CODE_MAP.get(code);
 
   if (mapped !== undefined) return mapped;
-  // `backend-unavailable` is the one code that says nothing about what happened, so what the
-  // provider actually threw exists nowhere else.
   logRedactedCause(
     `unmapped project provider error (${redactedExcerpt(code ?? "no code")})`,
-    error,
+    cause,
   );
 
   return "backend-unavailable";

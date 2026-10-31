@@ -1,15 +1,6 @@
 import type { HarnessScenario } from "./fixtures.mjs";
 import type { JsonValue } from "../json.mjs";
 
-/**
- * The generation ledger the stub keeps, and what each generation command does to it.
- *
- * The drawer's whole point is concurrency: activation and rollback carry the epoch the page
- * rendered, and the Supervisor refuses a command that observed an older one. A stub
- * with a frozen epoch could not tell a page that sends what it displays from one that sends
- * whatever the server last said, so the epoch lives here and every accepted command advances it.
- */
-
 export type GenerationStatus = "ready" | "failed";
 
 export type GenerationRecord = Readonly<{
@@ -36,7 +27,6 @@ export const BROKEN_CANDIDATE_COMMIT = "broken456";
 
 export const BUILD_FAILED_COMMIT = "buildfail789";
 
-/** Command output the page must show as text: it holds markup that would run if it were HTML. */
 export const BUILD_FAILED_STDERR = "error TS2322: <img src=x onerror=alert(1)> & more";
 
 export const INITIAL_GENERATION: GenerationState = {
@@ -45,7 +35,6 @@ export const INITIAL_GENERATION: GenerationState = {
   epoch: 3,
 };
 
-/** One answer to a generation command: what the page receives, and where the ledger stands after. */
 export type GenerationAnswer = Readonly<{
   status: number;
   payload: JsonValue;

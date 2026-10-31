@@ -13,7 +13,6 @@ import type { ModelCapability } from "../../../src/facet/generation-1/capabiliti
 import { ROUTE_MODEL, routeProvider } from "../../../src/facet/generation-1/route-provider.js";
 import { NO_USAGE, replies, scriptedRoute } from "./scripted-route.js";
 
-// workerd at this compatibility date has no WeakRef, which chord needs; the generation's Loader sets `enable_weak_ref`.
 class StrongRef<T extends object> {
   readonly #target: T;
 

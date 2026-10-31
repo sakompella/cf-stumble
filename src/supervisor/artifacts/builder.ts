@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import type { CommandOutput } from "../../workspace/index.js";
@@ -6,8 +7,8 @@ import { isTimeoutFailure, logRedactedCause, redactLogText } from "../../diagnos
 import {
   moduleMapFromBuildOutput,
   planHarnessBuild,
+  BuiltModuleMapFile,
   type BuildStepDiagnostics,
-  type BuiltModuleMapFile,
   type HarnessBuildConfiguration,
   type HarnessBuildProblem,
   type HarnessBuildStep,
@@ -59,7 +60,6 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       },
     });
 
-    // The tail goes to the owner, not the log: command output can hold file contents.
     return ran.pipe(
       Effect.flatMap((output) =>
         output.exitCode === 0
@@ -85,17 +85,20 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       },
     });
 
+    const invalidOutput: HarnessBuildProblem = {
+      code: "build-output-invalid",
+      harnessCommit,
+      reason: "invalid-artifact",
+    };
+
     return encoded.pipe(
       Effect.flatMap((text) =>
-        Effect.tryPromise({
-          // `Response.json` decodes without asserting a type; `moduleMapFromBuildOutput` validates.
-          try: () => new Response(text).json<BuiltModuleMapFile>(),
-          catch: (): HarnessBuildProblem => ({
-            code: "build-output-invalid",
-            harnessCommit,
-            reason: "invalid-artifact",
-          }),
-        }),
+        Effect.tryPromise({ try: () => new Response(text).json(), catch: () => invalidOutput }),
+      ),
+      Effect.flatMap((json) =>
+        Schema.decodeUnknownEffect(BuiltModuleMapFile)(json).pipe(
+          Effect.mapError(() => invalidOutput),
+        ),
       ),
       Effect.flatMap((output) =>
         Effect.fromResult(moduleMapFromBuildOutput(harnessCommit, output)),
@@ -115,7 +118,6 @@ function lastUnits(text: string): string {
   return cut && first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
 }
 
-/** Redact before cutting: a cut could leave half a token. */
 function stepDiagnostics(output: CommandOutput): BuildStepDiagnostics {
   const stdout = redactLogText(output.stdout);
   const stderr = redactLogText(output.stderr);

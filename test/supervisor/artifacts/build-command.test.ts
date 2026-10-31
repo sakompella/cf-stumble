@@ -1,17 +1,6 @@
 import { expect, test } from "vitest";
 import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
 
-/**
- * The Supervisor's build and the local gate used to be two different commands. The deployed build
- * ran `pnpm run build:module-map` in a freshly extracted commit, which has no `node_modules` and
- * no generated Pi output, while `pnpm verify` built Pi first and never saw the failure. These
- * checks keep the two from drifting apart again, now that the deployed build runs its phases as
- * separate steps and `build:artifact` is what a developer and the clean-build probe run: every
- * phase command must name a script this manifest defines or be a flag-only `pnpm install`, and
- * the phases in order must be exactly what `build:artifact` runs.
- *
- * Vite resolves the glob at build time, so this reads no filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -35,7 +24,6 @@ const probeFiles = import.meta.glob("../../../scripts/probe/clean-build.sh", {
 
 const manifest = Object.values(manifestFiles).at(0) ?? "";
 
-/** The script names `package.json` defines, read from the manifest text rather than parsed. */
 function scriptNames(): readonly string[] {
   const start = manifest.indexOf('"scripts": {');
   const block = manifest.slice(start, manifest.indexOf("\n  },", start));
@@ -43,7 +31,6 @@ function scriptNames(): readonly string[] {
   return [...block.matchAll(/^ {4}"([^"]+)":/gmu)].map((match) => match[1] ?? "");
 }
 
-/** The command line `package.json` gives one script name. */
 function scriptCommand(name: string): string {
   const line = new RegExp(`^ {4}"${name}": "(.*)",?$`, "mu").exec(manifest);
 

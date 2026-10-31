@@ -1,15 +1,15 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- The Responses stream is the provider's own untrusted output, parsed at this boundary.
-
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { ModelRouteRequest, RouteMessage } from "../model-route.js";
 import type { ProviderStreamAccumulator } from "../model-route-stream.js";
-import { isProviderError, tokenCount } from "../model-route-stream-parse.js";
+import { lenient } from "../lenient-schema.js";
+import {
+  ProviderErrorField,
+  ProviderErrorFields,
+  TokenCount,
+  type TokenUsage,
+} from "../model-route-stream-parse.js";
 import type { ToolCallDelta } from "../model-route-events.js";
-import { asUntrusted, field, isRecord, type UntrustedObject } from "../untrusted.js";
-
-/**
- * "Sign in with ChatGPT" requires `store: false` and `stream: true`, takes system text only as
- * `instructions`, and refuses `max_output_tokens` and `temperature`.
- */
 
 export const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
@@ -101,25 +101,61 @@ export function responsesRequest(model: string, request: ModelRouteRequest): Res
   return body;
 }
 
-export function safeCode(value: unknown): string {
-  return typeof value === "string" && /^[\w.-]{1,80}$/u.test(value) ? value : "unknown";
+const isString = Schema.is(Schema.String);
+
+function safeCode(value: string | undefined): string {
+  return value !== undefined && /^[\w.-]{1,80}$/u.test(value) ? value : "unknown";
 }
 
-/** The error message can name the owner's account, so it is never read. */
 export type ProviderError = Readonly<{ type: string; code: string }>;
 
-/** For an `error` event, its own `type` names the event rather than the error. */
-export function providerError(body: unknown): ProviderError {
-  const response = objectAt(body, "response");
-  const nested = objectAt(response, "error") ?? objectAt(body, "error");
-  const error = nested ?? (isRecord(body) ? asUntrusted(body) : undefined);
+const Item = Schema.Struct({
+  type: lenient(Schema.String),
+  call_id: lenient(Schema.String),
+  name: lenient(Schema.String),
+  arguments: lenient(Schema.String),
+});
+
+const ResponseFields = Schema.Struct({
+  error: lenient(ProviderErrorFields),
+  incomplete_details: lenient(Schema.Struct({ reason: lenient(Schema.String) })),
+  usage: lenient(
+    Schema.Struct({ input_tokens: lenient(TokenCount), output_tokens: lenient(TokenCount) }),
+  ),
+});
+
+const StreamEventSchema = Schema.Struct({
+  type: lenient(Schema.String),
+  output_index: lenient(Schema.Number),
+  delta: lenient(Schema.String),
+  item: lenient(Item),
+  response: lenient(ResponseFields),
+  error: ProviderErrorField,
+  code: lenient(Schema.String),
+});
+
+type StreamEvent = typeof StreamEventSchema.Type;
+
+const decodeStreamEvent = Schema.decodeUnknownOption(Schema.fromJsonString(StreamEventSchema));
+
+export const UNKNOWN_PROVIDER_ERROR: ProviderError = { type: "unknown", code: "unknown" };
+
+function providerError(body: StreamEvent): ProviderError {
+  const { response } = body;
+  const nested = response?.error ?? (isString(body.error) ? undefined : body.error);
+  const error = nested ?? body;
 
   return {
-    type: safeCode(nested === undefined ? undefined : stringAt(nested, "type")),
-    code: safeCode(
-      stringAt(error, "code") ?? stringAt(objectAt(response, "incomplete_details"), "reason"),
-    ),
+    type: safeCode(nested?.type),
+    code: safeCode(error.code ?? response?.incomplete_details?.reason),
   };
+}
+
+export function providerErrorOfText(text: string): ProviderError {
+  return decodeStreamEvent(text).pipe(
+    Option.map((body) => providerError(body)),
+    Option.getOrElse(() => UNKNOWN_PROVIDER_ERROR),
+  );
 }
 
 const USAGE_LIMITS: ReadonlySet<string> = new Set([
@@ -133,7 +169,6 @@ export function isUsageLimit(status: number, error: ProviderError): boolean {
   return status === 429 || USAGE_LIMITS.has(error.code) || USAGE_LIMITS.has(error.type);
 }
 
-/** ChatGPT plans have weekly limits. */
 const MAX_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function retryAt(header: string | null, now: number): number | null {
@@ -144,37 +179,15 @@ export function retryAt(header: string | null, now: number): number | null {
   return Number.isFinite(at) && at > now ? Math.min(at, now + MAX_RETRY_AFTER_MS) : null;
 }
 
-function objectAt(value: unknown, key: string): UntrustedObject | undefined {
-  const found = isRecord(value) ? field(asUntrusted(value), key) : undefined;
-
-  return isRecord(found) ? asUntrusted(found) : undefined;
-}
-
-function stringAt(value: unknown, key: string): string | undefined {
-  const found = isRecord(value) ? field(asUntrusted(value), key) : undefined;
-
-  return typeof found === "string" ? found : undefined;
-}
-
-function numberAt(value: unknown, key: string): number | undefined {
-  const found = isRecord(value) ? field(asUntrusted(value), key) : undefined;
-
-  return typeof found === "number" ? found : undefined;
-}
-
-function usageOf(
-  event: UntrustedObject,
-): Readonly<{ inputTokens: number; outputTokens: number }> | undefined {
-  const usage = objectAt(objectAt(event, "response"), "usage");
-  const inputTokens = tokenCount(numberAt(usage, "input_tokens"));
-  const outputTokens = tokenCount(numberAt(usage, "output_tokens"));
+function usageOf(event: StreamEvent): TokenUsage | undefined {
+  const inputTokens = event.response?.usage?.input_tokens;
+  const outputTokens = event.response?.usage?.output_tokens;
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined
     : { inputTokens, outputTokens };
 }
 
-/** A call's `output_index` is its slot, so a reasoning item before it leaves a gap rather than a merge. */
 export class ResponsesStreamReader {
   private readonly accumulator: ProviderStreamAccumulator;
   failure: ProviderError | undefined;
@@ -183,48 +196,35 @@ export class ResponsesStreamReader {
     this.accumulator = accumulator;
   }
 
-  /** Returns `true` at the terminal event. */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
 
     if (!trimmed.startsWith("data:")) return false;
-    let event: unknown;
+    const event = decodeStreamEvent(trimmed.slice("data:".length).trim());
 
-    try {
-      event = JSON.parse(trimmed.slice("data:".length).trim());
-    } catch {
-      return false;
-    }
-
-    return isRecord(event) && this.apply(asUntrusted(event));
+    return Option.isSome(event) && this.apply(event.value);
   }
 
-  private apply(event: UntrustedObject): boolean {
-    const index = numberAt(event, "output_index") ?? 0;
+  private apply(event: StreamEvent): boolean {
+    const index = event.output_index ?? 0;
 
-    switch (field(event, "type")) {
-      case "response.output_text.delta": {
-        const delta = stringAt(event, "delta");
-
-        if (delta !== undefined && delta !== "") this.accumulator.apply({ textDelta: delta });
-
-        return false;
-      }
-
-      case "response.output_item.added":
-        this.functionCallStarted(index, objectAt(event, "item"));
-
-        return false;
-      case "response.function_call_arguments.delta": {
-        const argumentsDelta = stringAt(event, "delta");
-
-        if (argumentsDelta !== undefined && argumentsDelta !== "") {
-          this.accumulator.apply({ toolCallDeltas: [{ index, argumentsDelta }] });
+    switch (event.type ?? "") {
+      case "response.output_text.delta":
+        if (event.delta !== undefined && event.delta !== "") {
+          this.accumulator.apply({ textDelta: event.delta });
         }
 
         return false;
-      }
+      case "response.output_item.added":
+        this.functionCallStarted(index, event.item);
 
+        return false;
+      case "response.function_call_arguments.delta":
+        if (event.delta !== undefined && event.delta !== "") {
+          this.accumulator.apply({ toolCallDeltas: [{ index, argumentsDelta: event.delta }] });
+        }
+
+        return false;
       case "response.completed": {
         const usage = usageOf(event);
 
@@ -240,27 +240,22 @@ export class ResponsesStreamReader {
 
         return true;
       default:
-        if (!isProviderError(event)) return false;
+        if (event.error === undefined) return false;
         this.failure = providerError(event);
 
         return true;
     }
   }
 
-  private functionCallStarted(index: number, item: UntrustedObject | undefined): void {
-    if (stringAt(item, "type") !== "function_call") return;
+  private functionCallStarted(index: number, item: typeof Item.Type | undefined): void {
+    if (item?.type !== "function_call") return;
 
-    const delta: Mutable<ToolCallDelta> = { index };
-    const id = stringAt(item, "call_id");
-    const name = stringAt(item, "name");
-    const argumentsDelta = stringAt(item, "arguments");
-
-    if (id !== undefined) delta.id = id;
-
-    if (name !== undefined) delta.name = name;
-
-    if (argumentsDelta !== undefined && argumentsDelta !== "")
-      delta.argumentsDelta = argumentsDelta;
+    const delta: ToolCallDelta = {
+      index,
+      id: item.call_id,
+      name: item.name,
+      argumentsDelta: item.arguments === "" ? undefined : item.arguments,
+    };
 
     this.accumulator.apply({ toolCallDeltas: [delta] });
   }

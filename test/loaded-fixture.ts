@@ -1,12 +1,5 @@
 import { env } from "cloudflare:workers";
 
-/**
- * Loads one of the test-only Worker Loader entrypoints that
- * `tools/build-loaded-execution-env-fixture.mts` bundles into `build/`. `pnpm verify` runs that
- * build before the tests, which is what puts the files in place.
- *
- * Vite resolves the glob at build time, so this reads no filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -31,7 +24,6 @@ function moduleEntry(module: BuiltFixtureFile["modules"][number]): [string, Work
   return [module.name, { js: module.source }];
 }
 
-/** Loads one bundled entrypoint into its own Worker Loader isolate and returns a stub for it. */
 export async function loadFixtureEntrypoint<T extends Rpc.WorkerEntrypointBranded>(
   fileName: string,
   environment: Readonly<Record<string, string>> = {},

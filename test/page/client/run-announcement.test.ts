@@ -1,12 +1,7 @@
-/**
- * What a screen reader hears when a run ends. The page keeps one polite live region, the run's
- * own state line, so a reader is told how the run ended once and is not read each streamed token.
- */
-
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import type { AgentEvent } from "../../../src/page/client/events.js";
+import type { AgentEvent } from "../../../src/page/client/agent-event.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";

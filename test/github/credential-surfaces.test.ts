@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
@@ -10,17 +8,6 @@ import { tenantConnections } from "../supervisor/projects/tenant-connections.js"
 import type { GitHubFetch } from "../../src/github/index.js";
 import { capturedEvents, everythingLogged, named } from "../log-capture.js";
 
-/**
- * The credential rule, stated as a negative and checked: a credential appears in no tracked file, no
- * application log, no browser response, no stored module map, and no saved state.
- *
- * The token here is recognizable on purpose. One authorization is driven end to end against the
- * fake workspace, and then every surface that could carry it is searched. The one place it is
- * allowed is the install request into the workspace and the standard input of the one command
- * that request runs, which is where ADR-0039 puts it.
- *
- * Vite resolves the globs at build time, so this reads no filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (
@@ -48,7 +35,6 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const REPOSITORY = "https://github.com/sample/repo-1";
 
-/** The modules that can hold a credential at all. None of them may write one anywhere. */
 function credentialModules(): [string, string][] {
   return Object.entries(sourceFiles).filter(
     ([path]) =>
@@ -81,7 +67,6 @@ function githubReplying(): GitHubFetch {
   };
 }
 
-/** Everything the tenant's storage holds, as text, after a whole authorization and connection. */
 function storedText(storage: DurableObjectStorage): string {
   const tables = storage.sql
     .exec<{ readonly name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table'")
@@ -111,12 +96,6 @@ test("no tracked source file or agent document contains a credential", () => {
   ).toEqual([]);
 });
 
-/**
- * A credential module no longer writes to a log directly: it hands whatever it caught to
- * `logRedactedCause` in `src/diagnostics.ts`, which is the one place that redacts a cause and
- * calls `console.error`. Checking for a bare `console.` call still catches a module that bypassed
- * that helper and logged something unredacted itself.
- */
 test("a credential module logs only through the shared redacting helper, never console directly", () => {
   const logging = credentialModules()
     .filter(([, contents]) => /\bconsole\s*\./u.test(contents))
@@ -224,11 +203,6 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
   ).toEqual([expect.stringContaining("gh auth login")]);
 });
 
-/**
- * The structured log is a new place a value can land, so it is searched like every other: across
- * every level, through a whole authorization, and through the unattended `GH_TOKEN` path. What
- * the log does say is which source a credential came from and how the install ended.
- */
 test("no log line at any level carries the token, and the install is logged with its source", async () => {
   const events = capturedEvents();
   const workspace = new FakeTenantWorkspace();

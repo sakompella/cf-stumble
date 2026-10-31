@@ -5,7 +5,6 @@ import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { canonicalModuleMap, encodeModuleMap } from "./module-map.js";
 
-/** A Durable Object row, string, or BLOB may not exceed 2 MB and one module can exceed that alone, so the encoding is chunked. */
 export const MODULE_MAP_CHUNK_BYTES = 1_048_576;
 
 export type ModuleMapStorage = Readonly<{
@@ -49,7 +48,6 @@ export class ModuleMapStore {
     `);
   }
 
-  /** Checks chunk count, byte count and contiguous indexes: `MainHarnessArtifact.parse` accepts a map with an imported module missing. */
   read(harnessCommit: HarnessCommit): StoredModuleMapResult {
     const manifest = this.storage.sql
       .exec<ManifestRow>(
@@ -78,7 +76,6 @@ export class ModuleMapStore {
     return decoded(bytes, harnessCommit);
   }
 
-  /** One `transactionSync`, so a restart sees the old map or the whole new one. */
   write(
     artifact: MainHarnessArtifact,
   ): Result.Result<MainHarnessArtifactInput, StoredModuleMapProblem> {
@@ -160,15 +157,15 @@ function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Arr
 }
 
 function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleMapResult {
-  let value: unknown;
+  let text: string;
 
   try {
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   } catch {
     return Result.fail({ code: "corrupt-artifact", harnessCommit });
   }
 
-  const parsed = MainHarnessArtifact.parse(value);
+  const parsed = MainHarnessArtifact.parseJson(text);
 
   if (Result.isFailure(parsed) || parsed.success.harnessCommit !== harnessCommit) {
     return Result.fail({ code: "corrupt-artifact", harnessCommit });

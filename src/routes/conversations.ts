@@ -7,10 +7,6 @@ import type {
   ConversationResult,
 } from "../supervisor/conversations/conversation-result.js";
 
-/**
- * A client names a project and nothing else: the Supervisor holds which conversation, generation and
- * workspace serve it, so these routes cannot be talked into another project's conversation.
- */
 export type ConversationApiSupervisor = Readonly<{
   submitProjectMessage: (
     projectId: string,
@@ -42,7 +38,6 @@ function problemResponse(problem: ConversationProblem): Response {
   return Response.json({ ok: false, problem }, { status: PROBLEM_STATUS[problem.code] });
 }
 
-/** `nosniff` because a stream of JSON lines must not be sampled into another content type. */
 function eventsResponse(events: ReadableStream<Uint8Array>): Response {
   return new Response(events, {
     headers: {

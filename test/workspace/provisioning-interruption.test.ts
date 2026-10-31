@@ -4,18 +4,10 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import {
-  provisionProjectWorkspace,
-  waitForWorkspaceProvision,
-  type ProvisionWorkspaceHost,
-} from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
+import type { ProvisionWorkspaceHost } from "../../src/workspace/provision-plan.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
-
-/**
- * A provision plan whose caller is interrupted still holds the workspace exclusion until its
- * Workspace Host RPC settles. The RPC cannot be recalled once sent, so a turn admitted early could
- * work in a directory the old clone is still writing.
- */
 
 const tick = () =>
   new Promise<void>((resolve) => {

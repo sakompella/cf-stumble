@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
@@ -71,12 +69,6 @@ test("prepares and serves a generation from its stored module map", async () => 
   expect(await response.text()).toBe("stored candidate serving");
 });
 
-/**
- * The Supervisor holds a real build workspace builder, and a Workspace Host cannot start its
- * container in the test pool, so this exercises the wired build path and its failure. workerd logs
- * that container failure as an uncaught exception; the failure still arrives as a plain typed
- * problem, which is what the test asserts.
- */
 test("leaves the active generation serving when the module map cannot be built", async () => {
   const control = await activeSupervisor("failed-build-keeps-active-generation");
   const label = await labelCandidate(control, commits.unstored);

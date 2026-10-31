@@ -1,14 +1,15 @@
-/**
- * JSON as a closed type, and the two guards that open it.
- *
- * The browser harness handles JSON from two directions: DevTools replies coming in, and stub API
- * payloads going out. `ops:check` reads Cloudflare API replies. All of it is JSON and nothing
- * wider, so none of it needs `unknown`. Stating that here once keeps every reader in both tools
- * working with a value contract instead of an escape hatch.
- */
-export type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonRecord;
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
-export type JsonRecord = { readonly [key: string]: JsonValue };
+export type JsonValue = Schema.Json;
+
+export type JsonRecord = Schema.JsonObject;
+
+const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
+
+export function parseJsonText(text: string): JsonValue | undefined {
+  return Option.getOrUndefined(decodeJsonText(text));
+}
 
 export function isJsonRecord(value: JsonValue): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -26,14 +27,8 @@ export function isJsonNumber(value: JsonValue): value is number {
   return typeof value === "number";
 }
 
-/** Parse text that should be a JSON object, answering `undefined` when it is anything else. */
 export function parseJsonRecordText(text: string): JsonRecord | undefined {
-  try {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: JSON.parse returns only JSON, which JsonValue describes exactly, and isJsonRecord then proves this one is an object.
-    const parsed = JSON.parse(text) as JsonValue;
+  const parsed = parseJsonText(text);
 
-    return isJsonRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
+  return parsed !== undefined && isJsonRecord(parsed) ? parsed : undefined;
 }

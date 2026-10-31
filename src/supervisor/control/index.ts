@@ -10,14 +10,8 @@ type ControlOutcome = Extract<GenerationControlResult, { readonly ok: true }>["o
 
 type ActivationKind = Exclude<ControlOutcome["kind"], "candidate-submitted">;
 
-// Runs on Result and converts once in execute(): the value crosses the RPC boundary and is written to SQLite.
-// Everything here runs inside one `transactionSync` callback, so it must stay synchronous.
 type ControlDecision = Result.Result<ControlOutcome, ControlProblemCode>;
 
-/**
- * No request journal: resubmitting a candidate is safe because labeling a labeled commit returns the
- * existing generation, and activating the active generation is a no-op. A stale epoch is rejected.
- */
 export class GenerationControl {
   private readonly generations: Generations;
 
@@ -65,7 +59,6 @@ export class GenerationControl {
     return Result.succeed(outcome);
   }
 
-  /** `guard` runs before the activation decider, so a rollback reports its own refusal first. */
   private activate(
     kind: ActivationKind,
     label: number,

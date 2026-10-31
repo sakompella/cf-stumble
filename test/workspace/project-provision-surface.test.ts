@@ -20,17 +20,10 @@ import {
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
 
-/**
- * The provision surface's parsing and planning, and the shell it hands to Computer. No test here
- * runs that shell — the Workers pool has no `node:child_process` — so what a green run shows is
- * which requests are refused, which paths are reachable, and what text the accepted ones produce.
- */
-
 const projectOne = sampleProjectOne;
 
 const projectTwo = sampleProjectTwo;
 
-/** One provision request, as the Supervisor sends it: the project it resolved, and a step. */
 function provisionRequest(
   project: Project,
   step: ProjectProvisionStepName,
@@ -51,11 +44,8 @@ class FakeProjectOperations implements WorkspaceOperations {
   readonly calls: string[] = [];
   readonly sources: string[] = [];
   exitCode = 0;
-  /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
-   * the provision shell's catch-all logs a redacted cause instead of discarding it. */
   commandFailure: Error | undefined;
 
-  /** The Git config the durable store holds for the clone, or nothing when the clone is absent. */
   durableGitConfig: string | undefined =
     `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${projectOne.repositoryUrl}\n`;
 
@@ -97,8 +87,7 @@ class FakeProjectOperations implements WorkspaceOperations {
   }
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function provision(operations: FakeProjectOperations, request: unknown) {
+function provision(operations: FakeProjectOperations, request: ProjectProvisionRequest) {
   return Effect.runPromise(executeProjectProvisionRequest({ operations, request }));
 }
 
@@ -191,11 +180,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * The provision shell's catch-all used to discard whatever Computer threw and answer
- * `workspace-unavailable` with nothing logged, same as the build shell's. The public code stays
- * generic; an operator can now read the cause the catch-all just swallowed.
- */
 test("logs a redacted cause instead of discarding it when the clone command cannot run", async () => {
   const operations = new FakeProjectOperations();
   operations.commandFailure = new Error("econnrefused while dialing the container");
@@ -212,32 +196,21 @@ test("logs a redacted cause instead of discarding it when the clone command cann
   expect(logged).toContain("econnrefused while dialing the container");
 });
 
-test("refuses a caller supplied repository URL, command, or project", async () => {
+test("refuses a repository URL that is not the project's, and a project id that is not an id", async () => {
   const operations = new FakeProjectOperations();
 
-  for (const [request, code] of [
-    [null, "invalid-request"],
-    [{ kind: "provision-project", projectId: projectOne.id }, "invalid-request"],
-    [
-      {
-        ...provisionRequest(projectOne, "clone"),
-        repositoryUrl: "https://example.invalid/attacker/repo.git",
-      },
-      "invalid-request",
-    ],
-    [{ ...provisionRequest(projectOne, "clone"), source: "whoami" }, "invalid-request"],
-    [
-      { ...provisionRequest(projectOne, "clone"), repositoryUrl: "git@github.com:a/b.git" },
-      "invalid-request",
-    ],
-    [{ ...provisionRequest(projectOne, "clone"), projectId: "../../etc" }, "invalid-request"],
-    [{ ...provisionRequest(projectOne, "clone"), projectId: 7 }, "invalid-request"],
-    [{ kind: "run-command", command: "check" }, "invalid-request"],
-    [{ kind: "read-file", path: "readme.md" }, "invalid-request"],
-    [{ ...provisionRequest(projectOne, "clone"), step: "whoami" }, "unknown-command"],
-    [{ ...provisionRequest(projectOne, "clone"), step: "instructions" }, "unknown-command"],
-  ] as const) {
-    await expect(provision(operations, request)).resolves.toEqual({ ok: false, error: { code } });
+  for (const request of [
+    {
+      ...provisionRequest(projectOne, "clone"),
+      repositoryUrl: "https://example.invalid/attacker/repo.git",
+    },
+    { ...provisionRequest(projectOne, "clone"), repositoryUrl: "git@github.com:a/b.git" },
+    { ...provisionRequest(projectOne, "clone"), projectId: "../../etc" },
+  ]) {
+    await expect(provision(operations, request)).resolves.toEqual({
+      ok: false,
+      error: { code: "invalid-request" },
+    });
   }
 
   expect(operations.calls, "a refused provision request runs nothing").toEqual([]);

@@ -6,11 +6,6 @@ import { execInWorkspace, type RunningCommands } from "./execution-env-exec.js";
 import { lstat, open, TEMP_DIRECTORY, uniqueTempPath } from "./execution-env-files.js";
 import { aborted, type ComputerWorkspace, type WorkspacePath } from "./execution-env-paths.js";
 
-/**
- * The capability can read, write, and stat, but has no rename, remove, or mkdir, so these run as
- * POSIX commands in the container. Paths are relative to the workspace root, which is the
- * command's working directory.
- */
 function operand(path: WorkspacePath): string {
   return shellQuote(`.${path.addressed}`);
 }
@@ -54,7 +49,6 @@ async function run(
   };
 }
 
-/** `mv -T` (GNU, as in the workspace image) replaces a destination the way rename(2) does. */
 export async function renameFile(
   workspace: ComputerWorkspace,
   running: RunningCommands,

@@ -67,7 +67,6 @@ class FakeHarnessHost implements HarnessProvisionWorkspaceHost {
   }
 }
 
-/** Holds a project clone open. Its plan writes the managed instructions through the harness fake. */
 class DelayedProjectHost {
   readonly started: Promise<void>;
   private resolveStarted = () => {};

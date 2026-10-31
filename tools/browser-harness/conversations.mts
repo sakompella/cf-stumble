@@ -31,17 +31,6 @@ import {
   type HarnessScenario,
 } from "./fixtures.mjs";
 
-/**
- * The stub's conversations are real Pi Durable conversations, one per project, on a faux model.
- * So the events the page reads are the events Pi emits for a run, in Pi's order and shape; only
- * the model's answers and the one tool are scripted.
- *
- * Every input gets the same run: an opening sentence and a `bash` call that streams two lines,
- * then the closing answer once the tool has answered. In `ready-paused` the tool waits after its
- * first line until a case releases it, so a case sees a run that is still going. In
- * `model-error` the closing answer fails.
- */
-
 export const OPENING_TEXT = "I will run the checks before I change anything.";
 
 export const ANSWER_TEXT = "Verification passed, and EARLIER-EDIT-KEPT is still in the workspace.";
@@ -52,7 +41,6 @@ export const TOOL_OUTPUT = ["tests: 12 passed\n", "lint: clean\n"] as const;
 
 export const MODEL_ERROR = "model-error";
 
-/** The marker that proves the reader is looking at this project's own conversation. */
 export const HARNESS_THREAD_MARKER = "HARNESS-THREAD";
 
 export const EARLIER_EDIT_MARKER = "EARLIER-EDIT-KEPT";
@@ -71,7 +59,6 @@ export function projectLocation(projectId: string): string {
     : `/workspace/projects/${projectId}`;
 }
 
-/** Every project starts with one exchange that names the project and where it is checked out. */
 export function seedExchange(projectId: string) {
   const location = projectLocation(projectId);
 
@@ -169,7 +156,6 @@ export type Conversations = Readonly<{
   close: () => Promise<void>;
 }>;
 
-/** `scenario` is read at each answer, so a scenario switched by hand applies to the next run. */
 async function openHarness(scenario: () => HarnessScenario, barrier: Barrier) {
   const faux = fauxProvider({ tokensPerSecond: 80 });
 
@@ -204,7 +190,6 @@ async function openHarness(scenario: () => HarnessScenario, barrier: Barrier) {
   return { harness, create };
 }
 
-/** `scenario` is read at each answer, so a scenario switched by hand applies to the next run. */
 export async function openConversations(scenario: () => HarnessScenario): Promise<Conversations> {
   const barrier = freshBarrier();
   const { harness, create } = await openHarness(scenario, barrier);

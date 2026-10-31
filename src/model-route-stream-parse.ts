@@ -1,178 +1,117 @@
-import { asUntrusted, field, isRecord, type UntrustedObject } from "./untrusted.js";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { lenient } from "./lenient-schema.js";
 import type { ToolCallDelta } from "./model-route-events.js";
 
+export const TokenCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+export const ProviderErrorFields = Schema.Struct({
+  type: lenient(Schema.String),
+  code: lenient(Schema.String),
+});
+
+export const ProviderErrorField = lenient(
+  Schema.Union([ProviderErrorFields, Schema.NonEmptyString]),
+);
+
+export type TokenUsage = Readonly<{ inputTokens: number; outputTokens: number }>;
+
 export type ParsedProviderChunk = Readonly<{
-  textDelta?: string;
-  toolCallDeltas?: ReadonlyArray<ToolCallDelta>;
-  usage?: Readonly<{ inputTokens: number; outputTokens: number }>;
+  textDelta?: string | undefined;
+  toolCallDeltas?: ReadonlyArray<ToolCallDelta> | undefined;
+  usage?: TokenUsage | undefined;
 }>;
 
-type MutableParsedChunk = {
-  textDelta?: string;
-  toolCallDeltas?: ToolCallDelta[];
-  usage?: Readonly<{ inputTokens: number; outputTokens: number }>;
-};
+export type ProviderPayload =
+  | Readonly<{ failed: true }>
+  | Readonly<{ failed: false; chunk: ParsedProviderChunk }>;
 
-type ParsedToolCallFunction = Readonly<{ name?: string; argumentsDelta?: string }>;
+const ToolCallEntry = Schema.Struct({
+  index: lenient(Schema.Number),
+  id: lenient(Schema.String),
+  function: lenient(
+    Schema.Struct({ name: lenient(Schema.String), arguments: lenient(Schema.String) }),
+  ),
+});
 
-type MutableToolCallFunction = { name?: string; argumentsDelta?: string };
+const Entries = Schema.Array(Schema.Unknown);
 
-type MutableToolCallDelta = { index: number; id?: string; name?: string; argumentsDelta?: string };
+const Delta = Schema.Struct({
+  content: lenient(Schema.NonEmptyString),
+  tool_calls: lenient(Entries),
+});
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted provider field.
-function stringField(value: unknown): string | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider field.
-  return typeof value === "string" && value !== "" ? value : undefined;
+const Choice = Schema.Struct({ delta: lenient(Delta) });
+
+const Usage = Schema.Struct({
+  prompt_tokens: lenient(TokenCount),
+  input_tokens: lenient(TokenCount),
+  completion_tokens: lenient(TokenCount),
+  output_tokens: lenient(TokenCount),
+});
+
+const ProviderEventSchema = Schema.Struct({
+  error: ProviderErrorField,
+  response: lenient(Schema.NonEmptyString),
+  tool_calls: lenient(Entries),
+  choices: lenient(Entries),
+  usage: lenient(Usage),
+});
+
+type ProviderEvent = typeof ProviderEventSchema.Type;
+
+const decodeProviderEvent = Schema.decodeUnknownOption(Schema.fromJsonString(ProviderEventSchema));
+
+const decodeChoice = Schema.decodeUnknownOption(Choice);
+
+const decodeToolCall = Schema.decodeUnknownOption(ToolCallEntry);
+
+function firstDelta(event: ProviderEvent): typeof Delta.Type | undefined {
+  const choice = event.choices?.at(0);
+
+  return choice === undefined ? undefined : Option.getOrUndefined(decodeChoice(choice))?.delta;
 }
 
-/**
- * Chat-completion providers stream text and tool calls in `choices[0].delta`, with usage at the top
- * level. Only the first choice matters.
- */
-function firstChoiceDelta(obj: UntrustedObject): UntrustedObject | undefined {
-  const choices = field(obj, "choices");
+function toolCallDeltas(event: ProviderEvent): ToolCallDelta[] {
+  const entries = event.tool_calls ?? firstDelta(event)?.tool_calls ?? [];
 
-  if (!Array.isArray(choices)) return undefined;
-  const first: unknown = choices.at(0);
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted choice entry.
-  if (first === null || typeof first !== "object") return undefined;
-  const delta = field(asUntrusted(first), "delta");
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted delta field.
-  return delta === null || typeof delta !== "object" ? undefined : asUntrusted(delta);
+  return entries.flatMap((entry, position) =>
+    decodeToolCall(entry).pipe(
+      Option.map((call): ToolCallDelta => ({
+        index: call.index ?? position,
+        id: call.id,
+        name: call.function?.name,
+        argumentsDelta: call.function?.arguments,
+      })),
+      Option.toArray,
+    ),
+  );
 }
 
-function numberField(obj: UntrustedObject, key: string): number | undefined {
-  const value = field(obj, key);
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider chunk field.
-  return typeof value === "number" ? value : undefined;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted provider usage field.
-export function tokenCount(value: unknown): number | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider usage field.
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
-}
-
-function parseProviderUsage(obj: UntrustedObject): ParsedProviderChunk["usage"] {
-  const usageValue = field(obj, "usage");
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider usage field.
-  if (usageValue === null || typeof usageValue !== "object") return undefined;
-  const usageObj = asUntrusted(usageValue);
-
-  const inputTokens =
-    tokenCount(field(usageObj, "prompt_tokens")) ?? tokenCount(field(usageObj, "input_tokens"));
-
-  const outputTokens =
-    tokenCount(field(usageObj, "completion_tokens")) ??
-    tokenCount(field(usageObj, "output_tokens"));
+function usageOf(event: ProviderEvent): TokenUsage | undefined {
+  const inputTokens = event.usage?.prompt_tokens ?? event.usage?.input_tokens;
+  const outputTokens = event.usage?.completion_tokens ?? event.usage?.output_tokens;
 
   return inputTokens === undefined || outputTokens === undefined
     ? undefined
     : { inputTokens, outputTokens };
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted `function` field from the provider's own stream chunk.
-function parseProviderToolCallFunction(fn: unknown): ParsedToolCallFunction {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted tool call function field.
-  if (fn === null || typeof fn !== "object") return {};
-  const fnObj = asUntrusted(fn);
-  const fnName = field(fnObj, "name");
-  const fnArgs = field(fnObj, "arguments");
-  const parsed: MutableToolCallFunction = {};
+function chunkOf(event: ProviderEvent): ParsedProviderChunk {
+  const deltas = toolCallDeltas(event);
 
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted function.name.
-  if (typeof fnName === "string") parsed.name = fnName;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted function.arguments.
-  if (typeof fnArgs === "string") parsed.argumentsDelta = fnArgs;
-
-  return parsed satisfies ParsedToolCallFunction;
+  return {
+    textDelta: event.response ?? firstDelta(event)?.content,
+    toolCallDeltas: deltas.length > 0 ? deltas : undefined,
+    usage: usageOf(event),
+  };
 }
 
-function parseProviderToolCallDelta(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream entry.
-  entry: unknown,
-  fallbackIndex: number,
-): ToolCallDelta | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted tool call delta entry.
-  if (entry === null || typeof entry !== "object") return undefined;
-  const obj = asUntrusted(entry);
-  const id = field(obj, "id");
-  const { name, argumentsDelta } = parseProviderToolCallFunction(field(obj, "function"));
-  const delta: MutableToolCallDelta = { index: numberField(obj, "index") ?? fallbackIndex };
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted tool call id.
-  if (typeof id === "string") delta.id = id;
-
-  if (name !== undefined) delta.name = name;
-
-  if (argumentsDelta !== undefined) delta.argumentsDelta = argumentsDelta;
-
-  return delta satisfies ToolCallDelta;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted `tool_calls` field.
-function parseProviderToolCallDeltas(toolCalls: unknown): ToolCallDelta[] {
-  const deltas: ToolCallDelta[] = [];
-
-  if (!Array.isArray(toolCalls)) return deltas;
-  toolCalls.forEach(
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: each array entry is still untrusted.
-    (entry: unknown, idx: number) => {
-      const delta = parseProviderToolCallDelta(entry, idx);
-
-      if (delta !== undefined) deltas.push(delta);
-    },
+export function parseProviderPayload(payload: string): ProviderPayload | undefined {
+  return decodeProviderEvent(payload).pipe(
+    Option.map((event): ProviderPayload =>
+      event.error === undefined ? { failed: false, chunk: chunkOf(event) } : { failed: true },
+    ),
+    Option.getOrUndefined,
   );
-
-  return deltas;
-}
-
-/**
- * An OpenAI-compatible server can send `{"error": ...}` mid-stream and still `[DONE]`, so this
- * event, not the stream end, must fail the turn.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream event.
-export function isProviderError(raw: unknown): boolean {
-  if (!isRecord(raw)) return false;
-  const error = raw.error;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider error field.
-  return isRecord(error) || (typeof error === "string" && error !== "");
-}
-
-/**
- * Unrecognized fields are ignored: a provider detail this route does not model must not fail an
- * otherwise-good turn.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this IS the parse boundary for the provider's own untrusted stream chunk.
-export function parseProviderChunk(raw: unknown): ParsedProviderChunk | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider chunk.
-  if (raw === null || typeof raw !== "object") return undefined;
-  const obj = asUntrusted(raw);
-  const delta = firstChoiceDelta(obj);
-
-  const response = field(obj, "response");
-  const content = delta === undefined ? undefined : field(delta, "content");
-
-  const toolCalls =
-    field(obj, "tool_calls") ?? (delta === undefined ? undefined : field(delta, "tool_calls"));
-
-  const toolCallDeltas = parseProviderToolCallDeltas(toolCalls);
-  const usage = parseProviderUsage(obj);
-
-  const parsed: MutableParsedChunk = {};
-  const text = stringField(response) ?? stringField(content);
-
-  if (text !== undefined) parsed.textDelta = text;
-
-  if (toolCallDeltas.length > 0) parsed.toolCallDeltas = toolCallDeltas;
-
-  if (usage !== undefined) parsed.usage = usage;
-
-  return parsed satisfies ParsedProviderChunk;
 }

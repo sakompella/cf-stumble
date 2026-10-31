@@ -6,7 +6,6 @@ import type {
   ProjectRpcTargetContract,
 } from "../../workspace/project/protocol.js";
 
-/** The capability addresses the workspace root as "/", and every path it accepts lies beneath it. */
 export interface WorkspacePath {
   readonly absolute: string;
   readonly addressed: string;
@@ -73,7 +72,6 @@ export function fromAddressed(addressed: string): WorkspacePath {
   };
 }
 
-/** Pi has no code for an existing path, an escape, a size limit, or a loop, so those are `invalid`. */
 const FILE_ERROR_CODES: Readonly<Record<ProjectErrorCode, FileErrorCode>> = {
   "not-found": "not_found",
   "not-directory": "not_directory",
@@ -106,7 +104,6 @@ export function fromProject<T>(result: ProjectResult<T>, path: string): Result<T
   return result.ok ? result : { ok: false, error: fileErrorOf(result.error.code, path) };
 }
 
-/** A capability whose turn ended, or a broken RPC hop, rejects instead of answering. */
 export async function capabilityCall<T>(
   path: string,
   call: () => Promise<ProjectResult<T>>,

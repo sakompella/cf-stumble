@@ -12,9 +12,6 @@ import {
 } from "../../../src/supervisor/generations/index.js";
 import { label } from "./fixtures.js";
 
-// Workerd-native coverage for the pure deciders, sibling to decisions.props.test.ts (which runs
-// the same rules as Hegel properties under Node). These are example-based on purpose.
-
 const COMMIT = testHarnessCommit("a".repeat(40));
 
 function generation(labelValue: number, status: GenerationStatus): Generation {

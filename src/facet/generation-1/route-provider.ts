@@ -6,15 +6,11 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import type { ModelStreamEvent } from "../../model-route.js";
+import { isModelStreamEvent } from "../../model-route-events.js";
 import type { ModelCapability } from "./capabilities.js";
 import { transcriptToRouteRequest } from "./route-request.js";
 import { ReplyAssembler } from "./route-reply.js";
 
-/**
- * Pi sizes a response against these, so they are nonzero. Costs are zero because real prices are
- * unknown; `maxTokens` is the host route's own output cap.
- */
 export const ROUTE_MODEL: Model<"host-model-route"> = {
   id: "host-model-route",
   name: "Host model route",
@@ -30,7 +26,6 @@ export const ROUTE_MODEL: Model<"host-model-route"> = {
 
 const CANCELLED = "the turn was cancelled";
 
-/** A function, so the check after each `await` is not narrowed away by the one before the loop. */
 function aborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
@@ -52,16 +47,13 @@ async function pump(
   const reader = route.pipeThrough(new TextDecoderStream()).getReader();
 
   const cancel = () => {
-    reader.cancel().catch(() => {
-      /* the stream already ended or failed; nothing more to release */
-    });
+    reader.cancel().catch(() => {});
   };
 
   signal?.addEventListener("abort", cancel, { once: true });
   let buffer = "";
 
   try {
-    // A signal that aborted while the route answered fires no event for the listener above.
     if (aborted(signal)) {
       reply.fail("aborted", CANCELLED);
 
@@ -87,8 +79,9 @@ async function pump(
       buffer = lines.pop() ?? "";
 
       for (const line of lines.filter((candidate) => candidate !== "")) {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the host route writes exactly this union, one event per line.
-        const event = JSON.parse(line) as ModelStreamEvent;
+        const event: unknown = JSON.parse(line);
+
+        if (!isModelStreamEvent(event)) throw new Error("the model route wrote an unknown event");
         reply.apply(event);
 
         if (event.type === "done" || event.type === "error") return;
@@ -100,7 +93,6 @@ async function pump(
   }
 }
 
-/** The facet has no network: the host's model route behind the MODEL binding is this provider's only I/O. */
 export function routeProvider(model: ModelCapability): Provider {
   const stream: ProviderStreams["stream"] = (routeModel, context, options?: StreamOptions) => {
     const out = createAssistantMessageEventStream();

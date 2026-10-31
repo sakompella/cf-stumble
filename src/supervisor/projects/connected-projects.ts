@@ -24,7 +24,6 @@ type ConnectedProjectRow = {
   readonly connected_at: number;
 };
 
-/** A conflict means the URL derives the harness entry's id. */
 type ConnectProjectProblem = Readonly<{
   code: "invalid-repository-url" | "project-id-conflict";
 }>;
@@ -34,16 +33,14 @@ type ConnectProjectResult =
   | Readonly<{ ok: false; problem: ConnectProjectProblem }>;
 
 interface ConnectProjectInput {
-  readonly repositoryUrl: unknown;
-  readonly displayName?: unknown;
+  readonly repositoryUrl: string;
+  readonly displayName?: string | undefined;
 }
 
 const DISPLAY_NAME_LIMIT = 80;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the display name arrives from a client.
-function chosenDisplayName(value: unknown, repositoryUrl: PublicRepositoryUrl): string {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the display name is untrusted.
-  const trimmed = typeof value === "string" ? value.trim() : "";
+function chosenDisplayName(value: string | undefined, repositoryUrl: PublicRepositoryUrl): string {
+  const trimmed = (value ?? "").trim();
 
   return trimmed.length === 0
     ? defaultProjectDisplayName(repositoryUrl)
@@ -114,7 +111,6 @@ export class ConnectedProjects {
     }
 
     if (id === HARNESS_PROJECT_ID) {
-      // The harness entry owns that id, so a row holding it could never be selected.
       return { ok: false, problem: { code: "project-id-conflict" } };
     }
 

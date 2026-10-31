@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -16,9 +14,6 @@ import {
   REFRESH_TWO,
 } from "./fixtures.js";
 import { access, connected, HOUR, withConnection } from "./connection-harness.js";
-
-/** Refreshing the cached credential: one refresh for concurrent callers, rotated tokens stored
- * atomically, and refusals that need a reconnect. */
 
 afterEach(async () => {
   vi.restoreAllMocks();

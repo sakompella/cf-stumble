@@ -2,20 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cf-stumble",
   "main": "src/worker.ts",
-  // The owner page's script is a generated module; build it before Wrangler bundles the Worker.
   "build": { "command": "pnpm run build:page" },
   "compatibility_date": "2025-01-01",
-  // @cloudflare/computer imports node:crypto and node:events, so the Worker does not start
-  // without nodejs_compat. Vitest resolves those itself, which is why the suite passed while
-  // `wrangler dev` failed to boot.
   "compatibility_flags": ["enable_ctx_exports", "nodejs_compat"],
-  // The zone has a proxied wildcard record, so the hostname resolves to another origin unless the
-  // Worker claims it. A route rather than a custom domain, because a custom domain writes DNS and
-  // a route does not: the wildcard already makes this hostname proxied.
-  // Operator diagnostics go to console.error (src/diagnostics.ts); without logs they vanish.
-  // Every rate is 1 so that no request's events are dropped. Traces bill one event per span
-  // against the quota logs use. Issues must stay enabled: a deployment from a configuration
-  // without it turns Issues off. See `cloudflare.config.ts`.
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -24,10 +13,7 @@
     "issues": { "enabled": true },
   },
   "routes": [{ "pattern": "stumble.akompella.dev/*", "zone_name": "akompella.dev" }],
-  // One entry point: the route. wrangler turns the `workers.dev` subdomain off by default once a
-  // route exists; this says so on purpose rather than relying on that.
   "workers_dev": false,
-  // Workers Cache stays off, so every request reaches the Worker.
   "cache": { "enabled": false },
   "durable_objects": {
     "bindings": [
@@ -41,9 +27,6 @@
       },
     ],
   },
-  // Both classes are live and SQLite-backed. This replaces the earlier `migrations` history
-  // (v1: Supervisor, v2: WorkspaceHost) so that `wrangler deploy` and `cf deploy` declare the same
-  // lifecycle. Do not mix `migrations` and `exports`: Wrangler rejects the pair.
   "exports": {
     "Supervisor": { "type": "durable-object", "storage": "sqlite" },
     "WorkspaceHost": {
@@ -54,21 +37,13 @@
   },
   "containers": [
     {
-      // Wrangler would derive this name; it is explicit so that it matches cloudflare.config.ts.
       "name": "cf-stumble-workspacehost",
       "image": "./containers/computerd.Dockerfile",
-      // The Dockerfile copies the lockfile and the vendored Computer tarball from the repository
-      // root, so the build context is the root, not the Dockerfile's directory.
       "image_build_context": ".",
       "max_instances": 1,
-      // Check workloads need more CPU, memory, and disk than standard-1 (0.5 vCPU, 4 GiB, 8 GB).
-      // standard-3 (2 vCPU, 8 GiB, 16 GB) leaves room for compiler and install peaks.
       "instance_type": "standard-3",
     },
   ],
-  // Instance values are Worker secrets that each instance sets itself, and they are not declared
-  // here: a declared secret is required, which stops the first deploy of a new Worker. The one
-  // plain variable is the ChatGPT model (ADR-0047). See `cloudflare.config.ts` and `docs/deploy.md`.
   "vars": { "CHATGPT_MODEL": "gpt-6.1-sol" },
   "worker_loaders": [{ "binding": "LOADER" }],
   "ai": { "binding": "AI" },

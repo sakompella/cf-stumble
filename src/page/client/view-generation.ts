@@ -135,10 +135,7 @@ export function generationBarView(model: Model, h: HtmlBuilder<Message>): Html {
       ),
       detailsView(model, h),
       h.details(
-        [
-          // The browser owns the drawer's open state.
-          h.Id(ID.generationDrawer),
-        ],
+        [h.Id(ID.generationDrawer)],
         [
           h.summary([], ["Generation controls"]),
           submissionPanel(model, h),

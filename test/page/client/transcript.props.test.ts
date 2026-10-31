@@ -2,14 +2,8 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION } from "../../../src/page/client/conversation.js";
-import type { PiMessage } from "../../../src/page/client/events.js";
+import type { PiMessage } from "../../../src/page/client/agent-event.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
-
-/**
- * Tool results against the rule a reader expects: a result finishes the latest block its call
- * opened, or opens one at the end. Ids come from a small pool, so repeats, orphans, and
- * interleaving happen often.
- */
 
 type Drawn = Readonly<{ isCall: boolean; id: string; isError: boolean }>;
 

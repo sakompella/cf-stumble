@@ -3,11 +3,6 @@ import { expect, test } from "vitest";
 import { commandOutput } from "../../src/workspace/computer-operations.js";
 import { WorkspaceSyncIncomplete } from "../../src/workspace/executor.js";
 
-/**
- * How the Workspace Host reads Computer's post-command sync. The results are shaped like the
- * pinned Computer's `WorkspaceRuntimeResult`; no Computer runs here.
- */
-
 const ran = { stdout: "out", stderr: "", exitCode: 0 } as const;
 
 const complete: ExecSyncResult = { status: "complete", applied: 3, skipped: [] };

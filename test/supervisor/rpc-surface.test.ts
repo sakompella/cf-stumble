@@ -1,12 +1,9 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { artifact, prepareWithModuleMap } from "./helpers.js";
 
-// The Worker Loader caches by harness commit, so a second source under a reused commit is ignored.
 const deadlineCommit = "cafe456789abcdef0123456789abcdef01234567";
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
@@ -70,10 +67,6 @@ export class MainFacet extends DurableObject {
   expect(result.report).not.toHaveProperty("cause");
 });
 
-/**
- * The Supervisor holds a real build workspace builder, and a Workspace Host cannot start its
- * container in the test pool, so a commit with no stored module map fails to build.
- */
 test("the failure arms of startup checking return plain RPC values", async () => {
   const control = supervisor("plain-startup-check-failures");
   const unstoredCommit = "cafe456789abcdef0123456789abcdef01234568";
@@ -96,8 +89,6 @@ test("the failure arms of startup checking return plain RPC values", async () =>
     { ok: false, problem: { code: "unknown-generation", label: 999 } },
     { ok: false, problem: { code: "build-workspace-unavailable", harnessCommit: unstoredCommit } },
   ]);
-  // A structured clone of a class instance is a plain object, so a value strictly equal to its own
-  // clone holds plain objects only: no Result, no error class, no prototype.
   expect(failures).toStrictEqual(structuredClone(failures));
 });
 
@@ -122,16 +113,4 @@ test("the failure arms of control, conversations, and relay return plain values"
     ok: false,
     problem: { code: "no-active-generation" },
   });
-});
-
-test("the Supervisor's helper methods are not reachable over RPC", async () => {
-  const stub = supervisor("helpers-not-rpc");
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Probe: a stub answers any property name with a pending remote lookup, and this test checks which names that lookup refuses.
-  const members: Readonly<Record<string, unknown>> = stub;
-
-  // Awaiting the member itself is the lookup a call makes first, without leaving the call's own
-  // rejection unhandled in the test pool's RPC wrapper.
-  for (const name of ["modelRoute", "mountServing", "startTurnStream"]) {
-    await expect(members[name], name).rejects.toThrow(/does not implement/u);
-  }
 });

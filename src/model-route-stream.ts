@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import {
-  isProviderError,
-  parseProviderChunk,
+  parseProviderPayload,
   type ParsedProviderChunk,
+  type TokenUsage,
 } from "./model-route-stream-parse.js";
 import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
 import type {
@@ -20,9 +20,6 @@ import {
   type ModelTurnAnswer,
 } from "./model-route-turn.js";
 
-// This model answers in `reasoning_content`, which spends the default output budget, hence
-// `MAX_OUTPUT_TOKENS`.
-// Llama 3.3 rejects Pi's content parts: its schema takes `messages[].content` as a string.
 const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
 
 const REASONING_EFFORT = "low" as const;
@@ -57,29 +54,13 @@ export function normalizeResponse(raw: ProviderResult): AssistantMessage {
   return { role: "assistant", content, tool_calls: toolCalls };
 }
 
-/**
- * `model` is a plain string, so TypeScript picks `run`'s untyped fallback overload; `stream: true`
- * still selects streaming at runtime.
- */
-export function streamingBindingCall(
-  ai: Ai,
-  model: string,
-  input: StreamingProviderPayload,
-  signal: AbortSignal,
-): Promise<ReadableStream<Uint8Array>> {
-  const raw: unknown = ai.run(model, input, { signal });
-
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: see the function doc above.
-  return raw as Promise<ReadableStream<Uint8Array>>;
-}
-
 type ToolCallAccumulator = { id: string; name: string; args: string[] };
 
 export class ProviderStreamAccumulator {
   private readonly texts: string[] = [];
   private readonly toolCalls = new Map<number, ToolCallAccumulator>();
   private readonly emit: (event: ModelStreamEvent) => void;
-  private reportedUsage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
+  private reportedUsage: TokenUsage | undefined;
   providerFailed = false;
 
   constructor(emit: (event: ModelStreamEvent) => void) {
@@ -105,23 +86,17 @@ export class ProviderStreamAccumulator {
     const payload = trimmed.slice("data:".length).trim();
 
     if (payload === "[DONE]") return true;
-    let parsedJson: unknown;
+    const parsed = parseProviderPayload(payload);
 
-    try {
-      parsedJson = JSON.parse(payload);
-    } catch {
-      return false;
-    }
+    if (parsed === undefined) return false;
 
-    if (isProviderError(parsedJson)) {
+    if (parsed.failed) {
       this.providerFailed = true;
 
       return true;
     }
 
-    const chunk = parseProviderChunk(parsedJson);
-
-    if (chunk !== undefined) this.apply(chunk);
+    this.apply(parsed.chunk);
 
     return false;
   }
@@ -151,7 +126,7 @@ export class ProviderStreamAccumulator {
     };
   }
 
-  usage(): Readonly<{ inputTokens: number; outputTokens: number }> | undefined {
+  usage(): TokenUsage | undefined {
     return this.reportedUsage;
   }
 }

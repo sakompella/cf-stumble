@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
@@ -52,7 +50,6 @@ export default { fetch() { return new Response(body); } };
   };
 }
 
-/** A build workspace stands in for Computer here: it reports one module map and counts its runs. */
 class CountingBuilder implements HarnessModuleMapBuilder {
   builds = 0;
 
@@ -63,7 +60,6 @@ class CountingBuilder implements HarnessModuleMapBuilder {
   }
 }
 
-/** A Supervisor with no build workspace: a module map the store lacks cannot be had. */
 const absentModuleMapBuilder: HarnessModuleMapBuilder = {
   build: (harnessCommit) => Effect.fail({ code: "build-workspace-unavailable", harnessCommit }),
 };
@@ -80,7 +76,6 @@ class RefusingBuilder implements HarnessModuleMapBuilder {
   }
 }
 
-/** Real storage that refuses every chunk, which is how a store write fails without a platform. */
 function refusingStorage(storage: DurableObjectStorage): ModuleMapStorage {
   return {
     sql: {
@@ -133,7 +128,6 @@ test("builds, validates, stores, then loads a module map when nothing is stored"
 
   expect(builder.builds).toBe(1);
   expect(prepared.storedSameBytes, "a prepared commit is stored before it is returned").toBe(true);
-  // Canonical form: the entry module is named, and every module is sorted by name.
   expect(prepared.moduleMap.modules.map((module) => module.name)).toEqual(["body.js", "main.js"]);
 
   const loaded = loadMainFacet(env.LOADER, prepared.moduleMap, { MODEL: modelRoute });
@@ -157,7 +151,6 @@ test("prepares a stored module map without rebuilding it", async () => {
       new HarnessArtifacts(state.storage, builder).prepare(commits.stored),
     );
 
-    // A second preparation with no build workspace: only the store can answer this one.
     const second = await resultOf(
       new HarnessArtifacts(state.storage, absentModuleMapBuilder).prepare(commits.stored),
     );
@@ -205,11 +198,6 @@ test("reports a failed build and stores nothing", async () => {
   expect(outcome.rows).toBe(0);
 });
 
-/**
- * The old resolver returned a built map with `cacheWrite: "failed"` and let startup continue.
- * Rollback cannot rebuild any more, so a generation must not become ready on a map that is not
- * stored: the write failure is the preparation's failure.
- */
 test("fails preparation when the store refuses the write", async () => {
   const control = supervisor("prepare-fails-on-unstorable-map");
 

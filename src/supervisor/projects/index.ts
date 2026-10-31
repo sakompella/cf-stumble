@@ -6,14 +6,14 @@ export type {
   ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
 
-export {
-  GitHubConnection,
-  type GitHubAuthorizationOutcome,
-  type GitHubAuthorizationProblem,
-  type GitHubConnectionEnvironment,
-  type GitHubConnectionRecord,
-  type GitHubConnectionStatus,
-} from "./github-connection.js";
+export { GitHubConnection, type GitHubConnectionEnvironment } from "./github-connection.js";
+
+export type {
+  GitHubAuthorizationOutcome,
+  GitHubAuthorizationProblem,
+  GitHubConnectionRecord,
+  GitHubConnectionStatus,
+} from "./github-connection-status.js";
 
 export { GitHubConnectionStore } from "./github-connection-store.js";
 

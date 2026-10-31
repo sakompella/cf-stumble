@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
@@ -10,7 +8,6 @@ import {
 } from "../../src/supervisor/generations/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 
-/** One generation as the registry holds it, read from storage: the Supervisor serves no such RPC. */
 export function readGeneration(
   control: DurableObjectStub<Supervisor>,
   label: number,
@@ -24,7 +21,6 @@ export function readGeneration(
   });
 }
 
-/** Every labeled generation, read from storage. */
 export function readGenerations(control: DurableObjectStub<Supervisor>): Promise<Generation[]> {
   return runInDurableObject(control, (_instance, state) => [
     ...new Generations(state.storage).all(),

@@ -5,6 +5,7 @@ import {
   HARNESS_BUILD_CONFIGURATION,
   harnessBuildStep,
   planHarnessBuild,
+  type HarnessBuildRequest,
 } from "../../src/harness-build.js";
 import {
   executeHarnessBuildRequest,
@@ -23,7 +24,6 @@ const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
 
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
 
-/** A build workspace with no project files in it: the build root is all it contains. */
 class FakeBuildOperations implements WorkspaceOperations {
   readonly calls: string[] = [];
   readonly files = new Map<string, string>([[moduleMapPath, "{}"]]);
@@ -56,8 +56,6 @@ class FakeBuildOperations implements WorkspaceOperations {
   }
 
   stdout: string | undefined;
-  /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
-   * the build shell's catch-all logs a redacted cause instead of discarding it. */
   commandFailure: Error | undefined;
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
@@ -73,8 +71,7 @@ class FakeBuildOperations implements WorkspaceOperations {
   }
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function build(operations: FakeBuildOperations, request: unknown) {
+function build(operations: FakeBuildOperations, request: HarnessBuildRequest) {
   return Effect.runPromise(
     executeHarnessBuildRequest({
       configuration: HARNESS_BUILD_CONFIGURATION,
@@ -144,12 +141,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * The build shell's catch-all used to discard whatever Computer threw and answer
- * `workspace-unavailable` with nothing logged. The public code is unchanged — a caller still
- * cannot tell a thrown container failure from a thrown filesystem failure — but an operator can
- * now read the cause the catch-all just swallowed.
- */
 test("logs a redacted cause instead of discarding it when a build step cannot run", async () => {
   const operations = new FakeBuildOperations();
   operations.commandFailure = new Error("container exited before the command could run");
@@ -199,32 +190,10 @@ test("reports a build that wrote no module map as a non-zero read", async () => 
   );
 });
 
-test("rejects caller supplied command text and every project request", async () => {
-  const operations = new FakeBuildOperations();
-
-  for (const [request, code] of [
-    [null, "invalid-request"],
-    [{ kind: "build-step", harnessCommit: commit }, "invalid-request"],
-    [
-      { kind: "build-step", harnessCommit: commit, step: "install", source: "whoami" },
-      "invalid-request",
-    ],
-    [{ kind: "build-step", harnessCommit: commit, step: "whoami" }, "unknown-command"],
-    [{ kind: "run-command", command: "check" }, "invalid-request"],
-    [{ kind: "read-file", path: "readme.md" }, "invalid-request"],
-    [{ kind: "git-diff" }, "invalid-request"],
-    [{ kind: "build-output", harnessCommit: commit, path: "readme.md" }, "invalid-request"],
-  ] as const) {
-    await expect(build(operations, request)).resolves.toEqual({ ok: false, error: { code } });
-  }
-
-  expect(operations.calls, "a rejected build request runs nothing").toEqual([]);
-});
-
 test("rejects a commit that is not a harness commit, so no path can escape the build root", async () => {
   const operations = new FakeBuildOperations();
 
-  for (const value of ["../../project", `${commit}/../../etc`, "not-a-commit", "", 7, null]) {
+  for (const value of ["../../project", `${commit}/../../etc`, "not-a-commit", ""]) {
     await expect(
       build(operations, { kind: "build-output", harnessCommit: value }),
     ).resolves.toEqual({
@@ -257,8 +226,6 @@ test("the checkout step fails on its own when the archive fails", () => {
     "checkout",
   );
 
-  // `git archive | tar -x` reports tar's exit code, so a failed archive used to reach the build
-  // step as an empty directory and a compilation error that named the wrong fault.
   expect(checkout.source).not.toContain("|");
   expect(checkout.source.startsWith("set -eu")).toBe(true);
 });

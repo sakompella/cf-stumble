@@ -15,7 +15,6 @@ declare global {
   }
 }
 
-/** Vite resolves both globs at build time, so this reads no filesystem and runs in workerd. */
 const dockerfiles = import.meta.glob("../../containers/computerd.Dockerfile", {
   eager: true,
   query: "?raw",

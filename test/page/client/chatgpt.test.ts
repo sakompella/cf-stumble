@@ -1,8 +1,3 @@
-/**
- * The ChatGPT connection control: how the owner API's view is worded, and what each click and each
- * answer does to the Model. The browser harness checks the same control against a rendered page.
- */
-
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { chatGPTConnection } from "../../../src/page/client/api.js";

@@ -13,18 +13,6 @@ import {
 } from "../../src/workspace/index.js";
 import { plainProblem, runToResult } from "./workspace-results.js";
 
-/**
- * The Supervisor's side of the credential RPC, driven against a Workspace Host binding that
- * throws instead of answering.
- *
- * `ask` in `credential-access.ts` is the boundary this file exercises: whatever a Workspace Host
- * throws (an RPC disconnect, a Durable Object eviction, a network failure) used to become
- * `credential-workspace-unavailable` with an empty detail and nothing else. The public problem
- * still carries no detail — that is unchanged — but the cause now reaches an operator log,
- * redacted, and a token this caller is holding never reaches it even when the thrown cause echoes
- * one back.
- */
-
 function fakeToken(value: string): GitHubToken {
   const token = parseGitHubToken(value);
 
@@ -37,7 +25,6 @@ function fakeToken(value: string): GitHubToken {
 
 const FAKE_TOKEN = fakeToken("ghp_cfstumbleFAKEtokenFAKEtoken0123456789");
 
-/** A Workspace Host binding whose `credential` RPC always rejects with a configured cause. */
 class ThrowingWorkspaceHost implements CredentialWorkspaceHost {
   cause: Error = new Error("rpc session was shut down");
 

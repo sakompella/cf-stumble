@@ -1,7 +1,7 @@
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
-import type { Entry, PiMessage } from "../../../src/page/client/events.js";
+import type { Entry, PiMessage } from "../../../src/page/client/agent-event.js";
 import {
   boundedLines,
   diffLineKind,

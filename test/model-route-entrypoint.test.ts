@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { exports as workerExports } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
 import { expect, test } from "vitest";
@@ -11,47 +9,33 @@ import {
   sseLine,
 } from "./model-route-provider-stream.js";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
+import type { WorkersAiBinding } from "../src/model-route-events.js";
 import type {
   ModelRouteRequest,
   StreamingProviderPayload,
   ValidationFailure,
 } from "../src/model-route.js";
 
-/**
- * `ModelRoute.runStream` itself, not the `streamModelEvents` helper behind it: the entrypoint the
- * Supervisor hands every facet through `ctx.exports.ModelRoute({})`. `test/model-route-stream.test.ts`
- * drives the helper directly, so the whole class could throw and stay green (recorded in
- * `.audit/v0/review-sol-tests.md`, finding 2). These tests construct the real entrypoint over a
- * scripted `AI.run`, and one of them calls it across the real service-binding RPC hop.
- *
- * Every asserted model id, payload field and event shape is written out literally here. Nothing
- * imports the production constant it is supposed to pin.
- */
-
-/** The one model the immutable host is allowed to call, written out rather than imported. */
 const REQUIRED_MODEL = "@cf/zai-org/glm-5.3-flash";
 
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 
-type FakeBinding = Readonly<{ ai: Ai; calls: readonly RecordedCall[] }>;
+type FakeBinding = Readonly<{ ai: WorkersAiBinding; calls: readonly RecordedCall[] }>;
 
-/** A Workers AI binding whose `run` answers from `answer` and records what it was asked for. */
 function fakeAiBinding(answer: () => Promise<ReadableStream<Uint8Array>>): FakeBinding {
   const calls: RecordedCall[] = [];
 
-  const binding = {
-    run(model: string, input: StreamingProviderPayload): Promise<ReadableStream<Uint8Array>> {
+  const binding: WorkersAiBinding = {
+    run(model, input) {
       calls.push({ model, input });
 
       return answer();
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `runStream` reaches the binding only through `AI.run`, which this object implements with the payload type that call passes; no other member of `Ai` is reachable from it.
-  return { ai: binding as Ai, calls };
+  return { ai: binding, calls };
 }
 
-/** A binding that answers one scripted provider SSE stream, split one line per byte chunk. */
 function bindingStreaming(lines: readonly string[]): FakeBinding {
   return fakeAiBinding(() => Promise.resolve(providerStreamOfLines(lines)));
 }
@@ -76,7 +60,6 @@ function routeOver(binding: FakeBinding): ModelRoute {
   });
 }
 
-/** A route a Supervisor created, whose credential holder answers every call with `access`. */
 function supervisedRoute(binding: FakeBinding, access: ChatGPTAccess): ModelRoute {
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
@@ -270,9 +253,6 @@ test("the deployed entrypoint answers runStream across its own service-binding h
     error: { code: "invalid-request", reason: "messages must be a non-empty array" },
   } satisfies ValidationFailure);
 
-  // The test Worker declares no Workers AI binding on purpose (`wrangler.test.jsonc`), so the
-  // provider call cannot succeed. What this pins is that a valid request still crosses the RPC
-  // boundary as a byte stream carrying one terminal event, rather than throwing out of the hop.
   const outcome = await stub.runStream(REQUEST);
   const events = await collectEvents(streamOf(outcome));
   expect(events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);

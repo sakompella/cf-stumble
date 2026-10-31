@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { resolveInWorkspace } from "../../src/facet/generation-1/execution-env-paths.js";
-import { parseAddressedPath } from "../../src/workspace/project/index.js";
+import { parseAddressedPath } from "../../src/workspace/project/resolve.js";
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { planProjectProvision, projectProvisionStep } from "../../src/project-provision.js";
 import { shellQuote } from "../../src/shell-quote.js";
@@ -18,14 +18,6 @@ import {
   projectGitDirectory,
   WORKSPACE_ROOT,
 } from "../../src/workspace-layout.js";
-
-/**
- * The layout of the one workspace, and the property E3 says the repository lost twice already: the
- * repository-relative root has ONE owner. The facet's path-escape guard and the project RPC
- * target's addressed-path space both read `WORKSPACE_ROOT`, so a change to that constant moves both
- * or neither. Two definitions that disagree would mean the guard and the translation disagree about
- * what is inside the workspace, which is a security divergence rather than untidiness.
- */
 
 const projectOne = sampleProjectOne;
 

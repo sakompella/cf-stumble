@@ -9,19 +9,10 @@ import {
   type UpdateReturn,
 } from "./update-shared.js";
 
-/**
- * Activation and rollback send the epoch the page rendered, so the value a reader sees is the value
- * the request carries.
- */
-
 function wholeNumber(value: number): Option.Option<number> {
   return Number.isSafeInteger(value) && value >= 0 ? Option.some(value) : Option.none();
 }
 
-/**
- * A generation label names one whole generation. "1.5" names none, and `Number.parseInt` would
- * read it as 1 and send a command the reader never asked for.
- */
 export function controlLabel(raw: string): Option.Option<number> {
   const trimmed = raw.trim();
 

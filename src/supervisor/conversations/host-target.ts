@@ -1,5 +1,7 @@
 import { RpcTarget } from "cloudflare:workers";
 import type { Wake } from "@earendil-works/pi-durable";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { ConversationHost } from "../../facet/index.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 
@@ -8,7 +10,17 @@ type HostPorts = Readonly<{
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
 
-/** The one capability the serving facet holds into the Supervisor. */
+const WakeFields = Schema.Struct({
+  active: Schema.optionalKey(Schema.Unknown),
+  at: Schema.optionalKey(Schema.Unknown),
+});
+
+const readWakeFields = Schema.decodeUnknownOption(WakeFields);
+
+const isFiniteNumber = Schema.is(Schema.Finite);
+
+const isString = Schema.is(Schema.String);
+
 export class ConversationHostTarget extends RpcTarget implements ConversationHost {
   readonly #ports: HostPorts;
 
@@ -17,15 +29,12 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
     this.#ports = ports;
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the wake arrives over RPC.
-  arm(wake: unknown): Promise<void> {
+  arm(wake: Wake): Promise<void> {
     return this.#ports.arm(parseWake(wake));
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the conversation id arrives over RPC.
-  workspace(conversationId: unknown): Promise<ProjectRpcTargetContract & Disposable> {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
-    if (typeof conversationId !== "string") {
+  workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable> {
+    if (!isString(conversationId)) {
       return Promise.reject(new Error("no workspace for this request"));
     }
 
@@ -33,15 +42,10 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
   }
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `arm`.
-function parseWake(wake: unknown): Wake {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
-  if (wake === null || typeof wake !== "object") return { active: true };
-  // SAFETY: both fields are read as `unknown` and checked below.
-  const { active, at } = wake as { active?: unknown; at?: unknown };
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
-  return typeof at === "number" && Number.isFinite(at)
-    ? { active: active !== false, at }
-    : { active: active !== false };
+function parseWake(wake: Wake): Wake {
+  return Option.match(readWakeFields(wake), {
+    onNone: () => ({ active: true }),
+    onSome: ({ active, at }) =>
+      isFiniteNumber(at) ? { active: active !== false, at } : { active: active !== false },
+  });
 }

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
@@ -18,8 +16,6 @@ import {
   REFRESH_TWO,
 } from "./fixtures.js";
 import { access, connected, HOUR, withConnection } from "./connection-harness.js";
-
-/** A ChatGPT usage limit: it keeps the connection, and the owner's view says it was reached. */
 
 afterEach(async () => {
   await reset();
@@ -84,7 +80,6 @@ test("a new sign-in and a disconnect forget a usage limit", async () => {
   });
 });
 
-/** A ChatGPT call over `connection` whose provider answers only when the test releases it. */
 function heldCall(connection: ChatGPTConnection) {
   const provider = heldReply();
   let markSent: (() => void) | undefined;
@@ -178,7 +173,7 @@ test("the Supervisor records a usage limit the route reports and shows it in the
     limitedUntil,
   });
 
-  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, "not a time");
+  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, Number.NaN);
 
   await expect(supervisor.getChatGPTConnection()).resolves.toMatchObject({
     connection: { state: "connected", usageLimit: { limitedUntil: null } },

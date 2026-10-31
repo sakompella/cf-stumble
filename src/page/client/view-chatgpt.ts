@@ -5,8 +5,6 @@ import { Message } from "./message.js";
 import type { Model } from "./model.js";
 import { controlRow, valueRow } from "./view-parts.js";
 
-/** The sign-in link is data from the Worker and opens in a tab of its own. */
-
 function buttonRow(id: string, label: string, onClick: Message, h: HtmlBuilder<Message>): Html {
   return h.div(
     [h.Class("row")],

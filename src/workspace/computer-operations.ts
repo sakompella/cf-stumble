@@ -10,16 +10,12 @@ import {
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "./executor.js";
+import { hasErrnoCode } from "./errno-code.js";
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Computer threw this value; the function narrows its documented error code.
-function isNotFound(error: unknown): boolean {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: Computer errors are untrusted implementation values.
-  if (error === null || typeof error !== "object" || !("code" in error)) return false;
-
-  return error.code === "ENOENT";
+function isNotFound(cause: unknown): boolean {
+  return hasErrnoCode(cause) && cause.code === "ENOENT";
 }
 
-/** `require-complete` counts a command only once Computer has copied its container changes into the durable store, which a replacement container starts from. */
 type CommandSync = "require-complete" | "not-required";
 
 function syncIsComplete(sync: ExecSyncResult): boolean {
@@ -55,9 +51,9 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
       if (entry.isSymbolicLink) return "symbolic-link";
 
       return entry.isDirectory ? "directory" : "file";
-    } catch (error) {
-      if (isNotFound(error)) return undefined;
-      throw error;
+    } catch (cause) {
+      if (isNotFound(cause)) return undefined;
+      throw cause;
     }
   }
 
@@ -82,7 +78,6 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
       timeoutMs,
     };
 
-    // Absent stdin differs from `undefined` under `exactOptionalPropertyTypes`.
     if (stdin !== undefined) options.stdin = stdin;
     const execution = await this.workspace.runtime.exec(source, options);
 

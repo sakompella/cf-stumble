@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
-import { AgentEvent } from "./events.js";
+import { AgentEvent } from "./agent-event.js";
 import { ChatGPTConnection, ControlKind, GitHubReport, Project } from "./model.js";
 
 export const Message = defineMessageUnion({

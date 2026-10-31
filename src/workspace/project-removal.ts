@@ -7,7 +7,6 @@ import { projectDirectory } from "../workspace-layout.js";
 import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
-import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 export type ProjectRemovalRequest = Readonly<{
   kind: "remove-project";
@@ -23,30 +22,14 @@ function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
 }
 
-function parsedProjectId(value: UntrustedObject): ProjectId | undefined {
-  const projectId = parseProjectId(field(value, "projectId"));
-
-  return projectId === undefined || projectId === HARNESS_PROJECT_ID ? undefined : projectId;
-}
-
 export function parseProjectRemovalRequest(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the Workspace Host RPC boundary.
-  value: unknown,
+  request: ProjectRemovalRequest,
 ): ParsedProjectRemovalRequest | WorkspaceFailure {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
-  if (value === null || typeof value !== "object") return invalidRequest();
-  const request = asUntrusted(value);
+  const projectId = parseProjectId(request.projectId);
 
-  if (
-    field(request, "kind") !== "remove-project" ||
-    !hasExactKeys(request, ["kind", "projectId"])
-  ) {
-    return invalidRequest();
-  }
-
-  const projectId = parsedProjectId(request);
-
-  return projectId === undefined ? invalidRequest() : { kind: "remove-project", projectId };
+  return projectId === undefined || projectId === HARNESS_PROJECT_ID
+    ? invalidRequest()
+    : { kind: "remove-project", projectId };
 }
 
 function removedDirectories(projectId: ProjectId): readonly [string, string] {
@@ -55,7 +38,6 @@ function removedDirectories(projectId: ProjectId): readonly [string, string] {
   return [root, `${root}.provisioning`];
 }
 
-/** A removal can outlive the RPC that asked for it; the provision lock keeps a later clone out of the directory it is deleting. */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
@@ -74,7 +56,6 @@ export function planProjectRemovalRequest(
   };
 }
 
-/** The store is what the next container starts from, so a directory still present there would come back. */
 export function removalIsDurable(
   operations: WorkspaceEffects,
   projectId: ProjectId,

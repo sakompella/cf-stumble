@@ -1,7 +1,3 @@
-/**
- * The single source for the page views and the tests. Elements a turn creates while it streams carry
- * classes rather than identifiers, because there is no fixed number of them to name.
- */
 export const OWNER_PAGE_IDS = {
   root: "owner-page",
   layout: "owner-layout",

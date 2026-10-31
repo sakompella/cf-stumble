@@ -1,18 +1,15 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 import worker from "../../src/worker.js";
+import type { SupervisorWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
+import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import {
   activateGeneration,
   artifact,
   prepareWithModuleMap,
   submitCandidate,
 } from "../supervisor/helpers.js";
-
-/**
- * The owner as the Worker sees them. Integration tests send every request through `worker.fetch`,
- * so routing runs as in a deployment.
- */
 
 const ORIGIN = "https://cf-stumble.test";
 
@@ -28,19 +25,13 @@ export function ownerSession() {
   return { get, post, supervisor: env.SUPERVISOR.getByName("owner") };
 }
 
-/**
- * Route the Supervisor's `WORKSPACE_HOST` lookups to the fake, and GitHub's REST API nowhere. The
- * test's `afterEach` must call `vi.restoreAllMocks()`.
- */
 export function stubExternalBoundaries<Workspace extends FakeTenantWorkspace>(
   workspace: Workspace,
 ): Workspace {
-  // SAFETY: the fake implements every Workspace Host RPC that the test drives.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
-  const host = workspace as unknown as ReturnType<typeof env.WORKSPACE_HOST.getByName>;
-  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(host);
-  // No size metadata, so the size guard fails open, as it does when GitHub cannot be reached.
-  // A fresh Response per call, because a body can be read only once.
+  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "project" | "reset">>(
+    env.WORKSPACE_HOST,
+    workspace,
+  );
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     Promise.resolve(new Response("{}", { status: 404 })),
   );
@@ -50,7 +41,6 @@ export function stubExternalBoundaries<Workspace extends FakeTenantWorkspace>(
 
 const SCRIPTED_HARNESS_COMMIT = "c0ffee0000000000000000000000000000000001";
 
-/** Prepare and activate a generation whose whole main facet module is `source`. */
 export async function servingScriptedGeneration(
   owner: ReturnType<typeof ownerSession>,
   source: string,

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, describe, expect, expectTypeOf, test } from "vitest";
@@ -13,19 +11,6 @@ import type { MainFacetCapabilities } from "../../src/facet/index.js";
 import type { ConversationHost } from "../../src/facet/index.js";
 import type { MainFacet } from "../../src/facet/generation-1/main-facet.js";
 import type { ProjectRpcTargetContract } from "../../src/workspace/project/protocol.js";
-
-/**
- * A project capability must reach a run through the attached host and never through loader environment.
- * `test/facet/loader.test.ts` shows why: the Worker Loader caches its entry under the harness
- * commit, so a capability installed there outlives the request that installed it and serves every
- * later request for that generation. For a capability scoped to one project that means the first
- * project to warm the cache would answer for all of them.
- *
- * The checks below hold that line from two directions: the platform refuses the serialization, and
- * the loader-environment type has no slot to put it in while the host hands one out per
- * conversation. That a mounted facet's environment holds only `MODEL` is already checked by
- * `test/facet/mounted-facet.test.ts`, against a facet the Supervisor really mounted.
- */
 
 const modelRoute = workerExports.ModelRoute({});
 
@@ -75,8 +60,6 @@ test("the loader environment type has no project slot and the host hands one out
     readonly MODEL: MainFacetCapabilities["MODEL"];
   }>();
   expectTypeOf<keyof MainFacetCapabilities>().toEqualTypeOf<"MODEL">();
-  // The generation declares its own environment separately from what the host installs. Holding
-  // the two to the same keys is what stops a project-scoped slot being declared on one side only.
   expectTypeOf<keyof ConstructorParameters<typeof MainFacet>[1]>().toEqualTypeOf<
     keyof MainFacetCapabilities
   >();

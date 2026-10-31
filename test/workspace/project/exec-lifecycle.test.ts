@@ -165,9 +165,10 @@ test("stops reading backend output while one event is buffered", async () => {
   if (!started.ok) throw new Error("expected startExec to succeed");
   const handle = execBackend.handles[0]!;
 
-  handle.push({ name: "stdout", data: new TextEncoder().encode("first") });
-  // oxlint-disable-next-line unicorn/prefer-single-call -- Each call models one backend event.
-  handle.push({ name: "stdout", data: new TextEncoder().encode("second") });
+  handle.push(
+    { name: "stdout", data: new TextEncoder().encode("first") },
+    { name: "stdout", data: new TextEncoder().encode("second") },
+  );
   await Promise.resolve();
   await Promise.resolve();
 

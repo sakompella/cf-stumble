@@ -16,11 +16,6 @@ import {
   REFRESH_ONE,
 } from "./fixtures.js";
 
-/**
- * The sign-in pieces that decide what a pasted address and a token reply may mean. Every
- * destination and parameter name is written out here rather than imported.
- */
-
 const STATE = "state-FAKE-0123456789";
 
 function callback(query: string): string {
@@ -75,13 +70,16 @@ test("a pasted address yields its code and issued client only when it is this si
 test("a token reply without the direct-use scope cannot connect", () => {
   const body = { access_token: ACCESS_ONE, refresh_token: REFRESH_ONE, expires_in: 3600 };
 
-  expect(parseTokenGrant({ ...body, scope: DIRECT_SCOPE })).toEqual(
+  const reply = (fields: Readonly<Record<string, string>>) =>
+    JSON.stringify({ ...body, ...fields });
+
+  expect(parseTokenGrant(reply({ scope: DIRECT_SCOPE }))).toEqual(
     Result.succeed({ accessToken: ACCESS_ONE, refreshToken: REFRESH_ONE, expiresInMs: 3_600_000 }),
   );
-  expect(parseTokenGrant({ ...body, scope: "openid offline_access" })).toEqual(
+  expect(parseTokenGrant(reply({ scope: "openid offline_access" }))).toEqual(
     Result.fail("missing-scope"),
   );
-  expect(parseTokenGrant({ ...body, access_token: "has space", scope: DIRECT_SCOPE })).toEqual(
+  expect(parseTokenGrant(reply({ access_token: "has space", scope: DIRECT_SCOPE }))).toEqual(
     Result.fail("ambiguous"),
   );
 });

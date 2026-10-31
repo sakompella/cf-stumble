@@ -14,11 +14,6 @@ type HeldWorkspace = Readonly<{
   release: AbortController;
 }>;
 
-/**
- * The capabilities a run's tools reach the workspace through, one per project, obtained on first
- * use. The Supervisor keeps the authority: ending them kills the commands still running through
- * them and refuses every later call from a duplicate the generation kept.
- */
 export class HeldWorkspaces {
   readonly #obtain: ObtainWorkspace;
   readonly #held = new Map<string, HeldWorkspace>();

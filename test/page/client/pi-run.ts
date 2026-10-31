@@ -18,17 +18,9 @@ import {
   type Conversation,
 } from "@earendil-works/pi-durable";
 
-/**
- * A real Pi Durable conversation on a faux model, so the page's fold is checked against the events
- * Pi actually emits rather than against events a test wrote by hand. The faux model streams slowly
- * enough that partial answers are committed, and its `bash` tool streams two lines of output.
- */
-
 export type PiRun = Readonly<{
   conversation: Conversation;
-  /** Every event line the page would have read since it attached, snapshot first. */
   lines: string[];
-  /** The `snapshot` line a page that connected now would read first. */
   snapshotLine: () => Promise<string>;
   close: () => Promise<void>;
 }>;

@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
@@ -16,11 +14,6 @@ import {
   type RecordedCall,
 } from "./fixtures.js";
 
-/**
- * The owner's ChatGPT connection over a real Supervisor's SQLite, with a fake token endpoint and a
- * clock the test moves. Times are in milliseconds; an access token lives one hour.
- */
-
 export const HOUR = 3_600_000;
 
 export type Harness = Readonly<{
@@ -30,7 +23,6 @@ export type Harness = Readonly<{
   clock: { now: number };
 }>;
 
-/** Run `body` inside a fresh Supervisor with a connection whose token endpoint is `reply`. */
 export function withConnection<T>(
   name: string,
   reply: (call: RecordedCall) => Promise<Response>,
@@ -56,7 +48,6 @@ export function access(connection: ChatGPTConnection, rejected?: string): Promis
   return Effect.runPromise(connection.access(rejected));
 }
 
-/** Store a connected pair the way a completed sign-in does. */
 export function connected(harness: Harness, expiresIn = HOUR): void {
   harness.store.connect(
     {

@@ -1,13 +1,8 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { createExecutionContext } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
-import {
-  ModelRoute,
-  type ModelRouteRequest,
-  type StreamingProviderPayload,
-} from "../src/model-route.js";
+import type { WorkersAiBinding } from "../src/model-route-events.js";
+import { ModelRoute, type ModelRouteRequest } from "../src/model-route.js";
 import {
   collectEvents,
   DONE_LINE,
@@ -15,36 +10,27 @@ import {
   sseLine,
 } from "./model-route-provider-stream.js";
 
-/**
- * `ModelRoute.runStream` when the owner's ChatGPT plan meets its usage limit (ADR-0047): a call
- * refused before any output is answered by Workers AI after one `provider-fallback` event, and a
- * call refused after output is not. OpenAI is faked through the global `fetch` the route uses.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-/** A Workers AI binding that answers `text` and counts its calls. */
 function workersAi(text: string) {
   const calls: string[] = [];
 
-  const binding = {
-    run(model: string, _input: StreamingProviderPayload): Promise<ReadableStream<Uint8Array>> {
+  const binding: WorkersAiBinding = {
+    run(model) {
       calls.push(model);
 
       return Promise.resolve(providerStreamOfLines([sseLine({ response: text }), DONE_LINE]));
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the route reaches the binding only through `AI.run`.
-  return { ai: binding as Ai, calls };
+  return { ai: binding, calls };
 }
 
-/** A route a Supervisor created, whose holder answers `access` and records each usage limit. */
-function supervisedRoute(ai: Ai, access: ChatGPTAccess) {
+function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
   const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner" } });
@@ -74,7 +60,6 @@ function eventsOf(outcome: ReturnType<ModelRoute["runStream"]>) {
   return collectEvents(outcome);
 }
 
-/** OpenAI's Responses endpoint answering HTTP 200 with these stream events. */
 function responsesAnswer(events: readonly object[]) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {

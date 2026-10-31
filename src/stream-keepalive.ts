@@ -1,9 +1,5 @@
 import * as Effect from "effect/Effect";
 
-/**
- * Workers RPC tells a stream's source its reader left only when the source next writes, so a source
- * waiting on slow work needs these lines.
- */
 const KEEPALIVE_MS = 2_000;
 
 export const KEEPALIVE_LINE = new TextEncoder().encode("\n");

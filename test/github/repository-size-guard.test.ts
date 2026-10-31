@@ -8,11 +8,6 @@ import {
 } from "../../src/project-provision.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
-/**
- * Workers-side coverage of the planned size check. These tests read shell text; the sibling
- * property file runs that text under `/bin/sh` with stub `gh` and `git` commands.
- */
-
 function cloneSource(): string {
   const step = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
 

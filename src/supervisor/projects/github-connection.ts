@@ -1,16 +1,12 @@
-// oxlint-disable max-lines -- The connection workflow owns status, authorization, and credential install together.
 import {
   parseGitHubToken,
   requestDeviceAuthorization,
   redeemDeviceAuthorization,
-  type DeviceRedemption,
-  type GitHubCredentialStatus,
   type GitHubFetch,
   type GitHubToken,
 } from "../../github/index.js";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { logEvent, type LogLevel } from "../../diagnostics.js";
 import {
   CredentialInstallFailed,
   installWorkspaceCredential,
@@ -24,48 +20,21 @@ import type {
   GitHubConnectionStore,
   RecordedConnection,
 } from "./github-connection-store.js";
+import {
+  learned,
+  logCredentialEnsure,
+  logCredentialInstall,
+  reconnect,
+  statusOnly,
+  unredeemedOutcome,
+  type GitHubAuthorizationOutcome,
+  type GitHubConnectionRecord,
+  type GitHubConnectionStatus,
+  type Learned,
+} from "./github-connection-status.js";
 
-/**
- * No state carries a token. It goes from GitHub's reply into the workspace's `gh` configuration and
- * nowhere else.
- */
-export type GitHubConnectionStatus =
-  | Readonly<{ state: "disconnected" }>
-  | Readonly<{ state: "tooling-missing" }>
-  | Readonly<{
-      state: "awaiting-authorization";
-      verificationUri: string;
-      userCode: string;
-      expiresAt: number;
-      intervalSeconds: number;
-    }>
-  | Readonly<{ state: "connected"; login: string; source: CredentialSource }>
-  | Readonly<{
-      state: "reconnect-required";
-      reason: "credential-missing" | "credential-rejected" | "workspace-unavailable";
-    }>;
+export type { GitHubConnectionStatus } from "./github-connection-status.js";
 
-export type GitHubAuthorizationProblem =
-  | "not-configured"
-  | "provider-unavailable"
-  | "no-pending-authorization"
-  | "authorization-expired"
-  | "authorization-denied";
-
-/** `checkedAt` and `github` are `null` before the first check and after a workspace reset. */
-export type GitHubConnectionRecord = Readonly<{
-  github: GitHubConnectionStatus | null;
-  checkedAt: number | null;
-}>;
-
-export type GitHubAuthorizationOutcome =
-  | Readonly<{ ok: true; status: GitHubConnectionStatus; checkedAt: number | null }>
-  | Readonly<{ ok: false; problem: GitHubAuthorizationProblem }>;
-
-/**
- * `fallbackToken` is recorded as `configured-token`, so a status never presents it as an owner
- * authorization.
- */
 export interface GitHubConnectionEnvironment {
   readonly clientId: string | undefined;
   readonly fallbackToken: string | undefined;
@@ -77,104 +46,6 @@ interface GitHubConnectionInput {
   readonly workspaceName: string;
   readonly namespace: CredentialWorkspaceNamespace;
   readonly environment: GitHubConnectionEnvironment;
-}
-
-function reconnect(
-  reason: "credential-missing" | "credential-rejected" | "workspace-unavailable",
-): CheckedStatus {
-  return { state: "reconnect-required", reason };
-}
-
-/** Nothing here reads a token, device code, user code, or login, so none can reach the log. */
-function outcome(status: GitHubConnectionStatus): string {
-  return status.state === "reconnect-required" ? status.reason : status.state;
-}
-
-function level(status: GitHubConnectionStatus): LogLevel {
-  if (status.state === "connected" || status.state === "awaiting-authorization") return "info";
-
-  return status.state === "reconnect-required" && status.reason === "credential-rejected"
-    ? "error"
-    : "warn";
-}
-
-function logCredentialInstall(source: CredentialSource, status: GitHubConnectionStatus): void {
-  logEvent(level(status), "github-credential.install", { source, outcome: outcome(status) });
-}
-
-function logCredentialEnsure(
-  before: GitHubConnectionStatus,
-  fallbackConfigured: boolean,
-  after: GitHubConnectionStatus,
-): void {
-  logEvent(level(after), "github-credential.ensure", {
-    before: outcome(before),
-    fallbackConfigured,
-    outcome: outcome(after),
-  });
-}
-
-function unredeemedOutcome(
-  kind: Exclude<DeviceRedemption["kind"], "authorized">,
-): "pending" | GitHubAuthorizationProblem {
-  switch (kind) {
-    case "pending":
-    case "slow-down":
-      return "pending";
-    case "expired":
-      return "authorization-expired";
-    case "denied":
-      return "authorization-denied";
-    case "unavailable":
-      return "provider-unavailable";
-    default: {
-      const exhaustive: never = kind;
-
-      return exhaustive;
-    }
-  }
-}
-
-type Learned = Readonly<{ status: CheckedStatus; connection: RecordedConnection | undefined }>;
-
-function statusOnly(status: CheckedStatus): (previous: RecordedConnection | undefined) => Learned {
-  return (previous) => ({ status, connection: previous });
-}
-
-function learned(
-  answer: GitHubCredentialStatus,
-  installedBy: CredentialSource | undefined,
-  previous: RecordedConnection | undefined,
-  now: number,
-): Learned {
-  switch (answer.state) {
-    case "connected": {
-      const login = answer.login ?? previous?.login ?? "";
-      const source = installedBy ?? previous?.source ?? "device-authorization";
-      const connectedAt = installedBy === undefined ? (previous?.connectedAt ?? 0) : now;
-
-      return {
-        status: { state: "connected", login, source },
-        connection: { login, source, connectedAt },
-      };
-    }
-
-    case "tooling-missing":
-      return { status: { state: "tooling-missing" }, connection: previous };
-    case "missing":
-      return {
-        status:
-          previous === undefined ? { state: "disconnected" } : reconnect("credential-missing"),
-        connection: undefined,
-      };
-    case "unusable":
-      return { status: reconnect("credential-rejected"), connection: undefined };
-    default: {
-      const exhaustive: never = answer.state;
-
-      return exhaustive;
-    }
-  }
 }
 
 type StatusReadOptions = Pick<WorkspaceCredentialInput, "signal">;
@@ -196,10 +67,6 @@ export class GitHubConnection {
     this.store.clear();
   }
 
-  /**
-   * A pending authorization outranks the workspace's answer, since the credential is legitimately
-   * absent mid-flow.
-   */
   status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
     return Effect.suspend(() => {
       const pending = this.pendingStatus(now);
@@ -264,7 +131,6 @@ export class GitHubConnection {
     });
   }
 
-  /** The device code stays in storage; only the verification URL and user code come back. */
   startAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
@@ -294,10 +160,6 @@ export class GitHubConnection {
     });
   }
 
-  /**
-   * The token is a local value that never reaches storage or a response. An answer that a newer
-   * authorization or a concurrent completion overtook is discarded, token included.
-   */
   completeAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
@@ -408,7 +270,6 @@ export class GitHubConnection {
     });
   }
 
-  /** A stopped check learned nothing, and one a workspace reset overtook is discarded. */
   private record(
     revision: number,
     now: number,

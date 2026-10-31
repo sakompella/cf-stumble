@@ -20,7 +20,6 @@ type CandidateMount =
   | Readonly<{ ok: true; fetcher: Fetcher<MainFacetTarget> }>
   | Readonly<{ ok: false; reason: string }>;
 
-/** Never touches the serving facet. */
 export async function runStartupCheck(
   host: StartupCheckHost,
   input: MainHarnessArtifactInput,
@@ -73,10 +72,6 @@ async function classifyCandidateResponse(
   return drainResponseBody(response, deadline, maxBodyBytes);
 }
 
-/**
- * The Supervisor's storage holds Pi Durable's schema and records, so a generation built against
- * any other Pi Durable version is refused, including one from before Pi Durable that reports none.
- */
 async function checkPiDurableVersion(
   facet: Fetcher<MainFacetTarget>,
   deadline: Deadline,
