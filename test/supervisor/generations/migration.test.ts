@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
 import { afterEach, expect, test } from "vitest";
 import { Generations } from "../../../src/supervisor/generations.js";
 import { label } from "./fixtures.js";
@@ -33,15 +34,15 @@ afterEach(async () => {
   await reset();
 });
 
-test("a Supervisor written by the activation-history schema keeps its active generation and its history", async () => {
+test("a Supervisor written by the activation-history schema keeps its active generation and its history, with no recorded Pi Durable version", async () => {
   const outcome = await runInDurableObject(
     env.SUPERVISOR.getByName("generations-legacy-schema"),
     (_instance, state) => {
       state.storage.sql.exec(LEGACY_SCHEMA);
 
-      const migrated = new Generations(state.storage);
+      const migrated = new Generations(state.storage, PI_DURABLE_VERSION);
       const active = migrated.active();
-      const reopened = new Generations(state.storage);
+      const reopened = new Generations(state.storage, PI_DURABLE_VERSION);
 
       const tables = state.storage.sql
         .exec<{ name: string }>(
@@ -65,8 +66,8 @@ test("a Supervisor written by the activation-history schema keeps its active gen
   });
   expect(outcome.tables).toEqual(["generation_state", "generations"]);
   expect(outcome.neverActive).toEqual({ ok: false, problem: { code: "not-previously-active" } });
-  expect(outcome.rolledBack).toMatchObject({
-    ok: true,
-    outcome: { kind: "rolled-back", generation: { label: 0 }, epoch: 10, effect: "activated" },
-  });
+  expect(
+    outcome.rolledBack,
+    "a row checked before versions were recorded must be re-prepared first",
+  ).toEqual({ ok: false, problem: { code: "pi-durable-version-mismatch" } });
 });

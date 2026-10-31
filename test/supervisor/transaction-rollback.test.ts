@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
 import { afterEach, expect, test, vi } from "vitest";
 import { Generations } from "../../src/supervisor/generations.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
@@ -40,7 +41,7 @@ afterEach(async () => {
 
 test("a submission whose epoch write fails raises and labels nothing", async () => {
   const outcome = await runInDurableObject(supervisor("submit-rolls-back"), (_instance, state) => {
-    const generations = new Generations(state.storage);
+    const generations = new Generations(state.storage, PI_DURABLE_VERSION);
 
     refuseStatements(state.storage, "UPDATE generation_state SET epoch");
 
@@ -62,14 +63,17 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
 
 test("a preparation check whose status write fails raises and changes nothing", async () => {
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
-    const generations = new Generations(state.storage);
+    const generations = new Generations(state.storage, PI_DURABLE_VERSION);
 
     const { label } = generations.submit(testHarnessCommit(commit)).generation;
 
     refuseStatements(state.storage, "UPDATE generations SET status");
 
     const raised = raises(() => {
-      generations.recordPreparation(label, "passed");
+      generations.recordPreparation(label, {
+        status: "ready",
+        piDurableVersion: PI_DURABLE_VERSION,
+      });
     });
 
     vi.restoreAllMocks();

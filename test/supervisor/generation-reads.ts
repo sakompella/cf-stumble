@@ -1,3 +1,4 @@
+import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
@@ -10,7 +11,7 @@ export function readGeneration(
   labelValue: number,
 ): Promise<Generation | undefined> {
   return runInDurableObject(control, (_instance, state) =>
-    new Generations(state.storage).byLabel(generationLabel(labelValue)),
+    new Generations(state.storage, PI_DURABLE_VERSION).byLabel(generationLabel(labelValue)),
   );
 }
 

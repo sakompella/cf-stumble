@@ -1,7 +1,13 @@
 import * as Effect from "effect/Effect";
 import type { MainFacetCapabilities } from "../../facet/index.js";
+import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
-import type { GenerationLabel, Generations, PreparationRecord } from "../generations.js";
+import type {
+  Generation,
+  GenerationLabel,
+  Generations,
+  PreparationRecord,
+} from "../generations.js";
 import { runStartupCheck, type StartupCheckOutcome } from "./candidate.js";
 
 const STARTUP_CHECK_DEADLINE_MS = 5_000;
@@ -18,7 +24,8 @@ export type StartupCheckOptions = {
   readonly deadlineMs?: number;
 };
 
-type StartupCheckReport = StartupCheckOutcome & Omit<PreparationRecord, "epoch">;
+type StartupCheckReport = StartupCheckOutcome &
+  Readonly<{ generation: Generation; effect: PreparationRecord["effect"] }>;
 
 type StartupCheckProblem =
   | { readonly code: "unknown-generation"; readonly label: number }
@@ -62,11 +69,13 @@ function checkLabeledStartup(
 
     const recorded = host.generations.recordPreparation(
       label,
-      outcome.stage === "ready" ? "passed" : "failed",
+      outcome.stage === "ready"
+        ? { status: "ready", piDurableVersion: PI_DURABLE_VERSION }
+        : { status: "failed" },
     );
 
     if (recorded === undefined) return yield* Effect.fail(unknown);
 
-    return { ...outcome, generation: recorded.generation, effect: recorded.effect };
+    return { ...outcome, generation: recorded.record.generation, effect: recorded.effect };
   });
 }

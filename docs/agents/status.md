@@ -16,7 +16,7 @@ The Worker has no authentication: every request reaches one Supervisor named `ow
 - **No Bombadil for now** (Aditya, 2026-09-28). Do not add it to `pnpm verify` or run a pilot.
 - **Skip Cloudflare Artifacts for now** (Aditya, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".
-- **The first deploy after the generation-table change of 2026-10-31 migrates in place.** On its first start the Supervisor turns `active_generation_history` into a `was_active` column and drops the unread `activation_id`. It keeps every row and `active_label`, so the active generation keeps serving.
+- **The first deploy after the generation-table change of 2026-10-31 migrates in place.** On its first start the Supervisor turns `active_generation_history` into a `was_active` column, drops the unread `activation_id`, and adds `pi_durable_version`. It keeps every row and `active_label`, so the active generation keeps serving. Rows prepared before that deploy have no recorded Pi Durable version, so activation and rollback refuse them with `pi-durable-version-mismatch` until their harness commit is submitted again, which re-runs the startup check under the same label.
 
 ## Open items
 
@@ -25,6 +25,5 @@ The Worker has no authentication: every request reaches one Supervisor named `ow
 3. **Live Computer paths are not proved.** Two staging runs on 2026-09-28 connected and disconnected a public repository. They did not induce `sync.status: "pending"` or skipped entries, so the `workspace-sync-incomplete` branch is tested only with fakes. No run proved a partial copy across Workspace Host eviction, or that the clone was absent from the store after removal. See `design/github-connection.md`, "Partial copies".
 4. **ChatGPT is unproved end to end.** No real ChatGPT answer has streamed yet. Reconnect from the owner page, run one turn, and check the Worker log for the call.
 5. **Token usage can be undercounted.** When a provider reports no usage, or a negative or fractional count, the model route estimates usage from bytes.
-6. **Rollback can reach a generation from before Pi Durable.** Preparation refuses such a generation, but rollback does not repeat the startup check, so rolling back to generation 0 serves code that answers every message with `generation-failed`.
-7. **The Computer `ExecutionEnv` conformance suite has not run against a real container.** It runs over a local shell and filesystem; production runs use the real one.
-8. **Runs in two projects at once share one deadline.** Pi Durable reports activity for the whole session, so the Supervisor starts the 8-minute deadline when the first run starts and ends every held project capability only when no run is left. A run that starts while another project's run is going gets less than 8 minutes, and a project whose run settled keeps its capability until then.
+6. **The Computer `ExecutionEnv` conformance suite has not run against a real container.** It runs over a local shell and filesystem; production runs use the real one.
+7. **Runs in two projects at once share one deadline.** Pi Durable reports activity for the whole session, so the Supervisor starts the 8-minute deadline when the first run starts and ends every held project capability only when no run is left. A run that starts while another project's run is going gets less than 8 minutes, and a project whose run settled keeps its capability until then.

@@ -21,6 +21,7 @@ export type Generation = Readonly<{
 export type GenerationRecord = Readonly<{
   generation: Generation;
   wasActive: boolean;
+  piDurableVersion: string | undefined;
 }>;
 
 export type ActiveGeneration = Readonly<{
@@ -49,6 +50,7 @@ export type ControlProblemCode =
   | "unknown-generation"
   | "not-ready"
   | "not-previously-active"
+  | "pi-durable-version-mismatch"
   | "stale-epoch";
 
 export type GenerationControlResult =
@@ -63,10 +65,12 @@ export type GenerationControlResult =
     }>
   | Readonly<{ ok: false; problem: Readonly<{ code: ControlProblemCode }> }>;
 
-export type PreparationOutcome = "passed" | "failed";
+export type PreparationOutcome =
+  | Readonly<{ status: "ready"; piDurableVersion: string }>
+  | Readonly<{ status: "failed" }>;
 
 export type PreparationRecord = Readonly<{
-  generation: Generation;
+  record: GenerationRecord;
   epoch: number;
   effect: "recorded" | "no-op";
 }>;
@@ -79,6 +83,7 @@ export function decideActivation(
   command: ActivationCommand,
   target: GenerationRecord | undefined,
   selection: Selection,
+  piDurableVersion: string,
 ): GenerationControlResult {
   if (command.observedEpoch !== selection.epoch) return refused("stale-epoch");
 
@@ -87,6 +92,8 @@ export function decideActivation(
   if (target.generation.status !== "ready") return refused("not-ready");
 
   if (command.kind === "rollback" && !target.wasActive) return refused("not-previously-active");
+
+  if (target.piDurableVersion !== piDurableVersion) return refused("pi-durable-version-mismatch");
 
   const kind = command.kind === "activate" ? "activated" : "rolled-back";
   const unchanged = selection.activeLabel === target.generation.label;
@@ -103,16 +110,23 @@ export function decideActivation(
 }
 
 export function decidePreparation(
-  current: Generation,
+  current: GenerationRecord,
   outcome: PreparationOutcome,
   selection: Selection,
 ): PreparationRecord {
-  const status = outcome === "passed" ? "ready" : "failed";
+  const piDurableVersion = outcome.status === "ready" ? outcome.piDurableVersion : undefined;
+
+  const unchanged =
+    current.generation.status === outcome.status && current.piDurableVersion === piDurableVersion;
 
   return {
-    generation: { ...current, status },
+    record: {
+      ...current,
+      generation: { ...current.generation, status: outcome.status },
+      piDurableVersion,
+    },
     epoch: selection.epoch + 1,
-    effect: current.status === status ? "no-op" : "recorded",
+    effect: unchanged ? "no-op" : "recorded",
   };
 }
 
@@ -121,6 +135,7 @@ type GenerationRow = {
   readonly harness_commit: HarnessCommit;
   readonly status: GenerationStatus;
   readonly was_active: number;
+  readonly pi_durable_version: string | null;
 };
 
 type SelectionRow = {
@@ -128,29 +143,34 @@ type SelectionRow = {
   readonly epoch: number;
 };
 
-const GENERATION_COLUMNS = "label, harness_commit, status, was_active";
+const GENERATION_COLUMNS = "label, harness_commit, status, was_active, pi_durable_version";
 
 function recordFromRow(row: GenerationRow): GenerationRecord {
   return {
     generation: { label: row.label, harnessCommit: row.harness_commit, status: row.status },
     wasActive: row.was_active === 1,
+    piDurableVersion: row.pi_durable_version ?? undefined,
   };
 }
 
 export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
+  readonly #piDurableVersion: string;
 
-  constructor(storage: DurableObjectStorage) {
+  constructor(storage: DurableObjectStorage, piDurableVersion: string) {
     this.#storage = storage;
     this.#sql = storage.sql;
+    this.#piDurableVersion = piDurableVersion;
     this.#migrateActivationHistory();
+    this.#migratePiDurableVersion();
     this.#sql.exec(`
       CREATE TABLE IF NOT EXISTS generations (
         label INTEGER PRIMARY KEY CHECK (label >= 0),
         harness_commit TEXT NOT NULL UNIQUE,
         status TEXT NOT NULL CHECK (status IN ('candidate', 'ready', 'failed')),
-        was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1))
+        was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1)),
+        pi_durable_version TEXT
       );
       CREATE TABLE IF NOT EXISTS generation_state (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -203,7 +223,12 @@ export class Generations {
 
   activate(command: ActivationCommand): GenerationControlResult {
     return this.#storage.transactionSync(() => {
-      const result = decideActivation(command, this.#record(command.label), this.#selection());
+      const result = decideActivation(
+        command,
+        this.#record(command.label),
+        this.#selection(),
+        this.#piDurableVersion,
+      );
 
       if (result.ok && result.outcome.effect === "activated") {
         this.#select(command.label, result.outcome.epoch);
@@ -218,7 +243,7 @@ export class Generations {
     outcome: PreparationOutcome,
   ): PreparationRecord | undefined {
     return this.#storage.transactionSync(() => {
-      const current = this.#record(label)?.generation;
+      const current = this.#record(label);
 
       return current === undefined
         ? undefined
@@ -227,10 +252,13 @@ export class Generations {
   }
 
   #writePreparation(recorded: PreparationRecord): PreparationRecord {
+    const { generation, piDurableVersion } = recorded.record;
+
     this.#sql.exec(
-      "UPDATE generations SET status = ? WHERE label = ?",
-      recorded.generation.status,
-      recorded.generation.label,
+      "UPDATE generations SET status = ?, pi_durable_version = ? WHERE label = ?",
+      generation.status,
+      piDurableVersion ?? null,
+      generation.label,
     );
     this.#writeEpoch(recorded.epoch);
 
@@ -296,5 +324,16 @@ export class Generations {
       DROP TABLE active_generation_history;
       ALTER TABLE generation_state DROP COLUMN activation_id;
     `);
+  }
+
+  #migratePiDurableVersion(): void {
+    const columns = this.#sql
+      .exec<{ name: string }>("SELECT name FROM pragma_table_info('generations')")
+      .toArray()
+      .map((column) => column.name);
+
+    if (columns.length === 0 || columns.includes("pi_durable_version")) return;
+
+    this.#sql.exec("ALTER TABLE generations ADD COLUMN pi_durable_version TEXT");
   }
 }
