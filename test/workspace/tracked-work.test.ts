@@ -3,12 +3,6 @@ import * as Fiber from "effect/Fiber";
 import { expect, test } from "vitest";
 import { trackedWork, WorkspaceIdleController } from "../../src/workspace/idle-controller.js";
 
-/**
- * Host work stays counted as in flight for as long as its native call runs. The Host cannot cancel
- * a Computer call it has made, so an interruption must not end the count early: an idle check that
- * saw nothing in flight would stop the container under a command that is still running.
- */
-
 function controller() {
   return new WorkspaceIdleController({
     nowMs: () => 1_000,

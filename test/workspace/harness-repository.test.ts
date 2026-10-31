@@ -1,10 +1,6 @@
 import { expect, test } from "vitest";
 import { harnessBuildConfiguration, HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 
-/**
- * A fork has one setting to change. Everything else about a build comes from the workspace layout,
- * so this proves the variable reaches the remote and reaches nothing else.
- */
 test("a deployment builds from the repository its variable names", () => {
   const forked = harnessBuildConfiguration("https://github.com/somebody/cf-stumble.git");
 

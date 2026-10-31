@@ -2,13 +2,8 @@
 
 import { isRecord } from "./untrusted.js";
 
-/** Letters, digits, and `-` only, so an id is also a path segment, a URL segment, and a key. */
 const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--(?:[1-9][0-9]*[dhsu]+)+)?$/u;
 
-/**
- * A file name may have 255 bytes and provisioning names `<id>.provisioning` and `cf-stumble-
- * project-<id>.provision.lock` from the id, so it must leave room for those.
- */
 export const PROJECT_ID_LIMIT = 200;
 
 declare const projectIdBrand: unique symbol;
@@ -83,10 +78,6 @@ export function parsePublicRepositoryUrl(value: unknown): PublicRepositoryUrl | 
   return value as PublicRepositoryUrl;
 }
 
-/**
- * Provisioning compares the stored URL against `remote.origin.url` verbatim and project identity
- * derives from this spelling. Path case is kept because GitHub paths are case-preserving.
- */
 export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | undefined {
   const parsed = parsePublicRepositoryUrl(value);
 
@@ -113,7 +104,6 @@ export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | un
   return parsePublicRepositoryUrl(`https://${url.host}/${segments.join("/")}`);
 }
 
-/** Legacy accounts may hold runs of hyphens. */
 const githubOwnerPattern = /^[a-z0-9][a-z0-9-]{0,38}$/u;
 
 const githubRepositoryPattern = /^[a-z0-9._-]{1,100}$/u;
@@ -126,16 +116,6 @@ function separatorCode(separator: string): string {
     .replaceAll("_", "u");
 }
 
-/**
- * Must be injective: the id is a directory name, a URL segment and a thread key, and `a-b`, `a.b`
- * and `a_b` are different repositories though GitHub ignores case.
- * The id is the words joined by `-`, then `--` and a punctuation key listing each unexpected
- * separator as its position plus one letter per character (`s` `/`, `h` `-`, `d` `.`, `u` `_`),
- * so `owner/a.b` is `owner-a-b--2d`.
- * A key was chosen over a hash suffix because a hash can collide and a colliding repository could
- * be
- * crafted on purpose. A name needing more than {@link PROJECT_ID_LIMIT} is refused, not shortened.
- */
 export function projectIdForRepository(repositoryUrl: unknown): ProjectId | undefined {
   const canonical = canonicalRepositoryUrl(repositoryUrl);
 
@@ -160,8 +140,6 @@ export function projectIdForRepository(repositoryUrl: unknown): ProjectId | unde
 
   const name = `${owner}/${repository}`;
   const words = name.match(/[a-z0-9]+/gu) ?? [];
-  // `separators[i]` stands before word `i`; `separators[0]` is always empty since the owner starts
-  // with a letter or digit.
   const separators = name.split(/[a-z0-9]+/u);
   let key = "";
 
@@ -209,10 +187,6 @@ function parseProject(value: unknown): Project | undefined {
   return { id, displayName: value.displayName, repositoryUrl };
 }
 
-/**
- * Any length is a catalog, including none. Ids stay unique so `resolveProject` does not depend on
- * position.
- */
 export function parseProjectCatalog(value: unknown): ProjectCatalog | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -237,10 +211,6 @@ type ProjectResolution =
   | Readonly<{ ok: true; project: Project }>
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
-/**
- * The default is the empty catalog, so a caller that forgets the tenant's catalog resolves nothing
- * instead of a placeholder.
- */
 export function resolveProject(
   projectId: unknown,
   catalog: ProjectCatalog = EMPTY_PROJECT_CATALOG,

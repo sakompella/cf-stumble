@@ -8,7 +8,6 @@ import {
   type GitHubToken,
 } from "../../src/github/device-flow.js";
 
-/** The lookup as the assertions compare it: the measurement, or nothing when it is unknown. */
 function measure(
   repositoryUrl: PublicRepositoryUrl,
   credential: GitHubToken | undefined,
@@ -77,7 +76,6 @@ test("allows a public repository lookup without a configured credential", async 
   const headers = new Headers(requestedInit?.headers);
 
   expect(headers.has("authorization")).toBe(false);
-  // GitHub answers 403 to any request that has no User-Agent.
   expect(headers.get("user-agent")).toBeTruthy();
 });
 

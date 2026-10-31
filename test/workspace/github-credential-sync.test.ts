@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import * as Effect from "effect/Effect";
 import { Workspace, type ExecSyncResult } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
@@ -15,13 +13,6 @@ import {
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
 
-/**
- * The credential install must not report success while the workspace's durable copy of `hosts.yml`
- * is still pending, because a container replacement would then lose the credential. The Workspace
- * Host passes the install a strict operations object (`require-complete`); this file checks that
- * the Host does, that the surface uses it for the install only, and that the failure leaks nothing.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -30,7 +21,6 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 class RecordingOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
-  /** Set to make every command run and then fail, as a pending post-command sync does. */
   failure: Error | undefined;
 
   lstat(): Promise<WorkspacePathKind | undefined> {
@@ -122,11 +112,6 @@ test("a failed logout does not hide the incomplete sync", async () => {
   expect(result).toEqual({ ok: false, error: { code: "workspace-unavailable", detail: "" } });
 });
 
-/**
- * A real Workspace Host whose Computer runtime runs every command with exit 0 and reports `sync`
- * for the copy back into the durable workspace. Everything between the Host and that runtime is
- * the production code.
- */
 function hostAnswering<T>(
   name: string,
   sync: ExecSyncResult,
@@ -149,7 +134,6 @@ function hostAnswering<T>(
   vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(runtime as never);
 
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
-    // The Host needs a container-enabled object to construct; no command reaches this container.
     Object.defineProperty(state, "container", { value: {}, configurable: true });
 
     return run(new WorkspaceHost(state, {}), sources);

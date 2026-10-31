@@ -5,21 +5,12 @@ import * as Predicate from "effect/Predicate";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
 import { GitHubReport, type ChatGPTConnection, type Project } from "./model.js";
 
-/**
- * Every path is relative, so every call stays on this origin; the Content Security Policy refuses the
- * rest. The page asks for no credential and stores none.
- */
-
 export function transportDetail(error: unknown): string {
   return Predicate.isError(error) ? error.message : String(error);
 }
 
 export type JsonBody = Readonly<Record<string, string | number>>;
 
-/**
- * `fetch` is read when the request starts; the browser harness replaces it to hold a submission in
- * flight.
- */
 export function fetchEffect(
   path: string,
   init: Readonly<{ method: "GET" | "POST"; accept: string; maybeBody: Option.Option<JsonBody> }>,
@@ -42,7 +33,6 @@ export function fetchEffect(
 
 export type Answer = Readonly<{ status: number; payload: unknown }>;
 
-/** A body that is not JSON reads as `null`, as the Worker's 5xx can be. */
 export function answerOf(response: Response): Effect.Effect<Answer> {
   return Effect.promise(() =>
     response.json().then(
@@ -114,7 +104,6 @@ function connectionDetail(status: unknown, state: string): string {
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-/** A pending authorization is the Worker's own live state, so it carries no check time. */
 export function checkedWording(checkedAt: unknown, now: number): string {
   if (!Predicate.isNumber(checkedAt) || !Number.isFinite(checkedAt)) {
     return "";
@@ -229,7 +218,6 @@ export function preparationText(preparation: unknown): string {
   return `rejected: ${text(field(preparation, "problem", "code"))}`;
 }
 
-/** Untrusted command output, so it is only ever text. */
 export function diagnosticsText(preparation: unknown): Option.Option<string> {
   const diagnostics =
     truthy(preparation) && field(preparation, "ok") === false

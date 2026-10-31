@@ -25,10 +25,6 @@ function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-/**
- * Chat-completion providers stream text and tool calls in `choices[0].delta`, with usage at the top
- * level. Only the first choice matters.
- */
 function firstChoiceDelta(obj: UntrustedObject): UntrustedObject | undefined {
   const choices = field(obj, "choices");
 
@@ -132,10 +128,6 @@ function parseProviderToolCallDeltas(toolCalls: unknown): ToolCallDelta[] {
   return deltas;
 }
 
-/**
- * An OpenAI-compatible server can send `{"error": ...}` mid-stream and still `[DONE]`, so this
- * event, not the stream end, must fail the turn.
- */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider's own untrusted stream event.
 export function isProviderError(raw: unknown): boolean {
   if (!isRecord(raw)) return false;
@@ -145,10 +137,6 @@ export function isProviderError(raw: unknown): boolean {
   return isRecord(error) || (typeof error === "string" && error !== "");
 }
 
-/**
- * Unrecognized fields are ignored: a provider detail this route does not model must not fail an
- * otherwise-good turn.
- */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this IS the parse boundary for the provider's own untrusted stream chunk.
 export function parseProviderChunk(raw: unknown): ParsedProviderChunk | undefined {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted provider chunk.

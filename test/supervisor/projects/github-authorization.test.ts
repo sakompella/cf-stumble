@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
@@ -9,15 +7,6 @@ import { GitHubConnection, GitHubConnectionStore } from "../../../src/supervisor
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
-
-/**
- * The owner-initiated GitHub device authorization (ADR-0039, Q2).
- *
- * The application shows a verification URL and a short user code and nothing else. The device code
- * that redeems the authorization stays server-side, and a consumed or expired authorization cannot
- * be redeemed again. The token itself
- * exists for one call: these tests follow the recognizable fake token and show where it goes.
- */
 
 const NOW = 1_700_000_000_000;
 
@@ -46,10 +35,6 @@ function githubReplying(replies: readonly Reply[]): GitHubFetch {
   };
 }
 
-/**
- * GitHub issuing `deviceCodes` in order and holding the first redemption until `released` opens,
- * so a test can start a newer authorization while an older one is still being redeemed.
- */
 function githubHoldingRedemption(deviceCodes: readonly Reply[], redemption: Reply) {
   const redeeming = Latch.makeUnsafe();
   const released = Latch.makeUnsafe();
@@ -77,7 +62,6 @@ interface Tenant {
   github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
 }
 
-/** `configured` is false for the deployment that has no GitHub OAuth client id yet. */
 function tenant(name: string, replies: readonly Reply[], configured = true): Tenant {
   return tenantOf(name, githubReplying(replies), configured);
 }

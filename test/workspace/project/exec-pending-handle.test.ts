@@ -48,7 +48,6 @@ test("a backend handle stuck pending past the timeout still returns an operation
   await vi.advanceTimersByTimeAsync(0);
   expect(deferred.handle.killCalls).toBe(1);
 
-  // A push onto the now-late handle must never surface as a second event on the closed stream.
   deferred.handle.push({ name: "exit", exitCode: 0 });
   await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
 });
@@ -72,7 +71,6 @@ test("a backend start rejection before the deadline is one failed terminal outco
   });
   await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
 
-  // The still-armed timer must not fire a second terminal event once the rejection settled it.
   await vi.advanceTimersByTimeAsync(1_000);
   await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
 });
@@ -114,8 +112,6 @@ test("a timeout, a manual kill, and the handle resolving all racing together set
     throw new Error("expected startExec to succeed even while the handle is pending");
   const reader = started.value.events.getReader();
 
-  // The manual kill fires first, then the timeout's timer elapses, and only then does the
-  // pending handle resolve. Only the first trigger may produce a terminal event or a kill call.
   const killResult = target.kill(started.value.operationId);
   await vi.advanceTimersByTimeAsync(50);
   deferred.resolve();

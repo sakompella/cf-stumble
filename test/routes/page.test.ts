@@ -1,12 +1,3 @@
-/**
- * The owner page is one plain HTML document and one script file. These tests hold the properties
- * the rest of version 0 depends on: a browser gets the page and its script, and a machine keeps
- * the relayed `GET /` the startup check uses.
- *
- * What the page itself contains is tested in `test/page/owner-page.test.ts`. This file is about
- * the request boundary, so it stays readable as one thing.
- */
-
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
@@ -20,7 +11,6 @@ function pageRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://cf-stumble.test/", { headers });
 }
 
-/** The owner page or its script, as a request with this `accept` header receives it. */
 function pageFetch(path: string, accept: string): Promise<Response> {
   return worker.fetch(new Request(`https://cf-stumble.test${path}`, { headers: { accept } }), env);
 }
@@ -91,7 +81,6 @@ test("a script path that is not the current one goes to the relay", async () => 
   const response = await pageFetch(stale, "*/*");
   const body = await response.text();
 
-  // No generation is active in this test, so the relay answers its typed 503.
   expect(response.status).toBe(503);
   expect(body).not.toContain("refreshStatus");
 });
@@ -100,8 +89,6 @@ test("a machine request for GET / still reaches the Supervisor relay", async () 
   const response = await worker.fetch(pageRequest({ accept: "*/*" }), env);
   const body = await response.text();
 
-  // No generation is active in this test, so the relay reports its typed 503. What matters is
-  // that the machine request reached the relay rather than receiving the owner page.
   expect(response.status).toBe(503);
   expect(body).toBe('{"ok":false,"problem":{"code":"no-active-generation"}}');
   expect(body).not.toContain(OWNER_PAGE_IDS.root);

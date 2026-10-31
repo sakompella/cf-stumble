@@ -15,16 +15,8 @@ import {
   workspaceContainerBackendConfiguration,
 } from "../../src/workspace/host.js";
 
-/**
- * What the Workspace Host offers as a Durable Object, rather than what any one of its surfaces
- * decides. The build, provisioning, and credential surfaces are each checked in their own file;
- * what is held here is that the object exposes those surfaces and nothing else, and that what a
- * surface returns can cross an RPC boundary.
- */
-
 const commit = "5000000000000000000000000000000000000001";
 
-/** Enough of the operation port to answer one planned build read. */
 class FakeOperations implements WorkspaceOperations {
   lstat(): Promise<WorkspacePathKind | undefined> {
     return Promise.resolve("directory");
@@ -81,7 +73,6 @@ test("exposes only the Workspace Host RPC methods", () => {
   ]);
 });
 
-/** A workspace store that holds only the managed file's path, as the test arranges it. */
 class ManagedInstructionsOperations implements WorkspaceOperations {
   readonly kinds = new Map<string, WorkspacePathKind>([[WORKSPACE_ROOT, "directory"]]);
   readonly files = new Map<string, string>();

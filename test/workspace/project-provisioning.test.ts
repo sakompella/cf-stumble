@@ -15,37 +15,13 @@ import {
 } from "../../src/workspace/index.js";
 import { plainProblem, runToResult } from "./workspace-results.js";
 
-/**
- * WHAT THESE TESTS ESTABLISH, AND WHAT THEY DO NOT.
- *
- * They establish which requests the caller sends, in what order, that it repeats every step
- * instead of remembering one, and that the plan a resumed run produces is byte-identical to the
- * plan an uninterrupted run produces. The fake host below is not a stand-in for a shell: it runs
- * the real `parseProjectProvisionRequest` and `planProjectProvisionRequest`, so what it records is
- * the same text the Workspace Host would hand to Computer.
- *
- * They do not establish that provisioning works. No test in this repository can run a shell: the
- * Workers vitest pool has no `node:child_process`, and the only Node project in vitest.config.ts
- * matches property test files alone. So `git clone` is never executed, no remote is contacted, and
- * the reconciliation is checked as text rather than as behavior. That is not a hypothetical gap.
- * This exact test shape passed while `shellQuote` emitted quoting no shell could parse (fixed in
- * f2fe291), and again while the whole provision step was inert because the container had
- * `egress: none`. Convergence here means "asks for the same thing again", not "ends in the same
- * filesystem state".
- */
-
 const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-1");
 
 const projectOne = sampleProjectOne;
 
-/**
- * Answers only the requests the real provision surface accepts, and plans them the way the real
- * host does, so a request the caller should never send fails the test instead of passing quietly.
- */
 class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
   readonly plans: WorkspacePlan[] = [];
-  /** Every Host RPC in order: a provision request by its step, and each managed-file write. */
   readonly steps: string[] = [];
   failingStep: "clone" | "instructions" | undefined;
 
@@ -75,7 +51,6 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
     });
   }
 
-  /** A write has no exit code, so a failing one answers the refusal the real Host gives. */
   ensureManagedInstructions(): Promise<WorkspaceResult> {
     this.steps.push("instructions");
 
@@ -140,12 +115,6 @@ test("clones and then writes the managed instructions into the tenant's workspac
   ]);
 });
 
-/**
- * The Workspace Host is a different Durable Object from the Supervisor and cannot read the
- * tenant's catalog, so the caller sends the repository it already resolved there. What still
- * cannot travel is command text, and the host re-derives the id from the URL, so the pair cannot
- * name one repository and another project's directory.
- */
 test("carries a resolved project and a step name, never command text", async () => {
   const host = new FakeProvisionHost();
 

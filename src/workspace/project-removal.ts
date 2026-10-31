@@ -55,7 +55,6 @@ function removedDirectories(projectId: ProjectId): readonly [string, string] {
   return [root, `${root}.provisioning`];
 }
 
-/** A removal can outlive the RPC that asked for it; the provision lock keeps a later clone out of the directory it is deleting. */
 export function planProjectRemovalRequest(
   request: ParsedProjectRemovalRequest,
 ): Extract<WorkspacePlan, { kind: "run-command" }> {
@@ -74,7 +73,6 @@ export function planProjectRemovalRequest(
   };
 }
 
-/** The store is what the next container starts from, so a directory still present there would come back. */
 export function removalIsDurable(
   operations: WorkspaceEffects,
   projectId: ProjectId,

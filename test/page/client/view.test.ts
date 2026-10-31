@@ -9,12 +9,6 @@ import type { ChatGPTConnection, Model } from "../../../src/page/client/model.js
 import { init, update } from "../../../src/page/client/update.js";
 import { view } from "../../../src/page/client/view.js";
 
-/**
- * The browser harness and the owner find elements by the identifiers in `element-ids.ts`. An
- * identifier the views do not render would make a harness wait time out rather than fail with a
- * reason, so this checks every one against the rendered tree.
- */
-
 type Rendered = NonNullable<ReturnType<typeof view>>;
 
 function renderedIds(node: Rendered | string): readonly string[] {
@@ -60,8 +54,6 @@ function withChatGPT(chatgpt: ChatGPTConnection): Model {
 }
 
 test("the page renders every stable element id, and none twice", () => {
-  // The ChatGPT control offers disconnecting, or a sign-in, or neither, so no one state renders
-  // every identifier.
   const pages = [
     shownWithDiagnostics(),
     withChatGPT({

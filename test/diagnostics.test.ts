@@ -8,15 +8,6 @@ import {
 import { textLines } from "./log-capture.js";
 import { syntheticJwt } from "./synthetic-jwt.js";
 
-/**
- * `logRedactedCause` and `isTimeoutFailure` sit inside catch blocks whose whole job is to turn an
- * arbitrary thrown value into one generic, stable public result (ADR-0045). A cause is caller
- * input from the diagnostics module's point of view: it can be anything a dependency throws,
- * including a hostile object whose own `toString` or `message` getter throws. Rendering that
- * cause for the log must not itself throw, or the catch path these helpers serve fails instead of
- * returning its generic result.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -58,11 +49,6 @@ test("logs a fixed fallback instead of throwing when a cause's message getter th
   expect(logged).toContain("[unprintable cause]");
 });
 
-/**
- * A thrown cause is free text, so a JWT inside it is not a structured field the logger
- * already redacts. Redaction must run before the cut: cutting first can drop the token's end and
- * leave its header and claims, or a whole short token, in the log.
- */
 test("logRedactedCause redacts every segment of a short JWT and keeps the surrounding text", () => {
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});
   const jwt = syntheticJwt();
@@ -104,13 +90,6 @@ test("isTimeoutFailure reports false instead of throwing when a cause's message 
   expect(isTimeoutFailure(hostileCause)).toBe(false);
 });
 
-/**
- * `logEvent` is the one structured log line every operational event goes through, so an operator
- * can filter Workers Logs by `event` and by field instead of matching free text. Each call writes
- * exactly one plain object, at the console level its severity names, and every string field is
- * redacted and bounded before it leaves: a field is a name, a code, or an id, and a value that
- * turns out to carry a credential must not carry it into the log.
- */
 function onlyEntry(spy: MockInstance<(...args: unknown[]) => void>): LogFields {
   expect(spy).toHaveBeenCalledTimes(1);
   const call = spy.mock.calls[0] ?? [];

@@ -26,7 +26,6 @@ function drawTools(tc: hegel.TestCase): ToolDefinition[] {
   return Array.from({ length: count }, () => drawTool(tc));
 }
 
-/** A value of the wrong type for each field a tool definition must carry. */
 const WRONG_VALUES = {
   type: [undefined, "", "Function", "web_search", 1, null, {}],
   function: [undefined, "read", 1, null, []],

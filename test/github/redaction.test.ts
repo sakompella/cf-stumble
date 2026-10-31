@@ -1,12 +1,6 @@
 import { expect, test } from "vitest";
 import { containsCredential, redactCredentials, REDACTED } from "../../src/github/index.js";
 
-/**
- * Redaction is the last line, not the design: nothing in cf-stumble puts a token in a value that
- * crosses a boundary. What this covers is the text `git` and `gh` print, which is the one place a
- * credential can arrive from outside and be forwarded without being read.
- */
-
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 test.each([

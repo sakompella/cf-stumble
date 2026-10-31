@@ -1,18 +1,9 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { connectSampleProjects } from "./helpers.js";
-
-/**
- * Reading the project list or the GitHub connection never reaches the Workspace Host, so a client
- * that keeps reading cannot keep the workspace container running: the Host's idle clock counts only
- * calls that reach it. Only a refresh asks the workspace, and later reads report what that refresh
- * found and when.
- */
 
 const NOW = 1_700_000_000_000;
 
@@ -23,7 +14,6 @@ afterEach(async () => {
   await reset();
 });
 
-/** A Workspace Host whose credential answers `answer`; any other call fails the test. */
 function workspaceAnswering(answer: GitHubCredentialResult) {
   const credential = vi.fn(() => Promise.resolve(answer));
 
@@ -88,10 +78,6 @@ test("a check that could not reach the workspace is the last known state, with i
   });
 });
 
-/**
- * A Workspace Host whose credential check waits until the test answers it, and whose reset answers
- * `resetAnswer`.
- */
 function heldCheckWorkspace(resetAnswer: WorkspaceResetResult) {
   const held = { started: (): void => {}, answer: (_result: GitHubCredentialResult): void => {} };
 
@@ -139,7 +125,6 @@ test.each([
   vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
   vi.spyOn(console, "warn").mockImplementation(() => {});
 
-  // Inside the object, because the held check resolves from this test's own request.
   await runInDurableObject(control, async (supervisor) => {
     const refreshing = supervisor.refreshGitHubConnection(NOW);
     await fake.started;

@@ -8,9 +8,6 @@ import {
   repositorySizeVerdictSource,
 } from "./github/index.js";
 
-/**
- * Blob filtering keeps the durable clone small; Git fetches a blob only when a command needs it.
- */
 const PROJECT_CLONE_DEPTH = 50;
 
 export const PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE = 122;
@@ -31,10 +28,6 @@ export const MANAGED_AGENT_INSTRUCTIONS = [
   "",
 ].join("\n");
 
-/**
- * The managed instructions are not a step: both plans write that file through the Host's
- * `ensureManagedInstructions`.
- */
 export type ProjectProvisionStepName = "clone";
 
 type ProjectProvisionStep = Readonly<{ name: "clone"; source: string; cwd: string }>;
@@ -50,32 +43,12 @@ export function projectProvisionLockPath(projectId: ProjectId): string {
   return `/tmp/cf-stumble-project-${projectId}.provision.lock`;
 }
 
-/**
- * Nothing records a pid, so there is no stale owner: the kernel releases the flock when the last
- * process holding the descriptor exits. The file stays out of `/workspace`, which Computer copies
- * to
- * and from its store, and is never deleted: a waiter locking a deleted file would not exclude a
- * newcomer creating a fresh one.
- * Descriptor 9 stays open in every child because the computerd runner signals only the direct
- * shell, so a `git clone` that outlives a killed shell keeps the lock until it exits.
- */
 export function holdProvisionLock(): readonly string[] {
   return ['exec 9>"$lock"', "flock 9"];
 }
 
 const CLONE_INTO_STAGING = `git clone --filter=blob:none --depth=${PROJECT_CLONE_DEPTH} --single-branch "$expected_remote" "$staging"`;
 
-/**
- * Reconciling means a clone of the expected remote is here, never that the tree matches origin:
- * uncommitted work and unpushed commits live there, so an existing clone is only checked.
- * Nothing deletes a directory it did not create; a populated non-repository fails the step
- * untouched.
- * The clone lands in a fixed staging directory and moves into place only on success, and the `EXIT`
- * trap is set once the lock is held, so the next run clears what a killed run left. `rmdir` removes
- * the root only when empty.
- * `cloneIntoStaging` replaces the plain clone, for a caller that maps a clone failure to its own
- * exit code.
- */
 export function reconcileClone(
   steps: Readonly<{ beforeClone?: readonly string[]; cloneIntoStaging?: readonly string[] }> = {},
 ): readonly string[] {
@@ -104,13 +77,6 @@ export function reconcileClone(
   ];
 }
 
-/**
- * The repository is measured with the workspace's own `gh` credential before a new clone, which
- * covers private repositories the Supervisor's `GH_TOKEN` preflight cannot see. An unmeasurable
- * repository is cloned anyway; an existing clone is never measured or removed.
- * Every shell value goes through `shellQuote`: the repository URL is configuration, and
- * hand-written escaping is how a quoting helper becomes an injection.
- */
 function cloneProjectRepository(project: Project): string {
   const { repositoryUrl } = project;
   const root = projectDirectory(project.id);
@@ -128,8 +94,6 @@ function cloneProjectRepository(project: Project): string {
     'mkdir -p "$projects"',
     ...reconcileClone({
       beforeClone: [
-        // Only a named ceiling refuses; any other output lets the clone proceed, so the check
-        // cannot fail closed on something it did not measure.
         `  size_verdict="$(${REPOSITORY_SIZE_VERDICT_FUNCTION})"`,
         '  case "$size_verdict" in',
         "    tree-truncated | too-many-files | working-tree-too-large | repository-too-large)",
@@ -155,10 +119,6 @@ function cloneProjectRepository(project: Project): string {
   ].join("\n");
 }
 
-/**
- * The plan derives from the project alone, so a resumed run asks for exactly what the interrupted
- * one did.
- */
 export function planProjectProvision(project: Project): ProjectProvisionPlan {
   return {
     projectId: project.id,
@@ -166,8 +126,6 @@ export function planProjectProvision(project: Project): ProjectProvisionPlan {
       {
         name: "clone",
         source: cloneProjectRepository(project),
-        // The clone moves the project root into place, so it cannot run inside it, and the
-        // workspace root may not exist yet on a cold container.
         cwd: "/",
       },
     ],

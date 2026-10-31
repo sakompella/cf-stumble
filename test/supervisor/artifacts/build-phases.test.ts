@@ -14,21 +14,12 @@ import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index
 import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
-/**
- * Why a build has one step per phase. Three deployed builds of one commit died at 671 s, 692 s
- * and 696 s: two lost the Durable Object, and one exited 1 with an empty stdout and an empty
- * stderr. Every one of them reported the whole build as `build` and left nothing behind that said
- * which phase had been running. A phase is now its own step, so it is its own RPC, its own exit
- * code and its own bounded tail, and no one command has to survive eleven minutes.
- */
-
 const commit = testHarnessCommit("6000000000000000000000000000000000000003");
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
 
 const phaseNames = HARNESS_BUILD_CONFIGURATION.buildPhases.map((phase) => phase.name);
 
-/** Fails the one step the test names and reports every step it was asked for. */
 class PhaseFailingHost implements BuildWorkspaceHost {
   readonly steps: string[] = [];
   private readonly failing: string;
@@ -116,7 +107,6 @@ test("a failing phase names that phase, and the phases after it never run", asyn
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-/** Fails one named step with output that echoes a token, as a failed authenticated fetch does. */
 class TokenEchoingHost implements BuildWorkspaceHost {
   private readonly failing: string;
 
@@ -186,7 +176,6 @@ test("the tail keeps the end of a long stream and says it was cut", async () => 
   expect(built.failure.diagnostics.truncated).toBe(true);
 });
 
-/** Fails the named step with exactly the output the test gives it. */
 class FixedOutputHost implements BuildWorkspaceHost {
   private readonly failing: string;
   private readonly stdout: string;
@@ -230,7 +219,6 @@ async function failedDiagnostics(output: Readonly<{ stdout: string; stderr: stri
 
 test("a token that straddles the cut is redacted before the cut, so no fragment survives", async () => {
   const token = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-  // The 2,000-character window of the raw text would start in the middle of the token.
   const stderr = `${token} ${"y".repeat(1_979)}`;
 
   const { stderrTail } = await failedDiagnostics({ stdout: "", stderr });

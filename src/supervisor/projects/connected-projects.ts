@@ -24,7 +24,6 @@ type ConnectedProjectRow = {
   readonly connected_at: number;
 };
 
-/** A conflict means the URL derives the harness entry's id. */
 type ConnectProjectProblem = Readonly<{
   code: "invalid-repository-url" | "project-id-conflict";
 }>;
@@ -114,7 +113,6 @@ export class ConnectedProjects {
     }
 
     if (id === HARNESS_PROJECT_ID) {
-      // The harness entry owns that id, so a row holding it could never be selected.
       return { ok: false, problem: { code: "project-id-conflict" } };
     }
 

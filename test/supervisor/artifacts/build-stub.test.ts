@@ -16,7 +16,6 @@ function moduleMapFile(): string {
   });
 }
 
-/** One Workspace Host stub. It records the one request it is asked for and nothing else. */
 class OneCallHost {
   readonly requests: HarnessBuildRequest[] = [];
 

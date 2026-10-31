@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -67,12 +65,6 @@ afterEach(async () => {
   await reset();
 });
 
-/**
- * The Supervisor once seeded Generation 0 from the fixture commit and served the fixture module
- * map whenever no generation was active, so `/facet/ping` answered `pong` on a Supervisor that had
- * never been given code. Nothing is built in now: with no active generation there is nothing to
- * serve.
- */
 test("reports a typed failure and serves nothing when no generation is active", async () => {
   const control = supervisor("no-active-generation-serves-nothing");
 
@@ -157,11 +149,6 @@ test("relays an ordinary request and response without changing either side", asy
   expect(await response.text()).toBe("request body");
 });
 
-/**
- * The public 502 tells a caller nothing, on purpose: a broken generation and a Loader or RPC
- * transport failure must look identical to the caller. An operator still needs to tell them
- * apart, so the discarded cause must reach a log, redacted, without changing the response at all.
- */
 test("logs the discarded cause of a pre-header failure without changing the public 502", async () => {
   const control = await activeSupervisor("relay-pre-header-failure");
   const loggedErrors = vi.spyOn(console, "error").mockImplementation(() => {});

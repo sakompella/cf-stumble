@@ -46,11 +46,9 @@ type ProjectRpcTargetOptions = Readonly<{
   remainingMs?: number;
   containerState?: ProjectContainerState;
   activity?: ProjectActivity;
-  /** Called once when the turn ends, so the workspace is not held for the rest of the budget. */
   endLease?: () => void;
 }>;
 
-/** A timeout capped at the turn's budget means the turn ended, so the turn timer and exec timer must report the same outcome. */
 function capAtBudget(requestedMs: number, remainingMs: number | undefined) {
   if (remainingMs === undefined) return { timeoutMs: requestedMs, timeoutEndsTurn: false };
 
@@ -68,11 +66,6 @@ function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectRes
   }
 }
 
-/**
- * Never exposes a build, fetch, raw Computer, container, or other generic capability. Filesystem
- * methods confine paths beneath the workspace root; `startExec` confines its working directory
- * there while accepting an arbitrary shell command.
- */
 export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContract {
   readonly #provider: ProjectFilesystemProvider;
   readonly #transactions: ProjectTransactions;
@@ -160,8 +153,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
   #startExec(input: ParsedStartExecInput): ProjectResult<StartedExec> {
     if (this.#containerWasReplaced()) {
-      // Files are durable across a replacement. Refuse only this first exec so callers get an
-      // explicit restart outcome, then permit a retry against the new container.
       this.#containerGeneration = this.#containerState?.generation;
 
       return fail("container-restarted");
@@ -199,7 +190,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
     const operationId = `${this.#nonce}:${this.#nextOperationSequence++}`;
 
-    // The operation holds the workspace until it settles, even past the turn's deadline.
     const endActivity = this.#activity?.begin();
 
     const operation = this.#startOperation(
@@ -295,8 +285,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
       return;
     }
 
-    // setTimeout clamps values above 2^31-1 to an immediate callback. Re-arm long budgets so the
-    // capability does not end early and still owns one bounded timer until its deadline.
     const delay = Math.min(remaining, 2_147_483_647);
     this.#turnTimer = setTimeout(() => {
       this.#turnTimer = undefined;
@@ -323,7 +311,6 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     return undefined;
   }
 
-  /** A container replacement does not refuse file access: the files are durable, so only a command needs to hear that its container changed. */
   #whileTurnLasts<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
     const ended = this.#turnEnded();
 

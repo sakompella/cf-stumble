@@ -16,11 +16,6 @@ export interface ProjectDirent {
   isSymbolicLink(): boolean;
 }
 
-/**
- * `appendFile` and `realpath` are absent on purpose: the first throws `ENOSYS` on the real
- * provider, the second only normalizes lexically instead of resolving symlinks. Byte-level writes
- * use `openSync`/`writeSync`/`closeSync` inside a transaction.
- */
 export interface ProjectFilesystemProvider {
   lstatSync(path: string): ProjectStat;
   readlinkSync(path: string): string;
@@ -63,8 +58,6 @@ export function mapProviderError(error: unknown): ProjectErrorCode {
   const mapped = code === undefined ? undefined : ERROR_CODE_MAP.get(code);
 
   if (mapped !== undefined) return mapped;
-  // `backend-unavailable` is the one code that says nothing about what happened, so what the
-  // provider actually threw exists nowhere else.
   logRedactedCause(
     `unmapped project provider error (${redactedExcerpt(code ?? "no code")})`,
     error,

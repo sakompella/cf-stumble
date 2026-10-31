@@ -13,11 +13,6 @@ import type {
   GitHubConnectionRecord,
 } from "../supervisor/projects/index.js";
 
-/**
- * A credential never arrives in a request here, there is no field for one; the token goes from GitHub
- * to the workspace without passing through a browser. Responses are built from named fields so no
- * internal error text or token can reach a client.
- */
 export type ProjectApiSupervisor = Readonly<{
   listProjects: () => Promise<SelectableCatalog>;
   connectProject: (

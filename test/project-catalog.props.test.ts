@@ -20,11 +20,6 @@ function drawSegment(tc: hegel.TestCase): string {
   return `${tc.draw(alphanumeric)}${tc.draw(interior)}${tc.draw(alphanumeric)}`;
 }
 
-/**
- * URL spelling is user input, but the canonical spelling is the value used both for cloning and
- * for deriving identity. This property generates repository paths instead of repeating the three
- * hand-picked spellings in the workerd sibling: every case must converge to one URL and id.
- */
 test("all spellings of a generated owner and repository share one canonical URL", () => {
   hegel.test((tc) => {
     const owner = drawSegment(tc);
@@ -49,11 +44,6 @@ test("all spellings of a generated owner and repository share one canonical URL"
   });
 });
 
-/**
- * GitHub owner names are letters, digits, and hyphens. Repository names add `.` and `_`. The small
- * alphabets put every punctuation mark next to every other and next to a boundary, which is where
- * the lowercase dash-joined spelling of an older id collapsed distinct repositories.
- */
 const ownerHead = gs.text({ alphabet: "aZ0", minSize: 1, maxSize: 1 });
 
 const ownerTail = gs.text({ alphabet: "aZ0-", maxSize: 6 });
@@ -71,7 +61,6 @@ function drawRepository(tc: hegel.TestCase): Repository {
   return { owner, name };
 }
 
-/** The same letters with every repository punctuation mark redrawn: the old id cannot tell them apart. */
 function drawRepunctuated(tc: hegel.TestCase, repository: Repository): Repository {
   const name = repository.name.replaceAll(/[-._]/gu, () => tc.draw(punctuation));
 
@@ -86,27 +75,14 @@ function idOf(repository: Repository): string | undefined {
   return projectIdForRepository(urlOf(repository));
 }
 
-/**
- * A name such as `.` or `.git` is no repository at all: the URL parser or canonicalization removes
- * it. Every other drawn name is one GitHub could hold.
- */
 function canonicalOf(repository: Repository): string | undefined {
   return canonicalRepositoryUrl(urlOf(repository));
 }
 
-/**
- * GitHub resolves owner and repository names without regard to case, so two canonical URLs that
- * differ only in case are one repository. Any other difference is a different repository.
- */
 function sameRepository(left: Repository, right: Repository): boolean {
   return canonicalOf(left)?.toLowerCase() === canonicalOf(right)?.toLowerCase();
 }
 
-/**
- * The id names a project's thread, its SQLite rows, and its directory, so two repositories that
- * share one lose one of them. The second repository is drawn two ways: independently, and as the
- * first one with its punctuation redrawn, because that pair is the one a lossy id merges.
- */
 test("gives distinct repositories distinct ids and one repository one id", () => {
   hegel.test((tc) => {
     const first = drawRepository(tc);
@@ -132,12 +108,6 @@ test("gives distinct repositories distinct ids and one repository one id", () =>
   });
 });
 
-/**
- * Every id becomes a directory under /workspace/projects, a URL path segment, and a SQLite key,
- * and the Workspace Host checks it again with `parseProjectId`. The provisioning script also
- * names `<id>.provisioning` beside it, so an id must never contain a dot or it could name another
- * project's staging directory.
- */
 test("derives an id for every GitHub repository name that is safe as a path segment", () => {
   hegel.test((tc) => {
     const repository = drawRepository(tc);
@@ -157,11 +127,6 @@ const plainOwner = gs.text({ alphabet: "aZ0", minSize: 1, maxSize: 6 });
 
 const plainWord = gs.text({ alphabet: "aZ0", minSize: 1, maxSize: 4 });
 
-/**
- * Ids of repositories whose owner has no hyphen and whose name is words joined by single hyphens
- * keep the spelling every earlier id had, so projects connected before injective ids keep their
- * threads and directories. The old spelling is restated here rather than imported.
- */
 test("keeps the earlier id of every owner without a hyphen and name without dots or underscores", () => {
   hegel.test((tc) => {
     const owner = tc.draw(plainOwner);

@@ -14,7 +14,6 @@ export type ChatGPTLoginView = Readonly<{
   expiresAt: number;
 }>;
 
-/** It never carries a token, a verifier, or a code. */
 export type ChatGPTConnectionView = Readonly<{
   connection: ChatGPTConnectionStatus;
   login: ChatGPTLoginView | null;
@@ -37,9 +36,6 @@ export type ChatGPTLoginOutcome =
       chatgpt: ChatGPTConnectionView;
     }>;
 
-/**
- * `unavailable` means the token server was busy or unreachable; the stored tokens are unchanged.
- */
 export type ChatGPTAccess =
   | Readonly<{ kind: "ready"; accessToken: string }>
   | Readonly<{ kind: "not-connected" }>

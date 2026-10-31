@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { createExecutionContext } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
@@ -15,19 +13,12 @@ import {
   sseLine,
 } from "./model-route-provider-stream.js";
 
-/**
- * `ModelRoute.runStream` when the owner's ChatGPT plan meets its usage limit (ADR-0047): a call
- * refused before any output is answered by Workers AI after one `provider-fallback` event, and a
- * call refused after output is not. OpenAI is faked through the global `fetch` the route uses.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-/** A Workers AI binding that answers `text` and counts its calls. */
 function workersAi(text: string) {
   const calls: string[] = [];
 
@@ -43,7 +34,6 @@ function workersAi(text: string) {
   return { ai: binding as Ai, calls };
 }
 
-/** A route a Supervisor created, whose holder answers `access` and records each usage limit. */
 function supervisedRoute(ai: Ai, access: ChatGPTAccess) {
   const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
@@ -74,7 +64,6 @@ function eventsOf(outcome: ReturnType<ModelRoute["runStream"]>) {
   return collectEvents(outcome);
 }
 
-/** OpenAI's Responses endpoint answering HTTP 200 with these stream events. */
 function responsesAnswer(events: readonly object[]) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {

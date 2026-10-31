@@ -17,7 +17,6 @@ test("arbitrary bytes round-trip exactly", async () => {
 
 test("multibyte file content reports a byte size, not a character count", async () => {
   const { target } = makeTarget();
-  // "héllo" is 5 UTF-16 code units but 6 UTF-8 bytes.
   const content = "héllo";
   await target.writeFile("/greeting.txt", encode(content), "overwrite");
 
@@ -29,7 +28,6 @@ test("multibyte file content reports a byte size, not a character count", async 
 
 test("a symlink's size is the byte length of its target, not the string length", async () => {
   const { provider, target } = makeTarget();
-  // "café-target" is 11 characters but 12 UTF-8 bytes.
   const targetText = "café-target";
   provider.addSymlink("/workspace/link", targetText);
 

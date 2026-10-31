@@ -6,11 +6,6 @@ import { isProviderError, tokenCount } from "../model-route-stream-parse.js";
 import type { ToolCallDelta } from "../model-route-events.js";
 import { asUntrusted, field, isRecord, type UntrustedObject } from "../untrusted.js";
 
-/**
- * "Sign in with ChatGPT" requires `store: false` and `stream: true`, takes system text only as
- * `instructions`, and refuses `max_output_tokens` and `temperature`.
- */
-
 export const RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
 const REASONING_EFFORT = "medium";
@@ -105,10 +100,8 @@ export function safeCode(value: unknown): string {
   return typeof value === "string" && /^[\w.-]{1,80}$/u.test(value) ? value : "unknown";
 }
 
-/** The error message can name the owner's account, so it is never read. */
 export type ProviderError = Readonly<{ type: string; code: string }>;
 
-/** For an `error` event, its own `type` names the event rather than the error. */
 export function providerError(body: unknown): ProviderError {
   const response = objectAt(body, "response");
   const nested = objectAt(response, "error") ?? objectAt(body, "error");
@@ -133,7 +126,6 @@ export function isUsageLimit(status: number, error: ProviderError): boolean {
   return status === 429 || USAGE_LIMITS.has(error.code) || USAGE_LIMITS.has(error.type);
 }
 
-/** ChatGPT plans have weekly limits. */
 const MAX_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function retryAt(header: string | null, now: number): number | null {
@@ -174,7 +166,6 @@ function usageOf(
     : { inputTokens, outputTokens };
 }
 
-/** A call's `output_index` is its slot, so a reasoning item before it leaves a gap rather than a merge. */
 export class ResponsesStreamReader {
   private readonly accumulator: ProviderStreamAccumulator;
   failure: ProviderError | undefined;
@@ -183,7 +174,6 @@ export class ResponsesStreamReader {
     this.accumulator = accumulator;
   }
 
-  /** Returns `true` at the terminal event. */
   handleLine(line: string): boolean {
     const trimmed = line.trim();
 

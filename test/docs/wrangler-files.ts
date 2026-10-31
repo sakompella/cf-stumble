@@ -1,9 +1,5 @@
 import { isRecord } from "../../src/untrusted.js";
 
-/**
- * The two Wrangler files, read as text. Vite resolves the glob at build time, so this reads no
- * filesystem and runs in workerd.
- */
 declare global {
   interface ImportMeta {
     glob: (

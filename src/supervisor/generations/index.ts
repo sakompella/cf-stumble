@@ -34,10 +34,6 @@ type StateRow = {
   readonly epoch: number;
 };
 
-/**
- * Mutating methods read plain values, call a pure decider in ./decisions.ts and apply its effects,
- * all in one Durable Object transaction, which makes the deciders' current + 1 epoch safe.
- */
 export class Generations {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;

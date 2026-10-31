@@ -13,9 +13,6 @@ import {
 } from "../../../src/supervisor/generations/index.js";
 import { label } from "./fixtures.js";
 
-// The deciders are pure functions over plain values, so these exercise their invariants across
-// generated labels, statuses, outcomes, and epochs — no Durable Object, no storage.
-
 const COMMIT = testHarnessCommit("a".repeat(40));
 
 function generation(labelValue: number, status: GenerationStatus): Generation {

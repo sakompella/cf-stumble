@@ -13,7 +13,6 @@ function sendShortcut(key: string, modifiers: Readonly<{ ctrlKey: boolean; metaK
     : Option.none();
 }
 
-/** A run is the conversation's, so its state shows here whichever browser started it. */
 function runState(model: Model): string {
   const { isRunning, inbox } = model.conversation;
 

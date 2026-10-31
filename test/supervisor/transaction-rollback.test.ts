@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -10,11 +8,6 @@ import { testHarnessCommit } from "../harness-commit-fixtures.js";
 
 const commit = "7200000000000000000000000000000000000001";
 
-/**
- * Make the real storage refuse every statement containing `refused`. Everything else, including
- * `transactionSync`, stays the real storage, so a refusal inside a transaction is a real rollback.
- * `afterEach` restores the statement.
- */
 function refuseStatements(storage: DurableObjectStorage, refused: string): void {
   const exec = storage.sql.exec.bind(storage.sql);
 
@@ -27,11 +20,6 @@ function refuseStatements(storage: DurableObjectStorage, refused: string): void 
   );
 }
 
-/**
- * Whether a refused write raised. A refusal must escape the transaction callback: that is what
- * rolls the transaction back, and a refusal turned into a returned value would commit whatever was
- * written before it.
- */
 function raises(operation: () => void): boolean {
   try {
     operation();

@@ -4,12 +4,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isRecord } from "../untrusted.js";
 
-/**
- * The access token exists in one place, the reply to the redemption call, which the caller installs
- * into the workspace's `gh` configuration and then drops. Nothing here stores, logs, or returns a
- * value to a browser.
- */
-
 declare const gitHubTokenBrand: unique symbol;
 
 export type GitHubToken = string & {
@@ -31,14 +25,12 @@ const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
-/** `repo` is what an agent needs to clone, push, and open a pull request in a private repository. */
 const GITHUB_DEVICE_SCOPE = "repo";
 
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 
 export type GitHubFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-/** `deviceCode` is a secret that redeems the authorization; it never reaches a browser or a log. */
 type DeviceAuthorization = Readonly<{
   deviceCode: string;
   userCode: string;
@@ -47,14 +39,12 @@ type DeviceAuthorization = Readonly<{
   intervalSeconds: number;
 }>;
 
-/** `not-configured` means this deployment has no GitHub OAuth client id. */
 type DeviceFlowProblem = "not-configured" | "provider-unavailable" | "provider-refused";
 
 export class DeviceAuthorizationNotStarted extends Data.TaggedError(
   "DeviceAuthorizationNotStarted",
 )<{ readonly problem: DeviceFlowProblem }> {}
 
-/** `pending` and `slow-down` are ordinary while the owner is still at GitHub's verification page. */
 export type DeviceRedemption =
   | Readonly<{ kind: "authorized"; token: GitHubToken }>
   | Readonly<{ kind: "pending" }>
@@ -96,7 +86,6 @@ export function parseDeviceAuthorization(value: unknown): DeviceAuthorization | 
   };
 }
 
-/** An unrecognized error code is `unavailable`, never `authorized`. */
 export function parseDeviceRedemption(value: unknown): DeviceRedemption {
   if (!isRecord(value)) {
     return { kind: "unavailable" };
@@ -156,7 +145,6 @@ function postForm(
   });
 }
 
-/** The reply is the only place a device code exists, so the caller stores it beside its owner. */
 export function requestDeviceAuthorization(
   clientId: string,
   fetcher: GitHubFetch,
@@ -183,7 +171,6 @@ export function requestDeviceAuthorization(
   );
 }
 
-/** The single call that can yield a token, and it yields it to its caller only. */
 export function redeemDeviceAuthorization(
   input: Readonly<{ clientId: string; deviceCode: string }>,
   fetcher: GitHubFetch,

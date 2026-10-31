@@ -8,18 +8,12 @@ import {
 import type { ComputerWorkspace } from "./execution-env-paths.js";
 import { createTempFile, writeBytes } from "./execution-env-files.js";
 
-/** Characters per append: at three UTF-8 bytes each, a write stays far below `MAX_FILE_BYTES`. */
 const APPEND_CHARACTERS = 128 * 1024;
 
 const encoder = new TextEncoder();
 
 const kept: Result<void, ExecutionError> = { ok: true, value: undefined };
 
-/**
- * The complete output in a temporary file once it passes either threshold, as Pi's Node
- * environment keeps it. The capability decodes output before it arrives, so the file holds that
- * text in UTF-8 rather than the raw bytes.
- */
 export class OutputSpill {
   readonly #workspace: ComputerWorkspace;
   readonly #thresholds: ShellSpillOptions;

@@ -8,13 +8,6 @@ import {
   type ProjectResult,
 } from "./protocol.js";
 
-/**
- * `workspace-layout.ts` owns the root and the facet's path-escape guard reads the same constant, so
- * address translation and the guard cannot disagree. The root is the whole workspace, so an agent
- * can read a sibling repository; project selection chooses a working directory, not a boundary.
- */
-
-/** Linux's own symlink-follow cap (`MAXSYMLINKS`), across one whole resolve call. */
 const MAX_SYMLINK_FOLLOWS = 40;
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC path-parsing boundary.
@@ -101,7 +94,6 @@ function stepPastSymlink(
   const target = provider.readlinkSync(place.candidate);
   queue.unshift(...splitTarget(target));
 
-  // An absolute target restarts from the root; a relative one resolves against the symlink's containing directory.
   return { kind: "continue", resolved: target.startsWith("/") ? "/" : place.resolved };
 }
 
@@ -150,11 +142,6 @@ function stepOneSegment(
   }
 }
 
-/**
- * `provider.realpath()` only normalizes lexically, so each component is walked with
- * `lstatSync`/`readlinkSync`. The root boundary is checked after every step that changes position,
- * so an escape is caught when it happens.
- */
 export function resolveAddressedPath(
   provider: ProjectFilesystemProvider,
   segments: readonly string[],
@@ -199,8 +186,6 @@ export function resolveAddressedPath(
     resolved = step.resolved;
   }
 
-  // Only reachable via a symlink target that fully consumes the queue without leaving a final
-  // component to settle on, e.g. a target of "." or "/".
   if (!isWithinRoot(resolved)) return fail("path-outside-root", addressed);
 
   return statAt(provider, resolved, addressed);
@@ -224,7 +209,6 @@ function kindOf(stat: ProjectStat): ProjectFileKind {
   return stat.isDirectory() ? "directory" : "file";
 }
 
-/** Byte-accurate size: a symlink's stored size is a UTF-16 code-unit count, not a byte count. */
 function byteAccurateSize(
   provider: ProjectFilesystemProvider,
   path: string,

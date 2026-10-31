@@ -26,13 +26,6 @@ import {
   writeExecutable,
 } from "../workspace/planned-shell-fixture.js";
 
-/**
- * These tests run the planned shell under `/bin/sh` with a stub `gh` and, for the clone step, a
- * stub `git`. The stub `gh` answers from canned JSON through the host's `jq`, while the real `gh`
- * evaluates `--jq` with its built-in gojq. They show what the shell decides for a given GitHub
- * answer; they do not show that GitHub, the real `gh`, or Computer behave the same way.
- */
-
 const jq = execFileSync("/bin/sh", ["-c", "command -v jq"], { encoding: "utf8" }).trim();
 
 const project: Project = (() => {
@@ -55,19 +48,15 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-/** A canned `gh api` answer. With `raw`, the stub prints `body` as it is instead of through `--jq`. */
 type GitHubAnswer = Readonly<{ exitCode: number; body: string; raw?: boolean }>;
 
 type Scenario = Readonly<{
   repository: GitHubAnswer;
   tree: GitHubAnswer;
-  /** Put the stub `gh` on PATH at all. */
   gh?: boolean;
-  /** Answer `git rev-parse` as an existing clone would. */
   existingClone?: boolean;
 }>;
 
-/** The JSON a canned GitHub answer holds. */
 type CannedJson =
   | string
   | number
@@ -80,7 +69,6 @@ function answered(body: CannedJson): GitHubAnswer {
   return { exitCode: 0, body: JSON.stringify(body) };
 }
 
-/** `gh` printing something its `--jq` filter could never print. */
 function printedAsIs(text: string): GitHubAnswer {
   return { exitCode: 0, body: text, raw: true };
 }
@@ -103,10 +91,8 @@ fi
 exec "$STUB_JQ" -r "$4" "$STUB_DIR/$answer.json"
 `;
 
-/** A recognizable fake token the stub `gh` prints on failure, which no output may carry. */
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
-/** Shared stubs, because macOS checks each new executable on its first run (about 0.15 s). */
 const stubs = join(scratch, "bin");
 
 const stubsWithoutGh = join(scratch, "bin-without-gh");
@@ -121,7 +107,6 @@ writeExecutable(join(stubs, "gh"), STUB_GH);
 
 let scenarioCount = 0;
 
-/** A fresh directory holding the canned GitHub answers for one run, and the stubs it runs with. */
 function prepare(scenario: Scenario) {
   scenarioCount += 1;
   const directory = join(scratch, String(scenarioCount));
@@ -173,7 +158,6 @@ function verdict(scenario: Scenario): string {
   return ran.stdout.trim();
 }
 
-/** The real clone step, with `/workspace` and `/tmp` moved under this run's scratch directory. */
 function clone(scenario: Scenario) {
   const prepared = prepare(scenario);
 
@@ -189,7 +173,6 @@ function clone(scenario: Scenario) {
   return { status: ran.status, stderr: ran.stderr, gitLog: log("git.log"), ghLog: log("gh.log") };
 }
 
-/** Split `total` bytes over `count` blobs, so a generated tree hits both ceilings exactly. */
 function blobs(count: number, total: number): readonly Readonly<{ type: string; size: number }>[] {
   return Array.from({ length: count }, (_, index) => ({
     type: "blob",

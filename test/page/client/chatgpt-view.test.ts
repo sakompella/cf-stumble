@@ -1,7 +1,3 @@
-/**
- * What the sidebar offers for each state of the ChatGPT connection, read from the rendered tree.
- */
-
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";

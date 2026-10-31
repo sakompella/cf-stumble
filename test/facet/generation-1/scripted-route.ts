@@ -23,7 +23,6 @@ function ndjson(events: readonly ModelStreamEvent[]): ReadableStream<Uint8Array>
   });
 }
 
-/** A route stream the test feeds on its own schedule. */
 export function pushableStream() {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
@@ -36,7 +35,6 @@ export function pushableStream() {
 
 export type Answer = () => Promise<ReadableStream<Uint8Array> | ValidationFailure>;
 
-/** A host model route that answers each call from the next script entry and records every request. */
 export function scriptedRoute(...answers: readonly Answer[]) {
   const requests: ModelRouteRequest[] = [];
   const queue = [...answers];

@@ -17,12 +17,6 @@ import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
 import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
-/**
- * The project travels because one workspace holds every repository and is named after the tenant
- * alone. The Workspace Host cannot read the catalog, so it checks the pair is coherent: the id must
- * be the one `projectIdForRepository` derives from the URL, so a request cannot clone one
- * repository into another project's directory.
- */
 export type ProjectProvisionRequest = Readonly<{
   kind: "provision-project";
   projectId: string;
@@ -40,7 +34,6 @@ function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
 }
 
-/** The display name is the id: a name that reached a command would be text the caller chose. */
 function parsedProject(value: UntrustedObject): Project | undefined {
   const projectId = parseProjectId(field(value, "projectId"));
   const repositoryUrl = canonicalRepositoryUrl(field(value, "repositoryUrl"));
@@ -56,10 +49,6 @@ function parsedProject(value: UntrustedObject): Project | undefined {
   return { id: projectId, displayName: projectId, repositoryUrl };
 }
 
-/**
- * A malformed or incoherent project is `invalid-request`. The caller already resolved the project
- * against the catalog, so these checks keep that true rather than explain a mistake.
- */
 export function parseProjectProvisionRequest(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the provision surface's RPC boundary.
   value: unknown,
@@ -115,11 +104,6 @@ function originUrl(config: string): string | undefined {
   return undefined;
 }
 
-/**
- * Reads the durable store, not the container, so a clone whose copy was lost reads as absent. The
- * markers do not prove the clone is complete: Computer applies a copy in batches, so an earlier
- * incomplete copy can leave some files in the store and not others.
- */
 export function cloneMarkersAreDurable(
   operations: WorkspaceEffects,
   project: Project,

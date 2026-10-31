@@ -25,10 +25,6 @@ import {
 } from "./operations.js";
 import { asUntrusted, field, hasExactKeys } from "../untrusted.js";
 
-/**
- * The only place a token value exists inside the workspace boundary, and only for one call. No
- * result carries a token; failure text is redacted before it is returned.
- */
 export type GitHubCredentialRequest =
   | Readonly<{ kind: "github-credential"; step: "install"; token: string }>
   | Readonly<{ kind: "github-credential"; step: "status" }>
@@ -109,7 +105,6 @@ function parseGitHubCredentialRequest(
   }
 }
 
-/** The token goes on standard input, not in the command text, so no process list or shell history can hold it. */
 function installCredential(
   operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
@@ -130,10 +125,6 @@ function installCredential(
   );
 }
 
-/**
- * When the sync check fails, `hosts.yml` is already written in the container. A best-effort logout
- * keeps a later status read from reporting `connected` for a failed install.
- */
 function runInstall(
   operations: Readonly<{ lenient: WorkspaceEffects; durable: WorkspaceEffects }>,
   token: string,
@@ -213,7 +204,6 @@ function failureLabel(thrown: unknown): string {
 
 type CredentialSurfaceInput = Readonly<{
   operations: WorkspaceOperations;
-  /** Fail unless the durable copy is complete, so a credential only the container disk holds is never reported as installed. */
   installOperations: WorkspaceOperations;
   request: unknown;
 }>;

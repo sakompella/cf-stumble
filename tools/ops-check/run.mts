@@ -10,12 +10,6 @@ import {
 } from "./check.mts";
 import { fetchInvocations, fetchUsage, readToken, resolveAccount, ApiFailure } from "./fetch.mts";
 
-/**
- * `pnpm ops:check`: print one line if no container ran past the Host's idle stop in the window,
- * or one line per finding and exit 1. The rule is pure (`check.mts`) and tested in
- * `pnpm verify`; this file and `fetch.mts` need a live account and stay outside the gate.
- */
-
 const USAGE =
   "usage: ops-check --worker <name> (--since <90m|2h|1d> | --from <ISO> [--to <ISO>]) " +
   "[--idle-minutes 10] [--account <id>] [--token-file <path>] [--json]";
@@ -35,7 +29,6 @@ const UNIT_MS = new Map([
   ["d", 24 * 60 * MINUTE_MS],
 ]);
 
-/** Throws with the reason when the command line is wrong. */
 function parseOptions(argv: readonly string[], nowMs: number): Options {
   const { values } = parseArgs({
     args: [...argv],
@@ -96,7 +89,6 @@ async function readActivity(options: Options): Promise<Activity> {
   const token = readToken(options.tokenFile, process.env);
   const account = await resolveAccount(token, options.account, process.env);
 
-  // A request just before the window can still hold the container into it.
   const requestWindow = { ...window, fromMs: window.fromMs - idleLimitMs };
 
   const [invocations, usage] = await Promise.all([

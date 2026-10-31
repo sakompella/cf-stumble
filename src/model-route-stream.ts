@@ -20,9 +20,6 @@ import {
   type ModelTurnAnswer,
 } from "./model-route-turn.js";
 
-// This model answers in `reasoning_content`, which spends the default output budget, hence
-// `MAX_OUTPUT_TOKENS`.
-// Llama 3.3 rejects Pi's content parts: its schema takes `messages[].content` as a string.
 const MODEL = "@cf/zai-org/glm-5.3-flash" as const;
 
 const REASONING_EFFORT = "low" as const;
@@ -57,10 +54,6 @@ export function normalizeResponse(raw: ProviderResult): AssistantMessage {
   return { role: "assistant", content, tool_calls: toolCalls };
 }
 
-/**
- * `model` is a plain string, so TypeScript picks `run`'s untyped fallback overload; `stream: true`
- * still selects streaming at runtime.
- */
 export function streamingBindingCall(
   ai: Ai,
   model: string,

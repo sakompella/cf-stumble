@@ -14,13 +14,6 @@ import { tenantWorkspaceName } from "../../../src/workspace-names.js";
 import type { HarnessBuildRequest } from "../../../src/harness-build.js";
 import type { WorkspaceResult } from "../../../src/workspace/index.js";
 
-/**
- * Two builds of one commit share a scratch directory named after that commit, and the isolate step
- * clears it, so the second build would delete the files the first is compiling. T1a handed that
- * race over in writing. These tests hold the rule that answers it: one build per commit at a time,
- * within the tenant whose workspace the build runs in.
- */
-
 const commit = testHarnessCommit("6000000000000000000000000000000000000002");
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
@@ -33,7 +26,6 @@ function moduleMapFile(): string {
   return JSON.stringify({ entryModule: "main.js", modules: [helperModule, entryModule] });
 }
 
-/** Answers only the requests the real build surface accepts, and counts what it was asked for. */
 class CountingBuildHost implements BuildWorkspaceHost {
   readonly requests: HarnessBuildRequest[] = [];
 
@@ -54,15 +46,8 @@ class CountingBuildHost implements BuildWorkspaceHost {
   }
 }
 
-/**
- * A build host that answers nothing until it is released, so two builds of one commit can be in
- * flight at the same moment. Concurrency is the whole point of the test below: the build plan
- * clears a scratch directory named after the commit, so a second build of the same commit running
- * beside the first would delete the files the first is compiling.
- */
 class GatedBuildHost implements BuildWorkspaceHost {
   readonly inner = new CountingBuildHost();
-  /** Requests received, including those still waiting at the gate. */
   asked = 0;
   #release: (() => void) | undefined;
   readonly #gate = new Promise<void>((resolve) => {
@@ -117,12 +102,6 @@ test("builds again once the build in flight has settled", async () => {
   ).toHaveLength(2 * HARNESS_BUILD_STEP_NAMES.length);
 });
 
-/**
- * The build in flight is a native Promise that every joined caller shares. A caller that stops
- * waiting, such as an interrupted fiber, must not stop that build or drop it from the map while
- * its first step is still running, or the next request would start a second build of the same
- * commit beside it.
- */
 test("a caller that stops waiting neither stops the build in flight nor drops it", async () => {
   const host = new GatedBuildHost();
   const builder = new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName);

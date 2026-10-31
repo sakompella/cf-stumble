@@ -11,13 +11,6 @@ import {
   WORKSPACE_ROOT,
 } from "../../src/workspace-layout.js";
 
-/**
- * What a build is allowed to write in the one shared workspace (ADR-0038). It extracts into scratch
- * that holds no repository, and it never replaces the checkout the owner edits. These are read as
- * planned text, so a green run shows what the plan asks for, not what `git` and `rm` then do with
- * it. `harness-build-provision-staging.shell.test.ts` runs the provision step in a real shell.
- */
-
 const commit = testHarnessCommit("5000000000000000000000000000000000000002");
 
 const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;

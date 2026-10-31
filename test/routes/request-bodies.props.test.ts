@@ -7,12 +7,6 @@ import { handleGenerationControl } from "../../src/routes/generations.js";
 import { routeConversationRequest } from "../../src/routes/conversations.js";
 import { messageRefusingSupervisor } from "./helpers.js";
 
-/**
- * A request body must be a JSON object with exactly the fields its route names, each of the right
- * type. These properties draw bodies from field names and values that sit on every edge of that
- * rule, and check that a route reaches the Supervisor exactly when the rule admits the body.
- */
-
 const ORIGIN = "https://cf-stumble.test";
 
 const FIELD_VALUES = [
@@ -33,7 +27,6 @@ const FIELD_VALUES = [
 
 const NOT_OBJECTS = ["[]", "null", '"prompt"', "3", "not json", ""] as const;
 
-/** One body as JSON text, so a key such as `__proto__` stays an ordinary own field. */
 function drawBody(tc: hegel.TestCase, names: readonly string[]): string {
   if (tc.draw(gs.integers({ minValue: 0, maxValue: 9 })) === 0) {
     return tc.draw(gs.sampledFrom([...NOT_OBJECTS]));
@@ -50,7 +43,6 @@ function drawBody(tc: hegel.TestCase, names: readonly string[]): string {
   return `{${entries.join(",")}}`;
 }
 
-/** The rule itself, over the parsed body. */
 function admits(
   text: string,
   expected: readonly string[],

@@ -7,13 +7,6 @@ import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 
-/**
- * Foldkit runs `update` once per queued Message, and a request's answer or a stream's event can
- * wait in that queue while the reader moves on. Whatever the reader did in between, an answer or an
- * event for a stream the page has since replaced must leave the page exactly as it was and send
- * nothing.
- */
-
 const PROJECT_IDS = ["repo", "harness"] as const;
 
 const PROJECTS = [
@@ -35,7 +28,6 @@ const EVENTS: readonly AgentEvent[] = [
 
 type Step = (model: Model, tc: hegel.TestCase) => Message;
 
-/** What a reader and the Worker can do to a page, each as the Message it would queue. */
 const STEPS: readonly Step[] = [
   (_model, tc) => Message.ClickedProject({ projectId: tc.draw(gs.sampledFrom(PROJECT_IDS)) }),
   () => Message.UpdatedPrompt({ value: "do it" }),
@@ -50,7 +42,6 @@ const STEPS: readonly Step[] = [
   (model) => Message.SucceededFreshThread({ streamId: model.eventsStreamId }),
 ];
 
-/** An answer or an event that belongs to a stream the page has since replaced. */
 const STALE: readonly Step[] = [
   (model, tc) =>
     Message.ReceivedEvent({
@@ -70,7 +61,6 @@ function staleStream(model: Model, tc: hegel.TestCase): number {
   return tc.draw(gs.integers({ minValue: 0, maxValue: model.eventsStreamId - 1 }));
 }
 
-/** The GitHub and ChatGPT answers a page can receive, in any order with the steps above. */
 const ANSWERS: readonly Step[] = [
   () => Message.SucceededGitHub({ github: { _tag: "Unknown" } }),
   () => Message.RejectedGitHub({ wording: "rejected: x" }),

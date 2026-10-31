@@ -68,18 +68,15 @@ type WorkspaceContainerReset = Readonly<{
   restart(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo>;
 }>;
 
-/** Must match the launch settings the container backend uses. */
 const WORKSPACE_CONTAINER_RESET_SPEC = {
   env: { PORT: "8080", MOUNT_POINT: "/workspace" },
   enableInternet: true,
 } as const satisfies ContainerLaunchSpec;
 
-/** Restarting destroys the old container replica, so it cannot push the deleted files back. */
 export function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
   container: WorkspaceContainerReset,
 ): Effect.Effect<WorkspaceResetResult> {
-  // A rejecting step is a defect: the reset RPC rejects with what it threw.
   return Effect.promise(async () => {
     await storage.deleteAll();
     const restarted = await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
@@ -107,7 +104,6 @@ function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLik
   return storage as DurableObjectStorageLike;
 }
 
-/** A symbolic link or directory at the path is not the managed file; the write refuses rather than follow or replace it. */
 type ManagedInstructionOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   writeFile(path: string, content: string): Promise<void>;
@@ -143,10 +139,6 @@ export function ensureManagedInstructions(
   );
 }
 
-/**
- * The one durable Computer workspace a tenant owns. Its RPC surface returns plain values and one
- * narrow project capability, never the workspace, its container API, or a credential-bearing binding.
- */
 export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
   #workspace: Workspace;
   readonly #containerBackend: CloudflareContainerBackend;
@@ -191,7 +183,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#resetting ? Promise.resolve(refused) : this.#tracked(work);
   }
 
-  /** A Workspace creates its SQLite tables when constructed, so a wiped store needs a new one. */
   #newWorkspace(): Workspace {
     return new Workspace({
       storage: computerStorage(this.ctx.storage),
@@ -200,7 +191,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  /** A caller names a commit and a step, never command text. A build writes inside no project clone and never inside the editable harness checkout. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   build(request: unknown): Promise<WorkspaceResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
@@ -212,7 +202,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /** The repository URL and directory come from the catalog, so no caller can point a clone at a URL or place of its own. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   provision(request: unknown): Promise<WorkspaceResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
@@ -239,11 +228,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     );
   }
 
-  /**
-   * A token enters the workspace here and stops. The install hands it to `gh` on standard input, so
-   * it is in no command line. Install requires a complete sync, because a pending `hosts.yml` would
-   * be lost with the container.
-   */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   credential(request: unknown): Promise<GitHubCredentialResult> {
     const work = () =>
@@ -256,10 +240,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#unlessResetting(CREDENTIAL_REFUSED, work);
   }
 
-  /**
-   * Tracked work still running would be cut off halfway and could write into the wiped store, so
-   * reset refuses while any runs and excludes new work, project capabilities, and a second reset.
-   */
   reset(): Promise<WorkspaceResetResult> {
     if (this.#resetting || this.#idle.snapshot().inFlight > 0)
       return Promise.resolve(WORKSPACE_BUSY);
@@ -270,11 +250,8 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
       resetWorkspaceStorage(this.ctx.storage, this.#container).pipe(
         Effect.ensuring(
           Effect.sync(() => {
-            // deleteAll dropped the Workspace's own tables; rebuild so the next operation recreates them.
             this.#workspace = this.#newWorkspace();
 
-            // It may also have dropped the idle alarm (the `delete_all_deletes_alarm` flag), so forget
-            // the one this instance armed; the end of this call arms a new one.
             this.#idle.forgetAlarm();
           }),
         ),
@@ -284,7 +261,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     });
   }
 
-  /** During a reset it throws: the Workspace it would wrap is being deleted. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable Object RPC input is untrusted.
   project(budget?: unknown): ProjectRpcTarget {
     if (this.#resetting) throw new Error("workspace-busy: the workspace is resetting");
@@ -309,7 +285,6 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return this.#containerBackend.handleFetch(request);
   }
 
-  /** The RPC WebSocket from computerd is not work, so it never delays a stop. */
   override alarm(): Promise<void> {
     return this.#idle.onAlarm();
   }

@@ -1,7 +1,4 @@
 // oxlint-disable max-lines -- One Durable Object class is one RPC surface: the runtime exposes the
-// methods declared here, so moving a group of them into another file would either hide them from
-// the binding or add a second object to route through. Each method below delegates to the module
-// that owns the work.
 
 // oxlint-disable import/max-dependencies -- The Supervisor is where every group meets, so it imports each of them.
 
@@ -78,7 +75,6 @@ type SupervisorEnv = {
     ProjectRemovalWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace &
     ResetWorkspaceNamespace;
-  /** Public configuration, not a secret. */
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   readonly GH_TOKEN?: string;
   readonly CHATGPT_MODEL: string;
@@ -103,7 +99,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   private readonly serving: ServingConversations;
   private readonly workspaceName: string;
   private readonly name: string;
-  /** Set from an owner reset's arrival until it ends. Turn admission, connect, disconnect and another reset refuse meanwhile. */
   #resetInProgress = false;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
@@ -180,7 +175,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.generations.active();
   }
 
-  /** A change of active generation replaces the serving facet, which keeps its storage. */
   controlGeneration(command: GenerationCommand): GenerationControlResult {
     const before = this.generations.active().generation?.harnessCommit;
     const result = this.control.execute(command);
@@ -190,28 +184,20 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return result;
   }
 
-  /** The harness entry has no repository URL, which tells the sidebar it is not a connection. */
   listProjects(): SelectableCatalog {
     return this.connections.catalog();
   }
 
-  /** Reads this object's storage only, so a client polling it cannot keep the workspace container running. */
   getGitHubConnection(now: number = Date.now()): GitHubConnectionRecord {
     return this.github.lastKnown(now);
   }
 
-  /** Installs `GH_TOKEN` when the workspace has no usable credential. Reaches the Workspace Host. */
   refreshGitHubConnection(now: number = Date.now()): Promise<GitHubConnectionRecord> {
     return runAtEntryPoint(
       this.github.ensureCredential(now).pipe(Effect.map(() => this.github.lastKnown(now))),
     );
   }
 
-  /**
-   * An active run refuses the reset: it deletes the run's files and restarts its container. The
-   * exclusion is set before the run check in the same synchronous step, so no run's workspace is
-   * handed out between the check and the end of the reset.
-   */
   async resetWorkspace(): Promise<SupervisorWorkspaceReset> {
     if (this.#resetInProgress) return WORKSPACE_BUSY;
 
@@ -235,7 +221,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     }
   }
 
-  /** The repository URL is canonicalized and the project id derived from it, so connecting a repository twice converges on one project. */
   connectProject(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
     repositoryUrl: unknown,
@@ -261,7 +246,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     );
   }
 
-  /** A second redemption of a consumed code is refused. */
   startGitHubAuthorization(now: number = Date.now()): Promise<GitHubAuthorizationOutcome> {
     return runAtEntryPoint(this.github.startAuthorization(now));
   }
@@ -300,7 +284,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.chatgpt.disconnect();
   }
 
-  /** Only the model route calls this: the owner API exposes no route to it, and a facet holds no Supervisor stub. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: Durable Object RPC input is untrusted.
   chatgptAccess(rejected?: unknown): Promise<ChatGPTAccess> {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted RPC argument.
@@ -336,7 +319,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runAtEntryPoint(this.serving.submit(projectId, content, requestId));
   }
 
-  /** NDJSON from the conversation's Pi Durable event stream: a snapshot, then one batch per commit. */
   projectEvents(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `submitProjectMessage`.
     projectId: unknown,
@@ -349,7 +331,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return runAtEntryPoint(this.serving.abort(projectId));
   }
 
-  /** The previous conversation stays in the facet's storage; the project points at a new one. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: see `submitProjectMessage`.
   freshProjectConversation(projectId: unknown) {
     return runAtEntryPoint(this.serving.freshThread(projectId));
@@ -397,7 +378,6 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     });
   }
 
-  /** No active generation answers 503, since there is nothing to serve until a harness commit is activated. Any other mount failure answers 500. */
   override fetch(request: Request): Promise<Response> {
     const mainFacet = this.#mountServing(this.generations.active());
 
@@ -422,8 +402,6 @@ export async function forwardToFacet(
   try {
     return await fetcher.fetch(request);
   } catch (cause) {
-    // The caller sees only the generic 502 so a broken generation and a Loader or RPC failure look identical.
-    // The discarded cause is logged redacted for operators.
     logRedactedCause(
       `supervisor.relay.forward ${request.method} ${new URL(request.url).pathname}: ${
         isTimeoutFailure(cause) ? "timeout" : "main-facet-failed-before-headers"

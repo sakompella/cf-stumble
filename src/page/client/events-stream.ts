@@ -9,13 +9,6 @@ import { EventLine, eventLine } from "./events.js";
 import { Message } from "./message.js";
 import type { Model } from "./model.js";
 
-/**
- * One events stream stays open for the selected project. When it ends or drops, the page opens it
- * again after a pause; every connection starts with a snapshot, so nothing missed in between is
- * lost. Selecting another project or starting a fresh thread changes the stream's id, and Foldkit
- * closes the old stream's scope, which aborts its fetch.
- */
-
 const RECONNECT_PAUSE = "1 second";
 
 const EventsStream = Schema.Struct({ streamId: Schema.Number, projectId: Schema.String });

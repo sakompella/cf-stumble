@@ -9,14 +9,6 @@ import {
   turnState,
 } from "./fixtures.mjs";
 
-/**
- * What a run leaves behind once the page is reloaded.
- *
- * Reloading throws away everything the page folded from the events stream, so the owner's words
- * and the agent's reply can only still be on screen because the conversation stored them and the
- * new stream's snapshot carried them back.
- */
-
 const PROMPT = "Rename the sidebar heading to Projects (persistence check)";
 
 test("an answered run keeps the exact prompt and the reply after a reload", async ({

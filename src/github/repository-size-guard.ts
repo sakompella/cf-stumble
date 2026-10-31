@@ -13,7 +13,6 @@ export const REPOSITORY_SIZE_VERDICT_FUNCTION = "repository_size_verdict";
 
 const REQUEST_TIMEOUT_SECONDS = Math.ceil(REPOSITORY_SIZE_TIMEOUT_MS / 1_000);
 
-/** The safe-integer bound keeps jq printing the size as plain digits. */
 const REPOSITORY_FILTER = [
   'if (.size | type) == "number" and .size >= 0 and .size == (.size | floor)',
   "and .size <= 9007199254740991",
@@ -22,7 +21,6 @@ const REPOSITORY_FILTER = [
   'else "unmeasured" end',
 ].join(" ");
 
-/** Same order as `repositorySizeReason`, leaving only the repository-size ceiling to the shell. */
 const TREE_FILTER = [
   'if (.tree | type) != "array" or (.truncated | type) != "boolean" then "unmeasured"',
   'else [.tree[] | select(type == "object" and .type == "blob") | .size] as $sizes',
@@ -34,12 +32,6 @@ const TREE_FILTER = [
   "end",
 ].join(" ");
 
-/**
- * The Supervisor's preflight can only use `GH_TOKEN`, so it cannot see a private repository
- * authorized through the device flow; this runs in the workspace where that credential lives. Any
- * failure to measure prints `unmeasured` and the caller clones anyway, keeping the preflight's
- * fail-open policy for transient GitHub problems.
- */
 export function repositorySizeVerdictSource(repositoryUrl: PublicRepositoryUrl): string {
   const apiPath = repositoryApiPath(repositoryUrl);
 

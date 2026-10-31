@@ -28,12 +28,6 @@ interface FdState {
   append: boolean;
 }
 
-/**
- * An in-memory stand-in for `@cloudflare/computer`'s `SQLiteWorkspaceProvider`, faithful to the
- * two documented quirks this target works around: a symlink's `lstatSync().size` is the UTF-16
- * length of its target text (not a byte count), and `openSync`/`writeSync` never read a file's
- * existing content to satisfy an append.
- */
 export class FakeProjectFilesystemProvider implements ProjectFilesystemProvider {
   readonly nodes = new Map<string, FakeNode>([["/workspace", { type: "dir", mtimeMs: 0 }]]);
   readonly calls: string[] = [];
@@ -187,7 +181,6 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   return result;
 }
 
-/** Runs the closure inline. Real transactionality does not matter for a single-threaded fake. */
 export class FakeProjectTransactions implements ProjectTransactions {
   calls = 0;
   transactionSync<T>(closure: () => T): T {
@@ -210,12 +203,6 @@ interface Waiter {
   reject: (error: unknown) => void;
 }
 
-/**
- * A single exec handle whose events and completion a test drives by hand. `read()` may be called
- * before its outcome is known — a target starts pumping the reader synchronously — so every
- * outcome (an event, EOF, or a failure) is queued or, if a read is already pending, delivered to
- * it directly rather than requiring the test to win a race against the pump loop.
- */
 export class ManualExecHandle implements ExecBackendHandle {
   #queue: QueueItem[] = [];
   #waiters: Waiter[] = [];
@@ -253,7 +240,6 @@ export class ManualExecHandle implements ExecBackendHandle {
     this.#deliver({ kind: "end" });
   }
 
-  /** Fails the next (or currently pending) read, the way a broken backend stream would. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test fake: simulates whatever error shape a broken backend stream would throw.
   fail(error: unknown): void {
     this.#ended = true;
@@ -290,18 +276,12 @@ export class ManualExecHandle implements ExecBackendHandle {
   }
 }
 
-/**
- * Hands out one `ManualExecHandle` per `exec()` call, recording every request it received. A test
- * that needs to control exactly when handle creation settles calls `deferNextExec` first; the
- * next `exec()` call then returns that deferred's promise instead of resolving immediately.
- */
 export class FakeExecBackend implements ExecBackend {
   readonly handles: ManualExecHandle[] = [];
   readonly requests: ExecBackendInput[] = [];
   onExec: ((input: ExecBackendInput) => void) | undefined;
   readonly #deferredQueue: Promise<ExecBackendHandle>[] = [];
 
-  /** The next call to `exec()` returns `deferred.promise` instead of resolving immediately. */
   deferNextExec(deferred: DeferredExec): void {
     this.#deferredQueue.push(deferred.promise);
   }

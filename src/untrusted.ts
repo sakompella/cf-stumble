@@ -2,7 +2,6 @@
 
 declare const untrustedBrand: unique symbol;
 
-/** A value that reached a public boundary. Nothing may read it except through `field`. */
 export type UntrustedObject = object & { readonly [untrustedBrand]: never };
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

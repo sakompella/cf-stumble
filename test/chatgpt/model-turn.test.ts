@@ -17,11 +17,6 @@ import {
   type RecordedCall,
 } from "./fixtures.js";
 
-/**
- * One ChatGPT model call, driven by a fake credential holder and a fake Responses endpoint, and
- * read back as the model route's own event stream.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });

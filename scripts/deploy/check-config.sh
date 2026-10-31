@@ -27,25 +27,18 @@ has_non_whitespace() {
     esac
 }
 
-# A generation is a full SHA-1 or SHA-256 harness commit. A branch name or a short ref fails here
-# rather than at the submission that creates Generation 0.
 is_git_object_id() {
     case ${#1} in
         40 | 64) ;;
         *) return 1 ;;
     esac
 
-    # The character list is written out because a range like [0-9a-f] also matches uppercase
-    # under a collation that interleaves the two cases, and the Supervisor accepts lowercase only.
     case $1 in
         *[!0123456789abcdef]*) return 1 ;;
         *) return 0 ;;
     esac
 }
 
-# The deployed harness commit becomes Generation 0. Nothing is built into the Worker: after the
-# deploy, the owner submits this commit, the Supervisor labels and prepares it, and the owner
-# activates it. A deploy without it would serve nothing, so the guard requires it.
 if has_non_whitespace "${CF_STUMBLE_HARNESS_COMMIT-}"; then
     if is_git_object_id "$CF_STUMBLE_HARNESS_COMMIT"; then
         printf 'CF_STUMBLE_HARNESS_COMMIT: present (length %s)\n' "${#CF_STUMBLE_HARNESS_COMMIT}"

@@ -1,23 +1,6 @@
 import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import type { JsonValue } from "../json.mjs";
 
-/**
- * The worlds the harness server can serve, and the recorded answers that are the same in all of
- * them.
- *
- * Every payload here copies the field names of the real route it stands in for, so a page that
- * reads a field the Supervisor does not send fails against this server too. The values are typed
- * as plain JSON rather than as the Supervisor's own types because those carry branded ids
- * (`ProjectId`, `HarnessCommit`, `GenerationLabel`) that only a parser can mint; a fixture that
- * asserted its way into a brand would prove nothing about the wire shape.
- *
- * A scenario names what cannot be reached by driving the page: whether a run holds or fails,
- * whether the workspace or the generation refuses, which GitHub state the workspace is in, whether
- * the catalog is empty, and whether the status route answers at all. Everything else — the
- * conversations, the generation ledger, the connected repositories — is state the server keeps
- * and a case changes by acting on the page.
- */
-
 export const HARNESS_SCENARIOS = [
   "ready",
   "ready-paused",
@@ -38,7 +21,6 @@ export function parseScenario(value: string | null | undefined): HarnessScenario
   return HARNESS_SCENARIOS.find((scenario) => scenario === value);
 }
 
-/** The connected repository, and the harness checkout. The two working directories v0 allows. */
 export const HARNESS_PROJECT_ID = "octocat-hello-world";
 
 export const HARNESS_PROJECT_URL = "https://github.com/octocat/hello-world";
@@ -114,7 +96,6 @@ function projectJson(project: ProjectEntry): JsonValue {
       };
 }
 
-/** The sidebar list, in the shape and the order the Supervisor sends it. */
 export function projectsPayload(projects: readonly ProjectEntry[]): JsonValue {
   return { ok: true, projects: projects.map((project) => projectJson(project)) };
 }
@@ -134,10 +115,6 @@ export function connectPayload(scenario: HarnessScenario, alreadyConnected: bool
   };
 }
 
-/**
- * When the stub's workspace last answered. It is built in the local zone, as the page shows it, and
- * falls on an earlier day than any run, so the page words it with its date.
- */
 export const CHECKED_AT = new Date(2026, 9, 15, 14, 32).getTime();
 
 export const CHECKED_WORDING = "2026-10-15 14:32";
@@ -146,7 +123,6 @@ export function authorizationPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }
 
-/** A refresh's answer: what the workspace said, and when it said it. */
 export function refreshPayload(scenario: HarnessScenario): JsonValue {
   return { ok: true, github: github(scenario), checkedAt: CHECKED_AT };
 }

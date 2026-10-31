@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
@@ -18,8 +16,6 @@ import {
   REFRESH_TWO,
 } from "./fixtures.js";
 import { type Harness, HOUR, withConnection } from "./connection-harness.js";
-
-/** Signing in to ChatGPT, and the Supervisor surface the owner API and the model route use. */
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -151,7 +147,6 @@ test("the Supervisor reports no credential before the first connection, and a di
   await expect(supervisor.chatgptAccess()).resolves.toEqual({ kind: "not-connected" });
 });
 
-/** A token endpoint that holds each exchange until the test releases it, in any order. */
 function heldExchanges(count: number) {
   const held = Array.from({ length: count }, () => heldReply());
   let next = 0;
@@ -168,7 +163,6 @@ async function requestsMade(harness: Harness, count: number): Promise<void> {
   });
 }
 
-/** Start a sign-in and return a function that finishes it with a matching address. */
 async function startSignIn(connection: ChatGPTConnection) {
   const login = (await Effect.runPromise(connection.startLogin())).login;
 

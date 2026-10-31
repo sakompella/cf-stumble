@@ -7,11 +7,6 @@ import {
   ownerApiSupervisor,
 } from "./helpers.js";
 
-/**
- * The owner's ChatGPT routes: what each answers, and that the address carrying the one-time code
- * reaches the Supervisor only through a POST with exactly the two fields it names.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });

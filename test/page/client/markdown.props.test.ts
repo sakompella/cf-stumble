@@ -5,11 +5,6 @@ import { inertHtml, type Html } from "foldkit/html";
 import { expect, test } from "vitest";
 import { markdownBlocks } from "../../../src/page/client/markdown.js";
 
-/**
- * Assistant text is model output, so the rendered tree may hold only the elements the renderer
- * names, and the words the model wrote must come out as text, whatever they look like.
- */
-
 const ALLOWED = new Set([
   "p",
   "h3",

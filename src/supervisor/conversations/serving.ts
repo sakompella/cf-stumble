@@ -29,22 +29,14 @@ type ServingPorts = Readonly<{
   mount: () => Result.Result<MountedFacet, MainFacetMountProblem>;
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
-  /** Provisions the project's checkout and obtains a capability that ends after `remainingMs`. */
   obtainWorkspace: ObtainWorkspace;
 }>;
 
-/**
- * The Supervisor's side of the agent loop (ADR-0048). Pi Durable's session lives in the serving
- * facet's own storage, under one name for every generation, so one instance writes it. Facets
- * cannot set alarms, so the facet relays its wake to `arm`, and the Supervisor's alarm attaches
- * the facet again, which resumes whatever work a lost instance left.
- */
 export class ServingConversations {
   readonly #ports: ServingPorts;
   readonly #projects: ProjectConversations;
   readonly #host: ConversationHostTarget;
   readonly #workspaces: HeldWorkspaces;
-  /** The events streams open on each conversation, so a fresh thread can end its predecessor's. */
   readonly #readers = new Map<string, Set<() => void>>();
 
   constructor(ports: ServingPorts) {
@@ -57,13 +49,11 @@ export class ServingConversations {
     });
   }
 
-  /** The next call mounts the newly active generation's class; its work resumes from storage. */
   replaceFacet(): void {
     this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
     this.endWorkspaces();
   }
 
-  /** A run is active from the wake that started it until the wake that settled it. */
   running(): boolean {
     return this.#runDeadline() !== undefined;
   }
@@ -121,7 +111,6 @@ export class ServingConversations {
     );
   }
 
-  /** The old conversation stays in storage; only the project's row moves. */
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
   freshThread(projectId: unknown) {
     return answered(
@@ -145,10 +134,6 @@ export class ServingConversations {
     );
   }
 
-  /**
-   * A disconnected project's conversation is left unreferenced, like a fresh thread's predecessor.
-   * Refused while a run is active.
-   */
   release(projectId: string): boolean {
     if (this.running()) return false;
 
@@ -157,16 +142,11 @@ export class ServingConversations {
     return true;
   }
 
-  /**
-   * Attaching resumes the session; past the run's deadline every current conversation is aborted.
-   * A failure throws, so the platform retries the alarm instead of stranding the run.
-   */
   alarm(now: number): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       const deadline = this.#runDeadline();
       const expired = deadline !== undefined && now >= deadline;
 
-      // Commands stop at the deadline even when the facet cannot be reached to abort its work.
       if (expired) this.endWorkspaces();
 
       const facet = yield* this.#facet();
@@ -190,7 +170,6 @@ export class ServingConversations {
     );
   }
 
-  /** Ends every capability handed out, which kills the commands still running through them. */
   endWorkspaces(): void {
     this.#workspaces.endAll();
   }
@@ -233,7 +212,6 @@ export class ServingConversations {
     );
   }
 
-  /** Attaching on every call costs one local RPC and covers a facet instance that was lost. */
   #facet(): Effect.Effect<MountedFacet, ConversationProblem> {
     return Effect.gen({ self: this }, function* () {
       const mounted = this.#ports.mount();
@@ -251,11 +229,6 @@ export class ServingConversations {
     });
   }
 
-  /**
-   * A stream ends cleanly when its conversation is replaced, which tells the page to open the
-   * project's events again. A stream whose source failed, as when a generation activation replaces
-   * the facet, ends the same way. However the relay stops, the facet's stream is cancelled.
-   */
   #endedWhenReplaced(
     conversationId: string,
     events: ReadableStream<Uint8Array>,

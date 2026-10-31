@@ -1,15 +1,8 @@
 import { shellQuote } from "../shell-quote.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH } from "../workspace-layout.js";
 
-/**
- * The token never appears in command text or a temporary file. `gh auth login --with-token` reads it
- * from standard input, so no process list, shell history, or error message can carry it. Output is
- * a fixed word plus at most a login name or a Git error.
- */
-
 const GITHUB_HOSTNAME = "github.com";
 
-/** Computer persists only `/workspace`, so a credential under `$HOME` is lost with the container. */
 export function durableGitHubConfigurationSource(): readonly string[] {
   return [
     `export GH_CONFIG_DIR=${shellQuote(GITHUB_CLI_CONFIG_DIRECTORY)}`,
@@ -17,7 +10,6 @@ export function durableGitHubConfigurationSource(): readonly string[] {
   ];
 }
 
-/** `unusable` means `gh` holds a credential GitHub rejects; it must never be presented as a connection. */
 export type GitHubCredentialState = "connected" | "missing" | "unusable" | "tooling-missing";
 
 export type GitHubCredentialStatus = Readonly<{
@@ -27,10 +19,6 @@ export type GitHubCredentialStatus = Readonly<{
 
 const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u;
 
-/**
- * An interrupted install can leave `hosts.yml` behind; the caller's rollback covers only a failed
- * durable sync. A missing `gh` is reported rather than repaired.
- */
 export function installCredentialSource(): string {
   return [
     "set -eu",
@@ -46,7 +34,6 @@ export function installCredentialSource(): string {
   ].join("\n");
 }
 
-/** Best effort. Run when the durable copy of a fresh credential could not be confirmed. */
 export function logoutCredentialSource(): string {
   return [
     "set -u",
@@ -55,7 +42,6 @@ export function logoutCredentialSource(): string {
   ].join("\n");
 }
 
-/** `gh auth status` also asks GitHub, so a token revoked since install reports `unusable`. */
 export function credentialStatusSource(): string {
   return [
     "set -u",
@@ -77,11 +63,6 @@ export function credentialStatusSource(): string {
   ].join("\n");
 }
 
-/**
- * `git ls-remote` rather than a `gh` API call because it exercises the credential helper a clone
- * uses. `GIT_TERMINAL_PROMPT` is off so a missing credential fails at once, and `timeout` is below
- * the command ceiling so a stalled network answers `denied` instead of the Host killing the command.
- */
 export function repositoryAccessSource(repositoryUrl: string): string {
   return [
     "set -u",
@@ -96,7 +77,6 @@ export function repositoryAccessSource(repositoryUrl: string): string {
   ].join("\n");
 }
 
-/** Anything unrecognized is `unusable`, never `connected`. */
 export function parseCredentialStatus(stdout: string): GitHubCredentialStatus {
   const [state, login] = stdout.trim().split(/\s+/u);
 
@@ -121,7 +101,6 @@ export type RepositoryAccess =
   | Readonly<{ granted: true }>
   | Readonly<{ granted: false; detail: string }>;
 
-/** The failure detail is Git's own text, which the caller redacts. */
 export function parseRepositoryAccess(stdout: string): RepositoryAccess {
   const output = stdout.trim();
 

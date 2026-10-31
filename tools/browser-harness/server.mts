@@ -21,21 +21,6 @@ import {
   type ScenarioState,
 } from "./server-state.mjs";
 
-/**
- * A local stand-in for the Worker, serving the real owner page.
- *
- * The page markup and its script file come from `src/page`, so the harness drives the code that
- * ships rather than a copy of it. Only the Supervisor is replaced, because a real run would call
- * a paid model API: the conversations are real Pi Durable conversations on a faux model
- * (`conversations.mts`). Everything the page can observe about its own environment is kept
- * identical: the same headers, the same policy with a per-response nonce for the style, the
- * script at its hashed path, and events that arrive as newline-delimited JSON over time.
- *
- * The controls a case uses are functions on {@link HarnessServer} rather than test-only HTTP
- * routes, because a case and this server share one Node process. The two routes under `/__harness`
- * exist for a developer driving this server by hand with curl.
- */
-
 export type GenerationPatch = Readonly<{
   activeLabel?: number;
   epoch?: number;
@@ -48,12 +33,9 @@ export type HarnessServer = Readonly<{
   setScenario: (scenario: HarnessScenario) => void;
   requests: () => readonly RecordedRequest[];
   clearRequests: () => void;
-  /** In `ready-paused`: the first tool call has written its first line and waits. */
   waitForBarrier: (timeoutMs?: number) => Promise<void>;
   release: () => void;
-  /** How many events responses for the project the browser holds open. */
   openEventStreams: (projectId: string) => number;
-  /** The project's conversation as Pi Durable stores it. */
   entries: Conversations["entries"];
   projects: () => readonly ProjectEntry[];
   generation: () => GenerationState;
@@ -62,13 +44,6 @@ export type HarnessServer = Readonly<{
   close: () => Promise<void>;
 }>;
 
-/**
- * Every request body, drained before anything answers.
- *
- * The server records what the page sent, so the body has to be read even on the routes that do not
- * need it; a route that answered without draining would leave the socket holding bytes and the
- * next request on that connection would start mid-body.
- */
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((whole, failed) => {
     let body = "";
@@ -154,8 +129,6 @@ async function handle(
   }
 
   if (req.method === "GET" && path === "/favicon.ico") {
-    // A browser asks for this on every navigation and the owner API does not serve it. Answering
-    // 204 keeps that request out of the browser's error log, where it would hide a real 404.
     record.status = 204;
     res.writeHead(204).end();
 

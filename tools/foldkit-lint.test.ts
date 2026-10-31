@@ -4,16 +4,8 @@ import foldkit from "@foldkit/oxlint-plugin";
 import { RuleTester } from "oxlint/plugins-dev";
 import config from "../oxlint.config.ts";
 
-/**
- * Foldkit's oxlint plugin checks the owner page. Every rule the pinned plugin ships must be decided
- * in the page override, so an upgrade cannot add one nobody read, and the enforced rules must
- * accept the page's idioms: `Message.match`, callable constructors, and `Option.map` with a named
- * callback.
- */
-
 const PREFIX = "foldkit/";
 
-/** The page override's Foldkit rules and their settings. */
 const pageRules = new Map(
   (config.overrides ?? []).flatMap((override) =>
     override.files.includes("src/page/client/**")

@@ -13,15 +13,6 @@ import {
   writeExecutable,
 } from "./workspace/planned-shell-fixture.js";
 
-/**
- * The planned harness provision step runs under `/bin/sh` on the host, with stand-ins for `git`
- * and `flock`. With `STUB_HOLD_CLONE` the `git clone` stand-in writes its target and then waits for
- * a release marker, so the test can kill the shell while the clone still runs, the way a timed-out
- * step's shell dies and its `git clone` outlives it. The Workspace Host runs the step in Computer
- * under Debian's `dash`, so these tests show what the planned text does on this host, not in the
- * container.
- */
-
 const scratch = scratchDirectory("cf-stumble-harness-staging-");
 
 afterAll(() => {
@@ -82,7 +73,6 @@ async function untilExists(path: string): Promise<void> {
   expect(existsSync(path), `${path} appeared`).toBe(true);
 }
 
-/** Start a provision, kill its shell while the clone runs, then let the orphaned clone finish. */
 async function killProvisionDuringClone(root: string): Promise<void> {
   const killed = spawn("/bin/sh", ["-c", provisionSource(root)], {
     env: environment(root, true),

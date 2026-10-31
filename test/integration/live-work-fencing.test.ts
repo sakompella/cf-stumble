@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ProjectCapabilityStub } from "../../src/supervisor/projects/index.js";
@@ -18,17 +16,6 @@ import {
   servingScriptedGeneration,
   stubExternalBoundaries,
 } from "./owner-session.js";
-
-/**
- * A second browser tab, or any other owner API client, asks for a workspace reset or a project
- * disconnect while a run is executing a command in that project. Both would delete the files under
- * the command, so both are refused until the run settles.
- *
- * The Worker, the Supervisor and a loaded generation are real. The generation starts one command
- * through the project capability its host hands out, as a run executing `sleep 90` does, and settles
- * its wake when the command exits. The capability is the real `ProjectRpcTarget` over an exec
- * backend the test answers; the Workspace Host around it is the fake in `fake-tenant-workspace.ts`.
- */
 
 const generationSource = `
 import { DurableObject } from "cloudflare:workers";
@@ -63,7 +50,6 @@ export class MainFacet extends DurableObject {
 }
 `;
 
-/** The fake Workspace Host, with a real capability whose commands the test answers. */
 class LiveWorkWorkspace extends FakeTenantWorkspace {
   readonly execBackend = new FakeExecBackend();
   resets = 0;
@@ -76,7 +62,6 @@ class LiveWorkWorkspace extends FakeTenantWorkspace {
       budget,
     );
 
-    // Workers RPC gives the generation a real stub. The Supervisor's own duplicate is the target.
     const held = Object.assign(target, { [Symbol.dispose]: () => {} });
 
     return Promise.resolve(Object.assign(held, { dup: () => held }));
@@ -133,7 +118,6 @@ test("a second client cannot reset the workspace or disconnect the project under
   expect(removals(workspace), "a running command's working tree must not be deleted").toEqual([]);
   expect(workspace.execBackend.handles[0]?.killCalls, "the command was left running").toBe(0);
 
-  // The command's handle belongs to the Supervisor's context, so it is answered from there.
   await runInDurableObject(owner.supervisor, () => {
     workspace.execBackend.handles[0]?.push({ name: "exit", exitCode: 0 });
   });

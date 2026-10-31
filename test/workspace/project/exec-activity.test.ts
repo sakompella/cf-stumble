@@ -8,8 +8,6 @@ import {
   FakeProjectTransactions,
 } from "./fakes.js";
 
-/** Whether a project capability tells the Host it is working: an exec counts until it settles. */
-
 afterEach(() => {
   vi.useRealTimers();
 });

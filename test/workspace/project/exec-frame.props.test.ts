@@ -5,7 +5,6 @@ import { startExecOperation } from "../../../src/workspace/project/exec-operatio
 import { MAX_EXEC_FRAME_BYTES } from "../../../src/workspace/project/protocol.js";
 import { FakeExecBackend } from "./fakes.js";
 
-// Each channel is at most 134 KiB of UTF-8 data; both channels and their frames stay below 300 KiB.
 const text = gs.text({ alphabet: "ab'\"\\\n\u0001é日🙂", maxSize: 48 });
 
 type DecodedEvent = {

@@ -67,10 +67,6 @@ export type DisconnectRepositoryResult =
       }>;
     }>;
 
-/**
- * Runs inside the disconnect's ordered operation. False while a run is active: removing the
- * directories would pull them from under its commands.
- */
 type ReleaseProject = (projectId: ProjectId) => boolean;
 
 type ConnectRepositoryProblem = Readonly<{
@@ -85,10 +81,6 @@ type ConnectRepositoryProblem = Readonly<{
   detail: string;
 }>;
 
-/**
- * A connect refused `workspace-busy` carries no GitHub status, since an owner reset was running and
- * the workspace was not asked.
- */
 export type ConnectRepositoryResult =
   | Readonly<{
       ok: true;
@@ -128,9 +120,6 @@ interface ProjectConnectionsInput {
   readonly github: GitHubConnection;
 }
 
-/**
- * A project is stored only once its clone is in the workspace, so a project in the list has files.
- */
 export class ProjectConnections {
   private readonly projects: ConnectedProjects;
   private readonly lifecycle = new ProjectLifecycleQueue();
@@ -156,10 +145,6 @@ export class ProjectConnections {
     return selectableCatalog(this.projects.catalog());
   }
 
-  /**
-   * The access check runs through the workspace's own Git, so what is verified is what a clone will
-   * do. A clone that fails removes the newly stored project.
-   */
   // oxlint-disable-next-line max-lines-per-function -- The workflow keeps guard, credential, access, and catalog effects ordered.
   connect(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the repository URL arrives from a client.
@@ -206,7 +191,6 @@ export class ProjectConnections {
         }),
       );
 
-      // The check fails only when the workspace could not be asked; a refusal is a granted: false.
       if (Result.isFailure(access)) {
         return this.refused(
           { code: "workspace-unavailable", detail: access.failure.detail },
@@ -228,10 +212,6 @@ export class ProjectConnections {
     });
   }
 
-  /**
-   * One ordered operation per project id, so a reconnect cannot clone into the directory while this
-   * removal is still running.
-   */
   disconnect(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The Supervisor resolves this client id before calling the workspace.
     projectId: unknown,
@@ -286,7 +266,6 @@ export class ProjectConnections {
     );
   }
 
-  /** Every run performs every step, which also repairs a workspace the platform recreated. */
   ensureProvisioned(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the project id arrives from a client.
     projectId: unknown,
@@ -306,8 +285,6 @@ export class ProjectConnections {
     signal?: AbortSignal,
   ): Effect.Effect<ProjectUseResult> {
     return Effect.gen({ self: this }, function* () {
-      // Harness turns use the generation-bound reconciler because the harness entry has no
-      // repository URL.
       const catalog: ProjectCatalog = this.projects.catalog();
       const resolved = resolveProject(projectId, catalog);
 
@@ -325,8 +302,6 @@ export class ProjectConnections {
 
       let provisioned = yield* Effect.result(provision);
 
-      // A reset removes the credential, so a private clone then fails. Re-establish it and clone
-      // once more. A credential last seen working is not the cause, so that failure is not retried.
       const credentialWasWorking = this.github.lastKnown(Date.now()).github?.state === "connected";
 
       if (
@@ -404,8 +379,6 @@ export class ProjectConnections {
     const removalNamespace: ProjectRemovalWorkspaceNamespace = this.namespace;
 
     return Effect.promise(() =>
-      // `workspace-sync-incomplete` means the container deleted the clone but the durable store
-      // may still hold it, so it can return with a replacement container. It is not a removal.
       boundedRpc(
         () =>
           removalNamespace.getByName(this.workspaceName).removeProject({

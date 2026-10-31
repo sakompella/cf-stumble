@@ -1,25 +1,4 @@
 #!/usr/bin/env bash
-#
-# Clean-build probe for a labeled harness commit.
-#
-# A developer machine always has a populated `node_modules` in place. The Supervisor's build
-# runs `HARNESS_BUILD_CONFIGURATION.buildCommand` in a directory that `git archive` just wrote, so
-# it has neither. This script reproduces that starting state locally: it extracts a commit into a
-# temporary directory outside the repository, isolates HOME and the pnpm store, and runs the same
-# `build:artifact` script the Supervisor runs.
-#
-# It builds the commit twice into separate directories with separate stores and compares the two
-# module maps byte for byte. That is a fast pre-check, NOT the release proof: the proof is two
-# clean builds of one labeled commit inside Computer, which this script never touches.
-#
-# Usage:
-#   scripts/probe/clean-build.sh [commit-ish]     # default: HEAD
-#
-# Environment:
-#   CLEAN_BUILD_KEEP=1   keep the temporary directory for inspection
-#
-# It makes no Cloudflare API call, creates no workspace, and spends nothing beyond npm registry
-# downloads.
 
 set -euo pipefail
 
@@ -44,9 +23,6 @@ ARCHIVE="${WORK}/source.tar"
 git -C "$REPO_ROOT" archive --format=tar -o "$ARCHIVE" "$COMMIT"
 printf 'Archive bytes: %s\n' "$(wc -c <"$ARCHIVE" | tr -d ' ')"
 
-# One build. The caller's HOME, npm configuration, pnpm store and NODE_PATH are all replaced, and
-# the build directory lives outside the repository, so no parent directory offers a node_modules
-# to borrow.
 run_build() {
   local index="$1"
   local directory="${WORK}/build-${index}"
@@ -85,8 +61,6 @@ run_build() {
     return 1
   fi
 
-  # pnpm derives the content-addressable store from HOME, so the isolated HOME is the store: its
-  # size is what a cold container downloads, and the build directory is what the build occupies.
   printf 'Build %s: %s seconds, module map %s bytes, build directory %s, cold store %s\n' \
     "$index" "$((ended - started))" "$(wc -c <"$map" | tr -d ' ')" \
     "$(du -sh "$directory" | cut -f1)" \
@@ -117,7 +91,4 @@ if ! cmp -s "$MAP_1" "$MAP_2"; then
   exit 1
 fi
 
-# The Supervisor stores the canonical form, which adds the commit and sorts modules by name. Equal
-# build output therefore means equal canonical maps, because canonicalization is a function of the
-# build output and the commit the Supervisor asked for.
 printf 'Two clean builds of %s produced identical module maps\n' "$COMMIT"

@@ -17,7 +17,6 @@ type Behavior = Readonly<{
   closeFails?: boolean;
   destroyFails?: boolean;
   alarmFails?: boolean;
-  /** Runs while the close is pending, as a request arriving mid-stop would. */
   duringClose?: (
     world: Readonly<{ idle: WorkspaceIdleController; state: { running: boolean } }>,
   ) => void;

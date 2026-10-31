@@ -17,14 +17,11 @@ export type BuildWorkspaceHost = Readonly<{
   build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
 }>;
 
-/** Names the workspace from the server-derived tenant key, so no request can point a build at another tenant's workspace. */
 export type BuildWorkspaceNamespace = Readonly<{
   getByName(name: string): BuildWorkspaceHost;
 }>;
 
-/** Sends the Host a step name, never command text: the Host plans the commit itself. */
 class CommitBuildWorkspace implements BuildWorkspace {
-  /** A fresh stub per call: the Workspace Host can restart mid-build and an older stub would die with it. */
   private readonly host: () => BuildWorkspaceHost;
   private readonly harnessCommit: HarnessCommit;
 
@@ -78,7 +75,6 @@ class CommitBuildWorkspace implements BuildWorkspace {
     }
 
     if (result.result.exitCode !== 0) {
-      // A missing or symlinked module map is an ordinary build failure; the builder reports `build-output-missing`.
       throw new Error(`the build wrote no readable module map: exit ${result.result.exitCode}`);
     }
 
@@ -86,13 +82,6 @@ class CommitBuildWorkspace implements BuildWorkspace {
   }
 }
 
-/**
- * One build per commit at a time: the plan extracts into a scratch directory named after the commit
- * and clears it first, so concurrent builds of one commit would delete each other's files. Later
- * callers join the build in flight.
- *
- * The build runs as its own program, not in a caller's fiber, so a caller that stops waiting does not stop it.
- */
 export class WorkspaceHostModuleMapBuilder implements HarnessModuleMapBuilder {
   private readonly namespace: BuildWorkspaceNamespace;
   private readonly workspaceName: string;

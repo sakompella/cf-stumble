@@ -8,7 +8,6 @@ type HostPorts = Readonly<{
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
 
-/** The one capability the serving facet holds into the Supervisor. */
 export class ConversationHostTarget extends RpcTarget implements ConversationHost {
   readonly #ports: HostPorts;
 

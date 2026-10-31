@@ -1,11 +1,6 @@
 import type { ExecBackendHandle } from "../../../src/workspace/project/index.js";
 import { ManualExecHandle } from "./fakes.js";
 
-/**
- * A backend `exec()` call a test holds open by hand: `handle` is the eventual
- * `ManualExecHandle`, and `resolve`/`reject` settle the promise `FakeExecBackend.exec()` returned
- * for it, the way a slow or failing real backend eventually would.
- */
 export interface DeferredExec {
   readonly handle: ManualExecHandle;
   readonly promise: Promise<ExecBackendHandle>;
@@ -14,7 +9,6 @@ export interface DeferredExec {
   reject(error: unknown): void;
 }
 
-/** Creates one pending `exec()` outcome a test settles later, to simulate a slow or failing backend handle creation. */
 export function deferredExec(): DeferredExec {
   const handle = new ManualExecHandle();
   let resolveImpl!: (handle: ManualExecHandle) => void;

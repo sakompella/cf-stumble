@@ -1,14 +1,8 @@
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
 
-/** The method a module map's `MainFacet` needs to pass the startup check's Pi Durable version check. */
 export const PI_DURABLE_VERSION_METHOD = `piDurableVersion() { return ${JSON.stringify(PI_DURABLE_VERSION)}; }`;
 
-/**
- * A hand-written main-facet module map for tests, and the invented harness commit that labels it.
- * Production never uses it: the deploy procedure submits the deployed harness commit and the
- * Supervisor builds it.
- */
 export const fixtureMainHarnessCommit = "f53a0e1c1bdbe213ab700a84b1db23615cc24b02";
 
 export const fixtureMainHarnessArtifact: MainHarnessArtifactInput = {

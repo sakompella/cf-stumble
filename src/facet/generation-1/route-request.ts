@@ -55,10 +55,6 @@ function routeMessage(message: Exclude<Message, SystemMessage>): RouteMessage {
   return { role: "tool", tool_call_id: message.toolCallId, content: contentText(message.content) };
 }
 
-/**
- * The route takes one leading system message, so the prompt, sections and tools that later system
- * messages changed are replayed into it. Thinking blocks and images do not cross the route.
- */
 export function transcriptToRouteRequest(context: TranscriptContext): ModelRouteRequest {
   const head = getCurrentSystemMessage(context.messages);
   const system = head === undefined ? "" : getSystemMessageText(head);

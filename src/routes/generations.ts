@@ -13,7 +13,6 @@ export type GenerationControlSupervisor = {
   readonly controlGeneration: (command: GenerationCommand) => Promise<GenerationControlResult>;
 };
 
-/** `prepareGeneration` never changes the active generation. */
 export type GenerationSubmissionSupervisor = GenerationControlSupervisor & {
   readonly prepareGeneration: (label: number) => Promise<StartupCheckResult>;
 };
@@ -28,11 +27,6 @@ export type GenerationSubmissionResult =
     }
   | Extract<GenerationControlResult, { readonly ok: false }>;
 
-/**
- * 400 is a request the Supervisor can never accept, 404 an unknown label, 409 a request current
- * state refuses, such as a stale epoch. The table is total over the codes, so a new code fails the
- * compiler until someone picks its status.
- */
 const CONTROL_REFUSAL_STATUS = {
   "invalid-harness-commit": 400,
   "invalid-generation-label": 400,
@@ -52,10 +46,6 @@ const GenerationControlBody = Schema.Struct({ observedEpoch: Count, label: Count
 
 type ControlCommandKind = "activate" | "rollback";
 
-/**
- * A submission carries no observed epoch, since labeling and checking decide nothing about what
- * serves; a body with one is malformed rather than stale.
- */
 const GenerationSubmissionBody = Schema.Struct({ harnessCommit: Schema.String });
 
 function command(
@@ -67,7 +57,6 @@ function command(
     : { kind: "rollback", label: body.label, observedEpoch: body.observedEpoch };
 }
 
-/** There is no request journal, so a rejected request is a fresh decision from current state. */
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
     const body = yield* decodeRequestBody(request, GenerationControlBody);
@@ -89,14 +78,6 @@ export const handleGenerationControl = Effect.fnUntraced(
     ),
 );
 
-/**
- * A build failure or failed startup check is a recorded outcome, so it keeps HTTP 200 and arrives as
- * the preparation result. A 4xx means a malformed request or a refused label, a 5xx means no
- * decision; neither carries Supervisor error text.
- *
- * Resubmitting runs the preparation again, and a differing outcome replaces the recorded one, so a
- * check that failed on a slow cold start does not mark the commit failed forever.
- */
 export const handleGenerationSubmission = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationSubmissionSupervisor) {
     const body = yield* decodeRequestBody(request, GenerationSubmissionBody);

@@ -1,7 +1,5 @@
 // oxlint-disable max-lines -- This file covers the connection workflow and reset regression across the GitHub, workspace and Supervisor boundaries.
 
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import * as Effect from "effect/Effect";
@@ -15,15 +13,6 @@ import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections, type TenantConnections } from "./tenant-connections.js";
 import { HARNESS_PROJECT } from "../../../src/selectable-projects.js";
 import type { GitHubFetch } from "../../../src/github/index.js";
-
-/**
- * Connecting repositories, and the GitHub authorization behind it.
- *
- * The workspace is the fake in `fake-tenant-workspace.ts`, which runs the real credential and
- * provision surfaces over a fake shell, and GitHub is a scripted provider. What these tests hold
- * is the order of the steps, the binding of an authorization to the owner who started it, and a
- * negative check: a recognizable fake token reaches the workspace install and appears in no status, no stored row, and no value a caller could return to a browser.
- */
 
 const NOW = 1_700_000_000_000;
 
@@ -61,11 +50,6 @@ interface Tenant {
   github<T>(use: (github: GitHubConnection) => Effect.Effect<T>): Promise<T>;
 }
 
-/**
- * One tenant: a real `ProjectConnections` and `GitHubConnection` over the Supervisor's own
- * storage, the fake workspace, and a scripted GitHub. Each call re-reads storage, so a test can
- * watch state persist.
- */
 function tenant(
   name: string,
   options: Readonly<{
@@ -332,8 +316,6 @@ test("lists the harness with no connection, and clones nothing for it", async ()
 
   const harness = listed.find((project) => project.kind === "harness");
 
-  // The entry is a working-directory selection and nothing else: no repository URL, so nothing
-  // about it can be authorized, cloned, or disconnected, and it is there whatever GitHub says.
   expect(harness).toEqual(HARNESS_PROJECT);
   expect(harness).not.toHaveProperty("repositoryUrl");
   expect(
@@ -353,9 +335,6 @@ test("refuses a repository URL that once reduced to the harness entry's id", asy
     Effect.sync(() => connections.catalog()),
   );
 
-  // The earlier id rule reduced this URL to `harness`, the harness entry's id. `-` is no GitHub
-  // owner, so it now derives no id at all, and no GitHub repository derives an id without a
-  // hyphen. The explicit refusal in `ConnectedProjects.connect` stays as a second line.
   expect(refused).toMatchObject({ ok: false, problem: { code: "invalid-repository-url" } });
   expect(listed).toEqual([HARNESS_PROJECT]);
   expect(
@@ -423,7 +402,6 @@ test("reports a removal that the durable store does not show as failed, not remo
     Effect.sync(() => connections.catalog()),
   );
 
-  // The row and thread are gone, as for any failed cleanup; the result says the clone may remain.
   expect(disconnected).toEqual({ ok: true, projectId: "sample-repo-1", workspace: "failed" });
   expect(listed).toEqual([HARNESS_PROJECT]);
 });
@@ -484,8 +462,6 @@ test("keeps a project whose reprovision the clone size check refuses", async () 
   const subject = tenant("reprovision-too-large", { workspace, fallbackToken: FAKE_TOKEN });
   await subject.connections((connections) => connections.connect(REPOSITORY, undefined, NOW));
 
-  // After a reset the clone step measures the repository again and exits with the size code when
-  // it has grown past a ceiling (`github/repository-size-guard.ts`).
   workspace.cloneExitCode = 122;
 
   const used = await subject.connections((connections) =>
@@ -583,8 +559,6 @@ test("asks for a reconnection after a restart left the workspace without a crede
   await subject.github((github) => github.ensureCredential(NOW));
   const connected = await subject.github((github) => github.status(NOW));
 
-  // A recreated container keeps the tenant's storage and loses the workspace filesystem, so `gh`
-  // has no credential and cf-stumble's record of one is the only thing left.
   workspace.credentialState = "missing";
   const withoutFallback = tenant("credential-after-restart", { workspace });
 

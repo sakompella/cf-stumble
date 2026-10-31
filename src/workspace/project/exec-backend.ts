@@ -8,7 +8,6 @@ interface ExecBackendReader {
   cancel(): Promise<void>;
 }
 
-/** Exposes only an incremental reader and `kill`, never a buffered `result()`: stdout must be forwarded as it arrives. */
 export interface ExecBackendHandle {
   readonly reader: ExecBackendReader;
   kill(): Promise<void>;

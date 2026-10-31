@@ -89,7 +89,6 @@ function timeoutOrUnavailable(thrown: unknown): string {
   return isTimeoutFailure(thrown) ? "timeout" : "workspace-unavailable";
 }
 
-/** Plans from the build configuration alone, so it can neither run a project command nor reach a project file. */
 export function executeHarnessBuildRequest(
   input: Readonly<{
     operations: WorkspaceOperations;

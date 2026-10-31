@@ -28,7 +28,6 @@ function withIgnoredFetchChanges(handle: BackendHandle): BackendHandle {
   };
 }
 
-/** Changes only sync.fetchChanges, and reports the runtime each connect reached. */
 export function withWorkspaceSyncIgnore(
   backend: WorkspaceBackend,
   connected?: (runtimeId: string | undefined) => void,

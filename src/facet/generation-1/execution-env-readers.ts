@@ -28,10 +28,6 @@ function isCount(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
-/**
- * Computer has no open file handle, so the reader holds the bytes it read when it opened. Later
- * renames and writes cannot change what it reads, and it opens files up to `MAX_FILE_BYTES`.
- */
 class SnapshotBinaryReader implements BinaryReader {
   readonly #bytes: Uint8Array;
   readonly #info: FileInfo;
@@ -126,7 +122,6 @@ export async function openBinaryReader(
   return { ok: true, value: new SnapshotBinaryReader(bytes.value, info) };
 }
 
-/** Lines split on LF, each saying whether a newline ended it, like Pi's Node reader. */
 function textLinesOf(bytes: Uint8Array): TextLine[] {
   const parts = new TextDecoder().decode(bytes).split("\n");
   const last = parts.pop() ?? "";
@@ -172,10 +167,6 @@ export async function openTextLineReader(
   return { ok: true, value: new SnapshotTextLineReader(textLinesOf(bytes.value), path) };
 }
 
-/**
- * The names are listed once when it opens. Each page lists the directory again, so an entry
- * removed since then is skipped and the others carry current metadata.
- */
 class ListingDirReader implements DirReader {
   readonly #workspace: ComputerWorkspace;
   readonly #directory: WorkspacePath;

@@ -3,12 +3,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import worker from "../src/worker.js";
 import { sampleProjectOne } from "./project-fixtures.js";
 
-/**
- * A streamed body outlives the Worker program that returned its headers (ADR-0037). The Worker
- * must hand the body on as it arrives, and a client that stops reading must reach the stream's
- * source, for a turn and for a relayed generation response alike.
- */
-
 const ORIGIN = "https://cf-stumble.test";
 
 const encoder = new TextEncoder();
@@ -19,7 +13,6 @@ afterEach(() => {
 
 type HeldStream = Readonly<{ stream: ReadableStream<Uint8Array>; cancelled: Promise<void> }>;
 
-/** A stream that sends one chunk and stays open until it is cancelled. */
 function heldStream(first: string): HeldStream {
   let markCancelled: (() => void) | undefined;
 
@@ -63,7 +56,6 @@ test("a conversation's events reach the client while they commit, and a cancel r
   const supervisor = ownersSupervisor();
   const events = heldStream('{"type":"snapshot"}\n');
 
-  // An RPC result is disposable; a result made in this isolate has nothing to release.
   vi.spyOn(supervisor, "projectEvents").mockResolvedValue({
     ok: true,
     events: events.stream,

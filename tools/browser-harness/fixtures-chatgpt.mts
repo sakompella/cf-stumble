@@ -1,23 +1,12 @@
 import type { HarnessScenario } from "./fixtures.mjs";
 import type { JsonValue } from "../json.mjs";
 
-/**
- * The ChatGPT connection the stub keeps, and what each of its four routes does to it.
- *
- * The page sends the attempt it was shown and the address the owner pasted, and the Supervisor
- * decides whether they match. A stub that accepted any finish could not tell a page that sends the
- * login's own attempt from one that sends a stale one, so the attempt lives here. The stub reads
- * the pasted address for a `code` parameter and nothing more: the real exchange is the Worker's.
- */
-
 export const CHATGPT_MODEL = "gpt-6.1-sol";
 
 export const CHATGPT_AUTHORIZE_URL = "https://auth.example/oauth/authorize";
 
-/** An address the browser ends on after a sign-in the provider accepted. */
 export const CHATGPT_CALLBACK_URL = "http://127.0.0.1:1455/auth/callback?code=abc&state=s";
 
-/** An address the browser ends on when the provider sent no code. */
 export const CHATGPT_CALLBACK_WITHOUT_CODE = "http://127.0.0.1:1455/auth/callback?state=s";
 
 type Connection =

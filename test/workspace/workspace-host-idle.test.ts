@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { Workspace, type DurableObjectStorageLike } from "@cloudflare/computer";
@@ -10,12 +8,6 @@ import { WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
-/**
- * The Host's own wiring of the idle stop: which calls count as work, what the alarm closes and
- * destroys. `WorkspaceHost` needs a platform container, so these tests build one on the storage of
- * a Durable Object the test pool can run, with a container that records what it is asked to do.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -23,9 +15,7 @@ afterEach(() => {
 class FakeContainer {
   running = true;
   readonly destroyed: unknown[] = [];
-  /** Launch requests the Workspace made, so a test can tell when an exec reached the container. */
   starts = 0;
-  /** When set, the destroy waits for it, as a slow platform call would. */
   destroyGate: Promise<void> | undefined;
 
   start(): void {
@@ -37,7 +27,6 @@ class FakeContainer {
   destroy(reason: string): Promise<void> {
     this.destroyed.push(reason);
 
-    // Computer's own restart destroys the container first; only an idle stop leaves it stopped.
     if (reason === "idle") this.running = false;
 
     return this.destroyGate ?? Promise.resolve();
@@ -139,8 +128,6 @@ test("a past-due alarm closes the Workspace and destroys the container for being
 });
 
 test("a call on the project capability counts as activity", async () => {
-  // Past the lease, so only the call itself can keep the workspace busy. A capability with a turn
-  // budget refuses calls by then, so this one has none.
   const calledAtMs = PROJECT_TURN_LEASE_MS + 120_000;
 
   const destroyed = await withHost("host-seam-touch", async (host, _state, container) => {
@@ -169,7 +156,6 @@ test("a reset that lost the alarm arms a new one", async () => {
   expect(alarm).not.toBeNull();
 });
 
-/** The project root is made by provisioning in a real workspace; here the test makes it. */
 async function seedWorkspaceRoot(state: DurableObjectState): Promise<void> {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the Host makes the same cast; Computer accepts the Durable Object SQLite API its generic cursor declaration narrows.
   const storage = state.storage as DurableObjectStorageLike;
@@ -200,7 +186,6 @@ test("an exec started while the idle stop destroys the container waits for it", 
     await host.build({ kind: "not-a-build" });
     await seedWorkspaceRoot(state);
 
-    // With no budget the capability has no turn deadline, so it can still start an exec later.
     const project = host.project();
 
     vi.spyOn(Date, "now").mockReturnValue(
@@ -247,7 +232,6 @@ test("a reset refuses while a file change or credential install is in flight and
     });
 
     const seen = await withHost(`host-reset-busy-${name}`, async (host, state) => {
-      // Every Workspace call waits, so the change stays in flight until the test releases it.
       // SAFETY: each member the change reaches is a function that waits; nothing reads the rest.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
       const waiting = new Proxy({}, { get: () => () => stalled }) as never;
@@ -272,7 +256,6 @@ test("a reset refuses while a file change or credential install is in flight and
   }
 });
 
-/** Whether the Host hands out a project capability now, or throws. */
 function capabilityAnswer(host: WorkspaceHost): "handed out" | "refused" {
   try {
     host.project({ remainingMs: 60_000 });
@@ -283,7 +266,6 @@ function capabilityAnswer(host: WorkspaceHost): "handed out" | "refused" {
   }
 }
 
-/** Every Host change, asked while a reset runs. None of these requests would succeed anyway. */
 async function changesDuringReset(host: WorkspaceHost) {
   return {
     build: await host.build({ kind: "not-a-build" }),
@@ -325,7 +307,6 @@ test("while a reset runs, file changes, credential requests, project capabilitie
     const startsDuring = container.starts;
 
     held.release();
-    // The fake container cannot launch the replacement, so the restart step rejects.
     await resetting.catch(() => {});
 
     return {

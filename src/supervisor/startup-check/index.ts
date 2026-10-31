@@ -8,7 +8,6 @@ import { runStartupCheck } from "./candidate.js";
 
 import type { Generation, Generations, PreparationCheckProblem } from "../generations/index.js";
 
-/** Covers a Dynamic Worker load and a cold Durable Object start. Tests pass their own. */
 const STARTUP_CHECK_DEADLINE_MS = 5_000;
 
 const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
@@ -53,7 +52,6 @@ export function checkGenerationStartup(
   );
 }
 
-/** A map that cannot be obtained records no check: that is no evidence about the candidate, and the active generation keeps serving. */
 function checkLabeledStartup(
   host: StartupCheckHost,
   label: number,

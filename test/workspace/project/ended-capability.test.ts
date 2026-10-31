@@ -8,12 +8,6 @@ import {
   FakeProjectTransactions,
 } from "./fakes.js";
 
-/**
- * An ended turn's capability is spent: whoever still holds a duplicate of it, every method that
- * reads, writes, or runs something in the workspace answers `turn-ended`, and only the two cleanup
- * methods still answer as they always do.
- */
-
 type Call = (target: ProjectRpcTarget) => Promise<ProjectResult<unknown>>;
 
 const CAPABILITY_CALLS = {
@@ -24,7 +18,6 @@ const CAPABILITY_CALLS = {
   startExec: (target) => target.startExec({ command: "echo late" }),
 } satisfies Record<string, Call>;
 
-/** What a duplicate may still send once the turn is over, including input that does not parse. */
 const LATE_CALLS = {
   ...CAPABILITY_CALLS,
   "startExec with malformed input": (target) => target.startExec({ command: 42 }),

@@ -9,15 +9,8 @@ import {
   type GitHubFetch,
 } from "../../src/github/index.js";
 
-/**
- * The two calls of GitHub's device flow, driven by a fake provider. What matters here is the
- * mapping from GitHub's replies to states cf-stumble can act on, and that the device code — which
- * is the secret half of this flow — travels only where the flow needs it.
- */
-
 const CLIENT_ID = "Iv1.cfstumbleFAKE";
 
-/** The start of an authorization as the plain outcome these assertions compare. */
 function startAuthorization(clientId: string, fetcher: GitHubFetch) {
   return Effect.runPromise(
     requestDeviceAuthorization(clientId, fetcher).pipe(
@@ -33,10 +26,8 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 type Call = Readonly<{ url: string; body: string }>;
 
-/** One reply GitHub could send: a JSON object, or a failure the flow has to survive. */
 type DeviceReply = Readonly<{ [field: string]: string | number }> | "error";
 
-/** The flow sends a form-encoded string body. Anything else would be a change worth failing on. */
 function bodyText(body: RequestInit["body"]): string {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The fetch init is a platform type, not a domain value.
   return typeof body === "string" ? body : "";

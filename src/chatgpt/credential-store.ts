@@ -1,8 +1,3 @@
-/**
- * One Supervisor is one owner, so each table holds at most one row. Tokens are plain columns because
- * Durable Object storage is encrypted at rest; nothing here logs them.
- */
-
 export type ReconnectReason = "refresh-refused" | "provider-refused" | "missing-scope";
 
 export type StoredConnection =
@@ -15,7 +10,6 @@ export type StoredConnection =
     }>
   | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
 
-/** A usage limit the provider reported; `limitedUntil` is `null` when it named no end. */
 export type StoredUsageLimit = Readonly<{ reachedAt: number; limitedUntil: number | null }>;
 
 export type StoredLogin = Readonly<{
@@ -111,7 +105,6 @@ export class ChatGPTCredentialStore {
       : { state: "needs-reconnect", reason: reconnectReason(row.reconnect_reason) };
   }
 
-  /** Also forgets the old connection's usage limit. */
   connect(grant: StoredGrant, now: number): void {
     this.clearUsageLimit();
     this.sql.exec(
@@ -126,10 +119,6 @@ export class ChatGPTCredentialStore {
     );
   }
 
-  /**
-   * One statement, only while `redeemed` is still stored, so a rotated token is never half written
-   * and a sign-in or disconnect during the refresh wins.
-   */
   replaceRefreshed(redeemed: string, grant: Omit<StoredGrant, "clientId">, now: number): boolean {
     return (
       this.sql
@@ -148,7 +137,6 @@ export class ChatGPTCredentialStore {
     );
   }
 
-  /** Only while `accessToken` is still stored, so a refusal cannot break a newer sign-in. */
   markNeedsReconnect(accessToken: string, reason: ReconnectReason, now: number): void {
     this.sql.exec(
       `UPDATE chatgpt_connection SET status = 'needs-reconnect', reconnect_reason = ?, updated_at = ?
@@ -177,7 +165,6 @@ export class ChatGPTCredentialStore {
       : { reachedAt: row.reached_at, limitedUntil: row.limited_until };
   }
 
-  /** Only while `accessToken` is still stored, so a late report cannot pause a newer sign-in. */
   markUsageLimited(accessToken: string, limit: StoredUsageLimit): void {
     this.sql.exec(
       `INSERT OR REPLACE INTO chatgpt_usage_limit (id, reached_at, limited_until)
@@ -227,7 +214,6 @@ export class ChatGPTCredentialStore {
     this.sql.exec("DELETE FROM chatgpt_login");
   }
 
-  /** Names the host, not the owner; not a secret, and it survives a disconnect. */
   agentHostId(): string {
     this.sql.exec(
       "INSERT OR IGNORE INTO chatgpt_host (id, agent_host_id) VALUES (1, ?)",

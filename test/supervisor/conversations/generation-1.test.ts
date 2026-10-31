@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -19,11 +17,6 @@ import {
   submitted,
   untilAnswered,
 } from "./generation-1-session.js";
-
-/**
- * Generation 1 as built, served by the Supervisor through its RPC surface, with the real model
- * route and a real project capability. Only OpenAI and Computer are fakes.
- */
 
 const project = sampleProjectOne.id;
 
@@ -47,7 +40,6 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
   ).rejects.toThrow();
   interrupted.release(says("an answer nobody reads"));
 
-  // A stub to an aborted object stays broken; the next one reaches a new instance.
   const control = env.SUPERVISOR.getByName("generation-1-resume");
 
   expect(await runDurableObjectAlarm(control)).toBe(true);

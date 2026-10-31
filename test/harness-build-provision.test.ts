@@ -9,7 +9,6 @@ import { shellQuote } from "../src/shell-quote.js";
 import { WORKSPACE_ROOT } from "../src/workspace-layout.js";
 import { testHarnessCommit } from "./harness-commit-fixtures.js";
 
-// `harness-build-provision.shell.test.ts` runs the lock in real shells; this checks where it is.
 test("the provision step locks a container-local file, not one Computer copies to its store", () => {
   const step = provisionHarnessRepository(
     HARNESS_BUILD_CONFIGURATION,

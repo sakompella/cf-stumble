@@ -6,13 +6,6 @@ import {
   FakeProjectTransactions,
 } from "./fakes.js";
 
-/**
- * The project target crosses the Workspace Host RPC boundary. These checks pin the values before
- * structured clone strips prototypes, so an accidental class instance cannot be mistaken for a
- * plain RPC result. The loaded execution-environment tests cover the same target through a real
- * Workers RPC hop.
- */
-
 function makeTarget() {
   const provider = new FakeProjectFilesystemProvider();
   const execBackend = new FakeExecBackend();

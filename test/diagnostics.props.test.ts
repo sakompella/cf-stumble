@@ -3,11 +3,6 @@ import * as gs from "@hegeldev/hegel/generators";
 import { expect, test, vi } from "vitest";
 import { logEvent, logRedactedCause } from "../src/diagnostics.js";
 
-/**
- * Whatever a string field holds, a GitHub token or a JWT inside it never reaches the log.
- * Fields are meant to be ids and codes, but a code built from text a tool printed is still text,
- * so the logger redacts every string rather than trusting its caller.
- */
 const githubToken = gs
   .text({
     alphabet: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
@@ -47,10 +42,6 @@ test("no credential or JWT inside a string field reaches the log", () => {
   });
 });
 
-/**
- * A thrown cause is cut to a fixed length. Wherever that cut falls relative to a JWT inside the
- * cause, no segment of the token reaches the log.
- */
 test("no segment of a JWT inside a thrown cause reaches the log, wherever the cause is cut", () => {
   hegel.test((tc) => {
     const header = `eyJ${tc.draw(segmentBody)}`;

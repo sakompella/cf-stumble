@@ -13,11 +13,6 @@ import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { GITHUB_CLI_CONFIG_DIRECTORY, GIT_GLOBAL_CONFIG_PATH } from "../../src/workspace-layout.js";
 
-/**
- * Computer persists only the workspace, so every command that needs the GitHub credential names
- * the durable `gh` and Git configuration itself instead of trusting the image's environment.
- */
-
 const exportsDurableConfiguration = [
   `export GH_CONFIG_DIR='${GITHUB_CLI_CONFIG_DIRECTORY}'`,
   `export GIT_CONFIG_GLOBAL='${GIT_GLOBAL_CONFIG_PATH}'`,

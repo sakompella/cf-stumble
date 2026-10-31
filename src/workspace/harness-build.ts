@@ -67,11 +67,6 @@ export function parseHarnessBuildRequest(
   }
 }
 
-/**
- * Read through a command because a build writes to the container filesystem, which the workspace
- * filesystem API cannot read. The symbolic-link refusal matters because `git archive` can carry a
- * link that names a file outside the build directory.
- */
 function readModuleMapSource(plan: HarnessBuildPlan): string {
   return [
     "set -eu",
@@ -84,7 +79,6 @@ function readModuleMapSource(plan: HarnessBuildPlan): string {
   ].join("\n");
 }
 
-/** Every path is derived from the fixed configuration and a validated commit, never the request. */
 export function planHarnessBuildRequest(
   configuration: HarnessBuildConfiguration,
   request: ParsedHarnessBuildRequest,

@@ -21,14 +21,6 @@ import {
   projectDirectory,
 } from "../../src/workspace-layout.js";
 
-/**
- * These tests read planned text. Nothing here runs a shell: the Workers pool has no
- * `node:child_process`, and the only Node project in vitest.config.ts matches property test files
- * alone. A passing suite therefore establishes that the planner emits the reconciliation it claims
- * to and quotes what it interpolates. It does not establish that `git` accepts these commands,
- * that a clone succeeds, or that the container can reach the remote at all.
- */
-
 const projectOne = sampleProjectOne;
 
 const projectTwo = sampleProjectTwo;
@@ -77,8 +69,6 @@ test("marks a clone that runs out of disk as a repository size failure", () => {
 });
 
 test("quotes an interpolated repository URL the catalog would accept", () => {
-  // The catalog's URL checks accept an embedded single quote, so the planner cannot be the place
-  // that assumes a URL is shell-safe. A later configuration edit is all it would take.
   const hostile = parsePublicRepositoryUrl("https://example.invalid/'; rm -rf /; '.git");
 
   if (hostile === undefined) {

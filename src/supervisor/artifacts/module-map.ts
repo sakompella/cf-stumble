@@ -1,6 +1,5 @@
 import type { MainHarnessArtifact, MainHarnessArtifactInput } from "../../facet/index.js";
 
-/** Commit, entry module, then modules sorted by name, so a build that reports modules in another order yields the same rows. */
 export function canonicalModuleMap(artifact: MainHarnessArtifact): MainHarnessArtifactInput {
   return {
     harnessCommit: artifact.harnessCommit,

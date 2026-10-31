@@ -3,27 +3,12 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 
-/**
- * Build the owner page's script into the module the Worker serves it from.
- *
- * The script is the Foldkit program in `src/page/client`, bundled from `entry.ts` with Effect and
- * Foldkit into one minified classic script with no imports. It is a separate same-origin file
- * whose path carries a hash of its bytes, so the Worker can let the browser cache it for a year: a
- * changed script is a new path, and the `no-store` page always names the current one. See
- * ADR-0046.
- *
- * Git ignores the output. `pnpm verify`, the browser harness, and the Wrangler build command that
- * `cf build` and `cf deploy` run all call this first, so a deployed script cannot be older than
- * its source.
- */
-
 const repoRoot = resolve(import.meta.dirname, "..");
 
 const ENTRY_PATH = "src/page/client/entry.ts";
 
 const OUTPUT_PATH = "src/page/owner-script.generated.ts";
 
-// 16 hex digits are 64 bits, far more than a few releases of one script can collide in.
 const HASH_LENGTH = 16;
 
 const bundled = await build({
@@ -34,9 +19,6 @@ const bundled = await build({
   platform: "browser",
   target: "es2023",
   minify: true,
-  // Foldkit gates its development features (hot reload, model preservation, the devtools bridge,
-  // the duplicate id scanner) on Vite's `import.meta.hot`. This build has no Vite, so it is
-  // defined away and those features never start.
   define: { "import.meta.hot": "undefined" },
   legalComments: "none",
   sourcemap: false,

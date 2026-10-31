@@ -1,10 +1,5 @@
 import type { ChatGPTAccess, ChatGPTCredential, ProviderFetch } from "../../src/chatgpt/index.js";
 
-/**
- * Fake OpenAI endpoints for the ChatGPT tests. Every token here is made up, and each is long and
- * distinctive enough that a test can search everything logged for it.
- */
-
 export const ACCESS_ONE = "chatgpt-access-FAKE-one-0123456789abcdef";
 
 export const ACCESS_TWO = "chatgpt-access-FAKE-two-0123456789abcdef";
@@ -20,7 +15,6 @@ export const DIRECT_SCOPE =
 
 export type RecordedCall = Readonly<{ url: string; init: RequestInit }>;
 
-/** A token endpoint reply granting `access` and `refresh` for one hour. */
 export function grant(access: string, refresh: string, scope = DIRECT_SCOPE): Response {
   return Response.json({
     access_token: access,
@@ -32,7 +26,6 @@ export function grant(access: string, refresh: string, scope = DIRECT_SCOPE): Re
   });
 }
 
-/** A fetch that answers each call from `reply` and records it. */
 export function recordingFetch(reply: (call: RecordedCall) => Promise<Response>) {
   const calls: RecordedCall[] = [];
 
@@ -46,7 +39,6 @@ export function recordingFetch(reply: (call: RecordedCall) => Promise<Response>)
   return { calls, fetcher };
 }
 
-/** A token endpoint reply that arrives only when the test releases it. */
 export function heldReply() {
   let resolveReply: ((response: Response) => void) | undefined;
 
@@ -61,7 +53,6 @@ export function heldReply() {
   return { reply, release };
 }
 
-/** The S256 challenge for a verifier, computed here rather than imported. */
 export async function challengeOf(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
 
@@ -76,7 +67,6 @@ export function formOf(call: RecordedCall | undefined): URLSearchParams {
   return new URLSearchParams(String(call?.init.body ?? ""));
 }
 
-/** One Responses SSE event, as the provider frames it. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
 export function responsesEvent(payload: {
@@ -106,7 +96,6 @@ export type FakeCredential = ChatGPTCredential & {
   readonly limited: (readonly [accessToken: string, limitedUntil: number | null])[];
 };
 
-/** A credential holder that answers each `access` call with the next entry of `answers`. */
 export function fakeCredential(answers: readonly ChatGPTAccess[]): FakeCredential {
   const asked: (string | undefined)[] = [];
   const refused: string[] = [];

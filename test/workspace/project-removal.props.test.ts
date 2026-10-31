@@ -18,18 +18,6 @@ import {
   writeExecutable,
 } from "./planned-shell-fixture.js";
 
-/**
- * The planned removal and clone commands run under `/bin/sh` on the host, with stand-ins for
- * `git`, `flock`, and the removal's `rm`. The Workspace Host runs them in Computer under Debian's
- * `dash` with util-linux `flock`, so these tests show how the two scripts share the lock on this
- * host, not in the container.
- *
- * The `rm` stand-in deletes from a background child that inherits the shell's descriptors and
- * waits for a release marker, the way a real `rm` or `git clone` can outlive a shell that was
- * killed. Tests wait for markers, not for a fixed time, except to show that a clone has not
- * started, which no marker can show.
- */
-
 const scratch = scratchDirectory("cf-stumble-removal-lock-");
 
 afterAll(() => {
@@ -65,7 +53,6 @@ function prepare(): Run {
   writeExecutable(join(bin, "git"), STUB_GIT);
   writeExecutable(join(bin, "rm"), HELD_REMOVAL_RM);
   writeExecutable(join(bin, "flock"), FLOCK_STAND_IN);
-  // The host may scan a new executable on its first run; do that before any timing matters.
   execFileSync(join(bin, "rm"), ["-f", join(root, "absent")]);
   execFileSync(join(bin, "git"), ["--version"]);
 

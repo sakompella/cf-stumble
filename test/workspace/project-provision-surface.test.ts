@@ -20,17 +20,10 @@ import {
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
 
-/**
- * The provision surface's parsing and planning, and the shell it hands to Computer. No test here
- * runs that shell — the Workers pool has no `node:child_process` — so what a green run shows is
- * which requests are refused, which paths are reachable, and what text the accepted ones produce.
- */
-
 const projectOne = sampleProjectOne;
 
 const projectTwo = sampleProjectTwo;
 
-/** One provision request, as the Supervisor sends it: the project it resolved, and a step. */
 function provisionRequest(
   project: Project,
   step: ProjectProvisionStepName,
@@ -51,11 +44,8 @@ class FakeProjectOperations implements WorkspaceOperations {
   readonly calls: string[] = [];
   readonly sources: string[] = [];
   exitCode = 0;
-  /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
-   * the provision shell's catch-all logs a redacted cause instead of discarding it. */
   commandFailure: Error | undefined;
 
-  /** The Git config the durable store holds for the clone, or nothing when the clone is absent. */
   durableGitConfig: string | undefined =
     `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${projectOne.repositoryUrl}\n`;
 
@@ -191,11 +181,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * The provision shell's catch-all used to discard whatever Computer threw and answer
- * `workspace-unavailable` with nothing logged, same as the build shell's. The public code stays
- * generic; an operator can now read the cause the catch-all just swallowed.
- */
 test("logs a redacted cause instead of discarding it when the clone command cannot run", async () => {
   const operations = new FakeProjectOperations();
   operations.commandFailure = new Error("econnrefused while dialing the container");

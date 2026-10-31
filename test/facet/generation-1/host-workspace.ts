@@ -23,7 +23,6 @@ import {
 import { WORKSPACE_ROOT } from "../../../src/workspace-layout.js";
 import { FakeProjectTransactions } from "../../workspace/project/fakes.js";
 
-/** `root` stands in for the container's `/workspace`, which is all a provider or backend sees. */
 function hostPath(root: string, path: string): string {
   if (path !== WORKSPACE_ROOT && !path.startsWith(`${WORKSPACE_ROOT}/`)) {
     throw new Error(`not a workspace path: ${path}`);
@@ -49,7 +48,6 @@ export function hostFilesystemProvider(root: string): ProjectFilesystemProvider 
   };
 }
 
-/** Runs each command in its own process group, as the Computer adapter does, so a kill reaches its children. */
 export function hostExecBackend(root: string): ExecBackend {
   return {
     exec(input) {
@@ -91,9 +89,7 @@ export function hostExecBackend(root: string): ExecBackend {
         kill: () => {
           try {
             process.kill(-(child.pid ?? 0), "SIGKILL");
-          } catch {
-            // The group already exited.
-          }
+          } catch {}
 
           return Promise.resolve();
         },
@@ -102,10 +98,6 @@ export function hostExecBackend(root: string): ExecBackend {
   };
 }
 
-/**
- * The real `ProjectRpcTarget` over a fresh temporary directory and `/bin/sh`, with the env's cwd in
- * a project directory below the workspace root, as a project conversation's is.
- */
 export async function withHostWorkspace(use: (env: ExecutionEnv) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "computer-env-"));
 

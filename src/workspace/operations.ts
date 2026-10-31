@@ -3,10 +3,6 @@ import * as Effect from "effect/Effect";
 
 export type WorkspacePathKind = "file" | "directory" | "symbolic-link";
 
-/**
- * `runCommand` takes `stdin` because a secret belongs on standard input: a command line shows in a
- * process list, and a file needs cleanup.
- */
 export type WorkspaceOperations = Readonly<{
   lstat(path: string): Promise<WorkspacePathKind | undefined>;
   readFile(path: string): Promise<string>;
@@ -67,10 +63,6 @@ export function thrownBy(fault: WorkspaceFault): unknown {
   return fault instanceof WorkspaceUnavailable ? fault.cause : fault;
 }
 
-/**
- * A surface answers both with its generic code and logs the cause redacted, so a programming
- * fault is never serialized to a caller.
- */
 export function answerFailures<A>(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything; the answer only logs it redacted.
   answer: (thrown: unknown) => A,

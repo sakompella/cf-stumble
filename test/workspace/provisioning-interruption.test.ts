@@ -11,12 +11,6 @@ import {
 } from "../../src/workspace/provisioning.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 
-/**
- * A provision plan whose caller is interrupted still holds the workspace exclusion until its
- * Workspace Host RPC settles. The RPC cannot be recalled once sent, so a turn admitted early could
- * work in a directory the old clone is still writing.
- */
-
 const tick = () =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, 0);

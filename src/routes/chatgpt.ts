@@ -17,7 +17,6 @@ export type ChatGPTApiSupervisor = {
   readonly disconnectChatGPT: () => Promise<ChatGPTConnectionView>;
 };
 
-/** A busy token endpoint is worth another try; every other refusal needs a new sign-in or address. */
 function loginStatus(code: ChatGPTLoginFailure): number {
   return code === "exchange-unavailable" ? 503 : 400;
 }
@@ -47,10 +46,6 @@ function viewResponse(
   return callSupervisor(read).pipe(Effect.map((chatgpt) => Response.json({ ok: true, chatgpt })));
 }
 
-/**
- * Answers `undefined` for any other request, so the owner API can try its other routes. No answer
- * carries a token, a verifier, or a code.
- */
 export function routeChatGPTApiRequest(
   request: Request,
   supervisor: ChatGPTApiSupervisor,

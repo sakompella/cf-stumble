@@ -19,7 +19,6 @@ function isNotFound(error: unknown): boolean {
   return error.code === "ENOENT";
 }
 
-/** `require-complete` counts a command only once Computer has copied its container changes into the durable store, which a replacement container starts from. */
 type CommandSync = "require-complete" | "not-required";
 
 function syncIsComplete(sync: ExecSyncResult): boolean {
@@ -82,7 +81,6 @@ export class ComputerWorkspaceOperations implements WorkspaceOperations {
       timeoutMs,
     };
 
-    // Absent stdin differs from `undefined` under `exactOptionalPropertyTypes`.
     if (stdin !== undefined) options.stdin = stdin;
     const execution = await this.workspace.runtime.exec(source, options);
 

@@ -10,19 +10,10 @@ export const REPOSITORY_SIZE_TIMEOUT_MS = 5_000;
 
 const GITHUB_API_ROOT = "https://api.github.com";
 
-/**
- * Protects the per-file durable workspace index and sync walk. Hono's 1,800-file tree was healthy
- * and workers-sdk wedged at 5,649 files.
- */
 export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
 
-/**
- * Hono's working tree was about 6 MB and workers-sdk's about 48 MB; 150 MB leaves margin without
- * admitting a repository that overwhelms the workspace.
- */
 export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
 
-/** Separate from the working-tree byte ceiling; GitHub reports `size` in kilobytes. */
 export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
 
 export const REPOSITORY_TREE_MUST_BE_COMPLETE = true;
@@ -106,7 +97,6 @@ function getJson(
   });
 }
 
-/** An unknown size is not a connection refusal, since cloning remains the final check. */
 export function lookupRepositorySize(
   repositoryUrl: PublicRepositoryUrl,
   token: GitHubToken | undefined,

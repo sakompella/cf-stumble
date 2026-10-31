@@ -9,14 +9,8 @@ import {
 import { listDirectory, open, statFollowing } from "./execution-env-files.js";
 import { childOf, type ComputerWorkspace, type WorkspacePath } from "./execution-env-paths.js";
 
-/**
- * Computer reports no file events to a capability holder, so the watcher compares snapshots:
- * each path's kind, size, and modification time. Pi Durable's conformance cases change a file's
- * size at every step, which a snapshot always sees.
- */
 const POLL_INTERVAL_MS = 500;
 
-/** Each directory costs one capability call per poll, so a watched tree stays small. */
 const MAX_WATCHED_ENTRIES = 5_000;
 
 type Snapshot = Map<string, string>;
@@ -67,7 +61,6 @@ async function addDirectory(
   return { ok: true, value: undefined };
 }
 
-/** A missing target, or one below a file, is simply absent from the snapshot. */
 async function addTarget(
   workspace: ComputerWorkspace,
   target: WatchTarget,
@@ -111,7 +104,6 @@ function parentOf(path: string): string {
   return path.slice(0, path.lastIndexOf("/"));
 }
 
-/** An entry that appears or disappears also changes its watched directory's listing. */
 function changedPaths(before: Snapshot, after: Snapshot): string[] {
   const changed = new Set<string>();
 

@@ -1,8 +1,3 @@
-/**
- * The owner page's behaviour as its update function sees it: Messages in, Model and Commands out.
- * No DOM runs here; the browser harness checks the rendered page.
- */
-
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
@@ -33,7 +28,6 @@ function commandNames(model: Model, message: Message): readonly string[] {
   return (update(model, message).commands ?? []).map((command) => command.name);
 }
 
-/** A page that listed both projects, selected the first, and read its empty snapshot. */
 function readyPage(): Model {
   const listed = after(init().model, [Message.SucceededFetchProjects({ projects: PROJECTS })]);
 
@@ -45,7 +39,6 @@ function readyPage(): Model {
   ]);
 }
 
-/** An event of the stream the page holds open. */
 function event(value: AgentEvent): (model: Model) => Message {
   return (model) => Message.ReceivedEvent({ streamId: model.eventsStreamId, event: value });
 }
@@ -257,8 +250,6 @@ test("activation sends nothing until the page has rendered an epoch", () => {
 });
 
 test("a generation label names one whole generation or nothing", () => {
-  // Number.parseInt("1.5") is 1, so a page that parsed the field would activate generation 1 for a
-  // reader who typed something that names no generation at all.
   expect(Option.getOrNull(controlLabel("2"))).toBe(2);
   expect(Option.getOrNull(controlLabel(" 3 "))).toBe(3);
   expect(Option.getOrNull(controlLabel("0"))).toBe(0);

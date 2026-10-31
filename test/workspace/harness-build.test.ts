@@ -23,7 +23,6 @@ const buildDirectory = `${HARNESS_BUILD_CONFIGURATION.buildRoot}/${commit}`;
 
 const moduleMapPath = `${buildDirectory}/${HARNESS_BUILD_CONFIGURATION.moduleMapPath}`;
 
-/** A build workspace with no project files in it: the build root is all it contains. */
 class FakeBuildOperations implements WorkspaceOperations {
   readonly calls: string[] = [];
   readonly files = new Map<string, string>([[moduleMapPath, "{}"]]);
@@ -56,8 +55,6 @@ class FakeBuildOperations implements WorkspaceOperations {
   }
 
   stdout: string | undefined;
-  /** When set, `runCommand` rejects with this instead of resolving. A test uses this to prove
-   * the build shell's catch-all logs a redacted cause instead of discarding it. */
   commandFailure: Error | undefined;
 
   runCommand(source: string, cwd: string): Promise<CommandOutput> {
@@ -144,12 +141,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * The build shell's catch-all used to discard whatever Computer threw and answer
- * `workspace-unavailable` with nothing logged. The public code is unchanged — a caller still
- * cannot tell a thrown container failure from a thrown filesystem failure — but an operator can
- * now read the cause the catch-all just swallowed.
- */
 test("logs a redacted cause instead of discarding it when a build step cannot run", async () => {
   const operations = new FakeBuildOperations();
   operations.commandFailure = new Error("container exited before the command could run");
@@ -257,8 +248,6 @@ test("the checkout step fails on its own when the archive fails", () => {
     "checkout",
   );
 
-  // `git archive | tar -x` reports tar's exit code, so a failed archive used to reach the build
-  // step as an empty directory and a compilation error that named the wrong fault.
   expect(checkout.source).not.toContain("|");
   expect(checkout.source.startsWith("set -eu")).toBe(true);
 });

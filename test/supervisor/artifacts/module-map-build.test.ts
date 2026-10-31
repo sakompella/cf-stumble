@@ -44,10 +44,6 @@ function succeeded(): CommandOutput {
   return { stdout: "", stderr: "", exitCode: 0 };
 }
 
-/**
- * Stands in for the Computer build workspace. It records the steps it was asked to run and
- * returns whatever the test placed as the build's module map.
- */
 class FakeBuildWorkspace implements BuildWorkspace {
   readonly steps: HarnessBuildStep[] = [];
   private readonly outputs: readonly (string | undefined)[];

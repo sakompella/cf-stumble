@@ -34,7 +34,6 @@ export type HarnessProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
     build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
   }>;
 
-/** The caller holds the name, which the Supervisor derives from its own tenant key, so no request can name a workspace. */
 export type ProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): ProvisionWorkspaceHost;
 }>;
@@ -120,7 +119,6 @@ type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
 
 interface ProvisionProjectWorkspaceInput {
   readonly workspaceName: string;
-  /** Client-supplied; the catalog resolves it before anything is provisioned. */
   readonly projectId: unknown;
   readonly catalog?: ProjectCatalog;
   readonly namespace: ProvisionWorkspaceNamespace;
@@ -268,12 +266,6 @@ const PROVISION_PLAN_STEP_COUNT = Math.max(
 export const PROVISION_STALE_AFTER_MS =
   PROVISION_PLAN_STEP_COUNT * WORKSPACE_RPC_TIMEOUT_MS + WORKSPACE_RPC_TIMEOUT_MARGIN_MS;
 
-/**
- * Keyed by the whole tenant workspace, not a project directory: a project or harness turn can reach
- * sibling repositories, so neither may enter while another project's orphaned provision can still
- * write. Isolate-local; after this Supervisor is evicted only a Workspace Host-side protocol can
- * prove an old RPC stopped.
- */
 const activeProvisions = new Map<string, ActiveProvision>();
 
 export function clearWorkspaceProvision(workspaceName: string): void {
@@ -284,10 +276,6 @@ function provisionIsStale(active: ActiveProvision, now: number): boolean {
   return now - active.startedAt > PROVISION_STALE_AFTER_MS;
 }
 
-/**
- * The plan is uninterruptible: its Host RPCs cannot be recalled once sent, so the exclusion is held
- * until the plan settles, not until its caller stops waiting.
- */
 function provisionInWorkspace<A, E>(
   input: Readonly<{
     workspaceName: string;
@@ -340,7 +328,6 @@ function removeActiveProvision(workspaceName: string, active: ActiveProvision): 
   if (activeProvisions.get(workspaceName) === active) activeProvisions.delete(workspaceName);
 }
 
-/** Presumed lost after its whole command budget; the Host may still be running it. */
 function clearStaleProvision(workspaceName: string): void {
   activeProvisions.delete(workspaceName);
 }

@@ -2,13 +2,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
-/**
- * The project and authorization routes at the HTTP boundary.
- *
- * What holds here is narrow and important: a body cannot carry a credential, and nothing a route
- * returns carries one.
- */
-
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const ORIGIN = "https://cf-stumble.test";
@@ -17,17 +10,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** One connected project, as the Supervisor would hand it to a route. */
 const connectedProject = sampleProjectOne;
 
 function get(path: string): Request {
   return new Request(`${ORIGIN}${path}`);
 }
 
-/**
- * A request body as a test writes it. The fields are the ones a client could send, valid or not,
- * because half of what these tests prove is which bodies the boundary refuses.
- */
 type RequestBody =
   | Readonly<{
       repositoryUrl?: string | number;

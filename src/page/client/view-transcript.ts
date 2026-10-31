@@ -12,11 +12,6 @@ import {
   type ToolEntry,
 } from "./transcript.js";
 
-/**
- * Two bounds keep a long turn readable: tool results are collapsed by default, and at most 20,000
- * characters and 400 lines of any output are laid out. Every value is a text child, never markup.
- */
-
 function note(text: string, h: HtmlBuilder<Message>): Html {
   return h.span([h.Class("note")], [text]);
 }
@@ -61,7 +56,6 @@ function toolView(tool: ToolEntry, h: HtmlBuilder<Message>): Html {
   return h.details(
     [
       h.Class(tool.isFailed ? `${CLASS.toolCall} failed` : CLASS.toolCall),
-      // The browser owns the open state; a failure opens it once through the attribute.
       ...(tool.isFailed ? [h.Attribute("open", "")] : []),
     ],
     [h.summary([], [tool.summary]), h.pre([h.Class(CLASS.toolOutput)], output)],

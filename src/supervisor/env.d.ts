@@ -13,7 +13,6 @@ declare global {
       readonly AI: Ai;
       readonly SUPERVISOR: DurableObjectNamespace<Supervisor>;
       readonly WORKSPACE_HOST: DurableObjectNamespace<WorkspaceHost>;
-      /** Public configuration, stored as a secret so deploys keep it. */
       readonly GITHUB_OAUTH_CLIENT_ID?: string;
       readonly GH_TOKEN?: string;
       readonly CHATGPT_MODEL: string;

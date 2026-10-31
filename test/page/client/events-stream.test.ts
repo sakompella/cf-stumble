@@ -9,13 +9,6 @@ import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";
 
-/**
- * The events stream is a Foldkit Subscription: the runtime recomputes its dependencies after every
- * update, restarts the stream when they change, and interrupts it when they become none. So they
- * must stay equal while the conversation runs, or every event would reconnect, and they must
- * change when the reader leaves the project or starts a fresh thread.
- */
-
 const PROJECTS = [
   { id: "repo", displayName: "hello-world", isHarness: false, location: "https://github.com/o/r" },
   { id: "harness", displayName: "harness", isHarness: true, location: "/workspace/harness" },

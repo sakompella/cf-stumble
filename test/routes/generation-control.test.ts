@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
@@ -41,7 +39,6 @@ function control(
   );
 }
 
-/** The epoch the owner page reads is the epoch an activation request must carry. */
 async function statusEpoch(stub: DurableObjectStub<Supervisor>): Promise<number> {
   const response = await ownerApiResponse(new Request("https://cf-stumble.test/api/status"), stub);
 

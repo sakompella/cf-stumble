@@ -17,7 +17,6 @@ import { runToResult } from "./workspace-results.js";
 
 class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
-  /** Every Host RPC in order: a provision request by its step, and each managed-file write. */
   readonly steps: string[] = [];
 
   protected record(request: ProjectProvisionRequest): void {
@@ -318,7 +317,6 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
 
     await Promise.resolve();
 
-    // The active RPC's command-ceiling timer, and the exclusion timer.
     expect(vi.getTimerCount()).toBe(2);
 
     delayed.release();

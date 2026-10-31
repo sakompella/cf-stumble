@@ -17,7 +17,6 @@ export const TEMP_DIRECTORY = "/.cf-stumble/tmp";
 
 type Opened = Result<WorkspacePath, FileError>;
 
-/** Every member checks cancellation and confines the path before it calls the capability. */
 export function open(workspace: ComputerWorkspace, path: string, context: Context): Opened {
   if (context.abortSignal?.aborted === true) return aborted(path);
 
@@ -37,7 +36,6 @@ export function lstat(
   return capabilityCall(path.absolute, () => workspace.target.lstat(path.addressed));
 }
 
-/** The final symbolic link, if any, resolved: what reading the path would open. */
 export async function statFollowing(
   workspace: ComputerWorkspace,
   path: WorkspacePath,
@@ -97,7 +95,6 @@ export async function readTextFile(
   return bytes.ok ? { ok: true, value: decodeText(bytes.value) } : bytes;
 }
 
-/** Like Node's `readFile(path, "utf8")`, a byte-order mark stays in the text. */
 function decodeText(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes);
 }
@@ -166,7 +163,6 @@ export async function canonicalPath(
   return canonical.ok ? { ok: true, value: fromAddressed(canonical.value).absolute } : canonical;
 }
 
-/** The capability lists at most `MAX_LIST_ENTRIES` names, so a longer directory fails rather than reads short. */
 export async function listDirectory(
   workspace: ComputerWorkspace,
   path: WorkspacePath,
@@ -206,7 +202,6 @@ export function listDir(
   return listDirectory(workspace, opened.value);
 }
 
-/** A capability write is durable once it answers, so a flush only checks that the path names a file. */
 export async function flushFile(
   workspace: ComputerWorkspace,
   path: string,
@@ -230,7 +225,6 @@ export async function flushFile(
   return { ok: true, value: undefined };
 }
 
-/** Whole-file rewrite, so it works up to `MAX_FILE_BYTES`, the capability's limit for one read or write. */
 export async function truncateFile(
   workspace: ComputerWorkspace,
   path: string,

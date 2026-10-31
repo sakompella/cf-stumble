@@ -24,20 +24,13 @@ import {
 } from "./execution-env-readers.js";
 import { watch } from "./execution-env-watch.js";
 
-/** One workspace per Supervisor, so every env this generation creates sees the same files. */
 export const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
 
 export interface ComputerEnvOptions {
-  /** Where relative paths and commands start; every path must still lie within the workspace root. */
   readonly cwd: string;
   readonly target: ProjectRpcTargetContract;
 }
 
-/**
- * Pi Durable's `ExecutionEnv` over the Computer project capability. Files go through the
- * capability's read, write, lstat, and listing; what it lacks runs as POSIX commands through its
- * `startExec`. `listFiles` is left out: it is optional, and nothing in Pi Durable calls it.
- */
 export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
   const workspace: ComputerWorkspace = { cwd: options.cwd, target: options.target };
   const running: RunningCommands = new Set();

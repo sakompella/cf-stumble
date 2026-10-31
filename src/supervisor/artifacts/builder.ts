@@ -59,7 +59,6 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
       },
     });
 
-    // The tail goes to the owner, not the log: command output can hold file contents.
     return ran.pipe(
       Effect.flatMap((output) =>
         output.exitCode === 0
@@ -88,7 +87,6 @@ export class WorkspaceModuleMapBuilder implements HarnessModuleMapBuilder {
     return encoded.pipe(
       Effect.flatMap((text) =>
         Effect.tryPromise({
-          // `Response.json` decodes without asserting a type; `moduleMapFromBuildOutput` validates.
           try: () => new Response(text).json<BuiltModuleMapFile>(),
           catch: (): HarnessBuildProblem => ({
             code: "build-output-invalid",
@@ -115,7 +113,6 @@ function lastUnits(text: string): string {
   return cut && first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
 }
 
-/** Redact before cutting: a cut could leave half a token. */
 function stepDiagnostics(output: CommandOutput): BuildStepDiagnostics {
   const stdout = redactLogText(output.stdout);
   const stderr = redactLogText(output.stderr);

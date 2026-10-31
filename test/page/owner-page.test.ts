@@ -1,9 +1,3 @@
-/**
- * The document the browser receives and the script file it names. What the program in
- * `src/page/client` renders is tested in `test/page/client/` and, in a real browser, in
- * `tools/playwright/`.
- */
-
 import { expect, test } from "vitest";
 import { ownerPageHtml, OWNER_PAGE_IDS, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
 
@@ -25,14 +19,10 @@ test("the script's path names a hash of its bytes", async () => {
 
   const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0"));
 
-  // The Worker lets a browser keep the script for a year, which is safe only while one path always
-  // means the same bytes.
   expect(OWNER_PAGE_SCRIPT_FILE.path).toBe(`/assets/owner-${hex.join("").slice(0, 16)}.js`);
 });
 
 test("the script the browser receives parses as JavaScript", () => {
-  // A syntax error would leave the empty container on screen and nothing else. Parsing the
-  // delivered script is the check that the page can fill itself in at all.
   const script = OWNER_PAGE_SCRIPT_FILE.source;
 
   expect(script.length).toBeGreaterThan(0);
@@ -43,8 +33,6 @@ test("the script the browser receives parses as JavaScript", () => {
 test("nothing outside the nonced style and the script file can run or style the page", () => {
   const html = ownerPageHtml("test-nonce");
 
-  // The Content Security Policy refuses inline handlers and any other origin, so the document
-  // carries neither.
   expect(html).not.toMatch(/\son[a-z]+=/u);
   expect(html).not.toMatch(/<(?:link|img|iframe)\b/u);
 });

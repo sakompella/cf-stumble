@@ -204,8 +204,6 @@ function parseFields(raw: unknown): Parsed<ModelRouteRequest> {
     return Result.fail("messages must be a non-empty array");
   }
 
-  // Bound by UTF-8 wire size; `JSON.stringify(...).length` counts UTF-16 units and under-counts
-  // non-ASCII.
   if (REQUEST_BYTES.encode(JSON.stringify(raw)).length > MAX_REQUEST_BYTES) {
     return Result.fail("request exceeds 1 MiB size limit");
   }
@@ -220,7 +218,6 @@ function parseFields(raw: unknown): Parsed<ModelRouteRequest> {
   });
 }
 
-/** Rebuilt from the checked fields so an unknown field never reaches a provider. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this IS the parse boundary for untrusted service-binding input.
 export function parseRequest(raw: unknown): Result.Result<ModelRouteRequest, ValidationFailure> {
   return Result.mapError(parseFields(raw), (reason): ValidationFailure => ({

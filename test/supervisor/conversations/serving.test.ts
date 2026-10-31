@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import {
@@ -12,11 +10,6 @@ import {
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
-/**
- * The Supervisor's side of a Pi Durable generation, against a scripted facet that speaks the
- * conversation protocol: it keeps its records in its own storage and relays its wake to `arm`.
- */
-
 afterEach(async () => {
   await reset();
 });
@@ -26,11 +19,6 @@ const SCRIPTED_COMMITS = [
   "d0d0000000000000000000000000000000000002",
 ] as const;
 
-/**
- * Numbers its submissions as Pi Durable does, and counts conversation creations in the facet's own
- * storage. Its events stream is its commit. `refuse the next attach` starts a run and makes the
- * next attach throw once.
- */
 function scriptedFacet(harnessCommit: string): string {
   return `
 import { DurableObject } from "cloudflare:workers";

@@ -17,10 +17,8 @@ import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
 import { ensureManagedInstructions } from "../../../src/workspace/host.js";
 import type { WorkspaceResult } from "../../../src/workspace/decisions.js";
 
-/** A command the fake has been told to hold open until the test answers it. */
 export class HeldCommand {
   readonly fragment: string;
-  /** Resolves once the held command has started. */
   readonly reached: Promise<void>;
   readonly exitCode: Promise<number>;
   private markReached: (() => void) | undefined;
@@ -40,45 +38,26 @@ export class HeldCommand {
     this.markReached?.();
   }
 
-  /** Answer the held command with this exit code. */
   release(exitCode = 0): void {
     this.answer?.(exitCode);
   }
 }
 
-/**
- * A stand-in for the tenant's Workspace Host that runs the real surfaces.
- *
- * Every request goes through the production parse, plan, and effect shells; only Computer itself is
- * replaced, by a fake shell that answers the four commands cf-stumble sends. That keeps the tests
- * honest about which requests are accepted and what text is run, and it records every write and
- * every command and every standard input so a test can prove where a token did and did not go.
- *
- * It cannot show that provisioning or `gh` works. No test in this repository runs a shell.
- */
 export class FakeTenantWorkspace implements WorkspaceOperations {
   readonly commands: string[] = [];
   readonly writes: (readonly [string, string])[] = [];
-  /** Every command that was given standard input, with what it was given. */
   readonly stdins: (readonly [string, string])[] = [];
-  /** Each credential request as JSON, so a test can search everything that was sent. */
   readonly credentialRequests: string[] = [];
   readonly names: string[] = [];
 
-  /** What `gh auth status` reports. Installing a token moves it to `connected`. */
   credentialState: GitHubCredentialState = "missing";
   login = "octocat";
   repositoryAccess: "granted" | "denied" = "granted";
   cloneExitCode = 0;
-  /** A private repository: the clone fails (exit 128) until a credential is installed. */
   cloneNeedsCredential = false;
   unavailable = false;
   private readonly held: HeldCommand[] = [];
 
-  /**
-   * Hold the next command whose text contains `fragment` until the test releases it, so a test can
-   * choose how two overlapping operations interleave.
-   */
   holdNext(fragment: string): HeldCommand {
     const held = new HeldCommand(fragment);
     this.held.push(held);
@@ -86,15 +65,9 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return held;
   }
 
-  /** Durable store paths, as the Workspace Host's `lstat` and `readFile` read them. */
   private readonly durablePaths = new Map<string, WorkspacePathKind>();
   private readonly durableFiles = new Map<string, string>();
 
-  /**
-   * How Computer's post-command sync ends for a clone or removal, which the Workspace Host runs
-   * with `require-complete`. `incomplete` throws as `ComputerWorkspaceOperations` does then, and
-   * leaves the durable store as it was.
-   */
   commandSync: "complete" | "incomplete" = "complete";
 
   lstat(path: string): Promise<WorkspacePathKind | undefined> {
@@ -134,7 +107,6 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return output;
   }
 
-  /** Apply a successful clone or removal to the durable store, as a completed sync would. */
   private persist(source: string): void {
     const cloned = /^repository='([^']+)'$/mu.exec(source)?.[1];
     const remote = /^expected_remote='([^']+)'$/mu.exec(source)?.[1];
@@ -258,7 +230,6 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Effect.runPromise(ensureManagedInstructions(this));
   }
 
-  /** The namespace view the Supervisor holds. One tenant, so every name reaches this host. */
   get namespace() {
     return {
       getByName: (name: string) => {

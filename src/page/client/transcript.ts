@@ -5,11 +5,6 @@ import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
 import type { AssistantMessage, Block, PiMessage } from "./events.js";
 
-/**
- * Foldkit builds text children with text nodes, so repository content and model output stay text and
- * cannot become markup this page executes.
- */
-
 const ToolOutput = Schema.Struct({
   content: Schema.String,
   isServerTruncated: Schema.Boolean,
@@ -90,7 +85,6 @@ export const OutboxItem = Schema.Struct({
   maybeSubmissionId: Schema.Option(Schema.Number),
 });
 
-/** A message this page sent that the conversation has not placed in its transcript yet. */
 export type OutboxItem = typeof OutboxItem.Type;
 
 function blocksText(blocks: readonly Block[]): string {
@@ -109,7 +103,6 @@ function finishedTool(
   });
 }
 
-/** The model route records a Workers AI fallback as a diagnostic on the message. */
 function isFallbackAnswer(message: AssistantMessage): boolean {
   return (
     message.diagnostics?.some((diagnostic) => diagnostic.type === "provider-fallback") === true
@@ -155,11 +148,6 @@ function withLiveOutput(entry: TranscriptEntry, conversation: Conversation): Tra
     : { ...entry, maybeOutput: Option.some({ content: output, isServerTruncated: false }) };
 }
 
-/**
- * What the reader sees: the committed entries, the answer still streaming, the running tools'
- * output, and this page's messages the conversation has not placed yet. One pass; `toolBlocks`
- * remembers each tool call's block so its result fills it in.
- */
 export function transcriptOf(
   conversation: Conversation,
   outbox: readonly OutboxItem[],

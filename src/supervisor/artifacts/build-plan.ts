@@ -14,13 +14,11 @@ export {
   type HarnessBuildStepName,
 } from "../../harness-build.js";
 
-/** What a build writes to `moduleMapPath`. The build never states its own commit. */
 export type BuiltModuleMapFile = Readonly<{
   entryModule: string;
   modules: readonly Readonly<{ name: string; source: string }>[];
 }>;
 
-/** Redacted stream tails. They go only to the owner's submission response, never to a log. */
 export type BuildStepDiagnostics = Readonly<{
   stdoutTail: string;
   stderrTail: string;
@@ -43,12 +41,10 @@ export type HarnessBuildProblem =
       readonly reason: MainHarnessArtifactProblem["code"];
     };
 
-/** A build cannot claim to be another generation: the commit comes from the caller. */
 export function moduleMapFromBuildOutput(
   harnessCommit: HarnessCommit,
   output: BuiltModuleMapFile,
 ): Result.Result<MainHarnessArtifactInput, HarnessBuildProblem> {
-  // The declared type is what JSON decoding produced, not a checked value; this keeps a non-object from throwing.
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: decoded build output is untrusted.
   if (output === null || typeof output !== "object") {
     return Result.fail({ code: "build-output-invalid", harnessCommit, reason: "invalid-artifact" });

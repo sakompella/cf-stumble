@@ -23,7 +23,6 @@ import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
 
 const context = BACKGROUND_CONTEXT;
 
-/** The policy generation 0 used: compact above 64k tokens less Pi's 16k answer reserve, keeping the newest 8k. */
 const CONTEXT_BUDGET_TOKENS = 64_000;
 
 const ANSWER_RESERVE_TOKENS = 16_384;
@@ -46,11 +45,6 @@ const KEEPALIVE_LINE = encoder.encode("\n");
 
 const KEEPALIVE_MS = 2_000;
 
-/**
- * The use's context ends when the use is aborted or done. The env kills its running commands
- * through the stub before the stub goes: a kill sent on a disposed stub fails, and the command
- * would run to its end.
- */
 async function computerEnv(
   host: ConversationHost,
   conversationId: string,
@@ -72,11 +66,6 @@ async function computerEnv(
   return env;
 }
 
-/**
- * Generation 1's main facet (ADR-0048). Pi Durable's session lives in this facet's own SQLite,
- * opened on the first `attach` so a startup-check candidate never touches it. Facets cannot set
- * alarms (setting one leaves the facet unusable), so every wake goes to the host's `arm`.
- */
 export class MainFacet
   extends DurableObject<Readonly<{ MODEL: ModelCapability }>>
   implements ConversationFacet
@@ -95,10 +84,6 @@ export class MainFacet
     return PI_DURABLE_VERSION;
   }
 
-  /**
-   * Arming from the session's own wake on every attach renews the recovery heartbeat the
-   * Supervisor's alarm consumed, and `resume` continues the work a lost instance left.
-   */
   async attach(host: ReceivedHost): Promise<void> {
     if (this.#session === undefined) {
       const opening = this.#open(host.dup());
@@ -143,11 +128,6 @@ export class MainFacet
     return submission.id;
   }
 
-  /**
-   * One JSON line per agent event, the snapshot first; cancelling the stream stops the watch.
-   * Workers RPC tells a stream's source that its reader left only when the source next writes, so
-   * a quiet stream writes an empty line now and then.
-   */
   async events(conversationId: string): Promise<ReadableStream<Uint8Array>> {
     const { harness } = await this.#opened();
     const { id } = await this.#conversation(conversationId);
@@ -174,11 +154,6 @@ export class MainFacet
     return readable;
   }
 
-  /**
-   * Answers once the abort is queued on the session's commit line, ahead of any later call. Pi
-   * Durable's abort then waits until the conversation is idle, which lasts as long as a running
-   * tool takes to stop, so nobody waits for it here.
-   */
   async abort(conversationId: string): Promise<void> {
     const conversation = await this.#conversation(conversationId);
     const { harness, host } = await this.#opened();
@@ -203,13 +178,10 @@ export class MainFacet
         models,
         registry,
         settings: SETTINGS,
-        // The Supervisor ends a capability when the run settles, so each use asks for a live one,
-        // and the stub goes when the use's context ends, since Pi Durable never cleans an env up.
         env: ({ conversationId, cwd }, invocation) =>
           cwd === undefined
             ? undefined
             : computerEnv(host, String(conversationId), cwd, invocation.abortSignal),
-        // A wake the Supervisor did not arm could strand work, so the instance starts over.
         onWake: (wake) => {
           void host.arm(wake).catch(() => {
             this.ctx.abort("the Supervisor did not arm a wake");
@@ -222,15 +194,10 @@ export class MainFacet
     return { harness, host };
   }
 
-  /** The Supervisor attaches before every other call. */
   #opened(): Promise<Session> {
     return this.#session ?? Promise.reject(new Error("attach first"));
   }
 
-  /**
-   * `onWake` runs after the commit that starts work, so the heartbeat is armed first; the wake
-   * after the call corrects it when the call started nothing, such as a repeated request ID.
-   */
   async #startingWork<T>(call: () => Promise<T>): Promise<T> {
     const { harness, host } = await this.#opened();
 

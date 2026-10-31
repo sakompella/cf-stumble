@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env, RpcStub } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { vi } from "vitest";
@@ -20,22 +18,14 @@ import {
   submitCandidate,
 } from "../helpers.js";
 
-/**
- * A Supervisor serving the built generation 1, with the real ModelRoute answering from the owner's
- * ChatGPT connection. OpenAI's Responses endpoint is the scripted model; Computer is the fake
- * project filesystem behind a real `ProjectRpcTarget`.
- */
-
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 
-/** A capability whose kills never reach the command, as when the container does not answer. */
 class UnkillableProjectTarget extends ProjectRpcTarget {
   override kill(): ReturnType<ProjectRpcTarget["kill"]> {
     return Promise.resolve({ ok: true, value: null });
   }
 }
 
-/** A Workspace Host whose project capability is a real target over an in-memory filesystem. */
 export class ProjectWorkspace extends FakeTenantWorkspace {
   readonly files = new FakeProjectFilesystemProvider();
   readonly execs = new FakeExecBackend();
@@ -49,7 +39,6 @@ export class ProjectWorkspace extends FakeTenantWorkspace {
     );
   }
 
-  /** Creates the parent directories too. */
   seedFile(path: string, text: string): void {
     const parts = path.split("/").filter((part) => part !== "");
 
@@ -70,7 +59,6 @@ type Control = Awaited<ReturnType<typeof connectedSupervisor>>;
 
 type Answer = () => Promise<Response>;
 
-/** The ChatGPT model turn reads only each event's data line. */
 function sse(events: readonly object[]): Response {
   const body = [...events, { type: "response.completed", response: {} }]
     .map((event) => `data: ${JSON.stringify(event)}\n\n`)
@@ -97,11 +85,6 @@ export const calls =
       ]),
     );
 
-/**
- * An answer the test releases. It polls rather than awaiting a promise the test resolves, because
- * the model route answers in another request's context, and workerd does not wake a request on a
- * promise another request resolved.
- */
 export function held() {
   let released: Answer | undefined;
 
@@ -119,10 +102,6 @@ export function held() {
   };
 }
 
-/**
- * The scripted model: each Responses request takes the next answer and records its input. Every
- * other request (GitHub's size check) finds nothing. The test's `afterEach` restores the mocks.
- */
 export function scriptModel(...answers: readonly Answer[]) {
   const inputs: ResponsesInput[] = [];
   const queue = [...answers];
@@ -145,18 +124,12 @@ export function scriptModel(...answers: readonly Answer[]) {
   return { inputs };
 }
 
-/**
- * The Worker Loader caches a generation by its harness commit, environment included, and that
- * environment's model route names the Supervisor that loaded it. One commit per Supervisor keeps
- * each test on its own route.
- */
 async function commitNamed(name: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(name));
 
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** A connected Supervisor whose ChatGPT connection is ready and whose active generation is the build. */
 export async function servingGeneration1(
   name: string,
   workspace: ProjectWorkspace,
@@ -206,7 +179,6 @@ export async function submitted(
   return result.submissionId;
 }
 
-/** The transcript the events carry: the snapshot's entries and every entry a later event ends with. */
 export function transcript(events: readonly AgentEvent[]): readonly EntryRecord[] {
   const entries = new Map<number, EntryRecord>();
 
@@ -229,7 +201,6 @@ export function transcript(events: readonly AgentEvent[]): readonly EntryRecord[
 
 export type Line = Readonly<{ role: string; text: string }>;
 
-/** Each conversation message of the transcript, system prompt changes left out, as its role and text. */
 export function lines(entries: readonly EntryRecord[]): readonly Line[] {
   return entries.flatMap((entry) =>
     (entry.model ?? [])
@@ -243,7 +214,6 @@ export function lines(entries: readonly EntryRecord[]): readonly Line[] {
   );
 }
 
-/** Answers that end a run: assistant messages that stopped without asking for a tool. */
 export function answerCount(entries: readonly EntryRecord[]): number {
   return entries.filter((entry) =>
     (entry.model ?? []).some(
@@ -252,7 +222,6 @@ export function answerCount(entries: readonly EntryRecord[]): number {
   ).length;
 }
 
-/** Reads the project's event stream until the transcript holds `count` answers, then cancels it. */
 export async function untilAnswered(
   control: Control,
   projectId: string,

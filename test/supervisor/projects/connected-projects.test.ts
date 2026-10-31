@@ -1,19 +1,8 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { ConnectedProjects } from "../../../src/supervisor/projects/index.js";
 import { projectIdForRepository, resolveProject } from "../../../src/project-catalog.js";
-
-/**
- * The tenant's connected repositories, in the Supervisor's own storage.
- *
- * The catalog used to be two entries in the source, so a tenant had exactly two projects and no
- * connect flow could add a third. These tests hold the properties that replaced that: any number
- * of projects, identity that comes from the repository rather than from a position or a name, and
- * a repeat connection that converges instead of duplicating.
- */
 
 const NOW = 1_700_000_000_000;
 

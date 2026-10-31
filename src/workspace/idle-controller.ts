@@ -13,15 +13,10 @@ type IdleControllerPorts = Readonly<{
   idleLimitMs: number;
   setAlarm(atMs: number): Promise<void>;
   containerRunning(): boolean;
-  /** Release the Workspace's hold on the container: this ends computerd's open WebSocket request. */
   closeWorkspace(): Promise<void>;
   stopContainer(): Promise<void>;
 }>;
 
-/**
- * The alarm is armed once per quiet period and re-armed when it fires early. Nothing here is a
- * timer, so it cannot keep the object in memory.
- */
 export class WorkspaceIdleController implements ProjectActivity {
   readonly #ports: IdleControllerPorts;
   #inFlight = 0;
@@ -54,7 +49,6 @@ export class WorkspaceIdleController implements ProjectActivity {
     this.#armForQuietPeriod();
   }
 
-  /** Holds the workspace until `endsAtMs`; ending the lease earlier counts as activity then. */
   lease(endsAtMs: number): () => void {
     const lease = { endsAtMs };
     this.#leases.add(lease);
@@ -83,11 +77,6 @@ export class WorkspaceIdleController implements ProjectActivity {
     return this.#stopping ?? Promise.resolve();
   }
 
-  /**
-   * An armed alarm that fires early re-arms itself, so only an earlier due time, as an ended lease
-   * makes, writes it again. Activity must not fail because the alarm could not be written; the next
-   * activity retries.
-   */
   #armForQuietPeriod(): void {
     if (!this.#ports.containerRunning()) return;
 
@@ -121,7 +110,6 @@ export class WorkspaceIdleController implements ProjectActivity {
 
     if (decision.kind === "check-at") return this.#arm(decision.atMs);
 
-    // Set before the stop's synchronous first step, so work that arrives during it waits.
     this.#stopping = new Promise((done) => {
       this.#finishStop = done;
     });
@@ -134,10 +122,6 @@ export class WorkspaceIdleController implements ProjectActivity {
     }
   }
 
-  /**
-   * A failed close does not stop the destroy, because the destroy also ends the WebSocket. Work
-   * that begins during the close keeps the container.
-   */
   async #stop(idleForMs: number): Promise<void> {
     try {
       await this.#ports.closeWorkspace();
@@ -175,10 +159,6 @@ export class WorkspaceIdleController implements ProjectActivity {
   }
 }
 
-/**
- * The work is uninterruptible: the Host cannot cancel a native Computer call, so an interruption
- * waits for the work to settle, and the work stays counted until then.
- */
 export function trackedWork<A, E>(
   activity: Pick<WorkspaceIdleController, "begin" | "settled">,
   work: Effect.Effect<A, E>,
@@ -191,7 +171,6 @@ export function trackedWork<A, E>(
   );
 }
 
-/** The exec is already counted, so the stop keeps the container; this keeps the command from starting on a half-closed Workspace. */
 export function afterIdleStop(
   controller: Pick<WorkspaceIdleController, "settled">,
   backend: ExecBackend,

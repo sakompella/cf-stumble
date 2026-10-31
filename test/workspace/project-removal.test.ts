@@ -28,7 +28,6 @@ const request: ProjectRemovalRequest = {
 class FakeOperations implements WorkspaceOperations {
   readonly sources: string[] = [];
   readonly statted: string[] = [];
-  /** Durable store paths that are still present after the removal command. */
   readonly remaining = new Set<string>();
   syncFailure: WorkspaceSyncIncomplete | undefined;
 

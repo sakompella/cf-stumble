@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
@@ -56,11 +54,6 @@ export class MainFacet extends DurableObject {
   );
 }
 
-/**
- * Put a module map where a prepared generation puts one. A build runs in the tenant's workspace
- * and this runtime has no container to run one, so a test that needs a stored map writes the rows
- * a preparation writes and nothing else.
- */
 export function storeModuleMap(
   control: DurableObjectStub<Supervisor>,
   input: MainHarnessArtifactInput,
@@ -80,14 +73,6 @@ export function storeModuleMap(
   });
 }
 
-/**
- * Give a Supervisor the two projects of `test/project-fixtures.ts`.
- *
- * A real connection verifies repository access and clones through the Workspace Host, and this
- * runtime has no container to do either, so these tests write the rows a connection writes and
- * nothing else. The Supervisor then resolves project ids exactly as it does in a deployment: from
- * its own `connected_projects` table.
- */
 export function connectSampleProjects(control: DurableObjectStub<Supervisor>): Promise<void> {
   return runInDurableObject(control, (_instance, state) => {
     const projects = new ConnectedProjects(state.storage);
@@ -101,10 +86,6 @@ export function connectSampleProjects(control: DurableObjectStub<Supervisor>): P
   });
 }
 
-/**
- * A Supervisor holding the tenant's two connected projects. The catalog is storage now, so a test
- * that names a project has to connect it first, exactly as the owner does.
- */
 export async function connectedSupervisor(name: string): Promise<DurableObjectStub<Supervisor>> {
   const control = env.SUPERVISOR.getByName(name);
   await connectSampleProjects(control);
@@ -119,14 +100,6 @@ export async function activeSupervisor(name: string): Promise<DurableObjectStub<
   return control;
 }
 
-/**
- * Bring a Supervisor to a prepared Generation 0 built from the fixture module map.
- *
- * The Supervisor no longer seeds a generation, so Generation 0 is an ordinary owner submission
- * here exactly as it is in the deploy procedure: the fixture commit is submitted, takes label 0
- * because it is the first submission, and is then prepared. The check on the label keeps the
- * tests that name generation 0 honest about why it is 0.
- */
 export async function prepareFixtureGeneration(
   control: DurableObjectStub<Supervisor>,
 ): Promise<number> {
@@ -137,11 +110,6 @@ export async function prepareFixtureGeneration(
   return label;
 }
 
-/**
- * Submit, prepare, and activate the fixture commit as Generation 0. Returns the epoch the
- * activation recorded, like `activateGeneration`, because that is the epoch a following control
- * request must observe.
- */
 export async function activateFixtureGeneration(
   control: DurableObjectStub<Supervisor>,
 ): Promise<number> {
@@ -170,10 +138,6 @@ export function labelCandidate(
   return submitCandidate(control, harnessCommit);
 }
 
-/**
- * Prepare a labeled generation through the Supervisor's own `prepareGeneration`, from a module map
- * stored for its commit first, so the preparation reads that map instead of building one.
- */
 export async function prepareWithModuleMap(
   control: DurableObjectStub<Supervisor>,
   label: number,

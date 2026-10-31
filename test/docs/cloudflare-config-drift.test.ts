@@ -3,16 +3,6 @@ import cloudflareConfig from "../../cloudflare.config.js";
 import { isRecord } from "../../src/untrusted.js";
 import { parsedConfig } from "./wrangler-files.js";
 
-/**
- * `cloudflare.config.ts` is the source of truth for the Worker. Two Wrangler files remain: the
- * Deploy to Cloudflare flow and `wrangler deploy` read `wrangler.jsonc`, and the vitest pool reads
- * `wrangler.test.jsonc` (its `cloudflare.config.ts` support cannot resolve a Durable Object binding
- * to the Worker itself). These tests fail when either Wrangler file drifts from the source of
- * truth, and when a live Durable Object class is missing or not SQLite-backed. Both formats declare
- * Durable Objects with `exports`, so `wrangler deploy` and `cf deploy` state the same lifecycle.
- */
-
-/** The deployment facts that both configuration formats state, in one shape. */
 type Facts = Readonly<{
   name: unknown;
   entrypoint: unknown;
@@ -60,20 +50,16 @@ function sorted<T>(values: readonly T[]): readonly T[] {
   return values.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
 
-// Wrangler writes the Dockerfile path as "./containers/..."; the new file may omit the "./".
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads an untyped configuration value.
 function dockerfilePath(value: unknown): string {
   return String(value).replace(/^\.\//u, "");
 }
 
-// A Wrangler binding without `script_name`, and a cf binding that names its own Worker, both point
-// at the Worker itself. Any other target is a different Worker.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads untyped configuration values.
 function bindingTarget(scriptName: unknown, ownName: unknown): string {
   return scriptName === undefined || scriptName === ownName ? "local" : JSON.stringify(scriptName);
 }
 
-// Wrangler spells keys in snake_case and `cloudflare.config.ts` in camelCase.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Converts an untyped nested configuration value.
 function camelKeys(value: unknown): unknown {
   if (!isRecord(value)) return value;

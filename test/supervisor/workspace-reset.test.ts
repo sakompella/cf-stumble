@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
@@ -106,7 +104,6 @@ test("a reset the Workspace Host refuses keeps the GitHub connection record", as
   });
 });
 
-/** A Workspace Host whose first reset waits until the test finishes it; later resets succeed. */
 function heldWorkspace() {
   const held = { started: (): void => {}, finish: (_result: WorkspaceResetResult): void => {} };
 
@@ -140,11 +137,9 @@ test("while a reset runs, messages, connects, disconnects, and a second reset ar
   await connectSampleProjects(control);
   const fake = heldWorkspace();
   vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
-  // A connect that got past the exclusion would ask GitHub for the repository size first.
   vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("this test reaches no network"));
   const busy = { ok: false, problem: { code: "workspace-busy" } };
 
-  // Inside the object, because the held reset resolves from this test's own request.
   await runInDurableObject(control, async (supervisor) => {
     const resetting = supervisor.resetWorkspace();
     await fake.started;
@@ -164,7 +159,6 @@ test("while a reset runs, messages, connects, disconnects, and a second reset ar
     await expect(resetting).resolves.toEqual({ ok: true, reset: "workspace" });
   });
 
-  // The exclusion ended with the reset, and the refused disconnect removed nothing.
   await expect(control.resetWorkspace()).resolves.toEqual({ ok: true, reset: "workspace" });
   expect((await control.listProjects()).map((project) => project.id)).toContain(
     "sample-project-one",

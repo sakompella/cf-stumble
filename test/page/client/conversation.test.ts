@@ -9,11 +9,6 @@ import { eventLine } from "../../../src/page/client/events.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 import { context, openPiRun, type PiRun } from "./pi-run.js";
 
-/**
- * A page that stayed connected and a page that connected just now must show the same
- * conversation: the first folded every event onto its snapshot, the second read one snapshot.
- */
-
 let run: PiRun | undefined;
 
 afterEach(async () => {

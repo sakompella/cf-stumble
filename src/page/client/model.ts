@@ -16,7 +16,6 @@ const GitHubConnection = Schema.Struct({
   state: Schema.String,
   detail: Schema.String,
   verificationUri: Schema.String,
-  /** Empty when this state is not the result of a check. */
   checked: Schema.String,
 });
 
@@ -71,16 +70,11 @@ export const Model = Schema.Struct({
   maybeProjectId: Schema.Option(Schema.String),
   conversationProject: Schema.String,
   conversationState: Schema.String,
-  /**
-   * Names the open events stream. Selecting a project or starting a fresh thread opens a new one,
-   * and a Message from an older stream is dropped.
-   */
   eventsStreamId: Schema.Number,
   conversation: Conversation,
   outbox: Schema.Array(OutboxItem),
 
   prompt: Schema.String,
-  /** What became of this page's last send, cancel or run, shown while no run is active. */
   runNote: Schema.String,
   isFreshArmed: Schema.Boolean,
   freshThreadStatus: Schema.String,
@@ -97,10 +91,6 @@ export const Model = Schema.Struct({
   submitEpoch: Schema.String,
   submitPreparation: Schema.String,
   maybeDiagnostics: Schema.Option(Schema.String),
-  /**
-   * The panel is keyed by it, so each new output is a new, closed disclosure and the reader's own open
-   * or close never races a render.
-   */
   diagnosticsShown: Schema.Number,
 
   activate: ControlPanel,

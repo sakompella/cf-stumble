@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
@@ -7,18 +5,10 @@ import * as Result from "effect/Result";
 import { ChatGPTCredentialStore } from "../src/chatgpt/credential-store.js";
 import { loadMainFacet } from "../src/facet/index.js";
 
-/**
- * Workers RPC exposes every method on an entrypoint's prototype, and TypeScript's `private` still
- * puts a method there. These tests reach the model route the way a generation does: a Worker
- * Loader isolate with no outbound network whose only binding is the route stub the Supervisor
- * creates.
- */
-
 const ACCESS_TOKEN = "synthetic-access-token-for-rpc-surface";
 
 const REFRESH_TOKEN = "synthetic-refresh-token-for-rpc-surface";
 
-/** Reads the route's instance state and calls its helper, then answers with what came back. */
 const PROBING_GENERATION = `
 const seen = [];
 

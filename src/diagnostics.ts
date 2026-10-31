@@ -2,7 +2,6 @@ import { REDACTED, redactCredentials } from "./github/index.js";
 
 const CAUSE_TEXT_LIMIT = 400;
 
-/** A DOMException from `AbortSignal.timeout` names itself; ordinary prose says "timed out". */
 const TIMEOUT_MESSAGE_PATTERN = /\btime(?:d)?[ -]?out\b/iu;
 
 export function isTimeoutFailure(cause: unknown): boolean {
@@ -17,13 +16,8 @@ export function isTimeoutFailure(cause: unknown): boolean {
 
 const UNPRINTABLE_CAUSE = "[unprintable cause]";
 
-/** The GitHub-shaped redaction does not recognize JWTs. */
 const JWT_PATTERN = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]*/gu;
 
-/**
- * Callers cut only after this runs: cutting first can leave a token's header and claims without the
- * rest the pattern needs.
- */
 export function redactLogText(text: string, knownToken?: string): string {
   return redactCredentials(text, knownToken).replaceAll(JWT_PATTERN, REDACTED);
 }
@@ -42,10 +36,6 @@ function causeText(cause: unknown, knownToken: string | undefined): string {
   }
 }
 
-/**
- * `knownToken` is stripped first so an opaque value the fixed patterns would not recognize cannot
- * reach the log.
- */
 export function logRedactedCause(context: string, cause: unknown, knownToken?: string): void {
   console.error(`${context}: ${causeText(cause, knownToken)}`);
 }
@@ -60,10 +50,6 @@ const FIELD_TEXT_LIMIT = 200;
 
 const CONSOLE_METHOD = { info: "log", warn: "warn", error: "error" } as const;
 
-/**
- * String fields are redacted and bounded, so a code built from tool output cannot leak a
- * credential.
- */
 export function logEvent(level: LogLevel, event: string, fields: LogFields = {}): void {
   const redacted = Object.entries(fields).map(([key, value]) =>
     isText(value) ? [key, redactLogText(value).slice(0, FIELD_TEXT_LIMIT)] : [key, value],

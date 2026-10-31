@@ -1,8 +1,3 @@
-/**
- * A path is request data and can be anything a client typed, so the log names the pattern, never the
- * path; a path outside the owner API is `relay`.
- */
-
 const FIXED_ROUTES: ReadonlySet<string> = new Set([
   "/",
   "/health",
@@ -44,7 +39,6 @@ export function routePattern(pathname: string): string {
   return pathname.startsWith("/api/") ? "/api/unknown" : "relay";
 }
 
-/** The Supervisor resolves it against the catalog, so an unknown id is not guessed at here. */
 export function projectIdFromPath(
   pathname: string,
   suffix: ProjectRouteSuffix,

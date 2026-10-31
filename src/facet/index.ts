@@ -12,11 +12,6 @@ export { MainHarnessArtifact } from "./artifact.js";
 
 export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
 
-/**
- * The Supervisor holds a stub of this shape and nothing wider. Project capabilities arrive through
- * the attached host, never through the loader environment, because loader environments are cached
- * per harness commit and shared by every project.
- */
 export interface MainFacetTarget extends Rpc.DurableObjectBranded, ConversationFacet {
   fetch(request: Request): Promise<Response>;
 }
@@ -25,7 +20,6 @@ function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] 
   return [module.name, { js: module.source }];
 }
 
-/** Loader entries are cached per harness commit, so only generation-invariant capabilities belong here. */
 export type MainFacetCapabilities = Readonly<{
   MODEL: Fetcher<ModelRoute>;
 }>;
@@ -37,7 +31,6 @@ function loadArtifact(
 ): WorkerStub {
   return loader.get(artifact.harnessCommit, () => ({
     compatibilityDate: "2025-01-01",
-    // Chord, under Pi Durable, uses WeakRef, which this date does not enable by itself.
     compatibilityFlags: ["enable_weak_ref"],
     mainModule: artifact.modules[0].name,
     modules: Object.fromEntries(artifact.modules.map(workerModuleEntry)),

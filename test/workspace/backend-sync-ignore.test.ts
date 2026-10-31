@@ -60,8 +60,6 @@ function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
 }
 
 function connect(backend: WorkspaceBackend): Promise<BackendHandle> {
-  // The fake backend does not use the host. Calling through its typed member keeps this test on
-  // the backend seam without manufacturing an unrelated database and filesystem.
   // oxlint-disable-next-line anti-slop/no-reflect-apply, typescript/no-unsafe-return, typescript/unbound-method -- SAFETY: the fake backend ignores its host.
   return Reflect.apply(backend.connect, backend, []);
 }

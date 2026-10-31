@@ -2,10 +2,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-/**
- * Codes name the fault in the request or route, never the cause inside the Supervisor, so no internal
- * error text or credential reaches the client.
- */
 type ApiErrorCode =
   | "invalid-submission-request"
   | "invalid-activation-request"
@@ -25,7 +21,6 @@ export const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 export class InvalidRequestBody extends Data.TaggedError("InvalidRequestBody") {}
 
-/** A body must carry exactly the fields the schema names; an extra field is a refusal. */
 export function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown>>(
   request: Request,
   schema: S,
@@ -38,10 +33,6 @@ export function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown>>(
   );
 }
 
-/**
- * A Supervisor RPC rejected. Its cause can come from a generation's code or a workspace command,
- * so the route that catches this logs the cause redacted and never answers with it.
- */
 export class SupervisorCallFailed extends Data.TaggedError("SupervisorCallFailed")<{
   readonly cause: unknown;
 }> {}

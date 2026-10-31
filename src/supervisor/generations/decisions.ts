@@ -7,10 +7,6 @@ import type {
   PreparationCheckProblem,
 } from "./generation.js";
 
-/**
- * Plain snapshot of generation_state so the deciders are pure. Their current + 1 epoch is safe only
- * because the shell runs them in one single-threaded Durable Object transaction.
- */
 export type GenerationState = {
   readonly activeLabel: GenerationLabel | undefined;
   readonly epoch: number;

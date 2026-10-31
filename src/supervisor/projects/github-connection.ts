@@ -25,10 +25,6 @@ import type {
   RecordedConnection,
 } from "./github-connection-store.js";
 
-/**
- * No state carries a token. It goes from GitHub's reply into the workspace's `gh` configuration and
- * nowhere else.
- */
 export type GitHubConnectionStatus =
   | Readonly<{ state: "disconnected" }>
   | Readonly<{ state: "tooling-missing" }>
@@ -52,7 +48,6 @@ export type GitHubAuthorizationProblem =
   | "authorization-expired"
   | "authorization-denied";
 
-/** `checkedAt` and `github` are `null` before the first check and after a workspace reset. */
 export type GitHubConnectionRecord = Readonly<{
   github: GitHubConnectionStatus | null;
   checkedAt: number | null;
@@ -62,10 +57,6 @@ export type GitHubAuthorizationOutcome =
   | Readonly<{ ok: true; status: GitHubConnectionStatus; checkedAt: number | null }>
   | Readonly<{ ok: false; problem: GitHubAuthorizationProblem }>;
 
-/**
- * `fallbackToken` is recorded as `configured-token`, so a status never presents it as an owner
- * authorization.
- */
 export interface GitHubConnectionEnvironment {
   readonly clientId: string | undefined;
   readonly fallbackToken: string | undefined;
@@ -85,7 +76,6 @@ function reconnect(
   return { state: "reconnect-required", reason };
 }
 
-/** Nothing here reads a token, device code, user code, or login, so none can reach the log. */
 function outcome(status: GitHubConnectionStatus): string {
   return status.state === "reconnect-required" ? status.reason : status.state;
 }
@@ -196,10 +186,6 @@ export class GitHubConnection {
     this.store.clear();
   }
 
-  /**
-   * A pending authorization outranks the workspace's answer, since the credential is legitimately
-   * absent mid-flow.
-   */
   status(now: number, options: StatusReadOptions = {}): Effect.Effect<GitHubConnectionStatus> {
     return Effect.suspend(() => {
       const pending = this.pendingStatus(now);
@@ -264,7 +250,6 @@ export class GitHubConnection {
     });
   }
 
-  /** The device code stays in storage; only the verification URL and user code come back. */
   startAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
@@ -294,10 +279,6 @@ export class GitHubConnection {
     });
   }
 
-  /**
-   * The token is a local value that never reaches storage or a response. An answer that a newer
-   * authorization or a concurrent completion overtook is discarded, token included.
-   */
   completeAuthorization(now: number): Effect.Effect<GitHubAuthorizationOutcome> {
     return Effect.gen({ self: this }, function* () {
       const clientId = this.environment.clientId;
@@ -408,7 +389,6 @@ export class GitHubConnection {
     });
   }
 
-  /** A stopped check learned nothing, and one a workspace reset overtook is discarded. */
   private record(
     revision: number,
     now: number,

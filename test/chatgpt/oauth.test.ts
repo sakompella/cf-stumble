@@ -16,11 +16,6 @@ import {
   REFRESH_ONE,
 } from "./fixtures.js";
 
-/**
- * The sign-in pieces that decide what a pasted address and a token reply may mean. Every
- * destination and parameter name is written out here rather than imported.
- */
-
 const STATE = "state-FAKE-0123456789";
 
 function callback(query: string): string {

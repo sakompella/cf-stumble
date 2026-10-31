@@ -7,15 +7,6 @@ import { after, describe, it } from "node:test";
 import { gzipSync } from "node:zlib";
 import { OWNER_PAGE_SCRIPT_SOURCE } from "../src/page/owner-script.generated.ts";
 
-/**
- * Size ceilings for what a deploy uploads and what the owner's browser downloads, so a change that
- * grows past its expected cost fails here instead of in production. The Worker limit is the size
- * the Foldkit spike measured for the finished port plus about 10 percent. The page limit is the
- * Foldkit page's measured size plus about 10 percent (200,595 bytes gzip in Wave 5). ADR-0046
- * records the measured values.
- *
- * gzip runs at the default level, which reproduces the "gzip" figure `wrangler deploy` prints.
- */
 const KIB = 1024;
 
 const WORKER_UPLOAD_GZIP_LIMIT = 600 * KIB;
@@ -30,11 +21,6 @@ after(() => {
   rmSync(outdir, { recursive: true, force: true });
 });
 
-/**
- * The modules `wrangler deploy` would upload, without uploading them. `--containers-rollout=none`
- * skips the container image build, which needs Docker and does not change the Worker. Wrangler
- * also runs the configured build command, so the bundle holds the current page script.
- */
 function workerUploadGzipBytes(): number {
   execFileSync(
     "pnpm",

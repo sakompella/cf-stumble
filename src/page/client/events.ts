@@ -3,12 +3,6 @@ import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import type { AgentEvent as PiAgentEvent } from "@earendil-works/pi-durable";
 
-/**
- * The page reads the Pi Durable agent events of its conversation, one JSON line each. These Schemas
- * prove only the fields the page shows and drop the rest; an event type the page does not read
- * decodes to nothing, so a newer Pi that adds one does not break the page.
- */
-
 const TextBlock = Schema.Struct({ type: Schema.Literal("text"), text: Schema.String });
 
 const ToolCallBlock = Schema.Struct({
@@ -184,7 +178,6 @@ const parseJson = Option.liftThrowable((raw: string): unknown => JSON.parse(raw)
 
 const TypedLine = Schema.Struct({ type: Schema.String });
 
-/** A line that is JSON with a `type` the page does not read is `Unread`, not a fault. */
 export function eventLine(line: string): EventLine {
   const maybeParsed = parseJson(line);
   const maybeTyped = Option.flatMap(maybeParsed, Schema.decodeUnknownOption(TypedLine));

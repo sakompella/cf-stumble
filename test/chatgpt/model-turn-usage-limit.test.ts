@@ -14,19 +14,12 @@ import {
   type RecordedCall,
 } from "./fixtures.js";
 
-/**
- * A ChatGPT call that the plan's usage limit refuses (ADR-0047): before any output it is the typed
- * failure the route answers from Workers AI, after output it fails as any provider error does, and
- * the log names the provider's status, error type and code without its message.
- */
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "Read a.txt" }] };
 
-/** How one call ended, read without the route's stream, so the case the route falls back on shows. */
 async function outcomeOf(
   credential: ChatGPTCredential,
   reply: (call: RecordedCall) => Promise<Response>,

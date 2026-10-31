@@ -1,17 +1,7 @@
-/// <reference types="@cloudflare/vitest-plugin/types" />
-
 import { expect, test } from "vitest";
 import { activeSupervisor, artifact, labelCandidate, prepareWithModuleMap } from "../helpers.js";
 import { expectFailedCandidate } from "../generation-reads.js";
 
-/**
- * A candidate whose successful headers arrive in time can still fail the startup check while its
- * body is read. Each candidate has its own commit, because the Worker Loader caches by commit.
- *
- * These cases do not reset storage after each test: a check that fails to bound a stalled body is
- * still pending when it fails, and `reset()` waits for it forever. Each case has its own
- * Supervisor name instead. `vitest.config.ts` ignores the platform's own rejections for this file.
- */
 const commits = {
   failing: "c123456789abcdef0123456789abcdef01234567",
   stalled: "d123456789abcdef0123456789abcdef01234567",

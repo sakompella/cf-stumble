@@ -34,27 +34,16 @@ export function computerFilesystemProvider(workspace: Workspace): ProjectFilesys
   };
 }
 
-/**
- * Must be the Durable Object's own API, not `workspace.db.transactionSync`: the database is this
- * object's SQLite storage, and the runtime rejects SQL BEGIN or SAVEPOINT statements and names
- * `state.storage.transaction()` instead.
- */
 export function durableObjectTransactions(storage: DurableObjectStorage): ProjectTransactions {
   return { transactionSync: (closure) => storage.transactionSync(closure) };
 }
 
-/**
- * The pinned computerd runner signals only the direct shell, so this wrapper keeps a TERM trap in
- * the session leader and sends SIGKILL to the whole process group. A nested shell keeps the trap
- * installed even when the command uses `exec`.
- */
 export function processGroupCommand(command: string): string {
   const body = `trap 'kill -s KILL 0' TERM INT HUP; /bin/sh -c ${shellQuote(command)} & wait $!`;
 
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }
 
-/** `container-shell` matches the backend id registered on `WorkspaceHost`. */
 // oxlint-disable-next-line max-lines-per-function -- The adapter wires process-group execution and container replacement detection in one port.
 export function computerExecBackend(
   workspace: Workspace,
