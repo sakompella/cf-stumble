@@ -2,7 +2,7 @@ import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import { AbortRun, FetchChatGPT, MintRequestId, ReplaceThread, SendMessage } from "./commands.js";
 import { applyEvent, EMPTY_CONVERSATION } from "./conversation.js";
-import type { AgentEvent } from "./events.js";
+import type { AgentEvent } from "./agent-event.js";
 import type { Model } from "./model.js";
 import { clearError, withError, type Handlers, type UpdateReturn } from "./update-shared.js";
 

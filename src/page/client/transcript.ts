@@ -3,7 +3,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
-import type { AssistantMessage, Block, PiMessage } from "./events.js";
+import type { AssistantMessage, Block, PiMessage } from "./agent-event.js";
 
 const ToolOutput = Schema.Struct({
   content: Schema.String,

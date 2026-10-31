@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Option from "effect/Option";
 import { expect, test } from "vitest";
-import type { AgentEvent } from "../../../src/page/client/events.js";
+import type { AgentEvent } from "../../../src/page/client/agent-event.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { init, update } from "../../../src/page/client/update.js";

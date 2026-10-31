@@ -10,11 +10,17 @@ import {
 } from "../../../src/workspace/executor.js";
 import {
   executeGitHubCredentialRequest,
+  type GitHubCredentialRequest,
   type GitHubCredentialResult,
 } from "../../../src/workspace/github-credential.js";
 import type { GitHubCredentialState } from "../../../src/github/index.js";
-import { HARNESS_BUILD_CONFIGURATION } from "../../../src/harness-build.js";
-import { ensureManagedInstructions } from "../../../src/workspace/host.js";
+import {
+  HARNESS_BUILD_CONFIGURATION,
+  type HarnessBuildRequest,
+} from "../../../src/harness-build.js";
+import type { ProjectProvisionRequest } from "../../../src/workspace/project-provision.js";
+import type { ProjectRemovalRequest } from "../../../src/workspace/project-removal.js";
+import { ensureManagedInstructions } from "../../../src/workspace/managed-instructions.js";
 import type { WorkspaceResult } from "../../../src/workspace/decisions.js";
 
 export class HeldCommand {
@@ -172,8 +178,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return { stdout: `${stdout}\n`, stderr: "", exitCode: 0 };
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
-  credential(request: unknown): Promise<GitHubCredentialResult> {
+  credential(request: GitHubCredentialRequest): Promise<GitHubCredentialResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -189,8 +194,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     );
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
-  provision(request: unknown): Promise<WorkspaceResult> {
+  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -198,8 +202,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     return Effect.runPromise(executeProjectProvisionRequest({ operations: this, request }));
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
-  build(request: unknown): Promise<WorkspaceResult> {
+  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }
@@ -213,8 +216,7 @@ export class FakeTenantWorkspace implements WorkspaceOperations {
     );
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Mirrors the Workspace Host's RPC boundary.
-  removeProject(request: unknown): Promise<WorkspaceResult> {
+  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceResult> {
     if (this.unavailable) {
       return Promise.reject(new Error("fake workspace host is unavailable"));
     }

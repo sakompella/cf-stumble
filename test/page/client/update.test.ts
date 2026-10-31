@@ -2,7 +2,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
 import { checkedWording, gitHubReport } from "../../../src/page/client/api.js";
-import type { AgentEvent } from "../../../src/page/client/events.js";
+import type { AgentEvent } from "../../../src/page/client/agent-event.js";
 import { Message } from "../../../src/page/client/message.js";
 import type { Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";

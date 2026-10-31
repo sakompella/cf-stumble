@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 import worker from "../../src/worker.js";
+import type { SupervisorWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
+import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import {
   activateGeneration,
   artifact,
@@ -26,10 +28,10 @@ export function ownerSession() {
 export function stubExternalBoundaries<Workspace extends FakeTenantWorkspace>(
   workspace: Workspace,
 ): Workspace {
-  // SAFETY: the fake implements every Workspace Host RPC that the test drives.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
-  const host = workspace as unknown as ReturnType<typeof env.WORKSPACE_HOST.getByName>;
-  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(host);
+  replaceWorkspaceHost<Omit<SupervisorWorkspaceHost, "project" | "reset">>(
+    env.WORKSPACE_HOST,
+    workspace,
+  );
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     Promise.resolve(new Response("{}", { status: 404 })),
   );

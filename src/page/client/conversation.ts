@@ -10,7 +10,7 @@ import {
   type Block,
   type MessageChange,
   type ToolOutputChange,
-} from "./events.js";
+} from "./agent-event.js";
 
 export const Conversation = Schema.Struct({
   entries: Schema.Array(Entry),

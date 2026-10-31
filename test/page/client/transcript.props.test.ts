@@ -2,7 +2,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION } from "../../../src/page/client/conversation.js";
-import type { PiMessage } from "../../../src/page/client/events.js";
+import type { PiMessage } from "../../../src/page/client/agent-event.js";
 import { transcriptOf } from "../../../src/page/client/transcript.js";
 
 type Drawn = Readonly<{ isCall: boolean; id: string; isError: boolean }>;

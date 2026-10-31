@@ -19,15 +19,21 @@ export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
   | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
 
+type HostOf<Namespace extends Readonly<{ getByName(name: string): object }>> = ReturnType<
+  Namespace["getByName"]
+>;
+
+export type SupervisorWorkspaceHost = HostOf<BuildWorkspaceNamespace> &
+  HostOf<ProjectWorkspaceNamespace> &
+  HostOf<CredentialWorkspaceNamespace> &
+  HostOf<ProvisionWorkspaceNamespace> &
+  HostOf<ProjectRemovalWorkspaceNamespace> &
+  HostOf<HarnessProvisionWorkspaceNamespace> &
+  ResetWorkspaceHost;
+
 export type SupervisorEnv = {
   readonly LOADER: WorkerLoader;
-  readonly WORKSPACE_HOST: BuildWorkspaceNamespace &
-    ProjectWorkspaceNamespace &
-    CredentialWorkspaceNamespace &
-    ProvisionWorkspaceNamespace &
-    ProjectRemovalWorkspaceNamespace &
-    HarnessProvisionWorkspaceNamespace &
-    ResetWorkspaceNamespace;
+  readonly WORKSPACE_HOST: Readonly<{ getByName(name: string): SupervisorWorkspaceHost }>;
   readonly GITHUB_OAUTH_CLIENT_ID?: string;
   readonly GH_TOKEN?: string;
   readonly CHATGPT_MODEL: string;
