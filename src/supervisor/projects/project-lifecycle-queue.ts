@@ -20,7 +20,7 @@ export class ProjectLifecycleQueue {
       });
 
       return Effect.promise(() => previous).pipe(
-        Effect.andThen(Effect.uninterruptible(operation)),
+        Effect.andThen(operation),
         Effect.ensuring(
           Effect.sync(() => {
             finished.settle();
