@@ -22,14 +22,6 @@ test("the script's path names a hash of its bytes", async () => {
   expect(OWNER_PAGE_SCRIPT_FILE.path).toBe(`/assets/owner-${hex.join("").slice(0, 16)}.js`);
 });
 
-test("the script the browser receives parses as JavaScript", () => {
-  const script = OWNER_PAGE_SCRIPT_FILE.source;
-
-  expect(script.length).toBeGreaterThan(0);
-  // oxlint-disable-next-line typescript/no-implied-eval -- Constructing the function is the check. It parses the script and is never called.
-  expect(() => new Function(script)).not.toThrow();
-});
-
 test("nothing outside the nonced style and the script file can run or style the page", () => {
   const html = ownerPageHtml("test-nonce");
 

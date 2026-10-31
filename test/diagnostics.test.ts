@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { afterEach, expect, test, vi, type MockInstance } from "vitest";
 import {
   isTimeoutFailure,
@@ -90,6 +91,13 @@ test("isTimeoutFailure reports false instead of throwing when a cause's message 
   expect(isTimeoutFailure(hostileCause)).toBe(false);
 });
 
+const decodeLogFields = Schema.decodeUnknownSync(
+  Schema.Record(
+    Schema.String,
+    Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]),
+  ),
+);
+
 function onlyEntry(spy: MockInstance<(...args: unknown[]) => void>): LogFields {
   expect(spy).toHaveBeenCalledTimes(1);
   const call = spy.mock.calls[0] ?? [];
@@ -98,10 +106,8 @@ function onlyEntry(spy: MockInstance<(...args: unknown[]) => void>): LogFields {
     "one log call is one argument, so Workers Logs indexes it as one event",
   ).toHaveLength(1);
   const [entry] = call;
-  expect(entry).toBeTypeOf("object");
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: checked to be an object above, and `logEvent` writes only `LogFields`.
-  return entry as LogFields;
+  return decodeLogFields(entry);
 }
 
 test("logEvent writes one JSON-safe object with the event, its level, a timestamp, and the fields", () => {

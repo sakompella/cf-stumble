@@ -6,6 +6,7 @@ import {
   isJsonRecord,
   isJsonString,
   parseJsonRecordText,
+  parseJsonText,
   type JsonRecord,
   type JsonValue,
 } from "../json.mts";
@@ -76,8 +77,7 @@ async function send(token: string, url: string, body?: JsonRecord): Promise<Json
     throw new ApiFailure(`HTTP ${response.status} from ${new URL(url).pathname}`);
   }
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: a JSON response body is JSON; callers check its shape before reading it.
-  return (await response.json().catch(() => null)) as JsonValue;
+  return parseJsonText(await response.text().catch(() => "")) ?? null;
 }
 
 export async function resolveAccount(

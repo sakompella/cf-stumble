@@ -1,46 +1,56 @@
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
-import cloudflareConfig from "../../cloudflare.config.js";
-import { isRecord } from "../../src/untrusted.js";
-import { parsedConfig } from "./wrangler-files.js";
+import cloudflareConfigModule from "../../cloudflare.config.js";
+import { configJson } from "./wrangler-files.js";
+
+type FactObject = { readonly [key: string]: Fact };
+
+type Fact = Schema.Json | undefined | readonly Fact[] | FactObject;
 
 type Facts = Readonly<{
-  name: unknown;
-  entrypoint: unknown;
-  compatibilityDate: unknown;
-  compatibilityFlags: unknown;
-  workersDev: unknown;
-  cacheEnabled: unknown;
-  observability: unknown;
-  routes: unknown;
-  durableObjectBindings: unknown;
-  durableObjectExports: unknown;
-  container: unknown;
-  vars: unknown;
-  secrets: unknown;
-  workerLoaders: unknown;
-  ai: unknown;
+  name: Fact;
+  entrypoint: Fact;
+  compatibilityDate: Fact;
+  compatibilityFlags: Fact;
+  workersDev: Fact;
+  cacheEnabled: Fact;
+  observability: Fact;
+  routes: Fact;
+  durableObjectBindings: Fact;
+  durableObjectExports: Fact;
+  container: Fact;
+  vars: Fact;
+  secrets: Fact;
+  workerLoaders: Fact;
+  ai: Fact;
 }>;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- `at` is the one place that narrows the untyped configuration values.
-function at(value: unknown, ...path: readonly string[]): unknown {
-  return path.reduce<unknown>(
-    (current, key) => (isRecord(current) ? current[key] : undefined),
+const cloudflareConfig = Schema.decodeUnknownSync(Schema.Json)(cloudflareConfigModule);
+
+function isFactObject(value: Fact): value is FactObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFactList(value: Fact): value is readonly Fact[] {
+  return Array.isArray(value);
+}
+
+function at(value: Fact, ...path: readonly string[]): Fact {
+  return path.reduce<Fact>(
+    (current, key) => (isFactObject(current) ? current[key] : undefined),
     value,
   );
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Narrows an untyped configuration value.
-function entries(value: unknown): readonly (readonly [string, unknown])[] {
-  return isRecord(value) ? Object.entries(value) : [];
+function entries(value: Fact): readonly (readonly [string, Fact])[] {
+  return isFactObject(value) ? Object.entries(value) : [];
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Narrows an untyped configuration value.
-function list(value: unknown): readonly unknown[] {
-  return Array.isArray(value) ? value : [];
+function list(value: Fact): readonly Fact[] {
+  return isFactList(value) ? value : [];
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Narrows an untyped configuration value.
-function keysOf(value: unknown): readonly string[] {
+function keysOf(value: Fact): readonly string[] {
   return entries(value)
     .map(([key]) => key)
     .toSorted();
@@ -50,19 +60,24 @@ function sorted<T>(values: readonly T[]): readonly T[] {
   return values.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads an untyped configuration value.
-function dockerfilePath(value: unknown): string {
-  return String(value).replace(/^\.\//u, "");
+function isText(value: Fact): value is string {
+  return typeof value === "string";
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads untyped configuration values.
-function bindingTarget(scriptName: unknown, ownName: unknown): string {
+function text(value: Fact): string {
+  return isText(value) ? value : "";
+}
+
+function dockerfilePath(value: Fact): string {
+  return text(value).replace(/^\.\//u, "");
+}
+
+function bindingTarget(scriptName: Fact, ownName: Fact): string {
   return scriptName === undefined || scriptName === ownName ? "local" : JSON.stringify(scriptName);
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Converts an untyped nested configuration value.
-function camelKeys(value: unknown): unknown {
-  if (!isRecord(value)) return value;
+function camelKeys(value: Fact): Fact {
+  if (!isFactObject(value)) return value;
 
   return Object.fromEntries(
     Object.entries(value).map(([key, inner]) => [
@@ -73,7 +88,7 @@ function camelKeys(value: unknown): unknown {
 }
 
 function wranglerFacts(name: string): Facts {
-  const wrangler: unknown = parsedConfig(name);
+  const wrangler = configJson(name);
   const container = list(at(wrangler, "containers"))[0];
 
   return {
@@ -119,8 +134,7 @@ function wranglerFacts(name: string): Facts {
   };
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads an untyped configuration value.
-function cloudflareExports(worker: unknown): Facts["durableObjectExports"] {
+function cloudflareExports(worker: Fact): Facts["durableObjectExports"] {
   return Object.fromEntries(
     entries(at(worker, "exports")).map(([exportName, entry]) => [
       exportName,
@@ -225,12 +239,12 @@ const CLOUDFLARE_CONTAINER_KEYS = ["image", "instanceType", "maxInstances", "nam
 
 test("no configuration field escapes the comparison", () => {
   const withoutAi = WRANGLER_KEYS.filter((key) => key !== "ai");
-  const wranglerContainer = list(at(parsedConfig("wrangler.jsonc"), "containers"))[0];
+  const wranglerContainer = list(at(configJson("wrangler.jsonc"), "containers"))[0];
 
-  expect(keysOf(parsedConfig("wrangler.jsonc"))).toEqual(WRANGLER_KEYS);
-  expect(keysOf(parsedConfig("wrangler.test.jsonc"))).toEqual(withoutAi);
+  expect(keysOf(configJson("wrangler.jsonc"))).toEqual(WRANGLER_KEYS);
+  expect(keysOf(configJson("wrangler.test.jsonc"))).toEqual(withoutAi);
   expect(keysOf(wranglerContainer)).toEqual(WRANGLER_CONTAINER_KEYS);
-  expect(keysOf(list(at(parsedConfig("wrangler.test.jsonc"), "containers"))[0])).toEqual(
+  expect(keysOf(list(at(configJson("wrangler.test.jsonc"), "containers"))[0])).toEqual(
     WRANGLER_CONTAINER_KEYS,
   );
   expect(keysOf(at(cloudflareConfig, "worker"))).toEqual(CLOUDFLARE_WORKER_KEYS);
@@ -267,12 +281,18 @@ test("every cloudflare.config.ts binding is one the comparison maps", () => {
     at(binding, "type"),
   );
 
-  expect(sorted(types).join(" ")).toBe("ai durable-object durable-object text worker-loader");
+  expect(sorted(types)).toEqual([
+    "ai",
+    "durable-object",
+    "durable-object",
+    "text",
+    "worker-loader",
+  ]);
 });
 
 test("every configuration declares exactly one container", () => {
-  expect(list(at(parsedConfig("wrangler.jsonc"), "containers"))).toHaveLength(1);
-  expect(list(at(parsedConfig("wrangler.test.jsonc"), "containers"))).toHaveLength(1);
+  expect(list(at(configJson("wrangler.jsonc"), "containers"))).toHaveLength(1);
+  expect(list(at(configJson("wrangler.test.jsonc"), "containers"))).toHaveLength(1);
   expect(list(at(cloudflareConfig, "containers"))).toHaveLength(1);
 });
 
@@ -282,7 +302,7 @@ test("the container name is the one Wrangler derives from the Worker and the cla
       ([, entry]) => at(entry, "container") !== undefined,
     ) ?? [""];
 
-    expect(at(facts.container, "name")).toBe(`${String(facts.name)}-${hostClass.toLowerCase()}`);
+    expect(at(facts.container, "name")).toBe(`${text(facts.name)}-${hostClass.toLowerCase()}`);
   }
 });
 

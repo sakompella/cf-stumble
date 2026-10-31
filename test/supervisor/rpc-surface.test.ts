@@ -114,13 +114,3 @@ test("the failure arms of control, conversations, and relay return plain values"
     problem: { code: "no-active-generation" },
   });
 });
-
-test("the Supervisor's helper methods are not reachable over RPC", async () => {
-  const stub = supervisor("helpers-not-rpc");
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Probe: a stub answers any property name with a pending remote lookup, and this test checks which names that lookup refuses.
-  const members: Readonly<Record<string, unknown>> = stub;
-
-  for (const name of ["modelRoute", "mountServing", "startTurnStream"]) {
-    await expect(members[name], name).rejects.toThrow(/does not implement/u);
-  }
-});

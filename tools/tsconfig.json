@@ -12,6 +12,7 @@
     "bundle-budgets.test.ts",
     "foldkit-lint.test.ts",
     "json.mts",
+    "owner-script.test.ts",
     "module-map-build.mts",
     "verify-computer-tarball.mts",
     "verify-project-protocol.mts",
