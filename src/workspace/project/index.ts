@@ -18,8 +18,6 @@ export type {
   ProjectTransactions,
 } from "./provider.js";
 
-export { parseAddressedPath } from "./resolve.js";
-
 export { parseProjectBudget, type ProjectBudget } from "./budget.js";
 
 export { ProjectRpcTarget } from "./target.js";

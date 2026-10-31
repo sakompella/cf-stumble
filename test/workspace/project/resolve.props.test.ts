@@ -4,20 +4,15 @@ import { posix } from "node:path";
 import { expect, test } from "vitest";
 import { addressedPathOf, parseAddressedPath } from "../../../src/workspace/project/resolve.js";
 
-type AddressCandidate = string | number | boolean | null | Record<string, never>;
-
 const arbitraryPath = gs.oneOf(
   gs.text({ alphabet: "ab/.\\\u0000", maxSize: 20 }),
   gs.text({ alphabet: "ab", maxSize: 16 }).map((suffix) => `/a/${suffix}\\`),
   gs.text({ alphabet: "ab", maxSize: 16 }).map((suffix) => `/a/${suffix}\u0000`),
   gs.text({ alphabet: "abc", maxSize: 16 }).map((suffix) => (suffix === "" ? "/" : `/a/${suffix}`)),
-  gs.sampledFrom([null, 0, false, {}, "relative/path", "/a//b", "/a/../b", "/a/"]),
+  gs.sampledFrom(["relative/path", "/a//b", "/a/../b", "/a/"]),
 );
 
-function isAcceptedByOracle(value: AddressCandidate): boolean {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The independent oracle accepts only strings.
-  if (typeof value !== "string") return false;
-
+function isAcceptedByOracle(value: string): boolean {
   if (!value.startsWith("/")) return false;
 
   if (value.includes("\\") || value.includes("\0")) return false;

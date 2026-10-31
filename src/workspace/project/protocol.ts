@@ -1,5 +1,3 @@
-// oxlint-disable anti-slop/no-unknown-parameters -- This is the RPC contract itself: a Durable Object stub can be called with any value, so every argument here is unproven until ProjectRpcTarget parses it.
-
 export const MAX_FILE_BYTES = 1_000_000;
 
 export const MAX_EXEC_TIMEOUT_MS = 10 * 60 * 1_000;
@@ -61,15 +59,23 @@ export type ExecEvent =
       error: { code: "backend-unavailable" | "container-restarted" };
     };
 
+export type StartExecWire = Readonly<{
+  command: string;
+  cwd?: string | undefined;
+  timeoutMs?: number | undefined;
+}>;
+
+export type WriteFileWire = Readonly<{ path: string; bytes: Uint8Array; mode: WriteMode }>;
+
 export interface ProjectRpcTargetContract {
-  lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>>;
-  readFile(path: unknown): Promise<ProjectResult<Uint8Array>>;
-  writeFile(path: unknown, bytes: unknown, mode: unknown): Promise<ProjectResult<null>>;
-  listFiles(path: unknown): Promise<ProjectResult<ProjectListing>>;
+  lstat(path: string): Promise<ProjectResult<ProjectLstatInfo>>;
+  readFile(path: string): Promise<ProjectResult<Uint8Array>>;
+  writeFile(path: string, bytes: Uint8Array, mode: WriteMode): Promise<ProjectResult<null>>;
+  listFiles(path: string): Promise<ProjectResult<ProjectListing>>;
   startExec(
-    input: unknown,
+    input: StartExecWire,
   ): Promise<ProjectResult<{ operationId: string; events: ReadableStream<Uint8Array> }>>;
-  kill(operationId: unknown): Promise<ProjectResult<null>>;
+  kill(operationId: string): Promise<ProjectResult<null>>;
   endTurn(): Promise<ProjectResult<{ killed: number }>>;
 }
 

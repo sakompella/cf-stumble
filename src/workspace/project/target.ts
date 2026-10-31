@@ -1,39 +1,33 @@
-// oxlint-disable max-lines -- Capability lifetime, process cleanup, and RPC methods share one bounded target.
 import { RpcTarget } from "cloudflare:workers";
 import type { ExecBackend } from "./exec-backend.js";
 import { startExecOperation, type ExecOperation } from "./exec-operation.js";
 import type { ProjectActivity } from "../idle-controller.js";
 import {
+  listProjectDirectory,
+  lstatProjectPath,
+  readProjectFile,
+  writeProjectFile,
+} from "./file-operations.js";
+import {
   mapProviderError,
   type ProjectFilesystemProvider,
   type ProjectTransactions,
 } from "./provider.js";
-import {
-  addressedPathOf,
-  fileInfoOf,
-  joinOne,
-  parseAddressedPath,
-  resolveAddressedPath,
-  resolveCanonicalPath,
-} from "./resolve.js";
+import { addressedPathOf, resolveAddressedPath } from "./resolve.js";
 import {
   fail,
   MAX_CONCURRENT_EXECS,
-  MAX_FILE_BYTES,
-  MAX_LIST_BYTES,
-  MAX_LIST_ENTRIES,
   ok,
-  type ProjectFileInfo,
+  type ProjectFailure,
   type ProjectListing,
   type ProjectLstatInfo,
   type ProjectResult,
-  type ProjectFailure,
   type ProjectRpcTargetContract,
+  type StartExecWire,
   type WriteMode,
 } from "./protocol.js";
 import {
-  isWriteMode,
-  OPERATION_ID_PATTERN,
+  parseOperationId,
   parseStartExecInput,
   type ParsedStartExecInput,
 } from "./start-exec-input.js";
@@ -61,8 +55,8 @@ function capAtBudget(requestedMs: number, remainingMs: number | undefined) {
 function projectResult<T>(operation: () => ProjectResult<T>): Promise<ProjectResult<T>> {
   try {
     return Promise.resolve(operation());
-  } catch (error) {
-    return Promise.resolve(fail(mapProviderError(error)));
+  } catch (cause) {
+    return Promise.resolve(fail(mapProviderError(cause)));
   }
 }
 
@@ -102,36 +96,25 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#armTurnTimer();
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#lstat` parses `path`.
-  lstat(path: unknown): Promise<ProjectResult<ProjectLstatInfo>> {
-    return this.#whileTurnLasts(() => this.#lstat(path));
+  lstat(path: string): Promise<ProjectResult<ProjectLstatInfo>> {
+    return this.#whileTurnLasts(() => lstatProjectPath(this.#provider, path));
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#readFile` parses `path`.
-  readFile(path: unknown): Promise<ProjectResult<Uint8Array>> {
-    return this.#whileTurnLasts(() => this.#readFile(path));
+  readFile(path: string): Promise<ProjectResult<Uint8Array>> {
+    return this.#whileTurnLasts(() => readProjectFile(this.#provider, path));
   }
 
-  writeFile(
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#writeFile` parses every argument.
-    path: unknown,
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#writeFile` parses every argument.
-    bytes: unknown,
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#writeFile` parses every argument.
-    mode: unknown,
-  ): Promise<ProjectResult<null>> {
-    return this.#whileTurnLasts(() => this.#writeFile(path, bytes, mode));
+  writeFile(path: string, bytes: Uint8Array, mode: WriteMode): Promise<ProjectResult<null>> {
+    return this.#whileTurnLasts(() =>
+      writeProjectFile(this.#provider, this.#transactions, { path, bytes, mode }),
+    );
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `#listFiles` parses `path`.
-  listFiles(path: unknown): Promise<ProjectResult<ProjectListing>> {
-    return this.#whileTurnLasts(() => this.#listFiles(path));
+  listFiles(path: string): Promise<ProjectResult<ProjectListing>> {
+    return this.#whileTurnLasts(() => listProjectDirectory(this.#provider, path));
   }
 
-  startExec(
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseStartExecInput` parses `input`.
-    input: unknown,
-  ): Promise<ProjectResult<StartedExec>> {
+  startExec(input: StartExecWire): Promise<ProjectResult<StartedExec>> {
     const ended = this.#turnEnded();
 
     if (ended !== undefined) {
@@ -224,22 +207,18 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
         },
         timeoutEndsTurn,
       );
-    } catch (error) {
+    } catch (cause) {
       endActivity?.();
 
-      throw error;
+      throw cause;
     }
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `operationId` is validated below.
-  kill(operationId: unknown): Promise<ProjectResult<null>> {
+  kill(operationId: string): Promise<ProjectResult<null>> {
     return projectResult(() => {
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC operation id is untrusted.
-      if (typeof operationId !== "string" || !OPERATION_ID_PATTERN.test(operationId)) {
-        return fail("invalid-request");
-      }
+      const parsed = parseOperationId(operationId);
 
-      return this.#kill(operationId);
+      return parsed.ok ? this.#kill(parsed.value) : parsed;
     });
   }
 
@@ -319,188 +298,5 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     this.#activity?.touch();
 
     return projectResult(operation);
-  }
-
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
-  #lstat(path: unknown): ProjectResult<ProjectLstatInfo> {
-    const segments = parseAddressedPath(path);
-
-    if (!segments.ok) return segments;
-
-    const outcome = resolveAddressedPath(this.#provider, segments.value, {
-      followFinalSymlink: false,
-      createMissingDirs: false,
-    });
-
-    if (!outcome.ok) return outcome;
-
-    if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments.value));
-
-    const name = segments.value.at(-1) ?? "/";
-
-    const info = fileInfoOf(
-      this.#provider,
-      name,
-      addressedPathOf(segments.value),
-      outcome.value.path,
-      outcome.value.stat,
-    );
-
-    const canonicalPath = resolveCanonicalPath(this.#provider, segments.value);
-
-    return ok({ ...info, canonicalPath });
-  }
-
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
-  #readFile(path: unknown): ProjectResult<Uint8Array> {
-    const segments = parseAddressedPath(path);
-
-    if (!segments.ok) return segments;
-
-    const outcome = resolveAddressedPath(this.#provider, segments.value, {
-      followFinalSymlink: true,
-      createMissingDirs: false,
-    });
-
-    if (!outcome.ok) return outcome;
-
-    if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments.value));
-
-    if (outcome.value.stat.isDirectory()) {
-      return fail("is-directory", addressedPathOf(segments.value));
-    }
-
-    if (outcome.value.stat.size > MAX_FILE_BYTES) {
-      return fail("content-too-large", addressedPathOf(segments.value));
-    }
-
-    try {
-      return ok(this.#provider.readFileSync(outcome.value.path));
-    } catch (error) {
-      return fail(mapProviderError(error), addressedPathOf(segments.value));
-    }
-  }
-
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; every argument is parsed immediately below.
-  #writeFile(path: unknown, bytes: unknown, mode: unknown): ProjectResult<null> {
-    const segments = parseAddressedPath(path);
-
-    if (!segments.ok) return segments;
-
-    if (!(bytes instanceof Uint8Array)) return fail("invalid-request");
-
-    if (!isWriteMode(mode)) return fail("invalid-request");
-
-    if (bytes.byteLength > MAX_FILE_BYTES) {
-      return fail("content-too-large", addressedPathOf(segments.value));
-    }
-
-    const addressed = addressedPathOf(segments.value);
-    const target = this.#resolveWriteTarget(segments.value, mode);
-
-    if (!target.ok) return target;
-
-    try {
-      this.#transactions.transactionSync(() => {
-        const fd = this.#provider.openSync(target.value.path, target.value.flag);
-
-        try {
-          this.#provider.writeSync(fd, bytes);
-        } finally {
-          this.#provider.closeSync(fd);
-        }
-      });
-
-      return ok(null);
-    } catch (error) {
-      return fail(mapProviderError(error), addressed);
-    }
-  }
-
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the RPC boundary; `parseAddressedPath` parses `path` immediately below.
-  #listFiles(path: unknown): ProjectResult<ProjectListing> {
-    const segments = parseAddressedPath(path);
-
-    if (!segments.ok) return segments;
-
-    const outcome = resolveAddressedPath(this.#provider, segments.value, {
-      followFinalSymlink: true,
-      createMissingDirs: false,
-    });
-
-    if (!outcome.ok) return outcome;
-
-    if (outcome.value.kind === "missing") return fail("not-found", addressedPathOf(segments.value));
-
-    if (!outcome.value.stat.isDirectory()) {
-      return fail("not-directory", addressedPathOf(segments.value));
-    }
-
-    const directoryPath = outcome.value.path;
-
-    try {
-      const names = this.#provider
-        .readdirSync(directoryPath, { withFileTypes: true })
-        .map((entry) => entry.name)
-        .toSorted((a, b) => a.localeCompare(b));
-
-      const entries: ProjectFileInfo[] = [];
-      let bytes = 0;
-
-      for (const name of names) {
-        const childAddressed = joinOne(addressedPathOf(segments.value), name);
-        bytes += new TextEncoder().encode(childAddressed).length;
-
-        if (entries.length >= MAX_LIST_ENTRIES || bytes > MAX_LIST_BYTES) {
-          return ok({ entries, truncated: true });
-        }
-
-        const childProviderPath = joinOne(directoryPath, name);
-        const stat = this.#provider.lstatSync(childProviderPath);
-        entries.push(fileInfoOf(this.#provider, name, childAddressed, childProviderPath, stat));
-      }
-
-      return ok({ entries, truncated: false });
-    } catch (error) {
-      return fail(mapProviderError(error), addressedPathOf(segments.value));
-    }
-  }
-
-  #resolveWriteTarget(
-    segments: readonly string[],
-    mode: WriteMode,
-  ): ProjectResult<{ path: string; flag: "w" | "a" | "wx" }> {
-    const addressed = addressedPathOf(segments);
-
-    if (mode === "create-exclusive") {
-      const outcome = resolveAddressedPath(this.#provider, segments, {
-        followFinalSymlink: false,
-        createMissingDirs: true,
-      });
-
-      if (!outcome.ok) return outcome;
-
-      if (outcome.value.kind === "resolved") return fail("already-exists", addressed);
-
-      return ok({ path: joinOne(outcome.value.parentPath, outcome.value.name), flag: "wx" });
-    }
-
-    const outcome = resolveAddressedPath(this.#provider, segments, {
-      followFinalSymlink: true,
-      createMissingDirs: true,
-    });
-
-    if (!outcome.ok) return outcome;
-
-    if (outcome.value.kind === "resolved") {
-      if (outcome.value.stat.isDirectory()) return fail("is-directory", addressed);
-
-      return ok({ path: outcome.value.path, flag: mode === "append" ? "a" : "w" });
-    }
-
-    return ok({
-      path: joinOne(outcome.value.parentPath, outcome.value.name),
-      flag: mode === "append" ? "a" : "w",
-    });
   }
 }

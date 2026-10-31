@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
-import { encode, makeTarget } from "./target-helpers.js";
+import type { StartExecWire } from "../../../src/workspace/project/protocol.js";
+import { makeTarget } from "./target-helpers.js";
 
 test("reflection exposes exactly six methods and no forbidden backing capability", () => {
   const { target } = makeTarget();
@@ -32,8 +33,7 @@ test("reflection exposes exactly six methods and no forbidden backing capability
   }
 });
 
-test.each<readonly [string, unknown]>([
-  ["a non-string", null],
+test.each<readonly [string, string]>([
   ["a backslash", "a\\b"],
   ["a path that needs normalization", "/a/../b"],
 ])("lstat/readFile/listFiles reject a malformed path: %s", async (_label, path) => {
@@ -43,19 +43,6 @@ test.each<readonly [string, unknown]>([
     await expect(call).resolves.toEqual({ ok: false, error: { code: "invalid-request" } });
   }
 
-  expect(provider.calls).toEqual([]);
-});
-
-test.each<readonly [string, unknown, unknown]>([
-  ["non-Uint8Array bytes", "not bytes", "overwrite"],
-  ["an unknown mode", encode("x"), "bogus-mode"],
-  ["a null mode", encode("x"), null],
-])("writeFile rejects %s", async (_label, bytes, mode) => {
-  const { provider, target } = makeTarget();
-  await expect(target.writeFile("/f.txt", bytes, mode)).resolves.toEqual({
-    ok: false,
-    error: { code: "invalid-request" },
-  });
   expect(provider.calls).toEqual([]);
 });
 
@@ -94,14 +81,12 @@ test("startExec limits concurrent operations and releases a settled slot", async
   expect(execBackend.requests).toHaveLength(9);
 });
 
-test.each<readonly [string, unknown]>([
-  ["null", null],
-  ["missing command", {}],
-  ["a non-string command", { command: 5 }],
-  ["an extra field", { command: "true", extra: true }],
+test.each<readonly [string, StartExecWire]>([
+  ["an empty command", { command: "" }],
   ["a negative timeout", { command: "true", timeoutMs: -5 }],
   ["a NaN timeout", { command: "true", timeoutMs: Number.NaN }],
-  ["a string timeout", { command: "true", timeoutMs: "10" }],
+  ["a zero timeout", { command: "true", timeoutMs: 0 }],
+  ["a relative cwd", { command: "true", cwd: "relative" }],
 ])("startExec rejects %s and starts no timer", async (_label, input) => {
   vi.useFakeTimers();
 
@@ -118,15 +103,24 @@ test.each<readonly [string, unknown]>([
   }
 });
 
-test.each<readonly [string, unknown]>([
-  ["null", null],
-  ["a number", 123],
-  ["an empty string", ""],
-  ["a plain string", "not-a-uuid:0"],
-])("kill rejects a malformed operation id (%s)", async (_label, operationId) => {
-  const { target } = makeTarget();
-  await expect(target.kill(operationId)).resolves.toEqual({
+test("startExec rejects a field the protocol does not define", async () => {
+  const { execBackend, target } = makeTarget();
+  const input = { command: "true", extra: true };
+
+  await expect(target.startExec(input)).resolves.toEqual({
     ok: false,
     error: { code: "invalid-request" },
   });
+  expect(execBackend.requests).toEqual([]);
 });
+
+test.each(["", "not-a-uuid:0"])(
+  "kill rejects a malformed operation id (%j)",
+  async (operationId) => {
+    const { target } = makeTarget();
+    await expect(target.kill(operationId)).resolves.toEqual({
+      ok: false,
+      error: { code: "invalid-request" },
+    });
+  },
+);

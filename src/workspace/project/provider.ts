@@ -1,4 +1,5 @@
 import { logRedactedCause, redactedExcerpt } from "../../diagnostics.js";
+import { hasErrnoCode } from "../errno-code.js";
 import type { ProjectErrorCode } from "./protocol.js";
 
 export interface ProjectStat {
@@ -42,25 +43,14 @@ const ERROR_CODE_MAP = new Map<string, ProjectErrorCode>([
   ["ELOOP", "symlink-loop"],
 ]);
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider threw this value; its documented shape is untrusted here.
-function errnoCode(error: unknown): string | undefined {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: narrowing an untrusted thrown value to check for a `code` field.
-  if (error === null || typeof error !== "object" || !("code" in error)) return undefined;
-  const { code } = error;
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the narrowed `code` field is still untrusted until its type is checked.
-  return typeof code === "string" ? code : undefined;
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the provider threw this value; its documented shape is untrusted here.
-export function mapProviderError(error: unknown): ProjectErrorCode {
-  const code = errnoCode(error);
+export function mapProviderError(cause: unknown): ProjectErrorCode {
+  const code = hasErrnoCode(cause) ? cause.code : undefined;
   const mapped = code === undefined ? undefined : ERROR_CODE_MAP.get(code);
 
   if (mapped !== undefined) return mapped;
   logRedactedCause(
     `unmapped project provider error (${redactedExcerpt(code ?? "no code")})`,
-    error,
+    cause,
   );
 
   return "backend-unavailable";

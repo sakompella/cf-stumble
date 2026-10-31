@@ -20,7 +20,7 @@ const CAPABILITY_CALLS = {
 
 const LATE_CALLS = {
   ...CAPABILITY_CALLS,
-  "startExec with malformed input": (target) => target.startExec({ command: 42 }),
+  "startExec with an empty command": (target) => target.startExec({ command: "" }),
 } satisfies Record<string, Call>;
 
 const CLEANUP_METHODS = ["kill", "endTurn"];
