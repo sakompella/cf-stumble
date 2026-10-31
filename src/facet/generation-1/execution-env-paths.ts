@@ -16,7 +16,7 @@ export interface ComputerWorkspace {
   readonly target: ProjectRpcTargetContract;
 }
 
-export function normalizePosix(path: string): string {
+function normalizePosix(path: string): string {
   const absolute = path.startsWith("/");
   const segments: string[] = [];
 
@@ -82,7 +82,7 @@ const FILE_ERROR_CODES: Readonly<Record<ProjectErrorCode, FileErrorCode>> = {
   "container-restarted": "unknown",
 };
 
-export function fileErrorOf(code: ProjectErrorCode, path?: string): FileError {
+function fileErrorOf(code: ProjectErrorCode, path?: string): FileError {
   return new FileError(FILE_ERROR_CODES[code], `the Computer capability reported "${code}"`, path);
 }
 

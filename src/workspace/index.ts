@@ -47,11 +47,7 @@ export {
   type ProvisionWorkspaceNamespace,
 } from "./provisioning.js";
 
-export {
-  waitForWorkspaceProvision,
-  clearWorkspaceProvision,
-  PROVISION_STALE_AFTER_MS,
-} from "./provision-exclusion.js";
+export { waitForWorkspaceProvision, clearWorkspaceProvision } from "./provision-exclusion.js";
 
 export { WorkspaceHost } from "./host.js";
 

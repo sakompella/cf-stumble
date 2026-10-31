@@ -12,10 +12,8 @@ export { parseRequest } from "./model-route-request.js";
 export { streamModelEvents } from "./model-route-stream.js";
 
 export type {
-  UserMessage,
   ToolCall,
   AssistantMessage,
-  ToolResultMessage,
   RouteMessage,
   ToolDefinition,
   ModelRouteRequest,
@@ -23,9 +21,7 @@ export type {
 } from "./model-route-request.js";
 
 export type {
-  ModelRouteErrorCode,
   ModelStreamEvent,
-  ProviderFallback,
   ModelStreamInference,
   ModelUsage,
   StreamingProviderPayload,

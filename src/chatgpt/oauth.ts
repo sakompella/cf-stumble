@@ -6,11 +6,11 @@ import * as Schema from "effect/Schema";
 
 const AUTH_ORIGIN = "https://auth.openai.com";
 
-export const AUTHORIZE_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/authorize`;
+const AUTHORIZE_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/authorize`;
 
-export const TOKEN_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/oauth/token`;
+const TOKEN_ENDPOINT = `${AUTH_ORIGIN}/api/accounts/oauth/token`;
 
-export const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
+const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 
 const DYNAMIC_CLIENT_ID = "dynamic_agent_client";
 

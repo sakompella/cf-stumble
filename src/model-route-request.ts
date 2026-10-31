@@ -15,7 +15,7 @@ const FORBIDDEN_FIELDS: readonly string[] = [
 
 type SystemMessage = Readonly<{ role: "system"; content: string }>;
 
-export type UserMessage = Readonly<{ role: "user"; content: string }>;
+type UserMessage = Readonly<{ role: "user"; content: string }>;
 
 export type ToolCall = Readonly<{
   id: string;
@@ -28,7 +28,7 @@ export type AssistantMessage = Readonly<{
   tool_calls: ReadonlyArray<ToolCall>;
 }>;
 
-export type ToolResultMessage = Readonly<{
+type ToolResultMessage = Readonly<{
   role: "tool";
   tool_call_id: string;
   content: string;

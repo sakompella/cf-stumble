@@ -14,7 +14,7 @@ import { joinPath, type ComputerWorkspace } from "./execution-env-paths.js";
 import { createTempDir } from "./execution-env-posix.js";
 import { openBinaryReader } from "./execution-env-readers.js";
 
-export const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
+const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
 
 export interface ComputerEnvOptions {
   readonly cwd: string;
