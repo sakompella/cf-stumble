@@ -6,11 +6,10 @@ export type HarnessCommit = string & {
   readonly [harnessCommitBrand]: "HarnessCommit";
 };
 
-export function parseHarnessCommit(value: string): HarnessCommit | undefined {
-  if (!gitObjectId.test(value)) {
-    return undefined;
-  }
+function isHarnessCommit(value: string): value is HarnessCommit {
+  return gitObjectId.test(value);
+}
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: gitObjectId accepts exactly the HarnessCommit syntax.
-  return value as HarnessCommit;
+export function parseHarnessCommit(value: string): HarnessCommit | undefined {
+  return isHarnessCommit(value) ? value : undefined;
 }

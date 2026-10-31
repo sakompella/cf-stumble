@@ -1,70 +1,30 @@
-// oxlint-disable import/max-dependencies -- The facet is where Pi Durable, its storage, the model route, the prompt and the workspace meet.
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai";
 import {
-  createRegistry,
-  Harness,
   watchEvents,
   type AgentEvent,
   type Conversation,
   type ConversationId,
-  type HarnessSettings,
 } from "@earendil-works/pi-durable";
-import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
 import type { ConversationFacet, ConversationHost } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
-import { createComputerEnv } from "./execution-env.js";
-import { CfStumblePrompt } from "./prompt.js";
-import { ROUTE_MODEL, routeProvider } from "./route-provider.js";
+import { openSession, type Session } from "./open-session.js";
+import { ROUTE_MODEL } from "./route-provider.js";
 
 const context = BACKGROUND_CONTEXT;
 
-const CONTEXT_BUDGET_TOKENS = 64_000;
-
-const ANSWER_RESERVE_TOKENS = 16_384;
-
-const SETTINGS: HarnessSettings = {
-  compaction: {
-    reserveTokens: ROUTE_MODEL.contextWindow - CONTEXT_BUDGET_TOKENS + ANSWER_RESERVE_TOKENS,
-    keepRecentTokens: 8_000,
-    backgroundTokens: 0,
-  },
-};
+function isConversationId(value: number): value is ConversationId {
+  return Number.isSafeInteger(value) && value >= 0;
+}
 
 type ReceivedHost = ConversationHost & Readonly<{ dup(): ConversationHost }>;
-
-type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 
 const encoder = new TextEncoder();
 
 const KEEPALIVE_LINE = encoder.encode("\n");
 
 const KEEPALIVE_MS = 2_000;
-
-async function computerEnv(
-  host: ConversationHost,
-  conversationId: string,
-  cwd: string,
-  signal: AbortSignal | undefined,
-): Promise<ExecutionEnv> {
-  const target = await host.workspace(conversationId);
-  const env = createComputerEnv({ cwd, target });
-
-  const end = () => {
-    void env.cleanup(context).finally(() => {
-      target[Symbol.dispose]();
-    });
-  };
-
-  if (signal?.aborted === true) end();
-  else signal?.addEventListener("abort", end, { once: true });
-
-  return env;
-}
 
 export class MainFacet
   extends DurableObject<Readonly<{ MODEL: ModelCapability }>>
@@ -86,7 +46,14 @@ export class MainFacet
 
   async attach(host: ReceivedHost): Promise<void> {
     if (this.#session === undefined) {
-      const opening = this.#open(host.dup());
+      const opening = openSession({
+        storage: this.ctx.storage,
+        host: host.dup(),
+        model: this.env.MODEL,
+        abort: (reason) => {
+          this.ctx.abort(reason);
+        },
+      });
 
       this.#session = opening;
       void opening.catch(() => {
@@ -165,35 +132,6 @@ export class MainFacet
       .catch(() => {});
   }
 
-  async #open(host: ConversationHost): Promise<Session> {
-    const models = createModels();
-    models.setProvider(routeProvider(this.env.MODEL));
-    const registry = createRegistry();
-    registry.install(CodingTools);
-    registry.install(CfStumblePrompt);
-
-    const harness = await Harness.open(
-      await openDurableObjectSqliteStorage(this.ctx.storage),
-      {
-        models,
-        registry,
-        settings: SETTINGS,
-        env: ({ conversationId, cwd }, invocation) =>
-          cwd === undefined
-            ? undefined
-            : computerEnv(host, String(conversationId), cwd, invocation.abortSignal),
-        onWake: (wake) => {
-          void host.arm(wake).catch(() => {
-            this.ctx.abort("the Supervisor did not arm a wake");
-          });
-        },
-      },
-      context,
-    );
-
-    return { harness, host };
-  }
-
   #opened(): Promise<Session> {
     return this.#session ?? Promise.reject(new Error("attach first"));
   }
@@ -210,10 +148,9 @@ export class MainFacet
 
   async #conversation(conversationId: string): Promise<Conversation> {
     const { harness } = await this.#opened();
-    // SAFETY: Pi Durable's conversation ids are numbers, and the Supervisor only hands back the
-    // decimal strings `createConversation` returned; an unknown one finds no conversation.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    const id = Number(conversationId) as ConversationId;
+    const id = Number(conversationId);
+
+    if (!isConversationId(id)) throw new Error("no such conversation");
 
     const conversation = await harness.conversation(id, context);
 

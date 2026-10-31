@@ -26,6 +26,24 @@ export const ROUTE_MODEL: Model<"host-model-route"> = {
 
 const CANCELLED = "the turn was cancelled";
 
+const EVENT_TYPES: ReadonlySet<string> = new Set<ModelStreamEvent["type"]>([
+  "text-delta",
+  "tool-call-delta",
+  "done",
+  "error",
+  "provider-fallback",
+]);
+
+function isModelStreamEvent(value: unknown): value is ModelStreamEvent {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string" &&
+    EVENT_TYPES.has(value.type)
+  );
+}
+
 function aborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
@@ -79,8 +97,9 @@ async function pump(
       buffer = lines.pop() ?? "";
 
       for (const line of lines.filter((candidate) => candidate !== "")) {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the host route writes exactly this union, one event per line.
-        const event = JSON.parse(line) as ModelStreamEvent;
+        const event: unknown = JSON.parse(line);
+
+        if (!isModelStreamEvent(event)) throw new Error("the model route wrote an unknown event");
         reply.apply(event);
 
         if (event.type === "done" || event.type === "error") return;

@@ -6,7 +6,6 @@ import {
   type ShellExecResult,
 } from "@earendil-works/pi-durable/env";
 import { shellQuote } from "../../shell-quote.js";
-import { isRecord } from "../../untrusted.js";
 import { MAX_EXEC_TIMEOUT_MS, type ExecEvent } from "../../workspace/project/protocol.js";
 import { NdjsonFrameReader } from "./execution-env-frame-reader.js";
 import { resolveInWorkspace, type ComputerWorkspace } from "./execution-env-paths.js";
@@ -46,13 +45,17 @@ function scriptOf(command: string | readonly string[], options: ShellExecOptions
 }
 
 function isExecEvent(value: unknown): value is ExecEvent {
-  if (!isRecord(value) || typeof value.seq !== "number") return false;
+  if (typeof value !== "object" || value === null) return false;
 
-  if (value.kind === "stdout" || value.kind === "stderr") return typeof value.data === "string";
+  if (!("seq" in value) || typeof value.seq !== "number" || !("kind" in value)) return false;
 
-  if (value.kind !== "terminal") return false;
+  if (value.kind === "stdout" || value.kind === "stderr") {
+    return "data" in value && typeof value.data === "string";
+  }
 
-  if (value.outcome === "exited") return typeof value.exitCode === "number";
+  if (value.kind !== "terminal" || !("outcome" in value)) return false;
+
+  if (value.outcome === "exited") return "exitCode" in value && typeof value.exitCode === "number";
 
   return value.outcome === "killed" || value.outcome === "timed-out" || value.outcome === "failed";
 }

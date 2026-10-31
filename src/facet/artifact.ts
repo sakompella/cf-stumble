@@ -1,4 +1,5 @@
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 
 export type HarnessModule = {
@@ -6,14 +7,15 @@ export type HarnessModule = {
   readonly source: string;
 };
 
-export type MainHarnessArtifactInput = {
-  readonly harnessCommit: string;
-  readonly entryModule: string;
-  readonly modules: readonly {
-    readonly name: string;
-    readonly source: string;
-  }[];
-};
+const ArtifactInputSchema = Schema.Struct({
+  harnessCommit: Schema.String,
+  entryModule: Schema.String,
+  modules: Schema.Array(Schema.Struct({ name: Schema.String, source: Schema.String })),
+});
+
+export type MainHarnessArtifactInput = typeof ArtifactInputSchema.Type;
+
+const decodeArtifactJson = Schema.decodeUnknownResult(Schema.fromJsonString(ArtifactInputSchema));
 
 export type MainHarnessArtifactProblem =
   | {
@@ -48,12 +50,17 @@ export class MainHarnessArtifact {
     this.modules = modules;
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: a built or stored module map is decoded JSON, so its shape is proven here.
-  static parse(input: unknown): Result.Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
-    if (!isMainHarnessArtifactInput(input)) {
-      return Result.fail({ code: "invalid-artifact" });
-    }
+  static parseJson(text: string): Result.Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
+    const input = decodeArtifactJson(text);
 
+    return Result.isFailure(input)
+      ? Result.fail({ code: "invalid-artifact" })
+      : MainHarnessArtifact.parse(input.success);
+  }
+
+  static parse(
+    input: MainHarnessArtifactInput,
+  ): Result.Result<MainHarnessArtifact, MainHarnessArtifactProblem> {
     const moduleMap = parseModuleMap(input.entryModule, input.modules);
 
     if (Result.isFailure(moduleMap)) {
@@ -71,41 +78,6 @@ export class MainHarnessArtifact {
 
     return Result.succeed(new MainHarnessArtifact(harnessCommit, moduleMap.success));
   }
-}
-
-function isHarnessModuleInput(
-  value: unknown,
-): value is MainHarnessArtifactInput["modules"][number] {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "name" in value &&
-    typeof value.name === "string" &&
-    "source" in value &&
-    typeof value.source === "string"
-  );
-}
-
-function isMainHarnessArtifactInput(value: unknown): value is MainHarnessArtifactInput {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  if (!("harnessCommit" in value) || typeof value.harnessCommit !== "string") {
-    return false;
-  }
-
-  if (!("entryModule" in value) || typeof value.entryModule !== "string") {
-    return false;
-  }
-
-  if (!("modules" in value)) {
-    return false;
-  }
-
-  const modules: unknown = value.modules;
-
-  return Array.isArray(modules) && modules.every((module) => isHarnessModuleInput(module));
 }
 
 function parseModuleMap(
