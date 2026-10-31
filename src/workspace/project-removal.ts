@@ -69,7 +69,7 @@ export function removalIsDurable(
   });
 }
 
-export type ProjectRemovalWorkspaceHost = Readonly<{
+type ProjectRemovalWorkspaceHost = Readonly<{
   removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult>;
 }>;
 

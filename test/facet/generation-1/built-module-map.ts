@@ -1,4 +1,4 @@
-import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../../src/facet/artifact.js";
 
 type BuiltModuleMapFile = Omit<MainHarnessArtifactInput, "harnessCommit">;
 

@@ -1,14 +1,13 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js";
+import { type CommandOutput } from "../../src/workspace/index.js";
 import {
   executeGitHubCredentialRequest,
-  type CommandOutput,
   type GitHubCredentialRequest,
   type GitHubCredentialResult,
-  type WorkspaceOperations,
-  type WorkspacePathKind,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/github-credential.js";
+import type { WorkspaceOperations, WorkspacePathKind } from "../../src/workspace/executor.js";
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 

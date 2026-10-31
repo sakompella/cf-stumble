@@ -1,0 +1,35 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/worker.ts!",
+    "src/page/client/entry.ts!",
+    "src/facet/generation-1/main-facet.ts!",
+    "tools/*.mts!",
+    "tools/ops-check/run.mts!",
+    "tools/browser-harness/server.mts!"
+  ],
+  "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!"],
+  "include": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
+  "ignoreIssues": {
+    "tools/**": ["files", "exports", "types", "nsExports", "nsTypes", "duplicates"],
+    "src/chatgpt/oauth.ts": ["exports"],
+    "src/github/redaction.ts": ["exports"],
+    "src/github/repository-size-guard.ts": ["exports"],
+    "src/harness-build.ts": ["exports"],
+    "src/page/client/api.ts": ["exports"],
+    "src/page/client/update-generation.ts": ["exports"],
+    "src/project-catalog.ts": ["exports"],
+    "src/routes/generations.ts": ["types"],
+    "src/selectable-projects.ts": ["exports"],
+    "src/supervisor/artifacts/store.ts": ["exports"],
+    "src/supervisor/generations.ts": ["exports", "types"],
+    "src/supervisor/supervisor-env.ts": ["types"],
+    "src/workspace/computer-operations.ts": ["exports"],
+    "src/workspace/credential-access.ts": ["types"],
+    "src/workspace/project/computer-adapter.ts": ["exports"],
+    "src/workspace/project/start-exec-input.ts": ["exports"],
+    "src/workspace/provision-exclusion.ts": ["exports"],
+    "src/workspace/provisioning.ts": ["exports", "types"],
+    "src/workspace/workspace-platform.ts": ["exports"]
+  }
+}

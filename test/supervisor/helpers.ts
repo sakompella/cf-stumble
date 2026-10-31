@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
-import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
+import { ConnectedProjects } from "../../src/supervisor/projects/connected-projects.js";
 import { sampleCatalog } from "../project-fixtures.js";
 import {
   fixtureMainHarnessArtifact,
@@ -9,7 +9,7 @@ import {
   parsedArtifact,
   servingFacetSource,
 } from "../facet/fixture.js";
-import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { label as generationLabel, testHarnessCommit } from "./generations/fixtures.js";
@@ -39,6 +39,19 @@ export function artifact(harnessCommit: string, source: string): MainHarnessArti
     harnessCommit,
     entryModule: "main.js",
     modules: [{ name: "main.js", source }],
+  };
+}
+
+export function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
+  const filler = "\u2603".repeat(200_000);
+
+  return {
+    harnessCommit,
+    entryModule: "main.js",
+    modules: [
+      { name: "main.js", source: `export const snowman = "${filler}";\n` },
+      { name: "helper.js", source: `export const helper = "${filler}";\n` },
+    ],
   };
 }
 

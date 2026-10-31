@@ -1,4 +1,4 @@
-import type { ExecBackendHandle } from "../../../src/workspace/project/index.js";
+import type { ExecBackendHandle } from "../../../src/workspace/project/exec-backend.js";
 import { ManualExecHandle } from "./fakes.js";
 
 export interface DeferredExec {

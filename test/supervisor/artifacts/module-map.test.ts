@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import type { MainHarnessArtifactInput } from "../../../src/facet/artifact.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { parsedArtifact } from "../../facet/fixture.js";
 
 const harnessCommit = "5000000000000000000000000000000000000001";

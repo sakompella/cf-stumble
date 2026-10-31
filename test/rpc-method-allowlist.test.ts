@@ -2,7 +2,7 @@ import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { ModelRoute } from "../src/model-route.js";
 import { ProjectRpcTarget } from "../src/workspace/project/index.js";
-import { ConversationHostTarget } from "../src/supervisor/conversations/index.js";
+import { ConversationHostTarget } from "../src/supervisor/conversations/host-target.js";
 
 type Prototype = NonNullable<ReturnType<typeof Reflect.getPrototypeOf>>;
 

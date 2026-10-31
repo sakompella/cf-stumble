@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { containsCredential, redactCredentials, REDACTED } from "../../src/github/index.js";
+import { redactCredentials, REDACTED } from "../../src/github/index.js";
+import { containsCredential } from "../../src/github/redaction.js";
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 

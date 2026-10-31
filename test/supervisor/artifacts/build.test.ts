@@ -1,78 +1,20 @@
 import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
-import { everythingLogged, textLines } from "../../log-capture.js";
-import { syntheticJwt } from "../../synthetic-jwt.js";
-import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
-import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
-import { buildModuleMap, encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import { buildModuleMap } from "../../../src/supervisor/artifacts/build.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
-import type { CommandOutput, WorkspaceCommandResult } from "../../../src/workspace/index.js";
 import { parsedArtifact } from "../../facet/fixture.js";
-
-const commit = testHarnessCommit("6000000000000000000000000000000000000001");
-
-const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
-
-const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
-
-const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-
-function moduleMapFile(modules: readonly Readonly<{ name: string; source: string }>[]): string {
-  return JSON.stringify({ entryModule: "main.js", modules });
-}
-
-function answered(output: CommandOutput): Promise<WorkspaceCommandResult> {
-  return Promise.resolve({ ok: true, result: { kind: "command", ...output } });
-}
-
-class FakeBuildHost implements BuildWorkspaceHost {
-  readonly requests: HarnessBuildRequest[] = [];
-  output: string | undefined = moduleMapFile([helperModule, entryModule]);
-  answers: Partial<Record<HarnessBuildStepName, CommandOutput>> = {};
-
-  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
-    this.requests.push(request);
-
-    if (request.kind === "build-output") {
-      return answered(
-        this.output === undefined
-          ? { stdout: "", stderr: "", exitCode: 1 }
-          : { stdout: this.output, stderr: "", exitCode: 0 },
-      );
-    }
-
-    return answered(this.answers[request.step] ?? { stdout: "", stderr: "", exitCode: 0 });
-  }
-
-  steps(): readonly string[] {
-    return this.requests.map((request) =>
-      request.kind === "build-step" ? request.step : request.kind,
-    );
-  }
-}
-
-function failingAt(step: HarnessBuildStepName, output: Partial<CommandOutput>): FakeBuildHost {
-  const host = new FakeBuildHost();
-  host.answers = { [step]: { stdout: "", stderr: "", exitCode: 7, ...output } };
-
-  return host;
-}
-
-function built(host: BuildWorkspaceHost) {
-  return resultOf(buildModuleMap(() => host, commit));
-}
-
-async function failedDiagnostics(output: Partial<CommandOutput>) {
-  const result = await built(failingAt("provision", output));
-
-  if (Result.isSuccess(result) || result.failure.code !== "build-step-failed") {
-    throw new Error("the step must fail with a build-step-failed problem");
-  }
-
-  return result.failure.diagnostics;
-}
+import {
+  BUILD_COMMIT,
+  built,
+  entryModule,
+  FakeBuildHost,
+  failingAt,
+  helperModule,
+  moduleMapFile,
+} from "./scripted-build-host.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -90,19 +32,19 @@ test("runs every step by name, reads the output, and parses it under the request
   expect(encodeModuleMap(result.success)).toBe(
     encodeModuleMap(
       parsedArtifact({
-        harnessCommit: commit,
+        harnessCommit: BUILD_COMMIT,
         entryModule: "main.js",
         modules: [entryModule, helperModule],
       }),
     ),
   );
   expect(host.requests).toEqual([
-    { kind: "build-step", harnessCommit: commit, step: "provision" },
-    { kind: "build-step", harnessCommit: commit, step: "isolate" },
-    { kind: "build-step", harnessCommit: commit, step: "checkout" },
-    { kind: "build-step", harnessCommit: commit, step: "install" },
-    { kind: "build-step", harnessCommit: commit, step: "build-module-map" },
-    { kind: "build-output", harnessCommit: commit },
+    { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "provision" },
+    { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "isolate" },
+    { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "checkout" },
+    { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "install" },
+    { kind: "build-step", harnessCommit: BUILD_COMMIT, step: "build-module-map" },
+    { kind: "build-output", harnessCommit: BUILD_COMMIT },
   ]);
   expect(
     host.requests.every((request) => !JSON.stringify(request).includes("git ")),
@@ -119,7 +61,7 @@ test("takes a fresh workspace stub for every call in one build", async () => {
       hosts.push(host);
 
       return host;
-    }, commit),
+    }, BUILD_COMMIT),
   );
 
   expect(Result.isSuccess(result), "the build reads its own output").toBe(true);
@@ -138,7 +80,7 @@ test("a failing step names that step, and the steps after it never run", async (
 
     expect(Result.isFailure(result) ? result.failure : "built").toEqual({
       code: "build-step-failed",
-      harnessCommit: commit,
+      harnessCommit: BUILD_COMMIT,
       step: failing,
       exitCode: 7,
       diagnostics: { stdoutTail: "", stderrTail: `${failing} failed`, truncated: false },
@@ -162,7 +104,7 @@ test("retries provisioning after an interrupted checkout", async () => {
 
   expect(interrupted.failure).toEqual({
     code: "build-step-failed",
-    harnessCommit: commit,
+    harnessCommit: BUILD_COMMIT,
     step: "checkout",
     exitCode: 3,
     diagnostics: { stdoutTail: "", stderrTail: "build failed", truncated: false },
@@ -181,9 +123,9 @@ test("reports missing and invalid build output as plain typed failures", async (
   const results = [await built(missing), await built(invalid), await built(withoutEntry)];
 
   expect(results.map((result) => (Result.isFailure(result) ? result.failure : "ok"))).toEqual([
-    { code: "build-output-missing", harnessCommit: commit },
-    { code: "build-output-invalid", harnessCommit: commit, reason: "invalid-artifact" },
-    { code: "build-output-invalid", harnessCommit: commit, reason: "entry-module-not-found" },
+    { code: "build-output-missing", harnessCommit: BUILD_COMMIT },
+    { code: "build-output-invalid", harnessCommit: BUILD_COMMIT, reason: "invalid-artifact" },
+    { code: "build-output-invalid", harnessCommit: BUILD_COMMIT, reason: "entry-module-not-found" },
   ]);
   expect(
     results.every(
@@ -208,7 +150,7 @@ test("gives the built module map the commit the Supervisor asked to build", asyn
     throw new Error("a valid build output must produce a module map");
   }
 
-  expect(result.success.harnessCommit).toBe(commit);
+  expect(result.success.harnessCommit).toBe(BUILD_COMMIT);
 });
 
 test("a refused or unreachable build workspace stays a typed failure", async () => {
@@ -225,118 +167,7 @@ test("a refused or unreachable build workspace stays a typed failure", async () 
   const results = [await built(refused), await built(gone)];
 
   expect(results.map((result) => (Result.isFailure(result) ? result.failure : "ok"))).toEqual([
-    { code: "build-workspace-unavailable", harnessCommit: commit },
-    { code: "build-workspace-unavailable", harnessCommit: commit },
+    { code: "build-workspace-unavailable", harnessCommit: BUILD_COMMIT },
+    { code: "build-workspace-unavailable", harnessCommit: BUILD_COMMIT },
   ]);
-});
-
-test("an unavailable build workspace logs its cause with every credential redacted", async () => {
-  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  const jwt = syntheticJwt();
-
-  const result = await built({
-    build: () =>
-      Promise.reject(new Error(`container refused ${jwt.token} for x:${FAKE_TOKEN}@github.com`)),
-  });
-
-  expect(Result.isFailure(result) ? result.failure.code : "ok").toBe("build-workspace-unavailable");
-  expect(textLines(errors).join("\n"), "the cause still explains the failure").toMatch(
-    /harness-build\.provision: build-workspace-unavailable: container refused \[redacted\]/u,
-  );
-
-  const logged = everythingLogged();
-
-  for (const segment of jwt.segments) expect(logged).not.toContain(segment);
-  expect(logged).not.toContain(FAKE_TOKEN);
-});
-
-test("missing build output logs its cause with every credential redacted", async () => {
-  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  const jwt = syntheticJwt();
-  const host = new FakeBuildHost();
-
-  const result = await built({
-    build: (request) =>
-      request.kind === "build-output"
-        ? Promise.reject(new Error(`no file; request carried ${jwt.token} ${FAKE_TOKEN}`))
-        : host.build(request),
-  });
-
-  expect(Result.isFailure(result) ? result.failure.code : "ok").toBe("build-output-missing");
-  expect(
-    textLines(errors).join("\n"),
-    "the log names the commit whose output is missing",
-  ).toContain(`harness-build.output ${commit}: build-output-missing: no file`);
-
-  const logged = everythingLogged();
-
-  for (const segment of jwt.segments) expect(logged).not.toContain(segment);
-  expect(logged).not.toContain(FAKE_TOKEN);
-});
-
-test("a failed step gives the owner its output tail with every credential redacted, and logs none of it", async () => {
-  const diagnostics = await failedDiagnostics({
-    stdout: `fetching https://x-access-token:${FAKE_TOKEN}@github.com/o/r`,
-    stderr: `fatal: authentication failed for ${FAKE_TOKEN}`,
-  });
-
-  expect(diagnostics.stderrTail, "the owner can read why the build failed").toContain(
-    "authentication failed",
-  );
-  expect(JSON.stringify(diagnostics), "a credential never reaches even the owner").not.toContain(
-    FAKE_TOKEN,
-  );
-  expect(diagnostics.truncated).toBe(false);
-
-  const logged = everythingLogged();
-  expect(logged, "command output is not written to a log").not.toContain("authentication failed");
-  expect(logged).not.toContain("x-access-token");
-  expect(logged).not.toContain(FAKE_TOKEN);
-});
-
-test("the tail keeps the end of a long stream and says it was cut", async () => {
-  const diagnostics = await failedDiagnostics({ stderr: `${"x".repeat(5_000)}THE END` });
-
-  expect(diagnostics.stderrTail).toHaveLength(2_000);
-  expect(diagnostics.stderrTail.endsWith("THE END")).toBe(true);
-  expect(diagnostics.truncated).toBe(true);
-});
-
-test("a token that straddles the cut is redacted before the cut, so no fragment survives", async () => {
-  const stderr = `${FAKE_TOKEN} ${"y".repeat(1_979)}`;
-
-  const { stderrTail } = await failedDiagnostics({ stderr });
-
-  for (let length = 8; length <= FAKE_TOKEN.length; length += 1) {
-    expect(stderrTail, `${length} characters of the token`).not.toContain(
-      FAKE_TOKEN.slice(0, length),
-    );
-    expect(stderrTail, `the last ${length} characters of the token`).not.toContain(
-      FAKE_TOKEN.slice(-length),
-    );
-  }
-
-  expect(stderrTail.endsWith("y")).toBe(true);
-});
-
-test("a JWT in the output is redacted from the owner's tail too", async () => {
-  const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl";
-
-  const { stdoutTail, stderrTail } = await failedDiagnostics({
-    stdout: `token ${jwt}`,
-    stderr: `denied for ${jwt}`,
-  });
-
-  expect(stdoutTail).not.toContain("eyJ");
-  expect(stderrTail).not.toContain("eyJ");
-  expect(stderrTail).toContain("denied for");
-});
-
-test("the cut never leaves half of a surrogate pair", async () => {
-  const { stderrTail } = await failedDiagnostics({ stderr: `${"😀".repeat(1_000)}x` });
-
-  expect(stderrTail.codePointAt(0)).toBe(0x1f600);
-  expect(stderrTail.endsWith("😀x")).toBe(true);
 });

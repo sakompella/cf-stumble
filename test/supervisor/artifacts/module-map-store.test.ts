@@ -2,14 +2,10 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
-import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { containsCredential } from "../../../src/github/index.js";
-import {
-  encodeModuleMap,
-  MODULE_MAP_CHUNK_BYTES,
-  ModuleMapStore,
-} from "../../../src/supervisor/artifacts/index.js";
+import { containsCredential } from "../../../src/github/redaction.js";
+import { ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
+import { MODULE_MAP_CHUNK_BYTES } from "../../../src/supervisor/artifacts/store.js";
 import type { ModuleMapStorage } from "../../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
@@ -23,6 +19,8 @@ import {
   storeModuleMap,
   submitCandidate,
   generationLabel,
+  largeModuleMap,
+  testHarnessCommit,
 } from "../helpers.js";
 
 const commits = {
@@ -34,19 +32,6 @@ const commits = {
   unbuildable: "7100000000000000000000000000000000000006",
   loggedFailure: "7100000000000000000000000000000000000007",
 } as const;
-
-function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
-  const filler = "\u2603".repeat(200_000);
-
-  return {
-    harnessCommit,
-    entryModule: "main.js",
-    modules: [
-      { name: "main.js", source: `export const snowman = "${filler}";\n` },
-      { name: "helper.js", source: `export const helper = "${filler}";\n` },
-    ],
-  };
-}
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
   return env.SUPERVISOR.getByName(name);

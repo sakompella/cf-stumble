@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { ConnectedProjects } from "../../../src/supervisor/projects/index.js";
+import { ConnectedProjects } from "../../../src/supervisor/projects/connected-projects.js";
 import { projectIdForRepository, resolveProject } from "../../../src/project-catalog.js";
 
 const NOW = 1_700_000_000_000;

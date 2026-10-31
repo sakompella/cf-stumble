@@ -1,6 +1,6 @@
 import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "../../src/facet/index.js";
-import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { FACET_COMPATIBILITY } from "../../src/facet-compatibility.js";
 
 export function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {

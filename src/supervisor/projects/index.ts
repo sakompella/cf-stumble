@@ -1,5 +1,3 @@
-export { ConnectedProjects } from "./connected-projects.js";
-
 export type {
   CredentialWorkspaceNamespace,
   ProvisionWorkspaceNamespace,
@@ -12,7 +10,6 @@ export type {
   GitHubAuthorizationOutcome,
   GitHubAuthorizationProblem,
   GitHubConnectionRecord,
-  GitHubConnectionStatus,
 } from "./github-connection-status.js";
 
 export { GitHubConnectionStore } from "./github-connection-store.js";

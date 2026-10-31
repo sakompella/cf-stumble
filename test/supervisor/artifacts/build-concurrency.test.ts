@@ -1,12 +1,12 @@
-import { env } from "cloudflare:workers";
-import { reset, runInDurableObject } from "cloudflare:test";
+import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import { encodeModuleMap, HarnessArtifacts } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
+import { withArtifacts } from "./artifacts-fixture.js";
 import { BuildHost, GatedBuildHost } from "./build-hosts.js";
 
 const commits = {
@@ -15,20 +15,14 @@ const commits = {
   abandoned: testHarnessCommit("1000000000000000000000000000000000000008"),
 } as const;
 
-function supervisor(name: string) {
-  return env.SUPERVISOR.getByName(name);
-}
-
 afterEach(async () => {
   await reset();
 });
 
 test("admits one build per commit, so a concurrent request joins it instead of racing it", async () => {
-  const control = supervisor("prepare-joins-build-in-flight");
   const host = new GatedBuildHost();
 
-  const outcome = await runInDurableObject(control, async (_instance, state) => {
-    const artifacts = new HarnessArtifacts(state.storage, () => host);
+  const outcome = await withArtifacts("prepare-joins-build-in-flight", host, async (artifacts) => {
     const first = resultOf(artifacts.prepare(commits.joined));
     const second = resultOf(artifacts.prepare(commits.joined));
     host.release();
@@ -49,12 +43,10 @@ test("admits one build per commit, so a concurrent request joins it instead of r
 });
 
 test("builds again once the build in flight has failed", async () => {
-  const control = supervisor("prepare-retries-settled-build");
   const host = new BuildHost();
   host.failing = "install";
 
-  const outcome = await runInDurableObject(control, async (_instance, state) => {
-    const artifacts = new HarnessArtifacts(state.storage, () => host);
+  const outcome = await withArtifacts("prepare-retries-settled-build", host, async (artifacts) => {
     const failed = await resultOf(artifacts.prepare(commits.retried));
     host.failing = undefined;
     const retried = await resultOf(artifacts.prepare(commits.retried));
@@ -72,11 +64,9 @@ test("builds again once the build in flight has failed", async () => {
 });
 
 test("a caller that stops waiting neither stops the build in flight nor drops it", async () => {
-  const control = supervisor("prepare-keeps-abandoned-build");
   const host = new GatedBuildHost();
 
-  const outcome = await runInDurableObject(control, async (_instance, state) => {
-    const artifacts = new HarnessArtifacts(state.storage, () => host);
+  const outcome = await withArtifacts("prepare-keeps-abandoned-build", host, async (artifacts) => {
     const abandoned = Effect.runFork(artifacts.prepare(commits.abandoned));
     await Effect.runPromise(Effect.yieldNow);
     await Effect.runPromise(Fiber.interrupt(abandoned));

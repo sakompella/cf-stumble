@@ -5,16 +5,18 @@ import { projectCloneSource } from "../../src/project-provision.js";
 import type { Project } from "../../src/project-catalog.js";
 import { projectDirectory, projectGitDirectory } from "../../src/workspace-layout.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { type CommandOutput } from "../../src/workspace/index.js";
 import {
   executeProjectProvisionRequest,
-  parseProjectProvisionRequest,
-  planProjectProvisionRequest,
   WorkspaceSyncIncomplete,
-  type CommandOutput,
-  type ProjectProvisionRequest,
   type WorkspaceOperations,
   type WorkspacePathKind,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/executor.js";
+import {
+  parseProjectProvisionRequest,
+  planProjectProvisionRequest,
+  type ProjectProvisionRequest,
+} from "../../src/workspace/project-provision.js";
 
 const projectOne = sampleProjectOne;
 

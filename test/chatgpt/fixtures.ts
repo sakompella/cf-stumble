@@ -1,4 +1,5 @@
-import type { ChatGPTAccess, ChatGPTCredential, ProviderFetch } from "../../src/chatgpt/index.js";
+import type { ChatGPTAccess, ChatGPTCredential } from "../../src/chatgpt/index.js";
+import type { ProviderFetch } from "../../src/chatgpt/oauth.js";
 
 export const ACCESS_ONE = "chatgpt-access-FAKE-one-0123456789abcdef";
 

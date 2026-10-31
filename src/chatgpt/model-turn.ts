@@ -28,9 +28,9 @@ export type ChatGPTCredential = Readonly<{
   markUsageLimited(accessToken: string, limitedUntil: number | null): Promise<void>;
 }>;
 
-export class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected") {}
+class ChatGPTNotConnected extends Data.TaggedError("ChatGPTNotConnected") {}
 
-export class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
+class ChatGPTUsageLimited extends Data.TaggedError("ChatGPTUsageLimited")<{
   readonly limitedUntil: number | null;
 }> {}
 

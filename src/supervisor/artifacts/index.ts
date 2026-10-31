@@ -108,15 +108,12 @@ export type { MainFacetCapabilities } from "../../facet/index.js";
 
 export { candidateFacetName, SERVING_FACET_NAME } from "./facet-name.js";
 
-export { MODULE_MAP_CHUNK_BYTES, ModuleMapStore } from "./store.js";
+export { ModuleMapStore } from "./store.js";
 
 export type { ModuleMapStorage } from "./store.js";
 
 export {
-  buildModuleMap,
   type BuildWorkspaceHost,
   type BuildWorkspaceNamespace,
   type HarnessBuildProblem,
 } from "./build.js";
-
-export { encodeModuleMap } from "./module-map.js";

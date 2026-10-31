@@ -1,5 +1,4 @@
 import { expect, test } from "vitest";
-import { EMPTY_PROJECT_CATALOG } from "../src/project-catalog.js";
 import {
   HARNESS_PROJECT,
   resolveSelectableProject,
@@ -13,7 +12,7 @@ import {
 import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "./project-fixtures.js";
 
 test("offers the harness with no connection behind it, connected repositories or not", () => {
-  const nothingConnected = selectableCatalog(EMPTY_PROJECT_CATALOG);
+  const nothingConnected = selectableCatalog([]);
   const withRepositories = selectableCatalog(sampleCatalog);
 
   expect(nothingConnected).toEqual([HARNESS_PROJECT]);

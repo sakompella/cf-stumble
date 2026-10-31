@@ -22,9 +22,9 @@ import type {
   ChatGPTUsageLimit,
 } from "./connection-view.js";
 
-export const LOGIN_TTL_MS = 10 * 60 * 1000;
+const LOGIN_TTL_MS = 10 * 60 * 1000;
 
-export const REFRESH_WINDOW_MS = 8 * 60 * 1000;
+const REFRESH_WINDOW_MS = 8 * 60 * 1000;
 
 type ConnectedCredential = Extract<StoredConnection, { state: "connected" }>;
 

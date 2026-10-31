@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import * as Result from "effect/Result";
 
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
-import { encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { parsedArtifact } from "../../facet/fixture.js";
 
 const harnessCommit = "6000000000000000000000000000000000000001";

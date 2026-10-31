@@ -3,7 +3,8 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
 import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
-import type { CredentialWorkspaceHost, WorkspaceResetResult } from "../../src/workspace/index.js";
+import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { connectSampleProjects } from "./helpers.js";
 

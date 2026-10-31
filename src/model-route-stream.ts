@@ -13,7 +13,6 @@ import type {
 } from "./model-route-events.js";
 import { resolveUsage, type ProviderResult } from "./model-route-usage.js";
 import {
-  modelEventStream,
   modelUnavailable,
   pumpSseStream,
   type ModelTurn,
@@ -38,7 +37,7 @@ function buildStreamingProviderPayload(request: ModelRouteRequest): StreamingPro
     : { messages: request.messages, tools: request.tools, ...fixed };
 }
 
-export function normalizeResponse(raw: ProviderResult): AssistantMessage {
+function normalizeResponse(raw: ProviderResult): AssistantMessage {
   const content = raw.response ?? null;
   const toolCalls: ToolCall[] = [];
 
@@ -161,11 +160,4 @@ export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteReque
       ),
     );
   };
-}
-
-export function streamModelEvents(
-  ai: ModelStreamInference,
-  request: ModelRouteRequest,
-): ReadableStream<Uint8Array> {
-  return modelEventStream(workersAiTurn(ai, request));
 }

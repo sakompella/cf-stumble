@@ -6,10 +6,7 @@ import { AgentEvent } from "./agent-event.js";
 
 type ReadTypes = AgentEvent["type"];
 
-export const READ_EVENTS_ARE_PI_EVENTS: [ReadTypes] extends [PiAgentEvent["type"]] ? true : false =
-  true;
-
-const READ_TYPES: ReadonlySet<string> = new Set<ReadTypes>([
+const READ_TYPES: ReadonlySet<string> = new Set<ReadTypes & PiAgentEvent["type"]>([
   "snapshot",
   "run_start",
   "run_end",

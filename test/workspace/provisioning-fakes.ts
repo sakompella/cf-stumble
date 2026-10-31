@@ -1,9 +1,22 @@
 import type {
   InstructionsWriteResult,
   WorkspaceCommandResult,
+  WorkspacePlan,
 } from "../../src/workspace/decisions.js";
-import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
-import type { ProvisionWorkspaceHost } from "../../src/workspace/provisioning.js";
+import type { Project } from "../../src/project-catalog.js";
+import { tenantWorkspaceName } from "../../src/workspace-names.js";
+import {
+  parseProjectProvisionRequest,
+  planProjectProvisionRequest,
+  type ProjectProvisionRequest,
+} from "../../src/workspace/project-provision.js";
+import {
+  provisionProjectWorkspace,
+  type ProvisionWorkspaceHost,
+} from "../../src/workspace/provisioning.js";
+import { sampleProjectOne } from "../project-fixtures.js";
+import { namespaceFor } from "../workspace-namespace-fixture.js";
+import { runToResult } from "./workspace-results.js";
 
 export class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
@@ -99,4 +112,57 @@ export class LostFirstProvisionHost extends FakeProvisionHost {
 
     return super.provision(request);
   }
+}
+
+export class ScriptedProvisionHost extends FakeProvisionHost {
+  readonly plans: WorkspacePlan[] = [];
+  failingStep: "clone" | "instructions" | undefined;
+
+  override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
+    this.record(request);
+    const parsed = parseProjectProvisionRequest(request);
+
+    if ("ok" in parsed) {
+      return Promise.resolve(parsed);
+    }
+
+    this.plans.push(planProjectProvisionRequest(parsed));
+
+    return Promise.resolve({
+      ok: true,
+      result:
+        this.failingStep === "clone"
+          ? {
+              kind: "command",
+              stdout: "",
+              stderr: "fatal: could not read from remote repository",
+              exitCode: 128,
+            }
+          : { kind: "command", stdout: "", stderr: "", exitCode: 0 },
+    });
+  }
+
+  override ensureManagedInstructions(): Promise<InstructionsWriteResult> {
+    this.steps.push("instructions");
+
+    return Promise.resolve(
+      this.failingStep === "instructions"
+        ? { ok: false, error: { code: "workspace-unavailable" } }
+        : { ok: true, result: { kind: "written" } },
+    );
+  }
+}
+
+export const TENANT_WORKSPACE = tenantWorkspaceName("supervisor-name-of-tenant-1");
+
+export function provisionerFor(host: ProvisionWorkspaceHost) {
+  const namespace = namespaceFor(host);
+
+  return {
+    namespace,
+    provision: (project: Project = sampleProjectOne) =>
+      runToResult(
+        provisionProjectWorkspace({ workspaceName: TENANT_WORKSPACE, project, namespace }),
+      ),
+  };
 }

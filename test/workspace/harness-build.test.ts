@@ -7,14 +7,16 @@ import {
   planHarnessBuild,
   type HarnessBuildRequest,
 } from "../../src/harness-build.js";
+import { type CommandOutput } from "../../src/workspace/index.js";
 import {
   executeHarnessBuildRequest,
-  parseHarnessBuildRequest,
-  planHarnessBuildRequest,
-  type CommandOutput,
   type WorkspaceOperations,
   type WorkspacePathKind,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/executor.js";
+import {
+  parseHarnessBuildRequest,
+  planHarnessBuildRequest,
+} from "../../src/workspace/harness-build.js";
 import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
 import { shellQuote } from "../../src/shell-quote.js";
 

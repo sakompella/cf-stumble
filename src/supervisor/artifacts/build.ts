@@ -18,7 +18,7 @@ export type BuildWorkspaceNamespace = Readonly<{
   getByName(name: string): BuildWorkspaceHost;
 }>;
 
-export type BuildStepDiagnostics = Readonly<{
+type BuildStepDiagnostics = Readonly<{
   stdoutTail: string;
   stderrTail: string;
   truncated: boolean;

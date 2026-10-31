@@ -44,7 +44,7 @@ export type ModelStreamEvent =
   | Readonly<{ type: "error"; error: Readonly<{ code: ModelRouteErrorCode }> }>
   | ProviderFallback;
 
-export type ProviderFallback = Readonly<{
+type ProviderFallback = Readonly<{
   type: "provider-fallback";
   reason: "chatgpt-usage-limit";
   limitedUntil: number | null;

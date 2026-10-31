@@ -69,10 +69,6 @@ export const OWNER_PAGE_IDS = {
   rollbackEffect: "rollback-effect",
 } as const;
 
-type OwnerPageId = (typeof OWNER_PAGE_IDS)[keyof typeof OWNER_PAGE_IDS];
-
-export const OWNER_PAGE_ELEMENT_IDS: readonly OwnerPageId[] = Object.values(OWNER_PAGE_IDS);
-
 export const OWNER_PAGE_CLASSES = {
   message: "message",
   toolCall: "tool-call",

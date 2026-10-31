@@ -8,7 +8,7 @@ export type ChatGPTConnectionStatus =
   | Readonly<{ state: "connected"; expiresAt: number; usageLimit?: ChatGPTUsageLimit }>
   | Readonly<{ state: "needs-reconnect"; reason: ReconnectReason }>;
 
-export type ChatGPTLoginView = Readonly<{
+type ChatGPTLoginView = Readonly<{
   attemptId: string;
   authorizeUrl: string;
   expiresAt: number;

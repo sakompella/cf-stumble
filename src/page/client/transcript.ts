@@ -53,17 +53,17 @@ export function diffLineKind(line: string): "hunk" | "added" | "removed" | "plai
   return line.startsWith("-") ? "removed" : "plain";
 }
 
-export function toolSummaryText(toolName: string, argumentsJson: string): string {
+function toolSummaryText(toolName: string, argumentsJson: string): string {
   return argumentsJson === "" || argumentsJson === "{}"
     ? toolName
     : `${toolName} ${argumentsJson.slice(0, 160)}`;
 }
 
-export function textEntry(role: string, who: string, text: string): TranscriptEntry {
+function textEntry(role: string, who: string, text: string): TranscriptEntry {
   return TranscriptEntry.Text({ role, who, text });
 }
 
-export function toolStartEntry(toolCallId: string, summary: string): ToolEntry {
+function toolStartEntry(toolCallId: string, summary: string): ToolEntry {
   return TranscriptEntry.Tool({
     toolCallId,
     summary,

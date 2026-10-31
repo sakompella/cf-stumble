@@ -3,7 +3,7 @@ import type { HarnessCommit } from "../../src/harness-commit.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
-import type { OwnerApiSupervisor } from "../../src/routes/index.js";
+import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
