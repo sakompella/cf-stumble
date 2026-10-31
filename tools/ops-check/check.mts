@@ -1,3 +1,5 @@
+import { routeClass } from "../../src/routes/route-pattern.ts";
+
 export const MINUTE_MS = 60_000;
 
 export const BUCKET_MS = 5 * MINUTE_MS;
@@ -83,14 +85,35 @@ export function isoMinute(ms: number): string {
   return new Date(ms).toISOString().slice(0, 16) + "Z";
 }
 
+function unclassifiedRoutes(activity: Activity): readonly Finding[] {
+  const unclassified = activity.invocations
+    .filter((call) => call.route.startsWith("/api/") && routeClass(call.route) === undefined)
+    .toSorted((a, b) => a.endMs - b.endMs);
+
+  return unclassified.length === 0
+    ? []
+    : [
+        {
+          rule: "unknown",
+          detail: `${unclassified.length} request(s) to an /api route that src/routes/route-pattern.ts does not list, so the checker cannot tell whether it reaches the workspace`,
+          evidence: unclassified.slice(-RECENT_REQUESTS).map(describeCall),
+        },
+      ];
+}
+
+function describeCall(call: Invocation): string {
+  return `${call.route}@${isoMinute(call.endMs).slice(11)}`;
+}
+
 function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] {
   const { window, nowMs, idleLimitMs } = input;
   const { usage } = activity;
-  const invocations = activity.invocations.filter((call) => call.route.startsWith("/api/"));
+  const apiCalls = activity.invocations.filter((call) => call.route.startsWith("/api/"));
+  const workspaceCalls = apiCalls.filter((call) => routeClass(call.route) === "workspace");
   const completeUntilMs = Math.min(window.toMs, nowMs - METRICS_LAG_MS);
 
   const allowed = mergeSpans(
-    invocations.map((call) => ({
+    workspaceCalls.map((call) => ({
       beginMs: call.endMs - call.wallTimeMs,
       endMs: call.endMs + idleLimitMs,
     })),
@@ -127,11 +150,11 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
 
     if (overrunMinutes * MINUTE_MS <= OVERRUN_SLACK_MS) return [];
 
-    const recent = invocations
+    const recent = apiCalls
       .filter((call) => call.endMs <= endMs)
       .toSorted((a, b) => b.endMs - a.endMs)
       .slice(0, RECENT_REQUESTS)
-      .map((call) => `${call.route}@${isoMinute(call.endMs).slice(11)}`);
+      .map(describeCall);
 
     return [
       {
@@ -145,7 +168,7 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
 
 export function runChecks(input: CheckInput): readonly Finding[] {
   return input.activity.status === "ok"
-    ? ranPastIdle(input.activity.data, input)
+    ? [...unclassifiedRoutes(input.activity.data), ...ranPastIdle(input.activity.data, input)]
     : [{ rule: "unknown", detail: input.activity.reason, evidence: [] }];
 }
 

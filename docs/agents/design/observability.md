@@ -79,14 +79,16 @@ finding otherwise, and exits 1 on any finding or `unknown`. `--json` prints the 
 
 - Workers Logs (`workers/observability/telemetry/query`): every fetch invocation of the Worker, with
   its end time, `$workers.wallTimeMs`, and URL, from one idle limit before the window starts. Only
-  owner API requests (routes under `/api/`) count; the page and Durable Object fetches never reach
-  the workspace.
+  owner API routes that can reach the workspace count as work. `src/routes/route-pattern.ts` lists
+  each route as `record-only` (status, project list, GitHub and ChatGPT connection: the Supervisor
+  answers from its own record) or `workspace`. The page and Durable Object fetches never reach the
+  workspace.
 - GraphQL `containersUsageAdaptiveGroups`: `allocatedMemory` byte-seconds per five-minute bucket,
   divided by the provisioned memory of the `<worker>-workspacehost` application and by 60, gives
   running minutes. A bucket counts at most five minutes.
 
-**Rule `ran-past-idle`.** Each request allows the container to run from its start until its end
-plus the idle limit (`--idle-minutes`, default `WORKSPACE_IDLE_STOP_MS`). A run of consecutive
+**Rule `ran-past-idle`.** Each `workspace` request allows the container to run from its start until
+its end plus the idle limit (`--idle-minutes`, default `WORKSPACE_IDLE_STOP_MS`). A run of consecutive
 running buckets that exceeds that allowance by more than 10 minutes is a finding. Buckets newer
 than 10 minutes are still filling and do not count. The finding lists the routes and end times of
 the last three requests before the run ended, which shows what kept the container awake.
@@ -100,9 +102,11 @@ needs Account Analytics Read; an API token with it is better for repeated runs. 
 `--account`, then `CLOUDFLARE_ACCOUNT_ID`, then the only account the token sees. The token goes in
 the `Authorization` header only and is never printed. Use `--worker <name>` for another Worker.
 
-**Unknown.** Missing data never reads as fine. A missing token or account, a failed call, a missing
-application, an unexpected response, or a query that hit its row limit (2,000 requests or 5,000
-usage rows) prints one `unknown` line with the reason. Use a shorter `--since` after a row limit.
+**Unknown.** Missing data never reads as fine. A request to an `/api/` route that
+`route-pattern.ts` does not list prints one `unknown` line, and the route gets no allowance. A
+missing token or account, a failed call, a missing application, an unexpected response, or a query
+that hit its row limit (2,000 requests or 5,000 usage rows) prints one `unknown` line with the
+reason. Use a shorter `--since` after a row limit.
 
 The queries are in `tools/ops-check/fetch.mts`. To check whether a stop happened without the
 metrics lag, `GET /accounts/<account-id>/containers/applications/<container-app-id>/instances`
