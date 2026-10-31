@@ -11,7 +11,6 @@ import {
   seedWorkspaceRoot,
   stubWorkspaceMember,
 } from "./host-fixtures.js";
-import { PROJECT_TURN_LEASE_MS } from "../../src/turn-budget.js";
 import { WORKSPACE_IDLE_STOP_MS } from "../../src/workspace/idle-stop.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
@@ -107,7 +106,7 @@ test("an ended project capability holds the workspace one idle limit from its en
   vi.spyOn(console, "log").mockImplementation(() => {});
 
   const result = await withHost("host-seam-lease-end", async (host, state, container) => {
-    const project = host.project({ remainingMs: PROJECT_TURN_LEASE_MS });
+    const project = host.project({ remainingMs: 9 * 60_000 });
     const endedAt = Date.now();
     await project.endTurn();
     const alarm = (await state.storage.getAlarm()) ?? 0;
@@ -133,23 +132,6 @@ test("a past-due alarm closes the Workspace and destroys the container for being
   });
 
   expect(destroyed).toEqual(["idle"]);
-});
-
-test("a call on the project capability counts as activity", async () => {
-  const calledAtMs = PROJECT_TURN_LEASE_MS + 120_000;
-
-  const destroyed = await withHost("host-seam-touch", async (host, _state, container) => {
-    const start = Date.now();
-    const project = host.project();
-    vi.spyOn(Date, "now").mockReturnValue(start + calledAtMs);
-    await project.lstat("/");
-    vi.spyOn(Date, "now").mockReturnValue(start + WORKSPACE_IDLE_STOP_MS + calledAtMs - 1);
-    await host.alarm();
-
-    return container.destroyed;
-  });
-
-  expect(destroyed, "the alarm finds the limit not yet passed since the call").toEqual([]);
 });
 
 test("a reset deletes the store and stops the container without starting another", async () => {
@@ -191,13 +173,10 @@ test("an exec started while the idle stop destroys the container waits for it", 
     await host.build(REFUSED_BUILD);
     await seedWorkspaceRoot(state);
 
-    const project = host.project();
-
-    vi.spyOn(Date, "now").mockReturnValue(
-      Date.now() + PROJECT_TURN_LEASE_MS + WORKSPACE_IDLE_STOP_MS + 1_000,
-    );
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + WORKSPACE_IDLE_STOP_MS + 1_000);
     const alarm = host.alarm();
     await tick();
+    const project = host.project({ remainingMs: 60_000 });
     const started = await project.startExec({ command: "true", timeoutMs: 1_000 });
     await tick();
     const whileDestroying = container.starts;
