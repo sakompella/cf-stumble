@@ -24,7 +24,14 @@ export default defineConfig({
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-imports": "error",
     "typescript/switch-exhaustiveness-check": "error",
-    "typescript/no-floating-promises": "error",
+    "typescript/no-floating-promises": [
+      "error",
+      {
+        allowForKnownSafeCalls: [
+          { from: "package", package: "node:test", name: ["describe", "it", "test"] },
+        ],
+      },
+    ],
     "typescript/no-misused-promises": "error",
     "typescript/prefer-readonly-parameter-types": "off",
     "eslint/max-lines": ["warn", { max: 300, skipBlankLines: true, skipComments: false }],
@@ -33,6 +40,11 @@ export default defineConfig({
       { max: 50, skipBlankLines: true, skipComments: false },
     ],
     "eslint/no-console": "off",
+    "eslint/no-underscore-dangle": ["error", { allow: ["_tag"] }],
+    "eslint/no-redeclare": "off",
+    "unicorn/no-array-callback-reference": "off",
+    "foldkit/no-hardcoded-route-strings": "off",
+    "foldkit/no-nonportable-server-globals": "off",
     "unicorn/prefer-top-level-await": "off",
     "unicorn/no-null": "off",
 
@@ -67,14 +79,6 @@ export default defineConfig({
   },
 
   overrides: [
-    {
-      files: ["src/page/client/**", "test/page/client/**"],
-      rules: {
-        "eslint/no-underscore-dangle": ["error", { allow: ["_tag"] }],
-        "eslint/no-redeclare": "off",
-        "unicorn/no-array-callback-reference": "off",
-      },
-    },
     {
       files: ["src/page/client/**"],
       rules: {
@@ -113,15 +117,6 @@ export default defineConfig({
         "foldkit/require-rel-for-external-link": "error",
         "foldkit/selection-submodel-factory-at-module-scope": "error",
         "foldkit/wrap-child-output-in-got-message": "error",
-        "foldkit/no-hardcoded-route-strings": "off",
-        "foldkit/no-nonportable-server-globals": "off",
-      },
-    },
-    {
-      files: ["tools/ops-check/**/*.test.ts", "tools/*.test.ts"],
-      rules: {
-        "typescript/no-floating-promises": "off",
-        "unicorn/consistent-function-scoping": "off",
       },
     },
   ],

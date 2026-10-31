@@ -6,13 +6,14 @@ import config from "../oxlint.config.ts";
 
 const PREFIX = "foldkit/";
 
-const pageRules = new Map(
-  (config.overrides ?? []).flatMap((override) =>
+const pageRules = new Map([
+  ...Object.entries(config.rules).filter(([name]) => name.startsWith(PREFIX)),
+  ...(config.overrides ?? []).flatMap((override) =>
     override.files.includes("src/page/client/**")
       ? Object.entries(override.rules ?? {}).filter(([name]) => name.startsWith(PREFIX))
       : [],
   ),
-);
+]);
 
 const shippedRules = new Map(
   Object.entries(foldkit.rules).map(([name, rule]) => [`${PREFIX}${name}`, rule] as const),
