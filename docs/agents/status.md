@@ -6,7 +6,7 @@ What runs in production, what was decided outside an ADR, and what is still open
 
 Production is the Worker `cf-stumble`, deployed only with `cf deploy`. Run `pnpm exec cf workers deployments list` before you assume that production matches a commit.
 
-On 2026-10-30 production runs `e097416` (Worker version `35be74ba`, about 21:28Z), with generation 1 (`9fde8fd`, the first on Pi Durable) active at epoch 6.
+On 2026-10-31 production runs `f83fd10` (Worker version `f38b73d3`), with generation 2 (`f83fd10`) active at epoch 9. Generation 1 (`9fde8fd`) was the first on Pi Durable.
 
 The Worker has no authentication: every request reaches one Supervisor named `owner`. GitHub is connected through the `GH_TOKEN` secret, and only the harness project exists. ChatGPT is not connected, so runs answer from Workers AI. Checked on production that day: a run with a `bash` tool call saved; a retried `requestId` returned the same submission; an abort answered in 0.9 s and killed a running `sleep 120` within about 2 s; the container stopped 600 s after the last run settled.
 
