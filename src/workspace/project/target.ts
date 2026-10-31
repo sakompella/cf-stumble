@@ -229,10 +229,10 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
   }
 
   endTurn(): Promise<ProjectResult<{ killed: number }>> {
-    return projectResult(() => this.#endTurn("end-turn"));
+    return projectResult(() => this.#endTurn());
   }
 
-  #endTurn(reason: "end-turn" | "turn-end" = "end-turn"): ProjectResult<{ killed: number }> {
+  #endTurn(): ProjectResult<{ killed: number }> {
     if (this.#endResult !== undefined) return ok(this.#endResult);
     this.#ended = true;
 
@@ -245,7 +245,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
 
     for (const operation of this.#operations.values()) {
       killed += 1;
-      operation.requestKill(reason);
+      operation.requestKill();
     }
 
     this.#endResult = { killed };
@@ -259,7 +259,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     const remaining = this.#turnEndsAt - Date.now();
 
     if (remaining <= 0) {
-      this.#endTurn("turn-end");
+      this.#endTurn();
 
       return;
     }
@@ -282,7 +282,7 @@ export class ProjectRpcTarget extends RpcTarget implements ProjectRpcTargetContr
     if (this.#ended) return { ok: false, error: { code: "turn-ended" } };
 
     if (this.#turnEndsAt !== undefined && Date.now() >= this.#turnEndsAt) {
-      this.#endTurn("turn-end");
+      this.#endTurn();
 
       return { ok: false, error: { code: "turn-ended" } };
     }
