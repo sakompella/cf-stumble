@@ -17,7 +17,6 @@ export const REFUSED_PROVISION: ProjectProvisionRequest = {
   kind: "provision-project",
   projectId: "not-a-project",
   repositoryUrl: "not-a-url",
-  step: "clone",
 };
 
 export const REFUSED_REMOVAL: ProjectRemovalRequest = {

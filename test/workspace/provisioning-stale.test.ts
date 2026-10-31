@@ -1,14 +1,11 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import { PROJECT_PROVISION_STEP_NAMES } from "../../src/project-provision.js";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import {
-  provisionProjectWorkspace,
-  PROVISION_STALE_AFTER_MS,
-} from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+import { PROVISION_STALE_AFTER_MS } from "../../src/workspace/provision-exclusion.js";
 import { delayedProvisionHost, LostFirstProvisionHost } from "./provisioning-fakes.js";
 import { runToResult } from "./workspace-results.js";
 
@@ -24,8 +21,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
     void runToResult(
       provisionProjectWorkspace({
         workspaceName,
-        projectId: sampleProjectOne.id,
-        catalog: sampleCatalog,
+        project: sampleProjectOne,
         namespace,
       }),
     );
@@ -34,8 +30,7 @@ test("a signal-less waiter proceeds after the Workspace Host command ceiling", a
     const waiter = runToResult(
       provisionProjectWorkspace({
         workspaceName,
-        projectId: sampleProjectTwo.id,
-        catalog: sampleCatalog,
+        project: sampleProjectTwo,
         namespace,
       }),
     );
@@ -69,8 +64,7 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
     const first = runToResult(
       provisionProjectWorkspace({
         workspaceName: tenantWorkspaceName("normal-waiter-timer"),
-        projectId: sampleProjectOne.id,
-        catalog: sampleCatalog,
+        project: sampleProjectOne,
         namespace,
       }),
     );
@@ -80,8 +74,7 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
     const second = runToResult(
       provisionProjectWorkspace({
         workspaceName: tenantWorkspaceName("normal-waiter-timer"),
-        projectId: sampleProjectTwo.id,
-        catalog: sampleCatalog,
+        project: sampleProjectTwo,
         namespace,
       }),
     );
@@ -100,10 +93,8 @@ test("clears the stale ceiling timer when a waiter finishes normally", async () 
   }
 });
 
-test("provision stale ceiling covers the plan command budget", () => {
-  expect(PROVISION_STALE_AFTER_MS).toBeGreaterThanOrEqual(
-    PROJECT_PROVISION_STEP_NAMES.length * WORKSPACE_COMMAND_TIMEOUT_MS,
-  );
+test("provision stale ceiling covers both Host calls of a provision", () => {
+  expect(PROVISION_STALE_AFTER_MS).toBeGreaterThanOrEqual(2 * WORKSPACE_COMMAND_TIMEOUT_MS);
 });
 
 test("drops an in-flight provision after the Workspace Host command ceiling", async () => {
@@ -116,8 +107,7 @@ test("drops an in-flight provision after the Workspace Host command ceiling", as
 
   const input = {
     workspaceName: tenantWorkspaceName("stale-provision"),
-    projectId: sampleProjectOne.id,
-    catalog: sampleCatalog,
+    project: sampleProjectOne,
     namespace,
   };
 

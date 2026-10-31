@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
-import { planProjectProvision, projectProvisionStep } from "../../src/project-provision.js";
+import { projectCloneSource } from "../../src/project-provision.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import {
   FLOCK_STAND_IN,
@@ -26,7 +26,7 @@ test("a clone whose existing directory has another origin fails and says why", (
   writeExecutable(join(bin, "flock"), FLOCK_STAND_IN);
   writeFileSync(join(scratch, "existing-clone"), "");
 
-  const { source } = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
+  const source = projectCloneSource(sampleProjectOne);
 
   const ran = spawnSync("/bin/sh", ["-c", underScratch(source, scratch)], {
     encoding: "utf8",

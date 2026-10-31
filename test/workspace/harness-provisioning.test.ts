@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { parseHarnessCommit, type HarnessCommit } from "../../src/harness-commit.js";
 import type { HarnessBuildRequest } from "../../src/harness-build.js";
-import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   provisionHarnessWorkspace,
@@ -168,8 +168,7 @@ test("excludes a harness provision while a project provision is in flight", asyn
   const project = runToResult(
     provisionProjectWorkspace({
       workspaceName,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: projectNamespace,
     }),
   );

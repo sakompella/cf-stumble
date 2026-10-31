@@ -1,6 +1,6 @@
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
-import type { ProvisionWorkspaceHost } from "../../src/workspace/provision-plan.js";
+import type { ProvisionWorkspaceHost } from "../../src/workspace/provisioning.js";
 
 export class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly requests: ProjectProvisionRequest[] = [];
@@ -8,7 +8,7 @@ export class FakeProvisionHost implements ProvisionWorkspaceHost {
 
   protected record(request: ProjectProvisionRequest): void {
     this.requests.push(request);
-    this.steps.push(request.step);
+    this.steps.push("clone");
   }
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {

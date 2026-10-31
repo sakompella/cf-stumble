@@ -2,11 +2,13 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+import {
+  provisionProjectWorkspace,
+  type ProvisionWorkspaceHost,
+} from "../../src/workspace/provisioning.js";
 import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
-import type { ProvisionWorkspaceHost } from "../../src/workspace/provision-plan.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 
 const tick = () =>
@@ -36,8 +38,7 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
   const plan = Effect.runFork(
     provisionProjectWorkspace({
       workspaceName,
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: namespaceFor(host),
     }),
   );

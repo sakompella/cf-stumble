@@ -37,8 +37,10 @@ export {
 export {
   provisionHarnessWorkspace,
   provisionProjectWorkspace,
-  ProvisionStepFailed,
-  ProvisionWorkspaceUnavailable,
+  ProvisionFailed,
+  type HarnessProvisionWorkspaceNamespace,
+  type ProvisionWorkspaceHost,
+  type ProvisionWorkspaceNamespace,
 } from "./provisioning.js";
 
 export {
@@ -46,13 +48,6 @@ export {
   clearWorkspaceProvision,
   PROVISION_STALE_AFTER_MS,
 } from "./provision-exclusion.js";
-
-export type {
-  HarnessProvisionWorkspaceNamespace,
-  ProvisionWorkspaceHost,
-  ProvisionWorkspaceNamespace,
-  ProjectRemovalWorkspaceNamespace,
-} from "./provision-plan.js";
 
 export { WorkspaceHost } from "./host.js";
 
@@ -62,4 +57,5 @@ export {
   parseProjectRemovalRequest,
   planProjectRemovalRequest,
   type ProjectRemovalRequest,
+  type ProjectRemovalWorkspaceNamespace,
 } from "./project-removal.js";

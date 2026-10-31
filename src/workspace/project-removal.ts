@@ -72,3 +72,7 @@ export function removalIsDurable(
 export type ProjectRemovalWorkspaceHost = Readonly<{
   removeProject(request: ProjectRemovalRequest): Promise<WorkspaceResult>;
 }>;
+
+export type ProjectRemovalWorkspaceNamespace = Readonly<{
+  getByName(name: string): ProjectRemovalWorkspaceHost;
+}>;

@@ -3,19 +3,12 @@ import { repositorySizeVerdictSource } from "../../src/github/repository-size-gu
 import { parsePublicRepositoryUrl } from "../../src/project-catalog.js";
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
-  planProjectProvision,
-  projectProvisionStep,
+  projectCloneSource,
 } from "../../src/project-provision.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
-function cloneSource(): string {
-  const step = projectProvisionStep(planProjectProvision(sampleProjectOne), "clone");
-
-  return step.source;
-}
-
 test("a new clone is measured after the existing-clone check and before git clone", () => {
-  const source = cloneSource();
+  const source = projectCloneSource(sampleProjectOne);
   const existingCheck = source.indexOf("rev-parse --is-bare-repository");
   const measured = source.indexOf('size_verdict="$(repository_size_verdict)"');
   const cloned = source.indexOf("git clone");

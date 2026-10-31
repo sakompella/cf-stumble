@@ -212,7 +212,6 @@ test("a reset refuses while a file change or credential install is in flight and
         kind: "provision-project",
         projectId: sampleProjectOne.id,
         repositoryUrl: sampleProjectOne.repositoryUrl,
-        step: "clone",
       }),
     credentialInstall: (host: WorkspaceHost) =>
       host.credential({ kind: "github-credential", step: "install", token: FAKE_TOKEN }),

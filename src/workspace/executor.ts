@@ -130,19 +130,14 @@ export function executeProjectProvisionRequest(
   return Effect.gen(function* () {
     const operations = workspaceEffects(input.operations);
 
-    const result = yield* executePlan(operations, planProjectProvisionRequest(parsed));
+    const output = yield* runPlannedCommand(operations, planProjectProvisionRequest(parsed));
 
-    const cloned =
-      parsed.step === "clone" && result.ok && result.result.kind === "command"
-        ? result.result.exitCode === 0
-        : false;
+    if (output.exitCode === 0 && !(yield* cloneMarkersAreDurable(operations, parsed))) {
+      return syncIncomplete();
+    }
 
-    return cloned && !(yield* cloneMarkersAreDurable(operations, parsed.project))
-      ? syncIncomplete()
-      : result;
-  }).pipe(
-    answerDurableFailures(`workspace.provision-project.${parsed.step}`, timeoutOrUnavailable),
-  );
+    return { ok: true, result: { kind: "command", ...cloneCommandOutput(output) } } as const;
+  }).pipe(answerDurableFailures("workspace.provision-project.clone", timeoutOrUnavailable));
 }
 
 export function executeProjectRemovalRequest(

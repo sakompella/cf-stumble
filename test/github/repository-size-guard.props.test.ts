@@ -14,8 +14,7 @@ import {
 import { parseProjectCatalog, type Project } from "../../src/project-catalog.js";
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,
-  planProjectProvision,
-  projectProvisionStep,
+  projectCloneSource,
 } from "../../src/project-provision.js";
 import {
   FLOCK_STAND_IN,
@@ -160,9 +159,7 @@ function verdict(scenario: Scenario): string {
 function clone(scenario: Scenario) {
   const prepared = prepare(scenario);
 
-  const step = projectProvisionStep(planProjectProvision(project), "clone");
-
-  const ran = run(prepared, underScratch(step.source, prepared.directory));
+  const ran = run(prepared, underScratch(projectCloneSource(project), prepared.directory));
 
   const log = (name: string) =>
     existsSync(join(prepared.directory, name))

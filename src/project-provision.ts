@@ -1,4 +1,3 @@
-import { invariant } from "./invariant.js";
 import { shellQuote } from "./shell-quote.js";
 import { PROJECTS_DIRECTORY, projectDirectory, projectGitDirectory } from "./workspace-layout.js";
 import type { Project, ProjectId } from "./project-catalog.js";
@@ -27,17 +26,6 @@ export const MANAGED_AGENT_INSTRUCTIONS = [
   "and the repository's conventions. Never print or commit authentication tokens.",
   "",
 ].join("\n");
-
-export type ProjectProvisionStepName = "clone";
-
-type ProjectProvisionStep = Readonly<{ name: "clone"; source: string; cwd: string }>;
-
-type ProjectProvisionPlan = Readonly<{
-  projectId: ProjectId;
-  steps: readonly [ProjectProvisionStep, ...ProjectProvisionStep[]];
-}>;
-
-export const PROJECT_PROVISION_STEP_NAMES: readonly ProjectProvisionStepName[] = ["clone"];
 
 export function projectProvisionLockPath(projectId: ProjectId): string {
   return `/tmp/cf-stumble-project-${projectId}.provision.lock`;
@@ -77,7 +65,7 @@ export function reconcileClone(
   ];
 }
 
-function cloneProjectRepository(project: Project): string {
+export function projectCloneSource(project: Project): string {
   const { repositoryUrl } = project;
   const root = projectDirectory(project.id);
 
@@ -117,27 +105,4 @@ function cloneProjectRepository(project: Project): string {
       ],
     }),
   ].join("\n");
-}
-
-export function planProjectProvision(project: Project): ProjectProvisionPlan {
-  return {
-    projectId: project.id,
-    steps: [
-      {
-        name: "clone",
-        source: cloneProjectRepository(project),
-        cwd: "/",
-      },
-    ],
-  };
-}
-
-export function projectProvisionStep(
-  plan: ProjectProvisionPlan,
-  name: ProjectProvisionStepName,
-): ProjectProvisionStep {
-  const step = plan.steps.find((planned) => planned.name === name);
-  invariant(step !== undefined, `the provisioning plan must contain its own ${name} step`);
-
-  return step;
 }

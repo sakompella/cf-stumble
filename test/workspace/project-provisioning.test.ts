@@ -1,19 +1,23 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import { sampleCatalog, sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
+import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
-  provisionProjectWorkspace,
-  ProvisionWorkspaceUnavailable,
   type ProjectProvisionRequest,
   type ProvisionWorkspaceHost,
   type WorkspacePlan,
   type WorkspaceResult,
 } from "../../src/workspace/index.js";
-import { plainProblem, runToResult } from "./workspace-results.js";
+import {
+  provisionProjectWorkspace,
+  ProvisionFailed,
+  ProvisionUnavailable,
+} from "../../src/workspace/provisioning.js";
+import type { Project } from "../../src/project-catalog.js";
+import { runToResult } from "./workspace-results.js";
 
 const workspaceName = tenantWorkspaceName("supervisor-name-of-tenant-1");
 
@@ -27,7 +31,7 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
 
   provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
     this.requests.push(request);
-    this.steps.push(request.step);
+    this.steps.push("clone");
     const parsed = parseProjectProvisionRequest(request);
 
     if ("ok" in parsed) {
@@ -67,10 +71,8 @@ function provisionerFor(host: FakeProvisionHost) {
 
   return {
     namespace,
-    provision: (projectId: string = projectOne.id) =>
-      runToResult(
-        provisionProjectWorkspace({ workspaceName, projectId, catalog: sampleCatalog, namespace }),
-      ),
+    provision: (project: Project = projectOne) =>
+      runToResult(provisionProjectWorkspace({ workspaceName, project, namespace })),
   };
 }
 
@@ -93,16 +95,14 @@ test("clones and then writes the managed instructions into the tenant's workspac
   const provisioned = await provision();
 
   if (Result.isFailure(provisioned)) {
-    throw new Error(`provisioning a catalog project must succeed: ${provisioned.failure.code}`);
+    throw new Error(`provisioning a catalog project must succeed: ${provisioned.failure._tag}`);
   }
 
-  expect(provisioned.success).toEqual({ projectId: projectOne.id, workspaceName });
   expect(host.requests).toEqual([
     {
       kind: "provision-project",
       projectId: projectOne.id,
       repositoryUrl: projectOne.repositoryUrl,
-      step: "clone",
     },
   ]);
   expect(host.steps, "the managed file is written through its own Host RPC").toEqual([
@@ -114,7 +114,7 @@ test("clones and then writes the managed instructions into the tenant's workspac
   ]);
 });
 
-test("carries a resolved project and a step name, never command text", async () => {
+test("carries a resolved project, never command text", async () => {
   const host = new FakeProvisionHost();
 
   await provisionerFor(host).provision();
@@ -128,7 +128,6 @@ test("carries a resolved project and a step name, never command text", async () 
       kind: "provision-project",
       projectId: projectOne.id,
       repositoryUrl: sampleProjectTwo.repositoryUrl,
-      step: "clone",
     }),
     "an id that is not the one the URL derives is refused",
   ).toEqual({ ok: false, error: { code: "invalid-request" } });
@@ -149,12 +148,8 @@ test("an interrupted provision and its resumption ask for the same state", async
     throw new Error("an interrupted clone must recover on the next provision request");
   }
 
-  expect(plainProblem(interrupted.failure)).toEqual({
-    code: "provision-step-failed",
-    projectId: projectOne.id,
-    step: "clone",
-    exitCode: 128,
-  });
+  expect(interrupted.failure).toMatchObject({ _tag: "ProvisionFailed", exitCode: 128 });
+  expect(interrupted.failure).toBeInstanceOf(ProvisionFailed);
   expect(host.steps, "a failed clone stops before the instructions step").toEqual([
     "clone",
     "clone",
@@ -182,11 +177,7 @@ test("repeats the clone after the instructions step failed, rather than resuming
     throw new Error("a failed instructions write must recover on the next provision request");
   }
 
-  expect(plainProblem(interrupted.failure)).toEqual({
-    code: "provision-workspace-unavailable",
-    projectId: projectOne.id,
-    step: "instructions",
-  });
+  expect(interrupted.failure).toBeInstanceOf(ProvisionUnavailable);
   expect(host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
 });
 
@@ -199,22 +190,6 @@ test("reconciles again on a plain repeat, holding no memory of the last run", as
 
   expect(host.steps).toEqual(["clone", "instructions", "clone", "instructions"]);
   expect(host.plans.slice(1)).toEqual(host.plans.slice(0, 1));
-});
-
-test("refuses a project the catalog does not resolve before naming a workspace", async () => {
-  const host = new FakeProvisionHost();
-  const { provision, namespace } = provisionerFor(host);
-
-  const refusals = [await provision("no-such-project"), await provision("../../etc")];
-
-  expect(
-    refusals.map((refusal) => (Result.isFailure(refusal) ? plainProblem(refusal.failure) : "ok")),
-  ).toEqual([
-    { code: "project-not-in-catalog", reason: "unknown-project-id" },
-    { code: "project-not-in-catalog", reason: "invalid-project-id" },
-  ]);
-  expect(namespace.names, "a refused project reaches no workspace").toEqual([]);
-  expect(host.requests).toEqual([]);
 });
 
 test("keeps a refused or unreachable workspace one typed failure", async () => {
@@ -238,15 +213,8 @@ test("keeps a refused or unreachable workspace one typed failure", async () => {
   logged.mockRestore();
 
   expect(
-    results.map((result) => (Result.isFailure(result) ? plainProblem(result.failure) : "ok")),
-  ).toEqual([
-    { code: "provision-workspace-unavailable", projectId: projectOne.id, step: "clone" },
-    { code: "provision-workspace-unavailable", projectId: projectOne.id, step: "clone" },
-  ]);
-  expect(
     results.every(
-      (result) =>
-        Result.isFailure(result) && result.failure instanceof ProvisionWorkspaceUnavailable,
+      (result) => Result.isFailure(result) && result.failure instanceof ProvisionUnavailable,
     ),
     "a provisioning failure is one typed error the caller handles by its class",
   ).toBe(true);

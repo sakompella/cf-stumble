@@ -1,14 +1,13 @@
 import * as Result from "effect/Result";
 import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
-import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
+import { sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
 import {
   provisionProjectWorkspace,
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 import { runToResult } from "./workspace-results.js";
 
@@ -16,8 +15,8 @@ class AbortAwareHost implements ProvisionWorkspaceHost {
   readonly steps: string[] = [];
   controller: AbortController | undefined;
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
-    this.steps.push(request.step);
+  provision(): Promise<WorkspaceResult> {
+    this.steps.push("clone");
     this.controller?.abort();
 
     return Promise.resolve({
@@ -41,8 +40,7 @@ test("does not start the next provisioning step after the turn aborts", async ()
   const result = await runToResult(
     provisionProjectWorkspace({
       workspaceName: tenantWorkspaceName("provisioning-abort-at-boundary"),
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: namespaceFor(host),
       signal: controller.signal,
     }),
@@ -69,8 +67,7 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
   const provisioning = runToResult(
     provisionProjectWorkspace({
       workspaceName: tenantWorkspaceName("provisioning-abort-bounded"),
-      projectId: sampleProjectOne.id,
-      catalog: sampleCatalog,
+      project: sampleProjectOne,
       namespace: namespaceFor(host),
       signal: controller.signal,
     }),
