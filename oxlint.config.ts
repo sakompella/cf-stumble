@@ -81,10 +81,6 @@ export default defineConfig({
 
   overrides: [
     {
-      files: ["test/**"],
-      rules: { "import/max-dependencies": ["warn", { max: 12 }] },
-    },
-    {
       files: ["src/page/client/**"],
       rules: {
         "foldkit/acquire-release-constructs-in-acquire-body": "error",

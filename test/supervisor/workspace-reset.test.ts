@@ -2,14 +2,12 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { GitHubConnectionStore } from "../../src/supervisor/projects/github-connection-store.js";
-import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
-import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
-import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";
 import { readGenerations } from "./generation-reads.js";
+import { fakeWorkspace, heldWorkspace } from "./workspace-reset-fakes.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -17,34 +15,6 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await reset();
 });
-
-function fakeWorkspace(resetResult: WorkspaceResetResult) {
-  let credentialState: "connected" | "missing" = "connected";
-
-  const credential = vi.fn((): Promise<GitHubCredentialResult> =>
-    Promise.resolve({
-      ok: true,
-      result: {
-        kind: "credential-status",
-        state: credentialState,
-        login: credentialState === "connected" ? "reset-user" : undefined,
-      },
-    }),
-  );
-
-  const resetWorkspace = vi.fn(() => {
-    if (resetResult.ok) credentialState = "missing";
-
-    return Promise.resolve(resetResult);
-  });
-
-  const workspace: CredentialWorkspaceHost & ResetWorkspaceHost = {
-    credential,
-    reset: resetWorkspace,
-  };
-
-  return { resetWorkspace, workspace };
-}
 
 test("resets the named workspace while preserving the projects and generations", async () => {
   const control = env.SUPERVISOR.getByName("workspace-reset-preserves-supervisor-state");
@@ -99,30 +69,6 @@ test("a reset the Workspace Host refuses keeps the GitHub connection record", as
     github: { state: "connected" },
   });
 });
-
-function heldWorkspace() {
-  const held = { started: (): void => {}, finish: (_result: WorkspaceResetResult): void => {} };
-
-  const started = new Promise<void>((resolve) => {
-    held.started = resolve;
-  });
-
-  const answer = new Promise<WorkspaceResetResult>((resolve) => {
-    held.finish = resolve;
-  });
-
-  const resetWorkspace = vi
-    .fn(() => Promise.resolve<WorkspaceResetResult>({ ok: true, reset: "workspace" }))
-    .mockImplementationOnce(() => {
-      held.started();
-
-      return answer;
-    });
-
-  const workspace: ResetWorkspaceHost = { reset: resetWorkspace };
-
-  return { started, finish: held.finish, resetWorkspace, workspace };
-}
 
 test("while a reset runs, messages, connects, disconnects, and a second reset are refused", async () => {
   const control = env.SUPERVISOR.getByName("workspace-reset-exclusion");

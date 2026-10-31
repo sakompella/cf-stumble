@@ -8,7 +8,6 @@ import { loadMainFacet } from "../../../src/facet/index.js";
 import { HarnessArtifacts, ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
 import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import type { ModuleMapStorage } from "../../../src/supervisor/artifacts/index.js";
-import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { BuildHost, unreachableHost } from "./build-hosts.js";
 
 const modelRoute = workerExports.ModelRoute({});
@@ -38,7 +37,7 @@ function refusingStorage(storage: DurableObjectStorage): ModuleMapStorage {
   };
 }
 
-function supervisor(name: string): DurableObjectStub<Supervisor> {
+function supervisor(name: string) {
   return env.SUPERVISOR.getByName(name);
 }
 

@@ -42,6 +42,19 @@ export function artifact(harnessCommit: string, source: string): MainHarnessArti
   };
 }
 
+export function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
+  const filler = "\u2603".repeat(200_000);
+
+  return {
+    harnessCommit,
+    entryModule: "main.js",
+    modules: [
+      { name: "main.js", source: `export const snowman = "${filler}";\n` },
+      { name: "helper.js", source: `export const helper = "${filler}";\n` },
+    ],
+  };
+}
+
 export function readyArtifact(harnessCommit: string): MainHarnessArtifactInput {
   if (harnessCommit === fixtureMainHarnessCommit) {
     return fixtureMainHarnessArtifact;
