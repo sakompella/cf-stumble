@@ -91,3 +91,11 @@ test("fenced and inline code keep their content exactly", () => {
     { testCases: 300 },
   );
 });
+
+test("a paragraph with thousands of inline spans renders instead of overflowing the stack", () => {
+  const spans = Array.from({ length: 20_000 }, (_, index) => `\`a${index}\``).join(" ");
+  const blocks = render(spans);
+
+  expect(blocks.map((node) => node.sel)).toStrictEqual(["p"]);
+  expect(blocks.flatMap(elements).filter((node) => node.sel === "code")).toHaveLength(20_000);
+});

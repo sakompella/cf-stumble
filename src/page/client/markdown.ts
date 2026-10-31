@@ -3,7 +3,7 @@ import type { Html, HtmlBuilder } from "foldkit/html";
 type Child = Html | string;
 
 const INLINE =
-  /`([^`\n]+)`|\*\*(?=\S)(.+?)\*\*|\*(?=[^\s*])([^*\n]+?)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/u;
+  /`([^`\n]+)`|\*\*(?=\S)(.+?)\*\*|\*(?=[^\s*])([^*\n]+?)\*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/gu;
 
 const FENCE = /^```/u;
 
@@ -12,29 +12,32 @@ const HEADING = /^(#{1,6})\s+(.*)$/u;
 const ITEM = /^\s*(?:([-*+])|\d+[.)])\s+(.*)$/u;
 
 function inline<Message>(text: string, h: HtmlBuilder<Message>): readonly Child[] {
-  const found = INLINE.exec(text);
+  const children: Child[] = [];
+  let consumed = 0;
 
-  if (found === null) {
-    return text === "" ? [] : [text];
+  for (const found of text.matchAll(INLINE)) {
+    const [whole, code, strong, emphasis, label, href] = found;
+    const before = text.slice(consumed, found.index);
+
+    const node =
+      code === undefined
+        ? strong === undefined
+          ? emphasis === undefined
+            ? h.a(
+                [h.Href(href ?? ""), h.Rel("noreferrer noopener"), h.Target("_blank")],
+                inline(label ?? "", h),
+              )
+            : h.em([], inline(emphasis, h))
+          : h.strong([], inline(strong, h))
+        : h.code([], [code]);
+
+    children.push(...(before === "" ? [] : [before]), node);
+    consumed = found.index + whole.length;
   }
 
-  const [whole, code, strong, emphasis, label, href] = found;
-  const before = text.slice(0, found.index);
-  const after = inline(text.slice(found.index + whole.length), h);
+  const rest = text.slice(consumed);
 
-  const node =
-    code === undefined
-      ? strong === undefined
-        ? emphasis === undefined
-          ? h.a(
-              [h.Href(href ?? ""), h.Rel("noreferrer noopener"), h.Target("_blank")],
-              inline(label ?? "", h),
-            )
-          : h.em([], inline(emphasis, h))
-        : h.strong([], inline(strong, h))
-      : h.code([], [code]);
-
-  return [...inline(before, h), node, ...after];
+  return rest === "" ? children : [...children, rest];
 }
 
 function startsBlock(line: string): boolean {
