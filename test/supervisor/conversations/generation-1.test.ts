@@ -7,6 +7,7 @@ import { sampleProjectOne } from "../../project-fixtures.js";
 import { ownerApiResponse } from "../../routes/helpers.js";
 import {
   answeredLines,
+  hasRun,
   servingGeneration1,
   submitted,
   untilAnswered,
@@ -163,6 +164,21 @@ test("an idle events stream writes a line now and then, so a reader that left is
   }
 
   expect(read.split("\n")[0]).toContain('"type":"snapshot"');
+});
+
+test("reading a project's events, aborting an idle project and starting a fresh thread never reach the workspace container", async () => {
+  scriptModel();
+  const workspace = new ProjectWorkspace();
+  const control = await servingGeneration1("generation-1-events-no-workspace", workspace);
+  const reached = vi.spyOn(env.WORKSPACE_HOST, "getByName");
+  reached.mockClear();
+
+  expect(await hasRun(control, project)).toBe(false);
+  expect(await control.abortProjectRun(project)).toEqual({ ok: true });
+  expect(await control.freshProjectConversation(project)).toMatchObject({ ok: true });
+
+  expect(reached).not.toHaveBeenCalled();
+  expect(workspace.leases).toEqual([]);
 });
 
 test("a fresh thread ends the events stream open on the old conversation", async () => {

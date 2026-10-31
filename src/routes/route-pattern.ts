@@ -30,6 +30,8 @@ const PROJECT_ROUTE_SUFFIXES = [
 
 export type ProjectRouteSuffix = (typeof PROJECT_ROUTE_SUFFIXES)[number];
 
+const WORKSPACE_PROJECT_SUFFIXES: readonly ProjectRouteSuffix[] = ["/messages", "/disconnect"];
+
 export function routePattern(pathname: string): string {
   if (PAGE_ROUTES.has(pathname) || API_ROUTES.has(pathname)) return pathname;
 
@@ -46,7 +48,9 @@ export function routeClass(pattern: string): RouteClass {
 
   if (fixed !== undefined) return fixed;
 
-  return PROJECT_ROUTE_SUFFIXES.some((suffix) => pattern === `/api/projects/:projectId${suffix}`)
+  return WORKSPACE_PROJECT_SUFFIXES.some(
+    (suffix) => pattern === `/api/projects/:projectId${suffix}`,
+  )
     ? "workspace"
     : "record-only";
 }
