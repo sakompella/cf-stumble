@@ -1,6 +1,13 @@
 import * as Option from "effect/Option";
 import { RunControl, SubmitCandidate } from "./commands.js";
-import type { ControlKind, ControlPanel, Model } from "./model.js";
+import {
+  ControlRequest,
+  StatusRead,
+  SubmitRequest,
+  type ControlKind,
+  type ControlPanel,
+  type Model,
+} from "./model.js";
 import {
   clearError,
   refreshStatus,
@@ -25,23 +32,33 @@ function withPanel(model: Model, kind: ControlKind, change: Partial<ControlPanel
     : { ...model, rollback: { ...model.rollback, ...change } };
 }
 
+function notSent(wording: string): ControlRequest {
+  return ControlRequest.Failed({ maybeSentEpoch: Option.none(), wording });
+}
+
+function sentFailure(sentEpoch: number, wording: string): ControlRequest {
+  return ControlRequest.Failed({ maybeSentEpoch: Option.some(sentEpoch), wording });
+}
+
 function runControl(model: Model, kind: ControlKind): UpdateReturn {
   const cleared = clearError(model);
   const panel = kind === "activate" ? model.activate : model.rollback;
-  const maybeEpoch = controlLabel(model.generationEpoch);
+  const maybeEpoch = Option.map(model.maybeReading, (reading) => reading.epoch);
 
   if (Option.isNone(maybeEpoch)) {
-    return { model: withPanel(cleared, kind, { status: "refresh the status first" }) };
+    return { model: withPanel(cleared, kind, { request: notSent("refresh the status first") }) };
   }
 
   const maybeLabel = controlLabel(panel.labelInput);
 
   if (Option.isNone(maybeLabel)) {
-    return { model: withPanel(cleared, kind, { status: "enter a generation label" }) };
+    return { model: withPanel(cleared, kind, { request: notSent("enter a generation label") }) };
   }
 
   return {
-    model: withPanel(cleared, kind, { sentEpoch: String(maybeEpoch.value), status: "running" }),
+    model: withPanel(cleared, kind, {
+      request: ControlRequest.Running({ sentEpoch: maybeEpoch.value }),
+    }),
     commands: [RunControl({ kind, observedEpoch: maybeEpoch.value, label: maybeLabel.value })],
   };
 }
@@ -51,14 +68,18 @@ function submit(model: Model): UpdateReturn {
   const harnessCommit = model.candidateCommitInput.trim();
 
   if (harnessCommit === "") {
-    return { model: { ...cleared, submitStatus: "enter a harness commit first" } };
+    return {
+      model: {
+        ...cleared,
+        submit: SubmitRequest.Failed({ wording: "enter a harness commit first" }),
+      },
+    };
   }
 
   return {
     model: {
       ...cleared,
-      submitStatus: "running",
-      maybeDiagnostics: Option.none(),
+      submit: SubmitRequest.Running(),
       diagnosticsShown: model.diagnosticsShown + 1,
     },
     commands: [SubmitCandidate({ harnessCommit })],
@@ -72,19 +93,17 @@ export function statusHandlers(
 > {
   return {
     ClickedRefreshStatus: () => refreshStatus(model),
-    SucceededFetchStatus: ({ label, commit, status, epoch }) => ({
-      model: {
-        ...model,
-        activeGenerationLabel: label,
-        activeGenerationCommit: commit,
-        activeGenerationStatus: status,
-        generationEpoch: epoch,
-        statusStatus: "ok",
-      },
+    SucceededFetchStatus: ({ reading }) => ({
+      model: { ...model, maybeReading: Option.some(reading), statusRead: StatusRead.Succeeded() },
     }),
-    RejectedFetchStatus: ({ wording }) => ({ model: { ...model, statusStatus: wording } }),
+    RejectedFetchStatus: ({ wording }) => ({
+      model: { ...model, statusRead: StatusRead.Failed({ wording }) },
+    }),
     FailedFetchStatus: ({ detail }) => ({
-      model: { ...withError(model, "the status request", detail), statusStatus: "request failed" },
+      model: {
+        ...withError(model, "the status request", detail),
+        statusRead: StatusRead.Failed({ wording: "request failed" }),
+      },
     }),
   };
 }
@@ -106,25 +125,19 @@ export function submitHandlers(
     SucceededSubmit: ({ label, epoch, preparation, maybeDiagnostics }) =>
       refreshStatus({
         ...model,
-        submitStatus: "ok",
-        submitGenerationLabel: label,
-        submitEpoch: epoch,
-        submitPreparation: preparation,
-        maybeDiagnostics,
+        submit: SubmitRequest.Succeeded({ label, epoch, preparation, maybeDiagnostics }),
         diagnosticsShown: model.diagnosticsShown + 1,
       }),
     RejectedSubmit: ({ wording }) =>
       refreshStatus({
         ...model,
-        submitStatus: wording,
-        maybeDiagnostics: Option.none(),
+        submit: SubmitRequest.Failed({ wording }),
         diagnosticsShown: model.diagnosticsShown + 1,
       }),
     FailedSubmit: ({ detail }) => ({
       model: {
         ...withError(model, "the submission request", detail),
-        submitStatus: "request failed",
-        maybeDiagnostics: Option.none(),
+        submit: SubmitRequest.Failed({ wording: "request failed" }),
         diagnosticsShown: model.diagnosticsShown + 1,
       },
     }),
@@ -145,13 +158,15 @@ export function controlHandlers(
       model: withPanel(model, kind, { labelInput: value }),
     }),
     ClickedControl: ({ kind }) => runControl(model, kind),
-    SucceededControl: ({ kind, effect }) =>
-      refreshStatus(withPanel(model, kind, { status: "ok", effect })),
-    RejectedControl: ({ kind, wording }) =>
-      refreshStatus(withPanel(model, kind, { status: wording, effect: "" })),
-    FailedControl: ({ kind, detail }) => ({
+    SucceededControl: ({ kind, sentEpoch, effect }) =>
+      refreshStatus(
+        withPanel(model, kind, { request: ControlRequest.Succeeded({ sentEpoch, effect }) }),
+      ),
+    RejectedControl: ({ kind, sentEpoch, wording }) =>
+      refreshStatus(withPanel(model, kind, { request: sentFailure(sentEpoch, wording) })),
+    FailedControl: ({ kind, sentEpoch, detail }) => ({
       model: withPanel(withError(model, `the ${kind} request`, detail), kind, {
-        status: "request failed",
+        request: sentFailure(sentEpoch, "request failed"),
       }),
     }),
   };

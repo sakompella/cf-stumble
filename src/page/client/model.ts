@@ -45,11 +45,53 @@ export const ControlKind = Schema.Literals(["activate", "rollback"]);
 
 export type ControlKind = typeof ControlKind.Type;
 
+const ActiveGeneration = Schema.Struct({
+  label: Schema.Number,
+  harnessCommit: Schema.String,
+  status: Schema.String,
+});
+
+export const GenerationReading = Schema.Struct({
+  maybeActive: Schema.Option(ActiveGeneration),
+  epoch: Schema.Number,
+});
+
+export type GenerationReading = typeof GenerationReading.Type;
+
+export const StatusRead = defineTaggedUnion({
+  Running: {},
+  Succeeded: {},
+  Failed: { wording: Schema.String },
+});
+
+export type StatusRead = typeof StatusRead.Type;
+
+export const SubmitRequest = defineTaggedUnion({
+  Idle: {},
+  Running: {},
+  Succeeded: {
+    label: Schema.Number,
+    epoch: Schema.Number,
+    preparation: Schema.String,
+    maybeDiagnostics: Schema.Option(Schema.String),
+  },
+  Failed: { wording: Schema.String },
+});
+
+export type SubmitRequest = typeof SubmitRequest.Type;
+
+export const ControlRequest = defineTaggedUnion({
+  Idle: {},
+  Running: { sentEpoch: Schema.Number },
+  Succeeded: { sentEpoch: Schema.Number, effect: Schema.String },
+  Failed: { maybeSentEpoch: Schema.Option(Schema.Number), wording: Schema.String },
+});
+
+export type ControlRequest = typeof ControlRequest.Type;
+
 export const ControlPanel = Schema.Struct({
   labelInput: Schema.String,
-  status: Schema.String,
-  sentEpoch: Schema.String,
-  effect: Schema.String,
+  request: ControlRequest,
 });
 
 export type ControlPanel = typeof ControlPanel.Type;
@@ -79,18 +121,11 @@ export const Model = Schema.Struct({
   isFreshArmed: Schema.Boolean,
   freshThreadStatus: Schema.String,
 
-  activeGenerationLabel: Schema.String,
-  activeGenerationCommit: Schema.String,
-  activeGenerationStatus: Schema.String,
-  generationEpoch: Schema.String,
-  statusStatus: Schema.String,
+  maybeReading: Schema.Option(GenerationReading),
+  statusRead: StatusRead,
 
   candidateCommitInput: Schema.String,
-  submitStatus: Schema.String,
-  submitGenerationLabel: Schema.String,
-  submitEpoch: Schema.String,
-  submitPreparation: Schema.String,
-  maybeDiagnostics: Schema.Option(Schema.String),
+  submit: SubmitRequest,
   diagnosticsShown: Schema.Number,
 
   activate: ControlPanel,
