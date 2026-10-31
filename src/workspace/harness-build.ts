@@ -1,16 +1,15 @@
 import { parseHarnessCommit, type HarnessCommit } from "../harness-commit.js";
 import {
   harnessBuildStep,
-  HARNESS_BUILD_STEP_NAMES,
   planHarnessBuild,
   type HarnessBuildConfiguration,
   type HarnessBuildPlan,
+  type HarnessBuildRequest,
   type HarnessBuildStepName,
 } from "../harness-build.js";
 import { shellQuote } from "../shell-quote.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import { WORKSPACE_ROOT } from "../workspace-layout.js";
-import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 type ParsedHarnessBuildRequest =
   | Readonly<{ kind: "build-step"; harnessCommit: HarnessCommit; step: HarnessBuildStepName }>
@@ -20,51 +19,16 @@ function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
 }
 
-function parsedCommit(value: UntrustedObject): HarnessCommit | undefined {
-  const harnessCommit = field(value, "harnessCommit");
-
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC commit is untrusted.
-  return typeof harnessCommit === "string" ? parseHarnessCommit(harnessCommit) : undefined;
-}
-
-function parsedStep(value: UntrustedObject): HarnessBuildStepName | undefined {
-  const step = field(value, "step");
-
-  return HARNESS_BUILD_STEP_NAMES.find((name) => name === step);
-}
-
 export function parseHarnessBuildRequest(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the build surface's RPC boundary.
-  value: unknown,
+  request: HarnessBuildRequest,
 ): ParsedHarnessBuildRequest | WorkspaceFailure {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
-  if (value === null || typeof value !== "object") return invalidRequest();
-  const request = asUntrusted(value);
-  const kind = field(request, "kind");
+  const harnessCommit = parseHarnessCommit(request.harnessCommit);
 
-  switch (kind) {
-    case "build-step": {
-      if (!hasExactKeys(request, ["kind", "harnessCommit", "step"])) return invalidRequest();
-      const harnessCommit = parsedCommit(request);
+  if (harnessCommit === undefined) return invalidRequest();
 
-      if (harnessCommit === undefined) return invalidRequest();
-      const step = parsedStep(request);
-
-      if (step === undefined) return { ok: false, error: { code: "unknown-command" } };
-
-      return { kind, harnessCommit, step };
-    }
-
-    case "build-output": {
-      if (!hasExactKeys(request, ["kind", "harnessCommit"])) return invalidRequest();
-      const harnessCommit = parsedCommit(request);
-
-      return harnessCommit === undefined ? invalidRequest() : { kind, harnessCommit };
-    }
-
-    default:
-      return invalidRequest();
-  }
+  return request.kind === "build-step"
+    ? { kind: "build-step", harnessCommit, step: request.step }
+    : { kind: "build-output", harnessCommit };
 }
 
 function readModuleMapSource(plan: HarnessBuildPlan): string {

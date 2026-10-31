@@ -4,7 +4,7 @@ import type {
   ContainerRuntimeInfo,
 } from "@cloudflare/computer/backends/container";
 import { afterEach, expect, test, vi } from "vitest";
-import { resetWorkspaceStorage } from "../../src/workspace/host.js";
+import { resetWorkspaceStorage } from "../../src/workspace/workspace-reset.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

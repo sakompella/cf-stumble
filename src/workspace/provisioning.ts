@@ -119,7 +119,7 @@ type ProvisionedHarnessWorkspace = Readonly<{ workspaceName: string }>;
 
 interface ProvisionProjectWorkspaceInput {
   readonly workspaceName: string;
-  readonly projectId: unknown;
+  readonly projectId: string;
   readonly catalog?: ProjectCatalog;
   readonly namespace: ProvisionWorkspaceNamespace;
   readonly signal?: AbortSignal | undefined;

@@ -7,7 +7,6 @@ import { projectDirectory } from "../workspace-layout.js";
 import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
 import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
 import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
-import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 export type ProjectRemovalRequest = Readonly<{
   kind: "remove-project";
@@ -23,30 +22,14 @@ function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
 }
 
-function parsedProjectId(value: UntrustedObject): ProjectId | undefined {
-  const projectId = parseProjectId(field(value, "projectId"));
-
-  return projectId === undefined || projectId === HARNESS_PROJECT_ID ? undefined : projectId;
-}
-
 export function parseProjectRemovalRequest(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the Workspace Host RPC boundary.
-  value: unknown,
+  request: ProjectRemovalRequest,
 ): ParsedProjectRemovalRequest | WorkspaceFailure {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
-  if (value === null || typeof value !== "object") return invalidRequest();
-  const request = asUntrusted(value);
+  const projectId = parseProjectId(request.projectId);
 
-  if (
-    field(request, "kind") !== "remove-project" ||
-    !hasExactKeys(request, ["kind", "projectId"])
-  ) {
-    return invalidRequest();
-  }
-
-  const projectId = parsedProjectId(request);
-
-  return projectId === undefined ? invalidRequest() : { kind: "remove-project", projectId };
+  return projectId === undefined || projectId === HARNESS_PROJECT_ID
+    ? invalidRequest()
+    : { kind: "remove-project", projectId };
 }
 
 function removedDirectories(projectId: ProjectId): readonly [string, string] {

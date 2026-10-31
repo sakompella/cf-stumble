@@ -1,21 +1,21 @@
 import * as Effect from "effect/Effect";
-import { Workspace, type ExecSyncResult } from "@cloudflare/computer";
+import type { ExecSyncResult } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { WorkspaceHost } from "../../src/workspace/host.js";
+import { restoreWorkspaceMembers, stubWorkspaceMember } from "./host-fixtures.js";
 import {
   executeGitHubCredentialRequest,
   WorkspaceSyncIncomplete,
   type CommandOutput,
+  type GitHubCredentialRequest,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/index.js";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(restoreWorkspaceMembers);
 
 const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
@@ -44,7 +44,11 @@ class RecordingOperations implements WorkspaceOperations {
   }
 }
 
-const installRequest = { kind: "github-credential", step: "install", token: FAKE_TOKEN };
+const installRequest: GitHubCredentialRequest = {
+  kind: "github-credential",
+  step: "install",
+  token: FAKE_TOKEN,
+};
 
 test("runs the install through operations that require a complete sync, and nothing else", async () => {
   const lenient = new RecordingOperations();
@@ -130,8 +134,7 @@ function hostAnswering<T>(
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fake implements the runtime slice ComputerWorkspaceOperations uses.
-  vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(runtime as never);
+  stubWorkspaceMember("runtime", runtime);
 
   return runInDurableObject(env.SUPERVISOR.getByName(name), (_instance, state) => {
     Object.defineProperty(state, "container", { value: {}, configurable: true });

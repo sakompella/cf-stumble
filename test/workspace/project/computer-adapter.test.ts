@@ -1,3 +1,4 @@
+import type { WorkspaceRuntimeEvent } from "@cloudflare/computer";
 import { expect, test } from "vitest";
 import {
   computerExecBackend,
@@ -14,7 +15,7 @@ test("wraps a command in a session leader that kills the whole process group", (
 });
 
 test("marks an in-flight read as container-restarted after the runtime generation changes", async () => {
-  let resolveRead: ((value: { done: boolean }) => void) | undefined;
+  let resolveRead: ((value: { done: false; value: WorkspaceRuntimeEvent }) => void) | undefined;
   const state = { generation: 0 };
 
   const runtime = {
@@ -22,7 +23,7 @@ test("marks an in-flight read as container-restarted after the runtime generatio
       Promise.resolve({
         getReader: () => ({
           read: () =>
-            new Promise<{ done: boolean }>((resolve) => {
+            new Promise<{ done: false; value: WorkspaceRuntimeEvent }>((resolve) => {
               resolveRead = resolve;
             }),
           cancel: () => Promise.resolve(),
@@ -31,17 +32,15 @@ test("marks an in-flight read as container-restarted after the runtime generatio
       }),
   };
 
-  const backend = computerExecBackend(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fake implements the runtime slice used by this adapter.
-    { runtime } as never,
-    "container-shell",
-    state,
-  );
+  const backend = computerExecBackend({ runtime }, "container-shell", state);
 
   const handle = await backend.exec({ command: "sleep 1", cwd: "/workspace", timeoutMs: 100 });
   const read = handle.reader.read();
   state.generation = 1;
-  resolveRead?.({ done: false });
+  resolveRead?.({
+    done: false,
+    value: { id: "1", seq: 0, name: "stdout", value: new Uint8Array() },
+  });
 
   await expect(read).rejects.toMatchObject({ code: "container-restarted" });
 });

@@ -67,8 +67,7 @@ function provisionerFor(host: FakeProvisionHost) {
 
   return {
     namespace,
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-    provision: (projectId: unknown = projectOne.id) =>
+    provision: (projectId: string = projectOne.id) =>
       runToResult(
         provisionProjectWorkspace({ workspaceName, projectId, catalog: sampleCatalog, namespace }),
       ),
@@ -206,17 +205,12 @@ test("refuses a project the catalog does not resolve before naming a workspace",
   const host = new FakeProvisionHost();
   const { provision, namespace } = provisionerFor(host);
 
-  const refusals = [
-    await provision("no-such-project"),
-    await provision("../../etc"),
-    await provision(7),
-  ];
+  const refusals = [await provision("no-such-project"), await provision("../../etc")];
 
   expect(
     refusals.map((refusal) => (Result.isFailure(refusal) ? plainProblem(refusal.failure) : "ok")),
   ).toEqual([
     { code: "project-not-in-catalog", reason: "unknown-project-id" },
-    { code: "project-not-in-catalog", reason: "invalid-project-id" },
     { code: "project-not-in-catalog", reason: "invalid-project-id" },
   ]);
   expect(namespace.names, "a refused project reaches no workspace").toEqual([]);

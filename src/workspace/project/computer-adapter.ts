@@ -9,6 +9,37 @@ import type {
 } from "./exec-backend.js";
 import type { ProjectDirent, ProjectFilesystemProvider, ProjectTransactions } from "./provider.js";
 
+type RuntimeReader = Readonly<{
+  read(): Promise<
+    { done: true; value?: undefined } | { done: false; value: WorkspaceRuntimeEvent }
+  >;
+  cancel(): Promise<void>;
+}>;
+
+type RuntimeExecHandle = Readonly<{
+  getReader(): RuntimeReader;
+  kill(): Promise<void>;
+}>;
+
+type RuntimeExecOptions = Readonly<{
+  backend: string;
+  cwd: string;
+  timeoutMs: number;
+  encoding: undefined;
+}>;
+
+export type ExecWorkspace = Readonly<{
+  runtime: Readonly<{
+    exec(command: string, options: RuntimeExecOptions): Promise<RuntimeExecHandle>;
+  }>;
+}>;
+
+function isDirent<Entry extends string | ProjectDirent>(
+  entry: Entry,
+): entry is Exclude<Entry, string> {
+  return typeof entry !== "string";
+}
+
 export function computerFilesystemProvider(workspace: Workspace): ProjectFilesystemProvider {
   const provider = workspace.provider();
 
@@ -19,8 +50,7 @@ export function computerFilesystemProvider(workspace: Workspace): ProjectFilesys
       provider.mkdirSync(path);
     },
     readdirSync: (path, options) =>
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `withFileTypes: true` is always passed, so the provider's untyped union is always the Dirent branch.
-      provider.readdirSync(path, options) as ProjectDirent[],
+      provider.readdirSync(path, options).filter((entry) => isDirent(entry)),
     openSync: (path, flags) => provider.openSync(path, flags),
     writeSync: (fd, buffer) => provider.writeSync(fd, buffer),
     closeSync: (fd) => {
@@ -44,15 +74,48 @@ export function processGroupCommand(command: string): string {
   return `exec setsid /bin/sh -c ${shellQuote(body)}`;
 }
 
-// oxlint-disable-next-line max-lines-per-function -- The adapter wires process-group execution and container replacement detection in one port.
+function replacementGuard(containerState: ContainerLifecycleState | undefined) {
+  const generation = containerState?.generation;
+
+  return {
+    replaced: (): boolean => generation !== undefined && containerState?.generation !== generation,
+  };
+}
+
+type ReplacementGuard = ReturnType<typeof replacementGuard>;
+
+function guardedReader(
+  reader: RuntimeReader,
+  guard: ReplacementGuard,
+): ExecBackendHandle["reader"] {
+  return {
+    async read() {
+      try {
+        const next = await reader.read();
+
+        if (guard.replaced()) throw new ContainerRestartedError();
+
+        if (next.done) return { done: true };
+
+        return { done: false, value: toBackendEvent(next.value) };
+      } catch (cause) {
+        if (guard.replaced()) throw new ContainerRestartedError();
+
+        throw cause;
+      }
+    },
+    cancel: () => reader.cancel(),
+  };
+}
+
 export function computerExecBackend(
-  workspace: Workspace,
+  workspace: ExecWorkspace,
   backendId = "container-shell",
   containerState?: ContainerLifecycleState,
 ): ExecBackend {
   return {
     async exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
-      const generation = containerState?.generation;
+      const guard = replacementGuard(containerState);
 
       const handle = await workspace.runtime
         .exec(processGroupCommand(input.command), {
@@ -61,49 +124,18 @@ export function computerExecBackend(
           timeoutMs: input.timeoutMs,
           encoding: undefined,
         })
-        .catch(
-          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Runtime rejects an untrusted backend value.
-          (error: unknown) => {
-            if (generation !== undefined && containerState?.generation !== generation) {
-              throw new ContainerRestartedError();
-            }
+        .catch((cause: unknown) => {
+          if (guard.replaced()) throw new ContainerRestartedError();
 
-            throw error;
-          },
-        );
+          throw cause;
+        });
 
-      if (generation !== undefined && containerState?.generation !== generation) {
+      if (guard.replaced()) {
         await handle.kill().catch(() => {});
         throw new ContainerRestartedError();
       }
 
-      const reader = handle.getReader();
-
-      return {
-        reader: {
-          async read() {
-            try {
-              const next = await reader.read();
-
-              if (generation !== undefined && containerState?.generation !== generation) {
-                throw new ContainerRestartedError();
-              }
-
-              if (next.done) return { done: true };
-
-              return { done: false, value: toBackendEvent(next.value) };
-            } catch (error) {
-              if (generation !== undefined && containerState?.generation !== generation) {
-                throw new ContainerRestartedError();
-              }
-
-              throw error;
-            }
-          },
-          cancel: () => reader.cancel(),
-        },
-        kill: () => handle.kill(),
-      };
+      return { reader: guardedReader(handle.getReader(), guard), kill: () => handle.kill() };
     },
   };
 }

@@ -1,12 +1,10 @@
-import { Workspace } from "@cloudflare/computer";
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkspaceHost } from "../../src/workspace/host.js";
+import { restoreWorkspaceMembers, stubWorkspaceMember } from "./host-fixtures.js";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(restoreWorkspaceMembers);
 
 test("a reset is refused while a credential status read is still running", async () => {
   const heldCommands: (() => void)[] = [];
@@ -29,8 +27,7 @@ test("a reset is refused while a credential status read is still running", async
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: this fake implements the runtime slice ComputerWorkspaceOperations uses.
-  vi.spyOn(Workspace.prototype, "runtime", "get").mockReturnValue(runtime as never);
+  stubWorkspaceMember("runtime", runtime);
 
   const refused = await runInDurableObject(
     env.SUPERVISOR.getByName("host-reset-busy"),

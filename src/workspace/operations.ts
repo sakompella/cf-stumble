@@ -58,18 +58,14 @@ export function workspaceEffects(operations: WorkspaceOperations): WorkspaceEffe
   };
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- The value is only ever logged redacted, never parsed.
-export function thrownBy(fault: WorkspaceFault): unknown {
-  return fault instanceof WorkspaceUnavailable ? fault.cause : fault;
-}
-
 export function answerFailures<A>(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything; the answer only logs it redacted.
-  answer: (thrown: unknown) => A,
+  answer: (cause: unknown) => A,
 ): (work: Effect.Effect<A, WorkspaceFault>) => Effect.Effect<A> {
   return (work) =>
     work.pipe(
-      Effect.catch((fault) => Effect.sync(() => answer(thrownBy(fault)))),
+      Effect.catch((fault) =>
+        Effect.sync(() => answer(fault instanceof WorkspaceUnavailable ? fault.cause : fault)),
+      ),
       Effect.catchDefect((defect) => Effect.sync(() => answer(defect))),
     );
 }

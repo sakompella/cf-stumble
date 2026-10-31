@@ -4,6 +4,7 @@ import { REDACTED, type GitHubCredentialState } from "../../src/github/index.js"
 import {
   executeGitHubCredentialRequest,
   type CommandOutput,
+  type GitHubCredentialRequest,
   type GitHubCredentialResult,
   type WorkspaceOperations,
   type WorkspacePathKind,
@@ -83,8 +84,7 @@ class FilesystemlessOperations implements WorkspaceOperations {
 
 type CredentialOperations = FakeCredentialOperations | FilesystemlessOperations;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function credential(operations: CredentialOperations, request: unknown) {
+function credential(operations: CredentialOperations, request: GitHubCredentialRequest) {
   return Effect.runPromise(
     executeGitHubCredentialRequest({ operations, installOperations: operations, request }),
   );
@@ -303,20 +303,13 @@ test("asks git whether a repository is readable, and redacts what git says when 
   expect(refused.result.detail).toContain(REDACTED);
 });
 
-test("refuses a request that is not one of the three credential steps", async () => {
+test("refuses an install token or repository URL that does not parse", async () => {
   const operations = new FakeCredentialOperations();
 
   for (const request of [
-    null,
-    { kind: "github-credential" },
-    { kind: "github-credential", step: "install" },
     { kind: "github-credential", step: "install", token: "has space" },
-    { kind: "github-credential", step: "install", token: FAKE_TOKEN, extra: 1 },
-    { kind: "github-credential", step: "status", token: FAKE_TOKEN },
     { kind: "github-credential", step: "verify-repository", repositoryUrl: "git@github.com:o/r" },
-    { kind: "github-credential", step: "revoke" },
-    { kind: "run-command", command: "check" },
-  ]) {
+  ] as const) {
     await expect(credential(operations, request)).resolves.toEqual({
       ok: false,
       error: { code: "invalid-request", detail: "" },

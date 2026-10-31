@@ -20,6 +20,6 @@ export type {
 
 export { parseAddressedPath } from "./resolve.js";
 
-export { parseProjectBudget } from "./budget.js";
+export { parseProjectBudget, type ProjectBudget } from "./budget.js";
 
 export { ProjectRpcTarget } from "./target.js";

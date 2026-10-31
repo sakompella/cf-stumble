@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import { WORKSPACE_COMMAND_TIMEOUT_MS } from "../workspace-command-timeout.js";
 import {
-  PROJECT_PROVISION_STEP_NAMES,
   planProjectProvision,
   projectProvisionStep,
   type ProjectProvisionStepName,
@@ -15,7 +14,6 @@ import {
 import { projectDirectory, projectGitDirectory } from "../workspace-layout.js";
 import type { WorkspaceFailure, WorkspacePlan } from "./decisions.js";
 import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
-import { asUntrusted, field, hasExactKeys, type UntrustedObject } from "../untrusted.js";
 
 export type ProjectProvisionRequest = Readonly<{
   kind: "provision-project";
@@ -34,9 +32,9 @@ function invalidRequest(): WorkspaceFailure {
   return { ok: false, error: { code: "invalid-request" } };
 }
 
-function parsedProject(value: UntrustedObject): Project | undefined {
-  const projectId = parseProjectId(field(value, "projectId"));
-  const repositoryUrl = canonicalRepositoryUrl(field(value, "repositoryUrl"));
+function parsedProject(request: ProjectProvisionRequest): Project | undefined {
+  const projectId = parseProjectId(request.projectId);
+  const repositoryUrl = canonicalRepositoryUrl(request.repositoryUrl);
 
   if (
     projectId === undefined ||
@@ -50,28 +48,13 @@ function parsedProject(value: UntrustedObject): Project | undefined {
 }
 
 export function parseProjectProvisionRequest(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the provision surface's RPC boundary.
-  value: unknown,
+  request: ProjectProvisionRequest,
 ): ParsedProjectProvisionRequest | WorkspaceFailure {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
-  if (value === null || typeof value !== "object") return invalidRequest();
-  const request = asUntrusted(value);
-
-  if (field(request, "kind") !== "provision-project") return invalidRequest();
-
-  if (!hasExactKeys(request, ["kind", "projectId", "repositoryUrl", "step"])) {
-    return invalidRequest();
-  }
-
   const project = parsedProject(request);
 
   if (project === undefined) return invalidRequest();
 
-  const step = PROJECT_PROVISION_STEP_NAMES.find((name) => name === field(request, "step"));
-
-  if (step === undefined) return { ok: false, error: { code: "unknown-command" } };
-
-  return { kind: "provision-project", project, step };
+  return { kind: "provision-project", project, step: request.step };
 }
 
 export function planProjectProvisionRequest(request: ParsedProjectProvisionRequest): WorkspacePlan {

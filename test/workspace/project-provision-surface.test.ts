@@ -87,8 +87,7 @@ class FakeProjectOperations implements WorkspaceOperations {
   }
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This helper passes test values to the public parsing boundary.
-function provision(operations: FakeProjectOperations, request: unknown) {
+function provision(operations: FakeProjectOperations, request: ProjectProvisionRequest) {
   return Effect.runPromise(executeProjectProvisionRequest({ operations, request }));
 }
 
@@ -197,32 +196,21 @@ test("logs a redacted cause instead of discarding it when the clone command cann
   expect(logged).toContain("econnrefused while dialing the container");
 });
 
-test("refuses a caller supplied repository URL, command, or project", async () => {
+test("refuses a repository URL that is not the project's, and a project id that is not an id", async () => {
   const operations = new FakeProjectOperations();
 
-  for (const [request, code] of [
-    [null, "invalid-request"],
-    [{ kind: "provision-project", projectId: projectOne.id }, "invalid-request"],
-    [
-      {
-        ...provisionRequest(projectOne, "clone"),
-        repositoryUrl: "https://example.invalid/attacker/repo.git",
-      },
-      "invalid-request",
-    ],
-    [{ ...provisionRequest(projectOne, "clone"), source: "whoami" }, "invalid-request"],
-    [
-      { ...provisionRequest(projectOne, "clone"), repositoryUrl: "git@github.com:a/b.git" },
-      "invalid-request",
-    ],
-    [{ ...provisionRequest(projectOne, "clone"), projectId: "../../etc" }, "invalid-request"],
-    [{ ...provisionRequest(projectOne, "clone"), projectId: 7 }, "invalid-request"],
-    [{ kind: "run-command", command: "check" }, "invalid-request"],
-    [{ kind: "read-file", path: "readme.md" }, "invalid-request"],
-    [{ ...provisionRequest(projectOne, "clone"), step: "whoami" }, "unknown-command"],
-    [{ ...provisionRequest(projectOne, "clone"), step: "instructions" }, "unknown-command"],
-  ] as const) {
-    await expect(provision(operations, request)).resolves.toEqual({ ok: false, error: { code } });
+  for (const request of [
+    {
+      ...provisionRequest(projectOne, "clone"),
+      repositoryUrl: "https://example.invalid/attacker/repo.git",
+    },
+    { ...provisionRequest(projectOne, "clone"), repositoryUrl: "git@github.com:a/b.git" },
+    { ...provisionRequest(projectOne, "clone"), projectId: "../../etc" },
+  ]) {
+    await expect(provision(operations, request)).resolves.toEqual({
+      ok: false,
+      error: { code: "invalid-request" },
+    });
   }
 
   expect(operations.calls, "a refused provision request runs nothing").toEqual([]);

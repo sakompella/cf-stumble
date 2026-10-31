@@ -9,11 +9,9 @@ import {
 import { HARNESS_BUILD_CONFIGURATION } from "../../src/harness-build.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
-import {
-  ensureManagedInstructions,
-  WorkspaceHost,
-  workspaceContainerBackendConfiguration,
-} from "../../src/workspace/host.js";
+import { WorkspaceHost } from "../../src/workspace/host.js";
+import { ensureManagedInstructions } from "../../src/workspace/managed-instructions.js";
+import { workspaceContainerBackendConfiguration } from "../../src/workspace/workspace-platform.js";
 
 const commit = "5000000000000000000000000000000000000001";
 

@@ -23,7 +23,6 @@ import {
   type WorkspaceFault,
   type WorkspaceOperations,
 } from "./operations.js";
-import { asUntrusted, field, hasExactKeys } from "../untrusted.js";
 
 export type GitHubCredentialRequest =
   | Readonly<{ kind: "github-credential"; step: "install"; token: string }>
@@ -68,40 +67,28 @@ function failed(
 }
 
 function parseGitHubCredentialRequest(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the credential surface's RPC boundary.
-  value: unknown,
+  request: GitHubCredentialRequest,
 ): GitHubCredentialRequest | GitHubCredentialResult {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the RPC payload is untrusted.
-  if (value === null || typeof value !== "object") return invalidRequest();
-  const request = asUntrusted(value);
-
-  if (field(request, "kind") !== "github-credential") return invalidRequest();
-
-  switch (field(request, "step")) {
+  switch (request.step) {
     case "install": {
-      if (!hasExactKeys(request, ["kind", "step", "token"])) return invalidRequest();
-      const token = parseGitHubToken(field(request, "token"));
+      const token = parseGitHubToken(request.token);
 
-      return token === undefined
-        ? invalidRequest()
-        : { kind: "github-credential", step: "install", token };
+      return token === undefined ? invalidRequest() : { ...request, token };
     }
 
     case "status":
-      return hasExactKeys(request, ["kind", "step"])
-        ? { kind: "github-credential", step: "status" }
-        : invalidRequest();
+      return request;
     case "verify-repository": {
-      if (!hasExactKeys(request, ["kind", "step", "repositoryUrl"])) return invalidRequest();
-      const repositoryUrl = canonicalRepositoryUrl(field(request, "repositoryUrl"));
+      const repositoryUrl = canonicalRepositoryUrl(request.repositoryUrl);
 
-      return repositoryUrl === undefined
-        ? invalidRequest()
-        : { kind: "github-credential", step: "verify-repository", repositoryUrl };
+      return repositoryUrl === undefined ? invalidRequest() : { ...request, repositoryUrl };
     }
 
-    default:
-      return invalidRequest();
+    default: {
+      const exhaustive: never = request;
+
+      return exhaustive;
+    }
   }
 }
 
@@ -141,8 +128,8 @@ function runInstall(
         timeoutMs: WORKSPACE_SHORT_COMMAND_TIMEOUT_MS,
       }).pipe(
         Effect.asVoid,
-        answerFailures((thrown) => {
-          logRedactedCause(`github-credential.logout: ${failureLabel(thrown)}`, thrown, token);
+        answerFailures((cause) => {
+          logRedactedCause(`github-credential.logout: ${failureLabel(cause)}`, cause, token);
         }),
         Effect.andThen(Effect.fail(incomplete)),
       ),
@@ -195,17 +182,16 @@ function repositoryAccess(
   );
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A thrown value can be anything.
-function failureLabel(thrown: unknown): string {
-  if (isTimeoutFailure(thrown)) return "timeout";
+function failureLabel(cause: unknown): string {
+  if (isTimeoutFailure(cause)) return "timeout";
 
-  return thrown instanceof WorkspaceSyncIncomplete ? "sync-incomplete" : "workspace-unavailable";
+  return cause instanceof WorkspaceSyncIncomplete ? "sync-incomplete" : "workspace-unavailable";
 }
 
 type CredentialSurfaceInput = Readonly<{
   operations: WorkspaceOperations;
   installOperations: WorkspaceOperations;
-  request: unknown;
+  request: GitHubCredentialRequest;
 }>;
 
 function credentialWork(
@@ -241,10 +227,10 @@ export function executeGitHubCredentialRequest(
   if ("ok" in parsed) return Effect.succeed(parsed);
 
   return Effect.suspend(() => credentialWork(parsed, input)).pipe(
-    answerFailures((thrown): GitHubCredentialResult => {
+    answerFailures((cause): GitHubCredentialResult => {
       logRedactedCause(
-        `github-credential.${parsed.step}: ${failureLabel(thrown)}`,
-        thrown,
+        `github-credential.${parsed.step}: ${failureLabel(cause)}`,
+        cause,
         parsed.step === "install" ? parsed.token : undefined,
       );
 

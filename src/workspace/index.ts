@@ -48,7 +48,9 @@ export {
   type ProjectRemovalWorkspaceNamespace,
 } from "./provisioning.js";
 
-export { WorkspaceHost, type WorkspaceResetResult } from "./host.js";
+export { WorkspaceHost } from "./host.js";
+
+export { type WorkspaceResetResult } from "./workspace-reset.js";
 
 export {
   parseProjectRemovalRequest,
