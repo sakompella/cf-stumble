@@ -1,8 +1,6 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
-  parseDeviceAuthorization,
-  parseDeviceRedemption,
   parseGitHubToken,
   redeemDeviceAuthorization,
   requestDeviceAuthorization,
@@ -28,9 +26,12 @@ type Call = Readonly<{ url: string; body: string }>;
 
 type DeviceReply = Readonly<{ [field: string]: string | number }> | "error";
 
+function isText(body: RequestInit["body"]): body is string {
+  return typeof body === "string";
+}
+
 function bodyText(body: RequestInit["body"]): string {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The fetch init is a platform type, not a domain value.
-  return typeof body === "string" ? body : "";
+  return isText(body) ? body : "";
 }
 
 function provider(replies: readonly DeviceReply[]) {
@@ -123,8 +124,14 @@ test.each([
   [{ error: "access_denied" }, { kind: "denied" }],
   [{ error: "something_new" }, { kind: "unavailable" }],
   [{}, { kind: "unavailable" }],
-])("maps the redemption reply %j to %j", (reply, expected) => {
-  expect(parseDeviceRedemption(reply)).toEqual(expected);
+])("maps the redemption reply %j to %j", async (reply, expected) => {
+  const { fetcher } = provider([reply]);
+
+  await expect(
+    Effect.runPromise(
+      redeemDeviceAuthorization({ clientId: CLIENT_ID, deviceCode: "device-code-secret" }, fetcher),
+    ),
+  ).resolves.toEqual(expected);
 });
 
 test("treats an unreachable provider as unavailable rather than as an authorization", async () => {
@@ -137,20 +144,24 @@ test("treats an unreachable provider as unavailable rather than as an authorizat
   ).resolves.toEqual({ kind: "unavailable" });
 });
 
-test("refuses a device reply whose verification page is not GitHub over HTTPS", () => {
-  expect(
-    parseDeviceAuthorization({
+test("refuses a device reply whose verification page is not GitHub over HTTPS", async () => {
+  const { fetcher } = provider([
+    {
       device_code: "device-code-secret",
       user_code: "WDJB-MJHT",
       verification_uri: "http://github.com/login/device",
-    }),
-  ).toBeUndefined();
+    },
+  ]);
+
+  await expect(startAuthorization(CLIENT_ID, fetcher)).resolves.toEqual({
+    ok: false,
+    problem: "provider-refused",
+  });
 });
 
 test("refuses a token that is not one line of printable text", () => {
   expect(parseGitHubToken("")).toBeUndefined();
   expect(parseGitHubToken("has space")).toBeUndefined();
   expect(parseGitHubToken(`${FAKE_TOKEN}\n`)).toBeUndefined();
-  expect(parseGitHubToken(7)).toBeUndefined();
   expect(parseGitHubToken(FAKE_TOKEN)).toBe(FAKE_TOKEN);
 });

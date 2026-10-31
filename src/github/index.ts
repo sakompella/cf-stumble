@@ -12,8 +12,6 @@ export {
 } from "./credential-commands.js";
 
 export {
-  parseDeviceAuthorization,
-  parseDeviceRedemption,
   parseGitHubToken,
   redeemDeviceAuthorization,
   requestDeviceAuthorization,

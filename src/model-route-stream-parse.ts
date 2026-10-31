@@ -1,18 +1,7 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as SchemaGetter from "effect/SchemaGetter";
+import { lenient } from "./lenient-schema.js";
 import type { ToolCallDelta } from "./model-route-events.js";
-
-const Dropped = Schema.Unknown.pipe(
-  Schema.decodeTo(Schema.Undefined, {
-    decode: SchemaGetter.omit(),
-    encode: SchemaGetter.omit(),
-  }),
-);
-
-export function lenient<S extends Schema.Constraint>(schema: S) {
-  return Schema.optional(Schema.Union([schema, Dropped]));
-}
 
 export const TokenCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 

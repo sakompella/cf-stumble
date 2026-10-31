@@ -10,10 +10,6 @@ const USER = { role: "user", content: "Hi" } as const;
 
 const decodeWire = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 
-function wireOf<T>(value: T): Schema.Json {
-  return decodeWire(JSON.stringify(value));
-}
-
 function drawTool(tc: hegel.TestCase): ToolDefinition {
   const property = tc.draw(gs.text({ alphabet: "abc_", minSize: 1, maxSize: 6 }));
 
@@ -79,10 +75,13 @@ test("a tool with one field of the wrong type or missing is rejected at its inde
 
     tools.splice(index, 0, corrupted(drawTool(tc), fieldName, value));
 
-    const reason = Result.match(parseRequest(wireOf({ messages: [USER], tools })), {
-      onSuccess: () => "parsed",
-      onFailure: (failure) => failure.error.reason,
-    });
+    const reason = Result.match(
+      parseRequest(decodeWire(JSON.stringify({ messages: [USER], tools }))),
+      {
+        onSuccess: () => "parsed",
+        onFailure: (failure) => failure.error.reason,
+      },
+    );
 
     expect(reason).toMatch(new RegExp(`^tools\\[${index}\\] `, "u"));
   });
