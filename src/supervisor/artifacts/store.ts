@@ -1,9 +1,8 @@
 import * as Result from "effect/Result";
 import { logRedactedCause } from "../../diagnostics.js";
 import { MainHarnessArtifact } from "../../facet/index.js";
-import type { MainHarnessArtifactInput } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
-import { canonicalModuleMap, encodeModuleMap } from "./module-map.js";
+import { encodeModuleMap } from "./module-map.js";
 
 export const MODULE_MAP_CHUNK_BYTES = 1_048_576;
 
@@ -19,7 +18,7 @@ export type StoredModuleMapProblem =
   | { readonly code: "artifact-write-failed"; readonly harnessCommit: string };
 
 type StoredModuleMap =
-  | Readonly<{ kind: "stored"; moduleMap: MainHarnessArtifactInput }>
+  | Readonly<{ kind: "stored"; artifact: MainHarnessArtifact }>
   | Readonly<{ kind: "absent" }>;
 
 type StoredModuleMapResult = Result.Result<StoredModuleMap, StoredModuleMapProblem>;
@@ -76,11 +75,8 @@ export class ModuleMapStore {
     return decoded(bytes, harnessCommit);
   }
 
-  write(
-    artifact: MainHarnessArtifact,
-  ): Result.Result<MainHarnessArtifactInput, StoredModuleMapProblem> {
-    const moduleMap = canonicalModuleMap(artifact);
-    const bytes = new TextEncoder().encode(encodeModuleMap(moduleMap));
+  write(artifact: MainHarnessArtifact): Result.Result<MainHarnessArtifact, StoredModuleMapProblem> {
+    const bytes = new TextEncoder().encode(encodeModuleMap(artifact));
     const chunks = chunked(bytes);
 
     try {
@@ -96,7 +92,7 @@ export class ModuleMapStore {
       return Result.fail({ code: "artifact-write-failed", harnessCommit: artifact.harnessCommit });
     }
 
-    return Result.succeed(moduleMap);
+    return Result.succeed(artifact);
   }
 
   private replace(
@@ -171,5 +167,5 @@ function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleM
     return Result.fail({ code: "corrupt-artifact", harnessCommit });
   }
 
-  return Result.succeed({ kind: "stored", moduleMap: canonicalModuleMap(parsed.success) });
+  return Result.succeed({ kind: "stored", artifact: parsed.success });
 }

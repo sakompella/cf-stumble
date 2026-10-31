@@ -27,7 +27,7 @@ export const commits = {
   fresh: "b123456789abcdef0123456789abcdef01234567",
 } as const;
 
-export { PI_DURABLE_VERSION_METHOD } from "../facet/fixture.js";
+export { parsedArtifact, PI_DURABLE_VERSION_METHOD } from "../facet/fixture.js";
 
 export function artifact(harnessCommit: string, source: string): MainHarnessArtifactInput {
   return {

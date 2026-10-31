@@ -1,27 +1,16 @@
-import type { MainHarnessArtifact, MainHarnessArtifactInput } from "../../facet/index.js";
+import type { HarnessModule, MainHarnessArtifact } from "../../facet/index.js";
 
-export function canonicalModuleMap(artifact: MainHarnessArtifact): MainHarnessArtifactInput {
-  return {
+export function encodeModuleMap(artifact: MainHarnessArtifact): string {
+  return JSON.stringify({
     harnessCommit: artifact.harnessCommit,
     entryModule: artifact.modules[0].name,
     modules: artifact.modules
       .map((module) => ({ name: module.name, source: module.source }))
       .toSorted(byModuleName),
-  };
-}
-
-export function encodeModuleMap(moduleMap: MainHarnessArtifactInput): string {
-  return JSON.stringify({
-    harnessCommit: moduleMap.harnessCommit,
-    entryModule: moduleMap.entryModule,
-    modules: moduleMap.modules.map((module) => ({ name: module.name, source: module.source })),
   });
 }
 
-function byModuleName(
-  left: MainHarnessArtifactInput["modules"][number],
-  right: MainHarnessArtifactInput["modules"][number],
-): number {
+function byModuleName(left: HarnessModule, right: HarnessModule): number {
   if (left.name === right.name) {
     return 0;
   }

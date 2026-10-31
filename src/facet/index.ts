@@ -1,16 +1,14 @@
-import * as Result from "effect/Result";
-import { MainHarnessArtifact } from "./artifact.js";
 import type { ModelRoute } from "../model-route.js";
+import type { HarnessModule, MainHarnessArtifact } from "./artifact.js";
 import type { ConversationFacet } from "./conversation-protocol.js";
-import type {
+
+export { MainHarnessArtifact } from "./artifact.js";
+
+export type {
   HarnessModule,
   MainHarnessArtifactInput,
   MainHarnessArtifactProblem,
 } from "./artifact.js";
-
-export { MainHarnessArtifact } from "./artifact.js";
-
-export type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "./artifact.js";
 
 export interface MainFacetTarget extends Rpc.DurableObjectBranded, ConversationFacet {
   fetch(request: Request): Promise<Response>;
@@ -24,12 +22,17 @@ export type MainFacetCapabilities = Readonly<{
   MODEL: Fetcher<ModelRoute>;
 }>;
 
-function loadArtifact(
+export type LoadedMainFacet = Readonly<{
+  worker: WorkerStub;
+  facetClass: DurableObjectClass<MainFacetTarget>;
+}>;
+
+export function loadMainFacet(
   loader: WorkerLoader,
   artifact: MainHarnessArtifact,
   capabilities: MainFacetCapabilities,
-): WorkerStub {
-  return loader.get(artifact.harnessCommit, () => ({
+): LoadedMainFacet {
+  const worker = loader.get(artifact.harnessCommit, () => ({
     compatibilityDate: "2025-01-01",
     compatibilityFlags: ["enable_weak_ref"],
     mainModule: artifact.modules[0].name,
@@ -37,26 +40,8 @@ function loadArtifact(
     env: capabilities,
     globalOutbound: null,
   }));
-}
 
-export function loadMainFacet(
-  loader: WorkerLoader,
-  input: MainHarnessArtifactInput,
-  capabilities: MainFacetCapabilities,
-): Result.Result<
-  {
-    readonly worker: WorkerStub;
-    readonly facetClass: DurableObjectClass<MainFacetTarget>;
-  },
-  MainHarnessArtifactProblem
-> {
-  return MainHarnessArtifact.parse(input).pipe(
-    Result.map((artifact) => {
-      const worker = loadArtifact(loader, artifact, capabilities);
-
-      return { worker, facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet") };
-    }),
-  );
+  return { worker, facetClass: worker.getDurableObjectClass<MainFacetTarget>("MainFacet") };
 }
 
 export type { ConversationHost } from "./conversation-protocol.js";

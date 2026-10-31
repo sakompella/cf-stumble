@@ -1,9 +1,8 @@
-import * as Result from "effect/Result";
 import { loadMainFacet } from "../../facet/index.js";
 import type {
   MainFacetCapabilities,
   MainFacetTarget,
-  MainHarnessArtifactInput,
+  MainHarnessArtifact,
 } from "../../facet/index.js";
 import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
 import { candidateFacetName } from "../artifacts/index.js";
@@ -22,7 +21,7 @@ type CandidateMount =
 
 export async function runStartupCheck(
   host: StartupCheckHost,
-  input: MainHarnessArtifactInput,
+  artifact: MainHarnessArtifact,
   harnessCommit: string,
   bounds: StartupRequestBounds,
 ): Promise<StartupCheckOutcome> {
@@ -30,7 +29,7 @@ export async function runStartupCheck(
   const deadline = deadlineAfter(bounds.deadlineMs);
 
   try {
-    const candidate = mountCandidateFacet(host, input, harnessCommit, modelRoute);
+    const candidate = mountCandidateFacet(host, artifact, harnessCommit, modelRoute);
 
     if (!candidate.ok) {
       return { stage: "mount-failed", reason: candidate.reason };
@@ -102,23 +101,18 @@ async function checkPiDurableVersion(
 
 function mountCandidateFacet(
   host: StartupCheckHost,
-  input: MainHarnessArtifactInput,
+  artifact: MainHarnessArtifact,
   harnessCommit: string,
   modelRoute: MainFacetCapabilities["MODEL"],
 ): CandidateMount {
   try {
-    const loadedFacet = loadMainFacet(host.loader, input, { MODEL: modelRoute });
-
-    if (Result.isFailure(loadedFacet)) {
-      return { ok: false, reason: loadedFacet.failure.code };
-    }
-
+    const { facetClass } = loadMainFacet(host.loader, artifact, { MODEL: modelRoute });
     const name = candidateFacetName(harnessCommit);
     host.ctx.facets.abort(name, "discard prior startup-check candidate");
 
     return {
       ok: true,
-      fetcher: host.ctx.facets.get(name, () => ({ class: loadedFacet.success.facetClass })),
+      fetcher: host.ctx.facets.get(name, () => ({ class: facetClass })),
     };
   } catch {
     return { ok: false, reason: "candidate facet could not mount" };

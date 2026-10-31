@@ -1,4 +1,4 @@
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+import { FileError, type ExecutionEnv, type Result } from "@earendil-works/pi-durable/env";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import { execInWorkspace, killAll, type RunningCommands } from "./execution-env-exec.js";
 import {
@@ -7,28 +7,24 @@ import {
   createTempFile,
   exists,
   fileInfo,
-  flushFile,
-  listDir,
-  readBytes,
   readTextFile,
-  truncateFile,
   writeBytes,
 } from "./execution-env-files.js";
 import { joinPath, type ComputerWorkspace } from "./execution-env-paths.js";
-import { createDir, createTempDir, remove, renameFile } from "./execution-env-posix.js";
-import {
-  openBinaryReader,
-  openDirReader,
-  openTextLineReader,
-  readTextLines,
-} from "./execution-env-readers.js";
-import { watch } from "./execution-env-watch.js";
+import { createTempDir } from "./execution-env-posix.js";
+import { openBinaryReader } from "./execution-env-readers.js";
 
 export const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
 
 export interface ComputerEnvOptions {
   readonly cwd: string;
   readonly target: ProjectRpcTargetContract;
+}
+
+function unsupported(member: string): () => Promise<Result<never, FileError>> {
+  const message = `the Computer workspace does not provide ${member}`;
+
+  return () => Promise.resolve({ ok: false, error: new FileError("not_supported", message) });
 }
 
 export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
@@ -41,29 +37,25 @@ export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
     absolutePath: (path, context) => absolutePath(workspace, path, context),
     joinPath: (parts) => joinPath(parts),
     readTextFile: (path, context) => readTextFile(workspace, path, context),
-    openTextLineReader: (path, context) => openTextLineReader(workspace, path, context),
-    readTextLines: (path, lineOptions, context) =>
-      readTextLines(workspace, path, lineOptions?.maxLines, context),
-    readBinaryFile: (path, context) => readBytes(workspace, path, context),
+    openTextLineReader: unsupported("openTextLineReader"),
+    readTextLines: unsupported("readTextLines"),
+    readBinaryFile: unsupported("readBinaryFile"),
     openBinaryReader: (path, readerOptions, context) =>
       openBinaryReader(workspace, path, readerOptions?.noFollow === true, context),
     writeFile: (path, content, context) =>
       writeBytes(workspace, path, content, "overwrite", context),
-    appendFile: (path, content, context) => writeBytes(workspace, path, content, "append", context),
-    truncateFile: (path, size, context) => truncateFile(workspace, path, size, context),
-    flushFile: (path, context) => flushFile(workspace, path, context),
-    renameFile: (source, destination, context) =>
-      renameFile(workspace, running, source, destination, context),
+    appendFile: unsupported("appendFile"),
+    truncateFile: unsupported("truncateFile"),
+    flushFile: unsupported("flushFile"),
+    renameFile: unsupported("renameFile"),
     fileInfo: (path, context) => fileInfo(workspace, path, context),
-    listDir: (path, context) => listDir(workspace, path, context),
-    openDirReader: (path, context) => openDirReader(workspace, path, context),
-    watch: (targets, onChange, context) => watch(workspace, targets, onChange, context),
+    listDir: unsupported("listDir"),
+    openDirReader: unsupported("openDirReader"),
+    watch: unsupported("watch"),
     canonicalPath: (path, context) => canonicalPath(workspace, path, context),
     exists: (path, context) => exists(workspace, path, context),
-    createDir: (path, dirOptions, context) =>
-      createDir(workspace, running, path, dirOptions, context),
-    remove: (path, removeOptions, context) =>
-      remove(workspace, running, path, removeOptions, context),
+    createDir: unsupported("createDir"),
+    remove: unsupported("remove"),
     createTempDir: (prefix, context) => createTempDir(workspace, running, prefix, context),
     createTempFile: (tempOptions, context) => createTempFile(workspace, tempOptions, context),
     exec: (command, execOptions, context) =>

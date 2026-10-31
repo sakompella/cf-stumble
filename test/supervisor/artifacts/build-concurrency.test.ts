@@ -1,123 +1,96 @@
-import { expect, test } from "vitest";
+import { env } from "cloudflare:workers";
+import { reset, runInDurableObject } from "cloudflare:test";
+import { afterEach, expect, test } from "vitest";
 import * as Effect from "effect/Effect";
-import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
-import { namespaceFor } from "../../workspace-namespace-fixture.js";
+import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import {
-  encodeModuleMap,
-  WorkspaceHostModuleMapBuilder,
-} from "../../../src/supervisor/artifacts/index.js";
-import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
-import { tenantWorkspaceName } from "../../../src/workspace-names.js";
-import type { HarnessBuildRequest } from "../../../src/harness-build.js";
-import type { WorkspaceResult } from "../../../src/workspace/index.js";
+import { encodeModuleMap, HarnessArtifacts } from "../../../src/supervisor/artifacts/index.js";
+import { BuildHost, GatedBuildHost } from "./build-hosts.js";
 
-const commit = testHarnessCommit("6000000000000000000000000000000000000002");
+const commits = {
+  joined: testHarnessCommit("1000000000000000000000000000000000000006"),
+  retried: testHarnessCommit("1000000000000000000000000000000000000007"),
+  abandoned: testHarnessCommit("1000000000000000000000000000000000000008"),
+} as const;
 
-const workspaceName = tenantWorkspaceName("supervisor-name-of-this-tenant");
-
-const entryModule = { name: "main.js", source: "export default { fetch() {} };\n" };
-
-const helperModule = { name: "helper.js", source: "export const help = 1;\n" };
-
-function moduleMapFile(): string {
-  return JSON.stringify({ entryModule: "main.js", modules: [helperModule, entryModule] });
+function supervisor(name: string) {
+  return env.SUPERVISOR.getByName(name);
 }
 
-class CountingBuildHost implements BuildWorkspaceHost {
-  readonly requests: HarnessBuildRequest[] = [];
-
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
-    this.requests.push(request);
-
-    if (request.kind === "build-output") {
-      return Promise.resolve({
-        ok: true,
-        result: { kind: "command", stdout: moduleMapFile(), stderr: "", exitCode: 0 },
-      });
-    }
-
-    return Promise.resolve({
-      ok: true,
-      result: { kind: "command", stdout: "", stderr: "", exitCode: 0 },
-    });
-  }
-}
-
-class GatedBuildHost implements BuildWorkspaceHost {
-  readonly inner = new CountingBuildHost();
-  asked = 0;
-  #release: (() => void) | undefined;
-  readonly #gate = new Promise<void>((resolve) => {
-    this.#release = resolve;
-  });
-
-  release(): void {
-    this.#release?.();
-  }
-
-  async build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
-    this.asked += 1;
-    await this.#gate;
-
-    return this.inner.build(request);
-  }
-}
-
-test("admits one build per commit, so a concurrent request joins it instead of racing it", async () => {
-  const host = new GatedBuildHost();
-  const namespace = namespaceFor(host);
-  const builder = new WorkspaceHostModuleMapBuilder(namespace, workspaceName);
-
-  const first = Effect.runPromise(Effect.result(builder.build(commit)));
-  const second = Effect.runPromise(Effect.result(builder.build(commit)));
-  host.release();
-  const [left, right] = await Promise.all([first, second]);
-
-  if (Result.isFailure(left) || Result.isFailure(right)) {
-    throw new Error("both callers must receive the one build's result");
-  }
-
-  expect(encodeModuleMap(left.success)).toBe(encodeModuleMap(right.success));
-  expect(
-    host.inner.requests.filter((request) => request.kind === "build-step"),
-    "one build ran its steps once; the second caller ran none of its own",
-  ).toHaveLength(HARNESS_BUILD_STEP_NAMES.length);
-  expect(namespace.names.every((name) => name === workspaceName)).toBe(true);
+afterEach(async () => {
+  await reset();
 });
 
-test("builds again once the build in flight has settled", async () => {
-  const host = new CountingBuildHost();
+test("admits one build per commit, so a concurrent request joins it instead of racing it", async () => {
+  const control = supervisor("prepare-joins-build-in-flight");
+  const host = new GatedBuildHost();
 
-  const builder = new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName);
+  const outcome = await runInDurableObject(control, async (_instance, state) => {
+    const artifacts = new HarnessArtifacts(state.storage, () => host);
+    const first = resultOf(artifacts.prepare(commits.joined));
+    const second = resultOf(artifacts.prepare(commits.joined));
+    host.release();
+    const [left, right] = await Promise.all([first, second]);
 
-  await Effect.runPromise(Effect.result(builder.build(commit)));
-  await Effect.runPromise(Effect.result(builder.build(commit)));
+    if (Result.isFailure(left) || Result.isFailure(right)) {
+      throw new Error("both callers must receive the one build's result");
+    }
 
+    return { left: encodeModuleMap(left.success), right: encodeModuleMap(right.success) };
+  });
+
+  expect(outcome.right).toBe(outcome.left);
   expect(
-    host.requests.filter((request) => request.kind === "build-step"),
-    "the conflict rule bounds concurrent builds; it does not cache a finished one",
-  ).toHaveLength(2 * HARNESS_BUILD_STEP_NAMES.length);
+    host.inner.provisions(),
+    "one build ran; the second caller started none of its own, because two builds of one commit share and clear one scratch directory",
+  ).toBe(1);
+});
+
+test("builds again once the build in flight has failed", async () => {
+  const control = supervisor("prepare-retries-settled-build");
+  const host = new BuildHost();
+  host.failing = "install";
+
+  const outcome = await runInDurableObject(control, async (_instance, state) => {
+    const artifacts = new HarnessArtifacts(state.storage, () => host);
+    const failed = await resultOf(artifacts.prepare(commits.retried));
+    host.failing = undefined;
+    const retried = await resultOf(artifacts.prepare(commits.retried));
+
+    return { failed: Result.isFailure(failed), retried: Result.isSuccess(retried) };
+  });
+
+  expect(outcome).toEqual({ failed: true, retried: true });
+  expect(
+    host.requests.filter(
+      (request) => request.kind === "build-step" && request.step === "provision",
+    ),
+    "the join bounds concurrent builds; it does not keep a settled one",
+  ).toHaveLength(2);
 });
 
 test("a caller that stops waiting neither stops the build in flight nor drops it", async () => {
+  const control = supervisor("prepare-keeps-abandoned-build");
   const host = new GatedBuildHost();
-  const builder = new WorkspaceHostModuleMapBuilder(namespaceFor(host), workspaceName);
 
-  const abandoned = Effect.runFork(builder.build(commit));
-  await Effect.runPromise(Effect.yieldNow);
-  await Effect.runPromise(Fiber.interrupt(abandoned));
+  const outcome = await runInDurableObject(control, async (_instance, state) => {
+    const artifacts = new HarnessArtifacts(state.storage, () => host);
+    const abandoned = Effect.runFork(artifacts.prepare(commits.abandoned));
+    await Effect.runPromise(Effect.yieldNow);
+    await Effect.runPromise(Fiber.interrupt(abandoned));
+    const askedBeforeJoin = host.asked;
 
-  expect(host.asked, "the abandoned caller started the build").toBe(1);
+    const joined = resultOf(artifacts.prepare(commits.abandoned));
+    host.release();
 
-  const joined = Effect.runPromise(Effect.result(builder.build(commit)));
-  host.release();
+    return { askedBeforeJoin, joined: Result.isSuccess(await joined) };
+  });
 
-  expect(Result.isSuccess(await joined)).toBe(true);
+  expect(outcome).toEqual({ askedBeforeJoin: 1, joined: true });
   expect(
-    host.inner.requests.filter((request) => request.kind === "build-step"),
+    host.inner.provisions(),
     "the later caller joined the first build instead of starting another",
-  ).toHaveLength(HARNESS_BUILD_STEP_NAMES.length);
+  ).toBe(1);
 });

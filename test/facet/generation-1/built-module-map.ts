@@ -1,8 +1,6 @@
-import * as Result from "effect/Result";
-import { parseHarnessCommit } from "../../../src/harness-commit.js";
-import { moduleMapFromBuildOutput } from "../../../src/supervisor/artifacts/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import type { BuiltModuleMapFile } from "../../../src/supervisor/artifacts/index.js";
+
+type BuiltModuleMapFile = Omit<MainHarnessArtifactInput, "harnessCommit">;
 
 declare global {
   interface ImportMeta {
@@ -27,15 +25,6 @@ export function builtModuleMap(): Promise<BuiltModuleMapFile> {
   return new Response(builtFile).json<BuiltModuleMapFile>();
 }
 
-export async function builtGeneration(commit: string): Promise<MainHarnessArtifactInput> {
-  const harnessCommit = parseHarnessCommit(commit);
-
-  if (harnessCommit === undefined) throw new Error("the test commit must be a Git object ID");
-  const validated = moduleMapFromBuildOutput(harnessCommit, await builtModuleMap());
-
-  if (Result.isFailure(validated)) {
-    throw new Error(`the built module map must validate: ${validated.failure.code}`);
-  }
-
-  return validated.success;
+export async function builtGeneration(harnessCommit: string): Promise<MainHarnessArtifactInput> {
+  return { harnessCommit, ...(await builtModuleMap()) };
 }

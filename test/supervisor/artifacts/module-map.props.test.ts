@@ -4,8 +4,8 @@ import { expect, test } from "vitest";
 import * as Result from "effect/Result";
 
 import { MainHarnessArtifact } from "../../../src/facet/index.js";
-import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { canonicalModuleMap, encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import { parsedArtifact } from "../../facet/fixture.js";
 
 const harnessCommit = "6000000000000000000000000000000000000001";
 
@@ -16,16 +16,6 @@ const moduleName = gs
 const moduleMaps = gs
   .maps(moduleName, gs.text({ maxSize: 12 }), { minSize: 1, maxSize: 6 })
   .map((entries) => [...entries].map(([name, source]) => ({ name, source })));
-
-function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
-  const parsed = MainHarnessArtifact.parse(input);
-
-  if (Result.isFailure(parsed)) {
-    throw new Error(`the generated module map must parse: ${parsed.failure.code}`);
-  }
-
-  return canonicalModuleMap(parsed.success);
-}
 
 function rotated<T>(values: readonly T[], by: number): readonly T[] {
   const offset = by % values.length;
@@ -39,9 +29,9 @@ test("canonicalizes one module map to the same bytes whatever order it arrived i
     const entryModule = modules[0]?.name ?? "";
     const by = tc.draw(gs.integers({ minValue: 0, maxValue: modules.length }));
 
-    const first = canonical({ harnessCommit, entryModule, modules });
+    const first = parsedArtifact({ harnessCommit, entryModule, modules });
 
-    const second = canonical({ harnessCommit, entryModule, modules: rotated(modules, by) });
+    const second = parsedArtifact({ harnessCommit, entryModule, modules: rotated(modules, by) });
 
     expect(encodeModuleMap(second)).toBe(encodeModuleMap(first));
   });
@@ -75,9 +65,9 @@ test("distinguishes module maps when a source or entry module changes", () => {
       encodingsShouldMatch = false;
     }
 
-    const first = canonical({ harnessCommit, entryModule, modules });
+    const first = parsedArtifact({ harnessCommit, entryModule, modules });
 
-    const second = canonical({
+    const second = parsedArtifact({
       harnessCommit,
       entryModule: otherEntryModule,
       modules: otherModules,
@@ -87,15 +77,17 @@ test("distinguishes module maps when a source or entry module changes", () => {
   });
 });
 
-test("keeps the canonical encoding stable when it is canonicalized again", () => {
+test("keeps the canonical encoding stable when its own bytes are parsed again", () => {
   hegel.test((tc) => {
     const modules = tc.draw(moduleMaps);
     const entryModule = modules[0]?.name ?? "";
 
-    const once = canonical({ harnessCommit, entryModule, modules });
-    const twice = canonical(once);
+    const once = parsedArtifact({ harnessCommit, entryModule, modules });
+    const twice = MainHarnessArtifact.parseJson(encodeModuleMap(once));
 
-    expect(encodeModuleMap(twice)).toBe(encodeModuleMap(once));
-    expect(twice.entryModule).toBe(entryModule);
+    if (Result.isFailure(twice)) throw new Error(`the encoding must parse: ${twice.failure.code}`);
+
+    expect(encodeModuleMap(twice.success)).toBe(encodeModuleMap(once));
+    expect(twice.success.modules[0].name).toBe(entryModule);
   });
 });

@@ -1,5 +1,17 @@
+import * as Result from "effect/Result";
+import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
+
+export function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
+  const parsed = MainHarnessArtifact.parse(input);
+
+  if (Result.isFailure(parsed)) {
+    throw new Error(`a test artifact must parse: ${parsed.failure.code}`);
+  }
+
+  return parsed.success;
+}
 
 export const PI_DURABLE_VERSION_METHOD = `piDurableVersion() { return ${JSON.stringify(PI_DURABLE_VERSION)}; }`;
 
