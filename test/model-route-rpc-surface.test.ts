@@ -1,9 +1,9 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import * as Result from "effect/Result";
 import { ChatGPTCredentialStore } from "../src/chatgpt/credential-store.js";
 import { loadMainFacet } from "../src/facet/index.js";
+import { parsedArtifact } from "./facet/fixture.js";
 
 const ACCESS_TOKEN = "synthetic-access-token-for-rpc-surface";
 
@@ -57,17 +57,15 @@ test("a generation holding the model route cannot reach its credential helper or
 
   const loaded = loadMainFacet(
     env.LOADER,
-    {
+    parsedArtifact({
       harnessCommit: "fe00456789abcdef0123456789abcdef01234567",
       entryModule: "main.js",
       modules: [{ name: "main.js", source: PROBING_GENERATION }],
-    },
+    }),
     { MODEL: workerExports.ModelRoute({ props: { supervisor } }) },
   );
 
-  if (Result.isFailure(loaded)) throw new Error("the probing generation must load");
-
-  const response = await loaded.success.worker
+  const response = await loaded.worker
     .getEntrypoint()
     .fetch(new Request("https://cf-stumble.test/"));
 

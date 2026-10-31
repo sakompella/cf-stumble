@@ -1,20 +1,9 @@
 import { expect, test } from "vitest";
-import * as Result from "effect/Result";
-import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { canonicalModuleMap, encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
+import { parsedArtifact } from "../../facet/fixture.js";
 
 const harnessCommit = "5000000000000000000000000000000000000001";
-
-function canonical(input: MainHarnessArtifactInput): MainHarnessArtifactInput {
-  const parsed = MainHarnessArtifact.parse(input);
-
-  if (Result.isFailure(parsed)) {
-    throw new Error(`the test module map must parse: ${parsed.failure.code}`);
-  }
-
-  return canonicalModuleMap(parsed.success);
-}
 
 function moduleMap(
   entryModule: string,
@@ -30,20 +19,19 @@ const modules = [
 ];
 
 test("sorts modules by name and keeps the entry module named", () => {
-  const map = canonical(moduleMap("main.js", modules));
-
-  expect(map.entryModule).toBe("main.js");
-  expect(map.modules.map((module) => module.name)).toEqual([
-    "a-helper.js",
-    "main.js",
-    "z-helper.js",
-  ]);
+  expect(encodeModuleMap(parsedArtifact(moduleMap("main.js", modules)))).toBe(
+    JSON.stringify({
+      harnessCommit,
+      entryModule: "main.js",
+      modules: [modules[1], modules[0], modules[2]],
+    }),
+  );
 });
 
 test("separates module maps that differ in a module source", () => {
-  const original = canonical(moduleMap("main.js", modules));
+  const original = parsedArtifact(moduleMap("main.js", modules));
 
-  const edited = canonical(
+  const edited = parsedArtifact(
     moduleMap("main.js", [
       { name: "main.js", source: "export default {};\n" },
       { name: "a-helper.js", source: "export const a = 3;\n" },

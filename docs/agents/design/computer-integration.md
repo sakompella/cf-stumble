@@ -59,7 +59,7 @@ The harness source is TypeScript, while Dynamic Workers need Worker-executable m
 
 ### Build isolation
 
-A build extracts its commit into `/tmp/cf-stumble-builds/<commit>` and clears that directory first. The path is container-local, outside `/workspace`, and holds no checkout, so clearing it destroys nothing. The harness directory is the owner's editable clone: a build reconciles and fetches into it, and refuses rather than deletes a populated directory that is not that repository. `WorkspaceHostModuleMapBuilder` admits one build per commit at a time, and a second request for a commit already building joins that build.
+A build extracts its commit into `/tmp/cf-stumble-builds/<commit>` and clears that directory first. The path is container-local, outside `/workspace`, and holds no checkout, so clearing it destroys nothing. The harness directory is the owner's editable clone: a build reconciles and fetches into it, and refuses rather than deletes a populated directory that is not that repository. `HarnessArtifacts` (`src/supervisor/artifacts/index.ts`) admits one build per commit at a time, and a second request for a commit already building joins that build, because two builds of one commit would clear each other's directory.
 
 ### Build phases
 

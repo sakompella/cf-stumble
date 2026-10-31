@@ -1,8 +1,8 @@
 import { env, exports as workerExports } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import * as Result from "effect/Result";
 import { loadMainFacet } from "../../../src/facet/index.js";
+import { parsedArtifact } from "../fixture.js";
 import { prepareWithModuleMap, submitCandidate } from "../../supervisor/helpers.js";
 import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
 import { builtGeneration, builtModuleMap } from "./built-module-map.js";
@@ -23,15 +23,14 @@ test("the build writes an entry module and its modules, and no harness commit", 
 });
 
 test("the written file parses into a module map the facet loader loads", async () => {
-  const validated = await builtGeneration(GENERATION_1_COMMIT);
+  const artifact = parsedArtifact(await builtGeneration(GENERATION_1_COMMIT));
 
-  expect(validated.harnessCommit).toBe(GENERATION_1_COMMIT);
+  expect(artifact.harnessCommit).toBe(GENERATION_1_COMMIT);
 
   const modelRoute = workerExports.ModelRoute({});
-  const loaded = loadMainFacet(env.LOADER, validated, { MODEL: modelRoute });
-  expect(Result.isSuccess(loaded), "the built module map must load through the facet loader").toBe(
-    true,
-  );
+  const loaded = loadMainFacet(env.LOADER, artifact, { MODEL: modelRoute });
+
+  expect(loaded.facetClass, "the built module map loads through the facet loader").toBeDefined();
 });
 
 test("the built generation passes the Supervisor's startup check", async () => {

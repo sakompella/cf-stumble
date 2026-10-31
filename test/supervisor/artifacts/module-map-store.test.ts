@@ -3,7 +3,6 @@ import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import { MainHarnessArtifact } from "../../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
 import { containsCredential } from "../../../src/github/index.js";
 import {
@@ -17,6 +16,7 @@ import {
   activateGeneration,
   activeSupervisor,
   artifact,
+  parsedArtifact,
   storeModuleMap,
   submitCandidate,
   PI_DURABLE_VERSION_METHOD,
@@ -43,16 +43,6 @@ function largeModuleMap(harnessCommit: string): MainHarnessArtifactInput {
       { name: "helper.js", source: `export const helper = "${filler}";\n` },
     ],
   };
-}
-
-function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
-  const artifactValue = MainHarnessArtifact.parse(input);
-
-  if (Result.isFailure(artifactValue)) {
-    throw new Error(`the test module map must parse: ${artifactValue.failure.code}`);
-  }
-
-  return artifactValue.success;
 }
 
 function supervisor(name: string): DurableObjectStub<Supervisor> {
@@ -112,10 +102,10 @@ test("keeps a stored module map across a Durable Object eviction", async () => {
       throw new Error("an evicted Supervisor must still hold its stored module map");
     }
 
-    return encodeModuleMap(read.success.moduleMap);
+    return encodeModuleMap(read.success.artifact);
   });
 
-  expect(found).toBe(encodeModuleMap(input));
+  expect(found).toBe(encodeModuleMap(parsedArtifact(input)));
 });
 
 test("stores a module map larger than one chunk and reads back the same bytes", async () => {
@@ -150,7 +140,7 @@ test("stores a module map larger than one chunk and reads back the same bytes", 
           commits.large,
         )
         .one(),
-      sameBytes: encodeModuleMap(read.success.moduleMap) === encodeModuleMap(written.success),
+      sameBytes: encodeModuleMap(read.success.artifact) === encodeModuleMap(written.success),
     };
   });
 

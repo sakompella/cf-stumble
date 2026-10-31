@@ -47,7 +47,10 @@ export function supervisorParts(
 ) {
   const generations = new Generations(ctx.storage);
   const { name, workspaceName } = supervisorNames(ctx);
-  const artifacts = HarnessArtifacts.forWorkspace(ctx.storage, env.WORKSPACE_HOST, workspaceName);
+
+  const artifacts = new HarnessArtifacts(ctx.storage, () =>
+    env.WORKSPACE_HOST.getByName(workspaceName),
+  );
 
   const modelRoute = (): MainFacetCapabilities["MODEL"] =>
     ctx.exports.ModelRoute({ props: { supervisor: name } });
