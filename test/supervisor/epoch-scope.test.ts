@@ -2,7 +2,13 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateFixtureGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
+import {
+  activateFixtureGeneration,
+  prepareGeneration,
+  servedText,
+  submitCandidate,
+  generationLabel,
+} from "./helpers.js";
 import { readGeneration } from "./generation-reads.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -30,26 +36,18 @@ async function activateReplacement(control: DurableObjectStub<Supervisor>, obser
   return control.controlGeneration({ kind: "activate", label: generation.label, observedEpoch });
 }
 
-async function completedTurn(control: DurableObjectStub<Supervisor>): Promise<void> {
-  const response = await control.fetch(
-    new Request("https://cf-stumble.test/facet/relay/body-complete"),
-  );
-
-  await response.text();
-}
-
 afterEach(async () => {
   await reset();
 });
 
-test("keeps the activation epoch stable while relaying a completed turn", async () => {
-  const control = await readyReplacement("epoch-scope-relay");
-  const beforeRelay = await control.getActiveGeneration();
+test("keeps the activation epoch stable while the active generation serves", async () => {
+  const control = await readyReplacement("epoch-scope-serving");
+  const beforeServing = await control.getActiveGeneration();
 
-  await completedTurn(control);
+  await servedText(control);
 
-  expect(await control.getActiveGeneration()).toEqual(beforeRelay);
-  const activated = await activateReplacement(control, beforeRelay.epoch);
+  expect(await control.getActiveGeneration()).toEqual(beforeServing);
+  const activated = await activateReplacement(control, beforeServing.epoch);
   expect(activated).toMatchObject({
     ok: true,
     outcome: { kind: "activated", generation: { label: 1 } },
@@ -62,7 +60,7 @@ test("keeps the activation epoch stable when an activation is rejected", async (
 
   const rejected = await control.controlGeneration({
     kind: "activate",
-    label: 99,
+    label: generationLabel(99),
     observedEpoch: beforeRejection.epoch,
   });
 
@@ -86,13 +84,13 @@ test("a repeated passing check advances the epoch and rejects an activation from
   await prepareGeneration(control, targetLabel, replacementCommit);
 
   const beforeRecheck = await control.getActiveGeneration();
-  const rechecked = await control.prepareGeneration(0);
+  const rechecked = await control.prepareGeneration(generationLabel(0));
 
   const afterRecheck = await control.getActiveGeneration();
 
   const result = await control.controlGeneration({
     kind: "activate",
-    label: targetLabel,
+    label: generationLabel(targetLabel),
     observedEpoch: beforeRecheck.epoch,
   });
 

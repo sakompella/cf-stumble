@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { Generations } from "./generations/index.js";
+import type { Generations } from "./generations.js";
 import type {
   ProjectCapabilityStub,
   ProjectConnections,

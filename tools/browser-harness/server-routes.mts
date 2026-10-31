@@ -60,12 +60,6 @@ export function sendOwnerPageScript(res: ServerResponse): void {
   res.end(OWNER_PAGE_SCRIPT_FILE.source);
 }
 
-export function acceptsHtml(accept: string | undefined): boolean {
-  return (accept ?? "")
-    .split(",")
-    .some((entry) => (entry.split(";")[0] ?? "").trim().toLowerCase() === "text/html");
-}
-
 function field(body: JsonValue, key: string): JsonValue | undefined {
   return isJsonRecord(body) ? body[key] : undefined;
 }

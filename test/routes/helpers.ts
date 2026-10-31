@@ -42,6 +42,7 @@ export function ownerApiSupervisor(
     controlGeneration() {
       return Promise.reject(new Error("this test must not reach generation control"));
     },
+    submitGeneration: notCalled("submit a generation"),
     prepareGeneration() {
       return Promise.reject(new Error("this test must not reach generation preparation"));
     },

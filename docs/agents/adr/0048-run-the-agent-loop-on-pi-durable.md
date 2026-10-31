@@ -26,8 +26,10 @@ Durable schema change across a rollback, and the version pin below already rules
 **Every runnable generation runs the Supervisor's Pi Durable version.** The startup check asks the
 candidate's `piDurableVersion()` and fails the candidate unless it equals the version the Supervisor
 was built with (`src/pi-durable-version.ts`). A generation built before Pi Durable reports none and
-fails preparation. Without this, a rollback could load code that reads the session with another
-schema.
+fails preparation. Preparation records the checked version on the generation, and activation and
+rollback refuse with `pi-durable-version-mismatch` when it differs from the Supervisor's, or when
+none is recorded. Submitting the generation's harness commit again re-runs the check. Without this,
+a rollback could load code that reads the session with another schema.
 
 **The Supervisor keeps its authority.** Facets cannot set alarms (in production `setAlarm` throws and
 leaves the facet unusable), so the generation relays each Pi Durable wake to the host's `arm`, and the

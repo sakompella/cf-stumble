@@ -1,36 +1,49 @@
+import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { activeSupervisor } from "../supervisor/helpers.js";
+import {
+  activateGeneration,
+  artifact,
+  prepareWithModuleMap,
+  servedText,
+  submitCandidate,
+  PI_DURABLE_VERSION_METHOD,
+} from "../supervisor/helpers.js";
 
-async function facetRequest(name: string, path: string): Promise<Response> {
-  const control = await activeSupervisor(name);
+const reportingCommit = "e0e0000000000000000000000000000000000001";
 
-  return control.fetch(new Request(`https://cf-stumble.test${path}`));
+async function servedReport(name: string): Promise<string> {
+  const control = env.SUPERVISOR.getByName(name);
+  const label = await submitCandidate(control, reportingCommit);
+
+  await prepareWithModuleMap(
+    control,
+    label,
+    artifact(
+      reportingCommit,
+      `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  ${PI_DURABLE_VERSION_METHOD}
+  async attach() {}
+  async createConversation(cwd) { return "conversation:" + cwd; }
+  async events() {
+    const outbound = await fetch("https://example.com/").then(() => "allowed", () => "blocked");
+    return new Response("bindings " + Object.keys(this.env).sort().join(",") + "; outbound " + outbound).body;
+  }
+}
+`,
+    ),
+  );
+  await activateGeneration(control, label);
+
+  return servedText(control);
 }
 
 afterEach(async () => {
   await reset();
 });
 
-test("forwards an ordinary request to the main facet", async () => {
-  const response = await facetRequest("mounted-facet-ping", "/facet/ping");
-
-  expect(response.status).toBe(200);
-  expect(await response.text()).toBe("pong");
-});
-
-test("runs the main facet with only the model capability", async () => {
-  const response = await facetRequest("mounted-facet-bindings", "/facet/bindings");
-
-  expect(response.status).toBe(200);
-  expect(await response.json(), "the running facet must receive only the model capability").toEqual(
-    ["MODEL"],
-  );
-});
-
-test("blocks ambient outbound requests from the main facet", async () => {
-  const response = await facetRequest("mounted-facet-outbound", "/facet/outbound");
-
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: false, error: "outbound-blocked" });
+test("runs the main facet with only the model capability and no ambient outbound", async () => {
+  expect(await servedReport("mounted-facet-capabilities")).toBe("bindings MODEL; outbound blocked");
 });

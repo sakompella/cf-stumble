@@ -6,7 +6,7 @@ export type HarnessCommit = string & {
   readonly [harnessCommitBrand]: "HarnessCommit";
 };
 
-function isHarnessCommit(value: string): value is HarnessCommit {
+export function isHarnessCommit(value: string): value is HarnessCommit {
   return gitObjectId.test(value);
 }
 

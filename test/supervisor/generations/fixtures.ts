@@ -1,14 +1,9 @@
-import {
-  parseGenerationLabel,
-  type GenerationLabel,
-} from "../../../src/supervisor/generations/index.js";
+import { isGenerationLabel, type GenerationLabel } from "../../../src/supervisor/generations.js";
 
 export function label(value: number): GenerationLabel {
-  const parsed = parseGenerationLabel(value);
+  if (!isGenerationLabel(value)) throw new Error(`invalid test label ${value}`);
 
-  if (parsed === undefined) {
-    throw new Error(`invalid test label ${value}`);
-  }
-
-  return parsed;
+  return value;
 }
+
+export { testHarnessCommit } from "../../harness-commit-fixtures.js";

@@ -6,37 +6,55 @@ import {
   commits,
   labelCandidate,
   prepareWithModuleMap,
+  servingFacetSource,
   storeModuleMap,
   PI_DURABLE_VERSION_METHOD,
+  generationLabel,
 } from "../helpers.js";
 import { expectFailedCandidate } from "../generation-reads.js";
+import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
 
 afterEach(async () => {
   await reset();
 });
 
-test("records a generation as ready when its candidate completes an ordinary request", async () => {
-  const control = await activeSupervisor("startup-check-ordinary");
-  const label = await labelCandidate(control, commits.ordinary);
+function facet(members: string): string {
+  return `
+import { DurableObject } from "cloudflare:workers";
+export class MainFacet extends DurableObject {
+  ${members}
+}
+`;
+}
+
+async function checked(name: string, harnessCommit: string, source: string, deadlineMs?: number) {
+  const control = await activeSupervisor(name);
+  const label = await labelCandidate(control, harnessCommit);
 
   const result = await prepareWithModuleMap(
     control,
     label,
-    artifact(
-      commits.ordinary,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response("ordinary response"); }
+    artifact(harnessCommit, source),
+    deadlineMs === undefined ? undefined : { deadlineMs },
+  );
+
+  return { control, label, result };
 }
-`,
-    ),
+
+test("records a generation as ready when it reports the Supervisor's Pi Durable version", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-ordinary",
+    commits.ordinary,
+    servingFacetSource("ordinary"),
   );
 
   expect(result).toMatchObject({
     ok: true,
-    report: { stage: "ready", status: 200, generation: { label, status: "ready" } },
+    report: {
+      stage: "ready",
+      reason: `the generation runs Pi Durable ${PI_DURABLE_VERSION}`,
+      generation: { label, status: "ready" },
+    },
   });
   expect(await control.getActiveGeneration()).toMatchObject({ generation: { label: 0 } });
 });
@@ -44,62 +62,35 @@ export class MainFacet extends DurableObject {
 const PI_DURABLE_MISMATCH_COMMIT = "9123456789abcdef0123456789abcdef01234567";
 
 test("a generation built with another Pi Durable version fails its startup check", async () => {
-  const control = await activeSupervisor("startup-check-pi-durable-version");
-  const label = await labelCandidate(control, PI_DURABLE_MISMATCH_COMMIT);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      PI_DURABLE_MISMATCH_COMMIT,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  piDurableVersion() { return "0.0.1"; }
-  fetch() { return new Response("ordinary response"); }
-}
-`,
-    ),
+  const { control, label, result } = await checked(
+    "startup-check-pi-durable-version",
+    PI_DURABLE_MISMATCH_COMMIT,
+    facet(`piDurableVersion() { return "0.0.1"; }`),
   );
 
   expect(result).toMatchObject({ ok: true, report: { stage: "version-mismatch" } });
   await expectFailedCandidate(control, label);
 });
 
-test("records a 400 response as failed at the response stage", async () => {
-  const control = await activeSupervisor("startup-check-client-error-response");
-  const label = await labelCandidate(control, commits.notFound);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.notFound,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response("invalid startup request", { status: 400 }); }
-}
-`,
-    ),
+test("records a generation from before Pi Durable as failed at mount", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-no-version",
+    commits.noVersion,
+    facet(`fetch() { return new Response("ready"); }`),
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "response-rejected", status: 400 } });
+  expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
   await expectFailedCandidate(control, label);
 });
 
-test("records a parse-invalid candidate as failed before headers", async () => {
-  const control = await activeSupervisor("startup-check-parse");
-  const label = await labelCandidate(control, commits.parse);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(commits.parse, "export class MainFacet extends {"),
+test("records a parse-invalid candidate as failed at mount", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-parse",
+    commits.parse,
+    "export class MainFacet extends {",
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "headers-not-received" } });
+  expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
 
   if (!result.ok) {
     throw new Error("a labeled generation must produce a startup-check report");
@@ -111,143 +102,55 @@ test("records a parse-invalid candidate as failed before headers", async () => {
   await expectFailedCandidate(control, label);
 });
 
-test("records a candidate without MainFacet as failed before headers", async () => {
-  const control = await activeSupervisor("startup-check-missing-facet");
-  const label = await labelCandidate(control, commits.missingFacet);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.missingFacet,
-      `export default { fetch() { return new Response("no durable object"); } };`,
-    ),
+test("records a candidate without MainFacet as failed at mount", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-missing-facet",
+    commits.missingFacet,
+    `export default { fetch() { return new Response("no durable object"); } };`,
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "headers-not-received" } });
+  expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
   await expectFailedCandidate(control, label);
 });
 
-test("records a constructor-throwing candidate as failed before headers", async () => {
-  const control = await activeSupervisor("startup-check-constructor");
-  const label = await labelCandidate(control, commits.constructor);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.constructor,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
+test("records a constructor-throwing candidate as failed at mount", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-constructor",
+    commits.constructor,
+    facet(`${PI_DURABLE_VERSION_METHOD}
   constructor(ctx, env) {
     super(ctx, env);
     throw new Error("constructor exploded");
-  }
-  fetch() { return new Response("unreachable"); }
-}
-`,
-    ),
+  }`),
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "headers-not-received" } });
+  expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
   await expectFailedCandidate(control, label);
 });
 
-test("records a first-request throw as failed before headers", async () => {
-  const control = await activeSupervisor("startup-check-request");
-  const label = await labelCandidate(control, commits.request);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.request,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { throw new Error("first request exploded"); }
-}
-`,
-    ),
+test("records a candidate whose version call throws as failed at mount", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-request",
+    commits.request,
+    facet(`piDurableVersion() { throw new Error("version exploded"); }`),
   );
 
-  expect(result).toMatchObject({ ok: true, report: { stage: "headers-not-received" } });
+  expect(result).toMatchObject({ ok: true, report: { stage: "mount-failed" } });
   await expectFailedCandidate(control, label);
 });
 
-test("records a 500 response as failed at the response stage", async () => {
-  const control = await activeSupervisor("startup-check-error-response");
-  const label = await labelCandidate(control, commits.errorResponse);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.errorResponse,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response("failure", { status: 500 }); }
-}
-`,
-    ),
-  );
-
-  expect(result).toMatchObject({ ok: true, report: { stage: "response-rejected", status: 500 } });
-  await expectFailedCandidate(control, label);
-});
-
-test("records a candidate that never sends headers as failed at the deadline", async () => {
-  const control = await activeSupervisor("startup-check-delayed");
-  const label = await labelCandidate(control, commits.delayed);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.delayed,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Promise(() => {}); }
-}
-`,
-    ),
-    { deadlineMs: 50 },
+test("records a candidate that never reports its version as failed at the deadline", async () => {
+  const { control, label, result } = await checked(
+    "startup-check-delayed",
+    commits.delayed,
+    facet(`piDurableVersion() { return new Promise(() => {}); }`),
+    50,
   );
 
   expect(result).toMatchObject({
     ok: true,
-    report: { stage: "deadline-expired", reason: "response headers exceeded the deadline" },
+    report: { stage: "deadline-expired", reason: "the Pi Durable version exceeded the deadline" },
   });
-  await expectFailedCandidate(control, label);
-});
-
-test("records a body above the byte bound as failed at the body stage", async () => {
-  const control = await activeSupervisor("startup-check-oversized");
-  const label = await labelCandidate(control, commits.oversized);
-
-  const result = await prepareWithModuleMap(
-    control,
-    label,
-    artifact(
-      commits.oversized,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response("x".repeat(${1_024 + 1})); }
-}
-`,
-    ),
-  );
-
-  expect(result).toMatchObject({ ok: true, report: { stage: "body-failed" } });
   await expectFailedCandidate(control, label);
 });
 
@@ -257,35 +160,25 @@ test("remounts a checked generation instead of reusing its warm candidate instan
 
   const candidate = artifact(
     commits.fresh,
-    `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  constructor(ctx, env) {
+    facet(`constructor(ctx, env) {
     super(ctx, env);
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS constructions (count INTEGER NOT NULL)");
-    ctx.storage.sql.exec("INSERT INTO constructions (count) VALUES (1)");
+    ctx.storage.kv.put("constructions", (ctx.storage.kv.get("constructions") ?? 0) + 1);
   }
-  fetch() {
-    const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM constructions").one().count;
-    return new Response("construction " + count, { status: count === 1 ? 200 : 201 });
-  }
-}
-`,
+  piDurableVersion() {
+    const calls = (this.ctx.storage.kv.get("calls") ?? 0) + 1;
+    this.ctx.storage.kv.put("calls", calls);
+    const fresh = this.ctx.storage.kv.get("constructions") === calls;
+    return fresh ? ${JSON.stringify(PI_DURABLE_VERSION)} : "a reused instance";
+  }`),
   );
 
   await storeModuleMap(control, candidate);
-  const first = await control.prepareGeneration(label);
-  const second = await control.prepareGeneration(label);
+  const first = await control.prepareGeneration(generationLabel(label));
+  const second = await control.prepareGeneration(generationLabel(label));
 
-  expect(first).toMatchObject({ ok: true, report: { stage: "ready", status: 200 } });
+  expect(first).toMatchObject({ ok: true, report: { stage: "ready" } });
   expect(second).toMatchObject({
     ok: true,
-    report: {
-      stage: "ready",
-      status: 201,
-      generation: { label, status: "ready" },
-      effect: "no-op",
-    },
+    report: { stage: "ready", generation: { label, status: "ready" }, effect: "no-op" },
   });
 });

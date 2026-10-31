@@ -1,16 +1,13 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
-
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   decideActivation,
-  decidePreparationCheck,
-} from "../../../src/supervisor/generations/decisions.js";
-import {
+  decidePreparation,
   type Generation,
   type GenerationStatus,
-} from "../../../src/supervisor/generations/index.js";
+} from "../../../src/supervisor/generations.js";
 import { label } from "./fixtures.js";
 
 const COMMIT = testHarnessCommit("a".repeat(40));
@@ -19,36 +16,49 @@ function generation(labelValue: number, status: GenerationStatus): Generation {
   return { label: label(labelValue), harnessCommit: COMMIT, status };
 }
 
+const SUPERVISOR_VERSION = "1.4.0";
+
 const count = gs.integers({ minValue: 0, maxValue: 2 ** 40 });
 
 const labelValue = gs.integers({ minValue: 0, maxValue: 2 ** 39 });
 
-test("activation always rejects an unknown generation, whatever the epoch", () => {
-  hegel.test((tc) => {
-    const target = tc.draw(labelValue);
-    const state = { activeLabel: undefined, epoch: tc.draw(count) };
+const kind = gs.sampledFrom(["activate", "rollback"] as const);
 
-    expect(decideActivation(label(target), undefined, state)).toEqual({
-      kind: "rejected",
-      problem: { code: "unknown-generation", label: target },
-    });
+const recordedVersion = gs.sampledFrom([SUPERVISOR_VERSION, "1.3.9", undefined] as const);
+
+test("only the current epoch can change the selection, whatever the target", () => {
+  hegel.test((tc) => {
+    const epoch = tc.draw(count);
+    const observedEpoch = tc.draw(count);
+    const target = tc.draw(labelValue);
+    const status = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
+
+    const record = {
+      generation: generation(target, status),
+      wasActive: tc.draw(gs.booleans()),
+      piDurableVersion: tc.draw(recordedVersion),
+    };
+
+    const command = { kind: tc.draw(kind), label: label(target), observedEpoch };
+
+    const decision = decideActivation(
+      command,
+      record,
+      { activeLabel: undefined, epoch },
+      SUPERVISOR_VERSION,
+    );
+
+    if (observedEpoch !== epoch) {
+      expect(decision).toEqual({ ok: false, problem: { code: "stale-epoch" } });
+    }
+
+    if (status !== "ready") expect(decision.ok).toBe(false);
+
+    if (record.piDurableVersion !== SUPERVISOR_VERSION) expect(decision.ok).toBe(false);
   });
 });
 
-test("activation always rejects a generation that is not ready", () => {
-  hegel.test((tc) => {
-    const target = tc.draw(labelValue);
-    const status = tc.draw(gs.sampledFrom(["candidate", "failed"] as const));
-    const state = { activeLabel: undefined, epoch: tc.draw(count) };
-
-    expect(decideActivation(label(target), generation(target, status), state)).toEqual({
-      kind: "rejected",
-      problem: { code: "not-ready", label: target },
-    });
-  });
-});
-
-test("a ready generation advances the epoch by exactly one, and only when it is not already active", () => {
+test("an accepted activation advances the epoch by exactly one, and only when it changes the selection", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
@@ -58,60 +68,54 @@ test("a ready generation advances the epoch by exactly one, and only when it is 
       active === "none" ? undefined : label(active === "same" ? target : target + 1);
 
     const ready = generation(target, "ready");
+    const command = { kind: tc.draw(kind), label: label(target), observedEpoch: epoch };
 
-    const decision = decideActivation(label(target), ready, { activeLabel, epoch });
-
-    if (active === "same") {
-      expect(decision).toEqual({ kind: "no-op", generation: ready, epoch });
-    } else {
-      expect(decision).toEqual({
-        kind: "activate",
-        generation: ready,
-        nextEpoch: epoch + 1,
-      });
-    }
-  });
-});
-
-test("a check that changes the status records it and advances the epoch by one", () => {
-  hegel.test((tc) => {
-    const target = tc.draw(labelValue);
-    const epoch = tc.draw(count);
-    const outcome = tc.draw(gs.sampledFrom(["passed", "failed"] as const));
-    const state = { activeLabel: undefined, epoch };
-    const expectedStatus: GenerationStatus = outcome === "passed" ? "ready" : "failed";
-
-    const previous: GenerationStatus = tc.draw(
-      gs.sampledFrom(["candidate", outcome === "passed" ? "failed" : "ready"] as const),
+    const decision = decideActivation(
+      command,
+      { generation: ready, wasActive: true, piDurableVersion: SUPERVISOR_VERSION },
+      { activeLabel, epoch },
+      SUPERVISOR_VERSION,
     );
 
-    expect(
-      decidePreparationCheck(label(target), outcome, generation(target, previous), state),
-    ).toEqual({
-      kind: "record",
-      generation: generation(target, expectedStatus),
-      statusUpdate: expectedStatus,
-      nextEpoch: epoch + 1,
-      effect: "recorded",
-    });
+    expect(decision).toMatchObject(
+      active === "same"
+        ? { ok: true, outcome: { generation: ready, epoch, effect: "no-op" } }
+        : { ok: true, outcome: { generation: ready, epoch: epoch + 1, effect: "activated" } },
+    );
   });
 });
 
-test("a check that confirms the recorded status is a no-op that still advances the epoch", () => {
+test("a check records the outcome's status and version, advances the epoch by one, and is a no-op only when nothing changed", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
-    const outcome = tc.draw(gs.sampledFrom(["passed", "failed"] as const));
-    const recorded: GenerationStatus = outcome === "passed" ? "ready" : "failed";
-    const settled = generation(target, recorded);
-    const state = { activeLabel: undefined, epoch };
+    const previousStatus = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
+    const previousVersion = tc.draw(recordedVersion);
+    const checkedVersion = tc.draw(recordedVersion);
+    const wasActive = tc.draw(gs.booleans());
 
-    expect(decidePreparationCheck(label(target), outcome, settled, state)).toEqual({
-      kind: "record",
-      generation: settled,
-      statusUpdate: undefined,
-      nextEpoch: epoch + 1,
-      effect: "no-op",
+    const outcome =
+      checkedVersion === undefined
+        ? ({ status: "failed" } as const)
+        : ({ status: "ready", piDurableVersion: checkedVersion } as const);
+
+    const previous = {
+      generation: generation(target, previousStatus),
+      wasActive,
+      piDurableVersion: previousVersion,
+    };
+
+    expect(decidePreparation(previous, outcome, { activeLabel: undefined, epoch })).toEqual({
+      record: {
+        generation: generation(target, outcome.status),
+        wasActive,
+        piDurableVersion: checkedVersion,
+      },
+      epoch: epoch + 1,
+      effect:
+        previousStatus === outcome.status && previousVersion === checkedVersion
+          ? "no-op"
+          : "recorded",
     });
   });
 });

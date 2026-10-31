@@ -1,6 +1,6 @@
 export type { GenerationSubmissionResult } from "./generations.js";
 
-export { isOwnerPageRequest, ownerPageResponse } from "./page.js";
+export { ownerPageResponse } from "./page.js";
 
 export { routeOwnerApiRequest } from "./owner-api.js";
 

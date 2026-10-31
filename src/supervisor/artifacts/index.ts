@@ -12,7 +12,7 @@ import { ModuleMapStore } from "./store.js";
 import type { ModuleMapStorage, StoredModuleMapProblem } from "./store.js";
 import { buildModuleMap, type BuildWorkspaceHost, type HarnessBuildProblem } from "./build.js";
 import { SERVING_FACET_NAME } from "./facet-name.js";
-import type { ActiveGeneration } from "../generations/index.js";
+import type { ActiveGeneration } from "../generations.js";
 
 export type ModuleMapProblem = StoredModuleMapProblem | HarnessBuildProblem;
 

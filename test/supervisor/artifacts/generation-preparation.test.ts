@@ -6,8 +6,10 @@ import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,
   labelCandidate,
+  servedText,
+  servingFacetSource,
   storeModuleMap,
-  PI_DURABLE_VERSION_METHOD,
+  generationLabel,
 } from "../helpers.js";
 import { readGeneration } from "../generation-reads.js";
 
@@ -23,13 +25,7 @@ function storedModuleMap(harnessCommit: string): MainHarnessArtifactInput {
     modules: [
       {
         name: "main.js",
-        source: `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response("stored candidate serving"); }
-}
-`,
+        source: servingFacetSource("stored candidate serving"),
       },
     ],
   };
@@ -40,7 +36,7 @@ async function activate(control: DurableObjectStub<Supervisor>, label: number): 
 
   const activation = await control.controlGeneration({
     kind: "activate",
-    label,
+    label: generationLabel(label),
     observedEpoch: active.epoch,
   });
 
@@ -58,22 +54,21 @@ test("prepares and serves a generation from its stored module map", async () => 
   await storeModuleMap(control, storedModuleMap(commits.stored));
   const label = await labelCandidate(control, commits.stored);
 
-  const prepared = await control.prepareGeneration(label);
+  const prepared = await control.prepareGeneration(generationLabel(label));
 
   expect(prepared).toMatchObject({ ok: true, report: { stage: "ready" } });
   expect(await readGeneration(control, label)).toMatchObject({ label, status: "ready" });
 
   await activate(control, label);
-  const response = await control.fetch(new Request("https://cf-stumble.test/"));
 
-  expect(await response.text()).toBe("stored candidate serving");
+  expect(await servedText(control)).toBe("stored candidate serving");
 });
 
 test("leaves the active generation serving when the module map cannot be built", async () => {
   const control = await activeSupervisor("failed-build-keeps-active-generation");
   const label = await labelCandidate(control, commits.unstored);
 
-  const prepared = await control.prepareGeneration(label);
+  const prepared = await control.prepareGeneration(generationLabel(label));
 
   expect(prepared).toEqual({
     ok: false,
@@ -86,8 +81,7 @@ test("leaves the active generation serving when the module map cannot be built",
   ).toMatchObject({ label, status: "candidate" });
 
   const active = await control.getActiveGeneration();
-  const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));
 
   expect(active.generation).toMatchObject({ label: 0, harnessCommit: fixtureMainHarnessCommit });
-  expect(await response.text()).toBe("pong");
+  expect(await servedText(control)).toBe(fixtureMainHarnessCommit);
 });

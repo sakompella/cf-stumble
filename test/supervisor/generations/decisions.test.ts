@@ -1,15 +1,13 @@
 import { expect, test } from "vitest";
-
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import {
   decideActivation,
-  decidePreparationCheck,
-  type GenerationState,
-} from "../../../src/supervisor/generations/decisions.js";
-import {
+  decidePreparation,
   type Generation,
+  type GenerationRecord,
   type GenerationStatus,
-} from "../../../src/supervisor/generations/index.js";
+  type Selection,
+} from "../../../src/supervisor/generations.js";
 import { label } from "./fixtures.js";
 
 const COMMIT = testHarnessCommit("a".repeat(40));
@@ -18,68 +16,147 @@ function generation(labelValue: number, status: GenerationStatus): Generation {
   return { label: label(labelValue), harnessCommit: COMMIT, status };
 }
 
-function stateAt(epoch: number, activeLabel?: number): GenerationState {
+const SUPERVISOR_VERSION = "1.4.0";
+
+function stored(
+  labelValue: number,
+  status: GenerationStatus,
+  wasActive = false,
+  piDurableVersion: string | undefined = SUPERVISOR_VERSION,
+): GenerationRecord {
+  return { generation: generation(labelValue, status), wasActive, piDurableVersion };
+}
+
+function selectionAt(epoch: number, activeLabel?: number): Selection {
   return { activeLabel: activeLabel === undefined ? undefined : label(activeLabel), epoch };
 }
 
-test("activation rejects an unknown generation", () => {
-  expect(decideActivation(label(3), undefined, stateAt(5))).toEqual({
-    kind: "rejected",
-    problem: { code: "unknown-generation", label: 3 },
+function activate(labelValue: number, observedEpoch: number) {
+  return { kind: "activate", label: label(labelValue), observedEpoch } as const;
+}
+
+function rollback(labelValue: number, observedEpoch: number) {
+  return { kind: "rollback", label: label(labelValue), observedEpoch } as const;
+}
+
+test("activation refuses a stale epoch before it looks at the target", () => {
+  expect(decideActivation(activate(3, 4), undefined, selectionAt(5), SUPERVISOR_VERSION)).toEqual({
+    ok: false,
+    problem: { code: "stale-epoch" },
   });
 });
 
-test("activation rejects a generation that is not ready", () => {
-  expect(decideActivation(label(1), generation(1, "candidate"), stateAt(5))).toEqual({
-    kind: "rejected",
-    problem: { code: "not-ready", label: 1 },
+test("activation refuses an unknown generation", () => {
+  expect(decideActivation(activate(3, 5), undefined, selectionAt(5), SUPERVISOR_VERSION)).toEqual({
+    ok: false,
+    problem: { code: "unknown-generation" },
+  });
+});
+
+test("activation refuses a generation that is not ready", () => {
+  expect(
+    decideActivation(activate(1, 5), stored(1, "candidate"), selectionAt(5), SUPERVISOR_VERSION),
+  ).toEqual({
+    ok: false,
+    problem: { code: "not-ready" },
+  });
+});
+
+test("rollback refuses a ready generation that was never active", () => {
+  expect(
+    decideActivation(rollback(1, 5), stored(1, "ready"), selectionAt(5, 0), SUPERVISOR_VERSION),
+  ).toEqual({
+    ok: false,
+    problem: { code: "not-previously-active" },
   });
 });
 
 test("activating the already-active generation is a no-op that leaves the epoch alone", () => {
-  expect(decideActivation(label(1), generation(1, "ready"), stateAt(5, 1))).toEqual({
-    kind: "no-op",
-    generation: generation(1, "ready"),
-    epoch: 5,
-  });
-});
-
-test("activating a ready generation advances the epoch by one", () => {
-  expect(decideActivation(label(2), generation(2, "ready"), stateAt(5, 1))).toEqual({
-    kind: "activate",
-    generation: generation(2, "ready"),
-    nextEpoch: 6,
-  });
-});
-
-test("a check on a candidate records the resulting status and advances the epoch", () => {
   expect(
-    decidePreparationCheck(label(1), "passed", generation(1, "candidate"), stateAt(5)),
+    decideActivation(
+      activate(1, 5),
+      stored(1, "ready", true),
+      selectionAt(5, 1),
+      SUPERVISOR_VERSION,
+    ),
   ).toEqual({
-    kind: "record",
-    generation: generation(1, "ready"),
-    statusUpdate: "ready",
-    nextEpoch: 6,
-    effect: "recorded",
+    ok: true,
+    outcome: { kind: "activated", generation: generation(1, "ready"), epoch: 5, effect: "no-op" },
   });
 });
 
-test("a check confirming the recorded status is a no-op that still advances the epoch", () => {
-  expect(decidePreparationCheck(label(1), "passed", generation(1, "ready"), stateAt(5))).toEqual({
-    kind: "record",
-    generation: generation(1, "ready"),
-    statusUpdate: undefined,
-    nextEpoch: 6,
+test("rolling back to a previously active generation advances the epoch by one", () => {
+  expect(
+    decideActivation(
+      rollback(0, 5),
+      stored(0, "ready", true),
+      selectionAt(5, 1),
+      SUPERVISOR_VERSION,
+    ),
+  ).toEqual({
+    ok: true,
+    outcome: {
+      kind: "rolled-back",
+      generation: generation(0, "ready"),
+      epoch: 6,
+      effect: "activated",
+    },
+  });
+});
+
+test("activation and rollback refuse a generation checked under another Pi Durable version", () => {
+  const checkedElsewhere = stored(0, "ready", true, "1.3.9");
+
+  for (const command of [activate(0, 5), rollback(0, 5)]) {
+    expect(
+      decideActivation(command, checkedElsewhere, selectionAt(5, 1), SUPERVISOR_VERSION),
+    ).toEqual({ ok: false, problem: { code: "pi-durable-version-mismatch" } });
+  }
+});
+
+test("activation refuses a generation with no recorded Pi Durable version", () => {
+  expect(
+    decideActivation(
+      activate(0, 5),
+      { ...stored(0, "ready", true), piDurableVersion: undefined },
+      selectionAt(5, 1),
+      SUPERVISOR_VERSION,
+    ),
+  ).toEqual({ ok: false, problem: { code: "pi-durable-version-mismatch" } });
+});
+
+const passed = { status: "ready", piDurableVersion: SUPERVISOR_VERSION } as const;
+
+test("a check on a candidate records the resulting status and version and advances the epoch", () => {
+  expect(
+    decidePreparation(
+      { ...stored(1, "candidate"), piDurableVersion: undefined },
+      passed,
+      selectionAt(5),
+    ),
+  ).toEqual({ record: stored(1, "ready"), epoch: 6, effect: "recorded" });
+});
+
+test("a check confirming the recorded status and version is a no-op that still advances the epoch", () => {
+  expect(decidePreparation(stored(1, "ready"), passed, selectionAt(5))).toEqual({
+    record: stored(1, "ready"),
+    epoch: 6,
     effect: "no-op",
   });
 });
 
-test("a check contradicting the recorded status replaces it", () => {
-  expect(decidePreparationCheck(label(1), "failed", generation(1, "ready"), stateAt(5))).toEqual({
-    kind: "record",
-    generation: generation(1, "failed"),
-    statusUpdate: "failed",
-    nextEpoch: 6,
+test("a passing check under a new Pi Durable version replaces the recorded version", () => {
+  expect(decidePreparation(stored(1, "ready", true, "1.3.9"), passed, selectionAt(5))).toEqual({
+    record: stored(1, "ready", true),
+    epoch: 6,
+    effect: "recorded",
+  });
+});
+
+test("a failed check replaces the recorded status and clears the version", () => {
+  expect(decidePreparation(stored(1, "ready"), { status: "failed" }, selectionAt(5))).toEqual({
+    record: { ...stored(1, "failed"), piDurableVersion: undefined },
+    epoch: 6,
     effect: "recorded",
   });
 });

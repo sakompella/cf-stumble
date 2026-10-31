@@ -36,15 +36,9 @@ function ownerRequest(request: Request, env: Cloudflare.Env): Effect.Effect<Resp
     return Effect.succeed(page);
   }
 
-  const supervisor = env.SUPERVISOR.getByName(SUPERVISOR_NAME);
-
-  if (pathname.startsWith("/api/")) {
-    return routeOwnerApiRequest(request, supervisor).pipe(
-      Effect.map((response) => noStore(response)),
-    );
-  }
-
-  return Effect.promise(() => supervisor.fetch(request));
+  return routeOwnerApiRequest(request, env.SUPERVISOR.getByName(SUPERVISOR_NAME)).pipe(
+    Effect.map((response) => noStore(response)),
+  );
 }
 
 export default {

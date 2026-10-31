@@ -32,14 +32,6 @@ export class MainFacet
 {
   #session: Promise<Session> | undefined;
 
-  override fetch(request: Request): Promise<Response> {
-    return Promise.resolve(
-      new URL(request.url).pathname === "/"
-        ? new Response("ready")
-        : new Response("Not found", { status: 404 }),
-    );
-  }
-
   piDurableVersion(): string {
     return PI_DURABLE_VERSION;
   }

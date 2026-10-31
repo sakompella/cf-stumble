@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
+import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
 import { afterEach, expect, test, vi } from "vitest";
-import { GenerationControl } from "../../src/supervisor/control/index.js";
-import { Generations } from "../../src/supervisor/generations/index.js";
+import { Generations } from "../../src/supervisor/generations.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 
@@ -41,18 +41,21 @@ afterEach(async () => {
 
 test("a submission whose epoch write fails raises and labels nothing", async () => {
   const outcome = await runInDurableObject(supervisor("submit-rolls-back"), (_instance, state) => {
-    const generations = new Generations(state.storage);
-    const control = new GenerationControl(generations);
+    const generations = new Generations(state.storage, PI_DURABLE_VERSION);
 
     refuseStatements(state.storage, "UPDATE generation_state SET epoch");
 
     const raised = raises(() => {
-      control.execute({ kind: "submit-candidate", harnessCommit: commit });
+      generations.submit(testHarnessCommit(commit));
     });
 
     vi.restoreAllMocks();
 
-    return { raised, labeled: generations.all().length, epoch: generations.active().epoch };
+    const labeled = state.storage.sql
+      .exec<{ count: number }>("SELECT COUNT(*) AS count FROM generations")
+      .one().count;
+
+    return { raised, labeled, epoch: generations.active().epoch };
   });
 
   expect(outcome).toEqual({ raised: true, labeled: 0, epoch: 0 });
@@ -60,18 +63,17 @@ test("a submission whose epoch write fails raises and labels nothing", async () 
 
 test("a preparation check whose status write fails raises and changes nothing", async () => {
   const outcome = await runInDurableObject(supervisor("check-rolls-back"), (_instance, state) => {
-    const generations = new Generations(state.storage);
+    const generations = new Generations(state.storage, PI_DURABLE_VERSION);
 
-    const labeled = generations.transaction(() =>
-      generations.labelInTransaction(testHarnessCommit(commit)),
-    );
-
-    const label = labeled.generation.label;
+    const { label } = generations.submit(testHarnessCommit(commit)).generation;
 
     refuseStatements(state.storage, "UPDATE generations SET status");
 
     const raised = raises(() => {
-      generations.recordPreparationCheck(label, "passed");
+      generations.recordPreparation(label, {
+        status: "ready",
+        piDurableVersion: PI_DURABLE_VERSION,
+      });
     });
 
     vi.restoreAllMocks();

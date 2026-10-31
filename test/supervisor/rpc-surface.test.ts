@@ -2,7 +2,13 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { artifact, prepareWithModuleMap } from "./helpers.js";
+import {
+  artifact,
+  prepareWithModuleMap,
+  servedText,
+  generationLabel,
+  testHarnessCommit,
+} from "./helpers.js";
 
 const deadlineCommit = "cafe456789abcdef0123456789abcdef01234567";
 
@@ -17,7 +23,7 @@ afterEach(async () => {
 test("the Supervisor stub type offers controlGeneration and no raw generation mutation RPC", () => {
   const control = supervisor("control-generation-rpc-type");
   expectTypeOf(control).not.toHaveProperty("labelGeneration");
-  expectTypeOf(control).not.toHaveProperty("recordPreparationCheck");
+  expectTypeOf(control).not.toHaveProperty("recordPreparation");
   expectTypeOf(control).not.toHaveProperty("activateGeneration");
   expectTypeOf(control).not.toHaveProperty("checkGenerationStartup");
   expectTypeOf(control).toHaveProperty("controlGeneration");
@@ -26,24 +32,17 @@ test("the Supervisor stub type offers controlGeneration and no raw generation mu
 test("startup checking returns plain RPC values", async () => {
   const control = supervisor("plain-startup-check-result");
 
-  const submission = await control.controlGeneration({
-    kind: "submit-candidate",
-    harnessCommit: deadlineCommit,
-  });
-
-  if (!submission.ok || submission.outcome.kind !== "candidate-submitted") {
-    throw new Error("a valid candidate submission must succeed");
-  }
+  const submission = await control.submitGeneration(testHarnessCommit(deadlineCommit));
 
   const result = await prepareWithModuleMap(
     control,
-    submission.outcome.generation.label,
+    submission.generation.label,
     artifact(
       deadlineCommit,
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  fetch() { return new Promise(() => {}); }
+  piDurableVersion() { return new Promise(() => {}); }
 }
 `,
     ),
@@ -52,7 +51,7 @@ export class MainFacet extends DurableObject {
 
   expect(result).toMatchObject({
     ok: true,
-    report: { stage: "deadline-expired", reason: "response headers exceeded the deadline" },
+    report: { stage: "deadline-expired", reason: "the Pi Durable version exceeded the deadline" },
   });
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(result).not.toHaveProperty("status");
@@ -71,18 +70,11 @@ test("the failure arms of startup checking return plain RPC values", async () =>
   const control = supervisor("plain-startup-check-failures");
   const unstoredCommit = "cafe456789abcdef0123456789abcdef01234568";
 
-  const submission = await control.controlGeneration({
-    kind: "submit-candidate",
-    harnessCommit: unstoredCommit,
-  });
-
-  if (!submission.ok) {
-    throw new Error("a valid candidate submission must succeed");
-  }
+  const submission = await control.submitGeneration(testHarnessCommit(unstoredCommit));
 
   const failures = [
-    await control.prepareGeneration(999),
-    await control.prepareGeneration(submission.outcome.generation.label),
+    await control.prepareGeneration(generationLabel(999)),
+    await control.prepareGeneration(submission.generation.label),
   ];
 
   expect(failures).toStrictEqual([
@@ -92,11 +84,15 @@ test("the failure arms of startup checking return plain RPC values", async () =>
   expect(failures).toStrictEqual(structuredClone(failures));
 });
 
-test("the failure arms of control, conversations, and relay return plain values", async () => {
+test("the failure arms of control and conversations return plain values", async () => {
   const control = supervisor("plain-control-failures");
 
   const failures = [
-    await control.controlGeneration({ kind: "activate", label: 0, observedEpoch: 1 }),
+    await control.controlGeneration({
+      kind: "activate",
+      label: generationLabel(0),
+      observedEpoch: 1,
+    }),
     await control.submitProjectMessage("not-a-project", "hello", "r1"),
   ];
 
@@ -105,12 +101,5 @@ test("the failure arms of control, conversations, and relay return plain values"
     { ok: false, problem: { code: "unknown-project-id" } },
   ]);
   expect(failures).toStrictEqual(structuredClone(failures));
-
-  const relayed = await control.fetch("https://supervisor.invalid/");
-
-  expect(relayed.status).toBe(503);
-  expect(await relayed.json()).toStrictEqual({
-    ok: false,
-    problem: { code: "no-active-generation" },
-  });
+  expect(await servedText(control)).toBe("refused: no-active-generation");
 });

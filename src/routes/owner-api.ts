@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
-import type { ActiveGeneration } from "../supervisor/generations/index.js";
+import type { ActiveGeneration } from "../supervisor/generations.js";
 import {
   handleGenerationControl,
   handleGenerationSubmission,

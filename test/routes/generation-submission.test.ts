@@ -1,8 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { parseHarnessCommit } from "../../src/harness-commit.js";
-import type { GenerationCommand } from "../../src/supervisor/control/index.js";
-import type { Generation, GenerationStatus } from "../../src/supervisor/generations/index.js";
-import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
+import type { HarnessCommit } from "../../src/harness-commit.js";
+import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
+import { testHarnessCommit } from "../harness-commit-fixtures.js";
+import { label as generationLabel } from "../supervisor/generations/fixtures.js";
 import type { OwnerApiSupervisor } from "../../src/routes/index.js";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
@@ -14,14 +14,7 @@ afterEach(() => {
 const harnessCommit = "0123456789abcdef0123456789abcdef01234567";
 
 function candidate(status: GenerationStatus): Generation {
-  const label = parseGenerationLabel(1);
-  const commit = parseHarnessCommit(harnessCommit);
-
-  if (label === undefined || commit === undefined) {
-    throw new Error("test fixture must contain a valid label and harness commit");
-  }
-
-  return { label, harnessCommit: commit, status };
+  return { label: generationLabel(1), harnessCommit: testHarnessCommit(harnessCommit), status };
 }
 
 function submitRequest(body: string): Request {
@@ -33,16 +26,16 @@ function submissionBody(commit: string = harnessCommit): string {
 }
 
 const labeled = {
-  ok: true,
-  outcome: { kind: "candidate-submitted", generation: candidate("candidate"), epoch: 4 },
+  kind: "candidate-submitted",
+  generation: candidate("candidate"),
+  epoch: 4,
 } as const;
 
 const readyCheck = {
   ok: true,
   report: {
     stage: "ready",
-    reason: "response body completed in 5 bytes",
-    status: 200,
+    reason: "the generation runs Pi Durable 1.4.0",
     generation: candidate("ready"),
     effect: "recorded",
   },
@@ -59,8 +52,7 @@ const expectedLabeledAndPrepared = {
     ok: true,
     report: {
       stage: "ready",
-      reason: "response body completed in 5 bytes",
-      status: 200,
+      reason: "the generation runs Pi Durable 1.4.0",
       generation: { label: 1, harnessCommit, status: "ready" },
       effect: "recorded",
     },
@@ -69,16 +61,16 @@ const expectedLabeledAndPrepared = {
 
 type RecordedSubmission = {
   readonly steps: string[];
-  readonly received: GenerationCommand[];
+  readonly received: HarnessCommit[];
   readonly preparedLabels: number[];
   submissions: number;
 };
 
 function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
   return supervisor({
-    controlGeneration(command) {
-      record.steps.push("control");
-      record.received.push(command);
+    submitGeneration(submitted) {
+      record.steps.push("submit");
+      record.received.push(submitted);
       record.submissions += 1;
 
       return Promise.resolve(labeled);
@@ -105,9 +97,9 @@ test("labels the commit directly, then prepares that label", async () => {
     recordingSupervisor(record),
   );
 
-  expect(record.received).toEqual([{ kind: "submit-candidate", harnessCommit }]);
+  expect(record.received).toEqual([harnessCommit]);
   expect(record.steps, "the label must exist before the candidate is prepared").toEqual([
-    "control",
+    "submit",
     "prepare",
   ]);
   expect(record.preparedLabels).toEqual([1]);
@@ -120,16 +112,15 @@ test("returns a failed startup check as the recorded preparation result", async 
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
-      controlGeneration() {
+      submitGeneration() {
         return Promise.resolve(labeled);
       },
       prepareGeneration() {
         return Promise.resolve({
           ok: true,
           report: {
-            stage: "response-rejected",
-            reason: "response status was 500",
-            status: 500,
+            stage: "version-mismatch",
+            reason: "the generation runs Pi Durable 0.0.1; this Supervisor stores 1.4.0",
             generation: candidate("failed"),
             effect: "recorded",
           },
@@ -141,7 +132,7 @@ test("returns a failed startup check as the recorded preparation result", async 
   expect(response.status, "a checked candidate that fails is a decision, not a fault").toBe(200);
   await expect(response.json()).resolves.toMatchObject({
     ok: true,
-    preparation: { ok: true, report: { stage: "response-rejected", effect: "recorded" } },
+    preparation: { ok: true, report: { stage: "version-mismatch", effect: "recorded" } },
   });
 });
 
@@ -149,7 +140,7 @@ test("returns a build failure as a preparation problem rather than a transport e
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
-      controlGeneration() {
+      submitGeneration() {
         return Promise.resolve(labeled);
       },
       prepareGeneration() {
@@ -180,7 +171,7 @@ test("returns a failed build step's output tail to the owner and writes none of 
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
-      controlGeneration() {
+      submitGeneration() {
         return Promise.resolve(labeled);
       },
       prepareGeneration() {
@@ -205,31 +196,6 @@ test("returns a failed build step's output tail to the owner and writes none of 
   expect(everythingLogged()).not.toContain("PRIVATE-COMPILER-OUTPUT");
 });
 
-test("prepares nothing when the control operation rejects the submission", async () => {
-  let prepared = false;
-
-  const response = await ownerApiResponse(
-    submitRequest(submissionBody()),
-    supervisor({
-      controlGeneration() {
-        return Promise.resolve({ ok: false, problem: { code: "invalid-harness-commit" } });
-      },
-      prepareGeneration() {
-        prepared = true;
-
-        return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label: 1 } });
-      },
-    }),
-  );
-
-  expect(prepared, "an unlabeled commit has nothing to prepare").toBe(false);
-  expect(response.status).toBe(400);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    problem: { code: "invalid-harness-commit" },
-  });
-});
-
 const malformedBodies: readonly (readonly [string, string])[] = [
   ["unparsable JSON", '{"harnessCommit":'],
   ["a JSON string", '"submit"'],
@@ -251,7 +217,7 @@ test.each(malformedBodies)(
     const response = await ownerApiResponse(
       submitRequest(body),
       supervisor({
-        controlGeneration() {
+        submitGeneration() {
           invoked = true;
 
           return Promise.resolve(labeled);
@@ -277,7 +243,7 @@ test("reports a labeling failure without echoing the internal error", async () =
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
-      controlGeneration() {
+      submitGeneration() {
         return Promise.reject(new Error("Bearer token-abc leaked from SQLite"));
       },
     }),
@@ -293,7 +259,7 @@ test("reports a preparation failure without echoing the internal error", async (
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
     supervisor({
-      controlGeneration() {
+      submitGeneration() {
         return Promise.resolve(labeled);
       },
       prepareGeneration() {
