@@ -1,4 +1,7 @@
-import type { WorkspaceResult } from "../../src/workspace/decisions.js";
+import type {
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
+} from "../../src/workspace/decisions.js";
 import type { ProjectProvisionRequest } from "../../src/workspace/project-provision.js";
 import type { ProvisionWorkspaceHost } from "../../src/workspace/provisioning.js";
 
@@ -11,7 +14,7 @@ export class FakeProvisionHost implements ProvisionWorkspaceHost {
     this.steps.push("clone");
   }
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
     this.record(request);
 
     return Promise.resolve({
@@ -20,7 +23,7 @@ export class FakeProvisionHost implements ProvisionWorkspaceHost {
     });
   }
 
-  ensureManagedInstructions(): Promise<WorkspaceResult> {
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     this.steps.push("instructions");
 
     return Promise.resolve({ ok: true, result: { kind: "written" } });
@@ -44,7 +47,7 @@ export function delayedProvisionHost(): DelayedProvision {
   const host = new (class extends FakeProvisionHost {
     calls = 0;
 
-    override provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+    override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
       this.calls += 1;
 
       if (this.calls === 1) {
@@ -75,7 +78,7 @@ export function delayedProvisionHost(): DelayedProvision {
 }
 
 export class NeverSettlingProvisionHost extends FakeProvisionHost {
-  override provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
     this.record(request);
 
     return new Promise(() => {});
@@ -85,7 +88,7 @@ export class NeverSettlingProvisionHost extends FakeProvisionHost {
 export class LostFirstProvisionHost extends FakeProvisionHost {
   calls = 0;
 
-  override provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  override provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
     this.calls += 1;
 
     if (this.calls === 1) {

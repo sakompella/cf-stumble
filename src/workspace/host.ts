@@ -25,7 +25,8 @@ import {
   type HarnessBuildRequest,
   type ProjectProvisionRequest,
   type ProjectRemovalRequest,
-  type WorkspaceResult,
+  type InstructionsWriteResult,
+  type WorkspaceCommandResult,
 } from "./workspace-surfaces.js";
 
 const CHANGE_REFUSED = { ok: false, error: { code: "workspace-busy" } } as const;
@@ -69,19 +70,19 @@ export class WorkspaceHost extends DurableObject<WorkspaceHostEnv> {
     return workspaceSurfaces(this.#platform.workspace, this.env.HARNESS_REPOSITORY_URL);
   }
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () => this.#surfaces().build(request));
   }
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () => this.#surfaces().provision(request));
   }
 
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceResult> {
+  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () => this.#surfaces().removeProject(request));
   }
 
-  ensureManagedInstructions(): Promise<WorkspaceResult> {
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     return this.#unlessResetting(CHANGE_REFUSED, () =>
       this.#surfaces().ensureManagedInstructions(),
     );

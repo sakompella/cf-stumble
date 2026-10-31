@@ -9,7 +9,7 @@ import {
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
 import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
-import type { WorkspaceResult } from "../../src/workspace/decisions.js";
+import type { WorkspaceCommandResult } from "../../src/workspace/decisions.js";
 
 const tick = () =>
   new Promise<void>((resolve) => {
@@ -22,7 +22,7 @@ test("an interrupted plan keeps the exclusion until its RPC settles", async () =
 
   const host: ProvisionWorkspaceHost = {
     provision: () =>
-      new Promise<WorkspaceResult>((resolve) => {
+      new Promise<WorkspaceCommandResult>((resolve) => {
         rpc.settle = () => {
           resolve({
             ok: true,

@@ -8,14 +8,17 @@ import {
   type ProvisionWorkspaceHost,
 } from "../../src/workspace/provisioning.js";
 import { WORKSPACE_RPC_TIMEOUT_MS } from "../../src/workspace-command-timeout.js";
-import type { WorkspaceResult } from "../../src/workspace/decisions.js";
+import type {
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
+} from "../../src/workspace/decisions.js";
 import { runToResult } from "./workspace-results.js";
 
 class AbortAwareHost implements ProvisionWorkspaceHost {
   readonly steps: string[] = [];
   controller: AbortController | undefined;
 
-  provision(): Promise<WorkspaceResult> {
+  provision(): Promise<WorkspaceCommandResult> {
     this.steps.push("clone");
     this.controller?.abort();
 
@@ -25,7 +28,7 @@ class AbortAwareHost implements ProvisionWorkspaceHost {
     });
   }
 
-  ensureManagedInstructions(): Promise<WorkspaceResult> {
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     this.steps.push("instructions");
 
     return Promise.resolve({ ok: true, result: { kind: "written" } });
@@ -55,7 +58,7 @@ test("bounds a running provisioning RPC after the turn aborts", async () => {
 
   const host: ProvisionWorkspaceHost = {
     provision: (request) => {
-      return new Promise<WorkspaceResult>(() => {
+      return new Promise<WorkspaceCommandResult>(() => {
         void request;
       });
     },

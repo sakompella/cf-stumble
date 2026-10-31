@@ -8,10 +8,10 @@ import { HARNESS_BUILD_STEP_NAMES } from "../../harness-build.js";
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../harness-build.js";
 import type { HarnessCommit } from "../../harness-commit.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../../workspace-command-timeout.js";
-import type { CommandOutput, WorkspaceResult } from "../../workspace/index.js";
+import type { CommandOutput, WorkspaceCommandResult } from "../../workspace/index.js";
 
 export type BuildWorkspaceHost = Readonly<{
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
+  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult>;
 }>;
 
 export type BuildWorkspaceNamespace = Readonly<{
@@ -71,10 +71,6 @@ async function command(
 
   if (!result.ok) {
     throw new Error(`the build workspace refused ${label}: ${result.error.code}`);
-  }
-
-  if (result.result.kind !== "command") {
-    throw new Error(`${label} returned ${result.result.kind}, not a command`);
   }
 
   const { stdout, stderr, exitCode } = result.result;

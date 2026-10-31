@@ -5,7 +5,11 @@ import type { HarnessBuildRequest } from "../harness-build.js";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { Project } from "../project-catalog.js";
 import { boundedRpc, WORKSPACE_RPC_TIMEOUT_MS } from "../workspace-command-timeout.js";
-import type { WorkspaceResult } from "./decisions.js";
+import type {
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
+  WorkspaceFailure,
+} from "./decisions.js";
 import type { ProjectProvisionRequest } from "./project-provision.js";
 import { provisionInWorkspace } from "./provision-exclusion.js";
 
@@ -18,17 +22,17 @@ export class ProvisionUnavailable extends Data.TaggedError("ProvisionUnavailable
 type ProvisionProblem = ProvisionFailed | ProvisionUnavailable;
 
 type ManagedInstructionsWorkspaceHost = Readonly<{
-  ensureManagedInstructions(): Promise<WorkspaceResult>;
+  ensureManagedInstructions(): Promise<InstructionsWriteResult>;
 }>;
 
 export type ProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
   Readonly<{
-    provision(request: ProjectProvisionRequest): Promise<WorkspaceResult>;
+    provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult>;
   }>;
 
 export type HarnessProvisionWorkspaceHost = ManagedInstructionsWorkspaceHost &
   Readonly<{
-    build(request: HarnessBuildRequest): Promise<WorkspaceResult>;
+    build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult>;
   }>;
 
 export type ProvisionWorkspaceNamespace = Readonly<{
@@ -39,13 +43,11 @@ export type HarnessProvisionWorkspaceNamespace = Readonly<{
   getByName(name: string): HarnessProvisionWorkspaceHost;
 }>;
 
-type HostSuccess = Extract<WorkspaceResult, { ok: true }>["result"];
-
-function hostStep(
+function hostStep<R>(
   context: string,
   signal: AbortSignal | undefined,
-  call: () => Promise<WorkspaceResult>,
-): Effect.Effect<HostSuccess, ProvisionUnavailable> {
+  call: () => Promise<Readonly<{ ok: true; result: R }> | WorkspaceFailure>,
+): Effect.Effect<R, ProvisionUnavailable> {
   return Effect.gen(function* () {
     if (signal !== undefined && signal.aborted) return yield* new ProvisionUnavailable();
 
@@ -68,16 +70,12 @@ function hostStep(
 function commandStep(
   context: string,
   signal: AbortSignal | undefined,
-  call: () => Promise<WorkspaceResult>,
+  call: () => Promise<WorkspaceCommandResult>,
 ): Effect.Effect<void, ProvisionProblem> {
   return hostStep(context, signal, call).pipe(
-    Effect.flatMap((result): Effect.Effect<void, ProvisionProblem> => {
-      if (result.kind !== "command") return Effect.fail(new ProvisionUnavailable());
-
-      return result.exitCode === 0
-        ? Effect.void
-        : Effect.fail(new ProvisionFailed({ exitCode: result.exitCode }));
-    }),
+    Effect.flatMap(({ exitCode }) =>
+      exitCode === 0 ? Effect.void : Effect.fail(new ProvisionFailed({ exitCode })),
+    ),
   );
 }
 
@@ -86,11 +84,7 @@ function instructionsStep(
   host: ManagedInstructionsWorkspaceHost,
   signal: AbortSignal | undefined,
 ): Effect.Effect<void, ProvisionUnavailable> {
-  return hostStep(context, signal, () => host.ensureManagedInstructions()).pipe(
-    Effect.flatMap((result): Effect.Effect<void, ProvisionUnavailable> =>
-      result.kind === "written" ? Effect.void : Effect.fail(new ProvisionUnavailable()),
-    ),
-  );
+  return Effect.asVoid(hostStep(context, signal, () => host.ensureManagedInstructions()));
 }
 
 export function provisionProjectWorkspace(

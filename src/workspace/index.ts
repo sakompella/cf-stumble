@@ -1,4 +1,8 @@
-export { type WorkspacePlan, type WorkspaceResult } from "./decisions.js";
+export {
+  type InstructionsWriteResult,
+  type WorkspaceCommandResult,
+  type WorkspacePlan,
+} from "./decisions.js";
 
 export {
   executeHarnessBuildRequest,

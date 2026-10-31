@@ -5,7 +5,7 @@ import { HARNESS_PROJECT_ID } from "../selectable-projects.js";
 import { shellQuote } from "../shell-quote.js";
 import { projectDirectory } from "../workspace-layout.js";
 import { holdProvisionLock, projectProvisionLockPath } from "../project-provision.js";
-import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
+import type { WorkspaceFailure, WorkspacePlan, WorkspaceCommandResult } from "./decisions.js";
 import type { WorkspaceEffects, WorkspaceFault } from "./operations.js";
 
 export type ProjectRemovalRequest = Readonly<{
@@ -70,7 +70,7 @@ export function removalIsDurable(
 }
 
 export type ProjectRemovalWorkspaceHost = Readonly<{
-  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceResult>;
+  removeProject(request: ProjectRemovalRequest): Promise<WorkspaceCommandResult>;
 }>;
 
 export type ProjectRemovalWorkspaceNamespace = Readonly<{

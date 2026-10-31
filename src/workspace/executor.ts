@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { isTimeoutFailure, logRedactedCause } from "../diagnostics.js";
-import type { WorkspaceFailure, WorkspacePlan, WorkspaceResult } from "./decisions.js";
+import type { WorkspaceFailure, WorkspacePlan, WorkspaceCommandResult } from "./decisions.js";
 import { parseHarnessBuildRequest, planHarnessBuildRequest } from "./harness-build.js";
 import {
   cloneMarkersAreDurable,
@@ -55,9 +55,9 @@ export function runPlannedCommand(
 function executePlan(
   operations: WorkspaceEffects,
   plan: WorkspacePlan,
-): Effect.Effect<WorkspaceResult, WorkspaceFault> {
+): Effect.Effect<WorkspaceCommandResult, WorkspaceFault> {
   return runPlannedCommand(operations, plan).pipe(
-    Effect.map((output): WorkspaceResult => ({
+    Effect.map((output): WorkspaceCommandResult => ({
       ok: true,
       result: { kind: "command", ...cloneCommandOutput(output) },
     })),
@@ -71,8 +71,10 @@ function cloneCommandOutput(output: CommandOutput): CommandOutput {
 function answerDurableFailures(
   context: string,
   unavailableLabel: (cause: unknown) => string,
-): (work: Effect.Effect<WorkspaceResult, WorkspaceFault>) => Effect.Effect<WorkspaceResult> {
-  return answerFailures<WorkspaceResult>((cause) => {
+): (
+  work: Effect.Effect<WorkspaceCommandResult, WorkspaceFault>,
+) => Effect.Effect<WorkspaceCommandResult> {
+  return answerFailures<WorkspaceCommandResult>((cause) => {
     if (cause instanceof WorkspaceSyncIncomplete) {
       logRedactedCause(`${context}: sync-incomplete`, cause);
 
@@ -95,7 +97,7 @@ export function executeHarnessBuildRequest(
     configuration: HarnessBuildConfiguration;
     request: HarnessBuildRequest;
   }>,
-): Effect.Effect<WorkspaceResult> {
+): Effect.Effect<WorkspaceCommandResult> {
   const parsed = parseHarnessBuildRequest(input.request);
 
   if ("ok" in parsed) return Effect.succeed(parsed);
@@ -106,7 +108,7 @@ export function executeHarnessBuildRequest(
       planHarnessBuildRequest(input.configuration, parsed),
     ),
   ).pipe(
-    answerFailures((cause): WorkspaceResult => {
+    answerFailures((cause): WorkspaceCommandResult => {
       logRedactedCause(
         `workspace.harness-build.${parsed.kind}: ${timeoutOrUnavailable(cause)}`,
         cause,
@@ -122,7 +124,7 @@ export function executeProjectProvisionRequest(
     operations: WorkspaceOperations;
     request: ProjectProvisionRequest;
   }>,
-): Effect.Effect<WorkspaceResult> {
+): Effect.Effect<WorkspaceCommandResult> {
   const parsed = parseProjectProvisionRequest(input.request);
 
   if ("ok" in parsed) return Effect.succeed(parsed);
@@ -145,7 +147,7 @@ export function executeProjectRemovalRequest(
     operations: WorkspaceOperations;
     request: ProjectRemovalRequest;
   }>,
-): Effect.Effect<WorkspaceResult> {
+): Effect.Effect<WorkspaceCommandResult> {
   const parsed = parseProjectRemovalRequest(input.request);
 
   if ("ok" in parsed) return Effect.succeed(parsed);

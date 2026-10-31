@@ -1,6 +1,6 @@
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
 import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
-import type { WorkspaceResult } from "../../../src/workspace/index.js";
+import type { WorkspaceCommandResult } from "../../../src/workspace/index.js";
 
 const builtModuleMapFile = JSON.stringify({
   entryModule: "main.js",
@@ -24,7 +24,7 @@ export class BuildHost implements BuildWorkspaceHost {
   readonly requests: HarnessBuildRequest[] = [];
   failing: HarnessBuildStepName | undefined;
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     this.requests.push(request);
     const failed = request.kind === "build-step" && request.step === this.failing;
     const stdout = request.kind === "build-output" ? builtModuleMapFile : "";
@@ -58,7 +58,7 @@ export class GatedBuildHost implements BuildWorkspaceHost {
     this.#release?.();
   }
 
-  async build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+  async build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     this.asked += 1;
     await this.#gate;
 

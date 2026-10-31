@@ -9,7 +9,8 @@ import {
   type ProjectProvisionRequest,
   type ProvisionWorkspaceHost,
   type WorkspacePlan,
-  type WorkspaceResult,
+  type InstructionsWriteResult,
+  type WorkspaceCommandResult,
 } from "../../src/workspace/index.js";
 import {
   provisionProjectWorkspace,
@@ -29,7 +30,7 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
   readonly steps: string[] = [];
   failingStep: "clone" | "instructions" | undefined;
 
-  provision(request: ProjectProvisionRequest): Promise<WorkspaceResult> {
+  provision(request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> {
     this.requests.push(request);
     this.steps.push("clone");
     const parsed = parseProjectProvisionRequest(request);
@@ -55,7 +56,7 @@ class FakeProvisionHost implements ProvisionWorkspaceHost {
     });
   }
 
-  ensureManagedInstructions(): Promise<WorkspaceResult> {
+  ensureManagedInstructions(): Promise<InstructionsWriteResult> {
     this.steps.push("instructions");
 
     return Promise.resolve(
@@ -194,14 +195,14 @@ test("reconciles again on a plain repeat, holding no memory of the last run", as
 
 test("keeps a refused or unreachable workspace one typed failure", async () => {
   const refusing = new FakeProvisionHost();
-  refusing.provision = (request: ProjectProvisionRequest): Promise<WorkspaceResult> => {
+  refusing.provision = (request: ProjectProvisionRequest): Promise<WorkspaceCommandResult> => {
     refusing.requests.push(request);
 
     return Promise.resolve({ ok: false, error: { code: "unknown-command" } });
   };
 
   const throwing = new FakeProvisionHost();
-  throwing.provision = (): Promise<WorkspaceResult> =>
+  throwing.provision = (): Promise<WorkspaceCommandResult> =>
     Promise.reject(new Error("fake workspace host failure"));
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -223,7 +224,7 @@ test("keeps a refused or unreachable workspace one typed failure", async () => {
 test("logs a redacted cause when the workspace provision RPC rejects", async () => {
   const throwing = new FakeProvisionHost();
   const secret = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-  throwing.provision = (): Promise<WorkspaceResult> =>
+  throwing.provision = (): Promise<WorkspaceCommandResult> =>
     Promise.reject(new Error(`clone failed ${secret} https://${secret}@github.com/sample/repo`));
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 

@@ -2,7 +2,7 @@ import type { Workspace } from "@cloudflare/computer";
 import type * as Effect from "effect/Effect";
 import { harnessBuildConfiguration, type HarnessBuildRequest } from "../harness-build.js";
 import { ComputerWorkspaceOperations } from "./computer-operations.js";
-import type { WorkspaceResult } from "./decisions.js";
+import type { InstructionsWriteResult, WorkspaceCommandResult } from "./decisions.js";
 import {
   executeHarnessBuildRequest,
   executeProjectProvisionRequest,
@@ -23,7 +23,8 @@ export type {
   HarnessBuildRequest,
   ProjectProvisionRequest,
   ProjectRemovalRequest,
-  WorkspaceResult,
+  InstructionsWriteResult,
+  WorkspaceCommandResult,
 };
 
 export function workspaceSurfaces(workspace: Workspace, harnessRepositoryUrl: string | undefined) {
@@ -31,15 +32,15 @@ export function workspaceSurfaces(workspace: Workspace, harnessRepositoryUrl: st
   const durable = () => new ComputerWorkspaceOperations(workspace, "require-complete");
 
   return {
-    build: (request: HarnessBuildRequest): Effect.Effect<WorkspaceResult> =>
+    build: (request: HarnessBuildRequest): Effect.Effect<WorkspaceCommandResult> =>
       executeHarnessBuildRequest({
         configuration: harnessBuildConfiguration(harnessRepositoryUrl),
         operations: lenient(),
         request,
       }),
-    provision: (request: ProjectProvisionRequest): Effect.Effect<WorkspaceResult> =>
+    provision: (request: ProjectProvisionRequest): Effect.Effect<WorkspaceCommandResult> =>
       executeProjectProvisionRequest({ operations: durable(), request }),
-    removeProject: (request: ProjectRemovalRequest): Effect.Effect<WorkspaceResult> =>
+    removeProject: (request: ProjectRemovalRequest): Effect.Effect<WorkspaceCommandResult> =>
       executeProjectRemovalRequest({ operations: durable(), request }),
     credential: (request: GitHubCredentialRequest): Effect.Effect<GitHubCredentialResult> =>
       executeGitHubCredentialRequest({
@@ -47,7 +48,7 @@ export function workspaceSurfaces(workspace: Workspace, harnessRepositoryUrl: st
         installOperations: durable(),
         request,
       }),
-    ensureManagedInstructions: (): Effect.Effect<WorkspaceResult> =>
+    ensureManagedInstructions: (): Effect.Effect<InstructionsWriteResult> =>
       ensureManagedInstructions(lenient()),
   };
 }

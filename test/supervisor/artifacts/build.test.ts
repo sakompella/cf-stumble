@@ -8,7 +8,7 @@ import { HARNESS_BUILD_STEP_NAMES } from "../../../src/harness-build.js";
 import type { HarnessBuildRequest, HarnessBuildStepName } from "../../../src/harness-build.js";
 import { buildModuleMap, encodeModuleMap } from "../../../src/supervisor/artifacts/index.js";
 import type { BuildWorkspaceHost } from "../../../src/supervisor/artifacts/index.js";
-import type { CommandOutput, WorkspaceResult } from "../../../src/workspace/index.js";
+import type { CommandOutput, WorkspaceCommandResult } from "../../../src/workspace/index.js";
 import { parsedArtifact } from "../../facet/fixture.js";
 
 const commit = testHarnessCommit("6000000000000000000000000000000000000001");
@@ -23,7 +23,7 @@ function moduleMapFile(modules: readonly Readonly<{ name: string; source: string
   return JSON.stringify({ entryModule: "main.js", modules });
 }
 
-function answered(output: CommandOutput): Promise<WorkspaceResult> {
+function answered(output: CommandOutput): Promise<WorkspaceCommandResult> {
   return Promise.resolve({ ok: true, result: { kind: "command", ...output } });
 }
 
@@ -32,7 +32,7 @@ class FakeBuildHost implements BuildWorkspaceHost {
   output: string | undefined = moduleMapFile([helperModule, entryModule]);
   answers: Partial<Record<HarnessBuildStepName, CommandOutput>> = {};
 
-  build(request: HarnessBuildRequest): Promise<WorkspaceResult> {
+  build(request: HarnessBuildRequest): Promise<WorkspaceCommandResult> {
     this.requests.push(request);
 
     if (request.kind === "build-output") {
