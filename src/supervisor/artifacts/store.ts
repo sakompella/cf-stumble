@@ -157,15 +157,15 @@ function assembled(manifest: ManifestRow, chunks: readonly ChunkRow[]): Uint8Arr
 }
 
 function decoded(bytes: Uint8Array, harnessCommit: HarnessCommit): StoredModuleMapResult {
-  let value: unknown;
+  let text: string;
 
   try {
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   } catch {
     return Result.fail({ code: "corrupt-artifact", harnessCommit });
   }
 
-  const parsed = MainHarnessArtifact.parse(value);
+  const parsed = MainHarnessArtifact.parseJson(text);
 
   if (Result.isFailure(parsed) || parsed.success.harnessCommit !== harnessCommit) {
     return Result.fail({ code: "corrupt-artifact", harnessCommit });
