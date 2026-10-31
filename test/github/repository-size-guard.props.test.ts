@@ -9,7 +9,6 @@ import {
   MAX_REPOSITORY_BLOB_COUNT,
   MAX_REPOSITORY_SIZE_KB,
   REPOSITORY_SIZE_VERDICT_FUNCTION,
-  repositorySizeReason,
   repositorySizeVerdictSource,
 } from "../../src/github/index.js";
 import { parseProjectCatalog, type Project } from "../../src/project-catalog.js";
@@ -180,7 +179,21 @@ function blobs(count: number, total: number): readonly Readonly<{ type: string; 
   }));
 }
 
-test("the in-workspace verdict agrees with the Supervisor's size policy", () => {
+function expectedVerdict(
+  measured: Readonly<{ sizeKb: number; blobCount: number; blobBytes: number; truncated: boolean }>,
+): string {
+  if (measured.truncated) return "tree-truncated";
+
+  if (measured.blobCount > MAX_REPOSITORY_BLOB_COUNT) return "too-many-files";
+
+  if (measured.blobBytes > MAX_REPOSITORY_BLOB_BYTES) return "working-tree-too-large";
+
+  if (measured.sizeKb > MAX_REPOSITORY_SIZE_KB) return "repository-too-large";
+
+  return "within-limits";
+}
+
+test("the in-workspace verdict follows the size policy", () => {
   hegel.test(
     (tc) => {
       const sizeKb = tc.draw(
@@ -211,7 +224,7 @@ test("the in-workspace verdict agrees with the Supervisor's size policy", () => 
         tree: answered({ truncated, tree: [{ type: "tree" }, ...blobs(blobCount, blobBytes)] }),
       });
 
-      expect(shell).toBe(repositorySizeReason({ sizeKb, blobCount, blobBytes, truncated }));
+      expect(shell).toBe(expectedVerdict({ sizeKb, blobCount, blobBytes, truncated }));
     },
     { testCases: 12 },
   );

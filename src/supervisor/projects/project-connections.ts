@@ -1,11 +1,7 @@
 import * as Effect from "effect/Effect";
 import { ConnectedProjects } from "./connected-projects.js";
 import { ProjectLifecycleQueue } from "./project-lifecycle-queue.js";
-import type {
-  GitHubConnection,
-  GitHubConnectionEnvironment,
-  GitHubConnectionStatus,
-} from "./github-connection.js";
+import type { GitHubConnection, GitHubConnectionStatus } from "./github-connection.js";
 import {
   canonicalRepositoryUrl,
   parseProjectId,
@@ -25,7 +21,6 @@ import {
   type ProjectRemovalWorkspaceNamespace,
 } from "../../workspace/index.js";
 import { removeProjectDirectories } from "./project-removal.js";
-import { repositorySizeGuard, type RepositorySizeGuard } from "./repository-size-guard.js";
 import { provisionOnUse } from "./provision-on-use.js";
 
 export type DisconnectRepositoryResult =
@@ -74,7 +69,6 @@ interface ProjectConnectionsInput {
     ProvisionWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace &
     ProjectRemovalWorkspaceNamespace;
-  readonly environment: Pick<GitHubConnectionEnvironment, "fallbackToken" | "fetcher">;
   readonly github: GitHubConnection;
 }
 
@@ -87,13 +81,11 @@ export class ProjectConnections {
     ProvisionWorkspaceNamespace &
     HarnessProvisionWorkspaceNamespace &
     ProjectRemovalWorkspaceNamespace;
-  private readonly sizeAllowed: RepositorySizeGuard;
 
   constructor(input: ProjectConnectionsInput) {
     this.projects = new ConnectedProjects(input.storage);
     this.workspaceName = input.workspaceName;
     this.namespace = input.namespace;
-    this.sizeAllowed = repositorySizeGuard(input.environment);
     this.github = input.github;
   }
 
@@ -113,13 +105,6 @@ export class ProjectConnections {
       if (canonical === undefined || projectId === undefined) {
         return this.refused(
           { code: "invalid-repository-url", detail: "" },
-          { state: "disconnected" },
-        );
-      }
-
-      if (!(yield* this.sizeAllowed(canonical))) {
-        return this.refused(
-          { code: "repository-too-large", detail: "" },
           { state: "disconnected" },
         );
       }

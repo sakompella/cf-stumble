@@ -33,7 +33,6 @@ function projectParts(storage: DurableObjectStorage, env: SupervisorEnv, workspa
     storage,
     workspaceName,
     namespace: env.WORKSPACE_HOST,
-    environment,
     github,
   });
 

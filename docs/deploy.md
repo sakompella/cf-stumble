@@ -147,7 +147,7 @@ The page checks the GitHub connection when it loads and when you press **Check a
 
 The sidebar also contains the harness project. It selects `/workspace/harness`, which is a Git clone of the harness repository. It is not a second connected repository or a separate workspace.
 
-A connection is refused when the repository is over the size limits in `docs/agents/design/github-connection.md`, "Connecting a repository". Set `GH_TOKEN` so the preflight can read private repositories.
+A connection is refused when the repository is over the size limits in `docs/agents/design/github-connection.md`, "Connecting a repository". The clone measures the repository inside the workspace, with the workspace's GitHub credential.
 
 To remove a connected project, send `POST /api/projects/{id}/disconnect`. The request refuses an unknown project, the harness, or any request while a run is active (`run-active`). Otherwise it drops the project's conversation pointer, then its catalog entry, then its workspace clone, and disconnecting loses any uncommitted work in that clone. The conversation itself stays in storage, unused. The clone removal is best-effort: it can fail after the catalog entry is already gone, leaving the project's files on disk with no project that owns them.
 

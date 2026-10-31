@@ -1,17 +1,15 @@
 import type { PublicRepositoryUrl } from "../project-catalog.js";
 import { shellQuote } from "../shell-quote.js";
-import {
-  MAX_REPOSITORY_BLOB_BYTES,
-  MAX_REPOSITORY_BLOB_COUNT,
-  MAX_REPOSITORY_SIZE_KB,
-  REPOSITORY_SIZE_TIMEOUT_MS,
-  REPOSITORY_TREE_MUST_BE_COMPLETE,
-  repositoryApiPath,
-} from "./repository-size.js";
+
+export const MAX_REPOSITORY_BLOB_COUNT = 3_000;
+
+export const MAX_REPOSITORY_BLOB_BYTES = 150_000_000;
+
+export const MAX_REPOSITORY_SIZE_KB = 5_000_000;
 
 export const REPOSITORY_SIZE_VERDICT_FUNCTION = "repository_size_verdict";
 
-const REQUEST_TIMEOUT_SECONDS = Math.ceil(REPOSITORY_SIZE_TIMEOUT_MS / 1_000);
+const REQUEST_TIMEOUT_SECONDS = 5;
 
 const REPOSITORY_FILTER = [
   'if (.size | type) == "number" and .size >= 0 and .size == (.size | floor)',
@@ -25,12 +23,21 @@ const TREE_FILTER = [
   'if (.tree | type) != "array" or (.truncated | type) != "boolean" then "unmeasured"',
   'else [.tree[] | select(type == "object" and .type == "blob") | .size] as $sizes',
   '| if ($sizes | all(type == "number" and . >= 0 and . == floor)) | not then "unmeasured"',
-  `elif ${String(REPOSITORY_TREE_MUST_BE_COMPLETE)} and .truncated then "tree-truncated"`,
+  'elif .truncated then "tree-truncated"',
   `elif ($sizes | length) > ${String(MAX_REPOSITORY_BLOB_COUNT)} then "too-many-files"`,
   `elif ($sizes | add // 0) > ${String(MAX_REPOSITORY_BLOB_BYTES)} then "working-tree-too-large"`,
   'else "measured" end',
   "end",
 ].join(" ");
+
+function repositoryApiPath(repositoryUrl: PublicRepositoryUrl): string | undefined {
+  const url = new URL(repositoryUrl);
+  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+
+  return url.hostname === "github.com" && segments.length === 2
+    ? `repos/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`
+    : undefined;
+}
 
 export function repositorySizeVerdictSource(repositoryUrl: PublicRepositoryUrl): string {
   const apiPath = repositoryApiPath(repositoryUrl);
