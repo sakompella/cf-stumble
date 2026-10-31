@@ -92,7 +92,8 @@ finding otherwise, and exits 1 on any finding or `unknown`.
 **Rule `ran-past-idle`.** Each `workspace` request allows the container to run from its start until
 its end plus the idle limit (`WORKSPACE_IDLE_STOP_MS`). A run of consecutive
 running buckets that exceeds that allowance by more than 10 minutes is a finding. Buckets newer
-than 10 minutes are still filling and do not count. The finding lists the routes and end times of
+than 10 minutes are still filling and do not count. The check mark names the window up to the last
+complete bucket, not up to now, and a window with nothing complete prints `unknown`. The finding lists the routes and end times of
 the last three requests before the run ended, which shows what kept the container awake.
 
 **Limits.** A run that holds the container after its request ended is covered only by the 10-minute slack. A stuck container shows up about 30

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BUCKET_MS,
+  formatReport,
   MINUTE_MS,
   runChecks,
   type CheckInput,
@@ -144,6 +145,28 @@ describe("route classes", () => {
       "/api/projects/connect@00:03Z",
       "/api/github/connection@00:02Z",
       "/api/projects@00:01Z",
+    ]);
+  });
+});
+
+describe("the window the check can see", () => {
+  it("is unknown, not fine, when usage lag leaves nothing complete to examine", () => {
+    const justNow = {
+      ...check([request(0)], runningBetween(0, 25), 25),
+      nowMs: START + 25 * MINUTE_MS,
+    };
+
+    const brief = { ...check([], runningBetween(0, 5), 5), nowMs: START + 8 * MINUTE_MS };
+
+    assert.deepEqual(rules(justNow), []);
+    assert.deepEqual(rules(brief), ["unknown"]);
+  });
+
+  it("is the part of the window the usage data has filled, and the green line says so", () => {
+    const recent = { ...check([], [], 120), nowMs: START + 125 * MINUTE_MS };
+
+    assert.deepEqual(formatReport(recent, runChecks(recent)), [
+      "✓ ops-check cf-stumble 2026-10-01T00:00Z..01:55Z",
     ]);
   });
 });

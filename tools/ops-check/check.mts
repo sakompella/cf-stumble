@@ -89,12 +89,15 @@ function describeCall(call: Invocation): string {
   return `${call.route}@${isoMinute(call.endMs).slice(11)}`;
 }
 
+function completeUntilMs(input: CheckInput): number {
+  return Math.min(input.window.toMs, input.nowMs - METRICS_LAG_MS);
+}
+
 function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] {
-  const { window, nowMs, idleLimitMs } = input;
+  const { window, idleLimitMs } = input;
   const { usage } = activity;
   const apiCalls = activity.invocations.filter((call) => call.route.startsWith("/api/"));
   const workspaceCalls = apiCalls.filter((call) => routeClass(call.route) === "workspace");
-  const completeUntilMs = Math.min(window.toMs, nowMs - METRICS_LAG_MS);
 
   const allowed = mergeSpans(
     workspaceCalls.map((call) => ({
@@ -108,7 +111,7 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
       (bucket) =>
         bucket.runningMinutes > 0 &&
         bucket.startMs + BUCKET_MS > window.fromMs &&
-        bucket.startMs + BUCKET_MS <= completeUntilMs,
+        bucket.startMs + BUCKET_MS <= completeUntilMs(input),
     )
     .toSorted((a, b) => a.startMs - b.startMs);
 
@@ -151,14 +154,25 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
 }
 
 export function runChecks(input: CheckInput): readonly Finding[] {
-  return input.activity.status === "ok"
-    ? ranPastIdle(input.activity.data, input)
-    : [{ rule: "unknown", detail: input.activity.reason, evidence: [] }];
+  if (input.activity.status !== "ok") {
+    return [{ rule: "unknown", detail: input.activity.reason, evidence: [] }];
+  }
+
+  if (completeUntilMs(input) <= input.window.fromMs) {
+    return [
+      {
+        rule: "unknown",
+        detail: `usage lags ${METRICS_LAG_MS / MINUTE_MS} min, so none of this window is complete yet; widen --since or wait`,
+        evidence: [],
+      },
+    ];
+  }
+
+  return ranPastIdle(input.activity.data, input);
 }
 
 export function formatReport(input: CheckInput, findings: readonly Finding[]): readonly string[] {
-  const { fromMs, toMs } = input.window;
-  const label = `${isoMinute(fromMs)}..${isoMinute(toMs).slice(11)}`;
+  const label = `${isoMinute(input.window.fromMs)}..${isoMinute(completeUntilMs(input)).slice(11)}`;
 
   return findings.length === 0
     ? [`✓ ops-check ${input.worker} ${label}`]
