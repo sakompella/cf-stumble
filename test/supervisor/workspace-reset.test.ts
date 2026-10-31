@@ -3,11 +3,9 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { GitHubConnectionStore } from "../../src/supervisor/projects/github-connection-store.js";
 import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
-import type {
-  CredentialWorkspaceHost,
-  GitHubCredentialResult,
-  WorkspaceResetResult,
-} from "../../src/workspace/index.js";
+import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
+import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
 import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { sampleProjectTwo } from "../project-fixtures.js";
 import { connectSampleProjects, submitCandidate } from "./helpers.js";

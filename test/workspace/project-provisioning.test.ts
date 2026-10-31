@@ -3,15 +3,14 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleProjectOne, sampleProjectTwo } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
+import { type WorkspaceCommandResult } from "../../src/workspace/index.js";
 import {
   parseProjectProvisionRequest,
   planProjectProvisionRequest,
   type ProjectProvisionRequest,
-  type ProvisionWorkspaceHost,
-  type WorkspacePlan,
-  type InstructionsWriteResult,
-  type WorkspaceCommandResult,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/project-provision.js";
+import type { ProvisionWorkspaceHost } from "../../src/workspace/provisioning.js";
+import type { WorkspacePlan, InstructionsWriteResult } from "../../src/workspace/decisions.js";
 import {
   provisionProjectWorkspace,
   ProvisionFailed,

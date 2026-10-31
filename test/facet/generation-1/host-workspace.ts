@@ -13,12 +13,9 @@ import {
 } from "node:fs";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import { createComputerEnv } from "../../../src/facet/generation-1/execution-env.js";
-import {
-  ProjectRpcTarget,
-  type BackendExecEvent,
-  type ExecBackend,
-  type ProjectFilesystemProvider,
-} from "../../../src/workspace/project/index.js";
+import { ProjectRpcTarget, type ExecBackend } from "../../../src/workspace/project/index.js";
+import type { BackendExecEvent } from "../../../src/workspace/project/exec-backend.js";
+import type { ProjectFilesystemProvider } from "../../../src/workspace/project/provider.js";
 import { WORKSPACE_ROOT } from "../../../src/workspace-layout.js";
 import { FakeProjectTransactions } from "../../workspace/project/fakes.js";
 

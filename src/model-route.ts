@@ -7,10 +7,6 @@ import { workersAiTurn } from "./model-route-stream.js";
 import type { WorkersAiBinding } from "./model-route-events.js";
 import { modelEventStream, type ModelTurn } from "./model-route-turn.js";
 
-export { parseRequest } from "./model-route-request.js";
-
-export { streamModelEvents } from "./model-route-stream.js";
-
 export type {
   ToolCall,
   AssistantMessage,
@@ -20,13 +16,7 @@ export type {
   ValidationFailure,
 } from "./model-route-request.js";
 
-export type {
-  ModelStreamEvent,
-  ModelStreamInference,
-  ModelUsage,
-  StreamingProviderPayload,
-  ToolCallDelta,
-} from "./model-route-events.js";
+export type { ModelStreamEvent, ModelUsage, ToolCallDelta } from "./model-route-events.js";
 
 type CredentialHolders = Readonly<{
   getByName(name: string): Readonly<{

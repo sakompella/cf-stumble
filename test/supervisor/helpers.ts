@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
-import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
+import { ConnectedProjects } from "../../src/supervisor/projects/connected-projects.js";
 import { sampleCatalog } from "../project-fixtures.js";
 import {
   fixtureMainHarnessArtifact,
@@ -9,7 +9,7 @@ import {
   parsedArtifact,
   servingFacetSource,
 } from "../facet/fixture.js";
-import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import { label as generationLabel, testHarnessCommit } from "./generations/fixtures.js";

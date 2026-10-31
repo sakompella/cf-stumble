@@ -1,7 +1,7 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
-import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../../src/facet/artifact.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,

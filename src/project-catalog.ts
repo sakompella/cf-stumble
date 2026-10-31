@@ -22,8 +22,6 @@ export type Project = Readonly<{
 
 export type ProjectCatalog = readonly Project[];
 
-export const EMPTY_PROJECT_CATALOG: ProjectCatalog = Object.freeze([]);
-
 export type ProjectConfiguration = Readonly<{
   id: string;
   displayName: string;
@@ -175,10 +173,7 @@ type ProjectResolution =
   | Readonly<{ ok: true; project: Project }>
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
-export function resolveProject(
-  projectId: string,
-  catalog: ProjectCatalog = EMPTY_PROJECT_CATALOG,
-): ProjectResolution {
+export function resolveProject(projectId: string, catalog: ProjectCatalog): ProjectResolution {
   const parsedProjectId = parseProjectId(projectId);
 
   if (parsedProjectId === undefined) {

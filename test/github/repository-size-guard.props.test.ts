@@ -5,12 +5,14 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import {
-  MAX_REPOSITORY_BLOB_BYTES,
-  MAX_REPOSITORY_BLOB_COUNT,
-  MAX_REPOSITORY_SIZE_KB,
   REPOSITORY_SIZE_VERDICT_FUNCTION,
   repositorySizeVerdictSource,
 } from "../../src/github/index.js";
+import {
+  MAX_REPOSITORY_BLOB_BYTES,
+  MAX_REPOSITORY_BLOB_COUNT,
+  MAX_REPOSITORY_SIZE_KB,
+} from "../../src/github/repository-size-guard.js";
 import { parseProjectCatalog, type Project } from "../../src/project-catalog.js";
 import {
   PROJECT_CLONE_SIZE_FAILURE_EXIT_CODE,

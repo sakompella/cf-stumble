@@ -9,12 +9,8 @@ import {
   sseLine,
 } from "./model-route-provider-stream.js";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
-import type { WorkersAiBinding } from "../src/model-route-events.js";
-import type {
-  ModelRouteRequest,
-  StreamingProviderPayload,
-  ValidationFailure,
-} from "../src/model-route.js";
+import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-events.js";
+import type { ModelRouteRequest, ValidationFailure } from "../src/model-route.js";
 
 const REQUIRED_MODEL = "@cf/zai-org/glm-5.3-flash";
 

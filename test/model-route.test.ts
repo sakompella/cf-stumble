@@ -1,12 +1,7 @@
 import * as Result from "effect/Result";
 import { expect, test } from "vitest";
-import { normalizeResponse } from "../src/model-route-stream.js";
-import {
-  parseRequest,
-  type AssistantMessage,
-  type ModelRouteRequest,
-  type ValidationFailure,
-} from "../src/model-route.js";
+import type { ModelRouteRequest, ValidationFailure } from "../src/model-route.js";
+import { parseRequest } from "../src/model-route-request.js";
 
 function rejected(reason: string): Result.Result<ModelRouteRequest, ValidationFailure> {
   return Result.fail({ ok: false, error: { code: "invalid-request", reason } });
@@ -87,27 +82,6 @@ test.each([
   { name: "an empty messages array", request: { messages: [] } },
 ])("rejects a request with $name", ({ request }) => {
   expect(parseRequest(request)).toEqual(rejected("messages must be a non-empty array"));
-});
-
-test("normalizes a plain text response", () => {
-  expect(normalizeResponse({ response: "Hello" })).toEqual({
-    role: "assistant",
-    content: "Hello",
-    tool_calls: [],
-  } satisfies AssistantMessage);
-});
-
-test("normalizes a response with tool calls", () => {
-  expect(
-    normalizeResponse({
-      response: null,
-      tool_calls: [{ id: "c1", function: { name: "read", arguments: '{"p":"a"}' } }],
-    }),
-  ).toEqual({
-    role: "assistant",
-    content: null,
-    tool_calls: [{ id: "c1", function: { name: "read", arguments: '{"p":"a"}' } }],
-  } satisfies AssistantMessage);
 });
 
 test("parses a request with all four message roles and a tool to the same request", () => {

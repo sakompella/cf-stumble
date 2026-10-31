@@ -2,7 +2,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { Scene } from "foldkit/test";
 import { expect, test } from "vitest";
-import { OWNER_PAGE_ELEMENT_IDS, OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
+import { OWNER_PAGE_IDS as ID } from "../../../src/page/element-ids.js";
 import { Message } from "../../../src/page/client/message.js";
 import { FollowTranscript } from "../../../src/page/client/mount.js";
 import type { ChatGPTConnection, Model } from "../../../src/page/client/model.js";
@@ -95,7 +95,7 @@ test("the page renders every stable element id, and none twice", () => {
     withChatGPT({ connection: "connected", isConnected: true, maybeLogin: Option.none() }),
   ].map((model) => idsRendered(model));
 
-  for (const id of OWNER_PAGE_ELEMENT_IDS) {
+  for (const id of Object.values(ID)) {
     const counts = pages.map((ids) => ids.filter((rendered) => rendered === id).length);
 
     expect(Math.max(...counts), id).toBe(1);

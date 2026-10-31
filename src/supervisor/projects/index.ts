@@ -1,5 +1,3 @@
-export { ConnectedProjects } from "./connected-projects.js";
-
 export type {
   CredentialWorkspaceNamespace,
   ProvisionWorkspaceNamespace,

@@ -1,15 +1,13 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
-import { chatgptTurn, type ChatGPTCredential, type ProviderFetch } from "../src/chatgpt/index.js";
+import { chatgptTurn, type ChatGPTCredential } from "../src/chatgpt/index.js";
+import type { ProviderFetch } from "../src/chatgpt/oauth.js";
 import { modelEventStream, type ModelTurn } from "../src/model-route-turn.js";
-import {
-  streamModelEvents,
-  type ModelRouteRequest,
-  type ModelStreamInference,
-} from "../src/model-route.js";
+import type { ModelRouteRequest } from "../src/model-route.js";
+import type { ModelStreamInference } from "../src/model-route-events.js";
 import { loadFixtureEntrypoint } from "./loaded-fixture.js";
 import { ACCESS_ONE, responsesEvent } from "./chatgpt/fixtures.js";
-import { sseLine } from "./model-route-provider-stream.js";
+import { sseLine, streamModelEvents } from "./model-route-provider-stream.js";
 import type LoadedStreamRelayEntry from "./supervisor/projects/loaded-stream-relay-entry.js";
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };

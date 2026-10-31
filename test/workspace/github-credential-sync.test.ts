@@ -6,14 +6,16 @@ import { afterEach, expect, test } from "vitest";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { WorkspaceHost } from "../../src/workspace/host.js";
 import { restoreWorkspaceMembers, stubWorkspaceMember } from "./host-fixtures.js";
+import { type CommandOutput } from "../../src/workspace/index.js";
 import {
   executeGitHubCredentialRequest,
-  WorkspaceSyncIncomplete,
-  type CommandOutput,
   type GitHubCredentialRequest,
+} from "../../src/workspace/github-credential.js";
+import {
+  WorkspaceSyncIncomplete,
   type WorkspaceOperations,
   type WorkspacePathKind,
-} from "../../src/workspace/index.js";
+} from "../../src/workspace/executor.js";
 
 afterEach(restoreWorkspaceMembers);
 

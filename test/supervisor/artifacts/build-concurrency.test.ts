@@ -6,7 +6,8 @@ import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import { encodeModuleMap, HarnessArtifacts } from "../../../src/supervisor/artifacts/index.js";
+import { HarnessArtifacts } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import { BuildHost, GatedBuildHost } from "./build-hosts.js";
 
 const commits = {

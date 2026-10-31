@@ -1,7 +1,7 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import type { GenerationSubmissionResult } from "../../src/routes/index.js";
+import type { GenerationSubmissionResult } from "../../src/routes/generations.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,

@@ -5,11 +5,8 @@ import * as Result from "effect/Result";
 import { resultOf } from "../../effect-result.js";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
 import { loadMainFacet } from "../../../src/facet/index.js";
-import {
-  encodeModuleMap,
-  HarnessArtifacts,
-  ModuleMapStore,
-} from "../../../src/supervisor/artifacts/index.js";
+import { HarnessArtifacts, ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
 import type { ModuleMapStorage } from "../../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import { BuildHost, unreachableHost } from "./build-hosts.js";

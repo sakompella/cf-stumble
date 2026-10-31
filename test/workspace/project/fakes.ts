@@ -1,12 +1,14 @@
+import type { ExecBackend } from "../../../src/workspace/project/index.js";
 import type {
   BackendExecEvent,
-  ExecBackend,
   ExecBackendHandle,
   ExecBackendInput,
+} from "../../../src/workspace/project/exec-backend.js";
+import type {
   ProjectFilesystemProvider,
   ProjectStat,
   ProjectTransactions,
-} from "../../../src/workspace/project/index.js";
+} from "../../../src/workspace/project/provider.js";
 import type { DeferredExec } from "./deferred-exec.js";
 
 class FakeFsError extends Error {

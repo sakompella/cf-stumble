@@ -4,11 +4,7 @@ import type { ConversationFacet } from "./conversation-protocol.js";
 
 export { MainHarnessArtifact } from "./artifact.js";
 
-export type {
-  HarnessModule,
-  MainHarnessArtifactInput,
-  MainHarnessArtifactProblem,
-} from "./artifact.js";
+export type { HarnessModule, MainHarnessArtifactProblem } from "./artifact.js";
 
 export type MainFacetTarget = Rpc.DurableObjectBranded & ConversationFacet;
 

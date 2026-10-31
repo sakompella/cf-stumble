@@ -3,7 +3,7 @@ import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import * as Result from "effect/Result";
 import { loadMainFacet, MainHarnessArtifact } from "../../src/facet/index.js";
-import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
+import type { MainHarnessArtifactInput } from "../../src/facet/artifact.js";
 import { parsedArtifact } from "./fixture.js";
 
 const modelRoute = workerExports.ModelRoute({});

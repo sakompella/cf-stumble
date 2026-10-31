@@ -10,5 +10,3 @@ export type {
 export { ChatGPTCredentialStore } from "./credential-store.js";
 
 export { chatgptTurn, type ChatGPTCredential } from "./model-turn.js";
-
-export { type ProviderFetch } from "./oauth.js";

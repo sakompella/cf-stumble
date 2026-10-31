@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { OwnerApiSupervisor } from "../../src/routes/index.js";
+import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
 import { textLines } from "../log-capture.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor } from "./helpers.js";

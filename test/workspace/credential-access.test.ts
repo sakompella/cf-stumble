@@ -6,11 +6,13 @@ import {
   checkRepositoryAccess,
   installWorkspaceCredential,
   readWorkspaceCredentialStatus,
-  type CredentialWorkspaceHost,
   type CredentialWorkspaceNamespace,
-  type GitHubCredentialRequest,
-  type GitHubCredentialResult,
 } from "../../src/workspace/index.js";
+import type { CredentialWorkspaceHost } from "../../src/workspace/credential-access.js";
+import type {
+  GitHubCredentialRequest,
+  GitHubCredentialResult,
+} from "../../src/workspace/github-credential.js";
 import { plainProblem, runToResult } from "./workspace-results.js";
 
 function fakeToken(value: string): GitHubToken {

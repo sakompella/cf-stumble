@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { ownerPageHtml, OWNER_PAGE_IDS, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import { ownerPageHtml, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 
 test("the document is a container for the program and one same-origin script", () => {
   const html = ownerPageHtml("test-nonce");

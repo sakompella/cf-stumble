@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import {
   canonicalRepositoryUrl,
-  EMPTY_PROJECT_CATALOG,
   parseProjectCatalog,
   parseProjectId,
   PROJECT_ID_LIMIT,
@@ -28,8 +27,7 @@ function catalogOf(...urls: readonly string[]): ProjectCatalog {
 }
 
 test("ships no projects, because a project exists only once a tenant connects one", () => {
-  expect(EMPTY_PROJECT_CATALOG).toEqual([]);
-  expect(resolveProject("sample-project-one")).toEqual({
+  expect(resolveProject("sample-project-one", [])).toEqual({
     ok: false,
     reason: "unknown-project-id",
   });

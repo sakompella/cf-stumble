@@ -3,13 +3,11 @@ import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import * as Result from "effect/Result";
 import { testHarnessCommit } from "../../harness-commit-fixtures.js";
-import type { MainHarnessArtifactInput } from "../../../src/facet/index.js";
-import { containsCredential } from "../../../src/github/index.js";
-import {
-  encodeModuleMap,
-  MODULE_MAP_CHUNK_BYTES,
-  ModuleMapStore,
-} from "../../../src/supervisor/artifacts/index.js";
+import type { MainHarnessArtifactInput } from "../../../src/facet/artifact.js";
+import { containsCredential } from "../../../src/github/redaction.js";
+import { ModuleMapStore } from "../../../src/supervisor/artifacts/index.js";
+import { encodeModuleMap } from "../../../src/supervisor/artifacts/module-map.js";
+import { MODULE_MAP_CHUNK_BYTES } from "../../../src/supervisor/artifacts/store.js";
 import type { ModuleMapStorage } from "../../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {

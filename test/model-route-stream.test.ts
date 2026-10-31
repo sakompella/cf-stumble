@@ -1,17 +1,14 @@
 import { expect, test } from "vitest";
 import { byteChunkStream } from "./byte-stream-fixture.js";
-import {
-  streamModelEvents,
-  type ModelRouteRequest,
-  type ModelStreamInference,
-  type StreamingProviderPayload,
-} from "../src/model-route.js";
+import type { ModelRouteRequest } from "../src/model-route.js";
+import type { ModelStreamInference, StreamingProviderPayload } from "../src/model-route-events.js";
 import {
   collectEvents,
   DONE_LINE,
   providerStreamOfLines,
   rawByteStream,
   sseLine,
+  streamModelEvents,
 } from "./model-route-provider-stream.js";
 
 const encoder = new TextEncoder();

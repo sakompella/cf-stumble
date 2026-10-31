@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
-import { OWNER_PAGE_IDS, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import { OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 import { ownerPageResponse } from "../../src/routes/index.js";
 import worker from "../../src/worker.js";
 
