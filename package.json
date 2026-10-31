@@ -9,6 +9,7 @@
     "test:watch": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/page/client && tsc --noEmit -p test/page/client",
     "typecheck:tools": "tsc --noEmit -p tools",
+    "knip": "knip --production",
     "lint": "oxlint --type-aware --max-warnings=0 --report-unused-disable-directives",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
@@ -21,7 +22,7 @@
     "probe:clean-build": "scripts/probe/clean-build.sh",
     "ops:check": "pnpm exec tsx tools/ops-check/run.mts --worker cf-stumble --since 2h",
     "test:browser": "pnpm build:page && playwright test -c tools/playwright/playwright.config.mts",
-    "verify": "pnpm verify:vendor && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
+    "verify": "pnpm verify:vendor && pnpm verify:project-protocol && pnpm build:page && pnpm typecheck && pnpm typecheck:tools && pnpm format:check && pnpm knip && pnpm lint && pnpm test:tools && pnpm build:module-map && pnpm build:loaded-execution-env-fixture && pnpm test",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "cf": "1.0.0-beta.14",
     "esbuild": "0.28.1",
     "foldkit": "0.168.0",
+    "knip": "6.44.0",
     "oxfmt": "^0.65.0",
     "oxlint": "^1",
     "oxlint-tsgolint": "^7",
