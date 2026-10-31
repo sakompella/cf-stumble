@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { parseHarnessCommit } from "../../src/harness-commit.js";
-import { parseGenerationLabel } from "../../src/supervisor/generations/index.js";
+import { testHarnessCommit } from "../harness-commit-fixtures.js";
+import { label } from "../supervisor/generations/fixtures.js";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 test("returns the active generation", async () => {
@@ -8,15 +8,10 @@ test("returns the active generation", async () => {
     new Request("https://cf-stumble.test/api/status"),
     supervisor({
       getActiveGeneration() {
-        const label = parseGenerationLabel(0);
-        const harnessCommit = parseHarnessCommit("f53a0e1c1bdbe213ab700a84b1db23615cc24b02");
-
-        if (label === undefined || harnessCommit === undefined) {
-          throw new Error("test fixture must contain valid generation values");
-        }
+        const harnessCommit = testHarnessCommit("f53a0e1c1bdbe213ab700a84b1db23615cc24b02");
 
         return Promise.resolve({
-          generation: { label, harnessCommit, status: "ready" },
+          generation: { label: label(0), harnessCommit, status: "ready" },
           epoch: 2,
         });
       },

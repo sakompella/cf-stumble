@@ -1,13 +1,15 @@
 import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import type { GenerationCommand } from "../../../src/supervisor/control/index.js";
+import type { ActivationCommand } from "../../../src/supervisor/generations.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
   activateFixtureGeneration,
   activateGeneration,
   prepareGeneration,
   submitCandidate,
+  generationLabel,
+  testHarnessCommit,
 } from "../helpers.js";
 import { readGenerations } from "../generation-reads.js";
 
@@ -37,10 +39,8 @@ afterEach(async () => {
 
 test("resubmitting the same harness commit returns the existing generation", async () => {
   const control = supervisor("control-resubmit-existing");
-  const submission: GenerationCommand = { kind: "submit-candidate", harnessCommit: commits.first };
-
-  const first = await control.controlGeneration(submission);
-  const resubmitted = await control.controlGeneration(submission);
+  const first = await control.submitGeneration(testHarnessCommit(commits.first));
+  const resubmitted = await control.submitGeneration(testHarnessCommit(commits.first));
 
   expect(resubmitted).toEqual(first);
   expect(
@@ -57,24 +57,12 @@ test("a stale activation request leaves the active generation unchanged", async 
 
   const result = await control.controlGeneration({
     kind: "activate",
-    label: target,
+    label: generationLabel(target),
     observedEpoch: active.epoch - 1,
   });
 
   expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
   expect(await control.getActiveGeneration()).toEqual(active);
-});
-
-test("rejects an invalid generation-label RPC input with its existing error code", async () => {
-  const control = supervisor("control-invalid-generation-label");
-
-  expect(
-    await control.controlGeneration({
-      kind: "activate",
-      label: -1,
-      observedEpoch: 0,
-    }),
-  ).toEqual({ ok: false, problem: { code: "invalid-generation-label" } });
 });
 
 test("activation rejects unknown and unchecked generation targets with distinct codes", async () => {
@@ -84,13 +72,13 @@ test("activation rejects unknown and unchecked generation targets with distinct 
 
   const unknown = await control.controlGeneration({
     kind: "activate",
-    label: 99,
+    label: generationLabel(99),
     observedEpoch: epoch + 1,
   });
 
   const unchecked = await control.controlGeneration({
     kind: "activate",
-    label: candidate,
+    label: generationLabel(candidate),
     observedEpoch: epoch + 1,
   });
 
@@ -106,13 +94,13 @@ test("rollback requires a target generation that has been active before", async 
 
   const neverActive = await control.controlGeneration({
     kind: "rollback",
-    label: replacement,
+    label: generationLabel(replacement),
     observedEpoch: beforeActivation.epoch,
   });
 
   const activated = await control.controlGeneration({
     kind: "activate",
-    label: replacement,
+    label: generationLabel(replacement),
     observedEpoch: beforeActivation.epoch,
   });
 
@@ -122,7 +110,7 @@ test("rollback requires a target generation that has been active before", async 
 
   const rolledBack = await control.controlGeneration({
     kind: "rollback",
-    label: 0,
+    label: generationLabel(0),
     observedEpoch: activated.outcome.epoch,
   });
 
@@ -143,7 +131,7 @@ test("a stale rollback request leaves the active generation unchanged", async ()
 
   const result = await control.controlGeneration({
     kind: "rollback",
-    label: 0,
+    label: generationLabel(0),
     observedEpoch: beforeActivation.epoch,
   });
 
@@ -157,9 +145,9 @@ test("activating the active generation with its current epoch is a no-op, but a 
   const target = await readyGeneration(control, commits.first);
   const active = await control.getActiveGeneration();
 
-  const activation: GenerationCommand = {
+  const activation: ActivationCommand = {
     kind: "activate",
-    label: target,
+    label: generationLabel(target),
     observedEpoch: active.epoch,
   };
 
@@ -173,7 +161,7 @@ test("activating the active generation with its current epoch is a no-op, but a 
 
   const currentRepeat = await control.controlGeneration({
     kind: "activate",
-    label: target,
+    label: generationLabel(target),
     observedEpoch: first.outcome.epoch,
   });
 
@@ -198,14 +186,9 @@ test("activating the active generation with its current epoch is a no-op, but a 
 test("resubmitting the same harness commit still returns the existing generation after Durable Object eviction", async () => {
   const control = supervisor("control-resubmit-after-eviction");
 
-  const submission: GenerationCommand = {
-    kind: "submit-candidate",
-    harnessCommit: commits.third,
-  };
-
-  const first = await control.controlGeneration(submission);
+  const first = await control.submitGeneration(testHarnessCommit(commits.third));
   await evictDurableObject(control);
-  const resubmitted = await control.controlGeneration(submission);
+  const resubmitted = await control.submitGeneration(testHarnessCommit(commits.third));
 
   expect(resubmitted).toEqual(first);
   expect(

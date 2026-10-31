@@ -9,6 +9,7 @@ import {
   servingFacetSource,
   storeModuleMap,
   PI_DURABLE_VERSION_METHOD,
+  generationLabel,
 } from "../helpers.js";
 import { expectFailedCandidate } from "../generation-reads.js";
 import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
@@ -172,8 +173,8 @@ test("remounts a checked generation instead of reusing its warm candidate instan
   );
 
   await storeModuleMap(control, candidate);
-  const first = await control.prepareGeneration(label);
-  const second = await control.prepareGeneration(label);
+  const first = await control.prepareGeneration(generationLabel(label));
+  const second = await control.prepareGeneration(generationLabel(label));
 
   expect(first).toMatchObject({ ok: true, report: { stage: "ready" } });
   expect(second).toMatchObject({

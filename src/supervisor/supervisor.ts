@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
-import type { GenerationCommand } from "./control/index.js";
+import type { HarnessCommit } from "../harness-commit.js";
+import type { ActivationCommand, GenerationLabel } from "./generations.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { checkGenerationStartup, type StartupCheckOptions } from "./startup-check/index.js";
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
@@ -21,7 +22,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress);
   }
 
-  prepareGeneration(label: number, options?: StartupCheckOptions) {
+  prepareGeneration(label: GenerationLabel, options?: StartupCheckOptions) {
     return runAtEntryPoint(checkGenerationStartup(this.#parts.startupCheckHost, label, options));
   }
 
@@ -29,12 +30,16 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
     return this.#parts.generations.active();
   }
 
-  controlGeneration(command: GenerationCommand) {
-    const { generations, control, serving } = this.#parts;
-    const before = generations.active().generation?.harnessCommit;
-    const result = control.execute(command);
+  submitGeneration(harnessCommit: HarnessCommit) {
+    return this.#parts.generations.submit(harnessCommit);
+  }
 
-    if (generations.active().generation?.harnessCommit !== before) serving.replaceFacet();
+  controlGeneration(command: ActivationCommand) {
+    const result = this.#parts.generations.activate(command);
+
+    if (result.ok && result.outcome.effect === "activated") {
+      this.#parts.serving.replaceFacet();
+    }
 
     return result;
   }

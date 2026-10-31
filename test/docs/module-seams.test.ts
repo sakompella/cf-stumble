@@ -92,7 +92,7 @@ function violations(): string[] {
 describe("module seams", () => {
   it("finds the source files and their group directories", () => {
     expect(Object.keys(sourceFiles).length).toBeGreaterThan(20);
-    expect(groupDirectories).toContain("src/supervisor/generations");
+    expect(groupDirectories).toContain("src/supervisor/startup-check");
   });
 
   it("resolves import specifiers against the importing directory", () => {

@@ -3,7 +3,14 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import { artifact, prepareGeneration, storeModuleMap, submitCandidate } from "../helpers.js";
+import {
+  artifact,
+  prepareGeneration,
+  storeModuleMap,
+  submitCandidate,
+  generationLabel,
+  testHarnessCommit,
+} from "../helpers.js";
 import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
 import { readGeneration, readGenerations } from "../generation-reads.js";
 
@@ -34,13 +41,17 @@ function supervisor(name: string): DurableObjectStub<Supervisor> {
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string) {
-  return control.controlGeneration({ kind: "submit-candidate", harnessCommit });
+  return control.submitGeneration(testHarnessCommit(harnessCommit));
 }
 
 async function activate(control: DurableObjectStub<Supervisor>, label: number) {
   const active = await control.getActiveGeneration();
 
-  return control.controlGeneration({ kind: "activate", label, observedEpoch: active.epoch });
+  return control.controlGeneration({
+    kind: "activate",
+    label: generationLabel(label),
+    observedEpoch: active.epoch,
+  });
 }
 
 afterEach(async () => {
@@ -54,27 +65,14 @@ test("submits the fixture harness commit as Generation 0 and the next commit as 
   const second = await submit(control, secondHarnessCommit);
 
   expect(first).toEqual({
-    ok: true,
-    outcome: {
-      kind: "candidate-submitted",
-      generation: {
-        label: 0,
-        harnessCommit: fixtureMainHarnessCommit,
-        status: "candidate",
-      },
-      epoch: 1,
-    },
+    kind: "candidate-submitted",
+    generation: { label: 0, harnessCommit: fixtureMainHarnessCommit, status: "candidate" },
+    epoch: 1,
   });
   expect(second).toMatchObject({
-    ok: true,
-    outcome: {
-      kind: "candidate-submitted",
-      generation: {
-        label: 1,
-        harnessCommit: secondHarnessCommit,
-        status: "candidate",
-      },
-    },
+    kind: "candidate-submitted",
+    generation: { label: 1, harnessCommit: secondHarnessCommit, status: "candidate" },
+    epoch: 2,
   });
   expect(await readGenerations(control)).toHaveLength(2);
 });
@@ -84,9 +82,9 @@ test("a later preparation outcome replaces the recorded status", async () => {
   const label = await submitCandidate(control, secondHarnessCommit);
 
   await storeModuleMap(control, stagedPreparationArtifact(secondHarnessCommit));
-  const recorded = await control.prepareGeneration(label);
-  const repeated = await control.prepareGeneration(label);
-  const failed = await control.prepareGeneration(label);
+  const recorded = await control.prepareGeneration(generationLabel(label));
+  const repeated = await control.prepareGeneration(generationLabel(label));
+  const failed = await control.prepareGeneration(generationLabel(label));
 
   if (!recorded.ok || !repeated.ok) {
     throw new Error("a labeled generation must accept its first preparation check");
@@ -105,16 +103,6 @@ test("a later preparation outcome replaces the recorded status", async () => {
     },
   });
   expect(await readGeneration(control, label)).toMatchObject({ status: "failed" });
-});
-
-test("refuses a candidate submission that does not name a harness commit", async () => {
-  const control = supervisor("rejects-malformed-commits");
-
-  expect(await submit(control, "main")).toEqual({
-    ok: false,
-    problem: { code: "invalid-harness-commit" },
-  });
-  expect(await readGenerations(control), "a refused submission labels nothing").toHaveLength(0);
 });
 
 test("activates a ready generation once and preserves its epoch on a repeated request", async () => {

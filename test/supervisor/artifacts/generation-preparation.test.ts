@@ -9,6 +9,7 @@ import {
   servedText,
   servingFacetSource,
   storeModuleMap,
+  generationLabel,
 } from "../helpers.js";
 import { readGeneration } from "../generation-reads.js";
 
@@ -35,7 +36,7 @@ async function activate(control: DurableObjectStub<Supervisor>, label: number): 
 
   const activation = await control.controlGeneration({
     kind: "activate",
-    label,
+    label: generationLabel(label),
     observedEpoch: active.epoch,
   });
 
@@ -53,7 +54,7 @@ test("prepares and serves a generation from its stored module map", async () => 
   await storeModuleMap(control, storedModuleMap(commits.stored));
   const label = await labelCandidate(control, commits.stored);
 
-  const prepared = await control.prepareGeneration(label);
+  const prepared = await control.prepareGeneration(generationLabel(label));
 
   expect(prepared).toMatchObject({ ok: true, report: { stage: "ready" } });
   expect(await readGeneration(control, label)).toMatchObject({ label, status: "ready" });
@@ -67,7 +68,7 @@ test("leaves the active generation serving when the module map cannot be built",
   const control = await activeSupervisor("failed-build-keeps-active-generation");
   const label = await labelCandidate(control, commits.unstored);
 
-  const prepared = await control.prepareGeneration(label);
+  const prepared = await control.prepareGeneration(generationLabel(label));
 
   expect(prepared).toEqual({
     ok: false,

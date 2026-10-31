@@ -1,12 +1,11 @@
 import * as Effect from "effect/Effect";
-import { GenerationControl } from "./control/index.js";
 import {
   GitHubConnection,
   GitHubConnectionStore,
   ProjectConnections,
   type GitHubConnectionEnvironment,
 } from "./projects/index.js";
-import { Generations } from "./generations/index.js";
+import { Generations } from "./generations.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
@@ -62,7 +61,6 @@ export function supervisorParts(
     workspaceName,
     generations,
     startupCheckHost: { ctx, loader: env.LOADER, artifacts, generations, modelRoute },
-    control: new GenerationControl(generations),
     github,
     connections,
     serving: new ServingConversations({

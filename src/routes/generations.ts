@@ -1,35 +1,33 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { parseHarnessCommit } from "../harness-commit.js";
-import type {
-  ControlProblemCode,
-  GenerationControlResult,
-  GenerationCommand,
-} from "../supervisor/control/index.js";
+import { isHarnessCommit, type HarnessCommit } from "../harness-commit.js";
+import {
+  isGenerationLabel,
+  type ActivationCommand,
+  type ControlProblemCode,
+  type GenerationControlResult,
+  type GenerationLabel,
+  type Submission,
+} from "../supervisor/generations.js";
 import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
-import { callSupervisor, Count, decodeRequestBody, InvalidRequestBody, jsonError } from "./json.js";
+import { callSupervisor, Count, decodeRequestBody, jsonError } from "./json.js";
 
 export type GenerationControlSupervisor = {
-  readonly controlGeneration: (command: GenerationCommand) => Promise<GenerationControlResult>;
+  readonly controlGeneration: (command: ActivationCommand) => Promise<GenerationControlResult>;
 };
 
-export type GenerationSubmissionSupervisor = GenerationControlSupervisor & {
-  readonly prepareGeneration: (label: number) => Promise<StartupCheckResult>;
+export type GenerationSubmissionSupervisor = {
+  readonly submitGeneration: (harnessCommit: HarnessCommit) => Promise<Submission>;
+  readonly prepareGeneration: (label: GenerationLabel) => Promise<StartupCheckResult>;
 };
 
-type SubmissionOutcome = Extract<GenerationControlResult, { readonly ok: true }>["outcome"];
-
-export type GenerationSubmissionResult =
-  | {
-      readonly ok: true;
-      readonly outcome: SubmissionOutcome;
-      readonly preparation: StartupCheckResult;
-    }
-  | Extract<GenerationControlResult, { readonly ok: false }>;
+export type GenerationSubmissionResult = Readonly<{
+  ok: true;
+  outcome: Submission;
+  preparation: StartupCheckResult;
+}>;
 
 const CONTROL_REFUSAL_STATUS = {
-  "invalid-harness-commit": 400,
-  "invalid-generation-label": 400,
   "unknown-generation": 404,
   "stale-epoch": 409,
   "not-ready": 409,
@@ -42,26 +40,24 @@ function refusalResponse(
   return Response.json(refusal, { status: CONTROL_REFUSAL_STATUS[refusal.problem.code] });
 }
 
-const GenerationControlBody = Schema.Struct({ observedEpoch: Count, label: Count });
+const GenerationControlBody = Schema.Struct({
+  observedEpoch: Count,
+  label: Count.pipe(Schema.refine(isGenerationLabel)),
+});
 
 type ControlCommandKind = "activate" | "rollback";
 
-const GenerationSubmissionBody = Schema.Struct({ harnessCommit: Schema.String });
-
-function command(
-  kind: ControlCommandKind,
-  body: typeof GenerationControlBody.Type,
-): GenerationCommand {
-  return kind === "activate"
-    ? { kind: "activate", label: body.label, observedEpoch: body.observedEpoch }
-    : { kind: "rollback", label: body.label, observedEpoch: body.observedEpoch };
-}
+const GenerationSubmissionBody = Schema.Struct({
+  harnessCommit: Schema.String.pipe(Schema.refine(isHarnessCommit)),
+});
 
 export const handleGenerationControl = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationControlSupervisor, kind: ControlCommandKind) {
     const body = yield* decodeRequestBody(request, GenerationControlBody);
 
-    const result = yield* callSupervisor(() => supervisor.controlGeneration(command(kind, body)));
+    const result = yield* callSupervisor(() =>
+      supervisor.controlGeneration({ kind, label: body.label, observedEpoch: body.observedEpoch }),
+    );
 
     return result.ok ? Response.json(result) : refusalResponse(result);
   },
@@ -80,26 +76,15 @@ export const handleGenerationControl = Effect.fnUntraced(
 
 export const handleGenerationSubmission = Effect.fnUntraced(
   function* (request: Request, supervisor: GenerationSubmissionSupervisor) {
-    const body = yield* decodeRequestBody(request, GenerationSubmissionBody);
-    const harnessCommit = parseHarnessCommit(body.harnessCommit);
+    const { harnessCommit } = yield* decodeRequestBody(request, GenerationSubmissionBody);
 
-    if (harnessCommit === undefined) {
-      return yield* new InvalidRequestBody();
-    }
-
-    const submitted = yield* callSupervisor(() =>
-      supervisor.controlGeneration({ kind: "submit-candidate", harnessCommit }),
-    );
-
-    if (!submitted.ok) {
-      return refusalResponse(submitted);
-    }
+    const submitted = yield* callSupervisor(() => supervisor.submitGeneration(harnessCommit));
 
     const result: GenerationSubmissionResult = {
       ok: true,
-      outcome: submitted.outcome,
+      outcome: submitted,
       preparation: yield* callSupervisor(() =>
-        supervisor.prepareGeneration(submitted.outcome.generation.label),
+        supervisor.prepareGeneration(submitted.generation.label),
       ),
     };
 

@@ -7,6 +7,7 @@ import {
   prepareGeneration,
   servedText,
   submitCandidate,
+  generationLabel,
 } from "./helpers.js";
 import { readGeneration } from "./generation-reads.js";
 
@@ -59,7 +60,7 @@ test("keeps the activation epoch stable when an activation is rejected", async (
 
   const rejected = await control.controlGeneration({
     kind: "activate",
-    label: 99,
+    label: generationLabel(99),
     observedEpoch: beforeRejection.epoch,
   });
 
@@ -83,13 +84,13 @@ test("a repeated passing check advances the epoch and rejects an activation from
   await prepareGeneration(control, targetLabel, replacementCommit);
 
   const beforeRecheck = await control.getActiveGeneration();
-  const rechecked = await control.prepareGeneration(0);
+  const rechecked = await control.prepareGeneration(generationLabel(0));
 
   const afterRecheck = await control.getActiveGeneration();
 
   const result = await control.controlGeneration({
     kind: "activate",
-    label: targetLabel,
+    label: generationLabel(targetLabel),
     observedEpoch: beforeRecheck.epoch,
   });
 

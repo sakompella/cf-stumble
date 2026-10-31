@@ -62,7 +62,7 @@ const throwingRoutes: readonly (readonly [string, Request, Partial<OwnerApiSuper
       "/api/generations/submit",
       '{"harnessCommit":"f53a0e1c1bdbe213ab700a84b1db23615cc24b02"}',
     ),
-    { controlGeneration: thrown },
+    { submitGeneration: thrown },
   ],
   [
     "POST /api/projects/connect",

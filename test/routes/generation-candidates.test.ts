@@ -54,10 +54,6 @@ async function submission(
 }
 
 function submittedLabel(result: GenerationSubmissionResult): number {
-  if (!result.ok) {
-    throw new Error(`a valid harness commit must receive a label: ${result.problem.code}`);
-  }
-
   return result.outcome.generation.label;
 }
 

@@ -2,13 +2,13 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import { parseGenerationLabel } from "../../../src/supervisor/generations/index.js";
+import { isGenerationLabel } from "../../../src/supervisor/generations.js";
 
 test("classifies every safe integer by whether it is non-negative", () => {
   hegel.test((tc) => {
     const value = tc.draw(gs.integers());
 
-    expect(parseGenerationLabel(value) === undefined).toBe(value < 0);
+    expect(isGenerationLabel(value)).toBe(value >= 0);
   });
 });
 
@@ -16,7 +16,7 @@ test("rejects generated fractions", () => {
   hegel.test((tc) => {
     const integer = tc.draw(gs.integers({ minValue: -(2 ** 52 - 1), maxValue: 2 ** 52 - 1 }));
 
-    expect(parseGenerationLabel(integer + 0.5)).toBeUndefined();
+    expect(isGenerationLabel(integer + 0.5)).toBe(false);
   });
 });
 
@@ -26,6 +26,6 @@ test("rejects non-finite numbers", () => {
       gs.sampledFrom([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]),
     );
 
-    expect(parseGenerationLabel(value)).toBeUndefined();
+    expect(isGenerationLabel(value)).toBe(false);
   });
 });

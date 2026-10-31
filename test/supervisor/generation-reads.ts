@@ -1,30 +1,30 @@
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import {
-  Generations,
-  parseGenerationLabel,
-  type Generation,
-} from "../../src/supervisor/generations/index.js";
+import { Generations, type Generation } from "../../src/supervisor/generations.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { label as generationLabel } from "./generations/fixtures.js";
 
 export function readGeneration(
   control: DurableObjectStub<Supervisor>,
-  label: number,
+  labelValue: number,
 ): Promise<Generation | undefined> {
-  return runInDurableObject(control, (_instance, state) => {
-    const generationLabel = parseGenerationLabel(label);
-
-    return generationLabel === undefined
-      ? undefined
-      : new Generations(state.storage).byLabel(generationLabel);
-  });
+  return runInDurableObject(control, (_instance, state) =>
+    new Generations(state.storage).byLabel(generationLabel(labelValue)),
+  );
 }
 
-export function readGenerations(control: DurableObjectStub<Supervisor>): Promise<Generation[]> {
-  return runInDurableObject(control, (_instance, state) => [
-    ...new Generations(state.storage).all(),
-  ]);
+export function readGenerations(
+  control: DurableObjectStub<Supervisor>,
+): Promise<{ label: number; harnessCommit: string; status: string }[]> {
+  return runInDurableObject(control, (_instance, state) =>
+    state.storage.sql
+      .exec<{ label: number; harness_commit: string; status: string }>(
+        "SELECT label, harness_commit, status FROM generations ORDER BY label",
+      )
+      .toArray()
+      .map((row) => ({ label: row.label, harnessCommit: row.harness_commit, status: row.status })),
+  );
 }
 
 export async function expectFailedCandidate(

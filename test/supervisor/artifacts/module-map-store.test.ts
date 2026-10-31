@@ -22,6 +22,7 @@ import {
   servingFacetSource,
   storeModuleMap,
   submitCandidate,
+  generationLabel,
 } from "../helpers.js";
 
 const commits = {
@@ -233,7 +234,7 @@ test("reports an incomplete stored module map instead of rebuilding the commit",
   });
   const label = await submitCandidate(control, commits.incomplete);
 
-  const prepared = await control.prepareGeneration(label);
+  const prepared = await control.prepareGeneration(generationLabel(label));
 
   expect(
     prepared,
@@ -255,7 +256,7 @@ test("rolls back to a stored generation while every build fails", async () => {
     artifact(secondCommit, servingFacetSource("second generation serving")),
   );
   const second = await submitCandidate(control, secondCommit);
-  const preparedSecond = await control.prepareGeneration(second);
+  const preparedSecond = await control.prepareGeneration(generationLabel(second));
   expect(preparedSecond).toMatchObject({ ok: true, report: { stage: "ready" } });
   await activateGeneration(control, second);
   expect(await servedText(control)).toBe("second generation serving");
@@ -265,7 +266,7 @@ test("rolls back to a stored generation while every build fails", async () => {
 
   const rolledBack = await control.controlGeneration({
     kind: "rollback",
-    label: 0,
+    label: generationLabel(0),
     observedEpoch: active.epoch,
   });
 
@@ -273,7 +274,7 @@ test("rolls back to a stored generation while every build fails", async () => {
   expect(await servedText(control)).toBe(fixtureMainHarnessCommit);
 
   const unbuildable = await control.prepareGeneration(
-    await submitCandidate(control, commits.unbuildable),
+    generationLabel(await submitCandidate(control, commits.unbuildable)),
   );
 
   expect(

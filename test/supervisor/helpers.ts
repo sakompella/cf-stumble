@@ -1,18 +1,18 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect } from "vitest";
-import * as Result from "effect/Result";
 import { ConnectedProjects } from "../../src/supervisor/projects/index.js";
 import { sampleCatalog } from "../project-fixtures.js";
 import {
   fixtureMainHarnessArtifact,
   fixtureMainHarnessCommit,
+  parsedArtifact,
   servingFacetSource,
 } from "../facet/fixture.js";
-import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import { ModuleMapStore } from "../../src/supervisor/artifacts/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
+import { label as generationLabel, testHarnessCommit } from "./generations/fixtures.js";
 
 export const commits = {
   ordinary: "0123456789abcdef0123456789abcdef01234567",
@@ -24,6 +24,8 @@ export const commits = {
   delayed: "7123456789abcdef0123456789abcdef01234567",
   fresh: "b123456789abcdef0123456789abcdef01234567",
 } as const;
+
+export { generationLabel, testHarnessCommit };
 
 export {
   fixtureMainHarnessCommit,
@@ -61,15 +63,9 @@ export function storeModuleMap(
   input: MainHarnessArtifactInput,
 ): Promise<void> {
   return runInDurableObject(control, (_instance, state) => {
-    const parsed = MainHarnessArtifact.parse(input);
+    const written = new ModuleMapStore(state.storage).write(parsedArtifact(input));
 
-    if (Result.isFailure(parsed)) {
-      throw new Error(`a stored module map must parse: ${parsed.failure.code}`);
-    }
-
-    const written = new ModuleMapStore(state.storage).write(parsed.success);
-
-    if (Result.isFailure(written)) {
+    if (written._tag === "Failure") {
       throw new Error(`a stored module map must be written: ${written.failure.code}`);
     }
   });
@@ -124,13 +120,9 @@ export async function submitCandidate(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
 ): Promise<number> {
-  const result = await control.controlGeneration({ kind: "submit-candidate", harnessCommit });
+  const submission = await control.submitGeneration(testHarnessCommit(harnessCommit));
 
-  if (!result.ok || result.outcome.kind !== "candidate-submitted") {
-    throw new Error("a valid harness commit must receive a generation label");
-  }
-
-  return result.outcome.generation.label;
+  return submission.generation.label;
 }
 
 export function labelCandidate(
@@ -148,7 +140,7 @@ export async function prepareWithModuleMap(
 ) {
   await storeModuleMap(control, moduleMap);
 
-  return control.prepareGeneration(label, options);
+  return control.prepareGeneration(generationLabel(label), options);
 }
 
 export async function prepareGeneration(
@@ -171,7 +163,7 @@ export async function activateGeneration(
 
   const result = await control.controlGeneration({
     kind: "activate",
-    label,
+    label: generationLabel(label),
     observedEpoch: active.epoch,
   });
 

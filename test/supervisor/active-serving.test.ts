@@ -10,6 +10,7 @@ import {
   servedText,
   servingFacetSource,
   submitCandidate,
+  generationLabel,
 } from "./helpers.js";
 import { readGenerations } from "./generation-reads.js";
 
@@ -91,7 +92,7 @@ test("keeps the active retained artifact when a failed candidate cannot activate
 
   const activation = await control.controlGeneration({
     kind: "activate",
-    label: failedCandidate,
+    label: generationLabel(failedCandidate),
     observedEpoch: active.epoch,
   });
 

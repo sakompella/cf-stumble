@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import type { ControlProblemCode, GenerationCommand } from "../../src/supervisor/control/index.js";
+import type { ActivationCommand, ControlProblemCode } from "../../src/supervisor/generations.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 test("activates directly", async () => {
-  let received: GenerationCommand | undefined;
+  let received: ActivationCommand | undefined;
 
   const response = await ownerApiResponse(
     controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
@@ -25,7 +25,7 @@ test("activates directly", async () => {
 });
 
 test("rolls back through the same direct control operation", async () => {
-  let received: GenerationCommand | undefined;
+  let received: ActivationCommand | undefined;
 
   const response = await ownerApiResponse(
     controlRequest("/api/generations/rollback", JSON.stringify({ observedEpoch: 4, label: 0 })),
@@ -43,8 +43,6 @@ test("rolls back through the same direct control operation", async () => {
 });
 
 const refusalStatuses: readonly (readonly [ControlProblemCode, number])[] = [
-  ["invalid-harness-commit", 400],
-  ["invalid-generation-label", 400],
   ["unknown-generation", 404],
   ["stale-epoch", 409],
   ["not-ready", 409],

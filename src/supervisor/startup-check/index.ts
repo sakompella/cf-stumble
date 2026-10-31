@@ -1,11 +1,8 @@
 import * as Effect from "effect/Effect";
 import type { MainFacetCapabilities } from "../../facet/index.js";
-
-import { parseGenerationLabel } from "../generations/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
+import type { GenerationLabel, Generations, PreparationRecord } from "../generations.js";
 import { runStartupCheck, type StartupCheckOutcome } from "./candidate.js";
-
-import type { Generation, Generations, PreparationCheckProblem } from "../generations/index.js";
 
 const STARTUP_CHECK_DEADLINE_MS = 5_000;
 
@@ -21,15 +18,11 @@ export type StartupCheckOptions = {
   readonly deadlineMs?: number;
 };
 
-type StartupCheckReport = StartupCheckOutcome & {
-  readonly generation: Generation;
-  readonly effect: "recorded" | "no-op";
-};
+type StartupCheckReport = StartupCheckOutcome & Omit<PreparationRecord, "epoch">;
 
 type StartupCheckProblem =
   | { readonly code: "unknown-generation"; readonly label: number }
-  | ModuleMapProblem
-  | PreparationCheckProblem;
+  | ModuleMapProblem;
 
 export type StartupCheckResult =
   | { readonly ok: true; readonly report: StartupCheckReport }
@@ -37,7 +30,7 @@ export type StartupCheckResult =
 
 export function checkGenerationStartup(
   host: StartupCheckHost,
-  label: number,
+  label: GenerationLabel,
   options: StartupCheckOptions = {},
 ): Effect.Effect<StartupCheckResult> {
   return checkLabeledStartup(host, label, options).pipe(
@@ -50,18 +43,14 @@ export function checkGenerationStartup(
 
 function checkLabeledStartup(
   host: StartupCheckHost,
-  label: number,
+  label: GenerationLabel,
   options: StartupCheckOptions,
 ): Effect.Effect<StartupCheckReport, StartupCheckProblem> {
   return Effect.gen(function* () {
-    const generationLabel = parseGenerationLabel(label);
+    const unknown: StartupCheckProblem = { code: "unknown-generation", label };
+    const generation = host.generations.byLabel(label);
 
-    const generation =
-      generationLabel === undefined ? undefined : host.generations.byLabel(generationLabel);
-
-    if (generationLabel === undefined || generation === undefined) {
-      return yield* Effect.fail<StartupCheckProblem>({ code: "unknown-generation", label });
-    }
+    if (generation === undefined) return yield* Effect.fail(unknown);
 
     const moduleMap = yield* host.artifacts.prepare(generation.harnessCommit);
 
@@ -71,12 +60,12 @@ function checkLabeledStartup(
       options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
     );
 
-    const recorded = yield* Effect.fromResult(
-      host.generations.recordPreparationCheck(
-        generationLabel,
-        outcome.stage === "ready" ? "passed" : "failed",
-      ),
+    const recorded = host.generations.recordPreparation(
+      label,
+      outcome.stage === "ready" ? "passed" : "failed",
     );
+
+    if (recorded === undefined) return yield* Effect.fail(unknown);
 
     return { ...outcome, generation: recorded.generation, effect: recorded.effect };
   });

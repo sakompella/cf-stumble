@@ -7,6 +7,7 @@ import {
   prepareWithModuleMap,
   submitCandidate,
   PI_DURABLE_VERSION_METHOD,
+  generationLabel,
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 
@@ -194,7 +195,11 @@ test("activation and rollback replace the serving facet, and its storage carries
 
   const { epoch } = await control.getActiveGeneration();
   expect(
-    await control.controlGeneration({ kind: "rollback", label: firstLabel, observedEpoch: epoch }),
+    await control.controlGeneration({
+      kind: "rollback",
+      label: generationLabel(firstLabel),
+      observedEpoch: epoch,
+    }),
   ).toMatchObject({ ok: true });
 
   expect(await servingCommit(control, "harness")).toBe(first);

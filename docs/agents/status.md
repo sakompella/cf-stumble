@@ -16,6 +16,7 @@ The Worker has no authentication: every request reaches one Supervisor named `ow
 - **No Bombadil for now** (Aditya, 2026-09-28). Do not add it to `pnpm verify` or run a pilot.
 - **Skip Cloudflare Artifacts for now** (Aditya, 2026-10-02). See `design/computer-integration.md`, "Artifacts (deferred)".
 - **Per-instance values are Worker secrets that no file declares.** See `docs/deploy.md`, "Instance secrets".
+- **The first deploy after the generation-table change of 2026-10-31 migrates in place.** On its first start the Supervisor turns `active_generation_history` into a `was_active` column and drops the unread `activation_id`. It keeps every row and `active_label`, so the active generation keeps serving.
 
 ## Open items
 
