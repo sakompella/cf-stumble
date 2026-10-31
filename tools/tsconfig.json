@@ -14,6 +14,7 @@
     "json.mts",
     "owner-script.test.ts",
     "module-map-build.mts",
+    "no-comments.test.ts",
     "verify-computer-tarball.mts",
     "verify-project-protocol.mts",
     "browser-harness/**/*.mts",

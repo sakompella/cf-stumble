@@ -75,6 +75,7 @@ export default defineConfig({
 
     "anti-slop/no-runtime-typeof": ["error", { allowInTypeGuards: true }],
 
+    "cf-stumble/no-comments": "error",
     "cf-stumble/no-typescript-private-rpc-member": "error",
   },
 
