@@ -49,6 +49,19 @@ function check(
 const rules = (input: CheckInput) => runChecks(input).map((finding) => finding.rule);
 
 describe("ran-past-idle", () => {
+  it("passes a scanner's stray /api requests while the container is stopped", () => {
+    assert.deepEqual(
+      rules(check([request(0, "/api/unknown"), request(5, "/api/unknown")], [])),
+      [],
+    );
+  });
+
+  it("gives a stray /api request no allowance, so a container it kept running is reported", () => {
+    assert.deepEqual(rules(check([request(0, "/api/unknown")], runningBetween(0, 20))), [
+      "ran-past-idle",
+    ]);
+  });
+
   it("fires when running exceeds the idle limit by more than the slack, not at it", () => {
     assert.deepEqual(rules(check([request(0)], runningBetween(0, 20))), []);
     assert.deepEqual(rules(check([request(0)], runningBetween(0, 25))), ["ran-past-idle"]);
@@ -130,22 +143,6 @@ describe("route classes", () => {
 });
 
 describe("unknown", () => {
-  it("reports an /api route the checker does not classify instead of passing", () => {
-    const stray = request(0, "/api/unknown");
-
-    const [finding] = runChecks(check([stray], []));
-
-    assert.equal(finding?.rule, "unknown");
-    assert.deepEqual(finding?.evidence, ["/api/unknown@00:00Z"]);
-  });
-
-  it("gives an unclassified route no allowance", () => {
-    assert.deepEqual(rules(check([request(0, "/api/unknown")], runningBetween(0, 20))), [
-      "unknown",
-      "ran-past-idle",
-    ]);
-  });
-
   it("reports an unavailable source instead of passing", () => {
     const input: CheckInput = {
       ...check([], []),

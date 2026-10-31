@@ -85,22 +85,6 @@ export function isoMinute(ms: number): string {
   return new Date(ms).toISOString().slice(0, 16) + "Z";
 }
 
-function unclassifiedRoutes(activity: Activity): readonly Finding[] {
-  const unclassified = activity.invocations
-    .filter((call) => call.route.startsWith("/api/") && routeClass(call.route) === undefined)
-    .toSorted((a, b) => a.endMs - b.endMs);
-
-  return unclassified.length === 0
-    ? []
-    : [
-        {
-          rule: "unknown",
-          detail: `${unclassified.length} request(s) to an /api route that src/routes/route-pattern.ts does not list, so the checker cannot tell whether it reaches the workspace`,
-          evidence: unclassified.slice(-RECENT_REQUESTS).map(describeCall),
-        },
-      ];
-}
-
 function describeCall(call: Invocation): string {
   return `${call.route}@${isoMinute(call.endMs).slice(11)}`;
 }
@@ -168,7 +152,7 @@ function ranPastIdle(activity: Activity, input: CheckInput): readonly Finding[] 
 
 export function runChecks(input: CheckInput): readonly Finding[] {
   return input.activity.status === "ok"
-    ? [...unclassifiedRoutes(input.activity.data), ...ranPastIdle(input.activity.data, input)]
+    ? ranPastIdle(input.activity.data, input)
     : [{ rule: "unknown", detail: input.activity.reason, evidence: [] }];
 }
 

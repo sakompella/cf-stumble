@@ -41,14 +41,14 @@ export function routePattern(pathname: string): string {
   return pathname.startsWith("/api/") ? "/api/unknown" : "unknown";
 }
 
-export function routeClass(pattern: string): RouteClass | undefined {
+export function routeClass(pattern: string): RouteClass {
   const fixed = API_ROUTES.get(pattern);
 
   if (fixed !== undefined) return fixed;
 
   return PROJECT_ROUTE_SUFFIXES.some((suffix) => pattern === `/api/projects/:projectId${suffix}`)
     ? "workspace"
-    : undefined;
+    : "record-only";
 }
 
 export function projectIdFromPath(

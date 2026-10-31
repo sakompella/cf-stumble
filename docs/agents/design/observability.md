@@ -103,7 +103,8 @@ needs Account Analytics Read; an API token with it is better for repeated runs. 
 the `Authorization` header only and is never printed. Use `--worker <name>` for another Worker.
 
 **Unknown.** Missing data never reads as fine. A request to an `/api/` route that
-`route-pattern.ts` does not list prints one `unknown` line, and the route gets no allowance. A
+`route-pattern.ts` does not list counts as record-only, since the router answers it 404 without the
+Supervisor; a workspace route left out of the table therefore shows up as `ran-past-idle`. A
 missing token or account, a failed call, a missing application, an unexpected response, or a query
 that hit its row limit (2,000 requests or 5,000 usage rows) prints one `unknown` line with the
 reason. Use a shorter `--since` after a row limit.
