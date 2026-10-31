@@ -11,7 +11,6 @@ import {
   writeBytes,
 } from "./execution-env-files.js";
 import { joinPath, type ComputerWorkspace } from "./execution-env-paths.js";
-import { createTempDir } from "./execution-env-posix.js";
 import { openBinaryReader } from "./execution-env-readers.js";
 
 const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
@@ -56,7 +55,7 @@ export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
     exists: (path, context) => exists(workspace, path, context),
     createDir: unsupported("createDir"),
     remove: unsupported("remove"),
-    createTempDir: (prefix, context) => createTempDir(workspace, running, prefix, context),
+    createTempDir: unsupported("createTempDir"),
     createTempFile: (tempOptions, context) => createTempFile(workspace, tempOptions, context),
     exec: (command, execOptions, context) =>
       execInWorkspace(workspace, running, command, execOptions, context),

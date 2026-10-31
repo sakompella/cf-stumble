@@ -13,7 +13,7 @@ import {
   type WorkspacePath,
 } from "./execution-env-paths.js";
 
-export const TEMP_DIRECTORY = "/.cf-stumble/tmp";
+const TEMP_DIRECTORY = "/.cf-stumble/tmp";
 
 type Opened = Result<WorkspacePath, FileError>;
 
@@ -172,7 +172,7 @@ function namePart(value: string | undefined, label: string): Result<string, File
   return { ok: true, value: part };
 }
 
-export function uniqueTempPath(
+function uniqueTempPath(
   prefix: string | undefined,
   suffix?: string,
 ): Result<WorkspacePath, FileError> {
