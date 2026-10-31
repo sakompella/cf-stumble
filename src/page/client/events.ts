@@ -173,8 +173,7 @@ export const EventLine = defineTaggedUnion({
 
 export type EventLine = typeof EventLine.Type;
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- JSON.parse is where the event enters; the Schema below proves it.
-const parseJson = Option.liftThrowable((raw: string): unknown => JSON.parse(raw));
+const parseJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
 
 const TypedLine = Schema.Struct({ type: Schema.String });
 
