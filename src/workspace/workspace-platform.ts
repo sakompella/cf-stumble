@@ -34,7 +34,7 @@ export function computerStorage(storage: DurableObjectStorage): DurableObjectSto
 }
 
 export class WorkspacePlatform {
-  readonly container: WorkspaceContainerAPI;
+  readonly #container: WorkspaceContainerAPI;
   readonly lifecycle = new ContainerLifecycle();
   readonly #state: DurableObjectState;
   readonly #platformContainer: DurableObjectState["container"];
@@ -45,9 +45,9 @@ export class WorkspacePlatform {
   constructor(state: DurableObjectState) {
     this.#state = state;
     this.#platformContainer = state.container;
-    this.container = new WorkspaceContainerAPI(state);
+    this.#container = new WorkspaceContainerAPI(state);
     this.#containerBackend = new CloudflareContainerBackend({
-      container: () => ({ getWorkspaceContainer: () => this.container }),
+      container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(state.id.toString()),
     });
     this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, (runtimeId) => {
@@ -69,8 +69,9 @@ export class WorkspacePlatform {
     return this.#platformContainer?.running ?? false;
   }
 
-  async stopContainer(): Promise<void> {
-    await this.#platformContainer?.destroy("idle");
+  async stopContainer(reason: "idle" | "reset"): Promise<void> {
+    if (this.containerRunning()) await this.#platformContainer?.destroy(reason);
+
     this.lifecycle.stoppedByHost();
   }
 

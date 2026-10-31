@@ -32,10 +32,10 @@ class FakeContainer {
     throw new Error("the fake container does not launch");
   }
 
-  destroy(reason: string): Promise<void> {
+  destroy(reason?: string): Promise<void> {
     this.destroyed.push(reason);
 
-    if (reason === "idle") this.running = false;
+    if (reason !== undefined) this.running = false;
 
     return this.destroyGate ?? Promise.resolve();
   }
@@ -152,16 +152,26 @@ test("a call on the project capability counts as activity", async () => {
   expect(destroyed, "the alarm finds the limit not yet passed since the call").toEqual([]);
 });
 
-test("a reset that lost the alarm arms a new one", async () => {
-  const alarm = await withHost("host-seam-reset", async (host, state) => {
+test("a reset deletes the store and stops the container without starting another", async () => {
+  const seen = await withHost("host-seam-reset", async (host, _state, container) => {
     await host.build(REFUSED_BUILD);
-    await state.storage.deleteAlarm();
-    await host.reset().catch(() => {});
+    const answer = await host.reset();
 
-    return state.storage.getAlarm();
+    return { answer, starts: container.starts, running: container.running };
   });
 
-  expect(alarm).not.toBeNull();
+  expect(seen).toEqual({ answer: { ok: true, reset: "workspace" }, starts: 0, running: false });
+});
+
+test("a reset while the container is stopped destroys nothing", async () => {
+  const destroyed = await withHost("host-seam-reset-stopped", async (host, _state, container) => {
+    container.running = false;
+    await host.reset();
+
+    return container.destroyed;
+  });
+
+  expect(destroyed).toEqual([]);
 });
 
 const tick = () =>

@@ -1,7 +1,3 @@
-import type {
-  ContainerLaunchSpec,
-  ContainerRuntimeInfo,
-} from "@cloudflare/computer/backends/container";
 import * as Effect from "effect/Effect";
 import { logEvent } from "../diagnostics.js";
 
@@ -15,23 +11,14 @@ type WorkspaceStorageReset = Readonly<{
   deleteAll(): Promise<void>;
 }>;
 
-type WorkspaceContainerReset = Readonly<{
-  restart(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo>;
-}>;
-
-const WORKSPACE_CONTAINER_RESET_SPEC = {
-  env: { PORT: "8080", MOUNT_POINT: "/workspace" },
-  enableInternet: true,
-} as const satisfies ContainerLaunchSpec;
-
 export function resetWorkspaceStorage(
   storage: WorkspaceStorageReset,
-  container: WorkspaceContainerReset,
+  stopContainer: () => Promise<void>,
 ): Effect.Effect<WorkspaceResetResult> {
   return Effect.promise(async () => {
     await storage.deleteAll();
-    const restarted = await container.restart(WORKSPACE_CONTAINER_RESET_SPEC);
-    logEvent("info", "workspace.reset", { runtimeId: restarted.runtimeId });
+    await stopContainer();
+    logEvent("info", "workspace.reset");
 
     return { ok: true, reset: "workspace" } as const;
   });
