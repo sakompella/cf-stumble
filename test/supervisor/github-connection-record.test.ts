@@ -2,7 +2,9 @@ import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { GitHubCredentialResult } from "../../src/workspace/github-credential.js";
-import type { WorkspaceResetResult } from "../../src/workspace/index.js";
+import type { ResetWorkspaceHost } from "../../src/supervisor/supervisor-env.js";
+import type { CredentialWorkspaceHost, WorkspaceResetResult } from "../../src/workspace/index.js";
+import { replaceWorkspaceHost } from "../workspace-host-spy.js";
 import { connectSampleProjects } from "./helpers.js";
 
 const NOW = 1_700_000_000_000;
@@ -17,10 +19,9 @@ afterEach(async () => {
 function workspaceAnswering(answer: GitHubCredentialResult) {
   const credential = vi.fn(() => Promise.resolve(answer));
 
-  // SAFETY: the fake implements the one RPC a connection check makes.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
-  const workspace = { credential } as unknown as ReturnType<typeof env.WORKSPACE_HOST.getByName>;
-  const getByName = vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(workspace);
+  const getByName = replaceWorkspaceHost<CredentialWorkspaceHost>(env.WORKSPACE_HOST, {
+    credential,
+  });
 
   return { credential, getByName };
 }
@@ -95,12 +96,10 @@ function heldCheckWorkspace(resetAnswer: WorkspaceResetResult) {
     return answer;
   });
 
-  // SAFETY: the fake implements the credential check and the reset this test makes.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion
-  const workspace = {
+  const workspace: CredentialWorkspaceHost & ResetWorkspaceHost = {
     credential,
     reset: () => Promise.resolve(resetAnswer),
-  } as unknown as ReturnType<typeof env.WORKSPACE_HOST.getByName>;
+  };
 
   return { started, answer: held.answer, workspace };
 }
@@ -122,7 +121,7 @@ test.each([
 ] as const)("a refresh held across $outcome", async ({ resetAnswer, stored }) => {
   const control = env.SUPERVISOR.getByName(`record-refresh-across-reset-${resetAnswer.ok}`);
   const fake = heldCheckWorkspace(resetAnswer);
-  vi.spyOn(env.WORKSPACE_HOST, "getByName").mockReturnValue(fake.workspace);
+  replaceWorkspaceHost(env.WORKSPACE_HOST, fake.workspace);
   vi.spyOn(console, "warn").mockImplementation(() => {});
 
   await runInDurableObject(control, async (supervisor) => {

@@ -11,9 +11,9 @@ import type {
 } from "../workspace/index.js";
 import { tenantWorkspaceName } from "../workspace-names.js";
 
-export type ResetWorkspaceNamespace = Readonly<{
-  getByName(name: string): Readonly<{ reset(): Promise<WorkspaceResetResult> }>;
-}>;
+export type ResetWorkspaceHost = Readonly<{ reset(): Promise<WorkspaceResetResult> }>;
+
+export type ResetWorkspaceNamespace = Readonly<{ getByName(name: string): ResetWorkspaceHost }>;
 
 export type SupervisorWorkspaceReset =
   | WorkspaceResetResult
