@@ -12,7 +12,7 @@ The **supervisor** is the immutable half. It lives in the Supervisor Durable Obj
 
 There is no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing.
 
-The supervisor reaches a facet through RPC: `piDurableVersion` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). Other paths are forwarded with ordinary `fetch` (`forwardToFacet` in `src/supervisor/supervisor.ts`). ADR-0003 does not fix this as a permanent contract.
+The supervisor reaches a facet through RPC: `piDurableVersion` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). Nothing reaches a facet over HTTP: the Worker serves the page and the owner API and answers 404 for any other path. ADR-0003 does not fix this as a permanent contract.
 
 ## What the main harness knows and tries to do
 

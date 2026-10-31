@@ -41,8 +41,7 @@ const readyCheck = {
   ok: true,
   report: {
     stage: "ready",
-    reason: "response body completed in 5 bytes",
-    status: 200,
+    reason: "the generation runs Pi Durable 1.4.0",
     generation: candidate("ready"),
     effect: "recorded",
   },
@@ -59,8 +58,7 @@ const expectedLabeledAndPrepared = {
     ok: true,
     report: {
       stage: "ready",
-      reason: "response body completed in 5 bytes",
-      status: 200,
+      reason: "the generation runs Pi Durable 1.4.0",
       generation: { label: 1, harnessCommit, status: "ready" },
       effect: "recorded",
     },
@@ -127,9 +125,8 @@ test("returns a failed startup check as the recorded preparation result", async 
         return Promise.resolve({
           ok: true,
           report: {
-            stage: "response-rejected",
-            reason: "response status was 500",
-            status: 500,
+            stage: "version-mismatch",
+            reason: "the generation runs Pi Durable 0.0.1; this Supervisor stores 1.4.0",
             generation: candidate("failed"),
             effect: "recorded",
           },
@@ -141,7 +138,7 @@ test("returns a failed startup check as the recorded preparation result", async 
   expect(response.status, "a checked candidate that fails is a decision, not a fault").toBe(200);
   await expect(response.json()).resolves.toMatchObject({
     ok: true,
-    preparation: { ok: true, report: { stage: "response-rejected", effect: "recorded" } },
+    preparation: { ok: true, report: { stage: "version-mismatch", effect: "recorded" } },
   });
 });
 

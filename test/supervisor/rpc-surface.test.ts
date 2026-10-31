@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, expectTypeOf, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { artifact, prepareWithModuleMap } from "./helpers.js";
+import { artifact, prepareWithModuleMap, servedText } from "./helpers.js";
 
 const deadlineCommit = "cafe456789abcdef0123456789abcdef01234567";
 
@@ -43,7 +43,7 @@ test("startup checking returns plain RPC values", async () => {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  fetch() { return new Promise(() => {}); }
+  piDurableVersion() { return new Promise(() => {}); }
 }
 `,
     ),
@@ -52,7 +52,7 @@ export class MainFacet extends DurableObject {
 
   expect(result).toMatchObject({
     ok: true,
-    report: { stage: "deadline-expired", reason: "response headers exceeded the deadline" },
+    report: { stage: "deadline-expired", reason: "the Pi Durable version exceeded the deadline" },
   });
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(result).not.toHaveProperty("status");
@@ -92,7 +92,7 @@ test("the failure arms of startup checking return plain RPC values", async () =>
   expect(failures).toStrictEqual(structuredClone(failures));
 });
 
-test("the failure arms of control, conversations, and relay return plain values", async () => {
+test("the failure arms of control and conversations return plain values", async () => {
   const control = supervisor("plain-control-failures");
 
   const failures = [
@@ -105,12 +105,5 @@ test("the failure arms of control, conversations, and relay return plain values"
     { ok: false, problem: { code: "unknown-project-id" } },
   ]);
   expect(failures).toStrictEqual(structuredClone(failures));
-
-  const relayed = await control.fetch("https://supervisor.invalid/");
-
-  expect(relayed.status).toBe(503);
-  expect(await relayed.json()).toStrictEqual({
-    ok: false,
-    problem: { code: "no-active-generation" },
-  });
+  expect(await servedText(control)).toBe("refused: no-active-generation");
 });

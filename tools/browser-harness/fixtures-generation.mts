@@ -99,7 +99,6 @@ function preparation(record: GenerationRecord): JsonValue {
       effect: "recorded",
       stage: "ready",
       reason: "startup check answered",
-      status: 200,
     },
   };
 }

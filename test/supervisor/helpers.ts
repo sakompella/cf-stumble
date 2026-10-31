@@ -7,7 +7,7 @@ import { sampleCatalog } from "../project-fixtures.js";
 import {
   fixtureMainHarnessArtifact,
   fixtureMainHarnessCommit,
-  PI_DURABLE_VERSION_METHOD,
+  servingFacetSource,
 } from "../facet/fixture.js";
 import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
@@ -16,18 +16,21 @@ import type { Supervisor } from "../../src/supervisor/supervisor.js";
 
 export const commits = {
   ordinary: "0123456789abcdef0123456789abcdef01234567",
-  notFound: "1123456789abcdef0123456789abcdef01234567",
+  noVersion: "1123456789abcdef0123456789abcdef01234567",
   parse: "2123456789abcdef0123456789abcdef01234567",
   missingFacet: "3123456789abcdef0123456789abcdef01234567",
   constructor: "4123456789abcdef0123456789abcdef01234567",
   request: "5123456789abcdef0123456789abcdef01234567",
-  errorResponse: "6123456789abcdef0123456789abcdef01234567",
   delayed: "7123456789abcdef0123456789abcdef01234567",
-  oversized: "8123456789abcdef0123456789abcdef01234567",
   fresh: "b123456789abcdef0123456789abcdef01234567",
 } as const;
 
-export { parsedArtifact, PI_DURABLE_VERSION_METHOD } from "../facet/fixture.js";
+export {
+  fixtureMainHarnessCommit,
+  parsedArtifact,
+  PI_DURABLE_VERSION_METHOD,
+  servingFacetSource,
+} from "../facet/fixture.js";
 
 export function artifact(harnessCommit: string, source: string): MainHarnessArtifactInput {
   return {
@@ -42,16 +45,15 @@ export function readyArtifact(harnessCommit: string): MainHarnessArtifactInput {
     return fixtureMainHarnessArtifact;
   }
 
-  return artifact(
-    harnessCommit,
-    `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  fetch() { return new Response("ready"); }
-  ${PI_DURABLE_VERSION_METHOD}
+  return artifact(harnessCommit, servingFacetSource(harnessCommit));
 }
-`,
-  );
+
+export async function servedText(control: DurableObjectStub<Supervisor>): Promise<string> {
+  const result = await control.projectEvents("harness");
+
+  if (!result.ok) return `refused: ${result.problem.code}`;
+
+  return new Response(result.events).text();
 }
 
 export function storeModuleMap(

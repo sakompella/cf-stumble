@@ -1,23 +1,5 @@
 import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../page/index.js";
 
-function acceptsHtmlDocument(accept: string | null): boolean {
-  if (accept === null) {
-    return false;
-  }
-
-  return accept
-    .split(",")
-    .some((entry) => (entry.split(";")[0] ?? "").trim().toLowerCase() === "text/html");
-}
-
-export function isOwnerPageRequest(request: Request): boolean {
-  return (
-    request.method === "GET" &&
-    new URL(request.url).pathname === "/" &&
-    acceptsHtmlDocument(request.headers.get("accept"))
-  );
-}
-
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
     status: 200,
@@ -59,5 +41,7 @@ export function ownerPageResponse(
     return ownerPageScript();
   }
 
-  return isOwnerPageRequest(request) ? ownerPage(nonce) : undefined;
+  return request.method === "GET" && new URL(request.url).pathname === "/"
+    ? ownerPage(nonce)
+    : undefined;
 }

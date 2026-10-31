@@ -36,7 +36,7 @@ export function routePattern(pathname: string): string {
 
   if (suffix !== undefined) return `/api/projects/:projectId${suffix}`;
 
-  return pathname.startsWith("/api/") ? "/api/unknown" : "relay";
+  return pathname.startsWith("/api/") ? "/api/unknown" : "unknown";
 }
 
 export function projectIdFromPath(

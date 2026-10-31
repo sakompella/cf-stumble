@@ -67,9 +67,9 @@ describe("ran-past-idle", () => {
   });
 
   it("allows running time only for owner API requests", () => {
-    const longRelay = { ...request(60, "relay"), wallTimeMs: 60 * MINUTE_MS };
+    const longPage = { ...request(60, "/"), wallTimeMs: 60 * MINUTE_MS };
 
-    assert.deepEqual(rules(check([longRelay], runningBetween(0, 80))), ["ran-past-idle"]);
+    assert.deepEqual(rules(check([longPage], runningBetween(0, 80))), ["ran-past-idle"]);
   });
 
   it("flags a container that runs with no request at all", () => {

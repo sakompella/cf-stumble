@@ -6,7 +6,6 @@ import type { GenerationRecord, GenerationState } from "./fixtures-generation.mj
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
-  acceptsHtml,
   isOwnerPageScriptPath,
   sendJson,
   sendOwnerPage,
@@ -114,7 +113,7 @@ async function handle(
     return;
   }
 
-  if (req.method === "GET" && path === "/" && acceptsHtml(req.headers.accept)) {
+  if (req.method === "GET" && path === "/") {
     record.status = 200;
     sendOwnerPage(res);
 

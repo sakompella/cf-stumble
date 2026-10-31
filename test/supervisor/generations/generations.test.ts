@@ -3,13 +3,8 @@ import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../../facet/fixture.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
-import {
-  artifact,
-  prepareGeneration,
-  storeModuleMap,
-  submitCandidate,
-  PI_DURABLE_VERSION_METHOD,
-} from "../helpers.js";
+import { artifact, prepareGeneration, storeModuleMap, submitCandidate } from "../helpers.js";
+import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
 import { readGeneration, readGenerations } from "../generation-reads.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -22,15 +17,12 @@ function stagedPreparationArtifact(harnessCommit: string) {
     `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
   constructor(ctx, env) {
     super(ctx, env);
-    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS checks (count INTEGER NOT NULL)");
-    ctx.storage.sql.exec("INSERT INTO checks (count) VALUES (1)");
+    ctx.storage.kv.put("checks", (ctx.storage.kv.get("checks") ?? 0) + 1);
   }
-  fetch() {
-    const count = this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM checks").one().count;
-    return new Response("check " + count, { status: count < 3 ? 200 : 500 });
+  piDurableVersion() {
+    return this.ctx.storage.kv.get("checks") < 3 ? ${JSON.stringify(PI_DURABLE_VERSION)} : "0.0.1";
   }
 }
 `,
@@ -107,7 +99,7 @@ test("a later preparation outcome replaces the recorded status", async () => {
   expect(failed).toMatchObject({
     ok: true,
     report: {
-      stage: "response-rejected",
+      stage: "version-mismatch",
       effect: "recorded",
       generation: { label, status: "failed" },
     },

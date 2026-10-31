@@ -56,9 +56,6 @@ export function supervisorParts(
 
   const { github, connections } = projectParts(ctx.storage, env, workspaceName);
 
-  const mountServing = () =>
-    artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute());
-
   const sources = { workspaceName, namespace: env.WORKSPACE_HOST, generations, connections };
 
   return {
@@ -70,7 +67,10 @@ export function supervisorParts(
     connections,
     serving: new ServingConversations({
       ctx,
-      mount: () => Effect.fromResult(mountServing()),
+      mount: () =>
+        Effect.fromResult(
+          artifacts.mount(generations.active(), env.LOADER, ctx.facets, modelRoute()),
+        ),
       catalog: () => connections.catalog(),
       resetting,
       obtainWorkspace: (project, remainingMs, signal) =>
@@ -82,6 +82,5 @@ export function supervisorParts(
       model: env.CHATGPT_MODEL,
       clock: () => Date.now(),
     }),
-    mountServing,
   };
 }

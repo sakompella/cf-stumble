@@ -1,13 +1,13 @@
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import { fixtureMainHarnessCommit } from "../facet/fixture.js";
-import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
 import type { GenerationSubmissionResult } from "../../src/routes/index.js";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activeSupervisor,
+  servedText,
+  servingFacetSource,
   storeModuleMap,
-  PI_DURABLE_VERSION_METHOD,
 } from "../supervisor/helpers.js";
 import { readGeneration, readGenerations } from "../supervisor/generation-reads.js";
 import { ownerApiResponse } from "./helpers.js";
@@ -20,32 +20,16 @@ const commits = {
   resubmittedUnbuildable: "5100000000000000000000000000000000000006",
 } as const;
 
-function moduleMap(harnessCommit: string, body: string, status: number): MainHarnessArtifactInput {
-  return {
-    harnessCommit,
-    entryModule: "main.js",
-    modules: [
-      {
-        name: "main.js",
-        source: `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response(${JSON.stringify(body)}, { status: ${String(status)} }); }
-}
-`,
-      },
-    ],
-  };
-}
-
 function seedModuleMap(
   control: DurableObjectStub<Supervisor>,
   harnessCommit: string,
-  body = "candidate serving",
-  status = 200,
+  versionMethod?: string,
 ): Promise<void> {
-  return storeModuleMap(control, moduleMap(harnessCommit, body, status));
+  return storeModuleMap(control, {
+    harnessCommit,
+    entryModule: "main.js",
+    modules: [{ name: "main.js", source: servingFacetSource("candidate serving", versionMethod) }],
+  });
 }
 
 function submit(control: DurableObjectStub<Supervisor>, harnessCommit: string): Promise<Response> {
@@ -86,8 +70,7 @@ async function expectActiveFixtureStillServing(
     harnessCommit: fixtureMainHarnessCommit,
     status: "ready",
   });
-  const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));
-  expect(await response.text()).toBe("pong");
+  expect(await servedText(control)).toBe(fixtureMainHarnessCommit);
 }
 
 afterEach(async () => {
@@ -136,14 +119,14 @@ test("returns a recorded failing preparation when the candidate module map canno
 
 test("records a candidate that fails its startup check and keeps the active generation", async () => {
   const control = await activeSupervisor("submit-failing-candidate");
-  await seedModuleMap(control, commits.rejecting, "candidate refused the startup request", 500);
+  await seedModuleMap(control, commits.rejecting, `piDurableVersion() { return "0.0.1"; }`);
 
   const result = await submission(control, commits.rejecting);
   const label = submittedLabel(result);
 
   expect(result).toMatchObject({
     ok: true,
-    preparation: { ok: true, report: { stage: "response-rejected", status: 500 } },
+    preparation: { ok: true, report: { stage: "version-mismatch" } },
   });
   expect(await readGeneration(control, label)).toMatchObject({ label, status: "failed" });
   await expectActiveFixtureStillServing(control);

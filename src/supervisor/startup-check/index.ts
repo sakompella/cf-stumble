@@ -1,16 +1,13 @@
 import * as Effect from "effect/Effect";
 import type { MainFacetCapabilities } from "../../facet/index.js";
-import type { StartupCheckOutcome } from "./body.js";
 
 import { parseGenerationLabel } from "../generations/index.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
-import { runStartupCheck } from "./candidate.js";
+import { runStartupCheck, type StartupCheckOutcome } from "./candidate.js";
 
 import type { Generation, Generations, PreparationCheckProblem } from "../generations/index.js";
 
 const STARTUP_CHECK_DEADLINE_MS = 5_000;
-
-const STARTUP_CHECK_MAX_BODY_BYTES = 1_024;
 
 export type StartupCheckHost = Readonly<{
   ctx: DurableObjectState;
@@ -22,7 +19,6 @@ export type StartupCheckHost = Readonly<{
 
 export type StartupCheckOptions = {
   readonly deadlineMs?: number;
-  readonly maxBodyBytes?: number;
 };
 
 type StartupCheckReport = StartupCheckOutcome & {
@@ -69,11 +65,10 @@ function checkLabeledStartup(
 
     const moduleMap = yield* host.artifacts.prepare(generation.harnessCommit);
 
-    const outcome = yield* Effect.promise(() =>
-      runStartupCheck(host, moduleMap, generation.harnessCommit, {
-        deadlineMs: options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
-        maxBodyBytes: options.maxBodyBytes ?? STARTUP_CHECK_MAX_BODY_BYTES,
-      }),
+    const outcome = yield* runStartupCheck(
+      host,
+      moduleMap,
+      options.deadlineMs ?? STARTUP_CHECK_DEADLINE_MS,
     );
 
     const recorded = yield* Effect.fromResult(

@@ -16,10 +16,12 @@ import {
   activateGeneration,
   activeSupervisor,
   artifact,
+  fixtureMainHarnessCommit,
   parsedArtifact,
+  servedText,
+  servingFacetSource,
   storeModuleMap,
   submitCandidate,
-  PI_DURABLE_VERSION_METHOD,
 } from "../helpers.js";
 
 const commits = {
@@ -250,24 +252,13 @@ test("rolls back to a stored generation while every build fails", async () => {
   const secondCommit = commits.rolledForward;
   await storeModuleMap(
     control,
-    artifact(
-      secondCommit,
-      `
-import { DurableObject } from "cloudflare:workers";
-export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
-  fetch() { return new Response("second generation serving"); }
-}
-`,
-    ),
+    artifact(secondCommit, servingFacetSource("second generation serving")),
   );
   const second = await submitCandidate(control, secondCommit);
   const preparedSecond = await control.prepareGeneration(second);
   expect(preparedSecond).toMatchObject({ ok: true, report: { stage: "ready" } });
   await activateGeneration(control, second);
-  expect(await (await control.fetch(new Request("https://cf-stumble.test/"))).text()).toBe(
-    "second generation serving",
-  );
+  expect(await servedText(control)).toBe("second generation serving");
 
   await evictDurableObject(control);
   const active = await control.getActiveGeneration();
@@ -278,10 +269,8 @@ export class MainFacet extends DurableObject {
     observedEpoch: active.epoch,
   });
 
-  const response = await control.fetch(new Request("https://cf-stumble.test/facet/ping"));
-
   expect(rolledBack).toMatchObject({ ok: true, outcome: { kind: "rolled-back" } });
-  expect(await response.text()).toBe("pong");
+  expect(await servedText(control)).toBe(fixtureMainHarnessCommit);
 
   const unbuildable = await control.prepareGeneration(
     await submitCandidate(control, commits.unbuildable),

@@ -2,7 +2,12 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
 import type { Supervisor } from "../../src/supervisor/supervisor.js";
-import { activateFixtureGeneration, prepareGeneration, submitCandidate } from "./helpers.js";
+import {
+  activateFixtureGeneration,
+  prepareGeneration,
+  servedText,
+  submitCandidate,
+} from "./helpers.js";
 import { readGeneration } from "./generation-reads.js";
 
 const replacementCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -30,26 +35,18 @@ async function activateReplacement(control: DurableObjectStub<Supervisor>, obser
   return control.controlGeneration({ kind: "activate", label: generation.label, observedEpoch });
 }
 
-async function completedTurn(control: DurableObjectStub<Supervisor>): Promise<void> {
-  const response = await control.fetch(
-    new Request("https://cf-stumble.test/facet/relay/body-complete"),
-  );
-
-  await response.text();
-}
-
 afterEach(async () => {
   await reset();
 });
 
-test("keeps the activation epoch stable while relaying a completed turn", async () => {
-  const control = await readyReplacement("epoch-scope-relay");
-  const beforeRelay = await control.getActiveGeneration();
+test("keeps the activation epoch stable while the active generation serves", async () => {
+  const control = await readyReplacement("epoch-scope-serving");
+  const beforeServing = await control.getActiveGeneration();
 
-  await completedTurn(control);
+  await servedText(control);
 
-  expect(await control.getActiveGeneration()).toEqual(beforeRelay);
-  const activated = await activateReplacement(control, beforeRelay.epoch);
+  expect(await control.getActiveGeneration()).toEqual(beforeServing);
+  const activated = await activateReplacement(control, beforeServing.epoch);
   expect(activated).toMatchObject({
     ok: true,
     outcome: { kind: "activated", generation: { label: 1 } },

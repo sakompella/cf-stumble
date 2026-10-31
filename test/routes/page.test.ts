@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { OWNER_PAGE_IDS, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
-import { isOwnerPageRequest, ownerPageResponse } from "../../src/routes/index.js";
+import { ownerPageResponse } from "../../src/routes/index.js";
 import worker from "../../src/worker.js";
 
 const BROWSER_ACCEPT =
@@ -26,11 +26,10 @@ test("a browser request for GET / receives the owner page", async () => {
   expect(body).toContain(`id="${OWNER_PAGE_IDS.root}"`);
 });
 
-test("a machine request for GET / is not the owner page", () => {
-  expect(ownerPageResponse(pageRequest({ accept: "*/*" }))).toBeUndefined();
-  expect(ownerPageResponse(pageRequest({ accept: "application/json" }))).toBeUndefined();
-  expect(ownerPageResponse(pageRequest())).toBeUndefined();
-  expect(isOwnerPageRequest(pageRequest({ accept: BROWSER_ACCEPT }))).toBe(true);
+test("every GET / is the owner page, whatever it accepts", () => {
+  expect(ownerPageResponse(pageRequest({ accept: "*/*" }))?.status).toBe(200);
+  expect(ownerPageResponse(pageRequest({ accept: "application/json" }))?.status).toBe(200);
+  expect(ownerPageResponse(pageRequest())?.status).toBe(200);
 });
 
 test("only GET / is the owner page", () => {
@@ -76,20 +75,13 @@ test("the page's script is served once per path and kept by the browser", async 
   expect(await response.text()).toBe(OWNER_PAGE_SCRIPT_FILE.source);
 });
 
-test("a script path that is not the current one goes to the relay", async () => {
+test("a path the Worker does not own answers 404", async () => {
   const stale = OWNER_PAGE_SCRIPT_FILE.path.replace(/owner-[0-9a-f]+/u, "owner-0000000000000000");
-  const response = await pageFetch(stale, "*/*");
-  const body = await response.text();
 
-  expect(response.status).toBe(503);
-  expect(body).not.toContain("refreshStatus");
-});
+  for (const path of [stale, "/unknown", "/generations"]) {
+    const response = await pageFetch(path, "*/*");
 
-test("a machine request for GET / still reaches the Supervisor relay", async () => {
-  const response = await worker.fetch(pageRequest({ accept: "*/*" }), env);
-  const body = await response.text();
-
-  expect(response.status).toBe(503);
-  expect(body).toBe('{"ok":false,"problem":{"code":"no-active-generation"}}');
-  expect(body).not.toContain(OWNER_PAGE_IDS.root);
+    expect(response.status, path).toBe(404);
+    await expect(response.json()).resolves.toEqual({ ok: false, error: { code: "not-found" } });
+  }
 });

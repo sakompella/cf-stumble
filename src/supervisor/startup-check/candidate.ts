@@ -1,138 +1,69 @@
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { loadMainFacet } from "../../facet/index.js";
-import type {
-  MainFacetCapabilities,
-  MainFacetTarget,
-  MainHarnessArtifact,
-} from "../../facet/index.js";
+import type { MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
 import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
 import { candidateFacetName } from "../artifacts/index.js";
-import { deadlineAfter, drainResponseBody, errorReason } from "./body.js";
-import type { Deadline, StartupCheckOutcome, ThrownValue } from "./body.js";
 import type { StartupCheckHost } from "./index.js";
 
-type StartupRequestBounds = Readonly<{
-  deadlineMs: number;
-  maxBodyBytes: number;
+export type StartupCheckOutcome = Readonly<{
+  stage: "ready" | "mount-failed" | "deadline-expired" | "version-mismatch";
+  reason: string;
 }>;
 
-type CandidateMount =
-  | Readonly<{ ok: true; fetcher: Fetcher<MainFacetTarget> }>
-  | Readonly<{ ok: false; reason: string }>;
-
-export async function runStartupCheck(
+export function runStartupCheck(
   host: StartupCheckHost,
   artifact: MainHarnessArtifact,
-  harnessCommit: string,
-  bounds: StartupRequestBounds,
-): Promise<StartupCheckOutcome> {
-  const modelRoute = host.modelRoute();
-  const deadline = deadlineAfter(bounds.deadlineMs);
+  deadlineMs: number,
+): Effect.Effect<StartupCheckOutcome> {
+  const candidate = mountCandidateFacet(host, artifact);
 
-  try {
-    const candidate = mountCandidateFacet(host, artifact, harnessCommit, modelRoute);
-
-    if (!candidate.ok) {
-      return { stage: "mount-failed", reason: candidate.reason };
-    }
-
-    const response = await classifyCandidateResponse(
-      candidate.fetcher,
-      deadline,
-      bounds.maxBodyBytes,
-    );
-
-    return response.stage === "ready"
-      ? await checkPiDurableVersion(candidate.fetcher, deadline, response)
-      : response;
-  } finally {
-    deadline.cancel();
+  if (Result.isFailure(candidate)) {
+    return Effect.succeed({ stage: "mount-failed", reason: candidate.failure });
   }
+
+  return Effect.tryPromise({
+    try: () => candidate.success.piDurableVersion(),
+    catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
+  }).pipe(
+    Effect.match({
+      onSuccess: versionOutcome,
+      onFailure: (reason): StartupCheckOutcome => ({
+        stage: "mount-failed",
+        reason: `the candidate did not answer piDurableVersion: ${reason}`,
+      }),
+    }),
+    Effect.timeoutOrElse({
+      duration: deadlineMs,
+      orElse: () =>
+        Effect.succeed<StartupCheckOutcome>({
+          stage: "deadline-expired",
+          reason: "the Pi Durable version exceeded the deadline",
+        }),
+    }),
+  );
 }
 
-async function classifyCandidateResponse(
-  fetcher: Fetcher,
-  deadline: Deadline,
-  maxBodyBytes: number,
-): Promise<StartupCheckOutcome> {
-  const response = await responseBeforeDeadline(fetcher, deadline);
-
-  if (!(response instanceof Response)) {
-    return response;
-  }
-
-  if (response.status >= 400) {
-    return {
-      stage: "response-rejected",
-      reason: `response status was ${response.status}`,
-      status: response.status,
-    };
-  }
-
-  return drainResponseBody(response, deadline, maxBodyBytes);
-}
-
-async function checkPiDurableVersion(
-  facet: Fetcher<MainFacetTarget>,
-  deadline: Deadline,
-  ready: StartupCheckOutcome,
-): Promise<StartupCheckOutcome> {
-  const reported = await Promise.race([
-    facet.piDurableVersion().then(
-      (version) => ({ kind: "reported" as const, version }),
-      () => ({ kind: "unreported" as const }),
-    ),
-    deadline.elapsed.then(() => ({ kind: "deadline" as const })),
-  ]);
-
-  if (reported.kind === "deadline") {
-    return { stage: "deadline-expired", reason: "the Pi Durable version exceeded the deadline" };
-  }
-
-  if (reported.kind === "reported" && reported.version === PI_DURABLE_VERSION) return ready;
-
-  return {
-    stage: "version-mismatch",
-    reason:
-      reported.kind === "reported"
-        ? `the generation runs Pi Durable ${reported.version}; this Supervisor stores ${PI_DURABLE_VERSION}`
-        : "the generation reports no Pi Durable version",
-  };
+function versionOutcome(version: string): StartupCheckOutcome {
+  return version === PI_DURABLE_VERSION
+    ? { stage: "ready", reason: `the generation runs Pi Durable ${version}` }
+    : {
+        stage: "version-mismatch",
+        reason: `the generation runs Pi Durable ${version}; this Supervisor stores ${PI_DURABLE_VERSION}`,
+      };
 }
 
 function mountCandidateFacet(
   host: StartupCheckHost,
   artifact: MainHarnessArtifact,
-  harnessCommit: string,
-  modelRoute: MainFacetCapabilities["MODEL"],
-): CandidateMount {
+): Result.Result<Fetcher<MainFacetTarget>, string> {
   try {
-    const { facetClass } = loadMainFacet(host.loader, artifact, { MODEL: modelRoute });
-    const name = candidateFacetName(harnessCommit);
+    const { facetClass } = loadMainFacet(host.loader, artifact, { MODEL: host.modelRoute() });
+    const name = candidateFacetName(artifact.harnessCommit);
     host.ctx.facets.abort(name, "discard prior startup-check candidate");
 
-    return {
-      ok: true,
-      fetcher: host.ctx.facets.get(name, () => ({ class: facetClass })),
-    };
+    return Result.succeed(host.ctx.facets.get(name, () => ({ class: facetClass })));
   } catch {
-    return { ok: false, reason: "candidate facet could not mount" };
+    return Result.fail("candidate facet could not mount");
   }
-}
-
-function responseBeforeDeadline(
-  fetcher: Fetcher,
-  deadline: Deadline,
-): Promise<Response | StartupCheckOutcome> {
-  return Promise.race([
-    fetcher
-      .fetch(new Request("https://main-facet.invalid/"))
-      .catch((error: ThrownValue): StartupCheckOutcome => ({
-        stage: "headers-not-received",
-        reason: errorReason(error),
-      })),
-    deadline.elapsed.then((): StartupCheckOutcome => ({
-      stage: "deadline-expired",
-      reason: "response headers exceeded the deadline",
-    })),
-  ]);
 }

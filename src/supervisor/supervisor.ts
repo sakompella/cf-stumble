@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import type { GenerationCommand } from "./control/index.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
 import { checkGenerationStartup, type StartupCheckOptions } from "./startup-check/index.js";
-import { relayToMainFacet } from "./facet-relay.js";
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
 import type {
   ResetWorkspaceNamespace,
@@ -157,9 +156,5 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   override alarm(): Promise<void> {
     return runAtEntryPoint(this.#parts.serving.alarm(Date.now()));
-  }
-
-  override fetch(request: Request): Promise<Response> {
-    return relayToMainFacet(request, this.#parts.mountServing());
   }
 }

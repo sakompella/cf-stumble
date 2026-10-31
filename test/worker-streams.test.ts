@@ -73,16 +73,3 @@ test("a conversation's events reach the client while they commit, and a cancel r
   await expect(firstChunkThenCancel(response)).resolves.toBe('{"type":"snapshot"}\n');
   await expect(events.cancelled).resolves.toBeUndefined();
 });
-
-test("a relayed generation response streams through, and a cancel reaches the generation", async () => {
-  const supervisor = ownersSupervisor();
-  const body = heldStream("first part");
-
-  vi.spyOn(supervisor, "fetch").mockResolvedValue(new Response(body.stream));
-
-  const response = await worker.fetch(new Request(`${ORIGIN}/generation/page`), env);
-
-  expect(response.status).toBe(200);
-  await expect(firstChunkThenCancel(response)).resolves.toBe("first part");
-  await expect(body.cancelled).resolves.toBeUndefined();
-});

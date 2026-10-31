@@ -10,9 +10,7 @@ export type {
   MainHarnessArtifactProblem,
 } from "./artifact.js";
 
-export interface MainFacetTarget extends Rpc.DurableObjectBranded, ConversationFacet {
-  fetch(request: Request): Promise<Response>;
-}
+export type MainFacetTarget = Rpc.DurableObjectBranded & ConversationFacet;
 
 function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] {
   return [module.name, { js: module.source }];
