@@ -29,13 +29,6 @@ export class ProjectConversations {
       .toArray()[0]?.project_id;
   }
 
-  conversations(): readonly string[] {
-    return this.sql
-      .exec<{ conversation_id: string }>("SELECT conversation_id FROM project_conversations")
-      .toArray()
-      .map((row) => row.conversation_id);
-  }
-
   point(projectId: string, conversationId: string): void {
     this.sql.exec(
       `INSERT INTO project_conversations (project_id, conversation_id) VALUES (?, ?)

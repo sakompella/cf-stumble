@@ -1,6 +1,11 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai";
-import { createRegistry, Harness, type HarnessSettings } from "@earendil-works/pi-durable";
+import {
+  createRegistry,
+  Harness,
+  type HarnessSettings,
+  type TaskGraph,
+} from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import type { ConversationHost } from "../conversation-protocol.js";
@@ -57,5 +62,36 @@ export async function openSession(input: SessionInput): Promise<Session> {
     BACKGROUND_CONTEXT,
   );
 
+  await relayRunningConversations(harness, host, input.abort);
+
   return { harness, host };
+}
+
+async function relayRunningConversations(
+  harness: Harness,
+  host: ConversationHost,
+  abort: (reason: string) => void,
+): Promise<void> {
+  const graph = await harness.watchTaskGraph(BACKGROUND_CONTEXT);
+  let reported = runningConversations(graph.value);
+
+  await host.running(reported);
+  graph.start(async (value) => {
+    const running = runningConversations(value);
+
+    if (running.join(" ") === reported.join(" ")) return;
+
+    reported = running;
+    await host.running(running).catch(() => {
+      abort("the Supervisor did not take the running conversations");
+    });
+  });
+}
+
+function runningConversations(graph: TaskGraph): readonly string[] {
+  const conversations = Object.values(graph.tasks)
+    .filter((task) => !task.background)
+    .map((task) => String(task.conversationId));
+
+  return [...new Set(conversations)].toSorted();
 }

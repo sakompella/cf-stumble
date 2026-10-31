@@ -23,10 +23,11 @@ export class HeldWorkspaces {
   }
 
   async capability(
+    conversationId: string,
     project: SelectableProject,
     remainingMs: number,
   ): Promise<ProjectRpcTargetContract & Disposable> {
-    const held = this.#held.get(project.id) ?? this.#hold(project, remainingMs);
+    const held = this.#held.get(conversationId) ?? this.#hold(conversationId, project, remainingMs);
     const capability = await held.capability;
 
     if (capability === null) throw new Error("the workspace is unavailable");
@@ -34,30 +35,37 @@ export class HeldWorkspaces {
     return capability.dup();
   }
 
-  endAll(): void {
-    for (const held of this.#held.values()) {
-      held.release.abort();
-      void held.capability.then(end);
-    }
+  end(conversationId: string): void {
+    const held = this.#held.get(conversationId);
 
-    this.#held.clear();
+    if (held === undefined) return;
+
+    this.#held.delete(conversationId);
+    held.release.abort();
+    void held.capability.then(endTurn);
   }
 
-  #hold(project: SelectableProject, remainingMs: number): HeldWorkspace {
+  endAll(): void {
+    for (const conversationId of this.#held.keys()) this.end(conversationId);
+  }
+
+  #hold(conversationId: string, project: SelectableProject, remainingMs: number): HeldWorkspace {
     const release = new AbortController();
     const capability = Effect.runPromise(this.#obtain(project, remainingMs, release.signal));
     const held = { capability, release };
 
-    this.#held.set(project.id, held);
+    this.#held.set(conversationId, held);
     void capability.then((obtained) => {
-      if (obtained === null && this.#held.get(project.id) === held) this.#held.delete(project.id);
+      if (obtained === null && this.#held.get(conversationId) === held) {
+        this.#held.delete(conversationId);
+      }
     });
 
     return held;
   }
 }
 
-function end(capability: ProjectCapabilityStub | null): void {
+function endTurn(capability: ProjectCapabilityStub | null): void {
   if (capability === null) return;
 
   const dispose = () => {

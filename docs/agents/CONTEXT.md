@@ -28,7 +28,8 @@ A user interaction. A successful HTTP status alone does not prove that a streame
 
 **Run**:
 The work Pi Durable does on a project's conversation from a submitted message until it settles. A run
-outlives the browser that sent the message; the Supervisor relays its wakes and ends it at a deadline.
+outlives the browser that sent the message. Each run has its own deadline, 8 minutes after the facet
+reports its conversation running, and the Supervisor aborts the run when that deadline passes.
 
 ## Repositories and files
 

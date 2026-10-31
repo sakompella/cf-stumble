@@ -7,6 +7,7 @@ import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.
 
 type HostPorts = Readonly<{
   arm: (wake: Wake) => Promise<void>;
+  running: (conversationIds: readonly string[]) => Promise<void>;
   workspace: (conversationId: string) => Promise<ProjectRpcTargetContract & Disposable>;
 }>;
 
@@ -21,6 +22,8 @@ const isFiniteNumber = Schema.is(Schema.Finite);
 
 const isString = Schema.is(Schema.String);
 
+const isConversationIds = Schema.is(Schema.Array(Schema.String));
+
 export class ConversationHostTarget extends RpcTarget implements ConversationHost {
   readonly #ports: HostPorts;
 
@@ -31,6 +34,14 @@ export class ConversationHostTarget extends RpcTarget implements ConversationHos
 
   arm(wake: Wake): Promise<void> {
     return this.#ports.arm(parseWake(wake));
+  }
+
+  running(conversationIds: readonly string[]): Promise<void> {
+    if (!isConversationIds(conversationIds)) {
+      return Promise.reject(new Error("running conversations must be conversation ids"));
+    }
+
+    return this.#ports.running(conversationIds);
   }
 
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable> {

@@ -35,6 +35,7 @@ export class MainFacet extends DurableObject {
   }
 
   async submit(conversationId) {
+    await this.host.running([conversationId]);
     await this.host.arm({ active: true });
     this.run = (async () => {
       const capability = await this.host.workspace(conversationId);
@@ -42,6 +43,7 @@ export class MainFacet extends DurableObject {
 
       if (started.ok) await new Response(started.value.events).arrayBuffer();
 
+      await this.host.running([]);
       await this.host.arm({ active: false });
     })();
 

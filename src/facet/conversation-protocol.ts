@@ -3,6 +3,7 @@ import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js"
 
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
+  running(conversationIds: readonly string[]): Promise<void>;
   workspace(conversationId: string): Promise<ProjectRpcTargetContract & Disposable>;
 }
 

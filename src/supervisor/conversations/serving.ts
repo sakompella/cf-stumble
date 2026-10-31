@@ -15,7 +15,7 @@ import {
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
 import { ConversationHostTarget } from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
-import { RunDeadline } from "./wake.js";
+import { ConversationRuns } from "./runs.js";
 
 type ServingPorts = Readonly<{
   ctx: DurableObjectState;
@@ -30,19 +30,17 @@ export class ServingConversations {
   readonly #projects: ProjectConversations;
   readonly #host: ConversationHostTarget;
   readonly #workspaces: HeldWorkspaces;
-  readonly #deadline: RunDeadline;
+  readonly #runs: ConversationRuns;
   readonly #readers = new Map<string, Set<() => void>>();
 
   constructor(ports: ServingPorts) {
     this.#ports = ports;
     this.#projects = new ProjectConversations(ports.ctx.storage);
     this.#workspaces = new HeldWorkspaces(ports.obtainWorkspace);
-    this.#deadline = new RunDeadline(ports.ctx.storage);
+    this.#runs = new ConversationRuns(ports.ctx.storage);
     this.#host = new ConversationHostTarget({
-      arm: (wake) =>
-        this.#deadline.arm(wake, () => {
-          this.endWorkspaces();
-        }),
+      arm: (wake) => this.#runs.arm(wake, Date.now()),
+      running: (conversationIds) => this.#running(conversationIds),
       workspace: (conversationId) => this.#workspace(conversationId),
     });
   }
@@ -53,7 +51,7 @@ export class ServingConversations {
   }
 
   running(): boolean {
-    return this.#deadline.get() !== undefined;
+    return this.#runs.running(Date.now());
   }
 
   submit(projectId: string, content: string, requestId: string) {
@@ -138,22 +136,14 @@ export class ServingConversations {
 
   alarm(now: number): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const deadline = this.#deadline.get();
-      const expired = deadline !== undefined && now >= deadline;
-
-      if (expired) this.endWorkspaces();
+      for (const conversationId of this.#runs.expired(now)) this.#workspaces.end(conversationId);
 
       const facet = yield* this.#facet();
 
-      if (!expired) return;
-
-      logEvent("warn", "run.deadline-aborted");
-
-      for (const conversationId of this.#projects.conversations()) {
+      for (const conversationId of this.#runs.expired(now)) {
+        logEvent("warn", "run.deadline-aborted");
         yield* this.#call(() => facet.abort(conversationId));
       }
-
-      this.#deadline.clear();
     }).pipe(
       Effect.tapError((problem) =>
         Effect.sync(() => {
@@ -264,14 +254,25 @@ export class ServingConversations {
     return readable;
   }
 
+  async #running(conversationIds: readonly string[]): Promise<void> {
+    const now = Date.now();
+
+    for (const conversationId of this.#runs.reconcile(conversationIds, now)) {
+      this.#workspaces.end(conversationId);
+    }
+
+    await this.#runs.setAlarm(now);
+  }
+
   #workspace(conversationId: string) {
     const projectId = this.#projects.projectOf(conversationId);
     const project = this.#ports.catalog().find((candidate) => candidate.id === projectId);
+    const remainingMs = this.#runs.remainingMs(conversationId, Date.now());
 
-    if (project === undefined || this.#ports.resetting()) {
-      return Promise.reject(new Error("this conversation has no project workspace"));
+    if (project === undefined || remainingMs === undefined || this.#ports.resetting()) {
+      return Promise.reject(new Error("this conversation has no running project workspace"));
     }
 
-    return this.#workspaces.capability(project, this.#deadline.remainingMs(Date.now()));
+    return this.#workspaces.capability(conversationId, project, remainingMs);
   }
 }
