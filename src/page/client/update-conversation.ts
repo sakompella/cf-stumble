@@ -28,6 +28,13 @@ function withoutRequest(model: Model, requestId: string): Model {
   return { ...model, outbox: model.outbox.filter((item) => item.requestId !== requestId) };
 }
 
+function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
+  const unsent = model.outbox.find((item) => item.requestId === requestId);
+  const kept = withoutRequest(model, requestId);
+
+  return unsent === undefined || model.prompt !== "" ? kept : { ...kept, prompt: unsent.text };
+}
+
 function settledNote(status: string, reason: string | undefined): Option.Option<string> {
   switch (status) {
     case "done":
@@ -166,11 +173,11 @@ export function composerHandlers(
       model: withSubmissionId(model, requestId, submissionId),
     }),
     RejectedSend: ({ requestId, wording }) => ({
-      model: { ...withoutRequest(model, requestId), runNote: wording },
+      model: { ...withUnsentRequestInPrompt(model, requestId), runNote: wording },
     }),
     FailedSend: ({ requestId, detail }) => ({
       model: {
-        ...withError(withoutRequest(model, requestId), "the message request", detail),
+        ...withError(withUnsentRequestInPrompt(model, requestId), "the message request", detail),
         runNote: "not sent",
       },
     }),

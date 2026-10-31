@@ -159,13 +159,22 @@ test("a reconnect keeps only the sent messages its snapshot still holds queued",
   expect(page.conversationState).toBe("live");
 });
 
-test("a refused send drops the message and says why", () => {
+test("a refused send takes the message out of the transcript, says why, and puts the text back in the prompt", () => {
   const refused = after(sentPage(readyPage()).model, [
     Message.RejectedSend({ requestId: "r1", wording: "busy: the workspace is resetting" }),
   ]);
 
   expect(refused.outbox).toEqual([]);
   expect(refused.runNote).toBe("busy: the workspace is resetting");
+  expect(refused.prompt).toBe("do it");
+});
+
+test("a send that never reached the Worker puts the text back too, unless the owner already typed something else", () => {
+  const sent = sentPage(readyPage()).model;
+  const failed = Message.FailedSend({ requestId: "r1", detail: "offline" });
+
+  expect(after(sent, [failed]).prompt).toBe("do it");
+  expect(after(sent, [Message.UpdatedPrompt({ value: "newer" }), failed]).prompt).toBe("newer");
 });
 
 test("a settled submission says how the run ended", () => {
