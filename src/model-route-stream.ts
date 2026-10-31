@@ -61,6 +61,7 @@ export class ProviderStreamAccumulator {
   private readonly emit: (event: ModelStreamEvent) => void;
   private reportedUsage: TokenUsage | undefined;
   providerFailed = false;
+  truncated = false;
 
   constructor(emit: (event: ModelStreamEvent) => void) {
     this.emit = emit;
@@ -109,6 +110,8 @@ export class ProviderStreamAccumulator {
     for (const delta of chunk.toolCallDeltas ?? []) this.applyToolCallDelta(delta);
 
     if (chunk.usage !== undefined) this.reportedUsage = chunk.usage;
+
+    if (chunk.truncated !== undefined) this.truncated = true;
   }
 
   result(): ProviderResult {
@@ -136,10 +139,12 @@ export function finishedTurn(
 ): ModelTurnAnswer {
   const result = accumulator.result();
 
-  return {
+  const answer = {
     message: normalizeResponse(result),
     usage: resolveUsage(accumulator.usage(), request, result),
   };
+
+  return accumulator.truncated ? { ...answer, truncated: true } : answer;
 }
 
 export function workersAiTurn(ai: ModelStreamInference, request: ModelRouteRequest): ModelTurn {

@@ -20,6 +20,7 @@ export type ParsedProviderChunk = Readonly<{
   textDelta?: string | undefined;
   toolCallDeltas?: ReadonlyArray<ToolCallDelta> | undefined;
   usage?: TokenUsage | undefined;
+  truncated?: true | undefined;
 }>;
 
 export type ProviderPayload =
@@ -41,7 +42,7 @@ const Delta = Schema.Struct({
   tool_calls: lenient(Entries),
 });
 
-const Choice = Schema.Struct({ delta: lenient(Delta) });
+const Choice = Schema.Struct({ delta: lenient(Delta), finish_reason: lenient(Schema.String) });
 
 const Usage = Schema.Struct({
   prompt_tokens: lenient(TokenCount),
@@ -66,10 +67,14 @@ const decodeChoice = Schema.decodeUnknownOption(Choice);
 
 const decodeToolCall = Schema.decodeUnknownOption(ToolCallEntry);
 
-function firstDelta(event: ProviderEvent): typeof Delta.Type | undefined {
+function firstChoice(event: ProviderEvent): typeof Choice.Type | undefined {
   const choice = event.choices?.at(0);
 
-  return choice === undefined ? undefined : Option.getOrUndefined(decodeChoice(choice))?.delta;
+  return choice === undefined ? undefined : Option.getOrUndefined(decodeChoice(choice));
+}
+
+function firstDelta(event: ProviderEvent): typeof Delta.Type | undefined {
+  return firstChoice(event)?.delta;
 }
 
 function toolCallDeltas(event: ProviderEvent): ToolCallDelta[] {
@@ -104,6 +109,7 @@ function chunkOf(event: ProviderEvent): ParsedProviderChunk {
     textDelta: event.response ?? firstDelta(event)?.content,
     toolCallDeltas: deltas.length > 0 ? deltas : undefined,
     usage: usageOf(event),
+    truncated: firstChoice(event)?.finish_reason === "length" ? true : undefined,
   };
 }
 

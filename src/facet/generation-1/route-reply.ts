@@ -159,7 +159,7 @@ export class ReplyAssembler {
     }
   }
 
-  #done({ message, usage }: Extract<ModelStreamEvent, { type: "done" }>): void {
+  #done({ message, usage, truncated }: Extract<ModelStreamEvent, { type: "done" }>): void {
     this.#start();
     this.#closeBlocks();
 
@@ -175,7 +175,9 @@ export class ReplyAssembler {
       })),
     ];
 
-    const reason = message.tool_calls.length > 0 ? "toolUse" : "stop";
+    const reason =
+      truncated === true ? "length" : message.tool_calls.length > 0 ? "toolUse" : "stop";
+
     this.#out.push({
       type: "done",
       reason,

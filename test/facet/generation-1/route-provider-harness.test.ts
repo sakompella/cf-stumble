@@ -98,3 +98,51 @@ test("a Pi Durable harness answers an input, running a tool, through the provide
     await harness.close(BACKGROUND_CONTEXT);
   }
 });
+
+test("a tool call the route reports as cut off is not run, and the run ends with what arrived", async () => {
+  const cutOff = replies([
+    { type: "text-delta", delta: "Writing the file" },
+    {
+      type: "done",
+      message: {
+        role: "assistant",
+        content: "Writing the file",
+        tool_calls: [{ id: "call_1", function: { name: "echo", arguments: '{"text":"h' } }],
+      },
+      usage: NO_USAGE,
+      truncated: true,
+    },
+  ]);
+
+  const { capability, requests } = scriptedRoute(cutOff, answers);
+  const harness = await openHarness(capability);
+
+  try {
+    const root = await harness.root(BACKGROUND_CONTEXT, {
+      agent: { model: { provider: ROUTE_MODEL.provider, modelId: ROUTE_MODEL.id } },
+    });
+
+    const submission = await root.submit({ type: "input", content: "say hi" }, BACKGROUND_CONTEXT);
+    const settled = await submission.wait(BACKGROUND_CONTEXT);
+
+    if (settled.status !== "done" || settled.type !== "input") throw new Error("input not done");
+
+    const answer = await root.commit(
+      (tx) => tx.entry(AssistantEntry, settled.answer),
+      BACKGROUND_CONTEXT,
+    );
+
+    expect(answer?.model?.[0]).toMatchObject({ stopReason: "length" });
+    expect(requests).toHaveLength(1);
+
+    const next = await root.submit({ type: "input", content: "go on" }, BACKGROUND_CONTEXT);
+    expect(await next.wait(BACKGROUND_CONTEXT)).toMatchObject({ status: "done" });
+    expect(requests[1]?.messages.slice(-3)).toMatchObject([
+      { role: "assistant", tool_calls: [{ id: "call_1" }] },
+      { role: "tool", tool_call_id: "call_1" },
+      { role: "user", content: "go on" },
+    ]);
+  } finally {
+    await harness.close(BACKGROUND_CONTEXT);
+  }
+});

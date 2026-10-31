@@ -298,3 +298,39 @@ test("a ChatGPT grant that needs a reconnect fails the call and never falls back
   expect(events).toEqual([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]);
   expect(binding.calls).toEqual([]);
 });
+
+test("a Workers AI answer cut off at max_tokens ends with a truncated done", async () => {
+  const binding = bindingStreaming([
+    sseLine({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                function: { name: "write", arguments: '{"path":"a.ts","content":"export const' },
+              },
+            ],
+          },
+        },
+      ],
+    }),
+    sseLine({ choices: [{ delta: {}, finish_reason: "length" }] }),
+    DONE_LINE,
+  ]);
+
+  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
+  expect(events.at(-1)).toMatchObject({ type: "done", truncated: true });
+});
+
+test("a Workers AI answer that stops on its own ends with a done that is not truncated", async () => {
+  const binding = bindingStreaming([
+    sseLine({ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] }),
+    DONE_LINE,
+  ]);
+
+  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
+  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "ok" } });
+  expect(events.at(-1)).not.toHaveProperty("truncated");
+});

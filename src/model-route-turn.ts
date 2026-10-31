@@ -70,7 +70,11 @@ export function pumpSseStream<Chunk extends Uint8Array>(
   );
 }
 
-export type ModelTurnAnswer = Readonly<{ message: AssistantMessage; usage: ModelUsage }>;
+export type ModelTurnAnswer = Readonly<{
+  message: AssistantMessage;
+  usage: ModelUsage;
+  truncated?: true;
+}>;
 
 export type ModelTurn = (
   emit: (event: ModelStreamEvent) => void,
@@ -96,8 +100,8 @@ export function modelEventStream(turn: ModelTurn): ReadableStream<Uint8Array> {
           onFailure: ({ code }) => {
             emit({ type: "error", error: { code } });
           },
-          onSuccess: ({ message, usage }) => {
-            emit({ type: "done", message, usage });
+          onSuccess: (answer) => {
+            emit({ type: "done", ...answer });
           },
         }),
       );
