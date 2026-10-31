@@ -3,7 +3,7 @@ import { FileError, type Result } from "@earendil-works/pi-durable/env";
 import { shellQuote } from "../../shell-quote.js";
 import { WORKSPACE_ROOT } from "../../workspace-layout.js";
 import { execInWorkspace, type RunningCommands } from "./execution-env-exec.js";
-import { lstat, open, TEMP_DIRECTORY, uniqueTempPath } from "./execution-env-files.js";
+import { TEMP_DIRECTORY, uniqueTempPath } from "./execution-env-files.js";
 import { aborted, type ComputerWorkspace, type WorkspacePath } from "./execution-env-paths.js";
 
 function operand(path: WorkspacePath): string {
@@ -47,80 +47,6 @@ async function run(
     ok: false,
     error: new FileError("unknown", stderr.trim() || `exit ${ran.value.exitCode}`, path.absolute),
   };
-}
-
-export async function renameFile(
-  workspace: ComputerWorkspace,
-  running: RunningCommands,
-  sourcePath: string,
-  destinationPath: string,
-  context: Context,
-): Promise<Result<void, FileError>> {
-  const source = open(workspace, sourcePath, context);
-
-  if (!source.ok) return source;
-
-  const destination = open(workspace, destinationPath, context);
-
-  if (!destination.ok) return destination;
-
-  const existing = await lstat(workspace, source.value);
-
-  if (!existing.ok) return existing;
-
-  const script = `mv -f -T ${operand(source.value)} ${operand(destination.value)}`;
-
-  return run(workspace, running, script, source.value, context);
-}
-
-export async function remove(
-  workspace: ComputerWorkspace,
-  running: RunningCommands,
-  path: string,
-  options: { recursive?: boolean; force?: boolean } | undefined,
-  context: Context,
-): Promise<Result<void, FileError>> {
-  const opened = open(workspace, path, context);
-
-  if (!opened.ok) return opened;
-
-  const existing = await lstat(workspace, opened.value);
-
-  if (!existing.ok) {
-    const missing = existing.error.code === "not_found";
-
-    return missing && options?.force === true ? { ok: true, value: undefined } : existing;
-  }
-
-  const recursive = options?.recursive === true;
-
-  if (existing.value.kind === "directory" && !recursive) {
-    return {
-      ok: false,
-      error: new FileError("is_directory", "Is a directory", opened.value.absolute),
-    };
-  }
-
-  const script = `rm -f ${recursive ? "-r " : ""}${operand(opened.value)}`;
-
-  return run(workspace, running, script, opened.value, context);
-}
-
-export function createDir(
-  workspace: ComputerWorkspace,
-  running: RunningCommands,
-  path: string,
-  options: { recursive?: boolean } | undefined,
-  context: Context,
-): Promise<Result<void, FileError>> {
-  const opened = open(workspace, path, context);
-
-  if (!opened.ok) return Promise.resolve(opened);
-
-  const parents = options?.recursive === false ? "" : "-p ";
-  const script = `mkdir ${parents}${operand(opened.value)}`;
-
-  return run(workspace, running, script, opened.value, context);
 }
 
 export async function createTempDir(

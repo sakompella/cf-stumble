@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/chord/context";
-import { FileError, type FileInfo, type Result } from "@earendil-works/pi-durable/env";
+import type { FileError, FileInfo, Result } from "@earendil-works/pi-durable/env";
 import type { ProjectFileInfo, ProjectLstatInfo } from "../../workspace/project/protocol.js";
 import {
   aborted,
@@ -29,7 +29,7 @@ export function fileInfoOf(path: WorkspacePath, info: ProjectFileInfo): FileInfo
   return { name: basename(path.absolute), path: path.absolute, kind, size, mtimeMs };
 }
 
-export function lstat(
+function lstat(
   workspace: ComputerWorkspace,
   path: WorkspacePath,
 ): Promise<Result<ProjectLstatInfo, FileError>> {
@@ -161,88 +161,6 @@ export async function canonicalPath(
   const canonical = fromProject(stat.value.canonicalPath, opened.value.absolute);
 
   return canonical.ok ? { ok: true, value: fromAddressed(canonical.value).absolute } : canonical;
-}
-
-export async function listDirectory(
-  workspace: ComputerWorkspace,
-  path: WorkspacePath,
-): Promise<Result<FileInfo[], FileError>> {
-  const listed = await capabilityCall(path.absolute, () =>
-    workspace.target.listFiles(path.addressed),
-  );
-
-  if (!listed.ok) return listed;
-
-  if (listed.value.truncated) {
-    return {
-      ok: false,
-      error: new FileError(
-        "unknown",
-        "the directory has more entries than Computer lists",
-        path.absolute,
-      ),
-    };
-  }
-
-  return {
-    ok: true,
-    value: listed.value.entries.map((entry) => fileInfoOf(fromAddressed(entry.path), entry)),
-  };
-}
-
-export function listDir(
-  workspace: ComputerWorkspace,
-  path: string,
-  context: Context,
-): Promise<Result<FileInfo[], FileError>> {
-  const opened = open(workspace, path, context);
-
-  if (!opened.ok) return Promise.resolve(opened);
-
-  return listDirectory(workspace, opened.value);
-}
-
-export async function flushFile(
-  workspace: ComputerWorkspace,
-  path: string,
-  context: Context,
-): Promise<Result<void, FileError>> {
-  const opened = open(workspace, path, context);
-
-  if (!opened.ok) return opened;
-
-  const stat = await statFollowing(workspace, opened.value);
-
-  if (!stat.ok) return stat;
-
-  if (stat.value.info.kind === "directory") {
-    return {
-      ok: false,
-      error: new FileError("is_directory", "Is a directory", opened.value.absolute),
-    };
-  }
-
-  return { ok: true, value: undefined };
-}
-
-export async function truncateFile(
-  workspace: ComputerWorkspace,
-  path: string,
-  size: number,
-  context: Context,
-): Promise<Result<void, FileError>> {
-  if (!Number.isSafeInteger(size) || size < 0) {
-    return invalid("File size must be a non-negative safe integer", path);
-  }
-
-  const bytes = await readBytes(workspace, path, context);
-
-  if (!bytes.ok) return bytes;
-
-  const resized = new Uint8Array(size);
-  resized.set(bytes.value.subarray(0, size));
-
-  return writeBytes(workspace, path, resized, "overwrite", context);
 }
 
 function namePart(value: string | undefined, label: string): Result<string, FileError> {

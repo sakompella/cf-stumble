@@ -1,5 +1,11 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { getOrThrow } from "@earendil-works/pi-durable/env";
+import {
+  getOrThrow,
+  type ExecutionEnv,
+  type FileError,
+  type FileErrorCode,
+  type Result,
+} from "@earendil-works/pi-durable/env";
 import { describe, expect, it } from "vitest";
 import { withHostWorkspace } from "./host-workspace.js";
 
@@ -41,5 +47,36 @@ describe("Computer ExecutionEnv exec", () => {
     });
 
     expect(stdout).toBe("it's $HOME|unset");
+  });
+});
+
+function codeOf<T>(result: Result<T, FileError>): FileErrorCode | undefined {
+  return result.ok ? undefined : result.error.code;
+}
+
+const UNSUPPORTED_CALLS: ReadonlyArray<
+  readonly [string, (env: ExecutionEnv) => Promise<FileErrorCode | undefined>]
+> = [
+  ["readBinaryFile", async (env) => codeOf(await env.readBinaryFile("a", context))],
+  ["appendFile", async (env) => codeOf(await env.appendFile("a", "x", context))],
+  ["openTextLineReader", async (env) => codeOf(await env.openTextLineReader("a", context))],
+  ["readTextLines", async (env) => codeOf(await env.readTextLines("a", undefined, context))],
+  ["truncateFile", async (env) => codeOf(await env.truncateFile("a", 0, context))],
+  ["flushFile", async (env) => codeOf(await env.flushFile("a", context))],
+  ["renameFile", async (env) => codeOf(await env.renameFile("a", "b", context))],
+  ["listDir", async (env) => codeOf(await env.listDir(".", context))],
+  ["openDirReader", async (env) => codeOf(await env.openDirReader(".", context))],
+  ["watch", async (env) => codeOf(await env.watch([{ path: "." }], () => {}, context))],
+  ["createDir", async (env) => codeOf(await env.createDir("a", undefined, context))],
+  ["remove", async (env) => codeOf(await env.remove("a", undefined, context))],
+];
+
+describe("Computer ExecutionEnv members Pi Durable never calls", () => {
+  it.each(UNSUPPORTED_CALLS)("%s answers not_supported", async (_member, call) => {
+    await withHostWorkspace(async (env) => {
+      getOrThrow(await env.writeFile("a", "x", context));
+
+      expect(await call(env)).toBe("not_supported");
+    });
   });
 });

@@ -59,12 +59,6 @@ function toAddressed(absolute: string): string {
   return absolute === WORKSPACE_ROOT ? "/" : absolute.slice(WORKSPACE_ROOT.length);
 }
 
-export function childOf(parent: WorkspacePath, name: string): WorkspacePath {
-  const addressed = parent.addressed === "/" ? `/${name}` : `${parent.addressed}/${name}`;
-
-  return { absolute: `${parent.absolute}/${name}`, addressed };
-}
-
 export function fromAddressed(addressed: string): WorkspacePath {
   return {
     absolute: addressed === "/" ? WORKSPACE_ROOT : `${WORKSPACE_ROOT}${addressed}`,
