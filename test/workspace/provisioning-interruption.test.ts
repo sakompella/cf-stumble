@@ -4,11 +4,9 @@ import { expect, test, vi } from "vitest";
 import { namespaceFor } from "../workspace-namespace-fixture.js";
 import { sampleCatalog, sampleProjectOne } from "../project-fixtures.js";
 import { tenantWorkspaceName } from "../../src/workspace-names.js";
-import {
-  provisionProjectWorkspace,
-  waitForWorkspaceProvision,
-  type ProvisionWorkspaceHost,
-} from "../../src/workspace/provisioning.js";
+import { provisionProjectWorkspace } from "../../src/workspace/provisioning.js";
+import { waitForWorkspaceProvision } from "../../src/workspace/provision-exclusion.js";
+import type { ProvisionWorkspaceHost } from "../../src/workspace/provision-plan.js";
 import type { WorkspaceResult } from "../../src/workspace/decisions.js";
 
 const tick = () =>
