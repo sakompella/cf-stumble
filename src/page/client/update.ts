@@ -3,7 +3,7 @@ import type { Runtime } from "foldkit";
 import { FetchChatGPT, FetchGitHub, FetchProjects, FetchStatus } from "./commands.js";
 import { Message } from "./message.js";
 import { EMPTY_CONVERSATION } from "./conversation.js";
-import type { Model } from "./model.js";
+import { ControlRequest, StatusRead, SubmitRequest, type Model } from "./model.js";
 import { controlHandlers, statusHandlers, submitHandlers } from "./update-generation.js";
 import {
   chatGPTHandlers,
@@ -14,7 +14,7 @@ import {
 import type { UpdateReturn } from "./update-shared.js";
 import { composerHandlers, streamHandlers } from "./update-conversation.js";
 
-const EMPTY_PANEL = { labelInput: "", status: "", sentEpoch: "", effect: "" };
+const EMPTY_PANEL = { labelInput: "", request: ControlRequest.Idle() };
 
 export const init: Runtime.ElementInit<Model, Message> = () => ({
   model: {
@@ -38,17 +38,10 @@ export const init: Runtime.ElementInit<Model, Message> = () => ({
     runNote: "",
     isFreshArmed: false,
     freshThreadStatus: "",
-    activeGenerationLabel: "",
-    activeGenerationCommit: "",
-    activeGenerationStatus: "",
-    generationEpoch: "",
-    statusStatus: "reading",
+    maybeReading: Option.none(),
+    statusRead: StatusRead.Running(),
     candidateCommitInput: "",
-    submitStatus: "",
-    submitGenerationLabel: "",
-    submitEpoch: "",
-    submitPreparation: "",
-    maybeDiagnostics: Option.none(),
+    submit: SubmitRequest.Idle(),
     diagnosticsShown: 0,
     activate: EMPTY_PANEL,
     rollback: EMPTY_PANEL,

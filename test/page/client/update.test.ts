@@ -1,10 +1,10 @@
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { expect, test } from "vitest";
-import { checkedWording, gitHubReport } from "../../../src/page/client/api.js";
+import { checkedWording, generationReading, gitHubReport } from "../../../src/page/client/api.js";
 import type { AgentEvent } from "../../../src/page/client/agent-event.js";
 import { Message } from "../../../src/page/client/message.js";
-import type { Model } from "../../../src/page/client/model.js";
+import { ControlRequest, type Model } from "../../../src/page/client/model.js";
 import { controlLabel } from "../../../src/page/client/update-generation.js";
 import { init, update } from "../../../src/page/client/update.js";
 
@@ -240,12 +240,17 @@ test("activation sends nothing until the page has rendered an epoch", () => {
   expect(commandNames(page, Message.ClickedControl({ kind: "activate" }))).toEqual([]);
 
   const shown = after(page, [
-    Message.SucceededFetchStatus({ label: "1", commit: "abc", status: "ready", epoch: "3" }),
+    Message.SucceededFetchStatus({
+      reading: {
+        maybeActive: Option.some({ label: 1, harnessCommit: "abc", status: "ready" }),
+        epoch: 3,
+      },
+    }),
   ]);
 
   const sent = update(shown, Message.ClickedControl({ kind: "activate" }));
 
-  expect(sent.model.activate.sentEpoch).toBe("3");
+  expect(sent.model.activate.request).toEqual(ControlRequest.Running({ sentEpoch: 3 }));
   expect(sent.commands?.[0]?.args).toEqual({ kind: "activate", observedEpoch: 3, label: 2 });
 });
 
@@ -257,4 +262,23 @@ test("a generation label names one whole generation or nothing", () => {
   expect(Option.getOrNull(controlLabel("-1"))).toBe(null);
   expect(Option.getOrNull(controlLabel(""))).toBe(null);
   expect(Option.getOrNull(controlLabel("two"))).toBe(null);
+});
+
+test("the status answer is read into a numeric label and epoch, or refused", () => {
+  const generation = { label: 2, harnessCommit: "abc", status: "ready" };
+
+  expect(
+    Option.getOrNull(generationReading({ activeGeneration: { generation, epoch: 4 } })),
+  ).toEqual({ maybeActive: Option.some(generation), epoch: 4 });
+
+  expect(
+    Option.getOrNull(generationReading({ activeGeneration: { generation: null, epoch: 0 } })),
+  ).toEqual({ maybeActive: Option.none(), epoch: 0 });
+
+  expect(
+    Option.isNone(generationReading({ ok: false, problem: { code: "status-unavailable" } })),
+  ).toBe(true);
+  expect(Option.isNone(generationReading({ activeGeneration: { generation, epoch: "4" } }))).toBe(
+    true,
+  );
 });

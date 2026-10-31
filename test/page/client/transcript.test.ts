@@ -67,7 +67,7 @@ test("an answer that holds only tool calls adds no empty entry, and a running ca
     {
       _tag: "Tool",
       summary: 'read {"path":"a"}',
-      maybeOutput: Option.some({ content: "so far", isServerTruncated: false }),
+      maybeOutput: Option.some("so far"),
     },
   ]);
 });

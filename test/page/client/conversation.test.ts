@@ -94,7 +94,7 @@ test("folding every event of a run with a tool and a follow-up shows what a fres
       transcriptOf(state, []).some(
         (entry) =>
           entry._tag === "Tool" &&
-          Option.exists(entry.maybeOutput, (output) => output.content === "line one\n"),
+          Option.exists(entry.maybeOutput, (output) => output === "line one\n"),
       ),
     ),
   ).toBe(true);

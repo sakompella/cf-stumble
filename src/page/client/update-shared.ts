@@ -1,7 +1,7 @@
 import type { Update } from "foldkit";
 import { FetchStatus } from "./commands.js";
 import type { Message } from "./message.js";
-import type { Model } from "./model.js";
+import { StatusRead, type Model } from "./model.js";
 
 export type UpdateReturn = Update.Return<Model, Message>;
 
@@ -21,7 +21,7 @@ export function withError(model: Model, where: string, detail: string): Model {
 
 export function refreshStatus(model: Model): UpdateReturn {
   return {
-    model: { ...clearError(model), statusStatus: "reading" },
+    model: { ...clearError(model), statusRead: StatusRead.Running() },
     commands: [FetchStatus()],
   };
 }

@@ -3,7 +3,12 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { HARNESS_DIRECTORY } from "../../workspace-layout.js";
-import { GitHubReport, type ChatGPTConnection, type Project } from "./model.js";
+import {
+  GitHubReport,
+  type ChatGPTConnection,
+  type GenerationReading,
+  type Project,
+} from "./model.js";
 
 export function transportDetail(cause: unknown): string {
   return Predicate.isError(cause) ? cause.message : String(cause);
@@ -79,6 +84,30 @@ export function text(value: Wire): string {
   return Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
     ? String(value)
     : "";
+}
+
+export function numberField(value: Wire, ...path: readonly string[]): Option.Option<number> {
+  const found = field(value, ...path);
+
+  return Predicate.isNumber(found) ? Option.some(found) : Option.none();
+}
+
+export function generationReading(payload: Wire): Option.Option<GenerationReading> {
+  const active = field(payload, "activeGeneration");
+  const generation = field(active, "generation");
+
+  return Option.all({
+    epoch: numberField(active, "epoch"),
+    maybeActive: truthy(generation)
+      ? Option.map(numberField(generation, "label"), (label) =>
+          Option.some({
+            label,
+            harnessCommit: text(field(generation, "harnessCommit")),
+            status: text(field(generation, "status")),
+          }),
+        )
+      : Option.some(Option.none()),
+  });
 }
 
 export function isOk(payload: Wire): boolean {

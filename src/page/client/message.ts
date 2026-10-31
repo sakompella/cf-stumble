@@ -1,7 +1,13 @@
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
 import { AgentEvent } from "./agent-event.js";
-import { ChatGPTConnection, ControlKind, GitHubReport, Project } from "./model.js";
+import {
+  ChatGPTConnection,
+  ControlKind,
+  GenerationReading,
+  GitHubReport,
+  Project,
+} from "./model.js";
 
 export const Message = defineMessageUnion({
   ClickedSidebarToggle: {},
@@ -27,12 +33,7 @@ export const Message = defineMessageUnion({
   UpdatedControlLabelInput: { kind: ControlKind, value: Schema.String },
   ClickedControl: { kind: ControlKind },
 
-  SucceededFetchStatus: {
-    label: Schema.String,
-    commit: Schema.String,
-    status: Schema.String,
-    epoch: Schema.String,
-  },
+  SucceededFetchStatus: { reading: GenerationReading },
   RejectedFetchStatus: { wording: Schema.String },
   FailedFetchStatus: { detail: Schema.String },
 
@@ -69,17 +70,17 @@ export const Message = defineMessageUnion({
   FailedFreshThread: { streamId: Schema.Number, detail: Schema.String },
 
   SucceededSubmit: {
-    label: Schema.String,
-    epoch: Schema.String,
+    label: Schema.Number,
+    epoch: Schema.Number,
     preparation: Schema.String,
     maybeDiagnostics: Schema.Option(Schema.String),
   },
   RejectedSubmit: { wording: Schema.String },
   FailedSubmit: { detail: Schema.String },
 
-  SucceededControl: { kind: ControlKind, effect: Schema.String },
-  RejectedControl: { kind: ControlKind, wording: Schema.String },
-  FailedControl: { kind: ControlKind, detail: Schema.String },
+  SucceededControl: { kind: ControlKind, sentEpoch: Schema.Number, effect: Schema.String },
+  RejectedControl: { kind: ControlKind, sentEpoch: Schema.Number, wording: Schema.String },
+  FailedControl: { kind: ControlKind, sentEpoch: Schema.Number, detail: Schema.String },
 
   ReceivedEvent: { streamId: Schema.Number, event: AgentEvent },
   ReceivedUnreadableEvent: { streamId: Schema.Number },

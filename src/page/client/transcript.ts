@@ -5,19 +5,12 @@ import { defineTaggedUnion } from "foldkit/schema";
 import type { Conversation } from "./conversation.js";
 import type { AssistantMessage, Block, PiMessage } from "./agent-event.js";
 
-const ToolOutput = Schema.Struct({
-  content: Schema.String,
-  isServerTruncated: Schema.Boolean,
-});
-
-type ToolOutput = typeof ToolOutput.Type;
-
 export const TranscriptEntry = defineTaggedUnion({
   Text: { role: Schema.String, who: Schema.String, text: Schema.String },
   Tool: {
     toolCallId: Schema.String,
     summary: Schema.String,
-    maybeOutput: Schema.Option(ToolOutput),
+    maybeOutput: Schema.Option(Schema.String),
     isFailed: Schema.Boolean,
   },
   Terminal: { wording: Schema.String, isProblem: Schema.Boolean },
@@ -98,7 +91,7 @@ function finishedTool(
   return TranscriptEntry.Tool({
     toolCallId: tool.toolCallId,
     summary: `${result.toolName}${result.isError ? " — failed" : " — done"}`,
-    maybeOutput: Option.some({ content: result.text, isServerTruncated: false }),
+    maybeOutput: Option.some(result.text),
     isFailed: result.isError,
   });
 }
@@ -143,9 +136,7 @@ function withLiveOutput(entry: TranscriptEntry, conversation: Conversation): Tra
 
   const output = conversation.tools.find((slot) => slot.callId === entry.toolCallId)?.output;
 
-  return output === undefined
-    ? entry
-    : { ...entry, maybeOutput: Option.some({ content: output, isServerTruncated: false }) };
+  return output === undefined ? entry : { ...entry, maybeOutput: Option.some(output) };
 }
 
 export function transcriptOf(

@@ -8,8 +8,10 @@ import {
   chatGPTConnection,
   diagnosticsText,
   field,
+  generationReading,
   gitHubReport,
   isOk,
+  numberField,
   preparationText,
   problemText,
   projectPath,
@@ -26,23 +28,12 @@ import { sentMessage } from "./sent-message.js";
 export const FetchStatus = Command.define("FetchStatus", {
   messages: [Message.SucceededFetchStatus, Message.RejectedFetchStatus, Message.FailedFetchStatus],
   execute: requestJson("GET", "/api/status", Option.none()).pipe(
-    Effect.map((answer) => {
-      const active = field(answer.payload, "activeGeneration");
-
-      if (!truthy(active)) {
-        return Message.RejectedFetchStatus({ wording: problemText(answer) });
-      }
-
-      const generation = field(active, "generation");
-      const isPresent = truthy(generation);
-
-      return Message.SucceededFetchStatus({
-        label: isPresent ? text(field(generation, "label")) : "none",
-        commit: isPresent ? text(field(generation, "harnessCommit")) : "none",
-        status: isPresent ? text(field(generation, "status")) : "none active",
-        epoch: text(field(active, "epoch")),
-      });
-    }),
+    Effect.map((answer) =>
+      Option.match(generationReading(answer.payload), {
+        onNone: () => Message.RejectedFetchStatus({ wording: problemText(answer) }),
+        onSome: (reading) => Message.SucceededFetchStatus({ reading }),
+      }),
+    ),
     Effect.catch((detail) => Effect.succeed(Message.FailedFetchStatus({ detail }))),
   ),
 });
@@ -236,18 +227,20 @@ export const SubmitCandidate = Command.define("SubmitCandidate", {
   execute: ({ harnessCommit }) =>
     requestJson("POST", "/api/generations/submit", Option.some({ harnessCommit })).pipe(
       Effect.map((answer) => {
-        if (!isOk(answer.payload)) {
-          return Message.RejectedSubmit({ wording: problemText(answer) });
-        }
-
         const preparation = field(answer.payload, "preparation");
 
-        return Message.SucceededSubmit({
-          label: text(field(answer.payload, "outcome", "generation", "label")),
-          epoch: text(field(answer.payload, "outcome", "epoch")),
-          preparation: preparationText(preparation),
-          maybeDiagnostics: diagnosticsText(preparation),
+        const maybeOutcome = Option.all({
+          label: numberField(answer.payload, "outcome", "generation", "label"),
+          epoch: numberField(answer.payload, "outcome", "epoch"),
         });
+
+        return isOk(answer.payload) && Option.isSome(maybeOutcome)
+          ? Message.SucceededSubmit({
+              ...maybeOutcome.value,
+              preparation: preparationText(preparation),
+              maybeDiagnostics: diagnosticsText(preparation),
+            })
+          : Message.RejectedSubmit({ wording: problemText(answer) });
       }),
       Effect.catch((detail) => Effect.succeed(Message.FailedSubmit({ detail }))),
     ),
@@ -262,10 +255,17 @@ export const RunControl = Command.define("RunControl", {
         isOk(answer.payload)
           ? Message.SucceededControl({
               kind,
+              sentEpoch: observedEpoch,
               effect: text(field(answer.payload, "outcome", "effect")),
             })
-          : Message.RejectedControl({ kind, wording: problemText(answer) }),
+          : Message.RejectedControl({
+              kind,
+              sentEpoch: observedEpoch,
+              wording: problemText(answer),
+            }),
       ),
-      Effect.catch((detail) => Effect.succeed(Message.FailedControl({ kind, detail }))),
+      Effect.catch((detail) =>
+        Effect.succeed(Message.FailedControl({ kind, sentEpoch: observedEpoch, detail })),
+      ),
     ),
 });

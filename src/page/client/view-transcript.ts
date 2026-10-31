@@ -47,10 +47,7 @@ function entry(
 function toolView(tool: ToolEntry, h: HtmlBuilder<Message>): Html {
   const output = Option.match(tool.maybeOutput, {
     onNone: () => ["running…"],
-    onSome: (result) => [
-      ...outputChildren(result.content, h),
-      ...(result.isServerTruncated ? [note("\n… the server truncated this output", h)] : []),
-    ],
+    onSome: (content) => outputChildren(content, h),
   });
 
   return h.details(
