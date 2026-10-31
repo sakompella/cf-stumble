@@ -133,14 +133,14 @@ export class MainFacet
     return String(conversation.id);
   }
 
-  async submit(conversationId: string, content: string, requestId: string): Promise<string> {
+  async submit(conversationId: string, content: string, requestId: string): Promise<number> {
     const conversation = await this.#conversation(conversationId);
 
     const submission = await this.#startingWork(() =>
       conversation.submit({ type: "input", content, requestId }, context),
     );
 
-    return String(submission.id);
+    return submission.id;
   }
 
   /**

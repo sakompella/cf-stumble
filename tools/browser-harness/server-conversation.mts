@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { isJsonRecord, isJsonString, type JsonValue } from "../json.mjs";
+import type { ConversationApiSupervisor } from "../../src/routes/conversations.js";
+import type { ConversationProblem } from "../../src/supervisor/conversations/conversation-result.js";
 import { sendJson } from "./server-routes.mjs";
 import type { RequestRecord, ScenarioState } from "./server-state.mjs";
 
@@ -9,6 +11,10 @@ import type { RequestRecord, ScenarioState } from "./server-state.mjs";
  * The events response writes the snapshot and then each event as its own line, as the Supervisor
  * does, and stays open until the browser closes it.
  */
+
+type SupervisorAnswer<Call extends keyof ConversationApiSupervisor> = Awaited<
+  ReturnType<ConversationApiSupervisor[Call]>
+>;
 
 const PROJECT_ROUTE = /^\/api\/projects\/([^/]+)\/(.+)$/u;
 
@@ -78,9 +84,24 @@ async function streamEvents(
   });
 }
 
-function refuse(res: ServerResponse, record: RequestRecord, status: number, code: string): void {
+function refuse(
+  res: ServerResponse,
+  record: RequestRecord,
+  status: number,
+  code: ConversationProblem["code"],
+): void {
   record.status = status;
   sendJson(res, status, { ok: false, problem: { code } });
+}
+
+function answer(
+  res: ServerResponse,
+  record: RequestRecord,
+  status: number,
+  result: SupervisorAnswer<"abortProjectRun" | "freshProjectConversation" | "submitProjectMessage">,
+): void {
+  record.status = status;
+  sendJson(res, status, result);
 }
 
 export async function serveConversation(
@@ -113,16 +134,14 @@ export async function serveConversation(
 
   if (action === "abort") {
     await state.conversations.abort(projectId);
-    record.status = 200;
-    sendJson(res, 200, { ok: true });
+    answer(res, record, 200, { ok: true });
 
     return;
   }
 
   if (action === "thread/fresh") {
     const conversationId = await state.conversations.fresh(projectId);
-    record.status = 200;
-    sendJson(res, 200, { ok: true, conversationId });
+    answer(res, record, 200, { ok: true, conversationId: String(conversationId) });
 
     return;
   }
@@ -147,6 +166,5 @@ export async function serveConversation(
     message.requestId,
   );
 
-  record.status = 202;
-  sendJson(res, 202, { ok: true, submissionId });
+  answer(res, record, 202, { ok: true, submissionId });
 }

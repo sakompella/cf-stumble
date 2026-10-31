@@ -62,9 +62,11 @@ const groupDirectories = Object.keys(sourceFiles)
   .map((path) => directoryOf(path));
 
 // Wire contracts another program reads directly. The owner page's browser program types the turn
-// stream from `turn-frames.ts`, and the group's index would pull Worker-only modules into it.
+// stream from `turn-frames.ts`, and the group's index would pull Worker-only modules into it. The
+// browser harness types its answers from `conversation-result.ts` for the same reason.
 const publicEntrypoints = new Set([
   "src/workspace/project/protocol.ts",
+  "src/supervisor/conversations/conversation-result.ts",
   "src/supervisor/projects/turn-frames.ts",
 ]);
 

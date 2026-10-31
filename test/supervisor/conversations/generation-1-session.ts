@@ -198,7 +198,7 @@ export async function submitted(
   projectId: string,
   content: string,
   requestId: string,
-): Promise<string> {
+): Promise<number> {
   const result = await control.submitProjectMessage(projectId, content, requestId);
 
   if (!result.ok) throw new Error(`the message must be admitted: ${result.problem.code}`);

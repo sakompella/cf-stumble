@@ -51,14 +51,14 @@ test("accepts a message with 202 and passes the project the client named", async
       submitProjectMessage(projectId) {
         named = projectId;
 
-        return Promise.resolve({ ok: true, submissionId: "s1" });
+        return Promise.resolve({ ok: true, submissionId: 1 });
       },
     }),
   );
 
   expect(named).toBe("sample-project-one");
   expect(response.status).toBe(202);
-  await expect(response.json()).resolves.toEqual({ ok: true, submissionId: "s1" });
+  await expect(response.json()).resolves.toEqual({ ok: true, submissionId: 1 });
 });
 
 test("streams a conversation's events as JSON lines", async () => {

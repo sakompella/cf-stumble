@@ -2,7 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
 import { projectIdFromPath, type ProjectRouteSuffix } from "./route-pattern.js";
-import type { ConversationProblem, ConversationResult } from "../supervisor/conversations/index.js";
+import type {
+  ConversationProblem,
+  ConversationResult,
+} from "../supervisor/conversations/conversation-result.js";
 
 /**
  * A client names a project and nothing else: the Supervisor holds which conversation, generation and
@@ -13,7 +16,7 @@ export type ConversationApiSupervisor = Readonly<{
     projectId: string,
     content: string,
     requestId: string,
-  ) => Promise<ConversationResult<{ submissionId: string }>>;
+  ) => Promise<ConversationResult<{ submissionId: number }>>;
   projectEvents: (
     projectId: string,
   ) => Promise<ConversationResult<{ events: ReadableStream<Uint8Array> }>>;

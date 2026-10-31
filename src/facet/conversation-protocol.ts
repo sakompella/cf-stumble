@@ -20,7 +20,7 @@ export interface ConversationFacet {
   piDurableVersion(): string;
   attach(host: ConversationHost): Promise<void>;
   createConversation(cwd: string): Promise<string>;
-  submit(conversationId: string, content: string, requestId: string): Promise<string>;
+  submit(conversationId: string, content: string, requestId: string): Promise<number>;
   events(conversationId: string): Promise<ReadableStream<Uint8Array>>;
   abort(conversationId: string): Promise<void>;
 }

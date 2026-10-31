@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import { Command } from "foldkit";
 import * as Schema from "effect/Schema";
 import {
@@ -22,6 +21,7 @@ import {
 } from "./api.js";
 import { Message } from "./message.js";
 import { ControlKind } from "./model.js";
+import { sentMessage } from "./sent-message.js";
 
 /**
  * Each Command turns its answer into exactly one declared Message, so a refused or unreachable
@@ -200,13 +200,12 @@ export const SendMessage = Command.define("SendMessage", {
       projectPath(projectId, "/messages"),
       Option.some({ content, requestId }),
     ).pipe(
-      Effect.map((answer) => {
-        const submissionId = field(answer.payload, "submissionId");
-
-        return isOk(answer.payload) && Predicate.isNumber(submissionId)
-          ? Message.SucceededSend({ requestId, submissionId })
-          : Message.RejectedSend({ requestId, wording: sendRefusalText(answer) });
-      }),
+      Effect.map((answer) =>
+        Option.match(sentMessage(answer.payload), {
+          onSome: ({ submissionId }) => Message.SucceededSend({ requestId, submissionId }),
+          onNone: () => Message.RejectedSend({ requestId, wording: sendRefusalText(answer) }),
+        }),
+      ),
       Effect.catch((detail) => Effect.succeed(Message.FailedSend({ requestId, detail }))),
     ),
 });

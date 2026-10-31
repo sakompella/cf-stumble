@@ -4,7 +4,10 @@ import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { SERVING_FACET_NAME } from "../../../src/supervisor/artifacts/index.js";
+import * as Option from "effect/Option";
+import { sentMessage } from "../../../src/page/client/sent-message.js";
 import { sampleProjectOne } from "../../project-fixtures.js";
+import { ownerApiResponse } from "../../routes/helpers.js";
 import {
   calls,
   held,
@@ -54,6 +57,24 @@ test("a run cut off by a Supervisor reset resumes from the Supervisor's alarm an
     { role: "user", text: "hello" },
     { role: "assistant", text: "resumed answer" },
   ]);
+});
+
+test("the owner API answers a sent message with the number the page accepts", async () => {
+  scriptModel(says("an answer"));
+  const control = await servingGeneration1("generation-1-send-answer", new ProjectWorkspace());
+
+  const response = await ownerApiResponse(
+    new Request(`https://cf-stumble.test/api/projects/${project}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content: "hello", requestId: "r1" }),
+    }),
+    control,
+  );
+
+  expect(response.status).toBe(202);
+  expect(Option.getOrUndefined(sentMessage(await response.json()))?.submissionId).toBeTypeOf(
+    "number",
+  );
 });
 
 test("a message sent while a run is busy is answered after the first", async () => {

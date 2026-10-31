@@ -27,8 +27,9 @@ const SCRIPTED_COMMITS = [
 ] as const;
 
 /**
- * Answers `generation` with its commit; a conversation id counts creations in the facet's own
- * storage. `refuse the next attach` starts a run and makes the next attach throw once.
+ * Numbers its submissions as Pi Durable does, and counts conversation creations in the facet's own
+ * storage. Its events stream is its commit. `refuse the next attach` starts a run and makes the
+ * next attach throw once.
  */
 function scriptedFacet(harnessCommit: string): string {
   return `
@@ -50,13 +51,21 @@ export class MainFacet extends DurableObject {
     return "conversation:" + cwd + ":" + created;
   }
   async submit(conversationId, content) {
-    if (content === "generation") return "${harnessCommit}";
     if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
     await this.host.arm({ active: true });
-    return conversationId + "/" + content;
+    const submitted = (this.ctx.storage.kv.get("submitted") ?? 0) + 1;
+    this.ctx.storage.kv.put("submitted", submitted);
+    return submitted;
   }
   async abort() { await this.host.arm({ active: false }); }
-  async events() { return new ReadableStream({ start(c) { c.close(); } }); }
+  async events() {
+    return new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("${harnessCommit}"));
+        c.close();
+      },
+    });
+  }
 }
 `;
 }
@@ -82,28 +91,64 @@ function alarm(control: DurableObjectStub<Supervisor>): Promise<number | null> {
   return runInDurableObject(control, (_instance, state) => state.storage.getAlarm());
 }
 
-function conversationOf(result: Awaited<ReturnType<Supervisor["submitProjectMessage"]>>): string {
+async function admitted(
+  control: DurableObjectStub<Supervisor>,
+  projectId: string,
+  content: string,
+  requestId: string,
+): Promise<number> {
+  const result = await control.submitProjectMessage(projectId, content, requestId);
+
   if (!result.ok) throw new Error(`the message must be admitted: ${result.problem.code}`);
 
-  return result.submissionId.slice(0, result.submissionId.lastIndexOf("/"));
+  return result.submissionId;
+}
+
+function conversationOf(
+  control: DurableObjectStub<Supervisor>,
+  projectId: string,
+): Promise<string | undefined> {
+  return runInDurableObject(
+    control,
+    (_instance, state) =>
+      state.storage.sql
+        .exec<{ conversation_id: string }>(
+          "SELECT conversation_id FROM project_conversations WHERE project_id = ?",
+          projectId,
+        )
+        .toArray()[0]?.conversation_id,
+  );
+}
+
+async function servingCommit(
+  control: DurableObjectStub<Supervisor>,
+  projectId: string,
+): Promise<string> {
+  const result = await control.projectEvents(projectId);
+
+  if (!result.ok) throw new Error(`the events must open: ${result.problem.code}`);
+
+  return new Response(result.events).text();
 }
 
 test("a project's first message creates its conversation in the project directory, and later ones reuse it", async () => {
   const control = await servingScripted("conversations-first-message");
 
-  const first = conversationOf(
-    await control.submitProjectMessage("sample-project-one", "hello", "r1"),
-  );
+  expect(await admitted(control, "sample-project-one", "hello", "r1")).toBe(1);
 
-  const second = conversationOf(
-    await control.submitProjectMessage("sample-project-one", "again", "r2"),
-  );
+  const first = await conversationOf(control, "sample-project-one");
 
-  const harness = conversationOf(await control.submitProjectMessage("harness", "hi", "r3"));
+  expect(await admitted(control, "sample-project-one", "again", "r2")).toBe(2);
 
-  expect(first.startsWith("conversation:/workspace/projects/sample-project-one:")).toBe(true);
+  const second = await conversationOf(control, "sample-project-one");
+
+  await admitted(control, "harness", "hi", "r3");
+
+  const harness = await conversationOf(control, "harness");
+
+  expect(first?.startsWith("conversation:/workspace/projects/sample-project-one:")).toBe(true);
   expect(second).toBe(first);
-  expect(harness.startsWith("conversation:/workspace/harness:")).toBe(true);
+  expect(harness?.startsWith("conversation:/workspace/harness:")).toBe(true);
 });
 
 test("a message that is not a message reaches no generation", async () => {
@@ -149,16 +194,12 @@ test("activation and rollback replace the serving facet, and its storage carries
   const [first, second] = SCRIPTED_COMMITS;
   const firstLabel = (await control.getActiveGeneration()).generation?.label ?? -1;
 
-  expect(await control.submitProjectMessage("harness", "generation", "r1")).toMatchObject({
-    submissionId: first,
-  });
+  expect(await servingCommit(control, "harness")).toBe(first);
 
   const secondLabel = await readyScripted(control, second);
   await activateGeneration(control, secondLabel);
 
-  expect(await control.submitProjectMessage("harness", "generation", "r2")).toMatchObject({
-    submissionId: second,
-  });
+  expect(await servingCommit(control, "harness")).toBe(second);
 
   const fresh = await control.freshProjectConversation("sample-project-one");
   expect(fresh.ok && fresh.conversationId.endsWith(":2")).toBe(true);
@@ -168,9 +209,7 @@ test("activation and rollback replace the serving facet, and its storage carries
     await control.controlGeneration({ kind: "rollback", label: firstLabel, observedEpoch: epoch }),
   ).toMatchObject({ ok: true });
 
-  expect(await control.submitProjectMessage("harness", "generation", "r3")).toMatchObject({
-    submissionId: first,
-  });
+  expect(await servingCommit(control, "harness")).toBe(first);
 });
 
 test("an alarm whose attach fails throws, so the platform retries it, and the retry resumes the run", async () => {
