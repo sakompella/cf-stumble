@@ -39,7 +39,7 @@ test("all spellings of a generated owner and repository share one canonical URL"
       const canonical = canonicalRepositoryUrl(spelling);
 
       expect(canonical).toBe(expected);
-      expect(canonicalRepositoryUrl(canonical)).toBe(expected);
+      expect(canonicalRepositoryUrl(canonical ?? "")).toBe(expected);
     }
   });
 });
@@ -117,7 +117,7 @@ test("derives an id for every GitHub repository name that is safe as a path segm
     expect(id).toBeDefined();
     expect(id).toMatch(/^[a-z0-9-]+$/u);
     expect(id?.length).toBeLessThanOrEqual(PROJECT_ID_LIMIT);
-    expect(parseProjectId(id)).toBe(id);
+    expect(parseProjectId(id ?? "")).toBe(id);
     expect(encodeURIComponent(id ?? "")).toBe(id);
     expect(id).not.toBe(HARNESS_PROJECT_ID);
   });
@@ -138,7 +138,7 @@ test("keeps the earlier id of every owner without a hyphen and name without dots
 });
 
 type RawProject = Readonly<{
-  id: string | undefined;
+  id: string;
   displayName: string;
   repositoryUrl: string;
 }>;
@@ -151,7 +151,7 @@ function drawRawCatalog(tc: hegel.TestCase): RawProject[] {
     const repositoryUrl = `https://github.com/owner${index}/${repository}`;
 
     return {
-      id: projectIdForRepository(repositoryUrl),
+      id: projectIdForRepository(repositoryUrl) ?? "",
       displayName: `project ${index}`,
       repositoryUrl,
     };

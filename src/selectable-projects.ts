@@ -42,8 +42,7 @@ type SelectableResolution =
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
 export function resolveSelectableProject(
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this is the parser. A selected id arrives from a client with no proven shape.
-  projectId: unknown,
+  projectId: string,
   catalog: SelectableCatalog,
 ): SelectableResolution {
   const parsedProjectId = parseProjectId(projectId);

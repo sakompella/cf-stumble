@@ -14,7 +14,7 @@ import { sampleCatalog, sampleProjectOne } from "./project-fixtures.js";
 function catalogOf(...urls: readonly string[]): ProjectCatalog {
   const parsed = parseProjectCatalog(
     urls.map((repositoryUrl, index) => ({
-      id: projectIdForRepository(repositoryUrl),
+      id: projectIdForRepository(repositoryUrl) ?? "",
       displayName: `project ${index}`,
       repositoryUrl,
     })),
@@ -63,7 +63,7 @@ test("gives one repository the same identity whatever its position or display na
   const reordered = catalogOf("https://github.com/sample/repo-2", url);
 
   const renamed = parseProjectCatalog([
-    { id: projectIdForRepository(url), displayName: "a new name", repositoryUrl: url },
+    { id: projectIdForRepository(url) ?? "", displayName: "a new name", repositoryUrl: url },
   ]);
 
   expect(projectIdForRepository(url)).toBe("sample-repo-1");

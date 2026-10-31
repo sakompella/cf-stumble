@@ -1,4 +1,3 @@
-// oxlint-disable anti-slop/no-unknown-parameters -- The Supervisor RPC methods take request data as `unknown` and parse it themselves.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { callSupervisor, decodeRequestBody, jsonError, type SupervisorCallFailed } from "./json.js";
@@ -16,14 +15,14 @@ import type {
 export type ProjectApiSupervisor = Readonly<{
   listProjects: () => Promise<SelectableCatalog>;
   connectProject: (
-    repositoryUrl: unknown,
-    displayName: unknown,
+    repositoryUrl: string,
+    displayName: string | undefined,
   ) => Promise<ConnectRepositoryResult>;
   getGitHubConnection: () => Promise<GitHubConnectionRecord>;
   refreshGitHubConnection: () => Promise<GitHubConnectionRecord>;
   startGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
   completeGitHubAuthorization: () => Promise<GitHubAuthorizationOutcome>;
-  disconnectProject: (projectId: unknown) => Promise<DisconnectRepositoryResult>;
+  disconnectProject: (projectId: string) => Promise<DisconnectRepositoryResult>;
 }>;
 
 const CONNECT_STATUS = {

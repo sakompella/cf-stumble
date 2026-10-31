@@ -33,16 +33,14 @@ type ConnectProjectResult =
   | Readonly<{ ok: false; problem: ConnectProjectProblem }>;
 
 interface ConnectProjectInput {
-  readonly repositoryUrl: unknown;
-  readonly displayName?: unknown;
+  readonly repositoryUrl: string;
+  readonly displayName?: string | undefined;
 }
 
 const DISPLAY_NAME_LIMIT = 80;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the display name arrives from a client.
-function chosenDisplayName(value: unknown, repositoryUrl: PublicRepositoryUrl): string {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: the display name is untrusted.
-  const trimmed = typeof value === "string" ? value.trim() : "";
+function chosenDisplayName(value: string | undefined, repositoryUrl: PublicRepositoryUrl): string {
+  const trimmed = (value ?? "").trim();
 
   return trimmed.length === 0
     ? defaultProjectDisplayName(repositoryUrl)

@@ -1,7 +1,3 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- Catalog configuration and project selection are parsed at these boundaries.
-
-import { isRecord } from "./untrusted.js";
-
 const projectIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--(?:[1-9][0-9]*[dhsu]+)+)?$/u;
 
 export const PROJECT_ID_LIMIT = 200;
@@ -34,51 +30,34 @@ export type ProjectConfiguration = Readonly<{
   repositoryUrl: string;
 }>;
 
-export function parseProjectId(value: unknown): ProjectId | undefined {
-  if (
-    typeof value !== "string" ||
-    value.length > PROJECT_ID_LIMIT ||
-    !projectIdPattern.test(value)
-  ) {
-    return undefined;
-  }
-
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: projectIdPattern accepts exactly the ProjectId syntax.
-  return value as ProjectId;
+function isProjectId(value: string): value is ProjectId {
+  return value.length <= PROJECT_ID_LIMIT && projectIdPattern.test(value);
 }
 
-export function parsePublicRepositoryUrl(value: unknown): PublicRepositoryUrl | undefined {
-  if (typeof value !== "string" || value.length === 0) {
-    return undefined;
-  }
-
-  let url: URL;
-
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-
-  const pathSegments = url.pathname.split("/").filter((segment) => segment.length > 0);
-
-  if (
-    url.protocol !== "https:" ||
-    url.username !== "" ||
-    url.password !== "" ||
-    url.search !== "" ||
-    url.hash !== "" ||
-    url.hostname === "" ||
-    pathSegments.length < 2
-  ) {
-    return undefined;
-  }
-
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the URL checks accept only repository URL syntax.
-  return value as PublicRepositoryUrl;
+export function parseProjectId(value: string): ProjectId | undefined {
+  return isProjectId(value) ? value : undefined;
 }
 
-export function canonicalRepositoryUrl(value: unknown): PublicRepositoryUrl | undefined {
+function isPublicRepositoryUrl(value: string): value is PublicRepositoryUrl {
+  const url = URL.parse(value);
+
+  return (
+    url !== null &&
+    url.protocol === "https:" &&
+    url.username === "" &&
+    url.password === "" &&
+    url.search === "" &&
+    url.hash === "" &&
+    url.hostname !== "" &&
+    url.pathname.split("/").filter((segment) => segment.length > 0).length >= 2
+  );
+}
+
+export function parsePublicRepositoryUrl(value: string): PublicRepositoryUrl | undefined {
+  return isPublicRepositoryUrl(value) ? value : undefined;
+}
+
+export function canonicalRepositoryUrl(value: string): PublicRepositoryUrl | undefined {
   const parsed = parsePublicRepositoryUrl(value);
 
   if (parsed === undefined) {
@@ -116,7 +95,7 @@ function separatorCode(separator: string): string {
     .replaceAll("_", "u");
 }
 
-export function projectIdForRepository(repositoryUrl: unknown): ProjectId | undefined {
+export function projectIdForRepository(repositoryUrl: string): ProjectId | undefined {
   const canonical = canonicalRepositoryUrl(repositoryUrl);
 
   if (canonical === undefined) {
@@ -163,35 +142,20 @@ export function defaultProjectDisplayName(repositoryUrl: PublicRepositoryUrl): s
   return segments.slice(-2).join("/");
 }
 
-function parseProject(value: unknown): Project | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
+function parseProject(value: ProjectConfiguration): Project | undefined {
   const id = parseProjectId(value.id);
   const repositoryUrl = parsePublicRepositoryUrl(value.repositoryUrl);
 
-  if (
-    id === undefined ||
-    Object.keys(value).length !== 3 ||
-    !Object.hasOwn(value, "id") ||
-    !Object.hasOwn(value, "displayName") ||
-    !Object.hasOwn(value, "repositoryUrl") ||
-    typeof value.displayName !== "string" ||
-    value.displayName.trim().length === 0 ||
-    repositoryUrl === undefined
-  ) {
+  if (id === undefined || value.displayName.trim().length === 0 || repositoryUrl === undefined) {
     return undefined;
   }
 
   return { id, displayName: value.displayName, repositoryUrl };
 }
 
-export function parseProjectCatalog(value: unknown): ProjectCatalog | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-
+export function parseProjectCatalog(
+  value: readonly ProjectConfiguration[],
+): ProjectCatalog | undefined {
   const projects: Project[] = [];
 
   for (const entry of value) {
@@ -212,7 +176,7 @@ type ProjectResolution =
   | Readonly<{ ok: false; reason: "invalid-project-id" | "unknown-project-id" }>;
 
 export function resolveProject(
-  projectId: unknown,
+  projectId: string,
   catalog: ProjectCatalog = EMPTY_PROJECT_CATALOG,
 ): ProjectResolution {
   const parsedProjectId = parseProjectId(projectId);

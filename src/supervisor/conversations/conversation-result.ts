@@ -34,20 +34,13 @@ export function answered<T extends object>(
   );
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the message arrives from a client.
-export function parseMessage(content: unknown, requestId: unknown) {
+export function parseMessage(content: string, requestId: string) {
   const encoder = new TextEncoder();
 
-  return (
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: untrusted client values.
-    typeof content === "string" &&
-      content.trim() !== "" &&
-      encoder.encode(content).byteLength <= MAX_MESSAGE_BYTES &&
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: see above.
-      typeof requestId === "string" &&
-      requestId !== "" &&
-      requestId.length <= MAX_REQUEST_ID_LENGTH
-      ? { content, requestId }
-      : undefined
-  );
+  return content.trim() !== "" &&
+    encoder.encode(content).byteLength <= MAX_MESSAGE_BYTES &&
+    requestId !== "" &&
+    requestId.length <= MAX_REQUEST_ID_LENGTH
+    ? { content, requestId }
+    : undefined;
 }

@@ -1,0 +1,44 @@
+import type { BuildWorkspaceNamespace } from "./artifacts/index.js";
+import type {
+  CredentialWorkspaceNamespace,
+  ProjectRemovalWorkspaceNamespace,
+  ProjectWorkspaceNamespace,
+  ProvisionWorkspaceNamespace,
+} from "./projects/index.js";
+import type {
+  HarnessProvisionWorkspaceNamespace,
+  WorkspaceResetResult,
+} from "../workspace/index.js";
+import { tenantWorkspaceName } from "../workspace-names.js";
+
+export type ResetWorkspaceNamespace = Readonly<{
+  getByName(name: string): Readonly<{ reset(): Promise<WorkspaceResetResult> }>;
+}>;
+
+export type SupervisorWorkspaceReset =
+  | WorkspaceResetResult
+  | Readonly<{ ok: false; problem: Readonly<{ code: "run-active" }> }>;
+
+export type SupervisorEnv = {
+  readonly LOADER: WorkerLoader;
+  readonly WORKSPACE_HOST: BuildWorkspaceNamespace &
+    ProjectWorkspaceNamespace &
+    CredentialWorkspaceNamespace &
+    ProvisionWorkspaceNamespace &
+    ProjectRemovalWorkspaceNamespace &
+    HarnessProvisionWorkspaceNamespace &
+    ResetWorkspaceNamespace;
+  readonly GITHUB_OAUTH_CLIENT_ID?: string;
+  readonly GH_TOKEN?: string;
+  readonly CHATGPT_MODEL: string;
+};
+
+export type SupervisorNames = Readonly<{ name: string; workspaceName: string }>;
+
+export function supervisorNames(ctx: DurableObjectState): SupervisorNames {
+  const name = ctx.id.name;
+
+  if (name === undefined) throw new Error("a Supervisor must be reached by name, not by id");
+
+  return { name, workspaceName: tenantWorkspaceName(name) };
+}

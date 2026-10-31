@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { evictDurableObject, reset } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import { containsCredential } from "../../src/github/index.js";
-import { forwardToFacet, type Supervisor } from "../../src/supervisor/supervisor.js";
+import { forwardToFacet } from "../../src/supervisor/facet-relay.js";
+import type { Supervisor } from "../../src/supervisor/supervisor.js";
 import {
   activateGeneration,
   activeSupervisor,

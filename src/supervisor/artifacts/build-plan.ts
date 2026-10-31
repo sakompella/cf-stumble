@@ -1,4 +1,5 @@
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { MainHarnessArtifact } from "../../facet/index.js";
 import type { MainHarnessArtifactInput, MainHarnessArtifactProblem } from "../../facet/index.js";
 import type { HarnessCommit } from "../../harness-commit.js";
@@ -14,10 +15,12 @@ export {
   type HarnessBuildStepName,
 } from "../../harness-build.js";
 
-export type BuiltModuleMapFile = Readonly<{
-  entryModule: string;
-  modules: readonly Readonly<{ name: string; source: string }>[];
-}>;
+export const BuiltModuleMapFile = Schema.Struct({
+  entryModule: Schema.String,
+  modules: Schema.Array(Schema.Struct({ name: Schema.String, source: Schema.String })),
+});
+
+export type BuiltModuleMapFile = typeof BuiltModuleMapFile.Type;
 
 export type BuildStepDiagnostics = Readonly<{
   stdoutTail: string;
@@ -45,11 +48,6 @@ export function moduleMapFromBuildOutput(
   harnessCommit: HarnessCommit,
   output: BuiltModuleMapFile,
 ): Result.Result<MainHarnessArtifactInput, HarnessBuildProblem> {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boundary: decoded build output is untrusted.
-  if (output === null || typeof output !== "object") {
-    return Result.fail({ code: "build-output-invalid", harnessCommit, reason: "invalid-artifact" });
-  }
-
   const parsed = MainHarnessArtifact.parse({
     harnessCommit,
     entryModule: output.entryModule,

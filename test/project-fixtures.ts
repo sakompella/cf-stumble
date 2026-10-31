@@ -1,4 +1,10 @@
-import { parseProjectCatalog, type Project, type ProjectCatalog } from "../src/project-catalog.js";
+import {
+  parseProjectCatalog,
+  parseProjectId,
+  type Project,
+  type ProjectCatalog,
+  type ProjectId,
+} from "../src/project-catalog.js";
 import { selectableCatalog, type SelectableCatalog } from "../src/selectable-projects.js";
 
 const parsed = parseProjectCatalog([
@@ -25,3 +31,11 @@ export const sampleProjectOne: Project = parsed[0];
 export const sampleProjectTwo: Project = parsed[1];
 
 export const sampleSelectableCatalog: SelectableCatalog = selectableCatalog(sampleCatalog);
+
+export function projectIdOf(value: string): ProjectId {
+  const projectId = parseProjectId(value);
+
+  if (projectId === undefined) throw new Error(`${value} must be a project id`);
+
+  return projectId;
+}

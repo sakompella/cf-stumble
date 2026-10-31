@@ -1,4 +1,4 @@
-import type { GitHubConnectionStatus } from "./github-connection.js";
+import type { GitHubConnectionStatus } from "./github-connection-status.js";
 
 type PendingAuthorization = Readonly<{
   deviceCode: string;

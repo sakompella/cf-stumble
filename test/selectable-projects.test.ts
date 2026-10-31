@@ -41,7 +41,7 @@ test("resolves a selected id to a working directory, and an unknown one to nothi
     ok: false,
     reason: "unknown-project-id",
   });
-  expect(resolveSelectableProject({ id: "harness" }, catalog)).toEqual({
+  expect(resolveSelectableProject("Not A Project Id", catalog)).toEqual({
     ok: false,
     reason: "invalid-project-id",
   });

@@ -5,6 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import type { ProjectConnections } from "../../../src/supervisor/projects/index.js";
 import { FakeTenantWorkspace } from "./fake-tenant-workspace.js";
 import { tenantConnections } from "./tenant-connections.js";
+import { projectIdOf } from "../../project-fixtures.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -12,7 +13,7 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const REPOSITORY = "https://github.com/sample/repo-1";
 
-const PROJECT_ID = "sample-repo-1";
+const PROJECT_ID = projectIdOf("sample-repo-1");
 
 const REMOVAL = "rm -rf --";
 

@@ -9,13 +9,12 @@ export type GenerationLabel = number & {
   readonly [generationLabelBrand]: "GenerationLabel";
 };
 
-export function parseGenerationLabel(value: number): GenerationLabel | undefined {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    return undefined;
-  }
+function isGenerationLabel(value: number): value is GenerationLabel {
+  return Number.isSafeInteger(value) && value >= 0;
+}
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the guard accepts only non-negative safe integer GenerationLabel values.
-  return value as GenerationLabel;
+export function parseGenerationLabel(value: number): GenerationLabel | undefined {
+  return isGenerationLabel(value) ? value : undefined;
 }
 
 export type Generation = {
