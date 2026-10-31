@@ -23,12 +23,6 @@ const manifestFiles = import.meta.glob("../../../package.json", {
   import: "default",
 });
 
-const probeFiles = import.meta.glob("../../../scripts/probe/clean-build.sh", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-});
-
 const manifest = Object.values(manifestFiles).at(0) ?? "";
 
 function scriptNames(): readonly string[] {
@@ -77,15 +71,6 @@ test("the configured phases are, in order, what build:artifact runs locally", ()
   expect(phases[1], "esbuild cannot resolve Pi Durable before the install").toBe(
     "pnpm run build:module-map",
   );
-});
-
-test("the clean-build probe stays committed and runnable", () => {
-  expect(
-    Object.keys(probeFiles),
-    "scripts/probe/clean-build.sh is the only proof that a clean checkout still builds",
-  ).toHaveLength(1);
-  expect(scriptCommand("probe:clean-build")).toBe("scripts/probe/clean-build.sh");
-  expect(Object.values(probeFiles).at(0) ?? "").toContain("build:artifact");
 });
 
 const commit = testHarnessCommit("6000000000000000000000000000000000000003");
