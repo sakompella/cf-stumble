@@ -9,6 +9,7 @@ import {
   sseLine,
 } from "./model-route-provider-stream.js";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
+import type { WorkersAiBinding } from "../src/model-route-events.js";
 import type {
   ModelRouteRequest,
   StreamingProviderPayload,
@@ -19,21 +20,20 @@ const REQUIRED_MODEL = "@cf/zai-org/glm-5.3-flash";
 
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 
-type FakeBinding = Readonly<{ ai: Ai; calls: readonly RecordedCall[] }>;
+type FakeBinding = Readonly<{ ai: WorkersAiBinding; calls: readonly RecordedCall[] }>;
 
 function fakeAiBinding(answer: () => Promise<ReadableStream<Uint8Array>>): FakeBinding {
   const calls: RecordedCall[] = [];
 
-  const binding = {
-    run(model: string, input: StreamingProviderPayload): Promise<ReadableStream<Uint8Array>> {
+  const binding: WorkersAiBinding = {
+    run(model, input) {
       calls.push({ model, input });
 
       return answer();
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: `runStream` reaches the binding only through `AI.run`, which this object implements with the payload type that call passes; no other member of `Ai` is reachable from it.
-  return { ai: binding as Ai, calls };
+  return { ai: binding, calls };
 }
 
 function bindingStreaming(lines: readonly string[]): FakeBinding {

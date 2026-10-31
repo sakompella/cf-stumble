@@ -70,13 +70,16 @@ test("a pasted address yields its code and issued client only when it is this si
 test("a token reply without the direct-use scope cannot connect", () => {
   const body = { access_token: ACCESS_ONE, refresh_token: REFRESH_ONE, expires_in: 3600 };
 
-  expect(parseTokenGrant({ ...body, scope: DIRECT_SCOPE })).toEqual(
+  const reply = (fields: Readonly<Record<string, string>>) =>
+    JSON.stringify({ ...body, ...fields });
+
+  expect(parseTokenGrant(reply({ scope: DIRECT_SCOPE }))).toEqual(
     Result.succeed({ accessToken: ACCESS_ONE, refreshToken: REFRESH_ONE, expiresInMs: 3_600_000 }),
   );
-  expect(parseTokenGrant({ ...body, scope: "openid offline_access" })).toEqual(
+  expect(parseTokenGrant(reply({ scope: "openid offline_access" }))).toEqual(
     Result.fail("missing-scope"),
   );
-  expect(parseTokenGrant({ ...body, access_token: "has space", scope: DIRECT_SCOPE })).toEqual(
+  expect(parseTokenGrant(reply({ access_token: "has space", scope: DIRECT_SCOPE }))).toEqual(
     Result.fail("ambiguous"),
   );
 });

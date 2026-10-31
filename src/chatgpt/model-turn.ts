@@ -13,11 +13,12 @@ import type { ChatGPTAccess } from "./connection-view.js";
 import { discardBody, type ProviderFetch } from "./oauth.js";
 import {
   isUsageLimit,
-  providerError,
+  providerErrorOfText,
   RESPONSES_ENDPOINT,
   ResponsesStreamReader,
   responsesRequest,
   retryAt,
+  UNKNOWN_PROVIDER_ERROR,
   type ProviderError,
 } from "./responses.js";
 
@@ -81,9 +82,11 @@ function errorOf(response: Response): Effect.Effect<ProviderError> {
     try {
       const text = await response.text();
 
-      return providerError(text.length > MAX_ERROR_BODY_BYTES ? null : JSON.parse(text));
+      return text.length > MAX_ERROR_BODY_BYTES
+        ? UNKNOWN_PROVIDER_ERROR
+        : providerErrorOfText(text);
     } catch {
-      return providerError(null);
+      return UNKNOWN_PROVIDER_ERROR;
     }
   });
 }
@@ -201,7 +204,6 @@ export function chatgptTurn(
 
       const reader = new ResponsesStreamReader(accumulator);
 
-      // oxlint-disable-next-line typescript/no-unsafe-argument -- SAFETY: a fetch response body is a byte stream.
       yield* pumpSseStream(response.body, (line) => reader.handleLine(line));
 
       if (reader.failure !== undefined) {

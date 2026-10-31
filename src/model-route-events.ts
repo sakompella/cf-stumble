@@ -18,10 +18,18 @@ export type ModelStreamInference = {
 
 export type ToolCallDelta = Readonly<{
   index: number;
-  id?: string;
-  name?: string;
-  argumentsDelta?: string;
+  id?: string | undefined;
+  name?: string | undefined;
+  argumentsDelta?: string | undefined;
 }>;
+
+export type WorkersAiBinding = {
+  run(
+    model: string,
+    input: StreamingProviderPayload,
+    options: { signal: AbortSignal },
+  ): Promise<ReadableStream<Uint8Array>>;
+};
 
 export type ModelUsage = Readonly<{
   inputTokens: number;
@@ -43,3 +51,21 @@ export type ProviderFallback = Readonly<{
 }>;
 
 export type ModelRouteErrorCode = "model-unavailable" | "chatgpt-reconnect-required";
+
+const EVENT_TYPES: ReadonlySet<string> = new Set<ModelStreamEvent["type"]>([
+  "text-delta",
+  "tool-call-delta",
+  "done",
+  "error",
+  "provider-fallback",
+]);
+
+export function isModelStreamEvent(value: unknown): value is ModelStreamEvent {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string" &&
+    EVENT_TYPES.has(value.type)
+  );
+}

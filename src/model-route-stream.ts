@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import {
-  isProviderError,
-  parseProviderChunk,
+  parseProviderPayload,
   type ParsedProviderChunk,
+  type TokenUsage,
 } from "./model-route-stream-parse.js";
 import type { AssistantMessage, ModelRouteRequest, ToolCall } from "./model-route.js";
 import type {
@@ -54,25 +54,13 @@ export function normalizeResponse(raw: ProviderResult): AssistantMessage {
   return { role: "assistant", content, tool_calls: toolCalls };
 }
 
-export function streamingBindingCall(
-  ai: Ai,
-  model: string,
-  input: StreamingProviderPayload,
-  signal: AbortSignal,
-): Promise<ReadableStream<Uint8Array>> {
-  const raw: unknown = ai.run(model, input, { signal });
-
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: see the function doc above.
-  return raw as Promise<ReadableStream<Uint8Array>>;
-}
-
 type ToolCallAccumulator = { id: string; name: string; args: string[] };
 
 export class ProviderStreamAccumulator {
   private readonly texts: string[] = [];
   private readonly toolCalls = new Map<number, ToolCallAccumulator>();
   private readonly emit: (event: ModelStreamEvent) => void;
-  private reportedUsage: Readonly<{ inputTokens: number; outputTokens: number }> | undefined;
+  private reportedUsage: TokenUsage | undefined;
   providerFailed = false;
 
   constructor(emit: (event: ModelStreamEvent) => void) {
@@ -98,23 +86,17 @@ export class ProviderStreamAccumulator {
     const payload = trimmed.slice("data:".length).trim();
 
     if (payload === "[DONE]") return true;
-    let parsedJson: unknown;
+    const parsed = parseProviderPayload(payload);
 
-    try {
-      parsedJson = JSON.parse(payload);
-    } catch {
-      return false;
-    }
+    if (parsed === undefined) return false;
 
-    if (isProviderError(parsedJson)) {
+    if (parsed.failed) {
       this.providerFailed = true;
 
       return true;
     }
 
-    const chunk = parseProviderChunk(parsedJson);
-
-    if (chunk !== undefined) this.apply(chunk);
+    this.apply(parsed.chunk);
 
     return false;
   }
@@ -144,7 +126,7 @@ export class ProviderStreamAccumulator {
     };
   }
 
-  usage(): Readonly<{ inputTokens: number; outputTokens: number }> | undefined {
+  usage(): TokenUsage | undefined {
     return this.reportedUsage;
   }
 }

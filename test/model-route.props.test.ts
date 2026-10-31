@@ -1,11 +1,18 @@
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { expect, test } from "vitest";
 
 import { parseRequest, type ToolDefinition } from "../src/model-route-request.js";
 
 const USER = { role: "user", content: "Hi" } as const;
+
+const decodeWire = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
+function wireOf<T>(value: T): Schema.Json {
+  return decodeWire(JSON.stringify(value));
+}
 
 function drawTool(tc: hegel.TestCase): ToolDefinition {
   const property = tc.draw(gs.text({ alphabet: "abc_", minSize: 1, maxSize: 6 }));
@@ -62,7 +69,7 @@ test("generated tool definitions parse to themselves", () => {
 
 test("a tool with one field of the wrong type or missing is rejected at its index", () => {
   hegel.test((tc) => {
-    const tools: unknown[] = drawTools(tc);
+    const tools: Array<ToolDefinition | ReturnType<typeof corrupted>> = drawTools(tc);
     const index = tc.draw(gs.integers({ minValue: 0, maxValue: tools.length }));
     const fieldName = tc.draw(gs.sampledFrom(TOOL_FIELDS));
 
@@ -72,7 +79,7 @@ test("a tool with one field of the wrong type or missing is rejected at its inde
 
     tools.splice(index, 0, corrupted(drawTool(tc), fieldName, value));
 
-    const reason = Result.match(parseRequest({ messages: [USER], tools }), {
+    const reason = Result.match(parseRequest(wireOf({ messages: [USER], tools })), {
       onSuccess: () => "parsed",
       onFailure: (failure) => failure.error.reason,
     });

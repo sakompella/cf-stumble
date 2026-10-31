@@ -6,7 +6,7 @@ import type {
   StreamOptions,
   TranscriptContext,
 } from "@earendil-works/pi-ai";
-import type { ModelStreamEvent } from "../../model-route.js";
+import { isModelStreamEvent } from "../../model-route-events.js";
 import type { ModelCapability } from "./capabilities.js";
 import { transcriptToRouteRequest } from "./route-request.js";
 import { ReplyAssembler } from "./route-reply.js";
@@ -25,24 +25,6 @@ export const ROUTE_MODEL: Model<"host-model-route"> = {
 };
 
 const CANCELLED = "the turn was cancelled";
-
-const EVENT_TYPES: ReadonlySet<string> = new Set<ModelStreamEvent["type"]>([
-  "text-delta",
-  "tool-call-delta",
-  "done",
-  "error",
-  "provider-fallback",
-]);
-
-function isModelStreamEvent(value: unknown): value is ModelStreamEvent {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string" &&
-    EVENT_TYPES.has(value.type)
-  );
-}
 
 function aborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;

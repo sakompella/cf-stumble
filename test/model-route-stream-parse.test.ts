@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
-import { parseProviderChunk } from "../src/model-route-stream-parse.js";
+import type * as Schema from "effect/Schema";
+import { parseProviderPayload } from "../src/model-route-stream-parse.js";
+
+function parseProviderChunk(payload: Schema.Json) {
+  const parsed = parseProviderPayload(JSON.stringify(payload));
+
+  return parsed?.failed === false ? parsed.chunk : undefined;
+}
 
 test("a chat-completion chunk's text and tool call reach the route", () => {
   expect(

@@ -1,3 +1,5 @@
+import type * as Schema from "effect/Schema";
+import { isModelStreamEvent } from "../src/model-route-events.js";
 import type { ModelStreamEvent } from "../src/model-route.js";
 import { byteChunkStream } from "./byte-stream-fixture.js";
 
@@ -5,8 +7,7 @@ export const rawByteStream = byteChunkStream;
 
 const encoder = new TextEncoder();
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Test-only encoder: builds a wire payload rather than parsing untrusted input.
-export function sseLine(payload: unknown): string {
+export function sseLine(payload: Schema.Json): string {
   return `data: ${JSON.stringify(payload)}\n`;
 }
 
@@ -26,6 +27,11 @@ export async function collectEvents(
   const text = await new Response(stream).text();
   const lines = text.split("\n").filter((line) => line !== "");
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: every line came from the model route, which encodes exactly one ModelStreamEvent per line.
-  return lines.map((line) => JSON.parse(line) as ModelStreamEvent);
+  return lines.map((line): ModelStreamEvent => {
+    const event: unknown = JSON.parse(line);
+
+    if (!isModelStreamEvent(event)) throw new Error(`the model route wrote ${line}`);
+
+    return event;
+  });
 }

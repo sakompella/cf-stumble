@@ -1,11 +1,8 @@
 import { createExecutionContext } from "cloudflare:test";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ChatGPTAccess } from "../src/chatgpt/index.js";
-import {
-  ModelRoute,
-  type ModelRouteRequest,
-  type StreamingProviderPayload,
-} from "../src/model-route.js";
+import type { WorkersAiBinding } from "../src/model-route-events.js";
+import { ModelRoute, type ModelRouteRequest } from "../src/model-route.js";
 import {
   collectEvents,
   DONE_LINE,
@@ -22,19 +19,18 @@ const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }]
 function workersAi(text: string) {
   const calls: string[] = [];
 
-  const binding = {
-    run(model: string, _input: StreamingProviderPayload): Promise<ReadableStream<Uint8Array>> {
+  const binding: WorkersAiBinding = {
+    run(model) {
       calls.push(model);
 
       return Promise.resolve(providerStreamOfLines([sseLine({ response: text }), DONE_LINE]));
     },
   };
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the route reaches the binding only through `AI.run`.
-  return { ai: binding as Ai, calls };
+  return { ai: binding, calls };
 }
 
-function supervisedRoute(ai: Ai, access: ChatGPTAccess) {
+function supervisedRoute(ai: WorkersAiBinding, access: ChatGPTAccess) {
   const limited: (readonly [string, number | null])[] = [];
   const context = createExecutionContext();
   Object.defineProperty(context, "props", { value: { supervisor: "owner" } });

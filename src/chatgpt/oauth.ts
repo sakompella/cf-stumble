@@ -1,9 +1,8 @@
-// oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof -- The token endpoint's replies are parsed at this boundary.
-
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
-import { isRecord } from "../untrusted.js";
+import * as Schema from "effect/Schema";
 
 const AUTH_ORIGIN = "https://auth.openai.com";
 
@@ -141,32 +140,30 @@ export type TokenGrant = Readonly<{
 
 export type ProviderFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-function bearer(value: unknown): string | undefined {
-  return typeof value === "string" && BEARER_PATTERN.test(value) ? value : undefined;
-}
+const Bearer = Schema.String.check(Schema.isPattern(BEARER_PATTERN));
 
-export function parseTokenGrant(value: unknown): Result.Result<TokenGrant, TokenFailure> {
-  if (!isRecord(value)) return Result.fail("ambiguous");
+const TokenReply = Schema.Struct({
+  access_token: Bearer,
+  refresh_token: Bearer,
+  expires_in: Schema.Finite.check(Schema.isGreaterThan(0)),
+  scope: Schema.String,
+});
 
-  const accessToken = bearer(value.access_token);
-  const refreshToken = bearer(value.refresh_token);
-  const expiresIn = value.expires_in;
-  const scope = value.scope;
+const decodeTokenReply = Schema.decodeUnknownOption(Schema.fromJsonString(TokenReply));
 
-  if (
-    accessToken === undefined ||
-    refreshToken === undefined ||
-    typeof expiresIn !== "number" ||
-    !Number.isFinite(expiresIn) ||
-    expiresIn <= 0 ||
-    typeof scope !== "string"
-  ) {
-    return Result.fail("ambiguous");
-  }
+export function parseTokenGrant(body: string): Result.Result<TokenGrant, TokenFailure> {
+  const reply = decodeTokenReply(body);
+
+  if (Option.isNone(reply)) return Result.fail("ambiguous");
+  const { access_token, refresh_token, expires_in, scope } = reply.value;
 
   if (!scope.split(/\s+/u).includes(DIRECT_TOKEN_SCOPE)) return Result.fail("missing-scope");
 
-  return Result.succeed({ accessToken, refreshToken, expiresInMs: expiresIn * 1000 });
+  return Result.succeed({
+    accessToken: access_token,
+    refreshToken: refresh_token,
+    expiresInMs: expires_in * 1000,
+  });
 }
 
 function statusFailure(status: number): TokenFailure {
@@ -203,8 +200,8 @@ export function requestTokens(
       return yield* new TokenRequestFailed({ failure: statusFailure(response.status) });
     }
 
-    const body: unknown = yield* Effect.tryPromise({
-      try: () => response.json(),
+    const body = yield* Effect.tryPromise({
+      try: () => response.text(),
       catch: () => new TokenRequestFailed({ failure: "ambiguous" }),
     });
 

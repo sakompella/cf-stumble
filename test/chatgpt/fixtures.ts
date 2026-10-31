@@ -62,9 +62,18 @@ export async function challengeOf(verifier: string): Promise<string> {
     .replace(/=+$/u, "");
 }
 
+function isText(body: RequestInit["body"]): body is string {
+  return typeof body === "string";
+}
+
+export function bodyOf(call: RecordedCall | undefined): string {
+  const body = call?.init.body;
+
+  return isText(body) ? body : "";
+}
+
 export function formOf(call: RecordedCall | undefined): URLSearchParams {
-  // oxlint-disable-next-line typescript/no-base-to-string -- The token request body is always a form string.
-  return new URLSearchParams(String(call?.init.body ?? ""));
+  return new URLSearchParams(bodyOf(call));
 }
 
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };

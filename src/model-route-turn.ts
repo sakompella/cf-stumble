@@ -7,8 +7,8 @@ import { KEEPALIVE_LINE, keptAlive } from "./stream-keepalive.js";
 
 const MAX_STREAM_EVENT_BYTES = 8_388_608;
 
-async function readSseLines(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+async function readSseLines<Chunk extends Uint8Array>(
+  reader: ReadableStreamDefaultReader<Chunk>,
   onLine: (line: string) => boolean,
 ): Promise<boolean> {
   const decoder = new TextDecoder();
@@ -50,8 +50,8 @@ export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
 export const modelUnavailable = (): ModelTurnFailed =>
   new ModelTurnFailed({ code: "model-unavailable" });
 
-export function pumpSseStream(
-  providerStream: ReadableStream<Uint8Array>,
+export function pumpSseStream<Chunk extends Uint8Array>(
+  providerStream: ReadableStream<Chunk>,
   onLine: (line: string) => boolean,
 ): Effect.Effect<void, ModelTurnFailed> {
   return Effect.acquireUseRelease(

@@ -173,7 +173,7 @@ test("the Supervisor records a usage limit the route reports and shows it in the
     limitedUntil,
   });
 
-  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, "not a time");
+  await supervisor.markChatGPTUsageLimited(ACCESS_ONE, Number.NaN);
 
   await expect(supervisor.getChatGPTConnection()).resolves.toMatchObject({
     connection: { state: "connected", usageLimit: { limitedUntil: null } },

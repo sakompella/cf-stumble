@@ -1,5 +1,5 @@
 import * as Result from "effect/Result";
-import { asUntrusted, field, hasOwn, isRecord, type UntrustedObject } from "./untrusted.js";
+import * as Schema from "effect/Schema";
 
 const MAX_REQUEST_BYTES = 1_048_576;
 
@@ -51,32 +51,35 @@ export type ValidationFailure = Readonly<{
   error: Readonly<{ code: "invalid-request"; reason: string }>;
 }>;
 
+export type RouteWire = ModelRouteRequest | Schema.Json;
+
 type Parsed<T> = Result.Result<T, string>;
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: one untrusted request value.
-function untrustedRecord(value: unknown): UntrustedObject | undefined {
-  return isRecord(value) ? asUntrusted(value) : undefined;
-}
+const FieldsSchema = Schema.Record(Schema.String, Schema.Unknown);
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value !== "";
-}
+type Fields = typeof FieldsSchema.Type;
 
-function isString(value: unknown): value is string {
-  return typeof value === "string";
-}
+const isFields = Schema.is(FieldsSchema);
+
+const EntriesSchema = Schema.Array(Schema.Unknown);
+
+type Entries = typeof EntriesSchema.Type;
+
+const isEntries = Schema.is(EntriesSchema);
+
+const isString = Schema.is(Schema.String);
+
+const isNonEmptyString = Schema.is(Schema.NonEmptyString);
 
 function parseEach<T>(
-  entries: readonly unknown[],
+  entries: Entries,
   label: (index: number) => string,
-  parse: (entry: UntrustedObject, at: string) => Parsed<T>,
+  parse: (entry: Fields, at: string) => Parsed<T>,
 ): Parsed<readonly T[]> {
   const parsed: T[] = [];
 
-  for (const [index, value] of entries.entries()) {
-    const entry = untrustedRecord(value);
-
-    if (entry === undefined) return Result.fail(`${label(index)} is not an object`);
+  for (const [index, entry] of entries.entries()) {
+    if (!isFields(entry)) return Result.fail(`${label(index)} is not an object`);
     const result = parse(entry, label(index));
 
     if (Result.isFailure(result)) return Result.fail(result.failure);
@@ -86,35 +89,35 @@ function parseEach<T>(
   return Result.succeed(parsed);
 }
 
-function parseToolCall(call: UntrustedObject, at: string): Parsed<ToolCall> {
-  const id = field(call, "id");
+function parseToolCall(call: Fields, at: string): Parsed<ToolCall> {
+  const id = call.id;
 
   if (!isNonEmptyString(id)) return Result.fail(`${at} missing non-empty id`);
-  const fn = untrustedRecord(field(call, "function"));
+  const fn = call.function;
 
-  if (fn === undefined) return Result.fail(`${at} missing function`);
-  const name = field(fn, "name");
+  if (!isFields(fn)) return Result.fail(`${at} missing function`);
+  const name = fn.name;
 
   if (!isNonEmptyString(name)) return Result.fail(`${at} missing function.name`);
-  const args = field(fn, "arguments");
+  const args = fn.arguments;
 
   if (!isString(args)) return Result.fail(`${at} missing function.arguments`);
 
   return Result.succeed({ id, function: { name, arguments: args } });
 }
 
-function parseAssistant(msg: UntrustedObject, at: string): Parsed<AssistantMessage> {
-  const content = field(msg, "content");
+function parseAssistant(msg: Fields, at: string): Parsed<AssistantMessage> {
+  const content = msg.content;
 
   if (content !== null && !isString(content)) {
     return Result.fail(`assistant message at ${at} content must be string or null`);
   }
 
-  if (!hasOwn(msg, "tool_calls"))
+  if (!Object.hasOwn(msg, "tool_calls"))
     return Result.succeed({ role: "assistant", content, tool_calls: [] });
-  const calls = field(msg, "tool_calls");
+  const calls = msg.tool_calls;
 
-  if (!Array.isArray(calls)) {
+  if (!isEntries(calls)) {
     return Result.fail(`assistant message at ${at} tool_calls must be an array`);
   }
 
@@ -131,25 +134,25 @@ function parseAssistant(msg: UntrustedObject, at: string): Parsed<AssistantMessa
   });
 }
 
-function parseToolResult(msg: UntrustedObject, at: string): Parsed<ToolResultMessage> {
-  const toolCallId = field(msg, "tool_call_id");
+function parseToolResult(msg: Fields, at: string): Parsed<ToolResultMessage> {
+  const toolCallId = msg.tool_call_id;
 
   if (!isNonEmptyString(toolCallId)) {
     return Result.fail(`tool message at ${at} missing non-empty tool_call_id`);
   }
 
-  const content = field(msg, "content");
+  const content = msg.content;
 
   if (!isString(content)) return Result.fail(`tool message at ${at} content must be a string`);
 
   return Result.succeed({ role: "tool", tool_call_id: toolCallId, content });
 }
 
-function parseMessage(msg: UntrustedObject, at: string): Parsed<RouteMessage> {
-  const role = field(msg, "role");
+function parseMessage(msg: Fields, at: string): Parsed<RouteMessage> {
+  const role = msg.role;
 
   if (role === "system" || role === "user") {
-    const content = field(msg, "content");
+    const content = msg.content;
 
     if (!isString(content)) return Result.fail(`${role} message at ${at} content must be a string`);
 
@@ -163,44 +166,34 @@ function parseMessage(msg: UntrustedObject, at: string): Parsed<RouteMessage> {
   return Result.fail(`unknown role ${JSON.stringify(role)} at ${at}`);
 }
 
-function parseTool(tool: UntrustedObject, at: string): Parsed<ToolDefinition> {
-  if (field(tool, "type") !== "function") return Result.fail(`${at} type must be "function"`);
-  const fn = untrustedRecord(field(tool, "function"));
+function parseTool(tool: Fields, at: string): Parsed<ToolDefinition> {
+  if (tool.type !== "function") return Result.fail(`${at} type must be "function"`);
+  const fn = tool.function;
 
-  if (fn === undefined) return Result.fail(`${at} missing function`);
-  const name = field(fn, "name");
+  if (!isFields(fn)) return Result.fail(`${at} missing function`);
+  const name = fn.name;
 
   if (!isNonEmptyString(name)) return Result.fail(`${at} missing function.name`);
-  const description = field(fn, "description");
+  const description = fn.description;
 
   if (!isString(description)) return Result.fail(`${at} function.description must be a string`);
-  const parameters = field(fn, "parameters");
+  const parameters = fn.parameters;
 
-  if (!isRecord(parameters)) return Result.fail(`${at} function.parameters must be an object`);
+  if (!isFields(parameters)) return Result.fail(`${at} function.parameters must be an object`);
 
   return Result.succeed({ type: "function", function: { name, description, parameters } });
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the untrusted `tools` field.
-function parseTools(tools: unknown): Parsed<readonly ToolDefinition[]> {
-  if (!Array.isArray(tools)) return Result.fail("tools must be an array");
-
-  return parseEach(tools, (index) => `tools[${index}]`, parseTool);
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: the untrusted request.
-function parseFields(raw: unknown): Parsed<ModelRouteRequest> {
-  const obj = untrustedRecord(raw);
-
-  if (obj === undefined) return Result.fail("request must be an object");
+function parseFields(raw: RouteWire): Parsed<ModelRouteRequest> {
+  if (!isFields(raw)) return Result.fail("request must be an object");
 
   for (const f of FORBIDDEN_FIELDS) {
-    if (hasOwn(obj, f)) return Result.fail(`request must not include provider field: ${f}`);
+    if (Object.hasOwn(raw, f)) return Result.fail(`request must not include provider field: ${f}`);
   }
 
-  const msgs = field(obj, "messages");
+  const msgs = raw.messages;
 
-  if (!Array.isArray(msgs) || msgs.length === 0) {
+  if (!isEntries(msgs) || msgs.length === 0) {
     return Result.fail("messages must be a non-empty array");
   }
 
@@ -210,16 +203,17 @@ function parseFields(raw: unknown): Parsed<ModelRouteRequest> {
 
   return Result.gen(function* () {
     const messages = yield* parseEach(msgs, (index) => `messages[${index}]`, parseMessage);
-    const tools = field(obj, "tools");
+    const tools = raw.tools;
 
     if (tools === undefined) return { messages };
 
-    return { messages, tools: yield* parseTools(tools) };
+    if (!isEntries(tools)) return yield* Result.fail("tools must be an array");
+
+    return { messages, tools: yield* parseEach(tools, (index) => `tools[${index}]`, parseTool) };
   });
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Boundary: this IS the parse boundary for untrusted service-binding input.
-export function parseRequest(raw: unknown): Result.Result<ModelRouteRequest, ValidationFailure> {
+export function parseRequest(raw: RouteWire): Result.Result<ModelRouteRequest, ValidationFailure> {
   return Result.mapError(parseFields(raw), (reason): ValidationFailure => ({
     ok: false,
     error: { code: "invalid-request", reason },
