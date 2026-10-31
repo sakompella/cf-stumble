@@ -1,7 +1,7 @@
 import * as Result from "effect/Result";
 import { MainHarnessArtifact } from "../../src/facet/index.js";
 import type { MainHarnessArtifactInput } from "../../src/facet/index.js";
-import { PI_DURABLE_VERSION } from "../../src/pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../../src/facet-compatibility.js";
 
 export function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArtifact {
   const parsed = MainHarnessArtifact.parse(input);
@@ -13,11 +13,11 @@ export function parsedArtifact(input: MainHarnessArtifactInput): MainHarnessArti
   return parsed.success;
 }
 
-export const PI_DURABLE_VERSION_METHOD = `piDurableVersion() { return ${JSON.stringify(PI_DURABLE_VERSION)}; }`;
+export const FACET_COMPATIBILITY_METHOD = `compatibility() { return ${JSON.stringify(FACET_COMPATIBILITY)}; }`;
 
 export function servingFacetSource(
   served: string,
-  versionMethod = PI_DURABLE_VERSION_METHOD,
+  versionMethod = FACET_COMPATIBILITY_METHOD,
 ): string {
   return `
 import { DurableObject } from "cloudflare:workers";

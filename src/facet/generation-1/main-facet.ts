@@ -6,7 +6,7 @@ import {
   type Conversation,
   type ConversationId,
 } from "@earendil-works/pi-durable";
-import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
 import type { ConversationFacet, ConversationHost } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
 import { openSession, type Session } from "./open-session.js";
@@ -32,8 +32,8 @@ export class MainFacet
 {
   #session: Promise<Session> | undefined;
 
-  piDurableVersion(): string {
-    return PI_DURABLE_VERSION;
+  compatibility(): string {
+    return FACET_COMPATIBILITY;
   }
 
   async attach(host: ReceivedHost): Promise<void> {

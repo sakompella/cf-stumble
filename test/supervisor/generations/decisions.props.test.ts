@@ -16,7 +16,7 @@ function generation(labelValue: number, status: GenerationStatus): Generation {
   return { label: label(labelValue), harnessCommit: COMMIT, status };
 }
 
-const SUPERVISOR_VERSION = "1.4.0";
+const SUPERVISOR_COMPATIBILITY = "pi-durable@1.4.0/host-2";
 
 const count = gs.integers({ minValue: 0, maxValue: 2 ** 40 });
 
@@ -24,7 +24,11 @@ const labelValue = gs.integers({ minValue: 0, maxValue: 2 ** 39 });
 
 const kind = gs.sampledFrom(["activate", "rollback"] as const);
 
-const recordedVersion = gs.sampledFrom([SUPERVISOR_VERSION, "1.3.9", undefined] as const);
+const recordedCompatibility = gs.sampledFrom([
+  SUPERVISOR_COMPATIBILITY,
+  "pi-durable@1.4.0/host-1",
+  undefined,
+] as const);
 
 test("only the current epoch can change the selection, whatever the target", () => {
   hegel.test((tc) => {
@@ -36,7 +40,7 @@ test("only the current epoch can change the selection, whatever the target", () 
     const record = {
       generation: generation(target, status),
       wasActive: tc.draw(gs.booleans()),
-      piDurableVersion: tc.draw(recordedVersion),
+      compatibility: tc.draw(recordedCompatibility),
     };
 
     const command = { kind: tc.draw(kind), label: label(target), observedEpoch };
@@ -45,7 +49,7 @@ test("only the current epoch can change the selection, whatever the target", () 
       command,
       record,
       { activeLabel: undefined, epoch },
-      SUPERVISOR_VERSION,
+      SUPERVISOR_COMPATIBILITY,
     );
 
     if (observedEpoch !== epoch) {
@@ -54,7 +58,7 @@ test("only the current epoch can change the selection, whatever the target", () 
 
     if (status !== "ready") expect(decision.ok).toBe(false);
 
-    if (record.piDurableVersion !== SUPERVISOR_VERSION) expect(decision.ok).toBe(false);
+    if (record.compatibility !== SUPERVISOR_COMPATIBILITY) expect(decision.ok).toBe(false);
   });
 });
 
@@ -72,9 +76,9 @@ test("an accepted activation advances the epoch by exactly one, and only when it
 
     const decision = decideActivation(
       command,
-      { generation: ready, wasActive: true, piDurableVersion: SUPERVISOR_VERSION },
+      { generation: ready, wasActive: true, compatibility: SUPERVISOR_COMPATIBILITY },
       { activeLabel, epoch },
-      SUPERVISOR_VERSION,
+      SUPERVISOR_COMPATIBILITY,
     );
 
     expect(decision).toMatchObject(
@@ -85,35 +89,35 @@ test("an accepted activation advances the epoch by exactly one, and only when it
   });
 });
 
-test("a check records the outcome's status and version, advances the epoch by one, and is a no-op only when nothing changed", () => {
+test("a check records the outcome's status and compatibility, advances the epoch by one, and is a no-op only when nothing changed", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
     const previousStatus = tc.draw(gs.sampledFrom(["candidate", "ready", "failed"] as const));
-    const previousVersion = tc.draw(recordedVersion);
-    const checkedVersion = tc.draw(recordedVersion);
+    const previousCompatibility = tc.draw(recordedCompatibility);
+    const checkedCompatibility = tc.draw(recordedCompatibility);
     const wasActive = tc.draw(gs.booleans());
 
     const outcome =
-      checkedVersion === undefined
+      checkedCompatibility === undefined
         ? ({ status: "failed" } as const)
-        : ({ status: "ready", piDurableVersion: checkedVersion } as const);
+        : ({ status: "ready", compatibility: checkedCompatibility } as const);
 
     const previous = {
       generation: generation(target, previousStatus),
       wasActive,
-      piDurableVersion: previousVersion,
+      compatibility: previousCompatibility,
     };
 
     expect(decidePreparation(previous, outcome, { activeLabel: undefined, epoch })).toEqual({
       record: {
         generation: generation(target, outcome.status),
         wasActive,
-        piDurableVersion: checkedVersion,
+        compatibility: checkedCompatibility,
       },
       epoch: epoch + 1,
       effect:
-        previousStatus === outcome.status && previousVersion === checkedVersion
+        previousStatus === outcome.status && previousCompatibility === checkedCompatibility
           ? "no-op"
           : "recorded",
     });

@@ -8,7 +8,7 @@ export interface ConversationHost {
 }
 
 export interface ConversationFacet {
-  piDurableVersion(): string;
+  compatibility(): string;
   attach(host: ConversationHost): Promise<void>;
   createConversation(cwd: string): Promise<string>;
   submit(conversationId: string, content: string, requestId: string): Promise<number>;

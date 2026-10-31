@@ -1,3 +1,3 @@
 import manifest from "@earendil-works/pi-durable/package.json" with { type: "json" };
 
-export const PI_DURABLE_VERSION: string = manifest.version;
+export const FACET_COMPATIBILITY: string = `pi-durable@${manifest.version}/host-2`;

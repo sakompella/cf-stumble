@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { MainFacetCapabilities } from "../../facet/index.js";
-import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
 import type { HarnessArtifacts, ModuleMapProblem } from "../artifacts/index.js";
 import type {
   Generation,
@@ -70,7 +70,7 @@ function checkLabeledStartup(
     const recorded = host.generations.recordPreparation(
       label,
       outcome.stage === "ready"
-        ? { status: "ready", piDurableVersion: PI_DURABLE_VERSION }
+        ? { status: "ready", compatibility: FACET_COMPATIBILITY }
         : { status: "failed" },
     );
 

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, test } from "vitest";
-import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../../../src/facet-compatibility.js";
 import { Generations } from "../../../src/supervisor/generations.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
 import {
@@ -14,7 +14,7 @@ import {
   testHarnessCommit,
 } from "../helpers.js";
 
-const EARLIER_VERSION = "0.0.1-earlier";
+const PREVIOUS_HOST_PROTOCOL = "pi-durable@1.4.0/host-1";
 
 const secondCommit = "0123456789abcdef0123456789abcdef01234567";
 
@@ -26,18 +26,18 @@ function rollback(control: DurableObjectStub<Supervisor>, observedEpoch: number)
   return control.controlGeneration({ kind: "rollback", label: generationLabel(0), observedEpoch });
 }
 
-test("rollback refuses a generation prepared under another Pi Durable version", async () => {
+test("rollback refuses a generation prepared under the previous host protocol", async () => {
   const refused = await runInDurableObject(
-    env.SUPERVISOR.getByName("rollback-across-versions"),
+    env.SUPERVISOR.getByName("rollback-across-protocols"),
     (_instance, state) => {
-      const before = new Generations(state.storage, EARLIER_VERSION);
+      const before = new Generations(state.storage, PREVIOUS_HOST_PROTOCOL);
       const first = before.submit(testHarnessCommit(fixtureMainHarnessCommit)).generation.label;
-      before.recordPreparation(first, { status: "ready", piDurableVersion: EARLIER_VERSION });
+      before.recordPreparation(first, { status: "ready", compatibility: PREVIOUS_HOST_PROTOCOL });
       before.activate({ kind: "activate", label: first, observedEpoch: before.active().epoch });
 
-      const after = new Generations(state.storage, PI_DURABLE_VERSION);
+      const after = new Generations(state.storage, FACET_COMPATIBILITY);
       const second = after.submit(testHarnessCommit(secondCommit)).generation.label;
-      after.recordPreparation(second, { status: "ready", piDurableVersion: PI_DURABLE_VERSION });
+      after.recordPreparation(second, { status: "ready", compatibility: FACET_COMPATIBILITY });
       after.activate({ kind: "activate", label: second, observedEpoch: after.active().epoch });
 
       return {
@@ -52,13 +52,13 @@ test("rollback refuses a generation prepared under another Pi Durable version", 
   );
 
   expect(refused).toEqual({
-    rollback: { ok: false, problem: { code: "pi-durable-version-mismatch" } },
+    rollback: { ok: false, problem: { code: "facet-compatibility-mismatch" } },
     active: 1,
   });
 });
 
 test("resubmitting the commit of a refused generation re-runs the check under the same label", async () => {
-  const control = env.SUPERVISOR.getByName("resubmit-after-version-change");
+  const control = env.SUPERVISOR.getByName("resubmit-after-protocol-change");
   await activateFixtureGeneration(control);
   const second = await submitCandidate(control, secondCommit);
   await prepareGeneration(control, second, secondCommit);
@@ -66,8 +66,8 @@ test("resubmitting the commit of a refused generation re-runs the check under th
 
   await runInDurableObject(control, (_instance, state) => {
     state.storage.sql.exec(
-      "UPDATE generations SET pi_durable_version = ? WHERE label = 0",
-      EARLIER_VERSION,
+      "UPDATE generations SET facet_compatibility = ? WHERE label = 0",
+      PREVIOUS_HOST_PROTOCOL,
     );
   });
 
@@ -76,7 +76,7 @@ test("resubmitting the commit of a refused generation re-runs the check under th
   const rechecked = await control.prepareGeneration(resubmitted.generation.label);
   const rolledBack = await rollback(control, (await control.getActiveGeneration()).epoch);
 
-  expect(refused).toEqual({ ok: false, problem: { code: "pi-durable-version-mismatch" } });
+  expect(refused).toEqual({ ok: false, problem: { code: "facet-compatibility-mismatch" } });
   expect(resubmitted.generation.label).toBe(0);
   expect(rechecked).toMatchObject({
     ok: true,

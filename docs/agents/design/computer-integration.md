@@ -53,6 +53,8 @@ cd node_modules/@earendil-works/pi-durable/dist && rg -n -g '*.js' -g '!storage/
 
 In 1.4.0 it finds only Pi's own Node environment calling itself (`env/node.js`) and two unrelated `watch` methods in `harness/harness.js`.
 
+A generation must also speak the Supervisor's current facet-to-Supervisor protocol. `FACET_COMPATIBILITY` in `src/facet-compatibility.ts` is `pi-durable@<version>/host-<N>`, the facet reports it from `compatibility()`, and the startup check, activation and rollback compare it exactly. Bump `host-N` when the facet-to-Supervisor RPC contract changes: a host call the facet makes (`arm`, `running`, `workspace`) or a facet method the Supervisor calls. `host-2` added `running`. A Pi Durable bump changes the key by itself.
+
 ## Harness execution
 
 The harness source is TypeScript, while Dynamic Workers need Worker-executable modules. Computer builds a canonical module map for a labeled harness commit. The Supervisor validates it and stores it in its own SQLite under that commit, so nothing rebuilds to serve or roll back. ADR-0028 defines the artifact. The Supervisor uses the commit ID as the Worker Loader name, because Loader names are cached and a changed commit must not reuse old code.

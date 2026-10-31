@@ -6,7 +6,7 @@ import {
   type GitHubConnectionEnvironment,
 } from "./projects/index.js";
 import { Generations } from "./generations.js";
-import { PI_DURABLE_VERSION } from "../pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../facet-compatibility.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
 import { ServingConversations } from "./conversations/index.js";
@@ -44,7 +44,7 @@ export function supervisorParts(
   env: SupervisorEnv,
   resetting: () => boolean,
 ) {
-  const generations = new Generations(ctx.storage, PI_DURABLE_VERSION);
+  const generations = new Generations(ctx.storage, FACET_COMPATIBILITY);
   const { name, workspaceName } = supervisorNames(ctx);
 
   const artifacts = new HarnessArtifacts(ctx.storage, () =>

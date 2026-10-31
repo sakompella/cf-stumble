@@ -5,7 +5,7 @@ import { ProjectRpcTarget } from "../../src/workspace/project/index.js";
 import type { WorkspaceResetResult } from "../../src/workspace/index.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 import { FakeTenantWorkspace } from "../supervisor/projects/fake-tenant-workspace.js";
-import { PI_DURABLE_VERSION_METHOD } from "../supervisor/helpers.js";
+import { FACET_COMPATIBILITY_METHOD } from "../supervisor/helpers.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
@@ -21,7 +21,7 @@ const generationSource = `
 import { DurableObject } from "cloudflare:workers";
 
 export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
+  ${FACET_COMPATIBILITY_METHOD}
   fetch() {
     return new Response("ready");
   }

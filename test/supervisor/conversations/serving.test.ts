@@ -6,7 +6,7 @@ import {
   connectedSupervisor,
   prepareWithModuleMap,
   submitCandidate,
-  PI_DURABLE_VERSION_METHOD,
+  FACET_COMPATIBILITY_METHOD,
   generationLabel,
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
@@ -24,7 +24,7 @@ function scriptedFacet(harnessCommit: string): string {
   return `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
+  ${FACET_COMPATIBILITY_METHOD}
   fetch() { return new Response("ready"); }
   async attach(host) {
     const refusals = this.ctx.storage.kv.get("refuse-attach") ?? 0;
