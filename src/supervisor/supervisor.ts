@@ -3,7 +3,11 @@ import * as Effect from "effect/Effect";
 import type { HarnessCommit } from "../harness-commit.js";
 import type { ActivationCommand, GenerationLabel } from "./generations.js";
 import { runAtEntryPoint } from "../run-entry-point.js";
-import { checkGenerationStartup, type StartupCheckOptions } from "./startup-check/index.js";
+import {
+  checkGenerationStartup,
+  type StartupCheckOptions,
+  type StartupCheckResult,
+} from "./startup-check/index.js";
 import { supervisorParts, type SupervisorParts } from "./supervisor-parts.js";
 import type {
   ResetWorkspaceNamespace,
@@ -15,6 +19,7 @@ const WORKSPACE_BUSY = { ok: false, problem: { code: "workspace-busy" } } as con
 
 export class Supervisor extends DurableObject<SupervisorEnv> {
   readonly #parts: SupervisorParts;
+  readonly #preparations = new Map<GenerationLabel, Promise<StartupCheckResult>>();
   #resetInProgress = false;
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
@@ -23,7 +28,19 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
   }
 
   prepareGeneration(label: GenerationLabel, options?: StartupCheckOptions) {
-    return runAtEntryPoint(checkGenerationStartup(this.#parts.startupCheckHost, label, options));
+    const pending = this.#preparations.get(label);
+
+    if (pending !== undefined) return pending;
+
+    const checking = runAtEntryPoint(
+      checkGenerationStartup(this.#parts.startupCheckHost, label, options),
+    ).finally(() => {
+      this.#preparations.delete(label);
+    });
+
+    this.#preparations.set(label, checking);
+
+    return checking;
   }
 
   getActiveGeneration() {

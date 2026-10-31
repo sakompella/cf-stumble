@@ -198,3 +198,30 @@ test("remounts a checked generation instead of reusing its warm candidate instan
     report: { stage: "ready", generation: { label, status: "ready" }, effect: "no-op" },
   });
 });
+
+test("overlapping preparations of one generation do not abort each other's startup check", async () => {
+  const control = await activeSupervisor("startup-check-overlap");
+  const label = await labelCandidate(control, commits.ordinary);
+
+  await storeModuleMap(
+    control,
+    artifact(
+      commits.ordinary,
+      facet(`
+  async compatibility() {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return ${JSON.stringify(FACET_COMPATIBILITY)};
+  }`),
+    ),
+  );
+
+  const reports = await Promise.all([
+    control.prepareGeneration(generationLabel(label)),
+    control.prepareGeneration(generationLabel(label)),
+  ]);
+
+  expect(reports).toMatchObject([
+    { ok: true, report: { stage: "ready" } },
+    { ok: true, report: { stage: "ready" } },
+  ]);
+});
