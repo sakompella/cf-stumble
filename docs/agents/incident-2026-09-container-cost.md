@@ -8,14 +8,14 @@ ADR-0043 and ADR-0044.
 
 ## Summary
 
-| Item                                                                                                   | Value                                                                                                                                                              |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Invoice (2026-09-27, as reported; the $4.30 equals the sum of the container lines in the usage export) | $10.25: Workers Paid $5.00, Containers overage $4.30, and an unclassified remainder of $0.95 (no invoice line items were read)                                     |
-| Container running time                                                                                 | 2.74 h on 09-25, 18.39 h on 09-26, 18.79 h on 09-27, 4.47 h on 09-28                                                                                               |
-| Container size                                                                                         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                                    |
-| Causes                                                                                                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU                  |
-| Fixed                                                                                                  | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail; on `main` only, status reads that answer from the Supervisor's record |
-| Not fixed                                                                                              | A client that polls a route that still touches the workspace, such as the connection refresh or a turn, keeps the container up. `ops:check` does not flag it.      |
+| Item                                                                                                   | Value                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Invoice (2026-09-27, as reported; the $4.30 equals the sum of the container lines in the usage export) | $10.25: Workers Paid $5.00, Containers overage $4.30, and an unclassified remainder of $0.95 (no invoice line items were read)                                |
+| Container running time                                                                                 | 2.74 h on 09-25, 18.39 h on 09-26, 18.79 h on 09-27, 4.47 h on 09-28                                                                                          |
+| Container size                                                                                         | `standard-3` (2 vCPU, 8 GiB memory, 16 GB disk)                                                                                                               |
+| Causes                                                                                                 | A client that called a paid route about every 95 s; a never-ending WebSocket that kept the Durable Object active; an idle disk walk that used CPU             |
+| Fixed                                                                                                  | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail; status reads that answer from the Supervisor's record            |
+| Not fixed                                                                                              | A client that polls a route that still touches the workspace, such as the connection refresh or a turn, keeps the container up. `ops:check` does not flag it. |
 
 The aggregated daily charges are in `docs/agents/evidence/container-cost-2026-09.json`.
 
@@ -82,10 +82,11 @@ The usage export reports the invoice of 09-27 as covering the cycle from 08-27 t
 | 4, lost credential     | `gh` and Git configuration live under `/workspace`.                                                                                                                               | `3adf75c` to `fad987a`                                                                        |
 | Visibility             | Traces, Issues, the idle-stop event, and `pnpm ops:check`. The request ids, `route.settled`, the container lifecycle events, and most `ops:check` rules were removed later.       | `71f03be` to `f8b03b3`, `c0816a9`, `94ef17c` to `4636cc5`                                     |
 
-Cause 1 is fixed on `main` and not deployed yet (2026-10-16). The project list and the connection
-status answer from the Supervisor's own record and never reach the Workspace Host. Only
-`POST /api/github/connection/refresh` runs `gh` in the container, and the page sends it when it
-loads and when the owner presses **Check again**. The idle stop still does not help against a
+Cause 1 is fixed (89fd845) and deployed. The project list and the connection status answer from
+the Supervisor's own record and never reach the Workspace Host. Only
+`POST /api/github/connection/refresh` runs `gh` in the container, and the page sends it only when
+the owner presses **Check again**; on load it reads the recorded status with
+`GET /api/github/connection`. The idle stop still does not help against a
 client that keeps calling a route that does touch the workspace, because each call counts as work.
 The only defense there is the stop that follows ten minutes after the client goes away;
 `ops:check` counts each such call as work, so it does not flag the poller.

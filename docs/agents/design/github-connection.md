@@ -60,7 +60,7 @@ The Supervisor uses GitHub's OAuth device flow. It asks GitHub for a device code
 
 `POST /api/github/connection/refresh` runs a check in the workspace (`gh auth status` and `gh api user`), stores the result, and answers in the same shape. A connect, a credential install, and the provisioning before a turn store their results too. A check that a cancelled turn stopped is not stored. Neither is a check that a workspace reset overtook: each check captures the reset revision when it starts and stores its result only if the revision is unchanged. `GET /api/projects` lists the catalog and carries no connection status.
 
-The page sends the refresh when it loads and when the owner presses **Check again**, never on a timer. Each check runs container commands, and the Host counts every call as work, so a client that repeated a status read once kept the container running all day (`docs/agents/incident-2026-09-container-cost.md`).
+On load the page reads the recorded status with `GET /api/github/connection`, which does not reach the workspace. It sends the refresh only when the owner presses **Check again**, never on a timer. Each check runs container commands, and the Host counts every call as work, so a client that repeated a status read once kept the container running all day (`docs/agents/incident-2026-09-container-cost.md`).
 
 ## Configuration
 
