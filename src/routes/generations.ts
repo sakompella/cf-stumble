@@ -32,7 +32,7 @@ const CONTROL_REFUSAL_STATUS = {
   "stale-epoch": 409,
   "not-ready": 409,
   "not-previously-active": 409,
-  "pi-durable-version-mismatch": 409,
+  "facet-compatibility-mismatch": 409,
 } as const satisfies Record<ControlProblemCode, number>;
 
 function refusalResponse(

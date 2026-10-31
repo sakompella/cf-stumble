@@ -7,7 +7,7 @@ import {
   prepareWithModuleMap,
   servedText,
   submitCandidate,
-  PI_DURABLE_VERSION_METHOD,
+  FACET_COMPATIBILITY_METHOD,
 } from "../supervisor/helpers.js";
 
 const reportingCommit = "e0e0000000000000000000000000000000000001";
@@ -24,7 +24,7 @@ async function servedReport(name: string): Promise<string> {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
+  ${FACET_COMPATIBILITY_METHOD}
   async attach() {}
   async createConversation(cwd) { return "conversation:" + cwd; }
   async events() {

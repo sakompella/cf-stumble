@@ -21,15 +21,19 @@ We first kept the session in the Supervisor's own SQLite and reached it from the
 storage RPC adapter. In production every commit then waited about 43 ms for the Supervisor's durable
 write, which added about 395 ms at p50 and 750 ms at p95 to a one-tool turn; facet-owned storage
 answered at about 146 ms p50. The adapter's one advantage was a session that could outlive a Pi
-Durable schema change across a rollback, and the version pin below already rules that rollback out.
+Durable schema change across a rollback, and the compatibility key below already rules that rollback out.
 
-**Every runnable generation runs the Supervisor's Pi Durable version.** The startup check asks the
-candidate's `piDurableVersion()` and fails the candidate unless it equals the version the Supervisor
-was built with (`src/pi-durable-version.ts`). A generation built before Pi Durable reports none and
-fails preparation. Preparation records the checked version on the generation, and activation and
-rollback refuse with `pi-durable-version-mismatch` when it differs from the Supervisor's, or when
-none is recorded. Submitting the generation's harness commit again re-runs the check. Without this,
-a rollback could load code that reads the session with another schema.
+**Every runnable generation speaks the Supervisor's facet compatibility.** The compatibility key,
+`FACET_COMPATIBILITY` in `src/facet-compatibility.ts`, is `pi-durable@<version>/host-<N>`: the pinned Pi
+Durable version, and the revision of the facet-to-Supervisor protocol (`host-2` added the `running`
+call). Bump `host-N` whenever that RPC contract changes in a way an older generation does not
+satisfy. The startup check asks the candidate's `compatibility()` and fails the candidate unless it
+equals the Supervisor's key. A generation built before the method existed cannot answer and fails
+at mount. Preparation records the checked key on the generation, and activation and rollback refuse
+with `facet-compatibility-mismatch` when it differs from the Supervisor's, or when none is recorded.
+Submitting the generation's harness commit again re-runs the check. Without this, a rollback could
+load code that reads the session with another schema, or code whose tool calls the Supervisor
+refuses because it never reports its runs.
 
 **The Supervisor keeps its authority.** Facets cannot set alarms (in production `setAlarm` throws and
 leaves the facet unusable), so the generation relays each Pi Durable wake to the host's `arm`, and the

@@ -104,3 +104,26 @@ export async function answeredLines(
 ): Promise<readonly Line[]> {
   return lines(await untilAnswered(control, projectId, count));
 }
+
+export async function hasRun(control: Control, projectId: string): Promise<boolean> {
+  const opened = await control.projectEvents(projectId);
+
+  if (!opened.ok) throw new Error(`the events must open: ${opened.problem.code}`);
+  const reader = opened.events.pipeThrough(new TextDecoderStream()).getReader();
+  let read = "";
+
+  try {
+    while (!read.includes("\n")) {
+      const next = await reader.read();
+
+      if (next.done) throw new Error("the event stream ended before its snapshot");
+      read += next.value;
+    }
+  } finally {
+    await reader.cancel();
+  }
+
+  return readEvent(read.split("\n")[0] ?? "").some(
+    (event) => event.type === "snapshot" && event.run !== undefined,
+  );
+}

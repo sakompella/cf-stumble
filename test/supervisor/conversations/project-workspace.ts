@@ -13,16 +13,30 @@ class UnkillableProjectTarget extends ProjectRpcTarget {
   }
 }
 
+type Lease = { readonly remainingMs: number; ended: boolean };
+
 export class ProjectWorkspace extends FakeTenantWorkspace {
   readonly files = new FakeProjectFilesystemProvider();
   readonly execs = new FakeExecBackend();
+  readonly leases: Lease[] = [];
   killsCommands = true;
 
-  project() {
+  project({ remainingMs }: Readonly<{ remainingMs: number }>) {
     const Target = this.killsCommands ? ProjectRpcTarget : UnkillableProjectTarget;
+    const lease: Lease = { remainingMs, ended: false };
+    this.leases.push(lease);
+
+    const endLease = () => {
+      lease.ended = true;
+    };
 
     return Promise.resolve(
-      new RpcStub(new Target(this.files, new FakeProjectTransactions(), this.execs)),
+      new RpcStub(
+        new Target(this.files, new FakeProjectTransactions(), this.execs, {
+          remainingMs,
+          endLease,
+        }),
+      ),
     );
   }
 

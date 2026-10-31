@@ -21,7 +21,7 @@ export type Generation = Readonly<{
 export type GenerationRecord = Readonly<{
   generation: Generation;
   wasActive: boolean;
-  piDurableVersion: string | undefined;
+  compatibility: string | undefined;
 }>;
 
 export type ActiveGeneration = Readonly<{
@@ -50,7 +50,7 @@ export type ControlProblemCode =
   | "unknown-generation"
   | "not-ready"
   | "not-previously-active"
-  | "pi-durable-version-mismatch"
+  | "facet-compatibility-mismatch"
   | "stale-epoch";
 
 export type GenerationControlResult =
@@ -66,7 +66,7 @@ export type GenerationControlResult =
   | Readonly<{ ok: false; problem: Readonly<{ code: ControlProblemCode }> }>;
 
 export type PreparationOutcome =
-  | Readonly<{ status: "ready"; piDurableVersion: string }>
+  | Readonly<{ status: "ready"; compatibility: string }>
   | Readonly<{ status: "failed" }>;
 
 export type PreparationRecord = Readonly<{
@@ -83,7 +83,7 @@ export function decideActivation(
   command: ActivationCommand,
   target: GenerationRecord | undefined,
   selection: Selection,
-  piDurableVersion: string,
+  compatibility: string,
 ): GenerationControlResult {
   if (command.observedEpoch !== selection.epoch) return refused("stale-epoch");
 
@@ -93,7 +93,7 @@ export function decideActivation(
 
   if (command.kind === "rollback" && !target.wasActive) return refused("not-previously-active");
 
-  if (target.piDurableVersion !== piDurableVersion) return refused("pi-durable-version-mismatch");
+  if (target.compatibility !== compatibility) return refused("facet-compatibility-mismatch");
 
   const kind = command.kind === "activate" ? "activated" : "rolled-back";
   const unchanged = selection.activeLabel === target.generation.label;
@@ -114,16 +114,16 @@ export function decidePreparation(
   outcome: PreparationOutcome,
   selection: Selection,
 ): PreparationRecord {
-  const piDurableVersion = outcome.status === "ready" ? outcome.piDurableVersion : undefined;
+  const compatibility = outcome.status === "ready" ? outcome.compatibility : undefined;
 
   const unchanged =
-    current.generation.status === outcome.status && current.piDurableVersion === piDurableVersion;
+    current.generation.status === outcome.status && current.compatibility === compatibility;
 
   return {
     record: {
       ...current,
       generation: { ...current.generation, status: outcome.status },
-      piDurableVersion,
+      compatibility,
     },
     epoch: selection.epoch + 1,
     effect: unchanged ? "no-op" : "recorded",
@@ -135,7 +135,7 @@ type GenerationRow = {
   readonly harness_commit: HarnessCommit;
   readonly status: GenerationStatus;
   readonly was_active: number;
-  readonly pi_durable_version: string | null;
+  readonly facet_compatibility: string | null;
 };
 
 type SelectionRow = {
@@ -143,34 +143,34 @@ type SelectionRow = {
   readonly epoch: number;
 };
 
-const GENERATION_COLUMNS = "label, harness_commit, status, was_active, pi_durable_version";
+const GENERATION_COLUMNS = "label, harness_commit, status, was_active, facet_compatibility";
 
 function recordFromRow(row: GenerationRow): GenerationRecord {
   return {
     generation: { label: row.label, harnessCommit: row.harness_commit, status: row.status },
     wasActive: row.was_active === 1,
-    piDurableVersion: row.pi_durable_version ?? undefined,
+    compatibility: row.facet_compatibility ?? undefined,
   };
 }
 
 export class Generations {
   readonly #storage: DurableObjectStorage;
   readonly #sql: SqlStorage;
-  readonly #piDurableVersion: string;
+  readonly #compatibility: string;
 
-  constructor(storage: DurableObjectStorage, piDurableVersion: string) {
+  constructor(storage: DurableObjectStorage, compatibility: string) {
     this.#storage = storage;
     this.#sql = storage.sql;
-    this.#piDurableVersion = piDurableVersion;
+    this.#compatibility = compatibility;
     this.#migrateActivationHistory();
-    this.#migratePiDurableVersion();
+    this.#migrateFacetCompatibility();
     this.#sql.exec(`
       CREATE TABLE IF NOT EXISTS generations (
         label INTEGER PRIMARY KEY CHECK (label >= 0),
         harness_commit TEXT NOT NULL UNIQUE,
         status TEXT NOT NULL CHECK (status IN ('candidate', 'ready', 'failed')),
         was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1)),
-        pi_durable_version TEXT
+        facet_compatibility TEXT
       );
       CREATE TABLE IF NOT EXISTS generation_state (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -227,7 +227,7 @@ export class Generations {
         command,
         this.#record(command.label),
         this.#selection(),
-        this.#piDurableVersion,
+        this.#compatibility,
       );
 
       if (result.ok && result.outcome.effect === "activated") {
@@ -252,12 +252,12 @@ export class Generations {
   }
 
   #writePreparation(recorded: PreparationRecord): PreparationRecord {
-    const { generation, piDurableVersion } = recorded.record;
+    const { generation, compatibility } = recorded.record;
 
     this.#sql.exec(
-      "UPDATE generations SET status = ?, pi_durable_version = ? WHERE label = ?",
+      "UPDATE generations SET status = ?, facet_compatibility = ? WHERE label = ?",
       generation.status,
-      piDurableVersion ?? null,
+      compatibility ?? null,
       generation.label,
     );
     this.#writeEpoch(recorded.epoch);
@@ -326,14 +326,18 @@ export class Generations {
     `);
   }
 
-  #migratePiDurableVersion(): void {
+  #migrateFacetCompatibility(): void {
     const columns = this.#sql
       .exec<{ name: string }>("SELECT name FROM pragma_table_info('generations')")
       .toArray()
       .map((column) => column.name);
 
-    if (columns.length === 0 || columns.includes("pi_durable_version")) return;
+    if (columns.length === 0 || columns.includes("facet_compatibility")) return;
 
-    this.#sql.exec("ALTER TABLE generations ADD COLUMN pi_durable_version TEXT");
+    this.#sql.exec(
+      columns.includes("pi_durable_version")
+        ? "ALTER TABLE generations RENAME COLUMN pi_durable_version TO facet_compatibility"
+        : "ALTER TABLE generations ADD COLUMN facet_compatibility TEXT",
+    );
   }
 }

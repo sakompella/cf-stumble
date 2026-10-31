@@ -30,7 +30,7 @@ export { generationLabel, testHarnessCommit };
 export {
   fixtureMainHarnessCommit,
   parsedArtifact,
-  PI_DURABLE_VERSION_METHOD,
+  FACET_COMPATIBILITY_METHOD,
   servingFacetSource,
 } from "../facet/fixture.js";
 

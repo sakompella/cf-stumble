@@ -42,7 +42,7 @@ test("startup checking returns plain RPC values", async () => {
       `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  piDurableVersion() { return new Promise(() => {}); }
+  compatibility() { return new Promise(() => {}); }
 }
 `,
     ),
@@ -51,7 +51,10 @@ export class MainFacet extends DurableObject {
 
   expect(result).toMatchObject({
     ok: true,
-    report: { stage: "deadline-expired", reason: "the Pi Durable version exceeded the deadline" },
+    report: {
+      stage: "deadline-expired",
+      reason: "the facet compatibility answer exceeded the deadline",
+    },
   });
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(result).not.toHaveProperty("status");

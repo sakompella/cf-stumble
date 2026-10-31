@@ -6,7 +6,7 @@ import {
   connectedSupervisor,
   prepareWithModuleMap,
   submitCandidate,
-  PI_DURABLE_VERSION_METHOD,
+  FACET_COMPATIBILITY_METHOD,
   generationLabel,
 } from "../helpers.js";
 import type { Supervisor } from "../../../src/supervisor/supervisor.js";
@@ -24,7 +24,7 @@ function scriptedFacet(harnessCommit: string): string {
   return `
 import { DurableObject } from "cloudflare:workers";
 export class MainFacet extends DurableObject {
-  ${PI_DURABLE_VERSION_METHOD}
+  ${FACET_COMPATIBILITY_METHOD}
   fetch() { return new Response("ready"); }
   async attach(host) {
     const refusals = this.ctx.storage.kv.get("refuse-attach") ?? 0;
@@ -41,12 +41,16 @@ export class MainFacet extends DurableObject {
   }
   async submit(conversationId, content) {
     if (content === "refuse the next attach") this.ctx.storage.kv.put("refuse-attach", 1);
+    await this.host.running([conversationId]);
     await this.host.arm({ active: true });
     const submitted = (this.ctx.storage.kv.get("submitted") ?? 0) + 1;
     this.ctx.storage.kv.put("submitted", submitted);
     return submitted;
   }
-  async abort() { await this.host.arm({ active: false }); }
+  async abort() {
+    await this.host.running([]);
+    await this.host.arm({ active: false });
+  }
   async events() {
     return new ReadableStream({
       start(c) {

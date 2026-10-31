@@ -12,7 +12,7 @@ The **supervisor** is the immutable half. It lives in the Supervisor Durable Obj
 
 There is no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing.
 
-The supervisor reaches a facet through RPC: `piDurableVersion` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). Nothing reaches a facet over HTTP: the Worker serves the page and the owner API and answers 404 for any other path. ADR-0003 does not fix this as a permanent contract.
+The supervisor reaches a facet through RPC: `compatibility` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). Nothing reaches a facet over HTTP: the Worker serves the page and the owner API and answers 404 for any other path. ADR-0003 does not fix this as a permanent contract.
 
 ## What the main harness knows and tries to do
 
@@ -51,8 +51,8 @@ The harness source is TypeScript, and Dynamic Workers execute Worker-compatible 
 
 ## Behavior to know
 
-The Worker has no authentication. Every request reaches the one Supervisor, and the owner API exposes generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`). The main facet's capabilities are the model route and the host the Supervisor attaches, which relays wakes and hands out project capabilities (`src/facet/index.ts`, `src/supervisor/conversations/host-target.ts`).
+The Worker has no authentication. Every request reaches the one Supervisor, and the owner API exposes generation submission, activation, and rollback (`src/worker.ts`, `src/routes/owner-api.ts`). The main facet's capabilities are the model route and the host the Supervisor attaches, which relays wakes, records which conversations are running, and hands out project capabilities (`src/facet/index.ts`, `src/supervisor/conversations/host-target.ts`).
 
-A run outlives its browser. `POST /api/projects/{id}/messages` answers 202 once Pi Durable has the message; a message sent while a run is busy is answered after it. The page watches `GET /api/projects/{id}/events`, which starts with a snapshot, so a reload or a dropped stream recovers by watching again. A run that loses its facet instance resumes from the Supervisor's alarm. The Supervisor aborts a run after 8 minutes and ends its project capability when it settles, which kills its running commands (`src/supervisor/conversations/serving.ts`).
+A run outlives its browser. `POST /api/projects/{id}/messages` answers 202 once Pi Durable has the message; a message sent while a run is busy is answered after it. The page watches `GET /api/projects/{id}/events`, which starts with a snapshot, so a reload or a dropped stream recovers by watching again. A run that loses its facet instance resumes from the Supervisor's alarm. The Supervisor aborts each run 8 minutes after it starts and ends that run's project capability when it settles, which kills its running commands, while runs in other projects go on (`src/supervisor/conversations/serving.ts`).
 
 A 202 does not prove that the run completed. Only the conversation's events show its result.

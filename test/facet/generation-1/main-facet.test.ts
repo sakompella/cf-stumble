@@ -29,6 +29,7 @@ test("an attach after a failed open opens the session again", async () => {
 
   const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
     arm: () => Promise.resolve(),
+    running: () => Promise.resolve(),
     workspace: () => Promise.reject(new Error("no workspace")),
     dup: () => host,
   };

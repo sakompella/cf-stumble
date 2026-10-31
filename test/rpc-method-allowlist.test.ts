@@ -44,5 +44,9 @@ test("ProjectRpcTarget exposes exactly the allowlisted RPC members", () => {
 });
 
 test("the host a serving facet holds exposes exactly the allowlisted RPC members", () => {
-  expect(rpcMemberNames(ConversationHostTarget.prototype)).toStrictEqual(["arm", "workspace"]);
+  expect(rpcMemberNames(ConversationHostTarget.prototype)).toStrictEqual([
+    "arm",
+    "running",
+    "workspace",
+  ]);
 });

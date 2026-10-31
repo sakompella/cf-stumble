@@ -2,12 +2,12 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { loadMainFacet } from "../../facet/index.js";
 import type { MainFacetTarget, MainHarnessArtifact } from "../../facet/index.js";
-import { PI_DURABLE_VERSION } from "../../pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
 import { candidateFacetName } from "../artifacts/index.js";
 import type { StartupCheckHost } from "./index.js";
 
 export type StartupCheckOutcome = Readonly<{
-  stage: "ready" | "mount-failed" | "deadline-expired" | "version-mismatch";
+  stage: "ready" | "mount-failed" | "deadline-expired" | "compatibility-mismatch";
   reason: string;
 }>;
 
@@ -23,14 +23,14 @@ export function runStartupCheck(
   }
 
   return Effect.tryPromise({
-    try: () => candidate.success.piDurableVersion(),
+    try: () => candidate.success.compatibility(),
     catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
   }).pipe(
     Effect.match({
-      onSuccess: versionOutcome,
+      onSuccess: compatibilityOutcome,
       onFailure: (reason): StartupCheckOutcome => ({
         stage: "mount-failed",
-        reason: `the candidate did not answer piDurableVersion: ${reason}`,
+        reason: `the candidate did not answer compatibility: ${reason}`,
       }),
     }),
     Effect.timeoutOrElse({
@@ -38,18 +38,18 @@ export function runStartupCheck(
       orElse: () =>
         Effect.succeed<StartupCheckOutcome>({
           stage: "deadline-expired",
-          reason: "the Pi Durable version exceeded the deadline",
+          reason: "the facet compatibility answer exceeded the deadline",
         }),
     }),
   );
 }
 
-function versionOutcome(version: string): StartupCheckOutcome {
-  return version === PI_DURABLE_VERSION
-    ? { stage: "ready", reason: `the generation runs Pi Durable ${version}` }
+function compatibilityOutcome(reported: string): StartupCheckOutcome {
+  return reported === FACET_COMPATIBILITY
+    ? { stage: "ready", reason: `the generation reports ${reported}` }
     : {
-        stage: "version-mismatch",
-        reason: `the generation runs Pi Durable ${version}; this Supervisor stores ${PI_DURABLE_VERSION}`,
+        stage: "compatibility-mismatch",
+        reason: `the generation reports ${reported}; this Supervisor requires ${FACET_COMPATIBILITY}`,
       };
 }
 

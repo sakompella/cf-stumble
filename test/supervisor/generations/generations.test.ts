@@ -11,7 +11,7 @@ import {
   generationLabel,
   testHarnessCommit,
 } from "../helpers.js";
-import { PI_DURABLE_VERSION } from "../../../src/pi-durable-version.js";
+import { FACET_COMPATIBILITY } from "../../../src/facet-compatibility.js";
 import { readGeneration, readGenerations } from "../generation-reads.js";
 
 const secondHarnessCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -28,8 +28,8 @@ export class MainFacet extends DurableObject {
     super(ctx, env);
     ctx.storage.kv.put("checks", (ctx.storage.kv.get("checks") ?? 0) + 1);
   }
-  piDurableVersion() {
-    return this.ctx.storage.kv.get("checks") < 3 ? ${JSON.stringify(PI_DURABLE_VERSION)} : "0.0.1";
+  compatibility() {
+    return this.ctx.storage.kv.get("checks") < 3 ? ${JSON.stringify(FACET_COMPATIBILITY)} : "0.0.1";
   }
 }
 `,
@@ -97,7 +97,7 @@ test("a later preparation outcome replaces the recorded status", async () => {
   expect(failed).toMatchObject({
     ok: true,
     report: {
-      stage: "version-mismatch",
+      stage: "compatibility-mismatch",
       effect: "recorded",
       generation: { label, status: "failed" },
     },

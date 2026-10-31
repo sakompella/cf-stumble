@@ -115,14 +115,14 @@ test("returns a recorded failing preparation when the candidate module map canno
 
 test("records a candidate that fails its startup check and keeps the active generation", async () => {
   const control = await activeSupervisor("submit-failing-candidate");
-  await seedModuleMap(control, commits.rejecting, `piDurableVersion() { return "0.0.1"; }`);
+  await seedModuleMap(control, commits.rejecting, `compatibility() { return "0.0.1"; }`);
 
   const result = await submission(control, commits.rejecting);
   const label = submittedLabel(result);
 
   expect(result).toMatchObject({
     ok: true,
-    preparation: { ok: true, report: { stage: "version-mismatch" } },
+    preparation: { ok: true, report: { stage: "compatibility-mismatch" } },
   });
   expect(await readGeneration(control, label)).toMatchObject({ label, status: "failed" });
   await expectActiveFixtureStillServing(control);

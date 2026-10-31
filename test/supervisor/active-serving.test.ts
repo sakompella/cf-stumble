@@ -25,7 +25,7 @@ function servingArtifact(harnessCommit: string) {
 function failingArtifact(harnessCommit: string) {
   return artifact(
     harnessCommit,
-    servingFacetSource("candidate failed", `piDurableVersion() { return "0.0.1"; }`),
+    servingFacetSource("candidate failed", `compatibility() { return "0.0.1"; }`),
   );
 }
 
@@ -84,7 +84,7 @@ test("keeps the active retained artifact when a failed candidate cannot activate
     failingArtifact("f123456789abcdef0123456789abcdef01234567"),
   );
 
-  if (!failedStartup.ok || failedStartup.report.stage !== "version-mismatch") {
+  if (!failedStartup.ok || failedStartup.report.stage !== "compatibility-mismatch") {
     throw new Error("the candidate must fail its startup check");
   }
 
