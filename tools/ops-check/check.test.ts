@@ -13,7 +13,9 @@ const START = Date.parse("2026-10-01T00:00:00Z");
 
 const IDLE_LIMIT_MS = 10 * MINUTE_MS;
 
-const request = (afterMinutes: number, route = "/api/projects"): Invocation => ({
+const WORKSPACE_ROUTE = "/api/projects/:projectId/messages";
+
+const request = (afterMinutes: number, route = WORKSPACE_ROUTE): Invocation => ({
   endMs: START + afterMinutes * MINUTE_MS,
   wallTimeMs: 0,
   route,
@@ -47,6 +49,19 @@ function check(
 const rules = (input: CheckInput) => runChecks(input).map((finding) => finding.rule);
 
 describe("ran-past-idle", () => {
+  it("passes a scanner's stray /api requests while the container is stopped", () => {
+    assert.deepEqual(
+      rules(check([request(0, "/api/unknown"), request(5, "/api/unknown")], [])),
+      [],
+    );
+  });
+
+  it("gives a stray /api request no allowance, so a container it kept running is reported", () => {
+    assert.deepEqual(rules(check([request(0, "/api/unknown")], runningBetween(0, 20))), [
+      "ran-past-idle",
+    ]);
+  });
+
   it("fires when running exceeds the idle limit by more than the slack, not at it", () => {
     assert.deepEqual(rules(check([request(0)], runningBetween(0, 20))), []);
     assert.deepEqual(rules(check([request(0)], runningBetween(0, 25))), ["ran-past-idle"]);
@@ -71,6 +86,33 @@ describe("ran-past-idle", () => {
 
     assert.deepEqual(rules(check([longPage], runningBetween(0, 80))), ["ran-past-idle"]);
   });
+});
+
+describe("route classes", () => {
+  it("gives record-only reads no allowance, however often they are polled", () => {
+    const polls = Array.from({ length: 24 }, (_, index) => request(index * 5, "/api/status"));
+
+    assert.deepEqual(rules(check([request(0), ...polls], runningBetween(0, 120))), [
+      "ran-past-idle",
+    ]);
+  });
+
+  it("keeps the allowance for every route that can reach the workspace", () => {
+    for (const route of [
+      "/api/projects/:projectId/messages",
+      "/api/projects/:projectId/events",
+      "/api/projects/:projectId/abort",
+      "/api/projects/:projectId/thread/fresh",
+      "/api/projects/:projectId/disconnect",
+      "/api/projects/connect",
+      "/api/github/connection/refresh",
+      "/api/workspace/reset",
+      "/api/generations/submit",
+    ]) {
+      assert.deepEqual(rules(check([request(0, route)], runningBetween(0, 20))), [], route);
+      assert.deepEqual(rules(check([request(0, route)], runningBetween(0, 25))), ["ran-past-idle"]);
+    }
+  });
 
   it("flags a container that runs with no request at all", () => {
     assert.deepEqual(rules(check([], runningBetween(0, 15))), ["ran-past-idle"]);
@@ -84,15 +126,19 @@ describe("ran-past-idle", () => {
 
   it("names the latest requests before the overrun, newest first", () => {
     const requests = [
-      request(0, "/api/a"),
-      request(1, "/api/b"),
-      request(2, "/api/c"),
-      request(3, "/api/d"),
+      request(0, "/api/status"),
+      request(1, "/api/projects"),
+      request(2, "/api/github/connection"),
+      request(3, "/api/projects/connect"),
     ];
 
     const [finding] = runChecks(check(requests, runningBetween(0, 40)));
 
-    assert.deepEqual(finding?.evidence, ["/api/d@00:03Z", "/api/c@00:02Z", "/api/b@00:01Z"]);
+    assert.deepEqual(finding?.evidence, [
+      "/api/projects/connect@00:03Z",
+      "/api/github/connection@00:02Z",
+      "/api/projects@00:01Z",
+    ]);
   });
 });
 
