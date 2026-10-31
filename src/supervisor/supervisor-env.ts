@@ -42,9 +42,7 @@ export type SupervisorEnv = {
 export type SupervisorNames = Readonly<{ name: string; workspaceName: string }>;
 
 export function supervisorNames(ctx: DurableObjectState): SupervisorNames {
-  const name = ctx.id.name;
-
-  if (name === undefined) throw new Error("a Supervisor must be reached by name, not by id");
+  const name = ctx.id.name ?? ctx.id.toString();
 
   return { name, workspaceName: tenantWorkspaceName(name) };
 }
