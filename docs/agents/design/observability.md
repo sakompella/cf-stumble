@@ -73,7 +73,7 @@ wrote about 12,600 spans. If the bill grows, lower `traces.headSamplingRate` fir
 Run `pnpm ops:check` after a staging deploy or an e2e run, and when the bill looks wrong. It needs a
 live account, so it is not part of `pnpm verify`. It checks one thing: a workspace container that
 kept running past the Host's idle stop. It prints one check mark when all is well and one line per
-finding otherwise, and exits 1 on any finding or `unknown`. `--json` prints the same as JSON.
+finding otherwise, and exits 1 on any finding or `unknown`.
 
 **Sources.** For the window (`--since 90m|2h|1d`, or `--from <ISO> [--to <ISO>]`), it reads:
 
@@ -90,7 +90,7 @@ finding otherwise, and exits 1 on any finding or `unknown`. `--json` prints the 
   running minutes. A bucket counts at most five minutes.
 
 **Rule `ran-past-idle`.** Each `workspace` request allows the container to run from its start until
-its end plus the idle limit (`--idle-minutes`, default `WORKSPACE_IDLE_STOP_MS`). A run of consecutive
+its end plus the idle limit (`WORKSPACE_IDLE_STOP_MS`). A run of consecutive
 running buckets that exceeds that allowance by more than 10 minutes is a finding. Buckets newer
 than 10 minutes are still filling and do not count. The finding lists the routes and end times of
 the last three requests before the run ended, which shows what kept the container awake.

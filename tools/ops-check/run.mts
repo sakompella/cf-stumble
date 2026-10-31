@@ -12,13 +12,11 @@ import { fetchInvocations, fetchUsage, readToken, resolveAccount, ApiFailure } f
 
 const USAGE =
   "usage: ops-check --worker <name> (--since <90m|2h|1d> | --from <ISO> [--to <ISO>]) " +
-  "[--idle-minutes 10] [--account <id>] [--token-file <path>] [--json]";
+  "[--account <id>] [--token-file <path>]";
 
 interface Options {
   readonly worker: string;
   readonly window: TimeWindow;
-  readonly idleLimitMs: number;
-  readonly json: boolean;
   readonly account: string | null;
   readonly tokenFile: string | null;
 }
@@ -37,10 +35,8 @@ function parseOptions(argv: readonly string[], nowMs: number): Options {
       since: { type: "string" },
       from: { type: "string" },
       to: { type: "string" },
-      "idle-minutes": { type: "string", default: String(WORKSPACE_IDLE_STOP_MS / MINUTE_MS) },
       account: { type: "string" },
       "token-file": { type: "string" },
-      json: { type: "boolean", default: false },
     },
   });
 
@@ -70,26 +66,20 @@ function parseOptions(argv: readonly string[], nowMs: number): Options {
 
   if (fromMs >= toMs) throw new Error("the window is empty");
 
-  const idleMinutes = Number(values["idle-minutes"]);
-
-  if (!(idleMinutes > 0)) throw new Error("--idle-minutes must be a positive number");
-
   return {
     worker: values.worker,
     window: { fromMs, toMs },
-    idleLimitMs: idleMinutes * MINUTE_MS,
-    json: values.json,
     account: values.account ?? null,
     tokenFile: values["token-file"] ?? null,
   };
 }
 
 async function readActivity(options: Options): Promise<Activity> {
-  const { worker, window, idleLimitMs } = options;
+  const { worker, window } = options;
   const token = readToken(options.tokenFile, process.env);
   const account = await resolveAccount(token, options.account, process.env);
 
-  const requestWindow = { ...window, fromMs: window.fromMs - idleLimitMs };
+  const requestWindow = { ...window, fromMs: window.fromMs - WORKSPACE_IDLE_STOP_MS };
 
   const [invocations, usage] = await Promise.all([
     fetchInvocations(token, account, worker, requestWindow),
@@ -100,7 +90,8 @@ async function readActivity(options: Options): Promise<Activity> {
 }
 
 async function gather(options: Options, nowMs: number): Promise<CheckInput> {
-  const { worker, window, idleLimitMs } = options;
+  const { worker, window } = options;
+  const idleLimitMs = WORKSPACE_IDLE_STOP_MS;
 
   try {
     return {
@@ -133,10 +124,6 @@ const input = await gather(options, nowMs);
 
 const findings = runChecks(input);
 
-console.log(
-  options.json
-    ? JSON.stringify({ worker: input.worker, ok: findings.length === 0, findings }, null, 2)
-    : formatReport(input, findings).join("\n"),
-);
+console.log(formatReport(input, findings).join("\n"));
 
 process.exitCode = findings.length === 0 ? 0 : 1;
