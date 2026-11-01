@@ -92,7 +92,7 @@ export default defineConfig({
       {
         plugins: [
           await effectPrebundle(),
-          cloudflareTest({ wrangler: { configPath: "./wrangler.test.jsonc" } }),
+          cloudflareTest({ experimental: { newConfig: { configPath: "./cloudflare.config.ts" } } }),
         ],
         test: {
           name: "workers",

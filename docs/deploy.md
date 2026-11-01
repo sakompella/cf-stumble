@@ -1,7 +1,5 @@
 # Deploy cf-stumble
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sakompella/cf-stumble)
-
 Deploy a cf-stumble instance to your Cloudflare account.
 
 cf-stumble is a coding agent that runs in your Cloudflare account. It has no authentication: anyone who can reach its hostname can use it.
@@ -16,34 +14,23 @@ You need:
 
 The workspace runs project commands and can make Workers AI requests. Use an account where you can control the resulting charges.
 
-## Deploy with the button
-
-Select the button at the top of this page. Cloudflare copies the public source repository into your GitHub account, lets you choose names, provisions the resources declared in `wrangler.jsonc`, sets up Workers Builds, builds the project, and deploys it.
-
-The button does not provision Containers. Workers Builds builds the Container image, but Cloudflare must create the Container application as part of the deployment. The button declares no secrets, so the first deploy works without them.
-
-Cloudflare reads `wrangler.jsonc` to provision supported bindings. In this project, that includes the Durable Objects, Workers AI binding, and Worker Loader. A Durable Object is Cloudflare's stateful Worker component. The configuration also declares the workspace Container, but Containers are outside the button's provisioning list.
-
 ## Configuration files
 
-`cloudflare.config.ts` is the source of truth for the Worker. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"), and no per-instance values or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build` and `cf deploy` read it. `cf dev` does not work yet.
+`cloudflare.config.ts` is the only Worker configuration. It declares the Worker name, the route, the bindings, the two Durable Object classes, the Container, and the Workers AI and loader bindings. It declares one plain-text variable, the deployment-wide `CHATGPT_MODEL` (see "Connect ChatGPT"), and no per-instance values or secrets: instance values are secrets set per instance (see "Instance secrets"). `cf build`, `cf deploy`, and the test runner read it.
 
-Two Wrangler files repeat these settings, because the tools that read them do not read `cloudflare.config.ts`:
+The file exports a function of the mode. A plain `cf deploy` leaves the mode undefined and gets the production configuration. Vitest passes the mode `test`, which names the Worker `cf-stumble-test` and leaves out the Workers AI binding, because the test runtime has no AI service to reach. Everything else is the same in both modes, and `test/docs/cloudflare-config.test.ts` checks that. Do not deploy with `--mode test`.
 
-- `wrangler.jsonc` is what the Deploy to Cloudflare flow and `wrangler deploy` read.
-- `wrangler.test.jsonc` is what the test runner reads. It leaves out the Workers AI binding.
+`wrangler.config.ts` is not Worker configuration. `cf build` and `cf deploy` delegate to the `wrangler` dev dependency, and Wrangler reads its `build.command` from this file. The command, `pnpm run build:page`, writes the owner page's script before Wrangler bundles the Worker. Without the file, the bundle step fails on a fresh checkout, or ships a stale page script on a checkout that has an old one, because `cloudflare.config.ts` has no field for a build command. The file also turns off type generation, so a build does not rewrite `.cloudflare/types`. `cf` also needs `wrangler` declared in `package.json`: without it, `cf build` stops with "No Cloudflare dev server is installed".
 
-Both Wrangler files declare the Durable Objects with `exports`, not `migrations`, so a Wrangler deployment and a `cf` deployment state the same lifecycle. `test/docs/cloudflare-config-drift.test.ts` fails when either file differs from `cloudflare.config.ts`. When you change a setting, change all three files.
+`cf` has no `--config` flag, so a staging copy needs its own directory (see `.agents/skills/cf-operations/references/staging.md`). Two commands stay on Wrangler, because `cf` has no equivalent: `pnpm exec wrangler tail cf-stumble` streams logs, and the staging cleanup removes a Worker with `npx wrangler delete`, which also removes its Durable Object namespaces.
 
-`cf dev` still fails on the Durable Object binding that points at the Worker itself when a Container is attached to that Durable Object. `cf` has no `--config` flag, so a staging copy needs its own directory with `cloudflare.config.ts`, `wrangler.config.ts`, a `package.json` that declares `wrangler` and `cf`, and a `node_modules` link. Use Wrangler for the other commands `cf` lacks: `npx wrangler tail cf-stumble` streams logs, and `npx wrangler secret put <NAME> --name cf-stumble` sets one secret. `scripts/local/dev.sh` also stays on `wrangler dev`.
-
-Use one deploy path for the Worker. Never alternate `wrangler deploy` and `cf deploy` on the same Worker. If you switch, disable or reconfigure Workers Builds first, so that an automatic build does not deploy through the other path.
+Use `cf deploy` as the only deploy path for the Worker. If Workers Builds is connected to the Worker, disable or reconfigure it first, so that an automatic build does not deploy through another path.
 
 Do not remove `Supervisor` or `WorkspaceHost` from `exports`, and do not change their `storage` value. A missing or mismatched class can orphan that class's stored data. Cloudflare cannot roll a Durable Object lifecycle change back to a version from before the change, so do not rely on a rollback across the first deployment that uses `exports`.
 
 ## Instance secrets
 
-Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts`, `wrangler.jsonc`, and `wrangler.test.jsonc` declare none of them. The only plain-text variable they declare is `CHATGPT_MODEL`, which is the same for every deployment and which `cf deploy` keeps because it is declared. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
+Values that differ per instance are Worker secrets, set once per instance and never committed. `cloudflare.config.ts` declares none of them. The only plain-text variable it declares is `CHATGPT_MODEL`, which is the same for every deployment and which `cf deploy` keeps because it is declared. `cf deploy` keeps undeclared secrets but removes undeclared plain-text variables, so a per-instance value cannot live in `vars` or in a `--var` flag. Do not pass `--var` to `cf deploy`. A declared secret would also be required, and a required secret makes the first deploy of a new Worker fail.
 
 | Secret                   | Required by the Worker | Purpose                                        |
 | ------------------------ | ---------------------- | ---------------------------------------------- |
@@ -54,9 +41,9 @@ Values that differ per instance are Worker secrets, set once per instance and ne
 Set them in one of two ways:
 
 - Put them in a JSON or `.env` file outside the repository and run `pnpm exec cf deploy --secrets-file <file>`. Delete the file afterward.
-- Run `npx wrangler secret put <NAME> --name <worker>` for each name.
+- Run `pnpm exec cf workers secrets update <NAME> --worker <worker> --type secret_text --text '<value>'` for each name. The value appears in the command line and the shell history, so prefer `--secrets-file` for a credential such as `GH_TOKEN`.
 
-Every later deploy keeps them. An instance whose values are still plain-text variables must convert them with `--secrets-file`; that turns them into secrets. Running `wrangler secret put` for a name that is already a plain variable is untested.
+Every later deploy keeps them. An instance whose values are still plain-text variables must convert them with `--secrets-file`; that turns them into secrets. Running `cf workers secrets update` for a name that is already a plain variable is untested.
 
 `scripts/deploy/check-config.sh` checks that `CF_STUMBLE_HARNESS_COMMIT` is in your shell.
 
@@ -68,8 +55,8 @@ Before you deploy:
 
 1. Start from a clean tree on `main` and run `pnpm verify`. The commit gate runs it too, but a deploy should start from a tree you verified.
 2. Run `pnpm exec cf auth whoami`. It shows the account and refreshes the login that `cf` keeps in its config. `ops:check` does not read that config by itself: pass `--token-file ~/.config/cloudflare/config/default.json` or set `CLOUDFLARE_API_TOKEN` (see `docs/agents/design/observability.md`, "Credentials"). If more than one account is visible, set `CLOUDFLARE_ACCOUNT_ID`.
-3. Check that the instance secrets you rely on exist: `npx wrangler secret list --name <worker>`. A deploy keeps secrets, so a missing one stays missing.
-4. Check that the last container rollout finished. `npx wrangler containers info <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
+3. Check that the instance secrets you rely on exist: `pnpm exec cf workers secrets list --worker <worker>`. A deploy keeps secrets, so a missing one stays missing.
+4. Check that the last container rollout finished. `pnpm exec cf containers applications get <container-app-id>` shows the application, and the instances call in `docs/agents/design/observability.md`, "Checking a running deployment", shows each instance's state. Find `<container-app-id>` in the applications list: the Worker's application is named `<worker>-workspacehost`.
 5. Run `pnpm exec cf deploy --dry-run` first. It builds the image and lists the bindings, and it uploads nothing.
 
 Then run `pnpm exec cf deploy`. A deploy that rolls the Container image replaces the container. The first request afterward starts a fresh one, and files outside `/workspace` are gone, as after any restart.
@@ -130,10 +117,9 @@ As the owner, send `POST /api/workspace/reset` to recover. Projects and the harn
 
 ## One entry point
 
-`cloudflare.config.ts` sets `workersDev: false`, and `wrangler.jsonc` sets `"workers_dev": false`. Your instance answers on the hostname you gave the
-Worker a route for, and nowhere else.
+`cloudflare.config.ts` sets `workersDev: false`. Your instance answers on the hostname you gave the Worker a route for, and nowhere else.
 
-If you want the subdomain as well, set `"workers_dev": true`.
+If you want the subdomain as well, set `workersDev: true`.
 
 ## Connect a project
 
@@ -190,7 +176,7 @@ A generation built before the Pi Durable migration has no conversation methods. 
 Your instance builds its own harness from a Git repository, and it has to be told which one. Set the `HARNESS_REPOSITORY_URL` secret to the HTTPS URL of your fork (see "Instance secrets"):
 
 ```sh
-printf '%s' 'https://github.com/your-name/cf-stumble.git' | npx wrangler secret put HARNESS_REPOSITORY_URL --name cf-stumble
+pnpm exec cf workers secrets update HARNESS_REPOSITORY_URL --worker cf-stumble --type secret_text --text 'https://github.com/your-name/cf-stumble.git'
 ```
 
 An empty value means the repository named in `src/harness-build.ts`, which is this project's own. Leave it empty and your instance will build this repository rather than your fork, so your own harness commits will never be reachable from it. Nothing else about a fork needs changing.
@@ -201,4 +187,4 @@ A wrong URL fails safely. The first build step tries to clone it, fails, and rep
 
 Workers Paid, Container time, and Workers AI requests can cost money. The Workspace Host stops the container ten minutes after the last work (ADR-0043), so an unused instance costs little. A client that keeps calling a route that touches the workspace keeps the container running, and `pnpm ops:check` counts each call as work, so it does not report it (`docs/agents/incident-2026-09-container-cost.md`).
 
-Delete the Worker, the Container application, and the old images in the account's registry when you no longer need the instance. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `npx wrangler containers images list` and remove the ones you will not roll back to with `npx wrangler containers images delete <repository>:<tag>`.
+Delete the Worker, the Container application, and the old images in the account's registry when you no longer need the instance. Each deploy of a new image leaves the previous one in the registry as rollback history; list them with `pnpm exec cf containers images list` and remove the ones you will not roll back to with `pnpm exec cf containers images delete <repository>:<tag>`.

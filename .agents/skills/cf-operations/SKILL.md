@@ -22,13 +22,13 @@ The owner API needs no credential: call it with plain `curl`.
 
 ### 1. Prepare
 
-Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `npx wrangler secret list --name <worker>`. Check that the last container rollout finished: `npx wrangler containers info <container-app-id>`, and the instance state from the instances call at the end of `docs/agents/design/observability.md`, "Checking a running deployment".
+Work from a clean tree on `main`. Run `pnpm verify`, then `pnpm exec cf auth whoami` (it shows the account). List the secrets with `pnpm exec cf workers secrets list --worker <worker>`. Check that the last container rollout finished: `pnpm exec cf containers applications get <container-app-id>`, and the instance state from the instances call at the end of `docs/agents/design/observability.md`, "Checking a running deployment".
 
 **Complete when:** `pnpm verify` passed on this exact commit, the account is the intended one, and no rollout is in progress.
 
 ### 2. Deploy
 
-Run `pnpm exec cf deploy --dry-run` and read the bindings it lists. Then run `pnpm exec cf deploy`. Never alternate `wrangler deploy` and `cf deploy` on one Worker. Never pass `--var`: `cf deploy` removes plain-text variables that `cloudflare.config.ts` does not declare.
+Run `pnpm exec cf deploy --dry-run` and read the bindings it lists. Then run `pnpm exec cf deploy`. Never deploy the Worker with another tool. Never pass `--var`: `cf deploy` removes plain-text variables that `cloudflare.config.ts` does not declare.
 
 `cf deploy` can print "Deploy complete" after it aborted on a conflict (the live Worker was last edited in the dashboard or through the script API). Trust the exit code.
 
@@ -64,7 +64,7 @@ List the account's Workers, container applications, Durable Object namespaces, a
 
 ### 2. Build the staging copy
 
-Create a worktree and a staging directory with a unique Worker name and container name. `cf` has no `--config` flag, so the directory holds its own `cloudflare.config.ts`.
+Create a worktree and a staging directory with a unique Worker name and container name. `cf` has no `--config` flag, so the directory holds its own `cloudflare.config.ts` and `wrangler.config.ts`.
 
 **Complete when:** the configuration has a unique `name` that differs from `<worker>`, `workersDev: true`, no `triggers`, a container named `<name>-workspacehost`, and instance type `standard-1`; and you printed these values and checked them before the deploy.
 

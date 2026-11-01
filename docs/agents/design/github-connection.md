@@ -69,7 +69,7 @@ On load the page reads the recorded status with `GET /api/github/connection`, wh
 | `GITHUB_OAUTH_CLIENT_ID` | Worker secret | The GitHub OAuth app the device flow belongs to. Not sensitive. Without it, starting an authorization answers `not-configured`. |
 | `GH_TOKEN`               | Worker secret | The credential source for automated tests and unsupervised runs.                                                                |
 
-Set both with `wrangler secret put`. See `docs/deploy.md`, "Instance secrets".
+Set both with `cf workers secrets update`. See `docs/deploy.md`, "Instance secrets".
 
 ## The `GH_TOKEN` fallback
 

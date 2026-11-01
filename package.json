@@ -33,7 +33,7 @@
     "effect": "4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@cloudflare/vitest-plugin": "^1.4.11",
     "@cloudflare/workers-types": "^5",
     "@effect/platform-browser": "4.0.0",
     "@foldkit/oxlint-plugin": "0.15.3",
@@ -41,7 +41,7 @@
     "@oxlint/plugins": "^1",
     "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
-    "cf": "1.0.0-beta.14",
+    "cf": "1.0.0-beta.26",
     "esbuild": "0.28.1",
     "foldkit": "0.168.0",
     "knip": "6.44.0",

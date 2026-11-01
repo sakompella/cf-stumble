@@ -13,14 +13,14 @@ mkdir -p .audit/stage        # `.audit/` is ignored by Git
 
 `cf` finds `cloudflare.config.ts` only in the working directory and has no `--config` flag, so the staging directory needs its own copy of everything `cf` reads:
 
-- `cloudflare.config.ts`: a copy of the repository file with `name: "<stage>"`, `workersDev: true`, no `triggers`, `containers[0].name: "<stage>-workspacehost"`, `instanceType: "standard-1"`, and every relative path (`entrypoint`, `image.dockerfile`, `image.buildContext`) prefixed with `../../`. Keep the worker name in the Durable Object bindings equal to `<stage>`.
+- `cloudflare.config.ts`: a copy of the repository file with the Worker name (`workerName`) set to `<stage>`, `workersDev: true`, no `triggers`, `containers[0].name: "<stage>-workspacehost"`, `instanceType: "standard-1"`, and every relative path (`entrypoint`, `image.dockerfile`, `image.buildContext`) prefixed with `../../`. Keep the worker name in the Durable Object bindings equal to `<stage>`.
 - `wrangler.config.ts`: a copy of the repository file.
 - `package.json`: declares `wrangler` and `cf` as dependencies, so `cf` finds its bundler and itself.
 - `node_modules`: a symlink to `../../node_modules`.
 
 Turn traces off in the staging copy, because one cold start writes about 12,600 spans that drown the events.
 
-Without these files `cf` stops with "No Cloudflare dev-server is installed" or "wrangler is declared ... but is not installed".
+Without these files `cf` stops with "No Cloudflare dev server is installed" or "wrangler is declared ... but is not installed".
 
 ## Before each deploy
 
@@ -43,9 +43,9 @@ An HTTP client with a default user agent may get 403 from the API; set your own 
 
 ```sh
 npx wrangler delete --name <stage>
-npx wrangler containers delete <stage-container-app-id>
-npx wrangler containers images list                 # find the repository:tag you pushed
-npx wrangler containers images delete <stage>-workspacehost:<tag>
+pnpm exec cf containers applications delete <stage-container-app-id>
+pnpm exec cf containers images list                 # find the repository:tag you pushed
+pnpm exec cf containers images delete <stage>-workspacehost:<tag>
 cd / && git -C <repo> worktree remove --force /tmp/<stage>
 ```
 
@@ -53,4 +53,4 @@ Look up `<stage-container-app-id>` in the applications list by the name `<stage>
 
 ## Prove it
 
-List again and compare with the baseline: Workers (`GET /accounts/<account-id>/workers/scripts`), container applications, Durable Object namespaces (`GET /accounts/<account-id>/workers/durable_objects/namespaces`), and `npx wrangler containers images list`. The lists must equal the baseline. Anything that was already there and is not yours stays untouched, including old images that are rollback history.
+List again and compare with the baseline: Workers (`GET /accounts/<account-id>/workers/scripts`), container applications, Durable Object namespaces (`GET /accounts/<account-id>/workers/durable_objects/namespaces`), and `pnpm exec cf containers images list`. The lists must equal the baseline. Anything that was already there and is not yours stays untouched, including old images that are rollback history.

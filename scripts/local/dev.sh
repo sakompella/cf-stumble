@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec pnpm exec wrangler dev "$@"
+exec pnpm exec cf dev "$@"

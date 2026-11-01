@@ -24,7 +24,16 @@ after(() => {
 function workerUploadGzipBytes(): number {
   execFileSync(
     "pnpm",
-    ["exec", "wrangler", "deploy", "--dry-run", "--containers-rollout=none", "--outdir", outdir],
+    [
+      "exec",
+      "wrangler",
+      "deploy",
+      "--dry-run",
+      "--experimental-new-config",
+      "--containers-rollout=none",
+      "--outdir",
+      outdir,
+    ],
     { cwd: repoRoot, stdio: "pipe", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } },
   );
 
