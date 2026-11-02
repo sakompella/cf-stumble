@@ -44,7 +44,7 @@
     "cf": "1.0.0-beta.26",
     "esbuild": "0.28.2",
     "foldkit": "0.168.0",
-    "knip": "6.44.0",
+    "knip": "6.44.1",
     "oxfmt": "^0.65.0",
     "oxlint": "^1",
     "oxlint-tsgolint": "^7",
