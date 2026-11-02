@@ -17,8 +17,6 @@ export function jsonError(status: number, code: ApiErrorCode): Response {
   return Response.json({ ok: false, error: { code } }, { status });
 }
 
-export const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-
 export class InvalidRequestBody extends Data.TaggedError("InvalidRequestBody") {}
 
 export function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown>>(

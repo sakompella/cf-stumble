@@ -1,11 +1,34 @@
 import { RpcStub } from "cloudflare:workers";
+import { STARTUP_CHECK_COMMAND, STARTUP_CHECK_OUTPUT } from "../../../src/startup-check-script.js";
+import type {
+  BackendExecEvent,
+  ExecBackendHandle,
+  ExecBackendInput,
+} from "../../../src/workspace/project/exec-backend.js";
 import { ProjectRpcTarget } from "../../../src/workspace/project/index.js";
 import {
   FakeExecBackend,
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
+  ManualExecHandle,
 } from "../../workspace/project/fakes.js";
 import { FakeTenantWorkspace } from "../projects/fake-tenant-workspace.js";
+
+class StartupCheckAnsweringExecs extends FakeExecBackend {
+  startupCheckOutput: readonly BackendExecEvent[] = [
+    { name: "stdout", data: new TextEncoder().encode(`${STARTUP_CHECK_OUTPUT}\n`) },
+    { name: "exit", exitCode: 0 },
+  ];
+
+  override exec(input: ExecBackendInput): Promise<ExecBackendHandle> {
+    if (input.command !== STARTUP_CHECK_COMMAND) return super.exec(input);
+    const handle = new ManualExecHandle();
+    handle.push(...this.startupCheckOutput);
+    handle.end();
+
+    return Promise.resolve(handle);
+  }
+}
 
 class UnkillableProjectTarget extends ProjectRpcTarget {
   override kill(): ReturnType<ProjectRpcTarget["kill"]> {
@@ -17,7 +40,7 @@ type Lease = { readonly remainingMs: number; ended: boolean };
 
 export class ProjectWorkspace extends FakeTenantWorkspace {
   readonly files = new FakeProjectFilesystemProvider();
-  readonly execs = new FakeExecBackend();
+  readonly execs = new StartupCheckAnsweringExecs();
   readonly leases: Lease[] = [];
   killsCommands = true;
 

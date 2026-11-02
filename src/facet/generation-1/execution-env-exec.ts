@@ -27,7 +27,7 @@ function isAborted(context: Context): boolean {
   return context.abortSignal?.aborted === true;
 }
 
-function isArgv(command: string | readonly string[]): command is readonly string[] {
+export function isArgv(command: string | readonly string[]): command is readonly string[] {
   return typeof command !== "string";
 }
 

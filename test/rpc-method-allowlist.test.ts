@@ -1,7 +1,11 @@
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { ModelRoute } from "../src/model-route.js";
-import { ConversationHostTarget } from "../src/supervisor/conversations/host-target.js";
+import { StartupCheckModel } from "../src/startup-check-model.js";
+import {
+  ConversationHostTarget,
+  GenerationHostTarget,
+} from "../src/supervisor/conversations/host-target.js";
 
 type Prototype = NonNullable<ReturnType<typeof Reflect.getPrototypeOf>>;
 
@@ -29,6 +33,19 @@ function rpcMemberNames(prototype: Prototype): string[] {
 
 test("ModelRoute exposes exactly the allowlisted RPC members", () => {
   expect(rpcMemberNames(ModelRoute.prototype)).toStrictEqual(["runStream"]);
+});
+
+test("the scripted model a startup check uses exposes exactly the allowlisted RPC members", () => {
+  expect(rpcMemberNames(StartupCheckModel.prototype)).toStrictEqual(["runStream"]);
+});
+
+test("the generation host a serving facet holds exposes exactly the allowlisted RPC members", () => {
+  expect(rpcMemberNames(GenerationHostTarget.prototype)).toStrictEqual([
+    "controlGeneration",
+    "generationStatus",
+    "prepareGeneration",
+    "submitGeneration",
+  ]);
 });
 
 test("the host a serving facet holds exposes exactly the allowlisted RPC members", () => {

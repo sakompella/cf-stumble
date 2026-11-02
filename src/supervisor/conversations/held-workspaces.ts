@@ -42,7 +42,9 @@ export class HeldWorkspaces {
 
     this.#held.delete(conversationId);
     held.release.abort();
-    void held.capability.then(endTurn);
+    void held.capability.then((capability) => {
+      if (capability !== null) endWorkspaceTurn(capability);
+    });
   }
 
   endAll(): void {
@@ -65,9 +67,7 @@ export class HeldWorkspaces {
   }
 }
 
-function endTurn(capability: ProjectCapabilityStub | null): void {
-  if (capability === null) return;
-
+export function endWorkspaceTurn(capability: ProjectCapabilityStub): void {
   const dispose = () => {
     capability[Symbol.dispose]();
   };

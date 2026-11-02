@@ -41,6 +41,18 @@ An HTTP client with a default user agent may get 403 from the API; set your own 
 - A new container application can take minutes to place its first instance, and the first launches often fail with "no container instance can be provided"; retry the request.
 - The generation build clones `HARNESS_REPOSITORY_URL`, so only commits on a public GitHub repository can build.
 
+## Prove self-modification
+
+Deploying a Worker that bumps the facet compatibility key (for example to `host-3`) makes every generation that is already prepared refuse activation and rollback, so first submit and activate the staging Worker's own commit as the baseline. Then:
+
+1. In a harness conversation, ask the agent for a small change you can see in its answers. It commits in `/workspace/harness`, pushes that exact commit to `self-modify/<change>`, runs `stumble gen prepare <sha>`, and continues only when the preparation reports `ready`. The commit must be on the public repository the Worker builds from.
+2. The agent reads the epoch with `stumble gen status` and runs `stumble gen activate <label> --epoch <n>`. Its facet ends. Within about a minute the Supervisor's alarm resumes the conversation under the new generation, which reports "already active". A fresh turn must show the changed behavior.
+3. Push a commit that loads but fails every message, and prepare it. Preparation must answer `conversation-failed`, and `GET /api/status` must show the same active generation and epoch.
+4. Make the workspace unavailable (stop its container), then roll back to the baseline with `stumble gen rollback <label> --epoch <n>` or `POST /api/generations/rollback`. Rollback loads the stored module map and must not need the workspace.
+5. Run `pnpm ops:check`.
+
+Record each label, epoch and the time each preparation took; the 90-second conversation deadline was sized without a staging measurement.
+
 ## Clean up
 
 ```sh

@@ -24,7 +24,7 @@ export class Supervisor extends DurableObject<SupervisorEnv> {
 
   constructor(ctx: DurableObjectState, env: SupervisorEnv) {
     super(ctx, env);
-    this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress);
+    this.#parts = supervisorParts(ctx, env, () => this.#resetInProgress, this);
   }
 
   prepareGeneration(label: GenerationLabel, options?: StartupCheckOptions) {

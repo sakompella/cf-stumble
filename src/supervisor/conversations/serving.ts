@@ -13,7 +13,7 @@ import {
   type MountedFacet,
 } from "../artifacts/index.js";
 import { HeldWorkspaces, type ObtainWorkspace } from "./held-workspaces.js";
-import { ConversationHostTarget } from "./host-target.js";
+import { ConversationHostTarget, type GenerationHostTarget } from "./host-target.js";
 import { ProjectConversations } from "./project-conversations.js";
 import { ConversationRuns } from "./runs.js";
 
@@ -23,6 +23,7 @@ type ServingPorts = Readonly<{
   catalog: () => SelectableCatalog;
   resetting: () => boolean;
   obtainWorkspace: ObtainWorkspace;
+  generations: GenerationHostTarget;
 }>;
 
 export class ServingConversations {
@@ -46,8 +47,10 @@ export class ServingConversations {
   }
 
   replaceFacet(): void {
-    this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
-    this.endWorkspaces();
+    setTimeout(() => {
+      this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
+      this.endWorkspaces();
+    }, 0);
   }
 
   running(): boolean {
@@ -200,7 +203,7 @@ export class ServingConversations {
       Effect.mapError((problem): ConversationProblem => ({
         code: problem.code === "no-active-generation" ? "no-active-generation" : "mount-failed",
       })),
-      Effect.tap((facet) => this.#call(() => facet.attach(this.#host))),
+      Effect.tap((facet) => this.#call(() => facet.attach(this.#host, this.#ports.generations))),
     );
   }
 

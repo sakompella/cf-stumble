@@ -16,7 +16,7 @@ import type { ProjectWorkspace } from "./project-workspace.js";
 
 type Control = Awaited<ReturnType<typeof connectedSupervisor>>;
 
-async function commitNamed(name: string): Promise<string> {
+export async function commitNamed(name: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(name));
 
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -50,6 +50,7 @@ export async function servingGeneration1(
     throw new Error("the built generation must pass its startup check");
   }
 
+  workspace.leases.splice(0);
   await activateGeneration(control, label);
 
   return control;

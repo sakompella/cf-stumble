@@ -71,3 +71,10 @@ A request for the supervisor to create and check a generation from a particular 
 
 **Generation activation request**:
 A request to make a specific existing generation active. The requester may name the target, but the supervisor checks and performs or rejects the change.
+
+**Startup check**:
+The supervisor's check of a prepared generation before it may become ready. The candidate runs in isolation and must report the supervisor's facet compatibility and answer one scripted conversation that runs one workspace command. A failed check marks the generation failed and leaves the active generation serving.
+
+**Self-activation**:
+The main harness activating a generation from its own conversation with `stumble gen activate`. The serving facet ends, and the conversation resumes under the new generation.
+_Avoid_: self-deploy

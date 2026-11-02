@@ -23,6 +23,10 @@ export const commits = {
   request: "5123456789abcdef0123456789abcdef01234567",
   delayed: "7123456789abcdef0123456789abcdef01234567",
   fresh: "b123456789abcdef0123456789abcdef01234567",
+  failingMessages: "c123456789abcdef0123456789abcdef01234567",
+  noGenerationControl: "d123456789abcdef0123456789abcdef01234567",
+  unsettled: "e123456789abcdef0123456789abcdef01234567",
+  failingAttach: "f123456789abcdef0123456789abcdef01234567",
 } as const;
 
 export { generationLabel, testHarnessCommit };
@@ -31,6 +35,8 @@ export {
   fixtureMainHarnessCommit,
   parsedArtifact,
   FACET_COMPATIBILITY_METHOD,
+  ANSWER_STARTUP_CHECK,
+  STARTUP_CHECK_CONVERSATION,
   servingFacetSource,
 } from "../facet/fixture.js";
 

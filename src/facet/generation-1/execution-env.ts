@@ -1,4 +1,5 @@
 import { FileError, type ExecutionEnv, type Result } from "@earendil-works/pi-durable/env";
+import type { GenerationControl } from "../../generation-requests.js";
 import type { ProjectRpcTargetContract } from "../../workspace/project/protocol.js";
 import { execInWorkspace, killAll, type RunningCommands } from "./execution-env-exec.js";
 import {
@@ -11,12 +12,14 @@ import {
 } from "./execution-env-files.js";
 import { joinPath, type ComputerWorkspace } from "./execution-env-paths.js";
 import { openBinaryReader } from "./execution-env-readers.js";
+import { runStumbleCommand, stumbleArguments } from "./stumble-command.js";
 
 const COMPUTER_ENV_ID = "cf-stumble:computer-workspace";
 
 export interface ComputerEnvOptions {
   readonly cwd: string;
   readonly target: ProjectRpcTargetContract;
+  readonly generations?: GenerationControl | undefined;
 }
 
 function unsupported(member: string): () => Promise<Result<never, FileError>> {
@@ -28,6 +31,7 @@ function unsupported(member: string): () => Promise<Result<never, FileError>> {
 export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
   const workspace: ComputerWorkspace = { cwd: options.cwd, target: options.target };
   const running: RunningCommands = new Set();
+  const { generations } = options;
 
   return {
     id: COMPUTER_ENV_ID,
@@ -56,8 +60,13 @@ export function createComputerEnv(options: ComputerEnvOptions): ExecutionEnv {
     remove: unsupported("remove"),
     createTempDir: unsupported("createTempDir"),
     createTempFile: unsupported("createTempFile"),
-    exec: (command, execOptions, context) =>
-      execInWorkspace(workspace, running, command, execOptions, context),
+    exec: (command, execOptions, context) => {
+      const stumble = generations === undefined ? undefined : stumbleArguments(command);
+
+      return stumble === undefined || generations === undefined
+        ? execInWorkspace(workspace, running, command, execOptions, context)
+        : runStumbleCommand(stumble, { generations }, execOptions, context);
+    },
     cleanup: () => killAll(workspace, running),
   };
 }

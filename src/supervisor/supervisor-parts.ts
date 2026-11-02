@@ -7,10 +7,11 @@ import {
 } from "./projects/index.js";
 import { Generations } from "./generations.js";
 import { FACET_COMPATIBILITY } from "../facet-compatibility.js";
+import type { GenerationOperations } from "../generation-requests.js";
 import { ChatGPTConnection, ChatGPTCredentialStore } from "../chatgpt/index.js";
 import { HarnessArtifacts, type MainFacetCapabilities } from "./artifacts/index.js";
-import { ServingConversations } from "./conversations/index.js";
-import { obtainProjectWorkspace } from "./obtain-workspace.js";
+import { GenerationHostTarget, ServingConversations } from "./conversations/index.js";
+import { obtainProjectWorkspace, obtainScratchWorkspace } from "./obtain-workspace.js";
 import { supervisorNames, type SupervisorEnv } from "./supervisor-env.js";
 
 export type SupervisorParts = ReturnType<typeof supervisorParts>;
@@ -43,6 +44,7 @@ export function supervisorParts(
   ctx: DurableObjectState,
   env: SupervisorEnv,
   resetting: () => boolean,
+  generationOperations: GenerationOperations,
 ) {
   const generations = new Generations(ctx.storage, FACET_COMPATIBILITY);
   const { name, workspaceName } = supervisorNames(ctx);
@@ -61,7 +63,15 @@ export function supervisorParts(
   return {
     workspaceName,
     generations,
-    startupCheckHost: { ctx, loader: env.LOADER, artifacts, generations, modelRoute },
+    startupCheckHost: {
+      ctx,
+      loader: env.LOADER,
+      artifacts,
+      generations,
+      model: () => ctx.exports.StartupCheckModel({}),
+      workspace: (remainingMs: number, signal: AbortSignal) =>
+        obtainScratchWorkspace(sources, remainingMs, signal),
+    },
     github,
     connections,
     serving: new ServingConversations({
@@ -74,6 +84,7 @@ export function supervisorParts(
       resetting,
       obtainWorkspace: (project, remainingMs, signal) =>
         obtainProjectWorkspace(sources, project, remainingMs, signal),
+      generations: new GenerationHostTarget(generationOperations),
     }),
     chatgpt: new ChatGPTConnection({
       store: new ChatGPTCredentialStore(ctx.storage),

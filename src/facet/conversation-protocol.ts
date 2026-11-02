@@ -1,5 +1,8 @@
 import type { Wake } from "@earendil-works/pi-durable";
+import type { GenerationControl } from "../generation-requests.js";
 import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
+
+export type { GenerationControl };
 
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
@@ -9,7 +12,7 @@ export interface ConversationHost {
 
 export interface ConversationFacet {
   compatibility(): string;
-  attach(host: ConversationHost): Promise<void>;
+  attach(host: ConversationHost, generations?: GenerationControl): Promise<void>;
   createConversation(cwd: string): Promise<string>;
   submit(conversationId: string, content: string, requestId: string): Promise<number>;
   events(conversationId: string): Promise<ReadableStream<Uint8Array>>;

@@ -1,4 +1,5 @@
 import type { ModelRoute } from "../model-route.js";
+import type { StartupCheckModel } from "../startup-check-model.js";
 import type { HarnessModule, MainHarnessArtifact } from "./artifact.js";
 import type { ConversationFacet } from "./conversation-protocol.js";
 
@@ -13,15 +14,16 @@ function workerModuleEntry(module: HarnessModule): [string, WorkerLoaderModule] 
 }
 
 export type MainFacetCapabilities = Readonly<{
-  MODEL: Fetcher<ModelRoute>;
+  MODEL: Fetcher<ModelRoute> | Fetcher<StartupCheckModel>;
 }>;
 
 export function loadMainFacet(
   loader: WorkerLoader,
   artifact: MainHarnessArtifact,
   capabilities: MainFacetCapabilities,
+  workerName: string = artifact.harnessCommit,
 ) {
-  const worker = loader.get(artifact.harnessCommit, () => ({
+  const worker = loader.get(workerName, () => ({
     compatibilityDate: "2025-01-01",
     compatibilityFlags: ["enable_weak_ref"],
     mainModule: artifact.modules[0].name,

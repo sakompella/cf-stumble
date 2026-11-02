@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { logRedactedCause } from "../diagnostics.js";
-import type { ActiveGeneration } from "../supervisor/generations.js";
+import { generationStatusView, type ActiveGeneration } from "../generation-requests.js";
 import {
   handleGenerationControl,
   handleGenerationSubmission,
@@ -42,14 +42,7 @@ function statusResponse(
   supervisor: OwnerApiSupervisor,
 ): Effect.Effect<Response, SupervisorCallFailed> {
   return callSupervisor(() => supervisor.getActiveGeneration()).pipe(
-    Effect.map((active) =>
-      Response.json({
-        activeGeneration: {
-          generation: active.generation ?? null,
-          epoch: active.epoch,
-        },
-      }),
-    ),
+    Effect.map((active) => Response.json({ activeGeneration: generationStatusView(active) })),
   );
 }
 
