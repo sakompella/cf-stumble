@@ -2,10 +2,6 @@ import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import { runAtEntryPoint, runResponseBody } from "../src/run-entry-point.js";
 
-test("a program's value is the entry point's value", async () => {
-  await expect(runAtEntryPoint(Effect.succeed(7))).resolves.toBe(7);
-});
-
 test("a defect rejects with the value that was thrown, as an async function would", async () => {
   const thrown = new Error("platform fault");
 

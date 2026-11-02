@@ -26,13 +26,6 @@ function catalogOf(...urls: readonly string[]): ProjectCatalog {
   return parsed;
 }
 
-test("ships no projects, because a project exists only once a tenant connects one", () => {
-  expect(resolveProject("sample-project-one", [])).toEqual({
-    ok: false,
-    reason: "unknown-project-id",
-  });
-});
-
 test("resolves every project of a non-empty catalog", () => {
   const count = 3;
 

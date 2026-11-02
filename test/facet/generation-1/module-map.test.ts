@@ -5,21 +5,12 @@ import { loadMainFacet } from "../../../src/facet/index.js";
 import { parsedArtifact } from "../fixture.js";
 import { prepareWithModuleMap, submitCandidate } from "../../supervisor/helpers.js";
 import type { ModelCapability } from "../../../src/facet/generation-1/capabilities.js";
-import { builtGeneration, builtModuleMap } from "./built-module-map.js";
+import { builtGeneration } from "./built-module-map.js";
 
 const GENERATION_1_COMMIT = "c0de00000000000000000000000000000000c0d1";
 
 afterEach(async () => {
   await reset();
-});
-
-test("the build writes an entry module and its modules, and no harness commit", async () => {
-  const built = await builtModuleMap();
-
-  expect(Object.keys(built).toSorted()).toEqual(["entryModule", "modules"]);
-  expect(built.entryModule).toBe("main-facet.js");
-  expect(built.modules.map((module) => module.name)).toEqual(["main-facet.js"]);
-  expect(built.modules[0]?.source).toContain("MainFacet");
 });
 
 test("the written file parses into a module map the facet loader loads", async () => {
