@@ -1,4 +1,4 @@
-import { exports as workerExports } from "cloudflare:workers";
+import { env, exports as workerExports } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
 import { expect, test } from "vitest";
 import { ModelRoute } from "../src/model-route.js";
@@ -161,17 +161,28 @@ test("two tool calls the provider reports without an index stay two separate cal
   });
 });
 
-test("the deployed entrypoint answers runStream across its own service-binding hop", async () => {
-  const stub = workerExports.ModelRoute({});
-  const refused = await stub.runStream({ messages: [] });
+test("the deployed entrypoint refuses an invalid request across its own service-binding hop", async () => {
+  const refused = await workerExports.ModelRoute({}).runStream({ messages: [] });
+
   expect(refused).toEqual({
     ok: false,
     error: { code: "invalid-request", reason: "messages must be a non-empty array" },
   } satisfies ValidationFailure);
+});
 
-  const outcome = await stub.runStream(REQUEST);
-  const events = await collectEvents(streamOf(outcome));
-  expect(events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
+test("the deployed entrypoint streams a Workers AI answer across its own service-binding hop", async () => {
+  const binding = bindingStreaming([sseLine({ response: "over rpc" }), DONE_LINE]);
+
+  Object.defineProperty(env, "AI", { value: binding.ai, configurable: true });
+
+  try {
+    const outcome = await workerExports.ModelRoute({}).runStream(REQUEST);
+    const events = await collectEvents(streamOf(outcome));
+
+    expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "over rpc" } });
+  } finally {
+    Object.defineProperty(env, "AI", { value: undefined, configurable: true });
+  }
 });
 
 test("with no ChatGPT credential connected, the Supervisor's route answers from Workers AI", async () => {

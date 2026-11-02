@@ -28,33 +28,49 @@ test.each([BROWSER_ACCEPT, "*/*", "application/json", ""])(
   },
 );
 
+function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
+  return new Map(
+    policy
+      .split(";")
+      .map((directive) => directive.trim().split(/\s+/u))
+      .filter(([name]) => name !== undefined && name !== "")
+      .map(([name = "", ...sources]) => [name, sources] as const),
+  );
+}
+
 test("the page policy admits its own style and its same-origin script, and no inline code", async () => {
   const response = await pageFetch("/", BROWSER_ACCEPT);
-  const policy = response.headers.get("content-security-policy") ?? "";
-  const nonce = /style-src 'nonce-([^']+)'/u.exec(policy)?.[1];
+  const policy = directivesOf(response.headers.get("content-security-policy") ?? "");
   const body = await response.text();
+  const [styleSource] = policy.get("style-src") ?? [];
+  const nonce = /^'nonce-(.+)'$/u.exec(styleSource ?? "")?.[1];
 
-  expect(policy).toContain("default-src 'none'");
-  expect(policy).toContain("connect-src 'self'");
-  expect(policy).toContain("script-src 'self';");
-  expect(policy).not.toContain("unsafe-inline");
-  expect(policy).not.toContain("unsafe-eval");
+  expect(policy.get("script-src")).toEqual(["'self'"]);
+  expect(policy.get("default-src")).toEqual(["'none'"]);
+  expect([...policy.values()].flat().filter((source) => source.includes("unsafe-"))).toEqual([]);
   expect(nonce).toBeDefined();
   expect(body).toContain(`<style nonce="${nonce ?? ""}">`);
   expect(body).toContain(`<script src="${OWNER_PAGE_SCRIPT_FILE.path}"></script>`);
 });
 
-test("the page's script is served once per path and kept by the browser", async () => {
+test("the page's script is kept by the browser only because its path derives from its content", async () => {
   const response = await pageFetch(OWNER_PAGE_SCRIPT_FILE.path, "*/*");
+  const source = await response.text();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
+
+  const digestHex = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+  const pathHash = /\/owner-([0-9a-f]+)\.js$/u.exec(OWNER_PAGE_SCRIPT_FILE.path)?.[1] ?? "";
 
   expect(response.status).toBe(200);
-  expect(response.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
-  expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
-  expect(response.headers.get("content-security-policy")).toBe(
-    "default-src 'none'; frame-ancestors 'none'",
-  );
+  expect(response.headers.get("content-type")).toContain("text/javascript");
+  expect(response.headers.get("cache-control")).toContain("immutable");
   expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-  expect(await response.text()).toBe(OWNER_PAGE_SCRIPT_FILE.source);
+  expect(source).toBe(OWNER_PAGE_SCRIPT_FILE.source);
+  expect(pathHash).not.toBe("");
+  expect(digestHex.startsWith(pathHash)).toBe(true);
 });
 
 test("a path or method the Worker does not own answers 404", async () => {

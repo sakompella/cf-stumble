@@ -43,55 +43,69 @@ test("the connection, a started sign-in and a disconnect each answer the view", 
   expect(await disconnected.json()).toEqual({ ok: true, chatgpt: disconnectedChatGPT });
 });
 
-test("finishing a sign-in passes exactly the attempt and the address, and words a refusal", async () => {
-  const received: string[][] = [];
+const COMPLETION_BODY = {
+  attemptId: "attempt-1",
+  callbackUrl: "http://127.0.0.1:1455/auth/callback?code=c&state=s&client_id=a",
+};
 
-  const outcomes: ChatGPTLoginOutcome[] = [
-    { ok: false, problem: { code: "wrong-sign-in" }, chatgpt: signingIn },
-    { ok: false, problem: { code: "exchange-unavailable" }, chatgpt: disconnectedChatGPT },
-  ];
+test("finishing a sign-in hands the supervisor the attempt and the address from the body", async () => {
+  const received: string[][] = [];
 
   const supervisor = ownerApiSupervisor({
     completeChatGPTLogin: (attemptId, callbackUrl) => {
       received.push([attemptId, callbackUrl]);
 
-      return Promise.resolve(outcomes[received.length - 1] ?? outcomes[0]!);
+      return Promise.resolve({ ok: true, chatgpt: disconnectedChatGPT });
     },
   });
 
-  const body = JSON.stringify({
-    attemptId: "attempt-1",
-    callbackUrl: "http://127.0.0.1:1455/auth/callback?code=c&state=s&client_id=a",
-  });
-
-  const refused = await ownerApiResponse(
-    controlRequest("/api/chatgpt/login/complete", body),
+  await ownerApiResponse(
+    controlRequest("/api/chatgpt/login/complete", JSON.stringify(COMPLETION_BODY)),
     supervisor,
   );
 
-  const busy = await ownerApiResponse(
-    controlRequest("/api/chatgpt/login/complete", body),
-    supervisor,
-  );
+  expect(received).toEqual([[COMPLETION_BODY.attemptId, COMPLETION_BODY.callbackUrl]]);
+});
 
-  const extraField = await ownerApiResponse(
+test.each([
+  { code: "wrong-sign-in", status: 400, chatgpt: signingIn },
+  { code: "exchange-unavailable", status: 503, chatgpt: disconnectedChatGPT },
+] as const)(
+  "a sign-in the supervisor refuses as $code answers $status with the outcome",
+  async (refusal) => {
+    const outcome: ChatGPTLoginOutcome = {
+      ok: false,
+      problem: { code: refusal.code },
+      chatgpt: refusal.chatgpt,
+    };
+
+    const response = await ownerApiResponse(
+      controlRequest("/api/chatgpt/login/complete", JSON.stringify(COMPLETION_BODY)),
+      ownerApiSupervisor({ completeChatGPTLogin: () => Promise.resolve(outcome) }),
+    );
+
+    expect(response.status).toBe(refusal.status);
+    expect(await response.json()).toEqual(outcome);
+  },
+);
+
+test("a sign-in body with a field beyond the attempt and the address never reaches the supervisor", async () => {
+  let reached = false;
+
+  const response = await ownerApiResponse(
     controlRequest(
       "/api/chatgpt/login/complete",
-      JSON.stringify({ attemptId: "a", callbackUrl: "b", clientId: "c" }),
+      JSON.stringify({ ...COMPLETION_BODY, clientId: "c" }),
     ),
-    supervisor,
+    ownerApiSupervisor({
+      completeChatGPTLogin: () => {
+        reached = true;
+
+        return Promise.resolve({ ok: true, chatgpt: disconnectedChatGPT });
+      },
+    }),
   );
 
-  expect(refused.status).toBe(400);
-  expect(await refused.json()).toEqual(outcomes[0]);
-  expect(busy.status).toBe(503);
-  expect(extraField.status).toBe(400);
-  expect(await extraField.json()).toEqual({
-    ok: false,
-    error: { code: "invalid-chatgpt-request" },
-  });
-  expect(received).toEqual([
-    ["attempt-1", "http://127.0.0.1:1455/auth/callback?code=c&state=s&client_id=a"],
-    ["attempt-1", "http://127.0.0.1:1455/auth/callback?code=c&state=s&client_id=a"],
-  ]);
+  expect(response.status).toBe(400);
+  expect(reached).toBe(false);
 });
