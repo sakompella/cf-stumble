@@ -5,21 +5,11 @@ import {
 } from "@cloudflare/computer";
 import {
   CloudflareContainerBackend,
-  type CloudflareContainerBackendOptions,
   WorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
-
-export function workspaceContainerBackendConfiguration(
-  workspaceId: string,
-): Pick<CloudflareContainerBackendOptions, "egress" | "workspace"> {
-  return {
-    workspace: { binding: "WORKSPACE_HOST", id: workspaceId },
-    egress: { mode: "direct" },
-  };
-}
 
 export function computerStorage(storage: DurableObjectStorage): DurableObjectStorageLike {
   function exec<Row extends object>(query: string, ...bindings: unknown[]): { toArray(): Row[] };
@@ -48,7 +38,8 @@ export class WorkspacePlatform {
     this.#container = new WorkspaceContainerAPI(state);
     this.#containerBackend = new CloudflareContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
-      ...workspaceContainerBackendConfiguration(state.id.toString()),
+      workspace: { binding: "WORKSPACE_HOST", id: state.id.toString() },
+      egress: { mode: "direct" },
     });
     this.#workspaceBackend = withWorkspaceSyncIgnore(this.#containerBackend, (runtimeId) => {
       this.lifecycle.connected(runtimeId);
