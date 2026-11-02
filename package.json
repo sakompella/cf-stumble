@@ -33,8 +33,8 @@
     "effect": "4.0.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.11",
-    "@cloudflare/workers-types": "^5",
+    "@cloudflare/vitest-plugin": "^1.4.12",
+    "@cloudflare/workers-types": "^5.20261102.1",
     "@effect/platform-browser": "4.0.0",
     "@foldkit/oxlint-plugin": "0.15.3",
     "@hegeldev/hegel": "0.4.5",
@@ -42,13 +42,13 @@
     "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
     "cf": "1.0.0-beta.26",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "foldkit": "0.168.0",
     "knip": "6.44.0",
     "oxfmt": "^0.65.0",
     "oxlint": "^1",
     "oxlint-tsgolint": "^7",
-    "tsx": "4.22.1",
+    "tsx": "4.23.15",
     "typescript": "^7",
     "vitest": "^4",
     "wrangler": "^4.149.0"
