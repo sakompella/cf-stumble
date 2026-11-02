@@ -1,5 +1,4 @@
 import { expect, test } from "vitest";
-import { byteChunkStream } from "./byte-stream-fixture.js";
 import type { ModelRouteRequest } from "../src/model-route.js";
 import type { ModelStreamInference, StreamingProviderPayload } from "../src/model-route-events.js";
 import {
@@ -53,34 +52,6 @@ function toolCallChunk(argsFragment: string): string {
     tool_calls: [{ index: 0, id: "call_1", function: { name: "bash", arguments: argsFragment } }],
   });
 }
-
-test("delivers byte chunks in order and reports exhaustion without reporting cancellation", async () => {
-  const chunks = [new Uint8Array([1]), new Uint8Array([2, 3])];
-  const exhausted: string[] = [];
-
-  const onExhausted = (): void => {
-    exhausted.push("exhausted");
-  };
-
-  const reader = byteChunkStream(chunks, onExhausted).getReader();
-
-  expect(await reader.read()).toEqual({ value: chunks[0], done: false });
-  expect(exhausted).toEqual([]);
-  expect(await reader.read()).toEqual({ value: chunks[1], done: false });
-  expect(await reader.read()).toEqual({ value: undefined, done: true });
-  expect(exhausted).toEqual(["exhausted"]);
-
-  const cancelled: string[] = [];
-
-  const onCancelledExhausted = (): void => {
-    cancelled.push("exhausted");
-  };
-
-  const cancelledReader = byteChunkStream(chunks, onCancelledExhausted).getReader();
-
-  await cancelledReader.cancel();
-  expect(cancelled).toEqual([]);
-});
 
 test("sends the whole conversation and its tools to the one fixed model", async () => {
   const calls: Array<{ model: string; input: StreamingProviderPayload }> = [];

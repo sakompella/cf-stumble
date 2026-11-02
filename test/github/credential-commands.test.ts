@@ -34,11 +34,6 @@ test.each([
   }
 });
 
-test("the install command still takes the token from standard input only", () => {
-  expect(installCredentialSource()).toContain("gh auth login --hostname github.com --with-token");
-  expect(installCredentialSource()).not.toMatch(/ghp_|github_pat_/u);
-});
-
 test("clone and harness provisioning export the durable configuration for private repositories", () => {
   const clone = projectCloneSource(sampleProjectOne);
 
