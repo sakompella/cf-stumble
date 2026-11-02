@@ -19,9 +19,10 @@ exit 0
 `;
 
 export function underScratch(source: string, root: string): string {
-  return source
-    .replaceAll("'/workspace/", `'${root}/workspace/`)
-    .replaceAll("'/tmp/", `'${root}/tmp/`);
+  return source.replaceAll(
+    /'\/(workspace|tmp)(?=[/'])/gu,
+    (_, directory) => `'${root}/${directory}`,
+  );
 }
 
 export const FLOCK_STAND_IN = `#!/bin/sh

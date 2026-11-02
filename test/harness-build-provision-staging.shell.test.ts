@@ -55,7 +55,7 @@ function provisionSource(root: string): string {
     testHarnessCommit("7000000000000000000000000000000000000001"),
   );
 
-  return underScratch(source.replaceAll("'/workspace'", `'${root}/workspace'`), root);
+  return underScratch(source, root);
 }
 
 function environment(root: string, holdClone: boolean): NodeJS.ProcessEnv {

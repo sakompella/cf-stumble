@@ -35,7 +35,7 @@ exec /bin/rm "$@"
 
 let runCount = 0;
 
-type Run = Readonly<{ root: string; bin: string; project: string; lock: string }>;
+type Run = Readonly<{ root: string; bin: string; project: string }>;
 
 function prepare(): Run {
   runCount += 1;
@@ -52,12 +52,7 @@ function prepare(): Run {
   execFileSync(join(bin, "rm"), ["-f", join(root, "absent")]);
   execFileSync(join(bin, "git"), ["--version"]);
 
-  return {
-    root,
-    bin,
-    project,
-    lock: join(root, projectProvisionLockPath(sampleProjectOne.id).slice(1)),
-  };
+  return { root, bin, project };
 }
 
 function start(run: Run, source: string, holdRemoval = false): ChildProcess {
@@ -105,11 +100,11 @@ test("a removal waits while another process holds the project's lock", async () 
   const holder = start(
     run,
     [
-      `lock='${run.lock}'`,
+      `lock='${projectProvisionLockPath(sampleProjectOne.id)}'`,
       'exec 9>"$lock"',
       "flock 9",
-      `: > '${held}'`,
-      `while [ ! -e '${released}' ]; do /bin/sleep 0.05; done`,
+      ': > "$STUB_DIR/held"',
+      'while [ ! -e "$STUB_DIR/holder-release" ]; do /bin/sleep 0.05; done',
     ].join("\n"),
   );
 
