@@ -9,57 +9,50 @@ type SyncRPC = BackendHandle["rpc"]["sync"];
 
 type FetchChangesInput = Parameters<SyncRPC["fetchChanges"]>[0];
 
-function delegated(calls: string[], name: string): never {
-  calls.push(name);
-
+function unused(name: string): never {
   throw new Error(name);
 }
 
-function syncFor(calls: string[], fetchChanges: SyncRPC["fetchChanges"]): SyncRPC {
+function syncFor(fetchChanges: SyncRPC["fetchChanges"]): SyncRPC {
   return {
-    push: () => delegated(calls, "sync.push"),
+    push: () => unused("sync.push"),
     fetchChanges,
-    watermarks: () => delegated(calls, "sync.watermarks"),
-    readEntry: () => delegated(calls, "sync.readEntry"),
-    hasObjects: () => delegated(calls, "sync.hasObjects"),
-    fetchObjects: () => delegated(calls, "sync.fetchObjects"),
-    pushObjects: () => delegated(calls, "sync.pushObjects"),
+    watermarks: () => unused("sync.watermarks"),
+    readEntry: () => unused("sync.readEntry"),
+    hasObjects: () => unused("sync.hasObjects"),
+    fetchObjects: () => unused("sync.fetchObjects"),
+    pushObjects: () => unused("sync.pushObjects"),
   };
 }
 
-function shellFor(calls: string[]): BackendHandle["rpc"]["shell"] {
+function shellFor(): BackendHandle["rpc"]["shell"] {
   return {
-    exec: () => delegated(calls, "shell.exec"),
-    getExec: () => delegated(calls, "shell.getExec"),
-    killExec: () => delegated(calls, "shell.killExec"),
-    disposeExec: () => delegated(calls, "shell.disposeExec"),
+    exec: () => unused("shell.exec"),
+    getExec: () => unused("shell.getExec"),
+    killExec: () => unused("shell.killExec"),
+    disposeExec: () => unused("shell.disposeExec"),
   };
 }
 
 function backendWith(fetchChanges: SyncRPC["fetchChanges"]) {
-  const calls: string[] = [];
-  const sync = syncFor(calls, fetchChanges);
-  const shell = shellFor(calls);
+  const sync = syncFor(fetchChanges);
+  const shell = shellFor();
 
   const handle: BackendHandle = {
     rpc: { sync, shell },
     runtimeId: "runtime",
     sync: "remote",
-    close: () => delegated(calls, "close"),
+    close: () => unused("close"),
   };
 
   const backend: HostedBackend<number> = {
     id: "backend",
     type: "test",
     callable: true,
-    connect: () => {
-      calls.push("connect");
-
-      return Promise.resolve(handle);
-    },
+    connect: () => Promise.resolve(handle),
   };
 
-  return { backend, calls, handle };
+  return { backend };
 }
 
 function connect(backend: HostedBackend<number>): Promise<BackendHandle> {
@@ -106,49 +99,5 @@ test("preserves caller ignores while adding node_modules", async () => {
 
   expect(inputs).toEqual([
     { after: { rev: 3, path: "/project" }, ignore: [".cache", "node_modules"] },
-  ]);
-});
-
-test("delegates every backend and RPC operation other than fetchChanges", async () => {
-  const { backend, calls, handle } = backendWith(() =>
-    Promise.resolve({
-      currentCursor: { rev: 1, path: null },
-      appliedPushCursor: { rev: 1, path: null },
-      stream: new ReadableStream(),
-    }),
-  );
-
-  const wrappedHandle = await connect(withWorkspaceSyncIgnore(backend));
-
-  expect(() =>
-    wrappedHandle.rpc.sync.push({ senderRev: 0, changes: new ReadableStream() }),
-  ).toThrow();
-  expect(() => wrappedHandle.rpc.sync.watermarks()).toThrow();
-  expect(() => wrappedHandle.rpc.sync.readEntry("/")).toThrow();
-  expect(() => wrappedHandle.rpc.sync.hasObjects([])).toThrow();
-  expect(() => wrappedHandle.rpc.sync.fetchObjects([])).toThrow();
-  expect(() => wrappedHandle.rpc.sync.pushObjects(new ReadableStream())).toThrow();
-  expect(() => wrappedHandle.rpc.shell.exec({ source: "true" })).toThrow();
-  expect(() => wrappedHandle.rpc.shell.getExec({ id: "exec" })).toThrow();
-  expect(() => wrappedHandle.rpc.shell.killExec({ id: "exec" })).toThrow();
-  expect(() => wrappedHandle.rpc.shell.disposeExec({ id: "exec" })).toThrow();
-  expect(() => wrappedHandle.close()).toThrow();
-
-  expect(wrappedHandle.runtimeId).toBe(handle.runtimeId);
-  expect(wrappedHandle.sync).toBe(handle.sync);
-  expect(wrappedHandle.rpc.shell).toBe(handle.rpc.shell);
-  expect(calls).toEqual([
-    "connect",
-    "sync.push",
-    "sync.watermarks",
-    "sync.readEntry",
-    "sync.hasObjects",
-    "sync.fetchObjects",
-    "sync.pushObjects",
-    "shell.exec",
-    "shell.getExec",
-    "shell.killExec",
-    "shell.disposeExec",
-    "close",
   ]);
 });

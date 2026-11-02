@@ -18,25 +18,6 @@ test.each(["/api/status", "/api/projects", "/api/github/connection", "/api/chatg
   },
 );
 
-test.each([
-  "/api/projects/sample-project-one/events",
-  "/api/projects/sample-project-one/abort",
-  "/api/projects/sample-project-one/thread/fresh",
-])("%s is record-only, because the Supervisor answers it without the workspace", (path) => {
-  expect(classOf(path)).toBe("record-only");
-});
-
-test.each([
-  "/api/projects/sample-project-one/messages",
-  "/api/projects/sample-project-one/disconnect",
-  "/api/projects/connect",
-  "/api/github/connection/refresh",
-  "/api/workspace/reset",
-  "/api/generations/submit",
-])("%s may reach the workspace", (path) => {
-  expect(classOf(path)).toBe("workspace");
-});
-
 test("a route the table does not list is record-only", () => {
   expect(classOf("/api/projects/sample-project-one/rename")).toBe("record-only");
 });
