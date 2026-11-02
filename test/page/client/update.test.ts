@@ -177,10 +177,10 @@ test("a send that never reached the Worker puts the text back too, unless the ow
   expect(after(sent, [Message.UpdatedPrompt({ value: "newer" }), failed]).prompt).toBe("newer");
 });
 
-test("a settled submission says how the run ended", () => {
-  const noteAfter = (record: Readonly<{ id: number; status: string; reason?: string }>) =>
-    after(readyPage(), [event({ type: "submission", record })]).runNote;
+const noteAfter = (record: Readonly<{ id: number; status: string; reason?: string }>) =>
+  after(readyPage(), [event({ type: "submission", record })]).runNote;
 
+test("a settled submission says how the run ended", () => {
   expect(noteAfter({ id: 1, status: "done" })).toBe("answered");
   expect(noteAfter({ id: 1, status: "unanswered", reason: "aborted" })).toBe("stopped: aborted");
   expect(noteAfter({ id: 1, status: "placed" })).toBe("");

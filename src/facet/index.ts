@@ -16,16 +16,11 @@ export type MainFacetCapabilities = Readonly<{
   MODEL: Fetcher<ModelRoute>;
 }>;
 
-export type LoadedMainFacet = Readonly<{
-  worker: WorkerStub;
-  facetClass: DurableObjectClass<MainFacetTarget>;
-}>;
-
 export function loadMainFacet(
   loader: WorkerLoader,
   artifact: MainHarnessArtifact,
   capabilities: MainFacetCapabilities,
-): LoadedMainFacet {
+) {
   const worker = loader.get(artifact.harnessCommit, () => ({
     compatibilityDate: "2025-01-01",
     compatibilityFlags: ["enable_weak_ref"],

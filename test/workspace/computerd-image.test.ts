@@ -47,6 +47,8 @@ const dockerfile = Object.values(dockerfiles).at(0) ?? "";
 
 const dockerignore = Object.values(dockerignores).at(0) ?? "";
 
+const dockerEnv = (name: string) => new RegExp(`^ENV ${name}=(\\S*)$`, "mu").exec(dockerfile)?.[1];
+
 test("the workspace image's shim skips exactly the segments the sync ignores", () => {
   const setting = /^ENV COMPUTERD_WALK_IGNORE=(\S*)$/mu.exec(dockerfile)?.[1];
 
@@ -69,10 +71,8 @@ test("the walk patch reads COMPUTERD_POLL_MS and tests its parse", () => {
 });
 
 test("the workspace image keeps gh and Git global configuration in the durable workspace", () => {
-  const setting = (name: string) => new RegExp(`^ENV ${name}=(\\S*)$`, "mu").exec(dockerfile)?.[1];
-
-  expect(setting("COMPUTER_VAR_GH_CONFIG_DIR")).toBe(GITHUB_CLI_CONFIG_DIRECTORY);
-  expect(setting("COMPUTER_VAR_GIT_CONFIG_GLOBAL")).toBe(GIT_GLOBAL_CONFIG_PATH);
+  expect(dockerEnv("COMPUTER_VAR_GH_CONFIG_DIR")).toBe(GITHUB_CLI_CONFIG_DIRECTORY);
+  expect(dockerEnv("COMPUTER_VAR_GIT_CONFIG_GLOBAL")).toBe(GIT_GLOBAL_CONFIG_PATH);
 });
 
 test("the workspace image ships computerd built from source, not the prebuilt image", () => {

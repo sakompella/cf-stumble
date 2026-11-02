@@ -13,15 +13,15 @@ import {
 
 const ORIGIN = "https://cf-stumble.test";
 
+const get = (path: string) => worker.fetch(new Request(`${ORIGIN}${path}`), env);
+
+const post = (path: string, body: Readonly<Record<string, string>> = {}) =>
+  worker.fetch(
+    new Request(`${ORIGIN}${path}`, { method: "POST", body: JSON.stringify(body) }),
+    env,
+  );
+
 export function ownerSession() {
-  const get = (path: string) => worker.fetch(new Request(`${ORIGIN}${path}`), env);
-
-  const post = (path: string, body: Readonly<Record<string, string>> = {}) =>
-    worker.fetch(
-      new Request(`${ORIGIN}${path}`, { method: "POST", body: JSON.stringify(body) }),
-      env,
-    );
-
   return { get, post, supervisor: env.SUPERVISOR.getByName("owner") };
 }
 
