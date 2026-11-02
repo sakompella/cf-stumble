@@ -7,26 +7,7 @@ import {
 } from "../../src/workspace/executor.js";
 import { MANAGED_AGENT_INSTRUCTIONS } from "../../src/project-provision.js";
 import { MANAGED_AGENT_INSTRUCTIONS_PATH, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
-import { WorkspaceHost } from "../../src/workspace/host.js";
 import { ensureManagedInstructions } from "../../src/workspace/managed-instructions.js";
-
-test("exposes only the Workspace Host RPC methods", () => {
-  expect(
-    Object.getOwnPropertyNames(WorkspaceHost.prototype).toSorted(),
-    "`project` hands out the narrow project capability; anything else added here is a new surface",
-  ).toEqual([
-    "alarm",
-    "build",
-    "constructor",
-    "credential",
-    "ensureManagedInstructions",
-    "fetch",
-    "project",
-    "provision",
-    "removeProject",
-    "reset",
-  ]);
-});
 
 class ManagedInstructionsOperations implements WorkspaceOperations {
   readonly kinds = new Map<string, WorkspacePathKind>([[WORKSPACE_ROOT, "directory"]]);

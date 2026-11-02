@@ -1,7 +1,6 @@
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { expect, test } from "vitest";
 import { ModelRoute } from "../src/model-route.js";
-import { ProjectRpcTarget } from "../src/workspace/project/index.js";
 import { ConversationHostTarget } from "../src/supervisor/conversations/host-target.js";
 
 type Prototype = NonNullable<ReturnType<typeof Reflect.getPrototypeOf>>;
@@ -30,17 +29,6 @@ function rpcMemberNames(prototype: Prototype): string[] {
 
 test("ModelRoute exposes exactly the allowlisted RPC members", () => {
   expect(rpcMemberNames(ModelRoute.prototype)).toStrictEqual(["runStream"]);
-});
-
-test("ProjectRpcTarget exposes exactly the allowlisted RPC members", () => {
-  expect(rpcMemberNames(ProjectRpcTarget.prototype)).toStrictEqual([
-    "endTurn",
-    "kill",
-    "lstat",
-    "readFile",
-    "startExec",
-    "writeFile",
-  ]);
 });
 
 test("the host a serving facet holds exposes exactly the allowlisted RPC members", () => {

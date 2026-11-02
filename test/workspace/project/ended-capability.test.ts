@@ -28,7 +28,6 @@ function liveTarget(remainingMs: number) {
   const provider = new FakeProjectFilesystemProvider();
   provider.addFile("/workspace/kept.txt", encode("kept"));
   const execBackend = new FakeExecBackend();
-  const containerState = { generation: 0 };
   const touches = { count: 0 };
 
   const activity = {
@@ -40,11 +39,10 @@ function liveTarget(remainingMs: number) {
 
   const target = new ProjectRpcTarget(provider, new FakeProjectTransactions(), execBackend, {
     remainingMs,
-    containerState,
     activity,
   });
 
-  return { provider, execBackend, containerState, target, touches };
+  return { provider, execBackend, target, touches };
 }
 
 afterEach(() => {
@@ -92,19 +90,6 @@ test.each(Object.entries(LATE_CALLS))(
 
     await expect(call(target)).resolves.toEqual({ ok: false, error: { code: "turn-ended" } });
     expect(provider.nodes.has("/workspace/after-the-turn.txt")).toBe(false);
-    expect(execBackend.requests).toEqual([]);
-    expect(touches.count).toBe(0);
-  },
-);
-
-test.each(Object.entries(LATE_CALLS))(
-  "%s answers turn-ended, not container-restarted, after a container replacement",
-  async (_name, call) => {
-    const { execBackend, containerState, target, touches } = liveTarget(60_000);
-    await target.endTurn();
-    containerState.generation += 1;
-
-    await expect(call(target)).resolves.toEqual({ ok: false, error: { code: "turn-ended" } });
     expect(execBackend.requests).toEqual([]);
     expect(touches.count).toBe(0);
   },

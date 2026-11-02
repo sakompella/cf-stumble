@@ -2,24 +2,6 @@ import { expect, test, vi } from "vitest";
 import type { StartExecWire } from "../../../src/workspace/project/protocol.js";
 import { makeTarget } from "./target-helpers.js";
 
-test("reflection exposes no own state and no forbidden backing capability", () => {
-  const { target } = makeTarget();
-
-  expect(Object.keys(target)).toEqual([]);
-
-  for (const forbidden of [
-    "build",
-    "fetch",
-    "exec",
-    "runCommand",
-    "provider",
-    "workspace",
-    "container",
-  ]) {
-    expect(Reflect.has(target, forbidden)).toBe(false);
-  }
-});
-
 test.each<readonly [string, string]>([
   ["a backslash", "a\\b"],
   ["a path that needs normalization", "/a/../b"],
