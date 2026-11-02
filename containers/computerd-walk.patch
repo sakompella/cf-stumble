@@ -1,17 +1,17 @@
 diff --git a/packages/computerd/src/cli/computerd.ts b/packages/computerd/src/cli/computerd.ts
-index 5036db4..d087b91 100644
+index 1e66f8e..44f0f18 100644
 --- a/packages/computerd/src/cli/computerd.ts
 +++ b/packages/computerd/src/cli/computerd.ts
-@@ -21,7 +21,7 @@ import {
-   parseFuseMountMode,
-   resolveFuseBackend,
- } from "../fuse/index.js";
--import { mountShim, type ShimMount } from "../shim/index.js";
-+import { mountShim, parsePollMs, type ShimMount } from "../shim/index.js";
- import { installLogging } from "./logger.js";
+@@ -32,7 +32,7 @@ import {
+   resolveMountIgnoreConfig,
+   resolveStore,
+ } from "../fuse/index";
+-import { mountShim, type ShimMount } from "../shim/index";
++import { mountShim, parsePollMs, type ShimMount } from "../shim/index";
+ import { installLogging } from "./logger";
  
  // The compiled-in default port. esbuild's `define` substitutes the
-@@ -73,6 +73,24 @@ function parsePort(value: string | undefined): number {
+@@ -84,6 +84,24 @@ function parsePort(value: string | undefined): number {
    return port;
  }
  
@@ -36,7 +36,7 @@ index 5036db4..d087b91 100644
  function parseMountPoint(value: string | undefined): string {
    const mountPoint = value === undefined || value === "" ? DEFAULT_MOUNT_POINT : value;
    if (!isAbsolute(mountPoint)) {
-@@ -613,7 +631,11 @@ async function main(): Promise<void> {
+@@ -826,7 +844,11 @@ async function main(): Promise<void> {
      await mkdir(mountPoint, { recursive: true });
  
      if (backend.kind === "shim") {
@@ -48,29 +48,29 @@ index 5036db4..d087b91 100644
 +      shim = await mountShim({ vfs, mountPoint, ignore, pollIntervalMs });
        fuse = shim;
      } else {
-       fuse = await mountFuse({
+       // The local-only store is created eagerly so a permission or
 diff --git a/packages/computerd/src/shim/index.ts b/packages/computerd/src/shim/index.ts
-index 44c32ff..a47943e 100644
+index 1247dd4..8ccb280 100644
 --- a/packages/computerd/src/shim/index.ts
 +++ b/packages/computerd/src/shim/index.ts
 @@ -1,2 +1,2 @@
- export type { ShimMount } from "./shim.js";
--export { mountShim } from "./shim.js";
-+export { mountShim, parsePollMs } from "./shim.js";
+ export type { ShimMount } from "./shim";
+-export { mountShim } from "./shim";
++export { mountShim, parsePollMs } from "./shim";
 diff --git a/packages/computerd/src/shim/shim.test.ts b/packages/computerd/src/shim/shim.test.ts
-index f92e8ae..b6b0b0a 100644
+index d9a5b24..256a0e0 100644
 --- a/packages/computerd/src/shim/shim.test.ts
 +++ b/packages/computerd/src/shim/shim.test.ts
 @@ -4,7 +4,7 @@ import path from "node:path";
  import { expect, onTestFinished, test } from "vitest";
  
- import { createNodeVirtualFileSystem } from "../fuse/index.js";
--import { mountShim } from "./index.js";
-+import { mountShim, parsePollMs } from "./index.js";
+ import { createNodeVirtualFileSystem } from "../fuse/index";
+-import { mountShim } from "./index";
++import { mountShim, parsePollMs } from "./index";
  
  // Poll cadence for the assertions below. We pass the same value into
  // the shim so the disk -> VFS reconcile fires this often, and use a
-@@ -29,10 +29,15 @@ async function eventually(
+@@ -30,10 +30,15 @@ async function eventually(
    throw new Error("eventually(): condition never became true");
  }
  
@@ -88,7 +88,7 @@ index f92e8ae..b6b0b0a 100644
    onTestFinished(async () => {
      await shim.unmount();
      await fs.rm(mountPoint, { recursive: true, force: true });
-@@ -239,3 +244,138 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
+@@ -240,3 +245,138 @@ test("shim drops VFS writes outside the mount point", async (_ctx) => {
    expect(await fs.readFile(path.join(mountPoint, "repo", "a.txt"), "utf8")).toBe("alpha");
    await expect(fs.access(path.join(mountPoint, "outside.txt"))).rejects.toThrow(/ENOENT/);
  });
@@ -228,7 +228,7 @@ index f92e8ae..b6b0b0a 100644
 +  }
 +});
 diff --git a/packages/computerd/src/shim/shim.ts b/packages/computerd/src/shim/shim.ts
-index 16ab794..a3c0ad6 100644
+index 411728d..ba39ded 100644
 --- a/packages/computerd/src/shim/shim.ts
 +++ b/packages/computerd/src/shim/shim.ts
 @@ -8,7 +8,16 @@
@@ -264,7 +264,7 @@ index 16ab794..a3c0ad6 100644
  } from "node:fs/promises";
  import { dirname, join, posix } from "node:path";
 +import { isIgnored } from "@cloudflare/dofs";
- import type { NodeVirtualFileSystem } from "../fuse/vfs.js";
+ import type { NodeVirtualFileSystem } from "../fuse/vfs";
  
  export interface ShimMount {
 @@ -72,12 +85,18 @@ export interface MountShimOptions {

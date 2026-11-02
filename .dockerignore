@@ -5,4 +5,3 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !containers/computerd-walk.patch
-!containers/computerd-exec.patch

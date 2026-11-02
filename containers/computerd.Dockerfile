@@ -1,10 +1,9 @@
-FROM docker.io/library/node:22.22.3-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752 AS computerd-source
+FROM docker.io/library/node:22.23.4-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f AS computerd-source
 
-ARG DEBIAN_SNAPSHOT=20260610T000000Z
-ARG COMPUTER_COMMIT=12336475c9fd03f5280a4537a707797fc0131fbd
-ARG NODE_VERSION=v22.22.3
-ARG NODE_LINUX_X64_SHA256=2e5d13569282d016861fae7c8f935e741693c269101a5bebcf761a5376d1f99f
-ARG NODE_DARWIN_X64_SHA256=939beff36e3adf3f93c5a9078d559e53245b488d5d47c5faf9fa0f1d21ede54d
+ARG DEBIAN_SNAPSHOT=20261102T000000Z
+ARG COMPUTER_COMMIT=9f0ade40196a4ef95ddde4f2b75e1555d9dfeeb1
+ARG COMPUTERD_NODE_VERSION=v22.23.4
+ARG COMPUTERD_NODE_LINUX_X64_SHA256=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce
 
 RUN sed -i \
       -e "s#deb.debian.org/debian-security#snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
@@ -12,7 +11,8 @@ RUN sed -i \
       /etc/apt/sources.list.d/debian.sources \
  && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/10snapshot \
  && apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git xz-utils \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl git xz-utils g++ make python3 pkg-config libfuse3-dev \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /home/runner/work/computer/computer
@@ -27,17 +27,21 @@ RUN npm ci --no-audit --no-fund --ignore-scripts
 
 RUN mkdir -p .devbox/node-binaries \
  && cd .devbox/node-binaries \
- && curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz" \
- && curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-darwin-x64.tar.xz" \
- && printf '%s  %s\n' \
-      "$NODE_LINUX_X64_SHA256" "node-${NODE_VERSION}-linux-x64.tar.xz" \
-      "$NODE_DARWIN_X64_SHA256" "node-${NODE_VERSION}-darwin-x64.tar.xz" \
+ && curl -fsSLO "https://nodejs.org/dist/${COMPUTERD_NODE_VERSION}/node-${COMPUTERD_NODE_VERSION}-linux-x64.tar.xz" \
+ && echo "${COMPUTERD_NODE_LINUX_X64_SHA256}  node-${COMPUTERD_NODE_VERSION}-linux-x64.tar.xz" \
     | sha256sum -c - \
- && tar -xJf "node-${NODE_VERSION}-linux-x64.tar.xz" \
- && tar -xJf "node-${NODE_VERSION}-darwin-x64.tar.xz"
+ && tar -xJf "node-${COMPUTERD_NODE_VERSION}-linux-x64.tar.xz"
+
+RUN mkdir /build \
+ && tar -C packages/computerd/vendor/fuse-napi --exclude=./build --exclude=./node_modules -cf - . \
+    | tar -C /build -xf - \
+ && cd /build \
+ && npm install --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error \
+ && npx --yes node-gyp@11 rebuild --nodedir=/usr/local --loglevel=error
+ENV COMPUTERD_FUSE_ADDON=/build/build/Release/fuse.node
 
 FROM computerd-source AS computerd-upstream
-ARG UPSTREAM_COMPUTERD_SHA256=5d1a601f337004d1a9b43e243a65b7168832c900738b6d66df120ea77b6dc24c
+ARG UPSTREAM_COMPUTERD_SHA256=4d70cdb2857709f6d8b99b4472f7cb8a8fdfe8696774a0183d70f65d388324ea
 RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare/computerd \
  && npm run build:bin -w @cloudflare/computerd \
  && printf '%s  %s\n' "$UPSTREAM_COMPUTERD_SHA256" artifacts/computerd/computerd-linux-x64 \
@@ -47,12 +51,9 @@ FROM computerd-source AS computerd
 COPY containers/computerd-walk.patch /tmp/computerd-walk.patch
 RUN git apply --check /tmp/computerd-walk.patch \
  && git apply /tmp/computerd-walk.patch
-COPY containers/computerd-exec.patch /tmp/computerd-exec.patch
-RUN git apply --check /tmp/computerd-exec.patch \
- && git apply /tmp/computerd-exec.patch
 RUN npm run build -w @cloudflare/dofs -w @cloudflare/computer-rpc -w @cloudflare/computerd \
  && npm run typecheck -w @cloudflare/computerd \
- && (cd packages/computerd && npx vitest run src/shim src/exec/runner.test.ts) \
+ && (cd packages/computerd && npx vitest run src/shim) \
  && npm run build:bin -w @cloudflare/computerd \
  && install -D -m 0755 artifacts/computerd/computerd-linux-x64 /usr/local/bin/computerd
 
