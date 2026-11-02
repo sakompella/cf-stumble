@@ -10,11 +10,14 @@ import {
   FLOCK_STAND_IN,
   STUB_GIT,
   scratchDirectory,
+  systemToolsDirectory,
   underScratch,
   writeExecutable,
 } from "./planned-shell-fixture.js";
 
 const scratch = scratchDirectory("cf-stumble-removal-lock-");
+
+const systemTools = systemToolsDirectory(scratch);
 
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
@@ -24,13 +27,15 @@ const HELD_REMOVAL_RM = `#!/bin/sh
 if [ "$2" = "--" ] && [ -n "$STUB_HOLD_RM" ]; then
   (
     : > "$STUB_DIR/rm-started"
-    while [ ! -e "$STUB_DIR/rm-release" ]; do /bin/sleep 0.05; done
-    /bin/rm "$@"
+    while [ ! -e "$STUB_DIR/rm-release" ]; do sleep 0.05; done
+    PATH="\${PATH#*:}"
+    rm "$@"
   ) &
   wait
   exit 0
 fi
-exec /bin/rm "$@"
+PATH="\${PATH#*:}"
+exec rm "$@"
 `;
 
 let runCount = 0;
@@ -63,7 +68,7 @@ function prepare(): Run {
 function start(run: Run, source: string, holdRemoval = false): ChildProcess {
   return spawn("/bin/sh", ["-c", underScratch(source, run.root)], {
     env: {
-      PATH: `${run.bin}:/usr/bin:/bin`,
+      PATH: `${run.bin}:${systemTools}`,
       STUB_DIR: run.root,
       STUB_REMOTE: sampleProjectOne.repositoryUrl,
       STUB_HOLD_RM: holdRemoval ? "1" : "",
@@ -109,7 +114,7 @@ test("a removal waits while another process holds the project's lock", async () 
       'exec 9>"$lock"',
       "flock 9",
       `: > '${held}'`,
-      `while [ ! -e '${released}' ]; do /bin/sleep 0.05; done`,
+      `while [ ! -e '${released}' ]; do sleep 0.05; done`,
     ].join("\n"),
   );
 

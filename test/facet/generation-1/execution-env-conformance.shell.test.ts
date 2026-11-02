@@ -18,7 +18,7 @@ function withShellDirectories(env: ExecutionEnv): ExecutionEnv {
   return {
     ...env,
     createDir: (path) => shellStep(env, ["mkdir", "-p", path]),
-    renameFile: (source, destination) => shellStep(env, ["mv", "-f", "-T", source, destination]),
+    renameFile: (source, destination) => shellStep(env, ["mv", "-f", source, destination]),
   };
 }
 
