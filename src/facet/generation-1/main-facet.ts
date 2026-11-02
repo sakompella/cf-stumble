@@ -7,7 +7,11 @@ import {
   type ConversationId,
 } from "@earendil-works/pi-durable";
 import { FACET_COMPATIBILITY } from "../../facet-compatibility.js";
-import type { ConversationFacet, ConversationHost } from "../conversation-protocol.js";
+import type {
+  ConversationFacet,
+  ConversationHost,
+  GenerationControl,
+} from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
 import { openSession, type Session } from "./open-session.js";
 import { ROUTE_MODEL } from "./route-provider.js";
@@ -18,7 +22,7 @@ function isConversationId(value: number): value is ConversationId {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
-type ReceivedHost = ConversationHost & Readonly<{ dup(): ConversationHost }>;
+type Received<T> = T & Readonly<{ dup(): T }>;
 
 const encoder = new TextEncoder();
 
@@ -36,11 +40,15 @@ export class MainFacet
     return FACET_COMPATIBILITY;
   }
 
-  async attach(host: ReceivedHost): Promise<void> {
+  async attach(
+    host: Received<ConversationHost>,
+    generations?: Received<GenerationControl>,
+  ): Promise<void> {
     if (this.#session === undefined) {
       const opening = openSession({
         storage: this.ctx.storage,
         host: host.dup(),
+        generations: generations?.dup(),
         model: this.env.MODEL,
         abort: (reason) => {
           this.ctx.abort(reason);

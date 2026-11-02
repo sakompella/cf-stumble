@@ -43,3 +43,16 @@ export type GenerationOperations = Readonly<{
   prepareGeneration(label: GenerationLabel): Promise<StartupCheckResult>;
   controlGeneration(command: ActivationCommand): Answer<GenerationControlResult>;
 }>;
+
+type GenerationControlCommand = Readonly<{
+  kind: "activate" | "rollback";
+  label: number;
+  observedEpoch: number;
+}>;
+
+export interface GenerationControl {
+  generationStatus(): Promise<GenerationStatusView>;
+  submitGeneration(harnessCommit: string): Promise<Submission>;
+  prepareGeneration(label: number): Promise<StartupCheckResult>;
+  controlGeneration(command: GenerationControlCommand): Promise<GenerationControlResult>;
+}

@@ -47,8 +47,10 @@ export class ServingConversations {
   }
 
   replaceFacet(): void {
-    this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
-    this.endWorkspaces();
+    setTimeout(() => {
+      this.#ports.ctx.facets.abort(SERVING_FACET_NAME, "another generation serves");
+      this.endWorkspaces();
+    }, 0);
   }
 
   running(): boolean {

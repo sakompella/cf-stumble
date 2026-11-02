@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import type { ConversationHost } from "../conversation-protocol.js";
+import type { ConversationHost, GenerationControl } from "../conversation-protocol.js";
 import type { ModelCapability } from "./capabilities.js";
 import { computerEnv } from "./computer-env.js";
 import { CfStumblePrompt } from "./prompt.js";
@@ -31,12 +31,13 @@ export type Session = Readonly<{ harness: Harness; host: ConversationHost }>;
 export type SessionInput = Readonly<{
   storage: DurableObjectStorage;
   host: ConversationHost;
+  generations: GenerationControl | undefined;
   model: ModelCapability;
   abort(reason: string): void;
 }>;
 
 export async function openSession(input: SessionInput): Promise<Session> {
-  const { host } = input;
+  const { host, generations } = input;
   const models = createModels();
   models.setProvider(routeProvider(input.model));
   const registry = createRegistry();
@@ -52,7 +53,7 @@ export async function openSession(input: SessionInput): Promise<Session> {
       env: ({ conversationId, cwd }, invocation) =>
         cwd === undefined
           ? undefined
-          : computerEnv(host, String(conversationId), cwd, invocation.abortSignal),
+          : computerEnv(host, generations, String(conversationId), cwd, invocation.abortSignal),
       onWake: (wake) => {
         void host.arm(wake).catch(() => {
           input.abort("the Supervisor did not arm a wake");

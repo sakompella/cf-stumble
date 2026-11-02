@@ -2,12 +2,13 @@ import { RpcTarget } from "cloudflare:workers";
 import type { Wake } from "@earendil-works/pi-durable";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { ConversationHost, GenerationHost } from "../../facet/index.js";
+import type { ConversationHost } from "../../facet/index.js";
 import {
   GenerationControlRequest,
   GenerationControlTarget,
   GenerationSubmissionRequest,
   generationStatusView,
+  type GenerationControl,
   type GenerationOperations,
   type GenerationStatusView,
 } from "../../generation-requests.js";
@@ -86,7 +87,7 @@ function whenValid<I, A>(input: Option.Option<I>, call: (value: I) => A | Promis
   });
 }
 
-export class GenerationHostTarget extends RpcTarget implements GenerationHost {
+export class GenerationHostTarget extends RpcTarget implements GenerationControl {
   readonly #operations: GenerationOperations;
 
   constructor(operations: GenerationOperations) {

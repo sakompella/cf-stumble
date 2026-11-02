@@ -1,21 +1,8 @@
 import type { Wake } from "@earendil-works/pi-durable";
-import type { GenerationStatusView } from "../generation-requests.js";
-import type { GenerationControlResult, Submission } from "../supervisor/generations.js";
-import type { StartupCheckResult } from "../supervisor/startup-check/index.js";
+import type { GenerationControl } from "../generation-requests.js";
 import type { ProjectRpcTargetContract } from "../workspace/project/protocol.js";
 
-type GenerationControlCommand = Readonly<{
-  kind: "activate" | "rollback";
-  label: number;
-  observedEpoch: number;
-}>;
-
-export interface GenerationHost {
-  generationStatus(): Promise<GenerationStatusView>;
-  submitGeneration(harnessCommit: string): Promise<Submission>;
-  prepareGeneration(label: number): Promise<StartupCheckResult>;
-  controlGeneration(command: GenerationControlCommand): Promise<GenerationControlResult>;
-}
+export type { GenerationControl };
 
 export interface ConversationHost {
   arm(wake: Wake): Promise<void>;
@@ -25,7 +12,7 @@ export interface ConversationHost {
 
 export interface ConversationFacet {
   compatibility(): string;
-  attach(host: ConversationHost, generations?: GenerationHost): Promise<void>;
+  attach(host: ConversationHost, generations?: GenerationControl): Promise<void>;
   createConversation(cwd: string): Promise<string>;
   submit(conversationId: string, content: string, requestId: string): Promise<number>;
   events(conversationId: string): Promise<ReadableStream<Uint8Array>>;
