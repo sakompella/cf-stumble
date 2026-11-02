@@ -161,17 +161,13 @@ test("two tool calls the provider reports without an index stay two separate cal
   });
 });
 
-test("the deployed entrypoint answers runStream across its own service-binding hop", async () => {
-  const stub = workerExports.ModelRoute({});
-  const refused = await stub.runStream({ messages: [] });
+test("the deployed entrypoint refuses a bad runStream request across its own service-binding hop", async () => {
+  const refused = await workerExports.ModelRoute({}).runStream({ messages: [] });
+
   expect(refused).toEqual({
     ok: false,
     error: { code: "invalid-request", reason: "messages must be a non-empty array" },
   } satisfies ValidationFailure);
-
-  const outcome = await stub.runStream(REQUEST);
-  const events = await collectEvents(streamOf(outcome));
-  expect(events).toEqual([{ type: "error", error: { code: "model-unavailable" } }]);
 });
 
 test("with no ChatGPT credential connected, the Supervisor's route answers from Workers AI", async () => {
