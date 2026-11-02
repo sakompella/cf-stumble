@@ -5,22 +5,6 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": [
-    "build-loaded-execution-env-fixture.mts",
-    "build-generation-1.mts",
-    "build-owner-page.mts",
-    "bundle-budgets.test.ts",
-    "foldkit-lint.test.ts",
-    "json.mts",
-    "owner-script.test.ts",
-    "module-map-build.mts",
-    "no-comments.test.ts",
-    "verify-computer-tarball.mts",
-    "verify-project-protocol.mts",
-    "browser-harness/**/*.mts",
-    "playwright/**/*.mts",
-    "ops-check/**/*.mts",
-    "ops-check/**/*.ts",
-    "oxlint/cf-stumble/**/*.ts"
-  ]
+  "include": ["**/*.ts", "**/*.mts"],
+  "exclude": ["oxlint/anti-slop"]
 }
