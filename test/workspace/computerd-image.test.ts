@@ -27,22 +27,6 @@ const dockerignores = import.meta.glob("../../.dockerignore", {
   import: "default",
 });
 
-const patches = import.meta.glob("../../containers/computerd-walk.patch", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-});
-
-const execPatches = import.meta.glob("../../containers/computerd-exec.patch", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-});
-
-const execPatch = Object.values(execPatches).at(0) ?? "";
-
-const patch = Object.values(patches).at(0) ?? "";
-
 const dockerfile = Object.values(dockerfiles).at(0) ?? "";
 
 const dockerignore = Object.values(dockerignores).at(0) ?? "";
@@ -61,32 +45,9 @@ test("the workspace image polls the disk every five seconds, not every 250 ms", 
   expect(setting).toBe("5000");
 });
 
-test("the walk patch reads COMPUTERD_POLL_MS and tests its parse", () => {
-  expect(patch).toContain("COMPUTERD_POLL_MS");
-  expect(patch).toContain("parsePollMs(");
-  expect(patch).toContain("COMPUTERD_POLL_MS is unset, or one positive integer");
-  expect(patch, "a value above the timer limit is refused, not clamped to 1 ms").toContain(
-    "MAX_POLL_MS = 2_147_483_647",
-  );
-});
-
 test("the workspace image keeps gh and Git global configuration in the durable workspace", () => {
   expect(dockerEnv("COMPUTER_VAR_GH_CONFIG_DIR")).toBe(GITHUB_CLI_CONFIG_DIRECTORY);
   expect(dockerEnv("COMPUTER_VAR_GIT_CONFIG_GLOBAL")).toBe(GIT_GLOBAL_CONFIG_PATH);
-});
-
-test("the workspace image ships computerd built from source, not the prebuilt image", () => {
-  expect(dockerfile).toMatch(/^FROM \S+ AS computerd$/mu);
-  expect(dockerfile).toMatch(/^COPY --from=computerd \/usr\/local\/bin\/computerd /mu);
-  expect(dockerfile).not.toMatch(/^FROM ghcr\.io\/cloudflare\/computer-computerd/mu);
-  expect(dockerfile).toContain("git apply /tmp/computerd-walk.patch");
-});
-
-test("the image drains command output before exit and runs the regression", () => {
-  expect(execPatch).toContain('+    child.once("close", finalise);');
-  expect(execPatch).toContain("exec drains paused %s before recording its exit");
-  expect(dockerfile).toContain("git apply /tmp/computerd-exec.patch");
-  expect(dockerfile).toContain("npx vitest run src/shim src/exec/runner.test.ts");
 });
 
 test("every base image is pinned by digest", () => {

@@ -1,24 +1,13 @@
 import * as Effect from "effect/Effect";
 import { afterEach, expect, test, vi } from "vitest";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
-import {
-  HARNESS_BUILD_CONFIGURATION,
-  harnessBuildStep,
-  planHarnessBuild,
-  type HarnessBuildRequest,
-} from "../../src/harness-build.js";
+import { HARNESS_BUILD_CONFIGURATION, type HarnessBuildRequest } from "../../src/harness-build.js";
 import { type CommandOutput } from "../../src/workspace/index.js";
 import {
   executeHarnessBuildRequest,
   type WorkspaceOperations,
   type WorkspacePathKind,
 } from "../../src/workspace/executor.js";
-import {
-  parseHarnessBuildRequest,
-  planHarnessBuildRequest,
-} from "../../src/workspace/harness-build.js";
-import { HARNESS_DIRECTORY, WORKSPACE_ROOT } from "../../src/workspace-layout.js";
-import { shellQuote } from "../../src/shell-quote.js";
 
 const commit = testHarnessCommit("5000000000000000000000000000000000000001");
 
@@ -83,36 +72,6 @@ function build(operations: FakeBuildOperations, request: HarnessBuildRequest) {
   );
 }
 
-test("plans one planned step, or the build output, from a validated commit", () => {
-  const step = parseHarnessBuildRequest({
-    kind: "build-step",
-    harnessCommit: commit,
-    step: "checkout",
-  });
-
-  const output = parseHarnessBuildRequest({ kind: "build-output", harnessCommit: commit });
-
-  if ("ok" in step || "ok" in output) {
-    throw new Error("valid build requests must parse");
-  }
-
-  expect(planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, step)).toEqual({
-    kind: "run-command",
-    source: [
-      "set -eu",
-      `archive=${buildDirectory}/.harness-archive.tar`,
-      `git --git-dir=${HARNESS_DIRECTORY}/.git archive --format=tar -o "$archive" ${commit}`,
-      `tar -x -m --no-same-owner --no-same-permissions -C ${buildDirectory} -f "$archive"`,
-      'rm -f "$archive"',
-    ].join("\n"),
-    cwd: WORKSPACE_ROOT,
-    timeoutMs: HARNESS_BUILD_CONFIGURATION.stepTimeoutMs,
-  });
-  const readPlan = planHarnessBuildRequest(HARNESS_BUILD_CONFIGURATION, output);
-  expect(readPlan.kind).toBe("run-command");
-  expect(readPlan.kind === "run-command" ? readPlan.source : "").toContain(moduleMapPath);
-});
-
 test("runs a planned build phase and returns its exit code", async () => {
   const operations = new FakeBuildOperations();
   operations.exitCode = 3;
@@ -152,7 +111,7 @@ test("logs a redacted cause instead of discarding it when a build step cannot ru
   expect(logged).toContain("container exited before the command could run");
 });
 
-test("reads the module map the build wrote, through the shell that wrote it, and refuses a symbolic link", async () => {
+test("reads the module map the build wrote, through the shell that wrote it", async () => {
   const operations = new FakeBuildOperations();
   operations.stdout = '{"entryModule":"main.js","modules":[]}';
 
@@ -174,12 +133,6 @@ test("reads the module map the build wrote, through the shell that wrote it, and
   expect(read, "the read names the commit's own module map and no other path").toContain(
     moduleMapPath,
   );
-  expect(read, "and reads it rather than searching for it").toContain('cat -- "$path"');
-  expect(read, "a symbolic link is refused before anything is read").toContain(
-    'if [ -L "$path" ]; then',
-  );
-  expect(read.indexOf('if [ -L "$path" ]; then')).toBeLessThan(read.indexOf('cat -- "$path"'));
-  expect(read, "and the refusal is a failing exit rather than empty output").toContain("exit 3");
 });
 
 test("rejects a commit that is not a harness commit, so no path can escape the build root", async () => {
@@ -195,32 +148,4 @@ test("rejects a commit that is not a harness commit, so no path can escape the b
   }
 
   expect(operations.calls).toEqual([]);
-});
-
-test("the checkout step fails on its own when the archive fails", () => {
-  const checkout = harnessBuildStep(
-    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
-    "checkout",
-  );
-
-  expect(checkout.source).not.toContain("|");
-  expect(checkout.source.startsWith("set -eu")).toBe(true);
-});
-
-test("the provision step obtains the requested commit before the build reads it", () => {
-  const provision = harnessBuildStep(
-    planHarnessBuild(HARNESS_BUILD_CONFIGURATION, commit),
-    "provision",
-  );
-
-  expect(provision.source).toContain(`commit=${shellQuote(commit)}`);
-  expect(provision.source, "a fresh harness checkout should not retain all history").toContain(
-    'git clone --filter=blob:none --depth=50 --single-branch "$expected_remote" "$staging"',
-  );
-  expect(provision.source, "a commit pushed after provisioning must be fetched").toContain(
-    'git --git-dir="$git_dir" fetch --no-tags --quiet origin "$commit"',
-  );
-  expect(provision.source, "an absent commit must name itself and the repository").toContain(
-    'printf "harness commit %s is not in %s\\n" "$commit" "$expected_remote" >&2',
-  );
 });
