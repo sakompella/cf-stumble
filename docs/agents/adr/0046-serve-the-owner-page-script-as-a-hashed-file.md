@@ -25,9 +25,18 @@ file it is downloaded once per release.
   `content-security-policy: default-src 'none'; frame-ancestors 'none'`. `public` is safe because
   the script holds no identity, credential, or owner data: every owner receives the same bytes,
   built from the repository.
-- The page keeps `cache-control: no-store` and its per-response nonce, which now admits only the
-  inline stylesheet. Its policy is `script-src 'self'`, and nothing in it allows `'unsafe-inline'`
-  or `'unsafe-eval'`. Foldkit's optional Schema JIT compiler needs eval and stays off.
+- The page keeps `cache-control: no-store` and its per-response nonce, which admits the inline
+  stylesheet and the scripts Cloudflare injects (below). Its policy is `script-src 'self'` plus that
+  nonce plus `https://static.cloudflareinsights.com/beacon.min.js/`, and nothing in it allows
+  `'unsafe-inline'` or `'unsafe-eval'`. Foldkit's optional Schema JIT compiler needs eval and stays off.
+
+**Scripts Cloudflare injects.** The zone's JavaScript Detections add an inline script to every HTML
+response. It carries the request's ray ID, so a hash cannot name it. Cloudflare reads a nonce from
+the `script-src` of the response's policy and stamps it on that script, so the page's one nonce
+covers it. The Web Analytics beacon loads from `static.cloudflareinsights.com/beacon.min.js/<version>`
+and reports to this origin's `/cdn-cgi/rum`, which `connect-src 'self'` already admits. The source
+ends in a slash so that it matches the versioned path. The page serves its favicon at `/favicon.svg`
+from its own origin.
 
 `script-src 'self'` also admits any script the active generation serves on this origin. The page
 cannot be made to load one, because it creates no script element and renders model and repository

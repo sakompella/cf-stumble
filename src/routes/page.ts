@@ -1,4 +1,9 @@
-import { OWNER_PAGE_SCRIPT_FILE, ownerPageHtml } from "../page/index.js";
+import {
+  OWNER_PAGE_FAVICON,
+  OWNER_PAGE_SCRIPT_FILE,
+  ownerPageHtml,
+  ownerPagePolicy,
+} from "../page/index.js";
 
 function ownerPage(nonce: string): Response {
   return new Response(ownerPageHtml(nonce), {
@@ -6,10 +11,7 @@ function ownerPage(nonce: string): Response {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-      "content-security-policy":
-        `default-src 'none'; connect-src 'self'; img-src 'self'; ` +
-        `style-src 'nonce-${nonce}'; script-src 'self'; ` +
-        `form-action 'none'; base-uri 'none'; frame-ancestors 'none'`,
+      "content-security-policy": ownerPagePolicy(nonce),
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
     },
@@ -29,6 +31,18 @@ function ownerPageScript(): Response {
   });
 }
 
+function ownerPageFavicon(): Response {
+  return new Response(OWNER_PAGE_FAVICON.source, {
+    status: 200,
+    headers: {
+      "content-type": "image/svg+xml",
+      "cache-control": "public, max-age=86400",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
 function isOwnerPageScriptRequest(request: Request): boolean {
   return request.method === "GET" && new URL(request.url).pathname === OWNER_PAGE_SCRIPT_FILE.path;
 }
@@ -41,7 +55,16 @@ export function ownerPageResponse(
     return ownerPageScript();
   }
 
-  return request.method === "GET" && new URL(request.url).pathname === "/"
-    ? ownerPage(nonce)
-    : undefined;
+  if (request.method !== "GET") {
+    return undefined;
+  }
+
+  switch (new URL(request.url).pathname) {
+    case "/":
+      return ownerPage(nonce);
+    case OWNER_PAGE_FAVICON.path:
+      return ownerPageFavicon();
+    default:
+      return undefined;
+  }
 }

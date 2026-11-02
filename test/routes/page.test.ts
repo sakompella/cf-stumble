@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { expect, test } from "vitest";
-import { OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
+import { OWNER_PAGE_FAVICON, OWNER_PAGE_SCRIPT_FILE } from "../../src/page/index.js";
 import { OWNER_PAGE_IDS } from "../../src/page/element-ids.js";
 import worker from "../../src/worker.js";
 
@@ -38,15 +38,20 @@ function directivesOf(policy: string): ReadonlyMap<string, readonly string[]> {
   );
 }
 
-test("the page policy admits its own style and its same-origin script, and no inline code", async () => {
+test("the page policy admits its own style and scripts, Cloudflare's beacon, and no unsafe code", async () => {
   const response = await pageFetch("/", BROWSER_ACCEPT);
   const policy = directivesOf(response.headers.get("content-security-policy") ?? "");
   const body = await response.text();
   const [styleSource] = policy.get("style-src") ?? [];
   const nonce = /^'nonce-(.+)'$/u.exec(styleSource ?? "")?.[1];
 
-  expect(policy.get("script-src")).toEqual(["'self'"]);
   expect(policy.get("default-src")).toEqual(["'none'"]);
+  expect(policy.get("connect-src")).toEqual(["'self'"]);
+  expect(policy.get("script-src")).toEqual([
+    "'self'",
+    `'nonce-${nonce ?? ""}'`,
+    "https://static.cloudflareinsights.com/beacon.min.js/",
+  ]);
   expect([...policy.values()].flat().filter((source) => source.includes("unsafe-"))).toEqual([]);
   expect(nonce).toBeDefined();
   expect(body).toContain(`<style nonce="${nonce ?? ""}">`);
@@ -71,6 +76,20 @@ test("the page's script is kept by the browser only because its path derives fro
   expect(source).toBe(OWNER_PAGE_SCRIPT_FILE.source);
   expect(pathHash).not.toBe("");
   expect(digestHex.startsWith(pathHash)).toBe(true);
+});
+
+test("the favicon is served from the page's own origin, which its image policy admits", async () => {
+  const page = await pageFetch("/", BROWSER_ACCEPT);
+  const policy = directivesOf(page.headers.get("content-security-policy") ?? "");
+  const href = /<link rel="icon"[^>]*href="([^"]+)"/u.exec(await page.text())?.[1] ?? "";
+
+  const response = await pageFetch(href, "image/svg+xml,*/*");
+
+  expect(policy.get("img-src")).toContain("'self'");
+  expect(href).toBe(OWNER_PAGE_FAVICON.path);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("image/svg+xml");
+  expect(await response.text()).toBe(OWNER_PAGE_FAVICON.source);
 });
 
 test("a path or method the Worker does not own answers 404", async () => {
