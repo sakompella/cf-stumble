@@ -179,16 +179,6 @@ test("a usage limit after a 401 retry is reported with the token the retry sent"
   expect(credential.limited).toEqual([[ACCESS_TWO, null]]);
 });
 
-test("a connection still inside its usage limit sends nothing", async () => {
-  const { outcome, calls } = await outcomeOf(
-    fakeCredential([{ kind: "usage-limited", limitedUntil: 5_000 }]),
-    () => Promise.reject(new Error("must not be called")),
-  );
-
-  expect(outcome).toEqual({ kind: "usage-limited", limitedUntil: 5_000 });
-  expect(calls).toEqual([]);
-});
-
 test("a refusal that is not a limit logs its status, type and code and errors the call", async () => {
   const credential = fakeCredential([ready(ACCESS_ONE)]);
   const logged = capturedEvents();

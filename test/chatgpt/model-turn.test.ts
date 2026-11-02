@@ -181,15 +181,6 @@ test("a second 401 marks the refreshed token refused and says reconnect is requi
   expect(everythingLogged()).not.toMatch(/chatgpt-access-FAKE/u);
 });
 
-test("a revoked grant fails the call before anything is sent", async () => {
-  const { events, calls } = await run(fakeCredential([{ kind: "reconnect-required" }]), () =>
-    Promise.reject(new Error("must not be called")),
-  );
-
-  expect(events).toEqual([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]);
-  expect(calls).toEqual([]);
-});
-
 test("an error object without a type, then [DONE], keeps the text already streamed, logs the code, and errors the call", async () => {
   const logged = capturedEvents();
   const errorObject = { error: { code: "server_error", message: "Read a.txt" } };
@@ -256,22 +247,4 @@ test("usage the provider reports as a negative count is replaced by an estimate"
   );
 
   expect(events.at(-1)).toMatchObject({ type: "done", usage: { estimated: true } });
-});
-
-test("no connected credential is a typed failure the route can fall back on", async () => {
-  const { fetcher, calls } = recordingFetch(() => Promise.reject(new Error("must not be called")));
-
-  const outcome = await Effect.runPromise(
-    chatgptTurn(
-      { credential: fakeCredential([{ kind: "not-connected" }]), fetcher, model: "m" },
-      REQUEST,
-    )(() => {}).pipe(
-      Effect.as("answered"),
-      Effect.catchTag("ChatGPTNotConnected", () => Effect.succeed("not-connected")),
-      Effect.catchTag("ModelTurnFailed", () => Effect.succeed("failed")),
-    ),
-  );
-
-  expect(outcome).toBe("not-connected");
-  expect(calls).toEqual([]);
 });

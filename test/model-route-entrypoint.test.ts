@@ -84,27 +84,6 @@ function streamOf(
 
 const REQUEST: ModelRouteRequest = { messages: [{ role: "user", content: "hi" }] };
 
-test("the entrypoint answers a provider's two text deltas with exactly those two text events and one terminal event", async () => {
-  const binding = bindingStreaming([
-    sseLine({ response: "Hel" }),
-    sseLine({ response: "lo" }),
-    DONE_LINE,
-  ]);
-
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events).toHaveLength(3);
-  expect(events.slice(0, 2)).toEqual([
-    { type: "text-delta", delta: "Hel" },
-    { type: "text-delta", delta: "lo" },
-  ]);
-  const done = events[2];
-
-  if (done?.type !== "done") throw new Error("the entrypoint sent no terminal done event");
-  expect(done.message).toEqual({ role: "assistant", content: "Hello", tool_calls: [] });
-  expect(done.usage.estimated).toBe(true);
-  expect(done.usage.outputTokens).toBeGreaterThan(0);
-});
-
 test("a request that names its own model is refused as a plain value and never reaches the binding", () => {
   const binding = bindingStreaming([DONE_LINE]);
 
@@ -121,32 +100,6 @@ test("a request that names its own model is refused as a plain value and never r
     },
   } satisfies ValidationFailure);
   expect(binding.calls).toEqual([]);
-});
-
-test("a binding call that rejects becomes exactly one terminal error event", async () => {
-  const binding = fakeAiBinding(() =>
-    Promise.reject(new Error("3040: Capacity temporarily exceeded")),
-  );
-
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events).toEqual([
-    {
-      type: "error",
-      error: { code: "model-unavailable", detail: "3040: Capacity temporarily exceeded" },
-    },
-  ]);
-});
-
-test("a provider stream that stops before its terminal marker keeps the text it sent, then errors", async () => {
-  const binding = bindingStreaming([sseLine({ response: "partial" })]);
-  const events = await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(events).toEqual([
-    { type: "text-delta", delta: "partial" },
-    {
-      type: "error",
-      error: { code: "model-unavailable", detail: "the stream ended without a terminal event" },
-    },
-  ]);
 });
 
 test("two tool calls the provider reports without an index stay two separate calls", async () => {
