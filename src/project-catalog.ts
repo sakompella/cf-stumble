@@ -22,7 +22,7 @@ export type Project = Readonly<{
 
 export type ProjectCatalog = readonly Project[];
 
-export type ProjectConfiguration = Readonly<{
+type ProjectConfiguration = Readonly<{
   id: string;
   displayName: string;
   repositoryUrl: string;

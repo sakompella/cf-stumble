@@ -26,7 +26,6 @@ export type ProjectApiSupervisor = Readonly<{
 
 const CONNECT_STATUS = {
   "invalid-repository-url": 400,
-  "project-id-conflict": 409,
   "repository-not-accessible": 403,
   "repository-too-large": 413,
   "workspace-unavailable": 503,

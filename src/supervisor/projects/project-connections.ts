@@ -37,7 +37,6 @@ type ReleaseProject = (projectId: ProjectId) => boolean;
 type ConnectRepositoryProblem = Readonly<{
   code:
     | "invalid-repository-url"
-    | "project-id-conflict"
     | "repository-not-accessible"
     | "workspace-unavailable"
     | "tooling-missing"

@@ -58,7 +58,7 @@ test("connecting the same repository again converges on the project already ther
         repositoryUrl: "https://github.com/Sample/Repo-1",
       },
     });
-    expect(projects.list()).toHaveLength(1);
+    expect(projects.catalog()).toHaveLength(1);
   });
 });
 
@@ -105,7 +105,7 @@ test("connects repositories that differ only in punctuation as separate projects
       });
     }
 
-    expect(projects.list().map((project) => [project.id, project.repositoryUrl])).toEqual([
+    expect(projects.catalog().map((project) => [project.id, project.repositoryUrl])).toEqual([
       ["sample-my-repo", urls[0]],
       ["sample-my-repo--2d", urls[1]],
       ["sample-my-repo--2u", urls[2]],
@@ -124,7 +124,7 @@ test("converges on one project when the same repository is written in another ca
       alreadyConnected: true,
       project: { repositoryUrl: "https://github.com/Sample/My.Repo" },
     });
-    expect(projects.list()).toHaveLength(1);
+    expect(projects.catalog()).toHaveLength(1);
   });
 });
 
@@ -136,7 +136,7 @@ test.each(["http://github.com/sample/repo", ""])(
         ok: false,
         problem: { code: "invalid-repository-url" },
       });
-      expect(projects.list()).toEqual([]);
+      expect(projects.catalog()).toEqual([]);
     });
   },
 );
@@ -145,11 +145,10 @@ test("names a project after its repository when nobody chooses a name", async ()
   await withProjects("catalog-default-name", (projects) => {
     projects.connect({ repositoryUrl: "https://github.com/sample/repo-1", displayName: "  " }, NOW);
 
-    expect(projects.list()[0]).toEqual({
+    expect(projects.catalog()[0]).toEqual({
       id: "sample-repo-1",
       displayName: "sample/repo-1",
       repositoryUrl: "https://github.com/sample/repo-1",
-      connectedAt: NOW,
     });
   });
 });

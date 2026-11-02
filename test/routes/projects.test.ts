@@ -80,7 +80,6 @@ test("refuses a connect body whose displayName is null before it reaches the Sup
 
 test.each([
   ["invalid-repository-url", 400],
-  ["project-id-conflict", 409],
   ["repository-not-accessible", 403],
   ["repository-too-large", 413],
   ["tooling-missing", 503],

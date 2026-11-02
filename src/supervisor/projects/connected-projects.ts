@@ -1,32 +1,17 @@
 import {
   canonicalRepositoryUrl,
   defaultProjectDisplayName,
-  parseProjectCatalog,
   projectIdForRepository,
   type Project,
   type ProjectCatalog,
   type ProjectId,
   type PublicRepositoryUrl,
 } from "../../project-catalog.js";
-import { HARNESS_PROJECT_ID } from "../../selectable-projects.js";
 
-type ConnectedProject = Readonly<{
-  id: ProjectId;
-  displayName: string;
-  repositoryUrl: PublicRepositoryUrl;
-  connectedAt: number;
-}>;
+const PROJECT_COLUMNS =
+  "project_id AS id, display_name AS displayName, repository_url AS repositoryUrl";
 
-type ConnectedProjectRow = {
-  readonly project_id: string;
-  readonly display_name: string;
-  readonly repository_url: string;
-  readonly connected_at: number;
-};
-
-type ConnectProjectProblem = Readonly<{
-  code: "invalid-repository-url" | "project-id-conflict";
-}>;
+type ConnectProjectProblem = Readonly<{ code: "invalid-repository-url" }>;
 
 type ConnectProjectResult =
   | Readonly<{ ok: true; project: Project; alreadyConnected: boolean }>
@@ -47,24 +32,6 @@ function chosenDisplayName(value: string | undefined, repositoryUrl: PublicRepos
     : trimmed.slice(0, DISPLAY_NAME_LIMIT);
 }
 
-function projectFromRow(row: ConnectedProjectRow): ConnectedProject {
-  const catalog = parseProjectCatalog([
-    {
-      id: row.project_id,
-      displayName: row.display_name,
-      repositoryUrl: row.repository_url,
-    },
-  ]);
-
-  const project = catalog?.[0];
-
-  if (project === undefined) {
-    throw new Error(`invalid connected project row ${row.project_id}`);
-  }
-
-  return { ...project, connectedAt: row.connected_at };
-}
-
 export class ConnectedProjects {
   private readonly storage: DurableObjectStorage;
   private readonly sql: SqlStorage;
@@ -82,23 +49,14 @@ export class ConnectedProjects {
     `);
   }
 
-  list(): readonly ConnectedProject[] {
-    return this.sql
-      .exec<ConnectedProjectRow>(
-        `SELECT project_id, display_name, repository_url, connected_at
-         FROM connected_projects ORDER BY connected_at ASC, project_id ASC`,
-      )
-      .toArray()
-      .map((row) => projectFromRow(row));
-  }
-
   catalog(): ProjectCatalog {
     return Object.freeze(
-      this.list().map(({ id, displayName, repositoryUrl }) => ({
-        id,
-        displayName,
-        repositoryUrl,
-      })),
+      this.sql
+        .exec<Project>(
+          `SELECT ${PROJECT_COLUMNS}
+           FROM connected_projects ORDER BY connected_at ASC, project_id ASC`,
+        )
+        .toArray(),
     );
   }
 
@@ -110,25 +68,13 @@ export class ConnectedProjects {
       return { ok: false, problem: { code: "invalid-repository-url" } };
     }
 
-    if (id === HARNESS_PROJECT_ID) {
-      return { ok: false, problem: { code: "project-id-conflict" } };
-    }
-
     const displayName = chosenDisplayName(input.displayName, repositoryUrl);
 
     return this.storage.transactionSync(() => {
       const existing = this.byId(id);
 
       if (existing !== undefined) {
-        return {
-          ok: true,
-          project: {
-            id: existing.id,
-            displayName: existing.displayName,
-            repositoryUrl: existing.repositoryUrl,
-          },
-          alreadyConnected: true,
-        };
+        return { ok: true, project: existing, alreadyConnected: true };
       }
 
       this.sql.exec(
@@ -148,15 +94,9 @@ export class ConnectedProjects {
     this.sql.exec(`DELETE FROM connected_projects WHERE project_id = ?`, id);
   }
 
-  private byId(id: ProjectId): ConnectedProject | undefined {
-    const row = this.sql
-      .exec<ConnectedProjectRow>(
-        `SELECT project_id, display_name, repository_url, connected_at
-         FROM connected_projects WHERE project_id = ?`,
-        id,
-      )
+  private byId(id: ProjectId): Project | undefined {
+    return this.sql
+      .exec<Project>(`SELECT ${PROJECT_COLUMNS} FROM connected_projects WHERE project_id = ?`, id)
       .toArray()[0];
-
-    return row === undefined ? undefined : projectFromRow(row);
   }
 }

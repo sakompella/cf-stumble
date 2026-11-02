@@ -142,12 +142,7 @@ const BODY_ROUTES: readonly BodyRoute[] = [
       connectProject: () => {
         reached();
 
-        return Promise.resolve({
-          ok: false,
-          problem: { code: "project-id-conflict", detail: "" },
-          github: { state: "disconnected" },
-          checkedAt: null,
-        });
+        return Promise.resolve({ ok: false, problem: { code: "workspace-busy", detail: "" } });
       },
     }),
   },
