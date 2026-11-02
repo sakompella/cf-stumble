@@ -12,6 +12,7 @@ import {
   FLOCK_STAND_IN,
   STUB_GIT,
   scratchDirectory,
+  systemToolsDirectory,
   underScratch,
   writeExecutable,
 } from "../workspace/planned-shell-fixture.js";
@@ -83,6 +84,8 @@ exec "$STUB_JQ" -r "$4" "$STUB_DIR/$answer.json"
 
 export const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
+const systemTools = systemToolsDirectory(scratch);
+
 const stubs = join(scratch, "bin");
 
 const stubsWithoutGh = join(scratch, "bin-without-gh");
@@ -123,7 +126,7 @@ function run({ directory, bin }: ReturnType<typeof prepare>, source: string) {
   return spawnSync("/bin/sh", ["-c", source], {
     encoding: "utf8",
     env: {
-      PATH: `${bin}:/usr/bin:/bin`,
+      PATH: `${bin}:${systemTools}`,
       STUB_DIR: directory,
       STUB_JQ: jq,
       STUB_SECRET: FAKE_TOKEN,

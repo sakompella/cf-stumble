@@ -6,6 +6,7 @@ import { finishedTurn, ProviderStreamAccumulator } from "../model-route-stream.j
 import {
   ModelTurnFailed,
   modelUnavailable,
+  modelUnavailableBecause,
   pumpSseStream,
   type ModelTurnAnswer,
 } from "../model-route-turn.js";
@@ -101,10 +102,14 @@ function refused(
 ): Effect.Effect<never, ChatGPTRefusal> {
   const fields = { outcome, status: response.status, type: error.type, code: error.code };
 
+  const unavailable = modelUnavailableBecause(
+    outcome === "http-error" ? `${response.status} ${error.code}` : error.code,
+  );
+
   if (!isUsageLimit(response.status, error)) {
     logEvent("error", "chatgpt.model-call", fields);
 
-    return Effect.fail(modelUnavailable());
+    return Effect.fail(unavailable);
   }
 
   const limitedUntil = retryAt(response.headers.get("retry-after"), Date.now());
@@ -120,7 +125,7 @@ function refused(
     credential.markUsageLimited(token, limitedUntil).catch(() => {}),
   ).pipe(
     Effect.andThen(
-      Effect.fail(outputSent ? modelUnavailable() : new ChatGPTUsageLimited({ limitedUntil })),
+      Effect.fail(outputSent ? unavailable : new ChatGPTUsageLimited({ limitedUntil })),
     ),
   );
 }

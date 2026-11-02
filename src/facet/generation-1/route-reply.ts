@@ -57,7 +57,12 @@ export class ReplyAssembler {
 
         return;
       case "error":
-        this.fail("error", event.error.code);
+        this.fail(
+          "error",
+          event.error.detail === undefined
+            ? event.error.code
+            : `${event.error.detail} (${event.error.code})`,
+        );
 
         return;
       case "provider-fallback":

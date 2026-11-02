@@ -9,11 +9,14 @@ import {
   FLOCK_STAND_IN,
   STUB_GIT,
   scratchDirectory,
+  systemToolsDirectory,
   underScratch,
   writeExecutable,
 } from "./workspace/planned-shell-fixture.js";
 
 const scratch = scratchDirectory("cf-stumble-harness-staging-");
+
+const systemTools = systemToolsDirectory(scratch);
 
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
@@ -26,7 +29,7 @@ case "$1" in
       for target; do :; done
       mkdir -p "$target/.git"
       : > "$STUB_DIR/clone-started"
-      while [ ! -e "$STUB_DIR/clone-release" ] && [ -d "$STUB_DIR" ]; do /bin/sleep 0.05; done
+      while [ ! -e "$STUB_DIR/clone-release" ] && [ -d "$STUB_DIR" ]; do sleep 0.05; done
       exit 0
     fi
     ;;
@@ -55,12 +58,12 @@ function provisionSource(root: string): string {
     testHarnessCommit("7000000000000000000000000000000000000001"),
   );
 
-  return underScratch(source.replaceAll("'/workspace'", `'${root}/workspace'`), root);
+  return underScratch(source, root);
 }
 
 function environment(root: string, holdClone: boolean): NodeJS.ProcessEnv {
   return {
-    PATH: `${join(root, "bin")}:/usr/bin:/bin`,
+    PATH: `${join(root, "bin")}:${systemTools}`,
     STUB_DIR: root,
     STUB_REMOTE: HARNESS_BUILD_CONFIGURATION.harnessGitRemote,
     STUB_HOLD_CLONE: holdClone ? "1" : "",

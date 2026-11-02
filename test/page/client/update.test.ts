@@ -169,12 +169,33 @@ test("a refused send takes the message out of the transcript, says why, and puts
   expect(refused.prompt).toBe("do it");
 });
 
-test("a send that never reached the Worker puts the text back too, unless the owner already typed something else", () => {
-  const sent = sentPage(readyPage()).model;
-  const failed = Message.FailedSend({ requestId: "r1", detail: "offline" });
+test("a send that never reached the Worker puts the text back too", () => {
+  const failed = after(sentPage(readyPage()).model, [
+    Message.FailedSend({ requestId: "r1", detail: "offline" }),
+  ]);
 
-  expect(after(sent, [failed]).prompt).toBe("do it");
-  expect(after(sent, [Message.UpdatedPrompt({ value: "newer" }), failed]).prompt).toBe("newer");
+  expect(failed.prompt).toBe("do it");
+});
+
+test("a failed send puts its text before what the owner typed since, after a blank line", () => {
+  const failed = after(sentPage(readyPage()).model, [
+    Message.UpdatedPrompt({ value: "newer" }),
+    Message.FailedSend({ requestId: "r1", detail: "offline" }),
+  ]);
+
+  expect(failed.prompt).toBe("do it\n\nnewer");
+  expect(failed.outbox).toEqual([]);
+});
+
+test("two refused sends both keep their text in the prompt", () => {
+  const refused = after(sentPage(readyPage()).model, [
+    Message.MintedRequestId({ ...MINTED, requestId: "r2", content: "then this" }),
+    Message.RejectedSend({ requestId: "r1", wording: "busy: send again once it finishes" }),
+    Message.RejectedSend({ requestId: "r2", wording: "busy: send again once it finishes" }),
+  ]);
+
+  expect(refused.prompt).toBe("then this\n\ndo it");
+  expect(refused.outbox).toEqual([]);
 });
 
 const noteAfter = (record: Readonly<{ id: number; status: string; reason?: string }>) =>

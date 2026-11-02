@@ -107,11 +107,24 @@ test("a stream that completes with no text or tool call is an empty answer, not 
 });
 
 test.each([
-  { name: "an error object", error: { message: "provider failed", code: 500 } },
-  { name: "an error string", error: "provider failed" },
+  {
+    name: "an error object",
+    error: { message: "provider failed", code: "server_error" },
+    failure: { code: "model-unavailable", detail: "server_error" },
+  },
+  {
+    name: "an error object without a readable code",
+    error: { message: "provider failed", code: 500 },
+    failure: { code: "model-unavailable" },
+  },
+  {
+    name: "an error string",
+    error: "provider failed",
+    failure: { code: "model-unavailable", detail: "provider failed" },
+  },
 ])(
   "$name from the provider keeps the text already sent, then errors once even though [DONE] follows",
-  async ({ error }) => {
+  async ({ error, failure }) => {
     const provider = providerStreamOfLines([
       sseLine({ response: "partial" }),
       sseLine({ error }),
@@ -122,7 +135,7 @@ test.each([
 
     expect(events).toEqual([
       { type: "text-delta", delta: "partial" },
-      { type: "error", error: { code: "model-unavailable" } },
+      { type: "error", error: failure },
     ]);
   },
 );
@@ -199,7 +212,7 @@ test("a provider stream that fails mid-read keeps the text it sent, then errors 
 
   provider.release("error");
   await expect(remainingEvents(reader)).resolves.toEqual([
-    { type: "error", error: { code: "model-unavailable" } },
+    { type: "error", error: { code: "model-unavailable", detail: "provider connection reset" } },
   ]);
 });
 
@@ -215,7 +228,10 @@ test("a provider stream past the byte bound ends in one error event and is cance
 
   expect(events).toEqual([
     { type: "text-delta", delta: "start" },
-    { type: "error", error: { code: "model-unavailable" } },
+    {
+      type: "error",
+      error: { code: "model-unavailable", detail: "provider stream exceeded the event byte bound" },
+    },
   ]);
   expect(provider.cancelled()).toBe(true);
 });
@@ -228,6 +244,6 @@ test("a binding call that throws before it returns a Promise becomes one termina
   };
 
   await expect(collectEvents(streamModelEvents(throwing, REQUEST))).resolves.toEqual([
-    { type: "error", error: { code: "model-unavailable" } },
+    { type: "error", error: { code: "model-unavailable", detail: "binding unavailable" } },
   ]);
 });

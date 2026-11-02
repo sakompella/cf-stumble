@@ -97,6 +97,26 @@ test("a queued answer or event for a stream the page replaced changes nothing", 
   );
 });
 
+test("clicking the project that is already selected changes nothing", () => {
+  hegel.test(
+    (tc) => {
+      const steps = tc.draw(gs.integers({ minValue: 0, maxValue: 12 }));
+      let model = listedPage();
+
+      for (let index = 0; index < steps; index += 1) {
+        model = update(model, tc.draw(gs.sampledFrom(STEPS))(model, tc)).model;
+      }
+
+      const selected = Option.getOrThrow(model.maybeProjectId);
+      const after = update(model, Message.ClickedProject({ projectId: selected }));
+
+      expect(after.model).toEqual(model);
+      expect(after.commands ?? []).toEqual([]);
+    },
+    { testCases: 300 },
+  );
+});
+
 test("only the owner's own request checks the GitHub connection again after the page loads", () => {
   hegel.test(
     (tc) => {

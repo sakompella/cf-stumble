@@ -1,5 +1,6 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { redactedExcerpt } from "./diagnostics.js";
 import type { AssistantMessage } from "./model-route.js";
 import type { ModelRouteErrorCode, ModelStreamEvent, ModelUsage } from "./model-route-events.js";
 import { runResponseBody } from "./run-entry-point.js";
@@ -45,10 +46,16 @@ async function readSseLines<Chunk extends Uint8Array>(
 
 export class ModelTurnFailed extends Data.TaggedError("ModelTurnFailed")<{
   readonly code: ModelRouteErrorCode;
+  readonly detail?: string;
 }> {}
 
-export const modelUnavailable = (): ModelTurnFailed =>
-  new ModelTurnFailed({ code: "model-unavailable" });
+export const modelUnavailable = (cause?: unknown): ModelTurnFailed =>
+  cause instanceof Error
+    ? modelUnavailableBecause(cause.message)
+    : new ModelTurnFailed({ code: "model-unavailable" });
+
+export const modelUnavailableBecause = (detail: string): ModelTurnFailed =>
+  new ModelTurnFailed({ code: "model-unavailable", detail: redactedExcerpt(detail) });
 
 export function pumpSseStream<Chunk extends Uint8Array>(
   providerStream: ReadableStream<Chunk>,
@@ -66,7 +73,11 @@ export function pumpSseStream<Chunk extends Uint8Array>(
       }),
     (reader) => Effect.promise(() => reader.cancel().catch(() => {})),
   ).pipe(
-    Effect.flatMap((terminated) => (terminated ? Effect.void : Effect.fail(modelUnavailable()))),
+    Effect.flatMap((terminated) =>
+      terminated
+        ? Effect.void
+        : Effect.fail(modelUnavailableBecause("the stream ended without a terminal event")),
+    ),
   );
 }
 
@@ -97,8 +108,8 @@ export function modelEventStream(turn: ModelTurn): ReadableStream<Uint8Array> {
 
       const answered = turn(emit).pipe(
         Effect.match({
-          onFailure: ({ code }) => {
-            emit({ type: "error", error: { code } });
+          onFailure: ({ code, detail }) => {
+            emit({ type: "error", error: detail === undefined ? { code } : { code, detail } });
           },
           onSuccess: (answer) => {
             emit({ type: "done", ...answer });

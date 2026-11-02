@@ -39,7 +39,7 @@ The Host therefore runs the clone step and project removal with `require-complet
 - After a clone exits 0, the project root and its `.git` must exist in the store, and the stored `.git/config` must name the catalog's repository as `origin`. Otherwise connection reports `provisioning-failed` and removes the new row. These are markers only and do not prove the stored repository is complete.
 - After a removal exits 0, neither the clone nor its `.provisioning` directory may exist in the store. Otherwise disconnect reports `workspace: "failed"`. The old clone can then come back with a replacement container, and a later connection of the same repository reuses it with its uncommitted work.
 
-Build, credential, and managed-instruction commands do not require a complete copy. Whether a clone left in the store returns after a Host or container replacement is unproven.
+The credential install also runs with `require-complete`; when its copy is pending, the Host logs the credential out and the install fails with `workspace-sync-incomplete` (`src/workspace/github-credential.ts`). Build, credential status and repository checks, and managed-instruction commands do not require a complete copy. Whether a clone left in the store returns after a Host or container replacement is unproven.
 
 ### Partial copies
 

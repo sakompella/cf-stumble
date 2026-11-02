@@ -127,7 +127,7 @@ test("an accepted activation advances the epoch by exactly one, and only when it
   });
 });
 
-test("a check records the outcome's status and compatibility, advances the epoch by one, and is a no-op only when nothing changed", () => {
+test("a check records the outcome's status and compatibility and advances the epoch by one, unless nothing changed, which is a no-op that keeps it", () => {
   hegel.test((tc) => {
     const target = tc.draw(labelValue);
     const epoch = tc.draw(count);
@@ -147,17 +147,17 @@ test("a check records the outcome's status and compatibility, advances the epoch
       compatibility: previousCompatibility,
     };
 
+    const unchanged =
+      previousStatus === outcome.status && previousCompatibility === checkedCompatibility;
+
     expect(decidePreparation(previous, outcome, { activeLabel: undefined, epoch })).toEqual({
       record: {
         generation: generation(target, outcome.status),
         wasActive,
         compatibility: checkedCompatibility,
       },
-      epoch: epoch + 1,
-      effect:
-        previousStatus === outcome.status && previousCompatibility === checkedCompatibility
-          ? "no-op"
-          : "recorded",
+      epoch: unchanged ? epoch : epoch + 1,
+      effect: unchanged ? "no-op" : "recorded",
     });
   });
 });

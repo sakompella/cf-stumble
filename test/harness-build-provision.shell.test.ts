@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,11 @@ import { holdProvisionLock } from "../src/project-provision.js";
 import { shellQuote } from "../src/shell-quote.js";
 import { writeExecutable } from "./workspace/planned-shell-fixture.js";
 
-const shells = ["/bin/sh", "/bin/dash"].filter((shell) => existsSync(shell));
+const dash = execFileSync("/bin/sh", ["-c", "command -v dash || true"], {
+  encoding: "utf8",
+}).trim();
+
+const shells = ["/bin/sh", dash].filter((shell) => shell !== "");
 
 const realSleep = ["/bin/sleep", "/usr/bin/sleep"].find((path) => existsSync(path)) ?? "sleep";
 

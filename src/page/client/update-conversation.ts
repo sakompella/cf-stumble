@@ -32,7 +32,14 @@ function withUnsentRequestInPrompt(model: Model, requestId: string): Model {
   const unsent = model.outbox.find((item) => item.requestId === requestId);
   const kept = withoutRequest(model, requestId);
 
-  return unsent === undefined || model.prompt !== "" ? kept : { ...kept, prompt: unsent.text };
+  if (unsent === undefined) {
+    return kept;
+  }
+
+  return {
+    ...kept,
+    prompt: model.prompt === "" ? unsent.text : `${unsent.text}\n\n${model.prompt}`,
+  };
 }
 
 function settledNote(status: string, reason: string | undefined): Option.Option<string> {

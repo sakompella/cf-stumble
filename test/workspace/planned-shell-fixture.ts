@@ -1,4 +1,5 @@
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,9 +20,11 @@ exit 0
 `;
 
 export function underScratch(source: string, root: string): string {
-  return source
-    .replaceAll("'/workspace/", `'${root}/workspace/`)
-    .replaceAll("'/tmp/", `'${root}/tmp/`);
+  return source.replaceAll(
+    /'\/(workspace|tmp)(?=['/])/gu,
+    (quoted, directory: string, offset: number) =>
+      source.startsWith(root, offset + 1) ? quoted : `'${root}/${directory}`,
+  );
 }
 
 export const FLOCK_STAND_IN = `#!/bin/sh
@@ -38,4 +41,18 @@ export function writeExecutable(path: string, content: string): void {
 
 export function scratchDirectory(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
+}
+
+const SYSTEM_TOOLS = ["cat", "ls", "mkdir", "mv", "perl", "rm", "rmdir", "sleep", "tr"] as const;
+
+export function systemToolsDirectory(parent: string): string {
+  const directory = join(parent, "system-bin");
+  mkdirSync(directory);
+
+  for (const tool of SYSTEM_TOOLS) {
+    const found = spawnSync("/bin/sh", ["-c", `command -v ${tool}`], { encoding: "utf8" });
+    symlinkSync(found.stdout.trim(), join(directory, tool));
+  }
+
+  return directory;
 }

@@ -1,3 +1,5 @@
+import { isContextOverflow } from "@earendil-works/pi-ai/utils/overflow";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai/utils/retry";
 import { expect, test } from "vitest";
 import type { ValidationFailure } from "../../../src/model-route.js";
 import {
@@ -98,16 +100,37 @@ test("a provider fallback stays on the final message as a diagnostic", async () 
   });
 });
 
-test("a route error code becomes a terminal error carrying the code", async () => {
-  const { capability } = scriptedRoute(
-    replies([{ type: "error", error: { code: "chatgpt-reconnect-required" } }]),
-  );
+test.each([
+  { error: { code: "model-unavailable", detail: "503 server_error" }, retry: true, compact: false },
+  {
+    error: { code: "model-unavailable", detail: "429 rate_limit_exceeded" },
+    retry: true,
+    compact: false,
+  },
+  {
+    error: { code: "model-unavailable", detail: "context_length_exceeded" },
+    retry: false,
+    compact: true,
+  },
+  {
+    error: { code: "model-unavailable", detail: "400 invalid_prompt" },
+    retry: false,
+    compact: false,
+  },
+  { error: { code: "chatgpt-reconnect-required" }, retry: false, compact: false },
+] as const)(
+  "Pi retries or compacts after the route error $error.code $error.detail only when its detail says so",
+  async ({ error, retry, compact }) => {
+    const { capability } = scriptedRoute(replies([{ type: "error", error }]));
 
-  expect(await stream(capability, GO).result()).toMatchObject({
-    stopReason: "error",
-    errorMessage: "chatgpt-reconnect-required",
-  });
-});
+    const message = await stream(capability, GO).result();
+
+    expect(message.stopReason).toBe("error");
+    expect(message.errorMessage).toContain(error.code);
+    expect(isRetryableAssistantError(message)).toBe(retry);
+    expect(isContextOverflow(message)).toBe(compact);
+  },
+);
 
 test("a route that throws, rejects the request, or ends early still ends the stream with an error", async () => {
   const rejection: ValidationFailure = {

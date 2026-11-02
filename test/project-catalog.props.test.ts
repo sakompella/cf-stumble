@@ -107,7 +107,7 @@ test("gives distinct repositories distinct ids and one repository one id", () =>
   });
 });
 
-test("derives an id for every GitHub repository name that is safe as a path segment", () => {
+test("derives an id for every short GitHub repository name that is safe as a path segment", () => {
   hegel.test((tc) => {
     const repository = drawRepository(tc);
     tc.assume(canonicalOf(repository) !== undefined);

@@ -125,7 +125,7 @@ export function decidePreparation(
       generation: { ...current.generation, status: outcome.status },
       compatibility,
     },
-    epoch: selection.epoch + 1,
+    epoch: unchanged ? selection.epoch : selection.epoch + 1,
     effect: unchanged ? "no-op" : "recorded",
   };
 }
@@ -162,8 +162,6 @@ export class Generations {
     this.#storage = storage;
     this.#sql = storage.sql;
     this.#compatibility = compatibility;
-    this.#migrateActivationHistory();
-    this.#migrateFacetCompatibility();
     this.#sql.exec(`
       CREATE TABLE IF NOT EXISTS generations (
         label INTEGER PRIMARY KEY CHECK (label >= 0),
@@ -305,39 +303,5 @@ export class Generations {
       epoch,
     );
     this.#sql.exec("UPDATE generations SET was_active = 1 WHERE label = ?", label);
-  }
-
-  #migrateActivationHistory(): void {
-    const legacy = this.#sql
-      .exec(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'active_generation_history'",
-      )
-      .toArray();
-
-    if (legacy.length === 0) return;
-
-    this.#sql.exec(`
-      ALTER TABLE generations
-        ADD COLUMN was_active INTEGER NOT NULL DEFAULT 0 CHECK (was_active IN (0, 1));
-      UPDATE generations SET was_active = 1
-        WHERE label IN (SELECT label FROM active_generation_history);
-      DROP TABLE active_generation_history;
-      ALTER TABLE generation_state DROP COLUMN activation_id;
-    `);
-  }
-
-  #migrateFacetCompatibility(): void {
-    const columns = this.#sql
-      .exec<{ name: string }>("SELECT name FROM pragma_table_info('generations')")
-      .toArray()
-      .map((column) => column.name);
-
-    if (columns.length === 0 || columns.includes("facet_compatibility")) return;
-
-    this.#sql.exec(
-      columns.includes("pi_durable_version")
-        ? "ALTER TABLE generations RENAME COLUMN pi_durable_version TO facet_compatibility"
-        : "ALTER TABLE generations ADD COLUMN facet_compatibility TEXT",
-    );
   }
 }

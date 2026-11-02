@@ -54,7 +54,7 @@ test("keeps the activation epoch stable while the active generation serves", asy
   });
 });
 
-test("a repeated passing check advances the epoch and rejects an activation from its prior view", async () => {
+test("a repeated passing check keeps the epoch, so an activation from its prior view succeeds", async () => {
   const control: DurableObjectStub<Supervisor> = env.SUPERVISOR.getByName(
     "epoch-scope-recheck-stale-activation",
   );
@@ -79,6 +79,9 @@ test("a repeated passing check advances the epoch and rejects an activation from
   }
 
   expect(rechecked.report.effect).toBe("no-op");
-  expect(afterRecheck).toEqual({ ...beforeRecheck, epoch: beforeRecheck.epoch + 1 });
-  expect(result).toEqual({ ok: false, problem: { code: "stale-epoch" } });
+  expect(afterRecheck).toEqual(beforeRecheck);
+  expect(result).toMatchObject({
+    ok: true,
+    outcome: { kind: "activated", generation: { label: targetLabel } },
+  });
 });

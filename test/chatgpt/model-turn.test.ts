@@ -206,12 +206,27 @@ test("an error object without a type, then [DONE], keeps the text already stream
 
   expect(events).toEqual([
     { type: "text-delta", delta: "part" },
-    { type: "error", error: { code: "model-unavailable" } },
+    { type: "error", error: { code: "model-unavailable", detail: "server_error" } },
   ]);
   expect(named(logged(), "chatgpt.model-call")).toEqual([
     expect.objectContaining({ outcome: "stream-failed", code: "server_error" }),
   ]);
   expect(everythingLogged()).not.toContain("Read a.txt");
+});
+
+test("a refused HTTP call ends with its status and code, and not its message", async () => {
+  const { events } = await run(fakeCredential([ready(ACCESS_ONE)]), () =>
+    Promise.resolve(
+      Response.json(
+        { error: { type: "server_error", code: "server_is_overloaded", message: "Read a.txt" } },
+        { status: 503 },
+      ),
+    ),
+  );
+
+  expect(events).toEqual([
+    { type: "error", error: { code: "model-unavailable", detail: "503 server_is_overloaded" } },
+  ]);
 });
 
 test("a stream that stops early ends as model-unavailable", async () => {
@@ -221,7 +236,10 @@ test("a stream that stops early ends as model-unavailable", async () => {
     ),
   );
 
-  expect(truncated.events.at(-1)).toEqual({ type: "error", error: { code: "model-unavailable" } });
+  expect(truncated.events.at(-1)).toEqual({
+    type: "error",
+    error: { code: "model-unavailable", detail: "the stream ended without a terminal event" },
+  });
 });
 
 test("usage the provider reports as a negative count is replaced by an estimate", async () => {
