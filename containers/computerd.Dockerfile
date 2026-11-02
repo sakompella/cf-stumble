@@ -101,7 +101,6 @@ EXPOSE 8080
 ENV PNPM_HOME=/usr/local/pnpm
 ENV PATH=/usr/local/pnpm:/usr/local/pnpm/bin:$PATH
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /seed/
-COPY vendor/cloudflare-computer-0.3.0.tgz /seed/vendor/
 RUN cd /seed \
  && corepack install \
  && corepack pnpm fetch \

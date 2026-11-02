@@ -2,12 +2,13 @@ import { bindings, defineConfig, defineContainer, exports, triggers } from "cf/c
 
 const workspaceHostContainer = defineContainer({
   name: "cf-stumble-workspacehost",
-  image: {
-    dockerfile: "./containers/computerd.Dockerfile",
-    buildContext: ".",
+  schedulingPolicy: "durable-object",
+  images: {
+    app: {
+      dockerfile: "./containers/computerd.Dockerfile",
+      buildContext: ".",
+    },
   },
-  maxInstances: 1,
-  instanceType: "standard-3",
 });
 
 export default defineConfig(({ mode }) => {

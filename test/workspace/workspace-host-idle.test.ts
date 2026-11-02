@@ -21,6 +21,7 @@ afterEach(() => {
 
 class FakeContainer {
   running = true;
+  readonly images = { app: "workspace-image" };
   readonly destroyed: unknown[] = [];
   starts = 0;
   destroyGate: Promise<void> | undefined;

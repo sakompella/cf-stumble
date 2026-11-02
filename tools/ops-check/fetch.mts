@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { routePattern } from "../../src/routes/route-pattern.ts";
+import { WORKSPACE_CONTAINER_MEMORY_MIB } from "../../src/workspace/container-instance.ts";
 import {
   isJsonArray,
   isJsonNumber,
@@ -205,9 +206,8 @@ export async function fetchUsage(
   );
 
   const id = digString(application, "id");
-  const memoryMib = digNumber(application, "configuration", "memory_mib");
 
-  if (id === null || memoryMib === null) {
+  if (id === null) {
     throw new ApiFailure(`no container application named ${name}`);
   }
 
@@ -221,5 +221,5 @@ export async function fetchUsage(
     },
   });
 
-  return parseUsage(response, memoryMib * 1024 * 1024);
+  return parseUsage(response, WORKSPACE_CONTAINER_MEMORY_MIB * 1024 * 1024);
 }

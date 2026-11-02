@@ -1,14 +1,7 @@
 import { defineConfig } from "oxlint";
 
 export default defineConfig({
-  ignorePatterns: [
-    "node_modules",
-    "dist",
-    ".wrangler",
-    ".agents/**",
-    "tools/oxlint/anti-slop/**",
-    "vendor/**",
-  ],
+  ignorePatterns: ["node_modules", "dist", ".wrangler", ".agents/**", "tools/oxlint/anti-slop/**"],
   jsPlugins: [
     { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
     { name: "foldkit", specifier: "@foldkit/oxlint-plugin" },

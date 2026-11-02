@@ -66,7 +66,7 @@ List the account's Workers, container applications, Durable Object namespaces, a
 
 Create a worktree and a staging directory with a unique Worker name and container name. `cf` has no `--config` flag, so the directory holds its own `cloudflare.config.ts` and `wrangler.config.ts`.
 
-**Complete when:** the configuration has a unique `name` that differs from `<worker>`, `workersDev: true`, no `triggers`, a container named `<name>-workspacehost`, and instance type `standard-1`; and you printed these values and checked them before the deploy.
+**Complete when:** the configuration has a unique `name` that differs from `<worker>`, `workersDev: true`, no `triggers`, and a container named `<name>-workspacehost`; and you printed these values and checked them before the deploy.
 
 ### 3. Deploy and exercise
 

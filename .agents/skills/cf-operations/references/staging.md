@@ -13,7 +13,7 @@ mkdir -p .audit/stage        # `.audit/` is ignored by Git
 
 `cf` finds `cloudflare.config.ts` only in the working directory and has no `--config` flag, so the staging directory needs its own copy of everything `cf` reads:
 
-- `cloudflare.config.ts`: a copy of the repository file with the Worker name (`workerName`) set to `<stage>`, `workersDev: true`, no `triggers`, `containers[0].name: "<stage>-workspacehost"`, `instanceType: "standard-1"`, and every relative path (`entrypoint`, `image.dockerfile`, `image.buildContext`) prefixed with `../../`. Keep the worker name in the Durable Object bindings equal to `<stage>`.
+- `cloudflare.config.ts`: a copy of the repository file with the Worker name (`workerName`) set to `<stage>`, `workersDev: true`, no `triggers`, `containers[0].name: "<stage>-workspacehost"`, and every relative path (`entrypoint`, `images.app.dockerfile`, `images.app.buildContext`) prefixed with `../../`. The stage runs the same instance size as production, `WORKSPACE_CONTAINER_INSTANCE` in `src/workspace/container-instance.ts`, because the Durable Object chooses the size when it starts the container. Keep the worker name in the Durable Object bindings equal to `<stage>`.
 - `wrangler.config.ts`: a copy of the repository file.
 - `package.json`: declares `wrangler` and `cf` as dependencies, so `cf` finds its bundler and itself.
 - `node_modules`: a symlink to `../../node_modules`.

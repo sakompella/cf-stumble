@@ -152,3 +152,57 @@ test("delegates every backend and RPC operation other than fetchChanges", async 
     "close",
   ]);
 });
+
+test("forwards the settle flag to watermarks", async () => {
+  const inputs: Parameters<SyncRPC["watermarks"]>[0][] = [];
+
+  const { backend, handle } = backendWith(() => Promise.reject(new Error("unused")));
+
+  handle.rpc.sync.watermarks = (input) => {
+    inputs.push(input);
+
+    return Promise.resolve({ currentRev: 1, pushRev: 1, fetchCursor: { rev: 1, path: null } });
+  };
+
+  await (await connect(withWorkspaceSyncIgnore(backend))).rpc.sync.watermarks({ settle: true });
+
+  expect(inputs).toEqual([{ settle: true }]);
+});
+
+test("adds node_modules to a change pack fetch and keeps the pack transport", async () => {
+  const inputs: Parameters<NonNullable<SyncRPC["fetchChangePack"]>>[0][] = [];
+
+  const { backend, handle } = backendWith(() => Promise.reject(new Error("unused")));
+
+  handle.rpc.sync.fetchChangePack = (input) => {
+    inputs.push(input);
+
+    return Promise.resolve({
+      cursor: { rev: 1, path: null },
+      drained: true,
+      entryCount: 0,
+      appliedPushCursor: { rev: 1, path: null },
+      stream: new ReadableStream(),
+    });
+  };
+
+  handle.rpc.sync.applyChangePack = () => delegated([], "sync.applyChangePack");
+
+  const sync = (await connect(withWorkspaceSyncIgnore(backend))).rpc.sync;
+
+  await sync.fetchChangePack?.({ maxEntries: 1, maxBytes: 1, generation: "g" });
+
+  expect(inputs).toEqual([
+    { maxEntries: 1, maxBytes: 1, generation: "g", ignore: ["node_modules"] },
+  ]);
+  expect("applyChangePack" in sync).toBe(true);
+});
+
+test("offers no pack transport when the backend has none", async () => {
+  const { backend } = backendWith(() => Promise.reject(new Error("unused")));
+
+  const sync = (await connect(withWorkspaceSyncIgnore(backend))).rpc.sync;
+
+  expect("fetchChangePack" in sync).toBe(false);
+  expect("applyChangePack" in sync).toBe(false);
+});

@@ -4,20 +4,22 @@ import {
   type WorkspaceBackend,
 } from "@cloudflare/computer";
 import {
-  CloudflareContainerBackend,
-  type CloudflareContainerBackendOptions,
+  ContainerBackend,
+  type ContainerBackendOptions,
   WorkspaceContainerAPI,
 } from "@cloudflare/computer/backends/container";
 import { logEvent } from "../diagnostics.js";
 import { withWorkspaceSyncIgnore } from "./backend-sync-ignore.js";
 import { ContainerLifecycle } from "./container-lifecycle.js";
+import { WORKSPACE_CONTAINER_INSTANCE } from "./container-instance.js";
 
 export function workspaceContainerBackendConfiguration(
   workspaceId: string,
-): Pick<CloudflareContainerBackendOptions, "egress" | "workspace"> {
+): Pick<ContainerBackendOptions, "egress" | "workspace" | "instance"> {
   return {
     workspace: { binding: "WORKSPACE_HOST", id: workspaceId },
     egress: { mode: "direct" },
+    instance: WORKSPACE_CONTAINER_INSTANCE,
   };
 }
 
@@ -38,7 +40,7 @@ export class WorkspacePlatform {
   readonly lifecycle = new ContainerLifecycle();
   readonly #state: DurableObjectState;
   readonly #platformContainer: DurableObjectState["container"];
-  readonly #containerBackend: CloudflareContainerBackend;
+  readonly #containerBackend: ContainerBackend;
   readonly #workspaceBackend: WorkspaceBackend;
   #workspace: Workspace;
 
@@ -46,7 +48,7 @@ export class WorkspacePlatform {
     this.#state = state;
     this.#platformContainer = state.container;
     this.#container = new WorkspaceContainerAPI(state);
-    this.#containerBackend = new CloudflareContainerBackend({
+    this.#containerBackend = new ContainerBackend({
       container: () => ({ getWorkspaceContainer: () => this.#container }),
       ...workspaceContainerBackendConfiguration(state.id.toString()),
     });

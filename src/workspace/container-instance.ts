@@ -1,0 +1,3 @@
+export const WORKSPACE_CONTAINER_INSTANCE = "standard-3";
+
+export const WORKSPACE_CONTAINER_MEMORY_MIB = 8192;
