@@ -21,6 +21,10 @@ afterEach(() => {
 });
 
 test("a failed step gives the owner its output tail with every credential redacted, and logs none of it", async () => {
+  for (const level of ["log", "warn", "error"] as const) {
+    vi.spyOn(console, level).mockImplementation(() => {});
+  }
+
   const diagnostics = await failedDiagnostics({
     stdout: `fetching https://x-access-token:${FAKE_TOKEN}@github.com/o/r`,
     stderr: `fatal: authentication failed for ${FAKE_TOKEN}`,
