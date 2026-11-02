@@ -101,8 +101,13 @@ test("a usage limit after output errors the call as before, and the limit is sti
   expect(emitted).toEqual([{ type: "text-delta", delta: "part" }]);
   expect(credential.limited).toEqual([[ACCESS_ONE, null]]);
   expect(named(logged(), "chatgpt.model-call")).toEqual([
-    expect.objectContaining({ outcome: "stream-failed", fallback: false }),
+    expect.objectContaining({
+      outcome: "stream-failed",
+      code: "subscription_sharing_usage_limit_exceeded",
+      fallback: false,
+    }),
   ]);
+  expect(everythingLogged()).not.toContain("owner@example.com");
 });
 
 test("an HTTP 429 records when its Retry-After says the limit ends, and logs status, type and code only", async () => {

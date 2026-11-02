@@ -81,7 +81,9 @@ test("the events of a provider stream do not depend on where its bytes are cut",
         .draw(gs.arrays(gs.arrays(deltaText, { minSize: 1, maxSize: 3 }), { maxSize: 2 }))
         .map((fragments, index) => ({ id: `call_${index}`, name: `tool${index}`, fragments }));
 
-      const bytes = new TextEncoder().encode(providerLines(tc, deltas, calls));
+      const lines = providerLines(tc, deltas, calls);
+      const unterminated = tc.draw(gs.booleans());
+      const bytes = new TextEncoder().encode(unterminated ? lines.slice(0, -1) : lines);
 
       const offsets = tc.draw(
         gs.arrays(gs.integers({ minValue: 0, maxValue: 4_096 }), { maxSize: 8 }),
@@ -93,6 +95,9 @@ test("the events of a provider stream do not depend on where its bytes are cut",
       expect(cut).toEqual(whole);
       expect(cut.flatMap((event) => (event.type === "text-delta" ? [event.delta] : []))).toEqual(
         deltas,
+      );
+      expect(cut.filter((event) => event.type === "tool-call-delta")).toHaveLength(
+        calls.length + calls.reduce((total, call) => total + call.fragments.length, 0),
       );
       expect(cut.filter((event) => event.type === "done" || event.type === "error")).toHaveLength(
         1,

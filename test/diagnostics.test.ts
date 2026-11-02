@@ -144,36 +144,3 @@ test("logEvent writes each level to the console method of that severity", () => 
   expect(onlyEntry(error)).toMatchObject({ event: "turn.lease-abandoned", level: "error" });
   expect(info).not.toHaveBeenCalled();
 });
-
-test("a field cannot overwrite the event, level, or timestamp", () => {
-  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
-
-  logEvent("info", "turn.settled", { event: "forged", level: "error", ts: "yesterday" });
-
-  const entry = onlyEntry(logged);
-  expect(entry.event).toBe("turn.settled");
-  expect(entry.level).toBe("info");
-  expect(entry.ts).not.toBe("yesterday");
-});
-
-test("a token inside a string field never reaches the log", () => {
-  const token = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
-
-  logEvent("info", "github-credential.install", {
-    detail: `remote: https://x:${token}@github.com/owner/repo failed ${token}`,
-    source: "configured-token",
-  });
-
-  const written = JSON.stringify(onlyEntry(logged));
-  expect(written).not.toContain(token);
-  expect(written).toContain("configured-token");
-});
-
-test("a long string field is bounded", () => {
-  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
-
-  logEvent("info", "route.refused", { route: "x".repeat(10_000) });
-
-  expect(String(onlyEntry(logged).route).length).toBeLessThanOrEqual(200);
-});

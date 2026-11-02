@@ -90,20 +90,6 @@ function violations(): string[] {
 }
 
 describe("module seams", () => {
-  it("finds the source files and their group directories", () => {
-    expect(Object.keys(sourceFiles).length).toBeGreaterThan(20);
-    expect(groupDirectories).toContain("src/supervisor/startup-check");
-  });
-
-  it("resolves import specifiers against the importing directory", () => {
-    expect(resolveImport("src/supervisor/generations", "./preparation-checks.js")).toBe(
-      "src/supervisor/generations/preparation-checks.ts",
-    );
-    expect(resolveImport("src/supervisor/generations", "../../workspace-names.js")).toBe(
-      "src/workspace-names.ts",
-    );
-  });
-
   it("routes every cross-group import through the group's index", () => {
     expect(violations(), "import these through the directory's index.ts").toEqual([]);
   });

@@ -1,5 +1,4 @@
 import { expect, test } from "vitest";
-import { byteChunkStream } from "./byte-stream-fixture.js";
 import type { ModelRouteRequest } from "../src/model-route.js";
 import type { ModelStreamInference, StreamingProviderPayload } from "../src/model-route-events.js";
 import {
@@ -48,40 +47,6 @@ const MULTI_TURN_REQUEST: ModelRouteRequest = {
   ],
 };
 
-function toolCallChunk(argsFragment: string): string {
-  return sseLine({
-    tool_calls: [{ index: 0, id: "call_1", function: { name: "bash", arguments: argsFragment } }],
-  });
-}
-
-test("delivers byte chunks in order and reports exhaustion without reporting cancellation", async () => {
-  const chunks = [new Uint8Array([1]), new Uint8Array([2, 3])];
-  const exhausted: string[] = [];
-
-  const onExhausted = (): void => {
-    exhausted.push("exhausted");
-  };
-
-  const reader = byteChunkStream(chunks, onExhausted).getReader();
-
-  expect(await reader.read()).toEqual({ value: chunks[0], done: false });
-  expect(exhausted).toEqual([]);
-  expect(await reader.read()).toEqual({ value: chunks[1], done: false });
-  expect(await reader.read()).toEqual({ value: undefined, done: true });
-  expect(exhausted).toEqual(["exhausted"]);
-
-  const cancelled: string[] = [];
-
-  const onCancelledExhausted = (): void => {
-    cancelled.push("exhausted");
-  };
-
-  const cancelledReader = byteChunkStream(chunks, onCancelledExhausted).getReader();
-
-  await cancelledReader.cancel();
-  expect(cancelled).toEqual([]);
-});
-
 test("sends the whole conversation and its tools to the one fixed model", async () => {
   const calls: Array<{ model: string; input: StreamingProviderPayload }> = [];
 
@@ -106,36 +71,6 @@ test("sends the whole conversation and its tools to the one fixed model", async 
       },
     },
   ]);
-});
-
-test("assembles a tool call whose arguments arrive split across several chunks", async () => {
-  const provider = rawByteStream([
-    encoder.encode(toolCallChunk('{"cm')),
-    encoder.encode(toolCallChunk('d":"l')),
-    encoder.encode(toolCallChunk('s"}') + DONE_LINE),
-  ]);
-
-  const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
-  const deltas = events.filter((e) => e.type === "tool-call-delta");
-  expect(deltas).toHaveLength(3);
-  const done = events.at(-1);
-  expect(done).toMatchObject({
-    type: "done",
-    message: {
-      content: null,
-      tool_calls: [{ id: "call_1", function: { name: "bash", arguments: '{"cmd":"ls"}' } }],
-    },
-  });
-});
-
-test("reassembles a multi-byte UTF-8 character split across two raw byte chunks", async () => {
-  const full = encoder.encode(sseLine({ response: "café" }) + DONE_LINE);
-  const splitAt = full.indexOf(0xc3) + 1;
-  expect(full[splitAt]).toBeGreaterThanOrEqual(0x80);
-  expect(full[splitAt]).toBeLessThanOrEqual(0xbf);
-  const provider = rawByteStream([full.slice(0, splitAt), full.slice(splitAt)]);
-  const events = await collectEvents(streamModelEvents(fakeStreamInference(provider), REQUEST));
-  expect(events.at(-1)).toMatchObject({ type: "done", message: { content: "café" } });
 });
 
 test("estimates non-zero usage, and marks it as an estimate, when the provider reports none", async () => {

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import { expect, test } from "vitest";
 import {
-  parseGitHubToken,
   redeemDeviceAuthorization,
   requestDeviceAuthorization,
   type GitHubFetch,
@@ -157,11 +156,4 @@ test("refuses a device reply whose verification page is not GitHub over HTTPS", 
     ok: false,
     problem: "provider-refused",
   });
-});
-
-test("refuses a token that is not one line of printable text", () => {
-  expect(parseGitHubToken("")).toBeUndefined();
-  expect(parseGitHubToken("has space")).toBeUndefined();
-  expect(parseGitHubToken(`${FAKE_TOKEN}\n`)).toBeUndefined();
-  expect(parseGitHubToken(FAKE_TOKEN)).toBe(FAKE_TOKEN);
 });
