@@ -86,6 +86,7 @@ export class WorkspacePlatform {
       storage: computerStorage(this.#state.storage),
       sessionId: this.#state.id.toString(),
       backends: [this.#workspaceBackend],
+      output: false,
     });
   }
 }
