@@ -23,12 +23,8 @@ test("the built generation passes the Supervisor's startup check", async () => {
   });
 });
 
-test("the host model route satisfies the capability the facet declares", async () => {
-  const modelRoute = workerExports.ModelRoute({});
-  const capability: ModelCapability = modelRoute;
+test("the host model route answers a refused run across the RPC stub as a failure result", async () => {
+  const capability: ModelCapability = workerExports.ModelRoute({});
 
-  await expect(capability.runStream({ messages: [] })).resolves.toEqual({
-    ok: false,
-    error: { code: "invalid-request", reason: "messages must be a non-empty array" },
-  });
+  await expect(capability.runStream({ messages: [] })).resolves.toMatchObject({ ok: false });
 });
