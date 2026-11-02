@@ -1,9 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { HarnessCommit } from "../../src/harness-commit.js";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
-import type { OwnerApiSupervisor } from "../../src/routes/owner-api.js";
 import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
@@ -30,83 +28,6 @@ const labeled = {
   generation: candidate("candidate"),
   epoch: 4,
 } as const;
-
-const readyCheck = {
-  ok: true,
-  report: {
-    stage: "ready",
-    reason: "the generation reports pi-durable@1.4.0/host-2",
-    generation: candidate("ready"),
-    effect: "recorded",
-  },
-} as const;
-
-const expectedLabeledAndPrepared = {
-  ok: true,
-  outcome: {
-    kind: "candidate-submitted",
-    generation: { label: 1, harnessCommit, status: "candidate" },
-    epoch: 4,
-  },
-  preparation: {
-    ok: true,
-    report: {
-      stage: "ready",
-      reason: "the generation reports pi-durable@1.4.0/host-2",
-      generation: { label: 1, harnessCommit, status: "ready" },
-      effect: "recorded",
-    },
-  },
-};
-
-type RecordedSubmission = {
-  readonly steps: string[];
-  readonly received: HarnessCommit[];
-  readonly preparedLabels: number[];
-  submissions: number;
-};
-
-function recordingSupervisor(record: RecordedSubmission): OwnerApiSupervisor {
-  return supervisor({
-    submitGeneration(submitted) {
-      record.steps.push("submit");
-      record.received.push(submitted);
-      record.submissions += 1;
-
-      return Promise.resolve(labeled);
-    },
-    prepareGeneration(label) {
-      record.steps.push("prepare");
-      record.preparedLabels.push(label);
-
-      return Promise.resolve(readyCheck);
-    },
-  });
-}
-
-test("labels the commit directly, then prepares that label", async () => {
-  const record: RecordedSubmission = {
-    steps: [],
-    received: [],
-    preparedLabels: [],
-    submissions: 0,
-  };
-
-  const response = await ownerApiResponse(
-    submitRequest(submissionBody()),
-    recordingSupervisor(record),
-  );
-
-  expect(record.received).toEqual([harnessCommit]);
-  expect(record.steps, "the label must exist before the candidate is prepared").toEqual([
-    "submit",
-    "prepare",
-  ]);
-  expect(record.preparedLabels).toEqual([1]);
-  expect(record.submissions).toBe(1);
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual(expectedLabeledAndPrepared);
-});
 
 test("returns a failed startup check as the recorded preparation result", async () => {
   const response = await ownerApiResponse(

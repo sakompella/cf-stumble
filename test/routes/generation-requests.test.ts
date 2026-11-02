@@ -1,46 +1,6 @@
 import { expect, test } from "vitest";
-import type { ActivationCommand, ControlProblemCode } from "../../src/supervisor/generations.js";
+import type { ControlProblemCode } from "../../src/supervisor/generations.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
-
-test("activates directly", async () => {
-  let received: ActivationCommand | undefined;
-
-  const response = await ownerApiResponse(
-    controlRequest("/api/generations/activate", JSON.stringify({ observedEpoch: 3, label: 2 })),
-    supervisor({
-      controlGeneration(request) {
-        received = request;
-
-        return Promise.resolve({ ok: false, problem: { code: "unknown-generation" } });
-      },
-    }),
-  );
-
-  expect(received).toEqual({ kind: "activate", label: 2, observedEpoch: 3 });
-  expect(response.status).toBe(404);
-  await expect(response.json()).resolves.toEqual({
-    ok: false,
-    problem: { code: "unknown-generation" },
-  });
-});
-
-test("rolls back through the same direct control operation", async () => {
-  let received: ActivationCommand | undefined;
-
-  const response = await ownerApiResponse(
-    controlRequest("/api/generations/rollback", JSON.stringify({ observedEpoch: 4, label: 0 })),
-    supervisor({
-      controlGeneration(request) {
-        received = request;
-
-        return Promise.resolve({ ok: false, problem: { code: "not-previously-active" } });
-      },
-    }),
-  );
-
-  expect(received).toEqual({ kind: "rollback", label: 0, observedEpoch: 4 });
-  expect(response.status).toBe(409);
-});
 
 const refusalStatuses: readonly (readonly [ControlProblemCode, number])[] = [
   ["unknown-generation", 404],

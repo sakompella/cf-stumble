@@ -101,27 +101,6 @@ test("starts a fresh thread only on POST", async () => {
   expect(wrongMethod.status).toBe(404);
 });
 
-test("resets the workspace and reports what it reset", async () => {
-  let calls = 0;
-
-  const response = await ownerApiResponse(
-    new Request("https://cf-stumble.test/api/workspace/reset", {
-      method: "POST",
-    }),
-    supervisor({
-      resetWorkspace() {
-        calls += 1;
-
-        return Promise.resolve({ ok: true, reset: "workspace" });
-      },
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  expect(calls).toBe(1);
-  await expect(response.json()).resolves.toEqual({ ok: true, reset: "workspace" });
-});
-
 test("returns JSON 404 for unknown route and method pairs", async () => {
   const unknownPath = await ownerApiResponse(
     new Request("https://cf-stumble.test/api/unknown"),

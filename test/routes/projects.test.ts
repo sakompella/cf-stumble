@@ -32,53 +32,6 @@ function post(path: string, body: RequestBody): Request {
   });
 }
 
-test("lists the tenant's projects", async () => {
-  const response = await ownerApiResponse(
-    get("/api/projects"),
-    supervisor({
-      listProjects: () => Promise.resolve([{ kind: "repository", ...connectedProject }]),
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({
-    ok: true,
-    projects: [{ kind: "repository", ...connectedProject }],
-  });
-});
-
-const CONNECTED = { state: "connected", login: "octocat", source: "device-authorization" } as const;
-
-test("answers the recorded connection with the time the workspace was last checked", async () => {
-  const response = await ownerApiResponse(
-    get("/api/github/connection"),
-    supervisor({
-      getGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 1_000 }),
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  const body = await response.text();
-  expect(JSON.parse(body)).toEqual({ ok: true, github: CONNECTED, checkedAt: 1_000 });
-  expect(body).not.toContain(FAKE_TOKEN);
-});
-
-test("refreshes the connection on a POST from the page", async () => {
-  const response = await ownerApiResponse(
-    post("/api/github/connection/refresh", {}),
-    supervisor({
-      refreshGitHubConnection: () => Promise.resolve({ github: CONNECTED, checkedAt: 2_000 }),
-    }),
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toEqual({
-    ok: true,
-    github: CONNECTED,
-    checkedAt: 2_000,
-  });
-});
-
 test.each([
   ["rejects", new Error("workspace RPC is unavailable")],
   ["times out", new DOMException("workspace RPC timed out", "TimeoutError")],

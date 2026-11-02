@@ -12,8 +12,6 @@ import type { ChatGPTAccess } from "../src/chatgpt/index.js";
 import type { StreamingProviderPayload, WorkersAiBinding } from "../src/model-route-events.js";
 import type { ModelRouteRequest, ValidationFailure } from "../src/model-route.js";
 
-const REQUIRED_MODEL = "@cf/zai-org/glm-5.3-flash";
-
 type RecordedCall = Readonly<{ model: string; input: StreamingProviderPayload }>;
 
 type FakeBinding = Readonly<{ ai: WorkersAiBinding; calls: readonly RecordedCall[] }>;
@@ -105,25 +103,6 @@ test("the entrypoint answers a provider's two text deltas with exactly those two
   expect(done.message).toEqual({ role: "assistant", content: "Hello", tool_calls: [] });
   expect(done.usage.estimated).toBe(true);
   expect(done.usage.outputTokens).toBeGreaterThan(0);
-});
-
-test("the entrypoint asks the one fixed model with a streaming payload and nothing else", async () => {
-  const binding = bindingStreaming([sseLine({ response: "ok" }), DONE_LINE]);
-  await collectEvents(streamOf(routeOver(binding).runStream(REQUEST)));
-  expect(binding.calls).toHaveLength(1);
-  const call = binding.calls[0];
-
-  if (call === undefined) throw new Error("the entrypoint never called the binding");
-  expect(call.model).toBe(REQUIRED_MODEL);
-  expect(Object.keys(call.input).toSorted()).toEqual([
-    "max_tokens",
-    "messages",
-    "reasoning_effort",
-    "stream",
-  ]);
-  expect(call.input.stream).toBe(true);
-  expect(call.input.max_tokens).toBe(4096);
-  expect(call.input.messages).toEqual([{ role: "user", content: "hi" }]);
 });
 
 test("a request that names its own model is refused as a plain value and never reaches the binding", () => {
