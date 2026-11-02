@@ -12,7 +12,7 @@ The **supervisor** is the immutable half. It lives in the Supervisor Durable Obj
 
 There is no recovery harness and no automatic repair. Recovery is the owner rolling back to a generation that already ran, which loads a stored module map and rebuilds nothing.
 
-The supervisor reaches a facet through RPC: `compatibility` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). Nothing reaches a facet over HTTP: the Worker serves the page and the owner API and answers 404 for any other path. ADR-0003 does not fix this as a permanent contract.
+The supervisor reaches a facet through RPC: `compatibility` for the startup check, and `attach`, `createConversation`, `submit`, `events` and `abort` for conversations (`src/facet/conversation-protocol.ts`). The serving facet reaches back through two hosts that `attach` hands it: the conversation host, and the generation control that reads status and submits, prepares, activates or rolls back a generation (`src/supervisor/conversations/host-target.ts`, `src/generation-requests.ts`). Nothing reaches a facet over HTTP: the Worker serves the page and the owner API and answers 404 for any other path. ADR-0003 does not fix this as a permanent contract.
 
 ## What the main harness knows and tries to do
 
@@ -32,7 +32,9 @@ The workspace behaves like a normal development machine, with unrestricted inter
 
 A project commit is an ordinary commit. A harness commit becomes a generation only when the Supervisor gives that commit a generation label.
 
-The owner submits a harness commit as a **generation candidate** with `POST /api/generations/submit` (`src/routes/generations.ts`). The Supervisor labels the commit, prepares it, runs the startup check, and records the result against that generation. The owner may then ask the Supervisor to activate a generation or roll back to an earlier one. The Supervisor validates each request and performs or rejects it. Mutable code cannot write protected generation state or bypass those checks. ADR-0024 lets the main harness make the same requests, but that path is not built, so only the owner sends them.
+The owner submits a harness commit as a **generation candidate** with `POST /api/generations/submit` (`src/routes/generations.ts`). The Supervisor labels the commit, prepares it, runs the startup check, and records the result against that generation. The owner may then ask the Supervisor to activate a generation or roll back to an earlier one. The Supervisor validates each request and performs or rejects it. Mutable code cannot write protected generation state or bypass those checks. The main harness makes the same requests from a conversation with the `stumble` command (`src/stumble-cli/`): `stumble gen status`, `stumble gen prepare <sha>`, and `stumble gen activate|rollback <label> --epoch <n>`. The command runs in the facet, not in the container, and calls the generation control, which shares its validation and decisions with the HTTP routes. A generation activating itself ends its own facet; the next generation resumes the conversation from the Supervisor's alarm.
+
+The startup check mounts the candidate in a facet of its own, with a scripted model and no generation control. The candidate must report the Supervisor's facet compatibility within 5 seconds, then open a conversation, run one command in a scratch directory of the workspace, and finish with the scripted reply within 90 seconds. The candidate's facet and its conversation are deleted afterwards, so the serving conversations and the production model are never touched.
 
 ## Runtime and Computer
 
@@ -43,7 +45,7 @@ The harness source is TypeScript, and Dynamic Workers execute Worker-compatible 
 ## Not built
 
 - automatic promotion, or activating a fallback automatically;
-- the agent repairing itself, submitting generations, or approving changes;
+- the agent repairing itself after a broken generation, or a check of its changes beyond the startup check;
 - steering a running turn;
 - combined project and harness views;
 - public signup, teams, roles, or a custom account system; and
