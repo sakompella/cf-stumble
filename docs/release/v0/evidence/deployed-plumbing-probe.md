@@ -52,7 +52,7 @@ the last:
 
 1. `tar: src/github: Cannot utime: No such file or directory`, exit 2. Computer's userspace
    filesystem refuses `utime`, `chown` and `chmod`. Fixed: `tar -x -m --no-same-owner
---no-same-permissions` (commit `787ae6f`).
+   --no-same-permissions` (commit `787ae6f`).
 2. The build step was killed at about 55 s with exit -1, mid `pnpm install`. Computer's default
    command timeout. Fixed: every planned command carries a 900 s budget (`787ae6f`).
 3. `build-output-missing` after an eleven minute build that exited 0. The module map read went
