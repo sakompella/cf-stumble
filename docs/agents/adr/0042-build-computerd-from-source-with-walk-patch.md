@@ -22,9 +22,8 @@ list as `WORKSPACE_SYNC_IGNORES`, and a test checks that the two agree. Files un
 segment therefore exist only in the container: they are not durable and a container restart
 loses them.
 
-The build follows upstream's release workflow, and its `computerd-upstream` stage builds the same
-commit without the patch and checks that the result is byte-identical to the published binary.
-To upgrade, move the commit, check the reproduction, and re-apply the patch, as the Dockerfile
-header describes. Delete the patch and this record when an upstream release fixes the walk.
+The build follows upstream's release workflow. To upgrade, move `COMPUTER_COMMIT` in
+`containers/computerd.Dockerfile` and re-apply the patches. Delete the walk patch and this record
+when an upstream release fixes the walk.
 
 ADR-0044 changes how often the shim walks the disk: it no longer polls every 250 ms.
