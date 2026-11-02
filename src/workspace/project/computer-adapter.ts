@@ -89,7 +89,11 @@ function guardedReader(
 
         if (next.done) return { done: true };
 
-        if (next.value.name === "exit") await waitForPostCommandSync(reader);
+        if (next.value.name === "exit") {
+          await waitForPostCommandSync(reader);
+
+          if (guard.replaced()) throw new ContainerRestartedError();
+        }
 
         return { done: false, value: toBackendEvent(next.value) };
       } catch (cause) {

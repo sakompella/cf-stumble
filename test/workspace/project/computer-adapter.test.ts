@@ -44,3 +44,36 @@ test("marks an in-flight read as container-restarted after the runtime generatio
 
   await expect(read).rejects.toMatchObject({ code: "container-restarted" });
 });
+
+test("reports a container restart that happens while the exit waits for the post-command sync", async () => {
+  const state = { generation: 0 };
+
+  const events: ({ done: true } | { done: false; value: WorkspaceRuntimeEvent })[] = [
+    { done: false, value: { id: "1", seq: 0, name: "exit", code: 0 } },
+  ];
+
+  const runtime = {
+    exec: () =>
+      Promise.resolve({
+        getReader: () => ({
+          read: () => {
+            const next = events.shift();
+
+            if (next !== undefined) return Promise.resolve(next);
+
+            state.generation = 1;
+
+            return Promise.resolve({ done: true as const });
+          },
+          cancel: () => Promise.resolve(),
+        }),
+        kill: () => Promise.resolve(),
+      }),
+  };
+
+  const backend = computerExecBackend({ runtime }, "container-shell", state);
+
+  const handle = await backend.exec({ command: "true", cwd: "/workspace", timeoutMs: 100 });
+
+  await expect(handle.reader.read()).rejects.toMatchObject({ code: "container-restarted" });
+});
