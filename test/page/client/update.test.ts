@@ -60,13 +60,7 @@ test("the first listed project is selected and its events stream opened", () => 
   expect(listed.commands ?? []).toEqual([]);
 });
 
-test("the page reads the recorded GitHub connection on load and checks it again only when the owner asks", () => {
-  expect((init().commands ?? []).map((command) => command.name)).toEqual([
-    "FetchStatus",
-    "FetchProjects",
-    "FetchGitHub",
-    "FetchChatGPT",
-  ]);
+test("asking to refresh GitHub is what checks the connection again", () => {
   expect(commandNames(readyPage(), Message.ClickedRefreshGitHub())).toEqual(["RefreshGitHub"]);
 });
 

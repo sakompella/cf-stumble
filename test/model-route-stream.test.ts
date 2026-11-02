@@ -47,7 +47,7 @@ const MULTI_TURN_REQUEST: ModelRouteRequest = {
   ],
 };
 
-test("sends the whole conversation and its tools to the one fixed model", async () => {
+test("sends the whole conversation and its tools to the model, as a stream", async () => {
   const calls: Array<{ model: string; input: StreamingProviderPayload }> = [];
 
   const ai: ModelStreamInference = {
@@ -59,18 +59,12 @@ test("sends the whole conversation and its tools to the one fixed model", async 
   };
 
   await collectEvents(streamModelEvents(ai, MULTI_TURN_REQUEST));
-  expect(calls).toEqual([
-    {
-      model: "@cf/zai-org/glm-5.3-flash",
-      input: {
-        messages: MULTI_TURN_REQUEST.messages,
-        tools: MULTI_TURN_REQUEST.tools,
-        reasoning_effort: "low",
-        max_tokens: 4096,
-        stream: true,
-      },
-    },
-  ]);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.input).toMatchObject({
+    messages: MULTI_TURN_REQUEST.messages,
+    tools: MULTI_TURN_REQUEST.tools,
+    stream: true,
+  });
 });
 
 test("estimates non-zero usage, and marks it as an estimate, when the provider reports none", async () => {

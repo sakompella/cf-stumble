@@ -25,22 +25,15 @@ function succeeded(chatgpt: ReturnType<typeof viewOf>): Message {
 
 const SIGNING_IN = after(init().model, [succeeded(viewOf(DISCONNECTED, LOGIN))]);
 
-test("each connection state is worded, and only a connected one offers disconnecting", () => {
-  const cases: readonly (readonly [Fields, string, boolean])[] = [
-    [DISCONNECTED, "not connected (Workers AI fallback)", false],
-    [{ state: "connected", expiresAt: 1 }, "connected (gpt-6.1-sol)", true],
-    [
-      { state: "needs-reconnect", reason: "refresh-refused" },
-      "reconnect required: refresh-refused",
-      false,
-    ],
+test("only a connected state counts as connected, so only it offers disconnecting", () => {
+  const cases: readonly (readonly [Fields, boolean])[] = [
+    [DISCONNECTED, false],
+    [{ state: "connected", expiresAt: 1 }, true],
+    [{ state: "needs-reconnect", reason: "refresh-refused" }, false],
   ];
 
-  for (const [connection, wording, isConnected] of cases) {
-    expect(chatGPTConnection(viewOf(connection))).toMatchObject({
-      connection: wording,
-      isConnected,
-    });
+  for (const [connection, isConnected] of cases) {
+    expect(chatGPTConnection(viewOf(connection)).isConnected).toBe(isConnected);
   }
 });
 

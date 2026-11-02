@@ -13,22 +13,15 @@ afterEach(async () => {
   await reset();
 });
 
-test("an attach after a failed open opens the session again", async () => {
-  let opens = 0;
-
-  const storage = new Proxy(
-    {},
-    {
-      get: () => {
-        opens += 1;
-
-        throw new Error("the storage is unavailable");
-      },
-    },
-  );
+test("an attach after a failed open opens the session and arms the host", async () => {
+  let armed = 0;
 
   const host: ConversationHost & Readonly<{ dup(): ConversationHost }> = {
-    arm: () => Promise.resolve(),
+    arm: () => {
+      armed += 1;
+
+      return Promise.resolve();
+    },
     running: () => Promise.resolve(),
     workspace: () => Promise.reject(new Error("no workspace")),
     dup: () => host,
@@ -37,14 +30,27 @@ test("an attach after a failed open opens the session again", async () => {
   await runInDurableObject(
     env.SUPERVISOR.getByName("main-facet-open"),
     async (_instance, state) => {
-      Object.defineProperty(state, "storage", { value: storage });
+      const { storage } = state;
+      let failedOnce = false;
+
+      Object.defineProperty(state, "storage", {
+        get: () => {
+          if (!failedOnce) {
+            failedOnce = true;
+
+            throw new Error("the storage is unavailable");
+          }
+
+          return storage;
+        },
+      });
       const facet = new MainFacet(state, { MODEL: noModelRun });
 
       await expect(facet.attach(host)).rejects.toThrow("the storage is unavailable");
-      const afterFirst = opens;
+      expect(armed).toBe(0);
 
-      await expect(facet.attach(host)).rejects.toThrow("the storage is unavailable");
-      expect(opens).toBeGreaterThan(afterFirst);
+      await expect(facet.attach(host)).resolves.toBeUndefined();
+      expect(armed).toBeGreaterThan(0);
     },
   );
 });

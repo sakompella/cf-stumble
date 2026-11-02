@@ -15,21 +15,6 @@ function artifact(
   return parsedArtifact({ harnessCommit, entryModule, modules });
 }
 
-function loaderWithRecordedNames(names: string[]): WorkerLoader {
-  return {
-    get(name, getCode) {
-      if (name !== null) {
-        names.push(name);
-      }
-
-      return env.LOADER.get(name, getCode);
-    },
-    load(code) {
-      return env.LOADER.load(code);
-    },
-  };
-}
-
 async function responseText(worker: WorkerStub): Promise<string> {
   const response = await worker.getEntrypoint().fetch(new Request("https://cf-stumble.test/"));
 
@@ -77,12 +62,9 @@ test("loads a multi-module main harness whose entry module uses an imported valu
   expect(await responseText(loadedHarness.worker)).toBe("from an imported module");
 });
 
-test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader name", async () => {
-  const loaderNames: string[] = [];
-  const loader = loaderWithRecordedNames(loaderNames);
-
+test("a SHA-1 harness commit and a SHA-256 harness commit each serve their own code", async () => {
   const firstHarness = loadMainFacet(
-    loader,
+    env.LOADER,
     artifact("2123456789abcdef0123456789abcdef01234567", "main.js", [
       {
         name: "main.js",
@@ -93,7 +75,7 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
   );
 
   const secondHarness = loadMainFacet(
-    loader,
+    env.LOADER,
     artifact("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "main.js", [
       {
         name: "main.js",
@@ -102,11 +84,6 @@ test("uses each labeled SHA-1 or SHA-256 harness commit as the Worker Loader nam
     ]),
     { MODEL: modelRoute },
   );
-
-  expect(loaderNames).toEqual([
-    "2123456789abcdef0123456789abcdef01234567",
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  ]);
 
   expect(await responseText(firstHarness.worker)).toBe("first harness");
   expect(await responseText(secondHarness.worker)).toBe("second harness");

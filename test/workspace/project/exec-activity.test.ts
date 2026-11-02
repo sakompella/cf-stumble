@@ -77,13 +77,27 @@ test("a refused exec never holds the workspace", async () => {
   expect(activity.begun).toBe(0);
 });
 
-test("filesystem calls and exec starts mark activity without holding the workspace", async () => {
+test.each([
+  ["lstat", (target: ProjectRpcTarget) => target.lstat("/")],
+  ["readFile", (target: ProjectRpcTarget) => target.readFile("/missing")],
+  [
+    "writeFile",
+    (target: ProjectRpcTarget) => target.writeFile("/a", new Uint8Array(), "overwrite"),
+  ],
+])("a %s call marks activity and does not hold the workspace", async (_name, call) => {
   const { activity, target } = makeTarget();
 
-  await target.lstat("/");
-  await target.readFile("/missing");
-  await target.writeFile("/a", new Uint8Array(), "overwrite");
+  await call(target);
 
-  expect(activity.touched).toBeGreaterThanOrEqual(3);
+  expect(activity.touched).toBeGreaterThan(0);
   expect(activity.open).toBe(0);
+});
+
+test("starting an exec marks activity", async () => {
+  const { activity, execBackend, target } = makeTarget();
+  execBackend.deferNextExec(deferredExec());
+
+  await target.startExec({ command: "sleep 9" });
+
+  expect(activity.touched).toBeGreaterThan(0);
 });

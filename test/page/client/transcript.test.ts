@@ -2,12 +2,7 @@ import * as Option from "effect/Option";
 import { expect, test } from "vitest";
 import { EMPTY_CONVERSATION, type Conversation } from "../../../src/page/client/conversation.js";
 import type { Entry, PiMessage } from "../../../src/page/client/agent-event.js";
-import {
-  boundedLines,
-  diffLineKind,
-  looksLikeDiff,
-  transcriptOf,
-} from "../../../src/page/client/transcript.js";
+import { boundedLines, transcriptOf } from "../../../src/page/client/transcript.js";
 
 function conversationOf(...messages: readonly PiMessage[]): Conversation {
   const entries: Entry[] = messages.map((message, index) => ({
@@ -127,17 +122,4 @@ test("output is bounded to what the page lays out", () => {
   expect(boundedLines(long).lines.join("").length).toBe(20_000);
   expect(boundedLines(many).lines).toHaveLength(400);
   expect(boundedLines("a\nb")).toEqual({ lines: ["a", "b"], isShortened: false });
-});
-
-test("a unified diff is recognised and its lines are classified", () => {
-  expect(looksLikeDiff("text\n@@ -1 +1 @@\n")).toBe(true);
-  expect(looksLikeDiff("plain output")).toBe(false);
-  expect(["@@ -1", "+++ b", "--- a", "+x", "-y", " z"].map((line) => diffLineKind(line))).toEqual([
-    "hunk",
-    "hunk",
-    "hunk",
-    "added",
-    "removed",
-    "plain",
-  ]);
 });

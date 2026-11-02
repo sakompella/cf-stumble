@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   BUCKET_MS,
   formatReport,
+  isoMinute,
+  METRICS_LAG_MS,
   MINUTE_MS,
   runChecks,
   type CheckInput,
@@ -136,23 +138,33 @@ describe("route classes", () => {
 });
 
 describe("the window the check can see", () => {
-  it("is unknown, not fine, when usage lag leaves nothing complete to examine", () => {
-    const justNow = {
-      ...check([request(0)], runningBetween(0, 25), 25),
-      nowMs: START + 25 * MINUTE_MS,
-    };
+  it("is unknown, not fine, while usage lag leaves nothing of the window complete", () => {
+    for (const sinceWindowStartMs of [0, METRICS_LAG_MS / 2, METRICS_LAG_MS]) {
+      const input = { ...check([], [], 5), nowMs: START + sinceWindowStartMs };
 
-    const brief = { ...check([], runningBetween(0, 5), 5), nowMs: START + 8 * MINUTE_MS };
-
-    assert.deepEqual(rules(justNow), []);
-    assert.deepEqual(rules(brief), ["unknown"]);
+      assert.deepEqual(
+        rules(input),
+        ["unknown"],
+        `${sinceWindowStartMs} ms after the window began`,
+      );
+    }
   });
 
-  it("is the part of the window the usage data has filled, and the green line says so", () => {
-    const recent = { ...check([], [], 120), nowMs: START + 125 * MINUTE_MS };
+  it("is judged once usage lag leaves part of the window complete", () => {
+    const input = { ...check([], [], 5), nowMs: START + METRICS_LAG_MS + MINUTE_MS };
 
-    assert.deepEqual(formatReport(recent, runChecks(recent)), [
-      "✓ ops-check cf-stumble 2026-10-01T00:00Z..01:55Z",
+    assert.deepEqual(rules(input), []);
+  });
+
+  it("ends the green line at now minus the usage lag, or at the window's end if that is earlier", () => {
+    const stillFilling = { ...check([], [], 120), nowMs: START + 125 * MINUTE_MS };
+    const settled = check([], [], 120);
+
+    assert.deepEqual(formatReport(stillFilling, runChecks(stillFilling)), [
+      `✓ ops-check cf-stumble ${isoMinute(START)}..${isoMinute(stillFilling.nowMs - METRICS_LAG_MS).slice(11)}`,
+    ]);
+    assert.deepEqual(formatReport(settled, runChecks(settled)), [
+      `✓ ops-check cf-stumble ${isoMinute(START)}..${isoMinute(settled.window.toMs).slice(11)}`,
     ]);
   });
 });

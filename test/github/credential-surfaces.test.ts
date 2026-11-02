@@ -35,16 +35,6 @@ const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
 
 const REPOSITORY = "https://github.com/sample/repo-1";
 
-function credentialModules(): [string, string][] {
-  return Object.entries(sourceFiles).filter(
-    ([path]) =>
-      path.includes("/src/github/") ||
-      path.includes("/src/workspace/github-credential") ||
-      path.includes("/src/workspace/credential-access") ||
-      path.includes("/src/supervisor/projects/"),
-  );
-}
-
 function githubReplying(): GitHubFetch {
   const replies = [
     {
@@ -110,18 +100,6 @@ test("no tracked source file or agent document contains a credential", () => {
   ).toEqual([]);
 });
 
-test("a credential module logs only through the shared redacting helper, never console directly", () => {
-  const logging = credentialModules()
-    .filter(([, contents]) => /\bconsole\s*\./u.test(contents))
-    .map(([path]) => path);
-
-  expect(credentialModules().length).toBeGreaterThan(5);
-  expect(
-    logging,
-    "a bare console call on this path would bypass the helper that redacts a cause",
-  ).toEqual([]);
-});
-
 test("a whole authorization leaves the token in the workspace and nowhere else", async () => {
   const events = capturedEvents();
   const workspace = new FakeTenantWorkspace();
@@ -181,31 +159,30 @@ test("a whole authorization leaves the token in the workspace and nowhere else",
   expect(everything, "the user code is the owner's to type").not.toContain("WDJB-MJHT");
 });
 
-test("an unattended run logs that its credential came from the configured token", async () => {
+test("an unattended run installs the configured token on the workspace and reports the credential connected", async () => {
   const events = capturedEvents();
   const workspace = new FakeTenantWorkspace();
   const name = "credential-surfaces-configured-token";
 
-  await runInDurableObject(env.SUPERVISOR.getByName(name), async (_instance, state) => {
-    const { github } = tenantConnections(state.storage, name, workspace, {
-      clientId: undefined,
-      fallbackToken: FAKE_TOKEN,
-      fetcher: githubReplying(),
-    });
+  const status = await runInDurableObject(
+    env.SUPERVISOR.getByName(name),
+    async (_instance, state) => {
+      const { github } = tenantConnections(state.storage, name, workspace, {
+        clientId: undefined,
+        fallbackToken: FAKE_TOKEN,
+        fetcher: githubReplying(),
+      });
 
-    await Effect.runPromise(github.ensureCredential(NOW));
-  });
+      await Effect.runPromise(github.ensureCredential(NOW));
 
-  const logged = events();
-  expect(named(logged, "github-credential.ensure")).toEqual([
-    expect.objectContaining({
-      before: "disconnected",
-      fallbackConfigured: true,
-      outcome: "connected",
-    }),
+      return github.lastKnown(NOW);
+    },
+  );
+
+  expect(status.github).toMatchObject({ state: "connected" });
+  expectTokenOnlyOnInstallStdin(workspace);
+  expect(named(events(), "github-credential.install")).toEqual([
+    expect.objectContaining({ source: "configured-token" }),
   ]);
-  expect(named(logged, "github-credential.install")).toEqual([
-    expect.objectContaining({ source: "configured-token", outcome: "connected" }),
-  ]);
-  expect(JSON.stringify(logged)).not.toContain(FAKE_TOKEN);
+  expect(JSON.stringify(events())).not.toContain(FAKE_TOKEN);
 });

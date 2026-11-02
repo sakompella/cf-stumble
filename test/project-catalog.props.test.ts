@@ -2,12 +2,8 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import { expect, test } from "vitest";
 
-import {
-  canonicalRepositoryUrl,
-  parseProjectId,
-  PROJECT_ID_LIMIT,
-  projectIdForRepository,
-} from "../src/project-catalog.js";
+import { canonicalRepositoryUrl, projectIdForRepository } from "../src/project-catalog.js";
+import { projectIdFromPath, routePattern } from "../src/routes/route-pattern.js";
 import { HARNESS_PROJECT_ID } from "../src/selectable-projects.js";
 
 const alphanumeric = gs.text({ alphabet: "abcXYZ012", minSize: 1, maxSize: 8 });
@@ -106,17 +102,29 @@ test("gives distinct repositories distinct ids and one repository one id", () =>
   });
 });
 
-test("derives an id for every short GitHub repository name that is safe as a path segment", () => {
+const wideOwner = gs.text({ alphabet: "aZ0-", minSize: 1, maxSize: 39 });
+
+const wideName = gs.text({ alphabet: "aZ0-._", minSize: 1, maxSize: 100 });
+
+test("every short GitHub repository name derives an id", () => {
   hegel.test((tc) => {
     const repository = drawRepository(tc);
     tc.assume(canonicalOf(repository) !== undefined);
-    const id = idOf(repository);
 
-    expect(id).toBeDefined();
-    expect(id).toMatch(/^[a-z0-9-]+$/u);
-    expect(id?.length).toBeLessThanOrEqual(PROJECT_ID_LIMIT);
-    expect(parseProjectId(id ?? "")).toBe(id);
-    expect(encodeURIComponent(id ?? "")).toBe(id);
+    expect(idOf(repository)).toBeDefined();
+  });
+});
+
+test("an id derived for a repository of any GitHub size is the id its API routes carry", () => {
+  hegel.test((tc) => {
+    const repository = { owner: tc.draw(wideOwner), name: tc.draw(wideName) };
+    const id = idOf(repository);
+    tc.assume(id !== undefined);
+
+    const path = `/api/projects/${id ?? ""}/messages`;
+
+    expect(routePattern(path)).toBe("/api/projects/:projectId/messages");
+    expect(projectIdFromPath(path, "/messages")).toBe(id);
     expect(id).not.toBe(HARNESS_PROJECT_ID);
   });
 });

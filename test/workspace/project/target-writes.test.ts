@@ -6,25 +6,22 @@ import {
   FakeProjectFilesystemProvider,
   FakeProjectTransactions,
 } from "./fakes.js";
+import { MAX_FILE_BYTES } from "../../../src/workspace/project/protocol.js";
 import { encode, makeTarget } from "./target-helpers.js";
 
-test("100 concurrent appends preserve every framed payload exactly once", async () => {
-  const { target } = makeTarget();
-  const lines = Array.from({ length: 100 }, (_unused, index) => `line-${index}`);
+test("concurrent appends land after the existing content, each once, in call order", async () => {
+  const { provider, target } = makeTarget();
+  provider.addFile("/workspace/log.txt", encode("head\n"));
+  const lines = Array.from({ length: 100 }, (_unused, index) => `line-${index}\n`);
 
-  await Promise.all(
-    lines.map((line) => target.writeFile("/log.txt", encode(`${line}\n`), "append")),
+  const results = await Promise.all(
+    lines.map((line) => target.writeFile("/log.txt", encode(line), "append")),
   );
 
   const read = await target.readFile("/log.txt");
-  expect(read.ok).toBe(true);
 
-  if (read.ok) {
-    const written = new TextDecoder().decode(read.value).split("\n").filter(Boolean);
-    expect(written.length).toBe(100);
-    expect(new Set(written).size).toBe(100);
-    expect(new Set(written)).toEqual(new Set(lines));
-  }
+  expect(results.every((result) => result.ok)).toBe(true);
+  expect(read).toEqual({ ok: true, value: encode(`head\n${lines.join("")}`) });
 });
 
 test("concurrent exclusive creates yield exactly one success", async () => {
@@ -46,15 +43,15 @@ test("concurrent exclusive creates yield exactly one success", async () => {
   expect(conflicts.length).toBe(19);
 });
 
-test("appending never reads the file's existing content first", async () => {
-  const { provider, target, transactions } = makeTarget();
-  await target.writeFile("/log.txt", encode("first\n"), "append");
-  provider.calls.length = 0;
+test("appending to a file too large to read still adds the bytes", async () => {
+  const { provider, target } = makeTarget();
+  provider.addFile("/workspace/big.log", new Uint8Array(MAX_FILE_BYTES + 1));
 
-  await target.writeFile("/log.txt", encode("second\n"), "append");
+  const appended = await target.writeFile("/big.log", encode("x"), "append");
+  const info = await target.lstat("/big.log");
 
-  expect(provider.calls.some((call) => call.startsWith("read:"))).toBe(false);
-  expect(transactions.calls).toBeGreaterThanOrEqual(2);
+  expect(appended.ok).toBe(true);
+  expect(info).toMatchObject({ ok: true, value: { size: MAX_FILE_BYTES + 2 } });
 });
 
 function throwingProvider(code: string): FakeProjectFilesystemProvider {

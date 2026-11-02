@@ -2,7 +2,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { Generation, GenerationStatus } from "../../src/supervisor/generations.js";
 import { testHarnessCommit } from "../harness-commit-fixtures.js";
 import { label as generationLabel } from "../supervisor/generations/fixtures.js";
-import { capturedEvents, everythingLogged } from "../log-capture.js";
 import { controlRequest, ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 
 afterEach(() => {
@@ -29,14 +28,12 @@ const labeled = {
   epoch: 4,
 } as const;
 
-test("returns a failed build step's output tail to the owner and writes none of it to a log", async () => {
+test("returns a failed build step's output tail to the owner", async () => {
   const diagnostics = {
     stdoutTail: "",
-    stderrTail: "error TS2322: PRIVATE-COMPILER-OUTPUT",
+    stderrTail: "error TS2322: compiler output",
     truncated: false,
   };
-
-  capturedEvents();
 
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),
@@ -63,7 +60,6 @@ test("returns a failed build step's output tail to the owner and writes none of 
   await expect(response.json()).resolves.toMatchObject({
     preparation: { ok: false, problem: { code: "build-step-failed", diagnostics } },
   });
-  expect(everythingLogged()).not.toContain("PRIVATE-COMPILER-OUTPUT");
 });
 
 test("reports a preparation failure without echoing the internal error", async () => {

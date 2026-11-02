@@ -146,3 +146,92 @@ test("a new submission or refused activation does not keep an earlier attempt's 
     textsRendered(refused, [ID.activateStatus, ID.activateSentEpoch, ID.activateEffect]),
   ).toEqual(["rejected: stale-epoch", "3", ""]);
 });
+
+function classesOf(node: Rendered | string): readonly string[] {
+  if (Predicate.isString(node)) {
+    return [];
+  }
+
+  return Object.keys(node.data?.class ?? {}).flatMap((name) => name.split(" "));
+}
+
+function modelShowingToolOutput(output: string): Model {
+  const listed = update(
+    init().model,
+    Message.SucceededFetchProjects({
+      projects: [
+        { id: "repo", displayName: "repo", isHarness: false, location: "/workspace/repo" },
+      ],
+    }),
+  ).model;
+
+  const model = update(
+    listed,
+    Message.ReceivedEvent({
+      streamId: listed.eventsStreamId,
+      event: {
+        type: "snapshot",
+        entries: [
+          {
+            id: 1,
+            kind: "pi.test",
+            model: [
+              {
+                role: "assistant",
+                content: [{ type: "toolCall", id: "t", name: "read", arguments: { path: "a" } }],
+                stopReason: "toolUse",
+              },
+            ],
+          },
+        ],
+        tools: [{ callId: "t", name: "read", status: "running", output }],
+        inbox: [],
+      },
+    }),
+  ).model;
+
+  return model;
+}
+
+function diffLinesRendered(output: string): readonly (readonly [string, readonly string[]])[] {
+  const model = modelShowingToolOutput(output);
+
+  let lines: readonly (readonly [string, readonly string[]])[] = [];
+
+  const collect = (node: Rendered | string): typeof lines =>
+    Predicate.isString(node)
+      ? []
+      : [
+          ...(classesOf(node).includes("diff-line")
+            ? [[textOf(node).trimEnd(), classesOf(node)] as const]
+            : []),
+          ...(node.children ?? []).flatMap((child) => collect(child)),
+        ];
+
+  Scene.scene(
+    { update, view },
+    Scene.given(model),
+    Scene.tap((simulation) => {
+      lines = collect(simulation.html);
+    }),
+    Scene.Mount.resolve(FollowTranscript, Message.CompletedFollowTranscript()),
+  );
+
+  return lines;
+}
+
+test("a tool's unified diff output shows headers, additions and removals in their own styles", () => {
+  const rendered = diffLinesRendered("diff --git a/f b/f\n@@ -1,2 +1,2 @@\n same\n-old\n+new");
+  const kindOf = (line: string) => rendered.find(([text]) => text === line)?.[1] ?? [];
+
+  expect(kindOf("@@ -1,2 +1,2 @@")).toContain("hunk");
+  expect(kindOf("-old")).toContain("removed");
+  expect(kindOf("+new")).toContain("added");
+  expect(kindOf(" same")).not.toContain("hunk");
+  expect(kindOf(" same")).not.toContain("added");
+  expect(kindOf(" same")).not.toContain("removed");
+});
+
+test("output that is not a diff renders as plain text, without diff lines", () => {
+  expect(diffLinesRendered("-just a list\n+of things")).toEqual([]);
+});
