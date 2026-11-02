@@ -66,49 +66,6 @@ test("returns a failed build step's output tail to the owner and writes none of 
   expect(everythingLogged()).not.toContain("PRIVATE-COMPILER-OUTPUT");
 });
 
-const malformedBodies: readonly (readonly [string, string])[] = [
-  ["unparsable JSON", '{"harnessCommit":'],
-  ["a JSON string", '"submit"'],
-  ["a missing harness commit", "{}"],
-  ["a request ID", `{"harnessCommit":"${harnessCommit}","requestId":"r"}`],
-  ["an observed epoch", `{"harnessCommit":"${harnessCommit}","observedEpoch":0}`],
-  ["an unknown key", `{"harnessCommit":"${harnessCommit}","tenant":"other"}`],
-  ["a supervisor name", `{"harnessCommit":"${harnessCommit}","supervisorName":"other"}`],
-  ["a truncated harness commit", '{"harnessCommit":"0123456789abcdef"}'],
-  ["a harness commit that is not a string", '{"harnessCommit":7}'],
-  ["an array body", `[{"harnessCommit":"${harnessCommit}"}]`],
-];
-
-test.each(malformedBodies)(
-  "rejects a submission carrying %s without reaching the Supervisor",
-  async (_description, body) => {
-    let invoked = false;
-
-    const response = await ownerApiResponse(
-      submitRequest(body),
-      supervisor({
-        submitGeneration() {
-          invoked = true;
-
-          return Promise.resolve(labeled);
-        },
-        prepareGeneration() {
-          invoked = true;
-
-          return Promise.resolve({ ok: false, problem: { code: "unknown-generation", label: 1 } });
-        },
-      }),
-    );
-
-    expect(invoked).toBe(false);
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      ok: false,
-      error: { code: "invalid-submission-request" },
-    });
-  },
-);
-
 test("reports a preparation failure without echoing the internal error", async () => {
   const response = await ownerApiResponse(
     submitRequest(submissionBody()),

@@ -24,13 +24,19 @@ function isTokenCount(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
-test("reported usage is kept only when both counts are non-negative whole numbers", () => {
+const SPELLINGS = [
+  ["prompt_tokens", "completion_tokens"],
+  ["input_tokens", "output_tokens"],
+] as const;
+
+test("reported usage is kept only when both counts are non-negative whole numbers, under either spelling", () => {
   hegel.test((tc) => {
+    const [promptKey, completionKey] = tc.draw(gs.sampledFrom([...SPELLINGS]));
     const prompt = withoutNegativeZero(tc.draw(tokenCandidates));
     const completion = withoutNegativeZero(tc.draw(tokenCandidates));
 
     const { usage } =
-      parseProviderChunk({ usage: { prompt_tokens: prompt, completion_tokens: completion } }) ?? {};
+      parseProviderChunk({ usage: { [promptKey]: prompt, [completionKey]: completion } }) ?? {};
 
     expect(usage).toEqual(
       isTokenCount(prompt) && isTokenCount(completion)

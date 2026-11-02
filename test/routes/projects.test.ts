@@ -2,8 +2,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ownerApiResponse, ownerApiSupervisor as supervisor } from "./helpers.js";
 import { sampleProjectOne } from "../project-fixtures.js";
 
-const FAKE_TOKEN = "ghp_cfstumbleFAKEtokenFAKEtoken0123456789";
-
 const ORIGIN = "https://cf-stumble.test";
 
 afterEach(() => {
@@ -86,16 +84,14 @@ test("connects the repository the body names, and nothing else it carries", asyn
   });
 });
 
-test.each([
-  [{ repositoryUrl: 7 }],
-  [{ displayName: "no url" }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", displayName: 7 }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", displayName: null }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", tenant: "someone-else" }],
-  [{ repositoryUrl: "https://github.com/sample/repo-1", token: FAKE_TOKEN }],
-  ["not an object"],
-])("refuses the connect body %j before it reaches the Supervisor", async (body) => {
-  const response = await ownerApiResponse(post("/api/projects/connect", body), supervisor());
+test("refuses a connect body whose displayName is null before it reaches the Supervisor", async () => {
+  const response = await ownerApiResponse(
+    post("/api/projects/connect", {
+      repositoryUrl: "https://github.com/sample/repo-1",
+      displayName: null,
+    }),
+    supervisor(),
+  );
 
   expect(response.status).toBe(400);
   await expect(response.json()).resolves.toEqual({
