@@ -21,10 +21,9 @@ import {
   type Extension,
 } from "@earendil-works/pi-durable";
 import { setTimeout as sleep } from "node:timers/promises";
+import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import {
-  CONNECTED_PROJECT_ID,
   CONNECTED_PROJECT_URL,
-  HARNESS_LOCATION,
   HARNESS_PROJECT_ID,
   HARNESS_PROJECT_URL,
   HARNESS_SELF_PROJECT_ID,
@@ -47,16 +46,14 @@ export const EARLIER_EDIT_MARKER = "EARLIER-EDIT-KEPT";
 
 export function projectLocation(projectId: string): string {
   if (projectId === HARNESS_SELF_PROJECT_ID) {
-    return HARNESS_LOCATION;
+    return HARNESS_DIRECTORY;
   }
 
   if (projectId === HARNESS_PROJECT_ID) {
     return HARNESS_PROJECT_URL;
   }
 
-  return projectId === CONNECTED_PROJECT_ID
-    ? CONNECTED_PROJECT_URL
-    : `/workspace/projects/${projectId}`;
+  return CONNECTED_PROJECT_URL;
 }
 
 export function seedExchange(projectId: string) {
@@ -122,7 +119,7 @@ function freshBarrier(): Barrier {
   return { ...barrier, released };
 }
 
-function stubTools(scenario: () => HarnessScenario, barrier: Barrier): Extension {
+function stubTools(scenario: HarnessScenario, barrier: Barrier): Extension {
   const bash = defineTool({
     name: "bash",
     description: "Run a shell command in the project",
@@ -131,7 +128,7 @@ function stubTools(scenario: () => HarnessScenario, barrier: Barrier): Extension
       const [first, second] = TOOL_OUTPUT;
       api.output(first);
 
-      if (scenario() === "ready-paused") {
+      if (scenario === "ready-paused") {
         barrier.reached = true;
         await awaitWithContext(barrier.released, toolContext);
       }
@@ -156,13 +153,13 @@ export type Conversations = Readonly<{
   close: () => Promise<void>;
 }>;
 
-async function openHarness(scenario: () => HarnessScenario, barrier: Barrier) {
+async function openHarness(scenario: HarnessScenario, barrier: Barrier) {
   const faux = fauxProvider({ tokensPerSecond: 80 });
 
   const respond: FauxResponseFactory = (transcript) => {
     faux.appendResponses([respond]);
 
-    return answer(scenario(), transcript.messages);
+    return answer(scenario, transcript.messages);
   };
 
   faux.setResponses([respond]);
@@ -190,7 +187,7 @@ async function openHarness(scenario: () => HarnessScenario, barrier: Barrier) {
   return { harness, create };
 }
 
-export async function openConversations(scenario: () => HarnessScenario): Promise<Conversations> {
+export async function openConversations(scenario: HarnessScenario): Promise<Conversations> {
   const barrier = freshBarrier();
   const { harness, create } = await openHarness(scenario, barrier);
   const byProject = new Map<string, Promise<Conversation>>();

@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { initialProjects, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
+import { BASELINE_PROJECTS, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
 import type { Conversations } from "./conversations.mjs";
 import type { JsonValue } from "../json.mjs";
 
@@ -13,7 +13,7 @@ export type RecordedRequest = Readonly<{
 export type RequestRecord = { method: string; path: string; body: JsonValue; status: number };
 
 export type ScenarioState = {
-  scenario: HarnessScenario;
+  readonly scenario: HarnessScenario;
   projects: ProjectEntry[];
   requests: RequestRecord[];
   conversations: Conversations;
@@ -26,7 +26,7 @@ export function initialState(
 ): ScenarioState {
   return {
     scenario,
-    projects: [...initialProjects(scenario)],
+    projects: [...BASELINE_PROJECTS],
     requests: [],
     conversations,
     openEventStreams: new Map(),

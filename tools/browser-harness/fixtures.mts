@@ -1,22 +1,11 @@
-import { HARNESS_DIRECTORY } from "../../src/workspace-layout.js";
 import type { JsonValue } from "../json.mjs";
 
-export const HARNESS_SCENARIOS = [
-  "ready",
-  "ready-paused",
-  "model-error",
-  "workspace-busy",
-  "no-active-generation",
-  "no-projects",
-  "github-disconnected",
-  "github-awaiting-authorization",
-] as const;
-
-export type HarnessScenario = (typeof HARNESS_SCENARIOS)[number];
-
-export function parseScenario(value: string | null | undefined): HarnessScenario | undefined {
-  return HARNESS_SCENARIOS.find((scenario) => scenario === value);
-}
+export type HarnessScenario =
+  | "ready"
+  | "ready-paused"
+  | "model-error"
+  | "github-disconnected"
+  | "github-awaiting-authorization";
 
 export const HARNESS_PROJECT_ID = "octocat-hello-world";
 
@@ -27,8 +16,6 @@ export const HARNESS_SELF_PROJECT_ID = "harness";
 export const CONNECTED_PROJECT_ID = "octocat-new-repo";
 
 export const CONNECTED_PROJECT_URL = "https://github.com/octocat/new-repo";
-
-export const HARNESS_LOCATION = HARNESS_DIRECTORY;
 
 export type ProjectEntry = Readonly<{
   kind: "repository" | "harness";
@@ -53,10 +40,6 @@ export const NEW_PROJECT: ProjectEntry = {
   displayName: "new-repo",
   repositoryUrl: CONNECTED_PROJECT_URL,
 };
-
-export function initialProjects(scenario: HarnessScenario): readonly ProjectEntry[] {
-  return scenario === "no-projects" ? [] : BASELINE_PROJECTS;
-}
 
 const CONNECTED_GITHUB = {
   state: "connected",

@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { resolve } from "node:path";
-import { parseScenario, type HarnessScenario, type ProjectEntry } from "./fixtures.mjs";
+import type { HarnessScenario } from "./fixtures.mjs";
 import { openConversations, type Conversations } from "./conversations.mjs";
 import { parseJsonRecordText, type JsonValue } from "../json.mjs";
 import {
@@ -21,15 +20,11 @@ import {
 
 export type HarnessServer = Readonly<{
   url: string;
-  scenario: () => HarnessScenario;
-  setScenario: (scenario: HarnessScenario) => void;
   requests: () => readonly RecordedRequest[];
-  clearRequests: () => void;
   waitForBarrier: (timeoutMs?: number) => Promise<void>;
   release: () => void;
   openEventStreams: (projectId: string) => number;
   entries: Conversations["entries"];
-  projects: () => readonly ProjectEntry[];
   close: () => Promise<void>;
 }>;
 
@@ -45,34 +40,6 @@ function readBody(req: IncomingMessage): Promise<string> {
     });
     req.on("error", failed);
   });
-}
-
-function serveHarnessRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-  state: ScenarioState,
-): number | undefined {
-  if (req.method === "GET" && url.pathname === "/__harness/requests") {
-    sendJson(res, 200, { ok: true, requests: [...state.requests] });
-
-    return 200;
-  }
-
-  if (req.method !== "POST" || url.pathname !== "/__harness/scenario") {
-    return undefined;
-  }
-
-  const requested = parseScenario(url.searchParams.get("name"));
-
-  if (requested !== undefined) {
-    state.scenario = requested;
-  }
-
-  const status = requested === undefined ? 400 : 200;
-  sendJson(res, status, { ok: requested !== undefined, scenario: state.scenario });
-
-  return status;
 }
 
 async function handle(
@@ -91,14 +58,6 @@ async function handle(
 
   if (conversation !== undefined) {
     await serveConversation(res, state, conversation, parsed, record);
-
-    return;
-  }
-
-  const harnessStatus = serveHarnessRoute(req, res, url, state);
-
-  if (harnessStatus !== undefined) {
-    record.status = harnessStatus;
 
     return;
   }
@@ -136,14 +95,7 @@ function isAddressInfo(address: string | AddressInfo | null): address is Address
 function controls(state: ScenarioState, url: string, close: () => Promise<void>): HarnessServer {
   return {
     url,
-    scenario: () => state.scenario,
-    setScenario: (next) => {
-      state.scenario = next;
-    },
     requests: () => state.requests.map((entry) => ({ ...entry })),
-    clearRequests: () => {
-      state.requests = [];
-    },
     waitForBarrier: (timeoutMs = 20_000) =>
       waitUntil(
         () => state.conversations.barrier.reached,
@@ -155,18 +107,12 @@ function controls(state: ScenarioState, url: string, close: () => Promise<void>)
     },
     openEventStreams: (projectId) => state.openEventStreams.get(projectId) ?? 0,
     entries: (projectId) => state.conversations.entries(projectId),
-    projects: () => [...state.projects],
     close,
   };
 }
 
-export async function startHarnessServer(
-  initialScenario?: HarnessScenario,
-): Promise<HarnessServer> {
-  const scenario =
-    initialScenario ?? parseScenario(process.env.CF_STUMBLE_HARNESS_SCENARIO) ?? "ready";
-
-  const conversations = await openConversations(() => state.scenario);
+export async function startHarnessServer(scenario: HarnessScenario): Promise<HarnessServer> {
+  const conversations = await openConversations(scenario);
   const state = initialState(scenario, conversations);
 
   const server = createServer((req, res) => {
@@ -200,13 +146,4 @@ export async function startHarnessServer(
       started(controls(state, `http://127.0.0.1:${address.port}`, close));
     });
   });
-}
-
-const invokedDirectly =
-  process.argv[1] !== undefined && resolve(process.argv[1]) === import.meta.filename;
-
-if (invokedDirectly) {
-  const running = await startHarnessServer();
-  console.log(`harness server on ${running.url} serving scenario "${running.scenario()}"`);
-  console.log(`switch it with: curl -X POST "${running.url}/__harness/scenario?name=ready-paused"`);
 }

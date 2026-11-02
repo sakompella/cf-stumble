@@ -112,12 +112,6 @@ export async function serveConversation(
     return;
   }
 
-  if (state.scenario === "no-active-generation") {
-    refuse(res, record, 503, "no-active-generation");
-
-    return;
-  }
-
   if (action === "events") {
     record.status = 200;
     await streamEvents(res, state, projectId);
@@ -143,12 +137,6 @@ export async function serveConversation(
 
   if (message === undefined) {
     refuse(res, record, 400, "invalid-message");
-
-    return;
-  }
-
-  if (state.scenario === "workspace-busy") {
-    refuse(res, record, 409, "workspace-busy");
 
     return;
   }

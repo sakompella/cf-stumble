@@ -6,7 +6,6 @@
     "src/facet/generation-1/main-facet.ts!",
     "tools/*.mts!",
     "tools/ops-check/run.mts!",
-    "tools/browser-harness/server.mts!",
     "infra/alchemy.run.ts!"
   ],
   "project": ["src/**/*.ts!", "tools/**/*.{ts,mts}!", "infra/*.ts!"],
