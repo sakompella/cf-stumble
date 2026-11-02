@@ -10,7 +10,7 @@ Use this file to find the repository's agent-authored domain documentation. cf-s
 4. Read `docs/agents/design/computer-integration.md` when the change touches the workspace or the build.
 5. Read `docs/agents/status.md` for what is deployed, what was decided outside an ADR, and what is still open.
 
-Read the other files below when their topic comes up. `docs/release/v0/` is history, not current scope, and is not required reading.
+Read the other files below when their topic comes up.
 
 ## Records
 

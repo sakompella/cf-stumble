@@ -17,8 +17,6 @@ ADR-0043 and ADR-0044.
 | Fixed                                                                                                  | The stop and the walk (ADR-0043, ADR-0044); the credential loss that made status reads fail; status reads that answer from the Supervisor's record            |
 | Not fixed                                                                                              | A client that polls a route that still touches the workspace, such as the connection refresh or a turn, keeps the container up. `ops:check` does not flag it. |
 
-The aggregated daily charges are in `docs/agents/evidence/container-cost-2026-09.json`.
-
 ## Timeline
 
 All times are UTC. Running hours come from GraphQL `containersUsageAdaptiveGroups` and match the
