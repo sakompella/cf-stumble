@@ -70,11 +70,10 @@ RUN sed -i \
  && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/10snapshot \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      fuse3 libfuse2t64 ca-certificates curl gnupg git tar \
+      fuse3 libfuse2t64 ca-certificates curl git tar \
  && mkdir -p /etc/apt/keyrings \
- && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
- && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+ && curl -fsSLo /etc/apt/keyrings/nodesource.asc https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+ && echo "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_22.x nodistro main" \
       > /etc/apt/sources.list.d/nodesource.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends "nodejs=${NODEJS_VERSION}" \
@@ -97,17 +96,5 @@ ENV COMPUTERD_POLL_MS=5000
 ENV COMPUTER_VAR_GH_CONFIG_DIR=/workspace/.config/gh
 ENV COMPUTER_VAR_GIT_CONFIG_GLOBAL=/workspace/.gitconfig
 EXPOSE 8080
-
-ENV PNPM_HOME=/usr/local/pnpm
-ENV PATH=/usr/local/pnpm:/usr/local/pnpm/bin:$PATH
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /seed/
-COPY vendor/cloudflare-computer-0.3.0.tgz /seed/vendor/
-RUN cd /seed \
- && corepack install \
- && corepack pnpm fetch \
- && rm -rf /seed
-
-RUN mkdir -p /root/.local/share/pnpm \
- && ln -s /usr/local/pnpm/store /root/.local/share/pnpm/store
 
 ENTRYPOINT ["/usr/local/bin/computerd"]
